@@ -1,7 +1,7 @@
 /* THE DASHBOARD'S ONE PALETTE (docs/notes/dashboards.md). Six categorical slots in a fixed order, validated with the dataviz
    skill's checker against this surface: light worst adjacent CVD dE 9.2, normal 17.2; dark 9.1 / 15.4 - slot 4 is under 3:1 on
    the light paper, so every chart keeps its legend and its table view. Marks wear the slots; text never does. Chrome is the
-   Beacon paper and ink. Dark is chosen step by step, not flipped - it waits on [data-theme="dark"], which the app does not set yet.
+   Beacon paper and ink. Dark is chosen step by step, not flipped - it waits on [data-theme="dark"], set by the application theme switch.
    THE CARDS ARE WHITE ON A CLEAN LIGHT PAGE (the owner, 2026-11-07: "I liked the white cards better"): plain white, a hairline edge and
    a soft shadow, so each card stands off the page; the page itself is a quiet neutral, not the warm ground of a task. */
 .tq-dash {
@@ -157,7 +157,7 @@
 
 /* on the canvas the dashboard takes the chat body's height (a size container, assistantView.css) less its card's own heading and
    buttons, and scrolls inside itself - the card never runs off under the dock */
-.tq-dash-canvas { margin-top: 8px; overflow: auto; padding: 12px; border-radius: 10px; background: #f7f7f5;
+.tq-dash-canvas { margin-top: 8px; overflow: auto; padding: 12px; border-radius: 10px; background: var(--tq-panel, #f7f7f5);
   flex: 1 1 auto; min-height: 280px; }
 /* ...and the CARD is the pane: the chat body's whole height, as a task view with a live agent takes it (CanvasItem.CANVAS_ITEM_HEIGHT,
    the same 100cqh against the same size container), its heading and buttons at the ends and the dashboard taking what is between */
@@ -167,7 +167,7 @@
 /* ...and in a task's three sections (ItemSections) the section scrolls itself and the dashboard sits straight on it - on the clean light
    page, not the task's warm ground (the owner, 2026-11-07); a brief (ReportBrief) sits on the same page */
 .tq-item-sec .tq-dash-canvas { margin: 0; padding: 0; background: transparent; border-radius: 0; overflow: visible; min-height: 0; flex: none; }
-.tq-item-sec:has(> [data-tq-dash-body]), .tq-item-sec:has([data-tq-report-brief]) { background: #f7f7f5; }
+.tq-item-sec:has(> [data-tq-dash-body]), .tq-item-sec:has([data-tq-report-brief]) { background: var(--tq-panel, #f7f7f5); }
 
 @media (prefers-reduced-motion: reduce) { .tq-dash-card { transition: none; } }
 

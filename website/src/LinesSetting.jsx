@@ -21,7 +21,7 @@ export default function LinesSetting({ value = "", fallback = "", save }) {
   return (
     <div style={{ minWidth: 260, maxWidth: 420 }}>
       <TextField multiline minRows={2} maxRows={8} fullWidth value={text} onChange={(e) => setText(e.target.value)} onBlur={leave}
-        placeholder="One folder a line" sx={{ bgcolor: "#fff" }} inputProps={{ "aria-label": "one folder a line", style: { fontSize: 12.5, fontFamily: "monospace" } }} />
+        placeholder="One folder a line" sx={{ bgcolor: "var(--tq-panel, #fff)" }} inputProps={{ "aria-label": "one folder a line", style: { fontSize: 12.5, fontFamily: "monospace" } }} />
       {!value && <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.25 }}>The usual places on this computer - change them here.</Typography>}
     </div>
   );

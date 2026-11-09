@@ -38,11 +38,11 @@ export default function SetupSteps() {
             aria-current={r.current ? "step" : undefined} aria-label={`${i + 1}. ${r.label}${r.done ? " - done" : ""}`}
             sx={{ display: "flex", flexDirection: "column", justifyContent: "flex-start", minWidth: 0, textAlign: "left", border: 0, bgcolor: "transparent", p: 0, pb: 0.25, fontFamily: "inherit",
               cursor: r.disabled ? "default" : "pointer", opacity: r.disabled ? 0.65 : 1, borderRadius: "4px",
-              "&:hover:not(:disabled) .tq-step-name": { color: INK }, "&:focus-visible": { outline: "2px solid #55697a", outlineOffset: 3 } }}>
+              "&:hover:not(:disabled) .tq-step-name": { color: INK }, "&:focus-visible": { outline: "2px solid var(--tq-link, #55697a)", outlineOffset: 3 } }}>
             <Box sx={{ height: 3, borderRadius: 2, bgcolor: tone(r), mb: { xs: 0, sm: 0.75 } }} />
             <Box sx={{ display: { xs: "none", sm: "block" }, minWidth: 0 }}>
               <Typography noWrap className="tq-step-name" sx={{ fontSize: 12.5, fontWeight: r.current ? 700 : 600, color: r.done || r.current ? INK : DIM }}>
-                {r.done && <CheckIcon sx={{ fontSize: 13, color: "#47654a", mr: 0.4, verticalAlign: "-2px" }} />}{r.label}</Typography>
+                {r.done && <CheckIcon sx={{ fontSize: 13, color: "var(--tq-success, #47654a)", mr: 0.4, verticalAlign: "-2px" }} />}{r.label}</Typography>
               {r.sub && <Typography noWrap sx={{ fontSize: 11, color: FAINT }} title={r.sub}>{r.sub}</Typography>}
             </Box>
           </Box>

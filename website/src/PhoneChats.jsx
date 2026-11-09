@@ -7,7 +7,7 @@ import { ChannelSetup } from "./AgentChannels.jsx";
 import { ASSISTANT_LINE, RULES, SECTION_TITLE, bindingRow, phoneSections } from "./phoneChats.js";
 import { DIM, FAINT, INK } from "./theme.jsx";
 
-const link = { color: "#55697a", textDecoration: "none", "&:hover": { textDecoration: "underline" } };
+const link = { color: "var(--tq-link, #55697a)", textDecoration: "none", "&:hover": { textDecoration: "underline" } };
 
 // one binding: the channel and chat, then what it talks to, in which repo, with whom
 const Binding = ({ c }) => {

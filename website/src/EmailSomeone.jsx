@@ -35,7 +35,7 @@ export const taskFiles = (detail, outputs = []) => {
 };
 
 const Label = ({ children }) => <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: DIM, mb: 0.5 }}>{children}</Typography>;
-const field = { "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } };
+const field = { "& .MuiInputBase-root": { fontSize: 13, bgcolor: "var(--tq-panel, #fcfaf7)" } };
 
 export default function EmailSomeone({ open, task, detail, onClose, onDrafted }) {
   const [targets, setTargets] = useState([]), [boxes, setBoxes] = useState([]);
@@ -82,7 +82,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
           <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
             {targets.map((t) => (
               <Box key={t.channel} component="button" type="button" onClick={() => { setChannel(t.channel); setTo([]); setChat(null); setCc([]); }}
-                sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 1.2, py: 0.6, cursor: "pointer", bgcolor: "#fff",
+                sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 1.2, py: 0.6, cursor: "pointer", bgcolor: "var(--tq-panel, #fff)",
                   border: `1px solid ${channel === t.channel ? ACCENT : BORDER}`, borderRadius: 2, font: "inherit",
                   boxShadow: channel === t.channel ? `inset 0 0 0 1px ${ACCENT}` : "none",
                   fontSize: 12.5, fontWeight: 600, color: channel === t.channel ? INK : DIM }}>
@@ -94,7 +94,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
         {email && boxes.length > 1 && (
           <Box>
             <Label>From</Label>
-            <Select size="small" fullWidth value={from} onChange={(e) => setFrom(e.target.value)} sx={{ fontSize: 13, bgcolor: "#fcfaf7" }}>
+            <Select size="small" fullWidth value={from} onChange={(e) => setFrom(e.target.value)} sx={{ fontSize: 13, bgcolor: "var(--tq-panel, #fcfaf7)" }}>
               {boxes.map((b) => <MenuItem key={b.address} value={b.address} sx={{ fontSize: 13 }}>{b.address}
                 <Typography component="span" sx={{ ml: 1, fontSize: 11, color: FAINT }}>{b.card}</Typography></MenuItem>)}
             </Select>
@@ -129,7 +129,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
             <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>Anything else: {label("attach")} on the draft.</Typography>
           </Box>
         )}
-        {err && <Typography variant="body2" sx={{ color: "#a33b3b" }}>{err}</Typography>}
+        {err && <Typography variant="body2" sx={{ color: "var(--tq-danger, #a33b3b)" }}>{err}</Typography>}
       </DialogContent>
       <ButtonBar>
         <Button variant="contained" disableElevation onClick={go} disabled={busy || !ready}>

@@ -116,12 +116,12 @@ function Shelf({ cards, more, opened, detail, onAll, allLabel = "Show all", grou
             ragged */}
         {folded && <Box role="button" tabIndex={0} data-tq-shelf-more="" onClick={() => setAll(true)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAll(true); } }}
-              sx={{ gridColumn: `span ${left}`, bgcolor: "#fbfaf7", border: "1px solid #ddd6ca", borderRadius: 2.5, p: 1.6, boxSizing: "border-box", cursor: "pointer",
+              sx={{ gridColumn: `span ${left}`, bgcolor: "var(--tq-panel, #fbfaf7)", border: "1px solid var(--tq-border, #ddd6ca)", borderRadius: 2.5, p: 1.6, boxSizing: "border-box", cursor: "pointer",
                 transition: "box-shadow .15s", "&:hover": { boxShadow: "0 2px 8px rgba(47,107,79,.12)" },
-                "&:focus-visible": { outline: "2px solid #55697a", outlineOffset: 2 } }}>
+                "&:focus-visible": { outline: "2px solid var(--tq-link, #55697a)", outlineOffset: 2 } }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.1 }}>
-                <Box sx={{ width: 30, height: 30, borderRadius: 2, bgcolor: "#e9e3d8", flexShrink: 0, display: "flex", alignItems: "center",
-                  justifyContent: "center", color: "#55697a", fontWeight: 700, fontSize: 15 }}>+{cards.length - FIRST}</Box>
+                <Box sx={{ width: 30, height: 30, borderRadius: 2, bgcolor: "var(--tq-inset, #e9e3d8)", flexShrink: 0, display: "flex", alignItems: "center",
+                  justifyContent: "center", color: "var(--tq-link, #55697a)", fontWeight: 700, fontSize: 15 }}>+{cards.length - FIRST}</Box>
                 <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0 }}>{more} options</Typography>
               </Box>
               <Typography sx={{ color: FAINT, fontSize: 11.5, lineHeight: 1.5, pt: 1, minHeight: "3em" }}>
@@ -554,7 +554,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
         </Box>
         <Box sx={{ width: "100%", display: details ? "block" : "none" }}><CliPane pane={pane} height="34vh" hint={false} onExit={ended} /></Box>
       </>}
-      {note?.bad && <Typography sx={{ fontSize: 13, color: "#9b2c2c" }}>{note.text} - try again, or pick a different AI.</Typography>}
+      {note?.bad && <Typography sx={{ fontSize: 13, color: "var(--tq-danger, #9b2c2c)" }}>{note.text} - try again, or pick a different AI.</Typography>}
     </Box>
   ) : stuck ? (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start" }}>

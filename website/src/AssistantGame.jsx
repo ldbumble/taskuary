@@ -315,7 +315,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
 
   return (
     <Box sx={{ position: "relative", width: "100%", height: "calc(100vh - 84px)", minHeight: 560, overflow: "hidden",
-      borderRadius: "14px", background: "radial-gradient(ellipse at 50% 40%, #f7f2e9 0%, #e7dfd1 70%, #d9d0c0 100%)" }}>
+      borderRadius: "14px", background: "radial-gradient(ellipse at 50% 40%, var(--tq-panel, #f7f2e9) 0%, var(--tq-inset, #e7dfd1) 70%, var(--tq-canvas, #d9d0c0) 100%)" }}>
       <Box sx={{ position: "absolute", inset: 0 }}>
         <React.Suspense fallback={<Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
           <GameScene seats={sceneSeats} selectedId={pick} onSelect={(id) => { setPick(id); go("floor"); }}
@@ -588,7 +588,7 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
           <Typography noWrap sx={{ fontSize: 13, fontWeight: 600, pt: 0.3 }}>{task.Title}</Typography>
           <Typography sx={{ fontSize: 11, color: G.dim, pt: 0.2 }}>{state.label}</Typography>
           {(liveRow?.work || liveRow?.promptPending) && (
-            <Box sx={{ pt: 0.5, bgcolor: "#f6f2ea", borderRadius: "6px", px: 0.75, pb: 0.5, mt: 0.5 }}>
+            <Box sx={{ pt: 0.5, bgcolor: "var(--tq-panel, #f6f2ea)", borderRadius: "6px", px: 0.75, pb: 0.5, mt: 0.5 }}>
               <WorkLine work={liveRow.work} who={state.agent} waiting={liveRow.kind === "session" && isWaiting(liveRow)}
                 asking={liveRow.asking} state={liveRow.state} detail={liveRow.request?.text} startedAt={liveRow.StartedAt} promptPending={liveRow.promptPending} />
             </Box>

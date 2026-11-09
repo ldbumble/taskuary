@@ -14,14 +14,14 @@ import { LENGTHS, WITHIN, canFind, formFrom, seenLine, slotsUrl, typedSlot } fro
 const Label = ({ children }) => (
   <Typography sx={{ ...mono, fontSize: 9.5, fontWeight: 600, letterSpacing: ".11em", textTransform: "uppercase", color: ACCENT2, mb: 0.75 }}>{children}</Typography>
 );
-const FIELD = { "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } };
+const FIELD = { "& .MuiInputBase-root": { fontSize: 13, bgcolor: "var(--tq-panel, #fcfaf7)" } };
 const Pick = ({ on, children, onPress, ...rest }) => (
   <Box {...pressable(onPress)} aria-pressed={on} {...rest}
     sx={{ ...FOCUS_RING, px: 1.25, py: 0.6, borderRadius: 2, cursor: "pointer", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
-      border: `1px solid ${on ? ACCENT : BORDER}`, boxShadow: on ? `inset 0 0 0 1px ${ACCENT}` : "none", color: on ? INK : DIM, bgcolor: on ? "#fff" : "#fcfaf7" }}>
+      border: `1px solid ${on ? ACCENT : BORDER}`, boxShadow: on ? `inset 0 0 0 1px ${ACCENT}` : "none", color: on ? INK : DIM, bgcolor: on ? "var(--tq-panel, #fff)" : "var(--tq-panel, #fcfaf7)" }}>
     {children}</Box>
 );
-const dateBox = { font: "inherit", fontSize: 13, padding: "5px 8px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "#fcfaf7", minWidth: 0 };
+const dateBox = { font: "inherit", fontSize: 13, padding: "5px 8px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "var(--tq-panel, #fcfaf7)", minWidth: 0 };
 
 export default function NewMeeting({ renderTo, options = [], initial, onPicked }) {
   const [f, setF] = useState(() => formFrom(initial || {}));
@@ -91,12 +91,12 @@ export default function NewMeeting({ renderTo, options = [], initial, onPicked }
       </Box>
       <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
         <Button size="small" variant="contained" disableElevation data-tq-find-times="" disabled={!canFind(f) || !!busy} onClick={find}
-          startIcon={busy === "find" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null} sx={{ background: GRADIENT }}>
+          startIcon={busy === "find" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null} sx={{ color: "#fff", background: GRADIENT }}>
           {busy === "find" ? "Reading calendars…" : "Find times"}</Button>
         <Typography sx={{ fontSize: 11.5, color: FAINT, flex: "1 1 200px" }}>Your calendar, and theirs where it is shared with you. Nothing is sent.</Typography>
       </Box>
 
-      {got && <Box data-tq-meeting-slots="" sx={{ border: `1px solid ${BORDER}`, borderRadius: 2, p: 1.5, display: "grid", gap: 1, bgcolor: "#fff", minWidth: 0 }}>
+      {got && <Box data-tq-meeting-slots="" sx={{ border: `1px solid ${BORDER}`, borderRadius: 2, p: 1.5, display: "grid", gap: 1, bgcolor: "var(--tq-panel, #fff)", minWidth: 0 }}>
         <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>
           {got.slots?.length ? `${got.minutes} minutes - pick a time` : "No free time in those days - type one below."}</Typography>
         {got.later && !!got.slots?.length && <Typography sx={{ fontSize: 11.5, color: FAINT }}>Those days are full - these are the next free times after them.</Typography>}

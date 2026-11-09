@@ -72,22 +72,22 @@ import { repliesOf } from "./connectorCatalog.js";
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
 const primary = { color: "#fff", background: ASSISTANT.gradient, "&:hover": { background: "linear-gradient(90deg, #465866, #698368)" } };
-const quiet = { color: "#4d4a43", borderColor: "#d6cec1", bgcolor: "#fffdfb" };
-const faint = { color: "#867f74" };
+const quiet = { color: "var(--tq-secondary, #4d4a43)", borderColor: "var(--tq-border, #d6cec1)", bgcolor: "var(--tq-panel, #fffdfb)" };
+const faint = { color: "var(--tq-warning, #867f74)" };
 
 // where a thing came from: the channel's own logo, a calendar for a meeting, a terminal for an
 // agent, the mark for the assistant's own line
 export function SourceMark({ item, size = 14 }) {
   if (!item) return null;
-  if (item.kind === "meeting") return <EventIcon sx={{ fontSize: size, color: "#55697a" }} />;
+  if (item.kind === "meeting") return <EventIcon sx={{ fontSize: size, color: "var(--tq-link, #55697a)" }} />;
   // a goal has no source: it wears the project mark (spec 2026-10-12)
-  if (String(item.kind || "").startsWith("goal")) return <OutlinedFlagIcon sx={{ fontSize: size, color: "#55697a" }} />;
+  if (String(item.kind || "").startsWith("goal")) return <OutlinedFlagIcon sx={{ fontSize: size, color: "var(--tq-link, #55697a)" }} />;
   // a dashboard's row wears a chart, not the report's page (dashboards.py)
-  if (item.dashboard) return <InsertChartOutlinedIcon sx={{ fontSize: size, color: "#55697a" }} />;
+  if (item.dashboard) return <InsertChartOutlinedIcon sx={{ fontSize: size, color: "var(--tq-link, #55697a)" }} />;
   // an agent on it is the row's STATE (its chip says so), not where it came from: an Advisor idea, a report or a
   // mail an agent picked up keeps its own mark (the owner, 2026-09-25: "it should be advisor as that's what it
   // comes from"). The terminal is left for work with no source at all.
-  if ((item.kind === "agent" || item.kind === "agentdone") && !item.channel) return <TerminalIcon sx={{ fontSize: size, color: "#41525f" }} />;
+  if ((item.kind === "agent" || item.kind === "agentdone") && !item.channel) return <TerminalIcon sx={{ fontSize: size, color: "var(--tq-link, #41525f)" }} />;
   if (item.kind === "setup" || item.kind === "brief" || item.kind === "walk" || (item.kind === "idea" && !item.channel)) return <TaskuaryMark size={size} />;
   if (item.kind === "fyis" && !item.channel) return <TaskuaryMark size={size} />;
   // a proposal is the assistant's own act (Remind me, Mark done...), not a mail: it wore the envelope every unsourced card falls to
@@ -314,7 +314,7 @@ export function YourMove({ title, tone, go, then, children }) {
   );
 }
 // the move's own button: the card's main verb, larger, in the move's ink
-const moveSx = { ...primary, fontWeight: 600, fontSize: 12.5, px: 1.5, py: 0.55, "&.Mui-disabled": { color: "#fff", background: "#b9c2bd" } };
+const moveSx = { ...primary, fontWeight: 600, fontSize: 12.5, px: 1.5, py: 0.55, "&.Mui-disabled": { color: "#fff", background: "var(--tq-inset, #b9c2bd)" } };
 const alertSx = { ...moveSx, background: ALERT, "&:hover": { background: ALERT_INK } };
 
 // MORE ONLY WHEN THERE IS MORE (the owner, 2026-09-23: "the less button when there is only one line
@@ -509,7 +509,7 @@ function FullText({ mid, revision, report = null }) {
       {/* ...and the pictures pasted into it, drawn - the screenshot is often the whole ask */}
       {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email" && mentionsPicture(doc.BodyText)} dense bare={bare} />}
       {read !== raw && <button type="button" className="tq-card-more" onClick={() => setWhole((v) => !v)}>{whole ? "Just what they wrote" : "Show the whole email"}</button>}
-      {doc.SourceLink && <div className="tq-card-note"><a href={doc.SourceLink} target="_blank" rel="noreferrer" style={{ color: "#55697a" }}>open the original</a></div>}
+      {doc.SourceLink && <div className="tq-card-note"><a href={doc.SourceLink} target="_blank" rel="noreferrer" style={{ color: "var(--tq-link, #55697a)" }}>open the original</a></div>}
     </div>
   );
 }
@@ -590,7 +590,7 @@ function CombinedTaskText({ card, list = true }) {
       {messages.map((m, n) => {
         const body = noImages(cleanText(m.ReadText ?? m.BodyText ?? ""));
         return (
-          <div key={m.MessageId || n} style={{ padding: "7px 0", borderTop: n ? "1px solid #e2ddd4" : 0 }}>
+          <div key={m.MessageId || n} style={{ padding: "7px 0", borderTop: n ? "1px solid var(--tq-border, #e2ddd4)" : 0 }}>
             <div className="tq-card-note" style={{ marginBottom: 3 }}>
               {m.Direction === "out" ? "You" : (m.FromName || m.FromEmail || "Someone")}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
             </div>
@@ -793,7 +793,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
         {rv && (
           <DraftField value={value} onChange={(e) => setText(e.target.value)} marks={!action || mate ? blankSpans(value) : []}
             placeholder={drafting ? "Drafting…" : action && !mate ? "" : "Write your answer here"}
-            sx={{ mt: 0.75, "& .MuiOutlinedInput-root": { background: "#fffdf9" }, "& textarea": { fontSize: 13.5, lineHeight: 1.55 } }} />
+            sx={{ mt: 0.75, "& .MuiOutlinedInput-root": { background: "var(--tq-panel, #fffdf9)" }, "& textarea": { fontSize: 13.5, lineHeight: 1.55 } }} />
         )}
         {!action && stale && <div className="tq-card-err">{`New messages arrived after this draft. Press ${btn("redraft")} to write it from the latest message before sending.`}</div>}
         {!action && rv && drafting && !value.trim() && <div className="tq-card-excerpt">Drafting… it fills in here when the AI is done - or write it yourself.</div>}
@@ -861,7 +861,7 @@ export function MeetingCard({ card, table = null }) {
               ["Link", e.join && <a key="j" href={e.join} target="_blank" rel="noreferrer">{e.join}</a>]]} />
             {e.about && <div className="tq-card-excerpt" data-tq-meeting-about="">{e.about}</div>}
           </ItemPart> },
-        { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
+        { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "var(--tq-secondary, #746e64)" }} />, lines: ["not started"],
           body: <ItemPart data-tq-meeting-agent="">
             <div className="tq-thr-h"><b>No agent yet</b></div>
             <div className="tq-thr-did muted">Nobody is preparing for this.</div>
@@ -948,7 +948,7 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
             <Facts rows={[["Report", <b key="n">{name}</b>], ["Ran", ran], ["Runs", src.runs], ["Reads", src.reads], ["Goes", src.goes], ["Note", src.run?.error]]} />
             {card.source_id != null && <div className="tq-card-actions"><Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>Edit this report ↗</Button></div>}
           </ItemPart> },
-        { key: "report", n: 2, name: "Report", icon: <InsertChartOutlinedIcon aria-hidden sx={{ fontSize: 18, color: "#746e64" }} />,
+        { key: "report", n: 2, name: "Report", icon: <InsertChartOutlinedIcon aria-hidden sx={{ fontSize: 18, color: "var(--tq-secondary, #746e64)" }} />,
           lines: [card.title],
           body: <ItemPart data-tq-report-body="">
             {card.bad && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
@@ -1017,7 +1017,7 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
             <Facts rows={[["Dashboard", <b key="n">{name}</b>], ["Ran", ran], ["Runs", src.runs], ["Reads", src.reads], ["Goes", src.goes], ["Note", src.run?.error]]} />
             {edit}
           </ItemPart> },
-        { key: "report", n: 2, name: "Dashboard", icon: <InsertChartOutlinedIcon aria-hidden sx={{ fontSize: 18, color: "#746e64" }} />,
+        { key: "report", n: 2, name: "Dashboard", icon: <InsertChartOutlinedIcon aria-hidden sx={{ fontSize: 18, color: "var(--tq-secondary, #746e64)" }} />,
           lines: [card.title],
           // ...its white cards straight on the section's warm ground, as on the Dashboards page: no card around the cards
           body: <div data-tq-dash-body="">{drawn}{share}</div> }]}
@@ -1564,7 +1564,7 @@ export const shownSubject = (item) => (item?.subject && item.subject !== item.ti
 // what triage read the words as trying to make an AI do (message.Danger): the task page's one warning line, on the card too (B3) - a scam
 // on the owner said as one, its reason on hover (`aim`, the owner 2026-10-30)
 const DangerNote = ({ danger, aim = null }) => (danger ? <div className="tq-card-note" data-tq-danger="" title={aim === "owner" ? danger : undefined}
-  style={{ color: ALERT, overflowWrap: "anywhere" }}>{dangerLine(danger, aim)}</div> : null);
+  style={{ color: "var(--tq-danger, #8a3646)", overflowWrap: "anywhere" }}>{dangerLine(danger, aim)}</div> : null);
 // ...a line Should be a task made a task stays, wearing where it went - its ref the way to the task (movedFyi.js, the owner 2026-11-03)
 export const MovedLine = ({ moved, onRef, className = "tq-item-msg-g" }) => !moved ? null : (
   <div className={`${className} tq-moved`} data-tq-moved={moved.ref}>Moved to Tasks · <button type="button" className="tq-ref-link"
@@ -1827,7 +1827,7 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
             it's done. Make the walk through accurate to what was completed"). */}
         {"done" in card && (
           <span aria-hidden="true" title={card.done ? "already done" : "not done yet"}
-            style={{ marginRight: 7, fontSize: 13, fontWeight: 600, color: card.done ? "#47654a" : "#b3aa9c" }}>
+            style={{ marginRight: 7, fontSize: 13, fontWeight: 600, color: card.done ? "var(--tq-success, #47654a)" : "var(--tq-warning, #b3aa9c)" }}>
             {card.done ? "☑" : "☐"}</span>
         )}
         {card.title}
@@ -1860,7 +1860,7 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
       {/* setup.state writes a detail that says what it IS ("already connected: Outlook mail, \u2026"),
           so this renders it as given. It used to patch the words back on for one step by key, which
           left every other step reading as a heading for the instructions under it. */}
-      {card.done && card.detail && <div style={{ fontSize: 12.5, fontWeight: 600, color: "#47654a", margin: "4px 0" }}>
+      {card.done && card.detail && <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tq-success, #47654a)", margin: "4px 0" }}>
         {card.detail}</div>}
       {can.length > 0 && (
         <div className="tq-walk-can">

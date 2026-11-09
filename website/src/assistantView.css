@@ -1,7 +1,7 @@
 /* The Assistant page: the Timeline's rail on the left with the pipe at its top, the chat on the
    right. Colour identifies (a dot, a mark, a word), never tints a surface; the only loud colour is
    the oxblood dot on what is on you. */
-.tq-asst-col { min-height: 0; display: flex; flex-direction: column; background: #fffdfb; border: 1px solid #e1dcd5; border-radius: 12px; overflow: hidden; }
+.tq-asst-col { min-height: 0; display: flex; flex-direction: column; background: var(--tq-panel, #fffdfb); border: 1px solid var(--tq-border, #e1dcd5); border-radius: 12px; overflow: hidden; }
 
 /* ── the pipe, at the top of the rail ─────────────────────────────────────────────────────────
    Rows share the Timeline row's geometry exactly - the 70px clock gutter, the 14px rail with its
@@ -10,8 +10,8 @@
    "no more funnel... everything comes out from the top"). */
 .tq-pile { position: relative; padding: 0 0 8px; }
 /* how close the pipe is to empty - said once the count is small enough to be encouraging */
-.tq-pile-cheer { text-align: center; color: #6e685f; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 10px 0 2px; }
-.tq-pile-note { text-align: center; color: #746e64; font: 500 10px 'IBM Plex Sans', system-ui, sans-serif; padding: 3px 0; }
+.tq-pile-cheer { text-align: center; color: var(--tq-secondary, #6e685f); font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 10px 0 2px; }
+.tq-pile-note { text-align: center; color: var(--tq-secondary, #746e64); font: 500 10px 'IBM Plex Sans', system-ui, sans-serif; padding: 3px 0; }
 
 /* ── the categories ───────────────────────────────────────────────────────────────────────────
    Each band is its own block with its own stack, so the heading can FREEZE at the top of the rail
@@ -22,7 +22,7 @@
    changes category jumps, and that is rare. */
 .tq-pile-band { position: relative; }
 .tq-pile-head { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 10px;
-  padding: 6px 10px 6px 4px; margin-top: 7px; background: #fffdfb; border-bottom: 1px solid #ece7e0; }
+  padding: 6px 10px 6px 4px; margin-top: 7px; background: var(--tq-panel, #fffdfb); border-bottom: 1px solid var(--tq-border, #ece7e0); }
 .tq-pile-band:first-child .tq-pile-head { margin-top: 0; }
 /* importance lives on the CATEGORY and nowhere else, so this is the only coloured thing on the
    rail - and it wears the whole role rather than just its ink: a tinted PILL reads as a label you
@@ -31,23 +31,23 @@
    are set inline from theme.jsx ROLES (funnelPile.LEVEL_ROLE). */
 /* a band that can be opened is shut the same way - the heading is the control */
 .tq-pile-head.folds { cursor: pointer; }
-.tq-pile-head.folds:hover span { border-color: #b9c3cb; }
-.tq-pile-head .fold { font-style: normal; font-size: 13px; line-height: 1; color: #6e685f; margin-left: -4px; padding: 2px 4px; cursor: pointer; border-radius: 4px; }
-.tq-pile-head:focus-visible, .tq-pile-head .fold:focus-visible { outline: 2px solid #55697a; outline-offset: 2px; }
-.tq-pile-head .fold:hover { background: #ece7e0; }
+.tq-pile-head.folds:hover span { border-color: var(--tq-border, #b9c3cb); }
+.tq-pile-head .fold { font-style: normal; font-size: 13px; line-height: 1; color: var(--tq-secondary, #6e685f); margin-left: -4px; padding: 2px 4px; cursor: pointer; border-radius: 4px; }
+.tq-pile-head:focus-visible, .tq-pile-head .fold:focus-visible { outline: 2px solid var(--tq-link, #55697a); outline-offset: 2px; }
+.tq-pile-head .fold:hover { background: var(--tq-inset, #ece7e0); }
 .tq-pile-head span { font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase;
-  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
+  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--tq-border, #e2dbcf); color: var(--tq-secondary, #6e685f); background: var(--tq-inset, #f3efe8); }
 /* one tint per band, all quiet: the band says what KIND of thing sits under it at a glance */
 /* SOLID PILLS, WHITE WORDS, FIVE COLOURS (the owner, 2026-10-06: variant C, "the pill should be dark and text white like the
    number 3"). theme.jsx LEVEL_COLOR is the same table - the rail dot and the day-card dot wear it too */
 .tq-pile-head span.lvl-task, .tq-sum-head span.lvl-task { color: #fff; background: #5f7a5f; border: 1px solid #5f7a5f; }
 .tq-pile-head span.lvl-reports, .tq-pile-head span.lvl-ideas, .tq-sum-head span.lvl-reports, .tq-sum-head span.lvl-ideas { color: #fff; background: #827356; border: 1px solid #827356; }
 .tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-fyi { color: #fff; background: #7b7366; border: 1px solid #7b7366; }
-.tq-pile-head span.lvl-later, .tq-sum-head span.lvl-later, .tq-pile-head span.lvl-watching, .tq-sum-head span.lvl-watching { color: #7b7366; background: transparent; border: 1px dashed #7b7366; }   /* put off: the oat, as an outline */
-.tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
+.tq-pile-head span.lvl-later, .tq-sum-head span.lvl-later, .tq-pile-head span.lvl-watching, .tq-sum-head span.lvl-watching { color: var(--tq-warning, #7b7366); background: transparent; border: 1px dashed #7b7366; }   /* put off: the oat, as an outline */
+.tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid var(--tq-border, #ece7e0); margin: 0; }
 .tq-pile-danger { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; }
-.tq-pile-rank { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; margin-left: -2px; }
-.tq-pile-head em { font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #746e64; font-variant-numeric: tabular-nums; }
+.tq-pile-rank { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-link, #41525f); margin-left: -2px; }
+.tq-pile-head em { font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: var(--tq-secondary, #746e64); font-variant-numeric: tabular-nums; }
 /* what a capped band leaves behind. Only reports and fyi can ever show one (funnelPile.CAPPED) */
 /* A BUTTON IS ONE LINE. Every pill-shaped button in the rail and on a card - none of them said so,
    so "Hand it to a coding agent" folded the moment its card got narrow (the owner, 2026-09-18: "i
@@ -55,16 +55,16 @@
    shorten; it is never a reason to fold one button into two rows. */
 .tq-verb, .tq-chip, .tq-pile-more { white-space: nowrap; flex-shrink: 0; }
 
-.tq-pile-more { display: block; margin: 5px 0 2px 70px; padding: 3px 11px; border: 1px solid #dcd5cb; border-radius: 99px;
-  background: #fffdfb; color: #55697a; font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; }
-.tq-pile-more:hover { border-color: #b9c3cb; background: #f5f8f9; }
+.tq-pile-more { display: block; margin: 5px 0 2px 70px; padding: 3px 11px; border: 1px solid var(--tq-border, #dcd5cb); border-radius: 99px;
+  background: var(--tq-panel, #fffdfb); color: var(--tq-link, #55697a); font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; }
+.tq-pile-more:hover { border-color: var(--tq-border, #b9c3cb); background: var(--tq-panel, #f5f8f9); }
 /* what the ranked pill opens. Thin on purpose: none of it has been triaged, so a card's worth of
    furniture would promise fields that do not exist. */
-.tq-pile-waiting { margin: 2px 0 6px 70px; border-left: 1px solid #e0dbcf; padding-left: 10px; }
+.tq-pile-waiting { margin: 2px 0 6px 70px; border-left: 1px solid var(--tq-border, #e0dbcf); padding-left: 10px; }
 .tq-pile-waitrow { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; min-width: 0; }
-.tq-pile-waitrow .subj { flex: 1 1 auto; min-width: 0; font-size: 12px; color: #3b4440;
+.tq-pile-waitrow .subj { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--tq-text, #3b4440);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tq-pile-waitrow .why { flex: 0 0 auto; font-size: 10.5px; color: #9aa39d; }
+.tq-pile-waitrow .why { flex: 0 0 auto; font-size: 10.5px; color: var(--tq-muted, #9aa39d); }
 
 /* ROWS NEVER OVERLAP ON THE WAY (the 2026-10-19 UI walk, G8): only `top` glided, so the row taking the ring grew to 54px at once
    while the rows under it were still gliding down - 10-30 frames of rows drawn over each other on every Next and rail click. Its
@@ -79,29 +79,29 @@
 .tq-pile-row.entering { animation: tq-row-in .2s ease .42s backwards; }
 /* HOW LONG IT HAS WAITED, not what o'clock it arrived: the rail is ranked, not dated. No mono -
    at 10px its figures were the hardest thing on the rail to read (the owner, 2026-09-16). */
-.tq-pile-row .when { font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; text-align: right; padding: 8px 6px 0 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tq-pile-row .when { font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-secondary, #6e685f); text-align: right; padding: 8px 6px 0 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tq-pile-row .rail { position: relative; }
-.tq-pile-row .rail::before { content: ""; position: absolute; left: 6px; top: -5px; bottom: -5px; width: 1px; background: #e1dcd5; }
+.tq-pile-row .rail::before { content: ""; position: absolute; left: 6px; top: -5px; bottom: -5px; width: 1px; background: var(--tq-inset, #e1dcd5); }
 /* the dot is the SOURCE (assistantCards.sourceColor) - one size for every row, because importance
    is not a per-row fact in this product */
-.tq-pile-row .rail i { position: absolute; left: 2.5px; top: 10px; width: 8px; height: 8px; border-radius: 50%; background: #d3ccc1; box-shadow: 0 0 0 3px #fffdfb; }
+.tq-pile-row .rail i { position: absolute; left: 2.5px; top: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--tq-inset, #d3ccc1); box-shadow: 0 0 0 3px var(--tq-panel, #fffdfb); }
 /* NO BOX PER ROW (the cleanup, 2026-10-06): a flat row on the rail's paper, a neutral tint under the pointer; the line and
    the dots beside it still run down the band */
 .tq-pile-row .card { margin-left: 8px; min-width: 0; overflow: hidden; border: 1px solid transparent; border-radius: 8px; padding: 4px 10px 5px; background: transparent; cursor: pointer; transition: background .15s; }
-.tq-pile-row .card:hover { background: #efebe4; }
+.tq-pile-row .card:hover { background: var(--tq-inset, #efebe4); }
 /* the keyboard's ring (the rail is one tab stop, Up/Down move it - AssistantView Pile): a focus outline and nothing else */
 .tq-pile-row .card:focus { outline: none; }
-.tq-pile-row .card:focus-visible { outline: 2px solid #55697a; outline-offset: -2px; }
+.tq-pile-row .card:focus-visible { outline: 2px solid var(--tq-link, #55697a); outline-offset: -2px; }
 .tq-pile-row.settling .card { border-style: dashed; }
 /* URGENT IS THE DOT, NOT THE ROW (the owner, 2026-10-25: a shaded row "makes it look like it's selected"): the row's circle on the
    rail goes the attention colour (theme ALERT, oxblood) with a thin ring, in the row's own place - there is no Urgent heading (2026-10-22) */
-.tq-pile-row.urgent .rail i, .tq-pile-row.urgent.current .rail i { background: #8a3646 !important; box-shadow: 0 0 0 2px #fffdfb, 0 0 0 3.5px rgba(138, 54, 70, .5); }
+.tq-pile-row.urgent .rail i, .tq-pile-row.urgent.current .rail i { background: #8a3646 !important; box-shadow: 0 0 0 2px var(--tq-panel, #fffdfb), 0 0 0 3.5px rgba(138, 54, 70, .5); }
 /* IMPORTANT wears no edge and no shade: its mark is the dot's colour, the theme's slate (AssistantView Pile, theme PRIORITY_COLOR) -
    in the row's own place, never a move (the owner, 2026-10-25) */
 /* ...ringed as urgent is, in its own slate (the owner, 2026-10-27: "an important task but I don't see a bigger circle on the green dot like
    the red dot's larger thing"): a bare 8px slate dot read as the band's sage, and on the table the band's colour painted over it. Regular
    stays the plain dot */
-.tq-pile-row.important .rail i, .tq-pile-row.important.current .rail i { background: #55697a !important; box-shadow: 0 0 0 2px #fffdfb, 0 0 0 3.5px rgba(85, 105, 122, .5); }
+.tq-pile-row.important .rail i, .tq-pile-row.important.current .rail i { background: #55697a !important; box-shadow: 0 0 0 2px var(--tq-panel, #fffdfb), 0 0 0 3.5px rgba(85, 105, 122, .5); }
 /* NEXT wears nothing: the ring is what is ON THE TABLE, and the row after it is a row like any other (the owner,
    2026-10-01: "the next one needs nothing"). The class stays - the walk and its tests find the next row by it. */
 .tq-pile-row.current { height: 54px; }
@@ -119,8 +119,8 @@
 .tq-pile-batch { position: absolute; left: 66px; right: 0; z-index: 0; border-radius: 10px; background: var(--tint, #e5ece2);
   transition: top .55s cubic-bezier(.2,.8,.2,1), height .55s cubic-bezier(.2,.8,.2,1); }
 .tq-pile-stack .tq-pile-batch b { color: var(--band, #5f7a5f); background: var(--tint, #e5ece2); }               /* the single item's pill says it in the same green */
-.tq-pile-batch b { position: absolute; top: -8px; right: 10px; background: #fffdfb; padding: 0 6px; border-radius: 99px;
-  font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #41525f; white-space: nowrap; }
+.tq-pile-batch b { position: absolute; top: -8px; right: 10px; background: var(--tq-panel, #fffdfb); padding: 0 6px; border-radius: 99px;
+  font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--tq-link, #41525f); white-space: nowrap; }
 /* ...and both pills sit on the ring's BOTTOM edge: the band heading above is sticky and opaque
    (z-index 3), and it sliced a top-edge pill in half whenever the ring started its band, which it
    usually does - first the single item's, then the batch's (the owner, 2026-09-17: "you can't see
@@ -128,8 +128,8 @@
 .tq-pile-batch b { top: auto; bottom: -7px; right: 10px; z-index: 2; pointer-events: none; }
 .tq-pile-row.inbatch { z-index: 1; }
 .tq-pile-row.inbatch .card { border-color: transparent; background: transparent; box-shadow: none; }
-.tq-pile-row.inbatch .rail i { box-shadow: 0 0 0 3px #f5f8f9; }
-.tq-pile-row.inbatch .card:hover { background: rgba(255,253,251,.6); }
+.tq-pile-row.inbatch .rail i { box-shadow: 0 0 0 3px var(--tq-panel, #f5f8f9); }
+.tq-pile-row.inbatch .card:hover { background: rgb(var(--tq-panel-rgb, 255 253 251) / .6); }
 /* ONE LINE: where it came from, and what it is. The sender, the ref, the lane word, the road word
    and the promoted arrow are all on the row you open (the owner, 2026-09-16: "maybe just subject
    should be there to clean it up"). */
@@ -139,9 +139,9 @@
    border is the table's alone, so the state is the icon's (statusMark.css, drawn by StatusMark.jsx's StatusLogo) */
 .tq-pile-row .logo .goal { width: 15px; font-size: 13px; line-height: 15px; text-align: center; }
 /* a goal's count beside its title - "· 2 of 5 steps" - in the age column's quiet ink */
-.tq-pile-steps { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tq-pile-steps { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-secondary, #746e64); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* ...and its due date after it - like its count and its word, the title gives way to it, never the other way round (.goal-t) */
-.tq-pile-due { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; white-space: nowrap; }
+.tq-pile-due { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-secondary, #746e64); white-space: nowrap; }
 /* 500, not 600: at 600 every row shouted equally and the column read as a wall of bold (the owner,
    2026-09-16: "it's all too bold"). 11.5px is the size the TIMELINE tab sets its own subjects in
    (FeedView), and the two rails are the same list read two ways, so they read at one size. And the
@@ -150,32 +150,32 @@
 /* the narrowed sidebar (2026-09-29): the TITLE keeps at least half the row and the lane word gives way first, down to its
    mark - "did t..." beside a whole "ready to send" had it backwards; the word is in the row's tooltip */
 /* the sidebar buttons' size (12.5px), so more of a row's subject shows (the owner, 2026-10-06: "if they were a little smaller you could see more") */
-.tq-pile-row .t b { flex: 1 1 auto; min-width: 50%; font-size: 12.5px; font-weight: 400; color: #262521; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-pile-row .t b { flex: 1 1 auto; min-width: 50%; font-size: 12.5px; font-weight: 400; color: var(--tq-text, #262521); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* which task a row is. Sans, not mono - the rail carries no mono anywhere - and quiet enough that
    the subject still leads the line. */
-.tq-pile-ref { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; font-variant-numeric: tabular-nums; }
+.tq-pile-ref { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-secondary, #746e64); font-variant-numeric: tabular-nums; }
 /* ...and, in YOUR TASK only, what is holding it up: "waiting to start", "asked you". A right-aligned
    column you can read down, not a pill - a pill on every row is what made the old rail a wall. */
-.tq-pile-word { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; white-space: nowrap; }
+.tq-pile-word { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-secondary, #6e685f); white-space: nowrap; }
 /* the lane's own mark, at the size it is READ at rather than the size the loud pill shouts at */
 .tq-pile-word i { font-style: normal; font-size: 11px; line-height: 1; margin-right: 4px; filter: saturate(.9); }
 /* an FYI Should be a task made a task (movedFyi.js): its row stays in FYI, quieter, saying where it went - the ref the way to the task */
-.tq-pile-row.moved .t b { color: #8a8478; }
+.tq-pile-row.moved .t b { color: var(--tq-warning, #8a8478); }
 /* ...one line high, the ref at its end: with no room for "Moved to Tasks ·" whole, the words wrap onto the hidden second line and the ref
    stays - cut, they read "Mo…" beside a squeezed title (the scenario run, 2026-11-06); the row's hover says where it went in full */
 /* ...and it gives way before the title, down to its ref: the room the words left goes to the title, not to a gap */
 .tq-pile-moved { flex: 0 1000 auto; min-width: 5em; display: inline-flex; flex-direction: row-reverse; flex-wrap: wrap; align-content: flex-start; column-gap: 4px;
-  height: 1.5em; overflow: hidden; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; white-space: nowrap; }
+  height: 1.5em; overflow: hidden; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-secondary, #746e64); white-space: nowrap; }
 .tq-pile-moved .w { flex: 0 0 auto; }
-.tq-pile-moved .ref { flex: 0 0 auto; color: #55697a; font-variant-numeric: tabular-nums; border-bottom: 1px solid #c9d2d9; cursor: pointer; }
+.tq-pile-moved .ref { flex: 0 0 auto; color: var(--tq-link, #55697a); font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--tq-border, #c9d2d9); cursor: pointer; }
 .tq-pile-moved .ref:hover { border-bottom-color: #55697a; }
-.tq-moved .tq-ref-link { font: inherit; font-weight: 600; padding: 0; background: none; border: 0; border-bottom: 1px solid #c9d2d9; }
-.tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid #ddd6cb; background: #eee9e1; color: #6f6960; font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
+.tq-moved .tq-ref-link { font: inherit; font-weight: 600; padding: 0; background: none; border: 0; border-bottom: 1px solid var(--tq-border, #c9d2d9); }
+.tq-pile-tag { flex: 0 0 auto; display: inline-block; padding: 0 6px; border-radius: 99px; border: 1px solid var(--tq-border, #ddd6cb); background: var(--tq-inset, #eee9e1); color: var(--tq-secondary, #6f6960); font: 600 9px/15px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .01em; white-space: nowrap; }
 /* the current one opens up: the second line says why it is here */
-.tq-pile-row .sub { font-size: 11.5px; line-height: 1.5; padding: 2px 0 0 25px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-pile-empty { padding: 56px 24px 24px; text-align: center; color: #6e685f; font-size: 11.5px; line-height: 1.5; }
-.tq-pile-empty .mark { display: block; font-size: 30px; line-height: 1; color: #3c5740; }
-.tq-pile-empty b { display: block; color: #3c5740; font-size: 15px; margin: 6px 0 4px; }
+.tq-pile-row .sub { font-size: 11.5px; line-height: 1.5; padding: 2px 0 0 25px; color: var(--tq-secondary, #6e685f); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-pile-empty { padding: 56px 24px 24px; text-align: center; color: var(--tq-secondary, #6e685f); font-size: 11.5px; line-height: 1.5; }
+.tq-pile-empty .mark { display: block; font-size: 30px; line-height: 1; color: var(--tq-success, #3c5740); }
+.tq-pile-empty b { display: block; color: var(--tq-success, #3c5740); font-size: 15px; margin: 6px 0 4px; }
 /* reaching clear (AllDone, the owner 2026-11-06): a short confetti burst over the empty rail, the line landing just after it */
 .tq-all-done { position: relative; }
 .tq-all-done-confetti { position: absolute; left: 0; top: 0; width: 100%; height: 260px; pointer-events: none; }
@@ -184,14 +184,14 @@
 @media (prefers-reduced-motion: reduce) { .tq-all-done-line { transition: none; } }
 
 /* ── the chat ─────────────────────────────────────────────────────────────────────────────── */
-.tq-chat-head { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 12px; border-bottom: 1px solid #e1dcd5; background: #fffdfb; }
-.tq-chat-head .who b { display: inline; font-size: 13px; color: #262521; font-weight: 600; letter-spacing: .2px; }
+.tq-chat-head { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 12px; border-bottom: 1px solid var(--tq-border, #e1dcd5); background: var(--tq-panel, #fffdfb); }
+.tq-chat-head .who b { display: inline; font-size: 13px; color: var(--tq-text, #262521); font-weight: 600; letter-spacing: .2px; }
 .tq-chat-head .who { min-width: 0; }
-.tq-chat-head .who span { display: inline; font-size: 10.5px; color: #6e685f; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-chat-head .who span { display: inline; font-size: 10.5px; color: var(--tq-secondary, #6e685f); margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-chat-head .grow { flex: 1; }
-.tq-stage-mode { display: inline-flex; border: 1px solid #ddd6cb; border-radius: 99px; overflow: hidden; flex: 0 0 auto; }
-.tq-stage-mode button { border: 0; background: transparent; padding: 4px 10px; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; cursor: pointer; white-space: nowrap; }
-.tq-stage-mode button.on { background: #eae4d8; color: #55697a; }
+.tq-stage-mode { display: inline-flex; border: 1px solid var(--tq-border, #ddd6cb); border-radius: 99px; overflow: hidden; flex: 0 0 auto; }
+.tq-stage-mode button { border: 0; background: transparent; padding: 4px 10px; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-secondary, #6e685f); cursor: pointer; white-space: nowrap; }
+.tq-stage-mode button.on { background: var(--tq-inset, #eae4d8); color: var(--tq-link, #55697a); }
 /* a SIZE container: the item on the table is as tall and as wide as this body (100cqh / 100cqw), in CSS, always current */
 .tq-chat-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 20px 8px; scroll-behavior: smooth; container-type: size; }
 .tq-chat-inner { width: min(980px, 100%); margin: 0 auto; }
@@ -203,20 +203,20 @@
    column without it, receipts and cards included */
 .tq-msg:not(.you) > .avatar { visibility: hidden; }
 .tq-msg.you + .tq-msg > .avatar, .tq-chat-inner > .tq-msg:first-child > .avatar, .tq-welcome-msg > .avatar { visibility: visible; }
-.tq-msg .body { min-width: 0; font-size: 13.5px; line-height: 1.55; color: #262521; padding-top: 3px; overflow-wrap: break-word; }
+.tq-msg .body { min-width: 0; font-size: 13.5px; line-height: 1.55; color: var(--tq-text, #262521); padding-top: 3px; overflow-wrap: break-word; }
 .tq-msg .body p { margin: 0 0 6px; }
 .tq-msg .body p:last-child { margin-bottom: 0; }
 .tq-msg.you { grid-template-columns: minmax(0, 1fr); }
-.tq-msg.you .body { justify-self: end; max-width: 78%; background: #f1eee8; border: 1px solid #dfdbd3; border-radius: 13px 13px 4px 13px; padding: 8px 12px; white-space: pre-wrap; }
-.tq-msg.receipt .body { color: #4c6450; font-size: 12px; }
-.tq-msg .at { font: 500 9.5px 'IBM Plex Mono', Consolas, monospace; color: #a09b92; margin-top: 3px; }
+.tq-msg.you .body { justify-self: end; max-width: 78%; background: var(--tq-inset, #f1eee8); border: 1px solid var(--tq-border, #dfdbd3); border-radius: 13px 13px 4px 13px; padding: 8px 12px; white-space: pre-wrap; }
+.tq-msg.receipt .body { color: var(--tq-success, #4c6450); font-size: 12px; }
+.tq-msg .at { font: 500 9.5px 'IBM Plex Mono', Consolas, monospace; color: var(--tq-muted, #a09b92); margin-top: 3px; }
 .tq-typing { display: inline-flex; gap: 4px; padding: 8px 2px; }
-.tq-work { margin: 2px 0 6px; padding: 6px 9px; border-left: 2px solid #dde1d6; font: 10.5px/1.5 'IBM Plex Mono', Consolas, monospace; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-work { margin: 2px 0 6px; padding: 6px 9px; border-left: 2px solid var(--tq-border, #dde1d6); font: 10.5px/1.5 'IBM Plex Mono', Consolas, monospace; color: var(--tq-secondary, #6e685f); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-work div { overflow: hidden; text-overflow: ellipsis; }
 .tq-typing i { width: 6px; height: 6px; border-radius: 50%; background: #a9a294; animation: tqTyping 1.1s ease-in-out infinite; }
 .tq-typing i:nth-child(2) { animation-delay: .15s; } .tq-typing i:nth-child(3) { animation-delay: .3s; }
 /* beside the dots, on their line; tabular digits so the count does not jitter as it ticks */
-.tq-working { margin-left: 6px; font-size: 12px; line-height: 22px; color: #6e685f; font-variant-numeric: tabular-nums; vertical-align: middle; }
+.tq-working { margin-left: 6px; font-size: 12px; line-height: 22px; color: var(--tq-secondary, #6e685f); font-variant-numeric: tabular-nums; vertical-align: middle; }
 @keyframes tqTyping { 0%, 100% { opacity: .35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
 /* the day's opener is a LINE of the chat: the avatar column is the speaker, the body is left-aligned */
 .tq-welcome-msg { margin: 4px 0 16px; }   /* full width: the mark sits at the left edge, like every line of the chat */
@@ -225,57 +225,57 @@
 .tq-welcome-msg:has([data-tq-firstrun]) { grid-template-columns: minmax(0, 1fr); }
 .tq-welcome-msg:has([data-tq-firstrun]) > .avatar { display: none; }
 .tq-welcome > span, .tq-welcome > .tq-day-hold > span { display: block; }
-.tq-welcome { color: #6e685f; padding-top: 2px; }
-.tq-welcome > b { display: block; font-size: 20px; font-weight: 600; color: #262521; margin: 0 0 4px; line-height: 1.3; }
+.tq-welcome { color: var(--tq-secondary, #6e685f); padding-top: 2px; }
+.tq-welcome > b { display: block; font-size: 20px; font-weight: 600; color: var(--tq-text, #262521); margin: 0 0 4px; line-height: 1.3; }
 .tq-welcome .tq-modes { justify-content: center; flex-wrap: wrap; }        /* the way in, centred under the card (the owner, 2026-10-08) */
 @media (max-width: 760px) { .tq-welcome .tq-modes { flex-wrap: wrap; } }
 .tq-welcome span { font-size: 12.5px; line-height: 1.5; }
 /* the start of the walk on the empty chat: the rows read left to right, whatever the welcome centres */
 .tq-welcome-sum { margin: 6px 0 4px; text-align: left; }
-.tq-welcome-away { margin: -4px 0 10px; color: #4a453e; }       /* the gap in a sentence, under the greeting (B5) */
-.tq-linkish { border: 0; background: none; padding: 0; font: inherit; color: #55697a; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.tq-welcome-away { margin: -4px 0 10px; color: var(--tq-text, #4a453e); }       /* the gap in a sentence, under the greeting (B5) */
+.tq-linkish { border: 0; background: none; padding: 0; font: inherit; color: var(--tq-link, #55697a); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 /* THE DAY'S OPENER, mock-up A (the owner, 2026-10-08): a greeting with the date beside it, then ONE paper card - the day's
    meetings as plain lines on the left, a row per band on the right. No tinted box: the hairlines carry it. */
 .tq-welcome-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 8px; }
-.tq-welcome-head > b { font-size: 20px; font-weight: 600; color: #262521; line-height: 1.3; }
-.tq-welcome .tq-welcome-head > span { font: 500 10.5px 'IBM Plex Mono', Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; color: #6e685f; white-space: nowrap; }
+.tq-welcome-head > b { font-size: 20px; font-weight: 600; color: var(--tq-text, #262521); line-height: 1.3; }
+.tq-welcome .tq-welcome-head > span { font: 500 10.5px 'IBM Plex Mono', Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--tq-secondary, #6e685f); white-space: nowrap; }
 .tq-day-box { display: flex; flex-direction: column; gap: 8px; text-align: left; }
 /* TWO CARDS IN ONE ROW, then the digest (the owner, 2026-10-31: "more compact please. not everything has that much screen ... make them
    cards"): a grid row stands both at the taller one's height, and that height is their content's - the day's list asks for a few lines
    (assistantCards EV_SHOWN) and scrolls the rest, so ten meetings or none the row is the same shape. A 13" laptop first. */
 .tq-day { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; text-align: left; }
-.tq-day-pane, .tq-since { min-width: 0; background: #fffdfb; border: 1px solid #e6e0d6; border-radius: 10px; padding: 9px 14px 10px; }
+.tq-day-pane, .tq-since { min-width: 0; background: var(--tq-panel, #fffdfb); border: 1px solid var(--tq-border, #e6e0d6); border-radius: 10px; padding: 9px 14px 10px; }
 .tq-day-pane { display: flex; flex-direction: column; }
 /* WHAT CHANGED WHILE YOU WERE AWAY, on top of the same card (mock-up "A +", 2026-10-08): counted, no model; the digest folded under it */
 .tq-since { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .tq-since > * { align-self: stretch; }
 .tq-since > .tq-linkish { align-self: flex-start; font-size: 12.5px; }
 .tq-since-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.tq-welcome .tq-since-head > span:last-child { font-size: 12.5px; color: #6e685f; }
+.tq-welcome .tq-since-head > span:last-child { font-size: 12.5px; color: var(--tq-secondary, #6e685f); }
 .tq-since-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 @container (max-width: 640px) { .tq-since-cards { grid-template-columns: minmax(0, 1fr); } }
-.tq-since-card { display: flex; flex-direction: column; gap: 4px; min-height: 60px; padding: 10px 12px; border: 1px solid #ece7de; border-radius: 10px;
-  background: #fffdfb; text-align: left; font: inherit; color: #262521; cursor: pointer; transition: border-color .15s, background .15s; }
-.tq-since-card:hover { border-color: #d3ccc1; background: #fbf9f6; }
-.tq-since-card:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
-.tq-welcome .tq-since-card .lbl { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #6e685f; }
+.tq-since-card { display: flex; flex-direction: column; gap: 4px; min-height: 60px; padding: 10px 12px; border: 1px solid var(--tq-border, #ece7de); border-radius: 10px;
+  background: var(--tq-panel, #fffdfb); text-align: left; font: inherit; color: var(--tq-text, #262521); cursor: pointer; transition: border-color .15s, background .15s; }
+.tq-since-card:hover { border-color: var(--tq-border, #d3ccc1); background: var(--tq-panel, #fbf9f6); }
+.tq-since-card:focus-visible { outline: 2px solid var(--tq-success, #7d9a7c); outline-offset: 2px; }
+.tq-welcome .tq-since-card .lbl { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--tq-secondary, #6e685f); }
 .tq-since-card .lbl i { width: 7px; height: 7px; border-radius: 50%; background: #7b7366; flex: 0 0 auto; }
 .tq-since-card.agent .lbl i { background: #55697a; }
 .tq-since-card.report .lbl i { background: #827356; }
-.tq-welcome .tq-since-card.agent .lbl { color: #55697a; font-weight: 600; }
-.tq-welcome .tq-since-card.report .lbl { color: #827356; font-weight: 600; }
+.tq-welcome .tq-since-card.agent .lbl { color: var(--tq-link, #55697a); font-weight: 600; }
+.tq-welcome .tq-since-card.report .lbl { color: var(--tq-warning, #827356); font-weight: 600; }
 .tq-since-card.agent { border-left: 3px solid #55697a; }
 .tq-since-card.report { border-left: 3px solid #827356; }
-.tq-welcome .tq-since-card .txt { font-size: 13px; line-height: 1.35; color: #262521; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.tq-since-digest { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: #6e685f; }
+.tq-welcome .tq-since-card .txt { font-size: 13px; line-height: 1.35; color: var(--tq-text, #262521); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.tq-since-digest { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--tq-secondary, #6e685f); }
 .tq-welcome .tq-since-digest > span { font-size: 12.5px; }
 .tq-welcome .tq-since-digest .tag { font: 600 10.5px 'IBM Plex Mono', Consolas, monospace; letter-spacing: .08em; color: #fff;
   background: #827356; border-radius: 4px; padding: 3px 7px; }
 .tq-welcome .tq-since-digest[data-tq-learned] .tag { background: #55697a; }
-.tq-welcome .tq-since-digest > span:not(.tag):not(.sep) { color: #262521; }
-.tq-since-digest .sep { color: #d8d1c5; }
+.tq-welcome .tq-since-digest > span:not(.tag):not(.sep) { color: var(--tq-text, #262521); }
+.tq-since-digest .sep { color: var(--tq-warning, #d8d1c5); }
 .tq-since-digest .tq-linkish { text-decoration: none; font-weight: 600; }
-.tq-since-body { border-top: 1px dashed #e3dccf; padding-top: 8px; max-height: 520px; overflow: auto; }
+.tq-since-body { border-top: 1px dashed var(--tq-border, #e3dccf); padding-top: 8px; max-height: 520px; overflow: auto; }
 /* folded, the body is cut at the last whole line that fits above the fold (SinceBlock) - the fade says there is more under it */
 .tq-since-body.cut { overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent); }
 /* the digest's own sections, tightened here only: the Reports page keeps DigestText's roomier drawing */
@@ -285,36 +285,36 @@
 .tq-since-body section li { margin-bottom: 1px; line-height: 1.45; }
 .tq-day.solo { grid-template-columns: minmax(0, 1fr); }
 @container (max-width: 640px) { .tq-day { grid-template-columns: minmax(0, 1fr); } }
-.tq-welcome .tq-day-h { display: block; margin: 0 0 3px; font: 600 10.5px/18px 'IBM Plex Mono', Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; color: #6e685f; }
+.tq-welcome .tq-day-h { display: block; margin: 0 0 3px; font: 600 10.5px/18px 'IBM Plex Mono', Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--tq-secondary, #6e685f); }
 .tq-day-agenda { min-width: 0; }
 /* the list's pitch is assistantCards' EV_ROW / EV_NOW: it asks for that much room, and the rest scrolls inside */
 .tq-day-evs { position: relative; flex: 1 1 auto; }
 .tq-day-evs > .in { position: absolute; inset: 0; overflow-y: auto; scrollbar-width: thin; }
 .tq-day-agenda .ev { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: baseline; height: 22px; }
-.tq-welcome .tq-day-agenda .t { font: 500 11.5px/22px 'IBM Plex Mono', Consolas, monospace; color: #262521; white-space: nowrap; }
-.tq-welcome .tq-day-agenda .s { font-size: 13px; line-height: 22px; color: #6e685f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tq-welcome .tq-day-agenda .t { font: 500 11.5px/22px 'IBM Plex Mono', Consolas, monospace; color: var(--tq-text, #262521); white-space: nowrap; }
+.tq-welcome .tq-day-agenda .s { font-size: 13px; line-height: 22px; color: var(--tq-secondary, #6e685f); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tq-day-agenda .ev.cal-note { display: block; height: auto; }
 .tq-welcome .tq-day-agenda .cal-note .s { display: block; line-height: 1.4; white-space: normal; }
 .tq-day-agenda .cal-go { align-self: flex-start; margin-top: 4px; font-size: 12.5px; }
-.tq-welcome .tq-day-wait .note { font-size: 12.5px; line-height: 1.4; color: #6e685f; }
-.tq-day-agenda .s b { font-weight: 600; color: #262521; }
+.tq-welcome .tq-day-wait .note { font-size: 12.5px; line-height: 1.4; color: var(--tq-secondary, #6e685f); }
+.tq-day-agenda .s b { font-weight: 600; color: var(--tq-text, #262521); }
 /* an unreadable calendar says why on its own line, under the headline */
 .tq-day-agenda .cal-note .why { display: block; margin-top: 4px; }
-.tq-day-agenda .ev.past .t, .tq-day-agenda .ev.past .s, .tq-day-agenda .ev.past .s b { color: #a09b92; font-weight: 400; }
+.tq-day-agenda .ev.past .t, .tq-day-agenda .ev.past .s, .tq-day-agenda .ev.past .s b { color: var(--tq-muted, #a09b92); font-weight: 400; }
 .tq-day-agenda .ev.past .s { text-decoration: line-through; text-decoration-color: #d8d1c5; }
-.tq-welcome .tq-day-agenda .ev.live .t { color: #8a3646; font-weight: 600; }
+.tq-welcome .tq-day-agenda .ev.live .t { color: var(--tq-danger, #8a3646); font-weight: 600; }
 .tq-day-agenda .ev.now { height: 10px; align-items: center; }
-.tq-welcome .tq-day-agenda .ev.now .t { font-weight: 600; font-size: 9.5px; line-height: 10px; text-transform: uppercase; color: #8a3646; }
+.tq-welcome .tq-day-agenda .ev.now .t { font-weight: 600; font-size: 9.5px; line-height: 10px; text-transform: uppercase; color: var(--tq-danger, #8a3646); }
 .tq-day-agenda .ev.now i { height: 1px; background: #8a3646; align-self: center; }
-.tq-welcome .tq-day-agenda .ev.allday .t { color: #6e685f; }
+.tq-welcome .tq-day-agenda .ev.allday .t { color: var(--tq-secondary, #6e685f); }
 .tq-day-row { display: grid; grid-template-columns: 8px 104px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 30px; padding: 0 4px;
-  border: 0; border-bottom: 1px solid #f0ebe3; border-radius: 0; background: none; text-align: left; font: inherit; color: #262521; cursor: pointer; transition: background .15s; }
+  border: 0; border-bottom: 1px solid var(--tq-border, #f0ebe3); border-radius: 0; background: none; text-align: left; font: inherit; color: var(--tq-text, #262521); cursor: pointer; transition: background .15s; }
 .tq-day-row:last-child { border-bottom: 0; }
-.tq-day-row:hover { background: #fbf9f6; }
-.tq-day-row:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
-.tq-day-row .dot { width: 8px; height: 8px; border-radius: 50%; background: #b8afa1; }
+.tq-day-row:hover { background: var(--tq-panel, #fbf9f6); }
+.tq-day-row:focus-visible { outline: 2px solid var(--tq-success, #7d9a7c); outline-offset: 2px; }
+.tq-day-row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tq-tint-brass, #b8afa1); }
 .tq-day-row .lbl { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-welcome .tq-day-row .who { font-size: 12.5px; color: #4d4a43; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-welcome .tq-day-row .who { font-size: 12.5px; color: var(--tq-secondary, #4d4a43); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-day-row .n { font: 600 16px/1 'IBM Plex Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; text-align: right; min-width: 24px; }
 .tq-day-row.lvl-task .dot { background: #5f7a5f; }
 .tq-day-row.lvl-reports .dot, .tq-day-row.lvl-ideas .dot { background: #827356; }
@@ -322,16 +322,16 @@
 .tq-day-row.lvl-later .dot, .tq-day-row.lvl-watching .dot { background: transparent; border: 1px dashed #7b7366; }
 /* the label and the count wear the band's colour, the rail's own section pill (the owner, 2026-10-22: "the count should be the same
    colour as tasks/reports/fyi") */
-.tq-day-row.lvl-task .n { color: #5f7a5f; }
-.tq-day-row.lvl-reports .n, .tq-day-row.lvl-ideas .n { color: #827356; }
-.tq-day-row.lvl-fyi .n, .tq-day-row.lvl-later .n, .tq-day-row.lvl-watching .n { color: #7b7366; }
+.tq-day-row.lvl-task .n { color: var(--tq-success, #5f7a5f); }
+.tq-day-row.lvl-reports .n, .tq-day-row.lvl-ideas .n { color: var(--tq-warning, #827356); }
+.tq-day-row.lvl-fyi .n, .tq-day-row.lvl-later .n, .tq-day-row.lvl-watching .n { color: var(--tq-warning, #7b7366); }
 /* ...and the label IS the rail's section pill - same fill, same capitals - so a band reads as the one on the rail */
-.tq-day-row .lbl { justify-self: start; max-width: 100%; color: #fff; background: #b8afa1; border-radius: 99px; padding: 2px 10px;
+.tq-day-row .lbl { justify-self: start; max-width: 100%; color: #fff; background: var(--tq-tint-brass, #b8afa1); border-radius: 99px; padding: 2px 10px;
   font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
 .tq-day-row.lvl-task .lbl { background: #5f7a5f; }
 .tq-day-row.lvl-reports .lbl, .tq-day-row.lvl-ideas .lbl { background: #827356; }
 .tq-day-row.lvl-fyi .lbl { background: #7b7366; }
-.tq-day-row.lvl-later .lbl, .tq-day-row.lvl-watching .lbl { color: #7b7366; background: transparent; border: 1px dashed #7b7366; }
+.tq-day-row.lvl-later .lbl, .tq-day-row.lvl-watching .lbl { color: var(--tq-warning, #7b7366); background: transparent; border: 1px dashed #7b7366; }
 .tq-day-row .dot { display: none; }
 .tq-day-row { grid-template-columns: 96px minmax(0, 1fr) auto; }
 @container (max-width: 640px) { .tq-day-row { grid-template-columns: 84px minmax(0, 1fr) auto; } }
@@ -342,177 +342,177 @@
 .tq-day-cards { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; margin: 16px 0 2px; }
 @container (max-width: 640px) { .tq-day-cards { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .tq-day-card { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: 0; padding: 12px 14px; text-align: left; cursor: pointer;
-  border: 1px solid #e6e1d8; border-radius: 10px; background: #fffdfb; font: inherit; color: #262521; transition: border-color .15s, background .15s; }
-.tq-day-card:hover { border-color: #d3ccc1; background: #fbf9f6; }
+  border: 1px solid var(--tq-border, #e6e1d8); border-radius: 10px; background: var(--tq-panel, #fffdfb); font: inherit; color: var(--tq-text, #262521); transition: border-color .15s, background .15s; }
+.tq-day-card:hover { border-color: var(--tq-border, #d3ccc1); background: var(--tq-panel, #fbf9f6); }
 /* the count sits BESIDE its label (the cleanup, 2026-10-06): one line says what and how many, the next says who */
 .tq-day-card .top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.tq-day-card:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
-.tq-welcome .tq-day-card .lbl { display: flex; align-items: center; gap: 7px; min-width: 0; font: 500 12.5px 'IBM Plex Sans', system-ui, sans-serif; color: #4d4a43; }
-.tq-day-card .dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #b8afa1; }
-.tq-day-card .top b { font: 600 22px/1 'IBM Plex Sans', system-ui, sans-serif; color: #262521; font-variant-numeric: tabular-nums; }
-.tq-welcome .tq-day-card .who { width: 100%; font-size: 12.5px; line-height: 1.4; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-day-card:focus-visible { outline: 2px solid var(--tq-success, #7d9a7c); outline-offset: 2px; }
+.tq-welcome .tq-day-card .lbl { display: flex; align-items: center; gap: 7px; min-width: 0; font: 500 12.5px 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-secondary, #4d4a43); }
+.tq-day-card .dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--tq-tint-brass, #b8afa1); }
+.tq-day-card .top b { font: 600 22px/1 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-text, #262521); font-variant-numeric: tabular-nums; }
+.tq-welcome .tq-day-card .who { width: 100%; font-size: 12.5px; line-height: 1.4; color: var(--tq-secondary, #6e685f); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-day-card.lvl-task .dot { background: #5f7a5f; }
 .tq-day-card.lvl-reports .dot, .tq-day-card.lvl-ideas .dot { background: #827356; }
 .tq-day-card.lvl-fyi .dot { background: #7b7366; }
 .tq-day-card.lvl-later .dot, .tq-day-card.lvl-watching .dot { background: transparent; border: 1px dashed #7b7366; }
 .tq-modes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
-.tq-chip { border: 1px solid #d8d1c5; background: #fffdfb; color: #262521; border-radius: 99px; padding: 7px 14px; font: 500 12.5px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .15s; }
-.tq-chip:hover { border-color: #55697a; background: #f4f6f8; }
+.tq-chip { border: 1px solid var(--tq-border, #d8d1c5); background: var(--tq-panel, #fffdfb); color: var(--tq-text, #262521); border-radius: 99px; padding: 7px 14px; font: 500 12.5px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .15s; }
+.tq-chip:hover { border-color: #55697a; background: var(--tq-panel, #f4f6f8); }
 .tq-chip:disabled { opacity: .5; cursor: default; }
-.tq-chip:focus-visible { outline: 2px solid #55697a; outline-offset: 2px; }
+.tq-chip:focus-visible { outline: 2px solid var(--tq-link, #55697a); outline-offset: 2px; }
 .tq-chip.primary { background: #55697a; color: #fff; border-color: transparent; }
 .tq-chip.primary:hover:not(:disabled) { background: #46586a; }
 /* the proposal card's own Confirm/Cancel row (ProposalCard.jsx) - not the chat's verbs */
 .tq-options { display: flex; gap: 6px; flex-wrap: wrap; }
 .tq-verbs { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin: 9px 0 1px; }
-.tq-verb { border: 1px solid #ddd8cf; background: transparent; color: #55697a; border-radius: 99px;
+.tq-verb { border: 1px solid var(--tq-border, #ddd8cf); background: transparent; color: var(--tq-link, #55697a); border-radius: 99px;
   padding: 3px 10px; font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .13s; }
-.tq-verb:hover { border-color: #55697a; background: #f2f5f7; color: #33424d; }
-.tq-verb:focus-visible { outline: 2px solid #7d9a7c; outline-offset: 2px; }
+.tq-verb:hover { border-color: #55697a; background: var(--tq-panel, #f2f5f7); color: var(--tq-link, #33424d); }
+.tq-verb:focus-visible { outline: 2px solid var(--tq-success, #7d9a7c); outline-offset: 2px; }
 .tq-verb:disabled { opacity: .45; cursor: default; }
-.tq-verb.primary { border-color: #8fa38f; background: #f1f5f1; color: #3f5943; }
-.tq-verb.primary:hover { background: #e6ede6; }
+.tq-verb.primary { border-color: var(--tq-border-strong, #8fa38f); background: var(--tq-panel, #f1f5f1); color: var(--tq-success, #3f5943); }
+.tq-verb.primary:hover { background: var(--tq-inset, #e6ede6); }
 
 /* the card under a line: paper and a hairline. The lane is the kicker's DOT - never an edge (2026-09-23) */
-.tq-card { margin: 8px 0 4px; border: 1px solid #ddd8cf; border-radius: 11px; background: #fffdf9; padding: 12px 14px 11px; box-shadow: 0 4px 16px rgba(51,45,35,.06); }
+.tq-card { margin: 8px 0 4px; border: 1px solid var(--tq-border, #ddd8cf); border-radius: 11px; background: var(--tq-panel, #fffdf9); padding: 12px 14px 11px; box-shadow: 0 4px 16px rgba(51,45,35,.06); }
 /* part 2, who wants what: one sentence, the asker in bold */
-.tq-card-lead { margin-top: 7px; font-size: 14.5px; line-height: 1.42; color: #262521; overflow-wrap: anywhere; }
+.tq-card-lead { margin-top: 7px; font-size: 14.5px; line-height: 1.42; color: var(--tq-text, #262521); overflow-wrap: anywhere; }
 .tq-card-lead b { font-weight: 600; }
 /* part 4, what the verb does - said before it is pressed */
-.tq-card-then { margin-top: 9px; font-size: 11.5px; line-height: 1.45; color: #4d4a43; }
-.tq-card-then b { font-weight: 600; color: #262521; }
+.tq-card-then { margin-top: 9px; font-size: 11.5px; line-height: 1.45; color: var(--tq-secondary, #4d4a43); }
+.tq-card-then b { font-weight: 600; color: var(--tq-text, #262521); }
 /* every other word, one quiet line - no second row of buttons */
-.tq-card-also { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 6px; font-size: 10.5px; color: #746e64; }
-.tq-card-also button { font: inherit; color: #55697a; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.tq-card-also { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 6px; font-size: 10.5px; color: var(--tq-secondary, #746e64); }
+.tq-card-also button { font: inherit; color: var(--tq-link, #55697a); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .tq-card-also button:disabled { opacity: .45; cursor: default; }
-.tq-card-more-actions { margin-top: 6px; padding-top: 7px; border-top: 1px solid #ebe6de; }
+.tq-card-more-actions { margin-top: 6px; padding-top: 7px; border-top: 1px solid var(--tq-border, #ebe6de); }
 /* More: the rest of the thing, unfolded in place */
-.tq-card-more { display: block; margin-top: 6px; font: inherit; font-size: 11px; color: #55697a; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.tq-card-more { display: block; margin-top: 6px; font: inherit; font-size: 11px; color: var(--tq-link, #55697a); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .tq-card-clamp .tq-card-full { max-height: 150px; overflow: hidden; }
 .tq-card-clamp.over .tq-card-full { -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
 /* the card's box on the same ground as the rail's work/timeline switch (theme PANEL2) - the near-white
    it wore read as no box at all on the card's paper (2026-09-23) */
-.tq-card .tq-card-full, .tq-card .tq-card-excerpt { background: #e9e3d8; border-color: #ddd5c7; }
+.tq-card .tq-card-full, .tq-card .tq-card-excerpt { background: var(--tq-inset, #e9e3d8); border-color: var(--tq-border, #ddd5c7); }
 /* the start of the walk: who wants what, one row shape for every kind */
 .tq-sum-group { margin-top: 10px; }
 /* the group's name as the rail band's pill (.tq-pile-head span), its count beside it */
 .tq-sum-head { display: flex; align-items: center; gap: 7px; margin: 0 0 4px 4px; }
 .tq-sum-head span { font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase;
-  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
-.tq-sum-head em { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #746e64; }
+  white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--tq-border, #e2dbcf); color: var(--tq-secondary, #6e685f); background: var(--tq-inset, #f3efe8); }
+.tq-sum-head em { font: 600 11px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: var(--tq-secondary, #746e64); }
 .tq-sum-row { display: grid; grid-template-columns: 8px 58px minmax(0, 140px) minmax(0, 1fr) 132px; align-items: center; gap: 9px; width: 100%;
-  min-height: 32px; padding: 0 6px; border: 0; border-top: 1px solid #efeae2; background: none; font: inherit; font-size: 12.5px; color: #262521; text-align: left; cursor: pointer; border-radius: 6px; }
-.tq-sum-row:hover { background: #f4f1ec; }
+  min-height: 32px; padding: 0 6px; border: 0; border-top: 1px solid var(--tq-border, #efeae2); background: none; font: inherit; font-size: 12.5px; color: var(--tq-text, #262521); text-align: left; cursor: pointer; border-radius: 6px; }
+.tq-sum-row:hover { background: var(--tq-panel, #f4f1ec); }
 .tq-sum-row .dot { width: 7px; height: 7px; border-radius: 50%; }
 .tq-sum-row b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-sum-row .what { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #4d4a43; }
-.tq-sum-row .st { font-size: 11px; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.tq-sum-row .what { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--tq-secondary, #4d4a43); }
+.tq-sum-row .st { font-size: 11px; color: var(--tq-secondary, #6e685f); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 /* the task number: a fixed column, so every row's name and title start at the same x */
-.tq-sum-row .ref { font: 500 10.5px 'IBM Plex Mono', ui-monospace, monospace; color: #746e64; white-space: nowrap; }
-.tq-sum-row .what .n { font-style: normal; color: #746e64; font-size: 11px; }
-.tq-sum-more { font-size: 11px; color: #746e64; padding: 4px 6px 0 23px; }
+.tq-sum-row .ref { font: 500 10.5px 'IBM Plex Mono', ui-monospace, monospace; color: var(--tq-secondary, #746e64); white-space: nowrap; }
+.tq-sum-row .what .n { font-style: normal; color: var(--tq-secondary, #746e64); font-size: 11px; }
+.tq-sum-more { font-size: 11px; color: var(--tq-secondary, #746e64); padding: 4px 6px 0 23px; }
 @media (max-width: 520px) { .tq-sum-row { grid-template-columns: 8px minmax(0, 90px) minmax(0, 1fr); } .tq-sum-row .st, .tq-sum-row .ref { display: none; } }
-.tq-card-kicker { display: flex; align-items: center; gap: 7px; font: 600 9px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: #6e685f; }
-.tq-card-kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: #d3ccc1; }
+.tq-card-kicker { display: flex; align-items: center; gap: 7px; font: 600 9px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--tq-secondary, #6e685f); }
+.tq-card-kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tq-inset, #d3ccc1); }
 .tq-card-kicker .src { display: inline-flex; align-items: center; margin-right: 2px; }
 /* the fyi handful: one box, one line per message, the line itself opens it (2026-09-23) */
 /* white, like the messages on a task and in Close out (the owner, 2026-10-14) - the beige box read as a different kind of thing */
-.tq-fyi-box { margin-top: 8px; border-radius: 8px; background: #fffdfb; border: 1px solid #e6e0d6; padding: 2px 4px; }
-.tq-fyi { border-top: 1px solid #eee9e0; }
+.tq-fyi-box { margin-top: 8px; border-radius: 8px; background: var(--tq-panel, #fffdfb); border: 1px solid var(--tq-border, #e6e0d6); padding: 2px 4px; }
+.tq-fyi { border-top: 1px solid var(--tq-border, #eee9e0); }
 .tq-fyi:first-child { border-top: 0; }
 .tq-fyi-line { display: flex; align-items: baseline; gap: 7px; width: 100%; min-width: 0; padding: 7px 8px 2px; border: 0; background: none;
   font: inherit; text-align: left; cursor: pointer; border-radius: 6px; }
-.tq-fyi-line:hover { background: #f7f3ec; }
-.tq-fyi-line .at { flex: 0 0 auto; font-size: 10.5px; color: #8a8378; white-space: nowrap; }
-.tq-fyi-line b { flex: 0 0 auto; font-size: 12.5px; color: #262521; }
-.tq-fyi-line .t { flex: 1 1 auto; min-width: 0; font-size: 12.5px; line-height: 1.45; color: #262521;
+.tq-fyi-line:hover { background: var(--tq-panel, #f7f3ec); }
+.tq-fyi-line .at { flex: 0 0 auto; font-size: 10.5px; color: var(--tq-warning, #8a8378); white-space: nowrap; }
+.tq-fyi-line b { flex: 0 0 auto; font-size: 12.5px; color: var(--tq-text, #262521); }
+.tq-fyi-line .t { flex: 1 1 auto; min-width: 0; font-size: 12.5px; line-height: 1.45; color: var(--tq-text, #262521);
   overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
-.tq-fyi-line .chev { flex: 0 0 auto; color: #746e64; font-size: 10px; }
+.tq-fyi-line .chev { flex: 0 0 auto; color: var(--tq-secondary, #746e64); font-size: 10px; }
 /* ON A PHONE THE SUBJECT GETS ITS OWN LINE: beside the sender and the date it was squeezed to one letter a line at 390px (2026-10-19 UI walk) */
 @container (max-width: 480px) { .tq-fyi-line { flex-wrap: wrap; } .tq-fyi-line .t { order: 9; flex-basis: 100%; padding-left: 20px; } }
-.tq-fyi-gist { margin: 0 8px 7px 28px; font-size: 11.5px; color: #6e685f; line-height: 1.45;
+.tq-fyi-gist { margin: 0 8px 7px 28px; font-size: 11.5px; color: var(--tq-secondary, #6e685f); line-height: 1.45;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-fyi.open .tq-fyi-line { padding-bottom: 6px; }
-.tq-fyi.open .tq-card-full { margin: 0 8px 6px; background: #fffdf9; }
+.tq-fyi.open .tq-card-full { margin: 0 8px 6px; background: var(--tq-panel, #fffdf9); }
 .tq-fyi-acts { margin: 0 8px 8px; }
 /* A REPORT OR AN FYI IN A TASK'S THREE SECTIONS (ItemSections): its section scrolls, so what it says is shown whole - no 420px box inside it */
 .tq-item-sec .tq-card-full { max-height: none; overflow: auto; }
 .tq-item-sec .tq-card-facts { margin-top: 0; }
 .tq-item-sec .tq-card-note { font-size: 12px; margin: 0 0 8px; }
 .tq-item-msg-h { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 7px; row-gap: 1px; width: 100%; min-width: 0; padding: 0; border: 0; background: none; font: inherit;
-  text-align: left; color: #746e64; font-size: 11.5px; }
+  text-align: left; color: var(--tq-secondary, #746e64); font-size: 11.5px; }
 .tq-item-msg-h.press { cursor: pointer; border-radius: 6px; }
 .tq-item-msg-h.press:hover b { text-decoration: underline; }
-.tq-item-msg-h b { font-size: 12.5px; color: #262521; font-weight: 600; white-space: nowrap; }
-.tq-item-msg-h .at { margin-left: auto; font-size: 10.5px; color: #8a8378; white-space: nowrap; }
-.tq-item-msg-h .chev { color: #746e64; font-size: 10px; }
-.tq-item-msg-t { margin-top: 3px; font-size: 13.5px; font-weight: 600; line-height: 1.4; color: #2f2d29; overflow-wrap: anywhere; }
+.tq-item-msg-h b { font-size: 12.5px; color: var(--tq-text, #262521); font-weight: 600; white-space: nowrap; }
+.tq-item-msg-h .at { margin-left: auto; font-size: 10.5px; color: var(--tq-warning, #8a8378); white-space: nowrap; }
+.tq-item-msg-h .chev { color: var(--tq-secondary, #746e64); font-size: 10px; }
+.tq-item-msg-t { margin-top: 3px; font-size: 13.5px; font-weight: 600; line-height: 1.4; color: var(--tq-text, #2f2d29); overflow-wrap: anywhere; }
 /* ...a handful of FYI as ONE list (the owner, 2026-10-28: "too much space in fyi"): six to a laptop's screen. Each message an entry - its line,
    its subject, its words right under it with no box of their own, "open the original" at the end of them - a hairline between entries */
 .tq-item-msg { padding: 7px 0; }
-.tq-item-msg + .tq-item-msg { border-top: 1px solid #eee9e1; }
+.tq-item-msg + .tq-item-msg { border-top: 1px solid var(--tq-border, #eee9e1); }
 /* ...FOLDED until pressed (the owner, 2026-10-28): its line holds the subject, cut to fit, and one line of what they wrote under it */
-.tq-item-msg-h .t { flex: 1 1 12em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: #2f2d29; }
+.tq-item-msg-h .t { flex: 1 1 12em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--tq-text, #2f2d29); }
 .tq-item-msg-h .t + .at { margin-left: 0; }
-.tq-item-msg-h.press:focus-visible { outline: 2px solid #55697a; outline-offset: 2px; }
-.tq-item-msg-g { margin: 1px 0 0 20px; font-size: 12px; line-height: 1.4; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-item-msg-h.press:focus-visible { outline: 2px solid var(--tq-link, #55697a); outline-offset: 2px; }
+.tq-item-msg-g { margin: 1px 0 0 20px; font-size: 12px; line-height: 1.4; color: var(--tq-secondary, #6e685f); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-item-msg .tq-item-msg-t { margin-top: 1px; font-size: 13px; line-height: 1.35; }
-.tq-item-sec .tq-item-msg .tq-card-full { margin-top: 1px; padding: 0; border: 0; border-radius: 0; background: none; color: #4d4a43; line-height: 1.45; }
+.tq-item-sec .tq-item-msg .tq-card-full { margin-top: 1px; padding: 0; border: 0; border-radius: 0; background: none; color: var(--tq-secondary, #4d4a43); line-height: 1.45; }
 .tq-item-sec .tq-item-msg .tq-card-full > .tq-card-note { display: inline-block; margin: 0 0 0 8px; font-size: 10.5px; }
 .tq-item-sec .tq-fyi-acts { margin: 8px 0 0; }
-.tq-item-note { margin-top: 8px; font-size: 12px; line-height: 1.5; color: #4d4a43; }
-.tq-item-moves { font-size: 12px; line-height: 1.55; color: #4d4a43; display: grid; gap: 3px; }
-.tq-item-moves-lead { color: #746e64; font-size: 11.5px; margin-bottom: 2px; }
-.tq-item-moves b { font-weight: 600; color: #262521; }
+.tq-item-note { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--tq-secondary, #4d4a43); }
+.tq-item-moves { font-size: 12px; line-height: 1.55; color: var(--tq-secondary, #4d4a43); display: grid; gap: 3px; }
+.tq-item-moves-lead { color: var(--tq-secondary, #746e64); font-size: 11.5px; margin-bottom: 2px; }
+.tq-item-moves b { font-weight: 600; color: var(--tq-text, #262521); }
 .tq-card-term { margin-top: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #2a2b33; background: #1e1e2e; }
 /* the assistant's own chat in the card: the page's ground, not a terminal's */
-.tq-card-chat { margin-top: 8px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd6c8; background: #faf7f1; display: flex; flex-direction: column; }
+.tq-card-chat { margin-top: 8px; border-radius: 8px; overflow: hidden; border: 1px solid var(--tq-border, #ddd6c8); background: var(--tq-panel, #faf7f1); display: flex; flex-direction: column; }
 .tq-card-chat > * { flex: 1; min-height: 0; }
 .tq-rows { border-collapse: collapse; white-space: normal; font-size: 12px; }
-.tq-rows th { text-align: left; font-weight: 600; color: #55697a; padding: 0 14px 4px 0; text-transform: capitalize; }
-.tq-rows td { padding: 2px 14px 2px 0; border-top: 1px solid #ddd5c7; }
+.tq-rows th { text-align: left; font-weight: 600; color: var(--tq-link, #55697a); padding: 0 14px 4px 0; text-transform: capitalize; }
+.tq-rows td { padding: 2px 14px 2px 0; border-top: 1px solid var(--tq-border, #ddd5c7); }
 .tq-rows td.n { text-align: right; font-variant-numeric: tabular-nums; }
-.tq-card-full { margin-top: 7px; padding: 10px 12px; border-radius: 8px; background: #f6f4f1; border: 1px solid #ebe6de; font-size: 12.5px; line-height: 1.55; color: #262521; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
+.tq-card-full { margin-top: 7px; padding: 10px 12px; border-radius: 8px; background: var(--tq-canvas, #f6f4f1); border: 1px solid var(--tq-border, #ebe6de); font-size: 12.5px; line-height: 1.55; color: var(--tq-text, #262521); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }
 /* ...a report's table: the panel as wide as the table, never past the card (the owner, 2026-10-28) */
 .tq-card-full.fit { width: fit-content; max-width: 100%; box-sizing: border-box; }
 /* ...folded, the table alone sets it: the chart and files under it are below the fold, and their width left the panel 3/4 empty */
 .tq-card-clamp .tq-card-full.fit > :not(table) { width: 0; min-width: 100%; }
-.tq-task-focus { margin-top: 9px; padding: 12px 14px 13px; border: 1px solid #b9c8bb; border-radius: 9px; background: #fff;
-  box-shadow: 0 2px 8px rgba(63,89,67,.08); color: #252923; }
-.tq-task-focus-label { display: flex; align-items: center; gap: 8px; color: #58705c;
+.tq-task-focus { margin-top: 9px; padding: 12px 14px 13px; border: 1px solid var(--tq-border, #b9c8bb); border-radius: 9px; background: var(--tq-panel, #fff);
+  box-shadow: 0 2px 8px rgba(63,89,67,.08); color: var(--tq-text, #252923); }
+.tq-task-focus-label { display: flex; align-items: center; gap: 8px; color: var(--tq-success, #58705c);
   font: 600 10px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; }
-.tq-task-focus-label em { margin-left: auto; color: #747b73; font-style: normal; font-weight: 600; letter-spacing: 0; text-transform: none; }
-.tq-task-box { width: 17px; height: 17px; flex: 0 0 17px; display: inline-grid; place-items: center; border: 2px solid #718b75;
-  border-radius: 4px; color: #fff; background: #fff; font: 600 12px/1 'IBM Plex Sans', system-ui, sans-serif; }
-.tq-task-focus-text { margin: 8px 0 0 0; font-size: 16px; line-height: 1.42; font-weight: 600; color: #20231f; overflow-wrap: anywhere; }
-.tq-task-focus-list { margin: 11px 0 0 0; padding-top: 9px; border-top: 1px solid #e0e7e1; display: grid; gap: 7px; }
-.tq-task-focus-item { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.4; color: #30332e; }
+.tq-task-focus-label em { margin-left: auto; color: var(--tq-muted, #747b73); font-style: normal; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.tq-task-box { width: 17px; height: 17px; flex: 0 0 17px; display: inline-grid; place-items: center; border: 2px solid var(--tq-border-strong, #718b75);
+  border-radius: 4px; color: #fff; background: var(--tq-panel, #fff); font: 600 12px/1 'IBM Plex Sans', system-ui, sans-serif; }
+.tq-task-focus-text { margin: 8px 0 0 0; font-size: 16px; line-height: 1.42; font-weight: 600; color: var(--tq-text, #20231f); overflow-wrap: anywhere; }
+.tq-task-focus-list { margin: 11px 0 0 0; padding-top: 9px; border-top: 1px solid var(--tq-border, #e0e7e1); display: grid; gap: 7px; }
+.tq-task-focus-item { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.4; color: var(--tq-text, #30332e); }
 .tq-task-focus-item .tq-task-box { margin-top: 1px; width: 16px; height: 16px; flex-basis: 16px; }
-.tq-task-focus-item.done { color: #777c74; text-decoration: line-through; }
+.tq-task-focus-item.done { color: var(--tq-muted, #777c74); text-decoration: line-through; }
 .tq-task-focus-item.done .tq-task-box { background: #718b75; }
 .tq-card-context { margin-top: 8px; }
-.tq-card-kicker em { margin-left: auto; font-style: normal; letter-spacing: .04em; text-transform: none; color: #989188; }
-.tq-card-title { margin-top: 5px; font-size: 13px; font-weight: 600; color: #262521; line-height: 1.35; overflow-wrap: anywhere; }
-.tq-card-chip { margin-left: 4px; padding: 1px 7px; border: 1px solid #d9d2c6; border-radius: 9px; font: 500 10px/1.5 'IBM Plex Sans', sans-serif; letter-spacing: 0; text-transform: none; color: #5d574f; }
-.tq-card-facts { margin-top: 9px; display: grid; grid-template-columns: 86px minmax(0, 1fr); row-gap: 5px; column-gap: 10px; font-size: 12.5px; line-height: 1.45; color: #3a3833; overflow-wrap: anywhere; }
-.tq-card-facts > :nth-child(odd) { color: #8a837a; font-size: 11px; padding-top: 1px; }
-.tq-card-link { color: #3d5a80; text-decoration: underline; text-decoration-color: #b8c4d4; }
-.tq-card-sub { font-size: 11px; color: #6e685f; margin-top: 2px; overflow-wrap: anywhere; }
-.tq-card-excerpt { margin-top: 7px; padding: 8px 10px; border-radius: 8px; background: #f6f4f1; border: 1px solid #ebe6de; font-size: 12px; line-height: 1.5; color: #4d4a43; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow: auto; }
-.tq-card-tail { margin-top: 7px; padding: 8px 10px; border-radius: 8px; background: #22231f; color: #e8e4dc; font: 11px/1.5 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow: auto; }
+.tq-card-kicker em { margin-left: auto; font-style: normal; letter-spacing: .04em; text-transform: none; color: var(--tq-muted, #989188); }
+.tq-card-title { margin-top: 5px; font-size: 13px; font-weight: 600; color: var(--tq-text, #262521); line-height: 1.35; overflow-wrap: anywhere; }
+.tq-card-chip { margin-left: 4px; padding: 1px 7px; border: 1px solid var(--tq-border, #d9d2c6); border-radius: 9px; font: 500 10px/1.5 'IBM Plex Sans', sans-serif; letter-spacing: 0; text-transform: none; color: var(--tq-secondary, #5d574f); }
+.tq-card-facts { margin-top: 9px; display: grid; grid-template-columns: 86px minmax(0, 1fr); row-gap: 5px; column-gap: 10px; font-size: 12.5px; line-height: 1.45; color: var(--tq-text, #3a3833); overflow-wrap: anywhere; }
+.tq-card-facts > :nth-child(odd) { color: var(--tq-muted, #8a837a); font-size: 11px; padding-top: 1px; }
+.tq-card-link { color: var(--tq-link, #3d5a80); text-decoration: underline; text-decoration-color: #b8c4d4; }
+.tq-card-sub { font-size: 11px; color: var(--tq-secondary, #6e685f); margin-top: 2px; overflow-wrap: anywhere; }
+.tq-card-excerpt { margin-top: 7px; padding: 8px 10px; border-radius: 8px; background: var(--tq-canvas, #f6f4f1); border: 1px solid var(--tq-border, #ebe6de); font-size: 12px; line-height: 1.5; color: var(--tq-secondary, #4d4a43); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow: auto; }
+.tq-card-tail { margin-top: 7px; padding: 8px 10px; border-radius: 8px; background: #22231f; color: var(--tq-muted, #e8e4dc); font: 11px/1.5 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 130px; overflow: auto; }
 .tq-card-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
 .tq-card-actions button { text-transform: none; font-size: 11px; min-height: 28px; }
 .tq-card-actions .sp { flex: 1; }
-.tq-card-note { font-size: 10.5px; color: #746e64; margin-top: 6px; }
+.tq-card-note { font-size: 10.5px; color: var(--tq-secondary, #746e64); margin-top: 6px; }
 /* THE STORY IS QUIET (assistantCards Story): who asked, then the agent, as a thread of the people in it - avatars
    joined by one rule, muted ink. Colour sits on the avatars only. */
 .tq-story { margin-top: 9px; display: flex; flex-direction: column; gap: 11px; }
 .tq-thr { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 9px; position: relative; }
-.tq-thr-rail { position: absolute; left: 12px; top: 27px; bottom: -20px; width: 2px; background: #e4ded3; }
+.tq-thr-rail { position: absolute; left: 12px; top: 27px; bottom: -20px; width: 2px; background: var(--tq-inset, #e4ded3); }
 /* ...and on into Your move: the thread ends at the decision (the owner, 2026-09-28: "continue the line ... to your move") */
 .tq-thr-rail.tail { bottom: -20px; }
 /* the parts are split by a dashed rule, as the phone splits them (the owner, 2026-09-28: "i like the ----- line") */
-.tq-thr + .tq-thr .tq-thr-body { border-top: 1px dashed #ddd5c8; padding-top: 9px; }
+.tq-thr + .tq-thr .tq-thr-body { border-top: 1px dashed var(--tq-border, #ddd5c8); padding-top: 9px; }
 .tq-thr + .tq-thr .tq-av { margin-top: 9px; }
 .tq-thr + .tq-thr .tq-thr-rail { top: 36px; }
 /* ONE STYLE, THE TASK PAGE'S THREE COLOURS (the owner, 2026-09-28: "the colors of the logos on the card in assistant
@@ -522,21 +522,21 @@
 .tq-av { --c: #55697a; background: var(--c); color: #fff; box-sizing: border-box;
   width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font: 600 9.5px/1 'IBM Plex Sans', sans-serif; text-align: center; position: relative; z-index: 1; }
-.tq-thr-h { font-size: 11.5px; color: #746e64; padding-top: 1px; }
-.tq-thr-h b { color: #4d4a43; font-weight: 600; }
-.tq-thr-say { margin-top: 2px; font-size: 14.5px; font-weight: 600; line-height: 1.42; color: #2f2d29; overflow-wrap: anywhere; }
-.tq-thr-subject { margin-top: 3px; font-size: 13px; line-height: 1.4; color: #3d3b36; overflow-wrap: anywhere; }
-.tq-thr-rest { margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere;
+.tq-thr-h { font-size: 11.5px; color: var(--tq-secondary, #746e64); padding-top: 1px; }
+.tq-thr-h b { color: var(--tq-secondary, #4d4a43); font-weight: 600; }
+.tq-thr-say { margin-top: 2px; font-size: 14.5px; font-weight: 600; line-height: 1.42; color: var(--tq-text, #2f2d29); overflow-wrap: anywhere; }
+.tq-thr-subject { margin-top: 3px; font-size: 13px; line-height: 1.4; color: var(--tq-text, #3d3b36); overflow-wrap: anywhere; }
+.tq-thr-rest { margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: var(--tq-secondary, #6e685f); overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.tq-thr-did { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 2px; font-size: 12.5px; line-height: 1.5; color: #4d4a43; overflow-wrap: anywhere; }
-.tq-thr-did.muted { color: #746e64; font-style: italic; }
-.tq-thr-more { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px; font-size: 12px; line-height: 1.5; color: #6e685f; overflow-wrap: anywhere; }
-.tq-thr-more b { color: #4d4a43; font-weight: 600; }
+.tq-thr-did { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 2px; font-size: 12.5px; line-height: 1.5; color: var(--tq-secondary, #4d4a43); overflow-wrap: anywhere; }
+.tq-thr-did.muted { color: var(--tq-secondary, #746e64); font-style: italic; }
+.tq-thr-more { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--tq-secondary, #6e685f); overflow-wrap: anywhere; }
+.tq-thr-more b { color: var(--tq-secondary, #4d4a43); font-weight: 600; }
 .tq-thr-words { margin-top: 6px; }
 /* ...YOUR MOVE IS LOUD (assistantCards YourMove): the one framed block, full contrast, its main button inside */
 /* ...your step closes the thread: split by the same dashed rule, your avatar on the same line */
 .tq-move { margin-top: 11px; }
-.tq-move .tq-thr-body { border-top: 1px dashed #ddd5c8; padding-top: 9px; }
+.tq-move .tq-thr-body { border-top: 1px dashed var(--tq-border, #ddd5c8); padding-top: 9px; }
 .tq-move .tq-av { margin-top: 9px; }
 .tq-av-asker { --c: #55697a; }
 .tq-av-agent { --c: #6f8a6e; }
@@ -546,24 +546,24 @@
 /* WHOSE TURN (Story `turn`): filled, with a ring of its own colour - the rest stay outlined */
 .tq-av.on { outline: 1.5px solid var(--c); outline-offset: 2px; }
 /* ...never faded: the task page never dims its badges, and a faded slate read as grey (2026-09-28) */
-.tq-move-say { margin-top: 6px; font-size: 13.5px; line-height: 1.45; color: #1d1c19; }
-.tq-move.alert .tq-move-say:first-of-type { font-weight: 600; color: #6b2b22; }
-.tq-move-to { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: #4d4a43; }
+.tq-move-say { margin-top: 6px; font-size: 13.5px; line-height: 1.45; color: var(--tq-text, #1d1c19); }
+.tq-move.alert .tq-move-say:first-of-type { font-weight: 600; color: var(--tq-danger, #6b2b22); }
+.tq-move-to { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: var(--tq-secondary, #4d4a43); }
 .tq-move-q { margin-top: 7px; }
-.tq-move-qt { font-size: 14px; font-weight: 600; line-height: 1.4; color: #1d1c19; margin-bottom: 6px; }
-.tq-move-q + .tq-move-q { margin-top: 12px; padding-top: 11px; border-top: 1px dashed #e0d6c8; }
-.tq-move-qn { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #a0643a; margin-bottom: 3px; }
+.tq-move-qt { font-size: 14px; font-weight: 600; line-height: 1.4; color: var(--tq-text, #1d1c19); margin-bottom: 6px; }
+.tq-move-q + .tq-move-q { margin-top: 12px; padding-top: 11px; border-top: 1px dashed var(--tq-border, #e0d6c8); }
+.tq-move-qn { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tq-warning, #a0643a); margin-bottom: 3px; }
 .tq-move-go { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .tq-move-go.first { margin-top: -1px; }
 .tq-move .tq-thr-body > :first-child { margin-top: 3px; }
-.tq-move-then { font-size: 11.5px; color: #6e685f; }
+.tq-move-then { font-size: 11.5px; color: var(--tq-secondary, #6e685f); }
 /* ...a rule under the move: Next / More are the CARD's, not a second row of the move's buttons */
-.tq-card .tq-move ~ .tq-card-actions { border-top: 1px solid #ebe6de; margin-top: 12px; padding-top: 10px; }
+.tq-card .tq-move ~ .tq-card-actions { border-top: 1px solid var(--tq-border, #ebe6de); margin-top: 12px; padding-top: 10px; }
 /* THE QUESTION AND ITS ANSWERS, in amber: an agent has stopped and named what it needs. The options stack rather than truncate - a chooser's options are sentences,
    and half of one is not a thing anybody can pick. */
-.tq-card-ask { margin-top: 8px; padding: 8px 10px; border: 1px solid #d8c9a8;
-  border-radius: 9px; background: #fbf7ee; }
-.tq-card-ask > span { display: block; font-size: 11.5px; line-height: 1.5; color: #4d4a43; margin-bottom: 7px; }
+.tq-card-ask { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--tq-edge-brass, #d8c9a8);
+  border-radius: 9px; background: var(--tq-panel, #fbf7ee); }
+.tq-card-ask > span { display: block; font-size: 11.5px; line-height: 1.5; color: var(--tq-secondary, #4d4a43); margin-bottom: 7px; }
 .tq-card-picks { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
 .tq-card-picks button { text-transform: none; font-size: 11.5px; line-height: 1.4; text-align: left; padding: 4px 10px; }
 /* a stop of the set-up walk you have already passed: a step in a trail, not a thing that was said.
@@ -573,28 +573,28 @@
 .tq-msg.tq-step .body { padding-top: 0; }
 .tq-msg.tq-bare { grid-template-columns: minmax(0, 1fr); }
 .tq-msg.tq-bare .body { padding-top: 0; }
-.tq-step-done { display: flex; align-items: baseline; gap: 5px; font-size: 11.5px; color: #746e64; }
-.tq-step-done i { font-style: normal; color: #47654a; }
+.tq-step-done { display: flex; align-items: baseline; gap: 5px; font-size: 11.5px; color: var(--tq-secondary, #746e64); }
+.tq-step-done i { font-style: normal; color: var(--tq-success, #47654a); }
 .tq-step-done b { font-weight: 600; font-variant-numeric: tabular-nums; }
-.tq-card-err { font-size: 11px; color: #7a2f3c; margin-top: 6px; }
+.tq-card-err { font-size: 11px; color: var(--tq-danger, #7a2f3c); margin-top: 6px; }
 /* A CONNECTION THAT STOPPED ANSWERING wears the task view's frame (theme frameInner): a heading strip, then the words in sentence
    case - not the old card's spaced capitals, grey box and bold-word help line (the owner, 2026-10-15: "make it look more like all
    the other ones"). Its buttons ride the action row like every item's. */
-.tq-conn { border: 1px solid #e1dcd5; border-radius: 18px; background: #fffdfb; overflow: hidden; min-width: 0; margin: 0 0 4px; }
-.tq-conn-head { display: flex; align-items: center; gap: 7px; padding: 8px 14px; background: #fff; border-bottom: 1px solid #e1dcd5; min-width: 0; }
-.tq-conn-head b { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: #262521; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-conn-pill { flex: 0 0 auto; font-size: 10.5px; line-height: 1; padding: 4px 8px; border-radius: 10px; background: #f3e4e2; color: #7a2f3c; }
-.tq-conn-head em { flex: 0 0 auto; font-style: normal; font-size: 11.5px; color: #6e685f; }
+.tq-conn { border: 1px solid var(--tq-border, #e1dcd5); border-radius: 18px; background: var(--tq-panel, #fffdfb); overflow: hidden; min-width: 0; margin: 0 0 4px; }
+.tq-conn-head { display: flex; align-items: center; gap: 7px; padding: 8px 14px; background: var(--tq-panel, #fff); border-bottom: 1px solid var(--tq-border, #e1dcd5); min-width: 0; }
+.tq-conn-head b { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--tq-text, #262521); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-conn-pill { flex: 0 0 auto; font-size: 10.5px; line-height: 1; padding: 4px 8px; border-radius: 10px; background: var(--tq-inset, #f3e4e2); color: var(--tq-danger, #7a2f3c); }
+.tq-conn-head em { flex: 0 0 auto; font-style: normal; font-size: 11.5px; color: var(--tq-secondary, #6e685f); }
 .tq-conn-body { padding: 12px 16px 10px; }
-.tq-conn-label { font-size: 12px; font-weight: 500; color: #6e685f; }
-.tq-conn-said { margin-top: 2px; font-size: 13px; line-height: 1.5; color: #262521; overflow-wrap: anywhere; }
-.tq-conn-note { margin-top: 8px; font-size: 12px; line-height: 1.45; color: #4d4a43; }
-.tq-conn-note.bad { color: #7a2f3c; }
+.tq-conn-label { font-size: 12px; font-weight: 500; color: var(--tq-secondary, #6e685f); }
+.tq-conn-said { margin-top: 2px; font-size: 13px; line-height: 1.5; color: var(--tq-text, #262521); overflow-wrap: anywhere; }
+.tq-conn-note { margin-top: 8px; font-size: 12px; line-height: 1.45; color: var(--tq-secondary, #4d4a43); }
+.tq-conn-note.bad { color: var(--tq-danger, #7a2f3c); }
 .tq-conn .tq-card-actions:empty { display: none; }
 
 /* THE WALK'S STOP: a picture of the tab, whole, and three things to try. The picture used to be a
    130px crop of a page corner - a search box and half a heading - under five bullets of text. */
-.tq-walk-progress { height: 3px; margin: 7px 0 8px; border-radius: 2px; background: #ebe6de; overflow: hidden; }
+.tq-walk-progress { height: 3px; margin: 7px 0 8px; border-radius: 2px; background: var(--tq-inset, #ebe6de); overflow: hidden; }
 .tq-walk-progress i { display: block; height: 100%; border-radius: 2px; background: #718b75; transform-origin: left; transition: transform .3s ease; }
 /* THE WHOLE TAB, AS BIG AS THE CARD. 540px of whole page made its words texture (2026-09-18), and the
    fix - a 540px window onto a 2x zoom of the top-left corner - showed a search box and half a heading
@@ -603,43 +603,43 @@
    900px screen only by shrinking the picture to 640px; asked, the owner chose the full width and a
    card that scrolls a little on a short window over a picture that shrinks. */
 .tq-walk-shot { display: block; width: 100%; aspect-ratio: 1280 / 760; overflow: hidden;
-  position: relative; border-radius: 8px; border: 1px solid #ddd8cf; background: #f6f4f1; margin: 0 0 8px; transition: box-shadow .15s; }
+  position: relative; border-radius: 8px; border: 1px solid var(--tq-border, #ddd8cf); background: var(--tq-canvas, #f6f4f1); margin: 0 0 8px; transition: box-shadow .15s; }
 .tq-walk-shot img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: top center; }
 /* the tab itself, live (assistantCards TAB_WINDOWS): the AI stop's terminal height, its own scroll */
-.tq-walk-window { height: 46vh; min-height: 320px; overflow: auto; border-radius: 8px; border: 1px solid #ddd8cf;
-  background: #fbfaf7; margin: 0 0 8px; overscroll-behavior: contain; }
+.tq-walk-window { height: 46vh; min-height: 320px; overflow: auto; border-radius: 8px; border: 1px solid var(--tq-border, #ddd8cf);
+  background: var(--tq-panel, #fbfaf7); margin: 0 0 8px; overscroll-behavior: contain; }
 .tq-walk-shot:hover, .tq-walk-shot:focus-visible { box-shadow: 0 0 0 2px #b9c8bb; outline: none; }
 .tq-pile-retry { margin-top: 8px; font: 600 11.5px 'IBM Plex Sans', system-ui, sans-serif; padding: 4px 12px;
-  border-radius: 99px; border: 1px solid #ddd8cf; background: #fffdf9; color: #41525f; cursor: pointer; }
-.tq-pile-retry:hover { border-color: #b9c3cb; background: #f6f4f1; }
+  border-radius: 99px; border: 1px solid var(--tq-border, #ddd8cf); background: var(--tq-panel, #fffdf9); color: var(--tq-link, #41525f); cursor: pointer; }
+.tq-pile-retry:hover { border-color: var(--tq-border, #b9c3cb); background: var(--tq-canvas, #f6f4f1); }
 .tq-walk-can { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
-.tq-walk-can .lbl { font: 600 9.5px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; color: #867f74; margin-right: 2px; }
+.tq-walk-can .lbl { font: 600 9.5px/1.2 'IBM Plex Mono', Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--tq-warning, #867f74); margin-right: 2px; }
 .tq-walk-can button, .tq-walk-can .plain { font: 500 11.5px/1.3 'IBM Plex Sans', system-ui, sans-serif; padding: 4px 10px; border-radius: 99px;
-  border: 1px solid #ddd8cf; background: #fffdf9; color: #41525f; text-align: left; }
+  border: 1px solid var(--tq-border, #ddd8cf); background: var(--tq-panel, #fffdf9); color: var(--tq-link, #41525f); text-align: left; }
 .tq-walk-can button { cursor: pointer; transition: border-color .15s, background .15s; }
-.tq-walk-can button:hover { border-color: #b9c3cb; background: #f6f4f1; }
-.tq-walk-can .plain { color: #6e685f; border-style: dashed; }
+.tq-walk-can button:hover { border-color: var(--tq-border, #b9c3cb); background: var(--tq-canvas, #f6f4f1); }
+.tq-walk-can .plain { color: var(--tq-secondary, #6e685f); border-style: dashed; }
 
 @keyframes tqPulse { 50% { opacity: .35; } }   /* the day strip's now-dot */
 
 /* the composer */
-.tq-compose { padding: 2px 20px 8px; background: #fffdfb; box-shadow: 0 -14px 14px -6px #fffdfb; position: relative;
+.tq-compose { padding: 2px 20px 8px; background: var(--tq-panel, #fffdfb); box-shadow: 0 -14px 14px -6px var(--tq-panel, #fffdfb); position: relative;
   --tq-chat-w: min(280px, calc(100% - 40px)); }   /* the pill and the open chat ONE width: opening grows it up, never wider (the owner, 2026-10-28) */   /* no rule above it: the row and the box float, a soft fade keeps scrolled content from showing through */
 /* THE DOCK (canvas I2): one border, three bands, as wide as the card above it (the owner: "the prompt box full width") - the suggestion tinted on top, the row under a hairline, the box its floor */
-.tq-dock { width: 100%; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d5d0c7; border-radius: 16px; background: #fff; box-shadow: 0 2px 10px #39352d0d; }
+.tq-dock { width: 100%; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--tq-border, #d5d0c7); border-radius: 16px; background: var(--tq-panel, #fff); box-shadow: 0 2px 10px #39352d0d; }
 /* ...and A THIRD OF A LAPTOP NO MORE (the owner, 2026-10-26, 1600x810: "you can't see anything ... button height is too high? you can't see
    what you have to do"): 138px of dock over a task whose reason was out of sight. Each band is as tall as its one line - the strip 30, the
    row its 30px pills in a 3px section (.tq-cl), the box its 34px line - about 115px; a touch screen keeps its 44px targets (pointer: coarse) */
-.tq-dock .tq-next { margin: 0; min-height: 30px; padding: 0 16px; justify-content: flex-start; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
+.tq-dock .tq-next { margin: 0; min-height: 30px; padding: 0 16px; justify-content: flex-start; background: var(--tq-panel, #f6f5f1); border-bottom: 1px solid var(--tq-border, #ece7de); }
 .tq-dock .tq-next .tq-next-why { margin-left: auto; padding-block: 2px; }
 /* NO STRIP (the owner, 2026-10-26: "maybe keep the box but remove the advisor?"): the dock is the row and the box, one line - a .tq-next here
    is setup's own line (SetupLine), drawn only while setup is in view */
-.tq-dock > .tq-next { border-bottom: 1px solid #ece7de; }
-.tq-dock .tq-arow { width: 100%; margin: 0; min-height: 0; justify-content: center; padding: 3px 12px; box-sizing: border-box; border-bottom: 1px solid #ece7de; }
+.tq-dock > .tq-next { border-bottom: 1px solid var(--tq-border, #ece7de); }
+.tq-dock .tq-arow { width: 100%; margin: 0; min-height: 0; justify-content: center; padding: 3px 12px; box-sizing: border-box; border-bottom: 1px solid var(--tq-border, #ece7de); }
 .tq-dock .tq-compose-box { width: 100%; min-height: 40px; align-items: center; border: 0; border-radius: 0; box-shadow: none; padding: 3px 8px; }
-.tq-compose-box { width: min(980px, 100%); margin: 0 auto; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
-.tq-compose-box textarea { flex: 1; min-width: 0; min-height: 34px; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: min(40vh, 280px); overflow-y: auto; }
-.tq-compose-box textarea::placeholder { color: #8f8b84; }
+.tq-compose-box { width: min(980px, 100%); margin: 0 auto; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid var(--tq-border, #d5d0c7); background: var(--tq-panel, #fff); border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
+.tq-compose-box textarea { flex: 1; min-width: 0; min-height: 34px; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--tq-text, #292824); font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: min(40vh, 280px); overflow-y: auto; }
+.tq-compose-box textarea::placeholder { color: var(--tq-muted, #8f8b84); }
 /* the mic arrives wrapped in a Tooltip <span>; inline descender space under it lifted the
    icon above the emoji next door. Both controls are flex items of the same height now. */
 .tq-compose-box > span { width: 34px; height: 34px; flex: 0 0 34px; display: flex; align-items: center; justify-content: center; }
@@ -658,11 +658,11 @@
 /* ...180px, white and edged in the brand's slate, its arrow the brand's (the owner, 2026-10-27: "still too small to see. even at rest it has
    to be wider and more prominent ... maybe the up arrow should be in the color of taskuary") - Mark done still on a laptop's row */
 .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box { flex: 0 0 var(--tq-chat-w); min-width: 0; width: auto; min-height: 34px; margin: 3px 6px 3px 0; padding: 0 3px 0 12px; gap: 2px;
-  border: 1px solid #a9b6c1; border-radius: 17px; background: #fff; box-shadow: 0 1px 3px #39352d14; transition: background-color .12s, border-color .12s; }
-.tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea::placeholder { color: #55697a; }
+  border: 1px solid var(--tq-border, #a9b6c1); border-radius: 17px; background: var(--tq-panel, #fff); box-shadow: 0 1px 3px #39352d14; transition: background-color .12s, border-color .12s; }
+.tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea::placeholder { color: var(--tq-link, #55697a); }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { background: #55697a; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send:disabled { opacity: .7; }
-.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { flex-basis: min(560px, 46%); padding-left: 3px; background: #fff; border-color: #9fae9f; }
+.tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { flex-basis: min(560px, 46%); padding-left: 3px; background: var(--tq-panel, #fff); border-color: var(--tq-border-strong, #9fae9f); }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box:not([data-tq-open]) .tq-compose-tools { display: none; }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box textarea { min-height: 30px; padding: 5px 4px; }
 /* ...its "Ask…" in the MIDDLE of the pill's height (the owner, 2026-10-27: "not centered in the height"): one 30px line, no padding to sit it high */
@@ -684,12 +684,12 @@
   .tq-compose .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] { position: relative; flex: 0 0 var(--tq-chat-w); width: var(--tq-chat-w);
     box-sizing: border-box; margin: 3px 6px 3px 0; min-height: 34px; padding: 0; gap: 0; border: 0; background: transparent; box-shadow: none; }
   .tq-compose .tq-dock .tq-dock-line:has(> .tq-arow) > .tq-compose-box[data-tq-open] > .tq-compose-field { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
-    border-color: #d5d0c7; border-top-color: #ece7de; border-radius: 0 0 14px 14px; box-shadow: 0 6px 16px -8px #39352d38; }
+    border-color: var(--tq-border, #d5d0c7); border-top-color: var(--tq-border, #ece7de); border-radius: 0 0 14px 14px; box-shadow: 0 6px 16px -8px #39352d38; }
   /* ...the dock's clip (its round corners) would cut the field off at the dock's top */
   .tq-compose .tq-dock:has(> .tq-dock-line > .tq-compose-box[data-tq-open]) { overflow: visible; }
   .tq-compose .tq-dock .tq-dock-line:not(:has(> .tq-arow)) > .tq-compose-box[data-tq-open] { position: absolute; right: 20px; bottom: calc(100% + 6px); z-index: 6;
     width: var(--tq-chat-w); box-sizing: border-box; margin: 0; min-height: 46px; align-items: stretch; padding: 8px 10px 10px; gap: 0;
-    border: 1px solid #d5d0c7; border-top-color: #ece7de; border-radius: 0 0 14px 14px; background: #fff; box-shadow: 0 14px 28px -10px #39352d38; }
+    border: 1px solid var(--tq-border, #d5d0c7); border-top-color: var(--tq-border, #ece7de); border-radius: 0 0 14px 14px; background: var(--tq-panel, #fff); box-shadow: 0 14px 28px -10px #39352d38; }
 }
 /* ...ITS FLOOR IS A FIELD YOU CAN SEE (the owner, 2026-10-28, of a flat white strip of icons and words: "it does not look like a prompt input
    box?"): under the window's hairline, a bordered, rounded field as in a support chat - the tools inside it on the left, the words beside
@@ -698,8 +698,8 @@
 .tq-compose-field { display: contents; }
 .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] > .tq-compose-field { flex: 1; min-width: 0; box-sizing: border-box; display: grid;
   grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "words words" "tools send"; align-items: center; gap: 0 2px;
-  padding: 3px 5px 4px 3px; border: 1px solid #d5d0c7; border-radius: 12px; background: #fff; transition: border-color .12s, box-shadow .12s; }
-.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] > .tq-compose-field:hover { border-color: #b5aea3; }
+  padding: 3px 5px 4px 3px; border: 1px solid var(--tq-border, #d5d0c7); border-radius: 12px; background: var(--tq-panel, #fff); transition: border-color .12s, box-shadow .12s; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] > .tq-compose-field:hover { border-color: var(--tq-border-strong, #b5aea3); }
 .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] > .tq-compose-field:focus-within { border-color: #55697a; box-shadow: 0 0 0 3px #55697a29; }
 /* ...THE WORDS ON A LINE OF THEIR OWN, the tools and send under them (the owner, 2026-10-28, of a 280px field whose words started after the
    paperclip, mic and emoji and lost their first line: ChatGPT's layout) - the words the field's full width, wrapping, up to five lines and
@@ -708,7 +708,7 @@
 .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-compose-tools { grid-area: tools; display: flex; align-items: center; gap: 0; min-width: 0; }
 .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-compose-tools > * { flex: 0 0 auto; }
 .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send { grid-area: send; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; background: #55697a; transition: background-color .12s, color .12s; }
-.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send:disabled { opacity: 1; background: #ebe8e2; color: #a19b91; }
+.tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] .tq-send:disabled { opacity: 1; background: var(--tq-inset, #ebe8e2); color: var(--tq-muted, #a19b91); }
 .tq-dock-line:has(> .tq-arow) > .tq-compose-box .tq-send { width: 28px; height: 28px; flex-basis: 28px; border-radius: 50%; }
 /* ...its hint ONE line, cut at the pill's edge: the box's long hint (an FYI batch, the walk's end) wrapped in the 220px pill and half its
    second line showed under the first (the overnight walk, 2026-10-26) */
@@ -728,26 +728,26 @@
 /* THE CHAT WINDOW's conversation: over the canvas, flush on its box (--tq-box-h, the open box's height and its 6px over the dock) - the
    panel's head and the lines scrolling inside, newest at the foot; never moving the view */
 .tq-chat-pop { position: absolute; right: 20px; bottom: calc(100% + var(--tq-box-h, -2px)); z-index: 6; width: var(--tq-chat-w); box-sizing: border-box; display: flex; flex-direction: column;
-  border: 1px solid #d5d0c7; border-bottom: 0; border-radius: 14px 14px 0 0; background: #fff; box-shadow: 0 -2px 28px #39352d1f, 0 2px 6px #39352d10; animation: tqPopIn .14s ease-out; }
+  border: 1px solid var(--tq-border, #d5d0c7); border-bottom: 0; border-radius: 14px 14px 0 0; background: var(--tq-panel, #fff); box-shadow: 0 -2px 28px #39352d1f, 0 2px 6px #39352d10; animation: tqPopIn .14s ease-out; }
 .tq-chat-pop[hidden] { display: none; }
 /* ...MINIMIZED, half its height: its head pressed brings the whole window back */
 .tq-chat-pop[data-tq-mini] .tq-chat-pop-head { cursor: pointer; }
 .tq-chat-pop[data-tq-mini] .tq-chat-pop-head { border-bottom: 0; }
-.tq-chat-pop[data-tq-mini] .tq-chat-pop-head:hover { background: #f6f5f1; border-radius: 14px 14px 0 0; }
+.tq-chat-pop[data-tq-mini] .tq-chat-pop-head:hover { background: var(--tq-panel, #f6f5f1); border-radius: 14px 14px 0 0; }
 .tq-chat-pop-body[hidden] { display: none; }
 .tq-chat-unseen.in-head { position: static; margin-left: 4px; }
 @keyframes tqPopIn { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .tq-chat-pop { animation: none; } }
-.tq-chat-pop-head { display: flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 6px 7px 12px; border-bottom: 1px solid #ece7de; font-size: 12px; color: #6e685f; }
-.tq-chat-pop-head b { color: #2f3a42; font-weight: 600; font-size: 13px; }
+.tq-chat-pop-head { display: flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 6px 7px 12px; border-bottom: 1px solid var(--tq-border, #ece7de); font-size: 12px; color: var(--tq-secondary, #6e685f); }
+.tq-chat-pop-head b { color: var(--tq-link, #2f3a42); font-weight: 600; font-size: 13px; }
 .tq-chat-pop-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px 6px; }
 .tq-chat-pop-body > .tq-msg { margin-bottom: 10px; max-width: none; }
 .tq-chat-pop-body > .tq-msg:first-child > .avatar { visibility: visible; }
-.tq-chat-pop-body > .tq-msg.receipt { margin-bottom: 8px; font-size: 11.5px; color: #6e685f; }
-.tq-chat-pop-empty { margin: 4px 0 10px; color: #8f8b84; font-size: 12.5px; }
+.tq-chat-pop-body > .tq-msg.receipt { margin-bottom: 8px; font-size: 11.5px; color: var(--tq-secondary, #6e685f); }
+.tq-chat-pop-empty { margin: 4px 0 10px; color: var(--tq-muted, #8f8b84); font-size: 12.5px; }
 /* the ×'s question while it helps with a page: one quiet band under the head, the window's own words and two chips */
-.tq-chat-pop-end { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex-shrink: 0; padding: 8px 12px; border-bottom: 1px solid #ece7de;
-  background: #f8f6f2; font-size: 12.5px; color: #2f3a42; }
+.tq-chat-pop-end { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex-shrink: 0; padding: 8px 12px; border-bottom: 1px solid var(--tq-border, #ece7de);
+  background: var(--tq-panel, #f8f6f2); font-size: 12.5px; color: var(--tq-link, #2f3a42); }
 .tq-chat-pop-end span { flex: 1 1 180px; }
 /* ...MINIMIZED, the pill says it can be continued ("Continue chat…") and counts the answers that came while it was put away */
 .tq-compose-box:not([data-tq-open]) { position: relative; }
@@ -757,7 +757,7 @@
 @media (max-width: 600px) {
   .tq-compose .tq-dock .tq-dock-line > .tq-compose-box[data-tq-open] { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1200; width: auto; flex: none;
     margin: 0; min-height: 52px; align-items: stretch; padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); gap: 0;
-    border: 0; border-top: 1px solid #ece7de; border-radius: 0; background: #fff; box-shadow: none; }
+    border: 0; border-top: 1px solid var(--tq-border, #ece7de); border-radius: 0; background: var(--tq-panel, #fff); box-shadow: none; }
   .tq-dock .tq-dock-line:has(> .tq-compose-box[data-tq-open])::after { content: ""; flex: 0 0 104px; min-height: 34px; }
   .tq-dock .tq-dock-line:not(:has(> .tq-arow)):has(> .tq-compose-box[data-tq-open])::after { flex: 1; min-height: 40px; }
   .tq-chat-pop { position: fixed; left: 0; right: 0; width: auto; bottom: var(--tq-box-h, 0px); z-index: 1200; border: 0; border-radius: 16px 16px 0 0;
@@ -765,25 +765,25 @@
 }
 /* the Advisor's pill sits where the arrow does and does what the card's primary button does; typing brings the arrow back */
 /* the walk is on the phone: the composer is replaced by the way back, never sat beside it */
-.tq-handed { margin: 0 20px 10px; padding: 10px 12px; border: 1px solid #d5d0c7; border-top-width: 1px; border-radius: 12px; background: #fffdfb; display: flex; align-items: center; gap: 10px; color: #4a5d4f; }
+.tq-handed { margin: 0 20px 10px; padding: 10px 12px; border: 1px solid var(--tq-border, #d5d0c7); border-top-width: 1px; border-radius: 12px; background: var(--tq-panel, #fffdfb); display: flex; align-items: center; gap: 10px; color: var(--tq-success, #4a5d4f); }
 .tq-handed .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.tq-handed .txt b { font-size: 12.5px; color: #262521; }
-.tq-handed .txt span { font-size: 11px; color: #77726a; }
+.tq-handed .txt b { font-size: 12.5px; color: var(--tq-text, #262521); }
+.tq-handed .txt span { font-size: 11px; color: var(--tq-muted, #77726a); }
 /* the set-up walk fills the pane the conversation would have: GeneralWorkspace lays its own
    thread and browser out inside, and needs a flex parent that can actually shrink. */
-.tq-walk { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0 20px 12px; border: 1px solid #d5d0c7; border-radius: 12px; overflow: hidden; background: #fff; }
+.tq-walk { flex: 1; min-height: 0; display: flex; flex-direction: column; margin: 0 20px 12px; border: 1px solid var(--tq-border, #d5d0c7); border-radius: 12px; overflow: hidden; background: var(--tq-panel, #fff); }
 .tq-chip-chat { display: inline-flex; align-items: center; gap: 5px; }
 
 /* past chats, slid over the thread */
-.tq-chats { position: absolute; inset: 0; background: #fffdfbf2; backdrop-filter: blur(2px); z-index: 5; display: flex; flex-direction: column; }
-.tq-chats-head { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: 1px solid #e1dcd5; font-size: 12.5px; font-weight: 600; color: #262521; }
+.tq-chats { position: absolute; inset: 0; background: rgb(var(--tq-panel-rgb, 255 253 251) / .949); backdrop-filter: blur(2px); z-index: 5; display: flex; flex-direction: column; }
+.tq-chats-head { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: 1px solid var(--tq-border, #e1dcd5); font-size: 12.5px; font-weight: 600; color: var(--tq-text, #262521); }
 .tq-chats-list { overflow-y: auto; padding: 6px 10px; }
 .tq-chats-list .c { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; cursor: pointer; }
-.tq-chats-list .c:hover { background: #f4f1ec; }
-.tq-chats-list .c b { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: #262521; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-chats-list .c span { font: 500 10px 'IBM Plex Mono', Consolas, monospace; color: #746e64; white-space: nowrap; }
+.tq-chats-list .c:hover { background: var(--tq-panel, #f4f1ec); }
+.tq-chats-list .c b { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--tq-text, #262521); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-chats-list .c span { font: 500 10px 'IBM Plex Mono', Consolas, monospace; color: var(--tq-secondary, #746e64); white-space: nowrap; }
 .tq-chats-list .c i { width: 7px; height: 7px; border-radius: 50%; background: #55697a; }
-.tq-old-banner { padding: 6px 14px; background: #eee7d6; border-bottom: 1px solid #ddd2b9; color: #6b5f45; font-size: 11.5px; display: flex; align-items: center; gap: 10px; }
+.tq-old-banner { padding: 6px 14px; background: var(--tq-tint-brass, #eee7d6); border-bottom: 1px solid var(--tq-edge-brass, #ddd2b9); color: var(--tq-warning, #6b5f45); font-size: 11.5px; display: flex; align-items: center; gap: 10px; }
 
 @media (max-width: 899.95px) {
   .tq-phone-hide { display: none !important; }   /* the voice and AI knobs: room for the name and the mode toggle */
@@ -825,16 +825,16 @@
 /* NOT a padding change: the task view is sized off this body (100cqh), so a smaller padding here grew the pane on Expand */
 /* an earlier item, folded to its title line - click it and it is back on the table */
 .tq-fold { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; margin-top: 2px; padding: 8px 14px;
-  border: 1px solid #e1dcd5; border-radius: 10px; background: #fffdfb; font: 400 12px 'IBM Plex Sans', system-ui, sans-serif;
-  color: #6e685f; text-align: left; }
-.tq-fold .ref { flex-shrink: 0; font-size: 9.5px; font-weight: 600; color: #746e64; letter-spacing: .02em; }
-.tq-fold b { min-width: 0; font-weight: 600; color: #2f3a42; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  border: 1px solid var(--tq-border, #e1dcd5); border-radius: 10px; background: var(--tq-panel, #fffdfb); font: 400 12px 'IBM Plex Sans', system-ui, sans-serif;
+  color: var(--tq-secondary, #6e685f); text-align: left; }
+.tq-fold .ref { flex-shrink: 0; font-size: 9.5px; font-weight: 600; color: var(--tq-secondary, #746e64); letter-spacing: .02em; }
+.tq-fold b { min-width: 0; font-weight: 600; color: var(--tq-link, #2f3a42); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* what was pressed on it, in its corner (AssistantView Pressed): the chip's own colours, small, in with a quick fade */
-.tq-pressed { flex-shrink: 0; margin-left: auto; padding: 2px 8px; border: 1px solid #d8d1c5; border-radius: 99px; background: #f4f6f8;
-  color: #55697a; font: 500 10.5px 'IBM Plex Sans', system-ui, sans-serif; white-space: nowrap; animation: tq-pressed-in .28s ease-out both; }
+.tq-pressed { flex-shrink: 0; margin-left: auto; padding: 2px 8px; border: 1px solid var(--tq-border, #d8d1c5); border-radius: 99px; background: var(--tq-panel, #f4f6f8);
+  color: var(--tq-link, #55697a); font: 500 10.5px 'IBM Plex Sans', system-ui, sans-serif; white-space: nowrap; animation: tq-pressed-in .28s ease-out both; }
 .tq-msg.receipt .tq-pressed { margin-left: 8px; }
 /* a Close with a note: its note after the badge, one muted line, cut short - whole on hover */
-.tq-pressed-note { flex: 0 1 auto; min-width: 0; max-width: 38%; margin-left: -4px; color: #7d8a95; font: italic 400 11px 'IBM Plex Sans', system-ui, sans-serif;
+.tq-pressed-note { flex: 0 1 auto; min-width: 0; max-width: 38%; margin-left: -4px; color: var(--tq-link, #7d8a95); font: italic 400 11px 'IBM Plex Sans', system-ui, sans-serif;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @keyframes tq-pressed-in { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .tq-pressed { animation: none; } }
@@ -890,17 +890,17 @@
 .tq-arow-ghost .tq-cl-h, .tq-arow-ghost .tq-ab { flex: none; max-width: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
 /* ONE TYPE (canvas J3): its own soft section, the label inside on the left of its one-word pills - one line, so the row is a
    band as tall as the suggestion and the box (the owner, 2026-10-13). The label names the noun. */
-.tq-cl { display: flex; align-items: center; gap: 5px; padding: 3px; border-radius: 16px; background: #f3f1ec; max-width: 100%; box-sizing: border-box; min-width: 0; }
-.tq-cl-h { width: 44px; padding-left: 9px; font: 500 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; color: #8a857c; }
+.tq-cl { display: flex; align-items: center; gap: 5px; padding: 3px; border-radius: 16px; background: var(--tq-inset, #f3f1ec); max-width: 100%; box-sizing: border-box; min-width: 0; }
+.tq-cl-h { width: 44px; padding-left: 9px; font: 500 9.5px/1 'IBM Plex Mono', Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--tq-muted, #8a857c); }
 /* ...and its pills stay on ITS line too (2026-10-23): the walk's end "Open TQ-... · <title>" chips that ran past a phone's edge (2026-10-22)
    fold into the ▾ now, and a centred line that overflowed both sides is `safe center` above - a start is never cut off */
 .tq-cl-b { display: flex; flex-wrap: nowrap; justify-content: center; gap: 5px; min-width: 0; }
 .tq-cl-b .tq-ab { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tq-cl .tq-ab { min-height: 30px; min-width: 78px; padding: 0 14px; font-size: 12.5px; }
 .tq-cl .tq-ab.next { min-width: 0; }
-.tq-cl-more { min-width: 30px !important; width: 30px; padding: 0 !important; color: #6e685f; }
-.tq-arow-sep { width: 1px; height: 22px; background: #ddd6cb; flex: 0 0 auto; margin: 0 2px; }
-.tq-arow-why { font-size: 11px; line-height: 1.25; color: #8a6d1f; text-align: center; }
+.tq-cl-more { min-width: 30px !important; width: 30px; padding: 0 !important; color: var(--tq-secondary, #6e685f); }
+.tq-arow-sep { width: 1px; height: 22px; background: var(--tq-inset, #ddd6cb); flex: 0 0 auto; margin: 0 2px; }
+.tq-arow-why { font-size: 11px; line-height: 1.25; color: var(--tq-warning, #8a6d1f); text-align: center; }
 /* NARROWER THAN 1100px the row stacked one type per line - four lines over the box, a third of a 768px screen taken from the task
    on the table (2026-10-18). Pills as wide as their words put two types on a line. */
 @media (max-width: 1099px) {
@@ -911,34 +911,34 @@
 /* THE SUGGESTION (canvas J3): one centred line over the row, no box - a slate dot, the sentence, Why? */
 .tq-next { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 2px 8px; }
 .tq-next::before { content: ""; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #55697a; }
-.tq-next-txt { flex: 0 1 auto; min-width: 0; font: 500 14px/1.4 'IBM Plex Sans', system-ui, sans-serif; color: #262521;
+.tq-next-txt { flex: 0 1 auto; min-width: 0; font: 500 14px/1.4 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-text, #262521);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* ONE line, always - the whole sentence is its tooltip (oneLine.js) */
 .tq-next > *:not(.tq-next-txt) { flex-shrink: 0; }   /* ...and Why? and a lit button stay on it, whole */
-.tq-next-why { flex: 0 0 auto; border: 0; background: transparent; padding: 4px 6px; border-radius: 6px; cursor: pointer; font: 600 12.5px/1 'IBM Plex Sans', system-ui, sans-serif; color: #55697a; text-decoration: underline; text-underline-offset: 3px; }
-.tq-next-why:hover { background: #ece9e3; }
-.tq-next-why:focus-visible { outline: 2px solid #55697a; outline-offset: 2px; }
-.tq-next-pop { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font: 400 13px/1.45 'IBM Plex Sans', system-ui, sans-serif; color: #262521; }
+.tq-next-why { flex: 0 0 auto; border: 0; background: transparent; padding: 4px 6px; border-radius: 6px; cursor: pointer; font: 600 12.5px/1 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-link, #55697a); text-decoration: underline; text-underline-offset: 3px; }
+.tq-next-why:hover { background: var(--tq-inset, #ece9e3); }
+.tq-next-why:focus-visible { outline: 2px solid var(--tq-link, #55697a); outline-offset: 2px; }
+.tq-next-pop { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font: 400 13px/1.45 'IBM Plex Sans', system-ui, sans-serif; color: var(--tq-text, #262521); }
 .tq-next-pop .said { font-weight: 500; }
-.tq-next-pop .fact, .tq-next-pop .when { color: #6e685f; font-size: 12.5px; }
-.tq-next-pop .rests .head { font: 500 10.5px/1 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; color: #6e685f; margin-bottom: 4px; }
+.tq-next-pop .fact, .tq-next-pop .when { color: var(--tq-secondary, #6e685f); font-size: 12.5px; }
+.tq-next-pop .rests .head { font: 500 10.5px/1 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--tq-secondary, #6e685f); margin-bottom: 4px; }
 .tq-next-pop ul { margin: 0; padding-left: 18px; }
-.tq-ab { font: 600 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; min-height: 26px; border-radius: 99px; padding: 0 12px; border: 1px solid #d8d1c5; background: #fff; color: #262521; white-space: nowrap; cursor: pointer; }
+.tq-ab { font: 600 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; min-height: 26px; border-radius: 99px; padding: 0 12px; border: 1px solid var(--tq-border, #d8d1c5); background: var(--tq-panel, #fff); color: var(--tq-text, #262521); white-space: nowrap; cursor: pointer; }
 .tq-ab:hover:not(:disabled) { border-color: #55697a; }
 .tq-ab.p { background: #55697a; color: #fff; border-color: #55697a; }   /* the primary is the brand slate, like the walk's way in */
 /* SETUP'S LIT MOVE (FirstRun's Light): the Advisor tints the real control where it stands - a shelf card, or the open card's own button -
    in the same slate, as a ring that takes no room, so the screen never moves when the advice lands */
-[data-tq-card][data-tq-setup-lit] { border-color: #55697a; outline: 2px solid #55697a; outline-offset: 2px; }
-.MuiButton-root[data-tq-setup-lit] { outline: 2px solid #55697a; outline-offset: 2px; }
-.MuiInputBase-root[data-tq-setup-lit] { outline: 2px solid #55697a; outline-offset: 2px; }
+[data-tq-card][data-tq-setup-lit] { border-color: #55697a; outline: 2px solid var(--tq-link, #55697a); outline-offset: 2px; }
+.MuiButton-root[data-tq-setup-lit] { outline: 2px solid var(--tq-link, #55697a); outline-offset: 2px; }
+.MuiInputBase-root[data-tq-setup-lit] { outline: 2px solid var(--tq-link, #55697a); outline-offset: 2px; }
 /* ...and what the Assistant pointed at or just filled on a page it was asked about (pageView.js): the same ring, on whatever it is */
-[data-tq-setup-lit="view"] { outline: 2px solid #55697a; outline-offset: 2px; border-radius: 6px; }
+[data-tq-setup-lit="view"] { outline: 2px solid var(--tq-link, #55697a); outline-offset: 2px; border-radius: 6px; }
 .tq-ab.p:hover:not(:disabled) { background: #46586a; border-color: #46586a; }
-.tq-ab.q { border-color: transparent; background: transparent; color: #6e685f; padding-inline: 8px; }
-.tq-ab.q:hover:not(:disabled) { background: #f1eee8; border-color: transparent; }
-.tq-ab:focus-visible { outline: 2px solid #55697a; outline-offset: 2px; }
+.tq-ab.q { border-color: transparent; background: transparent; color: var(--tq-secondary, #6e685f); padding-inline: 8px; }
+.tq-ab.q:hover:not(:disabled) { background: var(--tq-inset, #f1eee8); border-color: transparent; }
+.tq-ab:focus-visible { outline: 2px solid var(--tq-link, #55697a); outline-offset: 2px; }
 .tq-ab:disabled { opacity: .5; cursor: default; }
 /* the draft's Send keeps its place on the bar, empty: its button is under the draft (the owner, 2026-10-22), and the row must not shift */
-.tq-ab.p:disabled { background: #b9c1c8; border-color: #b9c1c8; opacity: 1; }   /* a greyed decision reads as off, not as a fainter blue */
+.tq-ab.p:disabled { background: var(--tq-inset, #b9c1c8); border-color: var(--tq-border, #b9c1c8); opacity: 1; }   /* a greyed decision reads as off, not as a fainter blue */
 .tq-ab.next::after { content: "\2192"; margin-left: 6px; }   /* the arrow is drawn, so the button's text stays exactly "Next" */
 /* setup's Back takes the same slot and points the way it goes (FirstRun: setup:back) */
 .tq-ab.next[data-tq-back]::after { content: none; }
@@ -947,7 +947,7 @@
 .tq-ab.next[data-tq-bare]::after { content: none; }   /* a squeezed desk bar's "All read": its words say it walks on (ActionRow shortNext) */
 .tq-arow.inline { width: 100%; margin: 0; padding: 6px 4px 2px; }
 /* a phone's line and the row it lights, one unit at the view's foot; the strip holds its height from Thinking to the answer */
-.tq-docked { flex: 0 0 auto; display: flex; flex-direction: column; position: sticky; bottom: 0; z-index: 2; background: #f6f4f1; }
+.tq-docked { flex: 0 0 auto; display: flex; flex-direction: column; position: sticky; bottom: 0; z-index: 2; background: var(--tq-canvas, #f6f4f1); }
 .tq-docked .tq-next { margin: 0; padding: 4px 8px; justify-content: flex-start; }   /* a phone's task view carries its own row: the dock is behind the pinned view */
 @media (min-width: 1100px) { .tq-arow { width: 100%; } }
 
@@ -965,13 +965,13 @@
 .tq-day-agenda .cal-go { align-self: flex-start; }
 /* the Advisor's own button, when the move it names has none on the row (ActionRow.AdvisorNext `own`) - beside its line, Why? after */
 .tq-next .tq-next-go { flex: 0 0 auto; min-height: 30px; padding: 0 14px; font-size: 12.5px; }
-.tq-next-err { color: #8a3646; font-weight: 400; }
+.tq-next-err { color: var(--tq-danger, #8a3646); font-weight: 400; }
 /* the thing a link named, shown for a moment where it landed (appLinks.focusPlace) - an outline that fades, nothing moves */
 .tq-flash { animation: tq-flash 1.8s ease-out; border-radius: 6px; }
 @keyframes tq-flash { 0%, 35% { box-shadow: 0 0 0 3px rgba(85, 105, 122, 0.38); } 100% { box-shadow: 0 0 0 3px rgba(85, 105, 122, 0); } }
 @media (prefers-reduced-motion: reduce) { .tq-flash { animation: none; box-shadow: 0 0 0 3px rgba(85, 105, 122, 0.38); } }
 /* a task named in an answer: a link that opens it as its rail row does (AssistantView RefLink, md.jsx linkRefs) */
-.tq-ref-link, .tq-chat-pop-body a[data-tq-task-link] { color: #55697a; font-weight: 600; text-decoration: none; border-bottom: 1px solid #c9d2d9; white-space: nowrap; cursor: pointer; }
+.tq-ref-link, .tq-chat-pop-body a[data-tq-task-link] { color: var(--tq-link, #55697a); font-weight: 600; text-decoration: none; border-bottom: 1px solid var(--tq-border, #c9d2d9); white-space: nowrap; cursor: pointer; }
 .tq-ref-link:hover, .tq-chat-pop-body a[data-tq-task-link]:hover { border-bottom-color: #55697a; }
 
 /* THE CHAT IS ITS OWN UNIT ON A DESK (the owner, 2026-10-29: "it looks weird coming out of the bottom bar"; AssistantView composeBox). From
@@ -1005,9 +1005,9 @@
 .tq-chat-unit > .tq-compose-box { position: relative; width: 100%; box-sizing: border-box; margin: 0; min-height: 0; padding: 0; gap: 0; border: 0; border-radius: 0;
   background: transparent; box-shadow: none; }
 .tq-chat-unit > .tq-compose-box > .tq-compose-field { flex: 1; min-width: 0; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
-  grid-template-areas: "words words send" "tools model model"; align-items: center; gap: 0 4px; padding: 4px 6px 3px 6px; border: 1px solid #d5d0c7; border-radius: 16px;
-  background: #fff; box-shadow: 0 4px 16px #39352d1f, 0 1px 3px #39352d10; transition: border-color .12s, box-shadow .12s; }
-.tq-chat-unit > .tq-compose-box > .tq-compose-field:hover { border-color: #b5aea3; }
+  grid-template-areas: "words words send" "tools model model"; align-items: center; gap: 0 4px; padding: 4px 6px 3px 6px; border: 1px solid var(--tq-border, #d5d0c7); border-radius: 16px;
+  background: var(--tq-panel, #fff); box-shadow: 0 4px 16px #39352d1f, 0 1px 3px #39352d10; transition: border-color .12s, box-shadow .12s; }
+.tq-chat-unit > .tq-compose-box > .tq-compose-field:hover { border-color: var(--tq-border-strong, #b5aea3); }
 .tq-chat-unit > .tq-compose-box > .tq-compose-field:focus-within { border-color: #55697a; box-shadow: 0 0 0 3px #55697a29; }
 /* ...AT REST ONE LINE, the bar's own height (the owner, 2026-10-29: "too thick"): attach and voice at its left, the words, the round send -
    the model picker and the emoji only once it is used; opening only adds the line under it and the conversation above, never width */
@@ -1022,16 +1022,16 @@
 .tq-chat-unit > .tq-compose-box { height: 44px; }
 .tq-chat-unit > .tq-compose-box[data-tq-open] > .tq-compose-field { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; }
 /* ...open it is the window's floor, the conversation flush on it */
-.tq-chat-unit > .tq-compose-box[data-tq-open] > .tq-compose-field { border-radius: 0 0 16px 16px; border-top-color: #ece7de; }
+.tq-chat-unit > .tq-compose-box[data-tq-open] > .tq-compose-field { border-radius: 0 0 16px 16px; border-top-color: var(--tq-border, #ece7de); }
 .tq-chat-unit > .tq-compose-box textarea { grid-area: words; width: 100%; min-height: 32px; max-height: 114px; padding: 6px 6px 2px; line-height: 20px; }
 .tq-chat-unit > .tq-compose-box:not([data-tq-open]) textarea { overflow: hidden; cursor: text; }
-.tq-chat-unit > .tq-compose-box textarea::placeholder { color: #8f8b84; white-space: nowrap; }
+.tq-chat-unit > .tq-compose-box textarea::placeholder { color: var(--tq-muted, #8f8b84); white-space: nowrap; }
 .tq-chat-unit > .tq-compose-box .tq-compose-tools { grid-area: tools; display: flex; align-items: center; gap: 0; min-width: 0; }
 .tq-chat-unit > .tq-compose-box .tq-compose-tools > * { flex: 0 0 auto; }
 .tq-chat-unit > .tq-compose-box .tq-compose-tools .MuiIconButton-root { width: 28px !important; height: 28px !important; }
 .tq-chat-unit > .tq-compose-box .tq-compose-tools svg { font-size: 17px !important; }
 .tq-chat-unit > .tq-compose-box .tq-send { grid-area: send; justify-self: end; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; background: #55697a; transition: background-color .12s, color .12s; }
-.tq-chat-unit > .tq-compose-box .tq-send:disabled { opacity: 1; background: #ebe8e2; color: #a19b91; }
+.tq-chat-unit > .tq-compose-box .tq-send:disabled { opacity: 1; background: var(--tq-inset, #ebe8e2); color: var(--tq-muted, #a19b91); }
 /* ...A TRIAL: GROWN UNDER THE MOUSE (AssistantView's `grow`, the owner 2026-10-31: "try it"): the card stands on its slot's foot and right
    edge at rest too, so it can grow up over the canvas without moving the slot - the bar beside it and the canvas stay where they are.
    Never wider (the owner, 2026-10-31: "size of the chat should never change"). Two lines of words the card's width, the whole hint;
@@ -1049,7 +1049,7 @@
   .tq-chat-unit > .tq-compose-box > .tq-compose-field, .tq-chat-unit > .tq-compose-box textarea { transition: none; }
 }
 .tq-model-pick { grid-area: model; justify-self: end; display: inline-flex; align-items: center; gap: 3px; max-width: 180px; height: 24px; padding: 0 6px; border: 0;
-  border-radius: 8px; background: transparent; color: #6e685f; font: 500 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
+  border-radius: 8px; background: transparent; color: var(--tq-secondary, #6e685f); font: 500 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
 .tq-model-pick > span { overflow: hidden; text-overflow: ellipsis; }
-.tq-model-pick:hover { background: #f4f1ec; color: #292824; }
-.tq-model-pick:focus-visible { outline: 2px solid #55697a; outline-offset: 1px; }
+.tq-model-pick:hover { background: var(--tq-panel, #f4f1ec); color: var(--tq-text, #292824); }
+.tq-model-pick:focus-visible { outline: 2px solid var(--tq-link, #55697a); outline-offset: 1px; }

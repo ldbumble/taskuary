@@ -63,7 +63,7 @@ export function useShareParts(owner, result, on = true, { onShared, summary = nu
   const badge = done && <span className="tq-pressed" data-tq-pressed={label("share_result")} data-tq-shared={done.how} title={done.note}>✓ {label("share_result")}</span>;
   return { badge, menu: (
     <>
-      {err && !mailOpen && <Typography variant="caption" role="alert" sx={{ color: "#a33b3b", display: "block" }}>{err}</Typography>}
+      {err && !mailOpen && <Typography variant="caption" role="alert" sx={{ color: "var(--tq-danger, #a33b3b)", display: "block" }}>{err}</Typography>}
       <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "center" }}
         transformOrigin={{ vertical: "bottom", horizontal: "center" }} slotProps={{ paper: { sx: { minWidth: 220, borderRadius: 2 } } }}>
         {rows.map((w) => (
@@ -87,7 +87,7 @@ export function useShareParts(owner, result, on = true, { onShared, summary = nu
             <EmailRecipients value={to} onChange={setTo} options={people} placeholder="Search contacts or type an email address" />
             <Typography variant="caption" sx={{ color: FAINT }}>The first is To, anyone after is copied in.</Typography>
           </Box>
-          {err && <Typography variant="body2" role="alert" sx={{ color: "#a33b3b" }}>{err}</Typography>}
+          {err && <Typography variant="body2" role="alert" sx={{ color: "var(--tq-danger, #a33b3b)" }}>{err}</Typography>}
         </DialogContent>
         <ButtonBar>
           <Button variant="contained" disableElevation onClick={() => go("email", { to })} disabled={busy === "email" || !to.length}>

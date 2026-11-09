@@ -11,6 +11,8 @@ const VIEWS = ["Board", "Assistant", "Reports", "Hub", "Connections", "Settings"
   const browser = await launch();
   try {
   const page = await browser.newPage();
+  // A disposable demo/test server can require auth too; no token needs to appear in screenshots or URLs.
+  if (process.env.TASKUARY_TEST_TOKEN) await page.evaluateOnNewDocument((token) => localStorage.setItem("taskuary_token", token), process.env.TASKUARY_TEST_TOKEN);
   await page.setViewport({ width: 1440, height: 900 });
   const errors = [];
   page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));

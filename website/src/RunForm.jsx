@@ -69,7 +69,7 @@ export function AgentAsk({ coding: wantCoding = false, title, what, placeholder 
   };
   const verb = coding ? "coding_agent" : "regular_agent";
   return (
-    <Box ref={box} data-tq-agent-ask="" data-tq-view={view ? "agent" : undefined} data-tq-view-label={view?.title} sx={inline ? { p: 1.5, border: "1px solid #d5d0c7", borderRadius: "12px", bgcolor: "#fffdfb" } : {}}>
+    <Box ref={box} data-tq-agent-ask="" data-tq-view={view ? "agent" : undefined} data-tq-view-label={view?.title} sx={inline ? { p: 1.5, border: "1px solid var(--tq-border, #d5d0c7)", borderRadius: "12px", bgcolor: "var(--tq-panel, #fffdfb)" } : {}}>
       <RunForm title={title || btn(verb)} value={text} onValue={setText} pics={pics} autoFocus placeholder={placeholder}
         sx={inline ? { mt: 0, pt: 0, borderTop: 0 } : {}}
         note={what}
@@ -90,7 +90,7 @@ export function AgentAsk({ coding: wantCoding = false, title, what, placeholder 
             {choice("agent", coding ? "regular_agent" : "coding_agent")}</Button>}
           <Button size="small" variant="text" disabled={busy} onClick={onClose}>Cancel</Button>
         </>}>
-        {err && <Typography role="alert" variant="caption" sx={{ color: "#7a2f3c", display: "block", mt: 0.5 }}>{err}</Typography>}
+        {err && <Typography role="alert" variant="caption" sx={{ color: "var(--tq-danger, #7a2f3c)", display: "block", mt: 0.5 }}>{err}</Typography>}
       </RunForm>
     </Box>
   );

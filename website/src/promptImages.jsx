@@ -63,7 +63,7 @@ export function AttachImage({ pics, size = 18, sx }) {
     <>
       <Tooltip title={pics.busy ? "Uploading…" : `Attach ${what} - or paste or drop one here`}>
         <span><IconButton size="small" aria-label={`Attach ${what}`} disabled={pics.busy} onClick={() => input.current?.click()}
-          sx={{ width: 34, height: 34, p: 0, color: "#6e685f", ...sx }}><AttachFileIcon sx={{ fontSize: size }} /></IconButton></span>
+          sx={{ width: 34, height: 34, p: 0, color: "var(--tq-secondary, #6e685f)", ...sx }}><AttachFileIcon sx={{ fontSize: size }} /></IconButton></span>
       </Tooltip>
       <input ref={input} hidden type="file" accept={pics.files ? undefined : IMAGE_ACCEPT} multiple
         onChange={(e) => { pics.add(e.target.files); e.target.value = ""; }} />
@@ -80,14 +80,14 @@ export function AttachChip({ name, icon = null, thumb = "", warn = "", note = ""
   const opens = !!(rest.onClick || rest.href);
   return <Box className="tq-attach-chip" {...rest} title={warn ? `${name} - ${warn}` : title || name}
     sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, flexShrink: 0, maxWidth: 240, height: 24, pl: thumb ? 0.25 : 0.75, pr: onRemove ? 0.25 : 0.75,
-      borderRadius: "12px", bgcolor: warn ? "#fbf3e8" : "#e4e9ee", border: `1px solid ${warn ? "#e2c9a8" : "transparent"}`, fontSize: 12.5, color: "#2f3a42",
-      boxSizing: "border-box", textDecoration: "none", ...(opens ? { cursor: "pointer", "&:hover": { borderColor: "#b9c6d1" } } : {}), ...sx }}>
+      borderRadius: "12px", bgcolor: warn ? "var(--tq-panel, #fbf3e8)" : "var(--tq-inset, #e4e9ee)", border: `1px solid ${warn ? "var(--tq-edge-brass, #e2c9a8)" : "transparent"}`, fontSize: 12.5, color: "var(--tq-link, #2f3a42)",
+      boxSizing: "border-box", textDecoration: "none", ...(opens ? { cursor: "pointer", "&:hover": { borderColor: "var(--tq-border, #b9c6d1)" } } : {}), ...sx }}>
     {thumb ? <Box component="img" src={thumb} alt="" sx={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-      : icon === false ? null : icon || <AttachFileIcon sx={{ fontSize: 13, color: "#55697a", flexShrink: 0 }} />}
+      : icon === false ? null : icon || <AttachFileIcon sx={{ fontSize: 13, color: "var(--tq-link, #55697a)", flexShrink: 0 }} />}
     <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</Box>
-    {note && <Box component="span" sx={{ color: "#7d8a94", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>{note}</Box>}
-    {warn && <Box component="span" sx={{ color: "#8a5a1c", whiteSpace: "nowrap", flexShrink: 0 }}>· {warn.length > 24 ? "can't go" : warn}</Box>}
-    {onRemove && <IconButton size="small" aria-label={`Remove ${name}`} onClick={(e) => { e.stopPropagation(); onRemove(e); }} sx={{ width: 18, height: 18, p: 0, color: "#55697a", flexShrink: 0 }}>
+    {note && <Box component="span" sx={{ color: "var(--tq-link, #7d8a94)", fontSize: 11, whiteSpace: "nowrap", flexShrink: 0 }}>{note}</Box>}
+    {warn && <Box component="span" sx={{ color: "var(--tq-warning, #8a5a1c)", whiteSpace: "nowrap", flexShrink: 0 }}>· {warn.length > 24 ? "can't go" : warn}</Box>}
+    {onRemove && <IconButton size="small" aria-label={`Remove ${name}`} onClick={(e) => { e.stopPropagation(); onRemove(e); }} sx={{ width: 18, height: 18, p: 0, color: "var(--tq-link, #55697a)", flexShrink: 0 }}>
       <CloseIcon sx={{ fontSize: 12 }} /></IconButton>}
   </Box>;
 }
@@ -118,8 +118,8 @@ export function AttachRow({ children, sx, few = ATTACH_FEW, ...rest }) {
 // the files waiting to go, as chips: `cannot(i)` says what this box's road cannot do with one
 export const fileChips = (pics, cannot = null) => pics.imgs.map((i) => <AttachChip key={i.path} data-tq-file-chip={i.name} data-tq-file-cannot={cannot?.(i) || undefined}
   name={i.name} thumb={i.image === false ? "" : i.url || ""} warn={cannot?.(i) || ""} onRemove={() => pics.remove(i.path)} />);
-export const fileState = (pics) => <>{pics.busy && <Box component="span" sx={{ fontSize: 11, color: "#a09889", flexShrink: 0 }}>uploading…</Box>}
-  {!!pics.err && <Box component="span" sx={{ fontSize: 11, color: "#7a2f3c", flexShrink: 0 }}>{pics.err}</Box>}</>;
+export const fileState = (pics) => <>{pics.busy && <Box component="span" sx={{ fontSize: 11, color: "var(--tq-warning, #a09889)", flexShrink: 0 }}>uploading…</Box>}
+  {!!pics.err && <Box component="span" sx={{ fontSize: 11, color: "var(--tq-danger, #7a2f3c)", flexShrink: 0 }}>{pics.err}</Box>}</>;
 // a box that keeps its files OUTSIDE it (the dock, Continue, New): the same chips, the same one line
 export function ImageTray({ pics, sx, cannot = null }) {
   if (!pics.imgs.length && !pics.err && !pics.busy) return null;

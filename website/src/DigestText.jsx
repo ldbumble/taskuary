@@ -32,7 +32,7 @@ function DigestWayOn({ sourceId, noAi = false }) {
       {noAi ? <ConnectAi variant="outlined" />
         : <Button size="small" component="a" href={placeHref("ai")} onClick={(e) => { e.preventDefault(); openAppLink(placeHref("ai")); }}>Check the AI connection</Button>}
     </Box>
-    {said && <Typography sx={{ fontSize: 12, mt: 0.5, color: "#55697a" }}>{said}</Typography>}
+    {said && <Typography sx={{ fontSize: 12, mt: 0.5, color: "var(--tq-link, #55697a)" }}>{said}</Typography>}
   </Box>;
 }
 
@@ -43,14 +43,14 @@ const goTask = (e, id) => { e.preventDefault(); openAppLink(`task=${id}`); };
 const Refs = ({ text, linked }) => text.split(REF).map((part, i) => {
   const id = /^TQ-(\d+)$/.exec(part)?.[1];
   return id && !linked.has(Number(id))
-    ? <a key={i} href={`#task=${Number(id)}`} onClick={(e) => goTask(e, Number(id))} style={{ color: "#526978", fontWeight: 600, textDecoration: "none" }}>{part}</a>
+    ? <a key={i} href={`#task=${Number(id)}`} onClick={(e) => goTask(e, Number(id))} style={{ color: "var(--tq-link, #526978)", fontWeight: 600, textDecoration: "none" }}>{part}</a>
     : <React.Fragment key={i}>{part}</React.Fragment>;
 });
 const Linked = ({ children }) => {
   const text = String(children || ""), linked = new Set([...text.matchAll(/#task=(\d+)/g)].map((m) => Number(m[1])));
   return text.split(URL).map((part, i) => /^https?:\/\//.test(part)
     ? <a key={i} href={part} target={/#task=\d+/.test(part) ? undefined : "_blank"} rel="noreferrer"
-        style={{ color: "#526978", fontWeight: 600, textDecoration: "none" }}
+        style={{ color: "var(--tq-link, #526978)", fontWeight: 600, textDecoration: "none" }}
         onClick={(e) => { const hit = /#task=(\d+)/.exec(part); if (hit) { e.preventDefault(); openAppLink(`task=${hit[1]}`); } }}>
         {/#task=(\d+)/.test(part) ? `open TQ-${String(/#task=(\d+)/.exec(part)[1]).padStart(4, "0")} →` : part}
       </a>
@@ -59,14 +59,14 @@ const Linked = ({ children }) => {
 
 const Sections = ({ sections }) => <Box sx={{ display: "grid", gap: 1.25 }}>
   {sections.map((section) => <Box component="section" key={section.title}
-    sx={{ border: "1px solid #e1ddd5", borderRadius: 2, bgcolor: "#fff", overflow: "hidden" }}>
-    <Typography component="h3" sx={{ m: 0, px: 1.35, py: 0.85, bgcolor: "#f5f2ec",
-      borderBottom: "1px solid #e6e0d7", color: "#343832", fontSize: 13, fontWeight: 600 }}>
+    sx={{ border: "1px solid var(--tq-border, #e1ddd5)", borderRadius: 2, bgcolor: "var(--tq-panel, #fff)", overflow: "hidden" }}>
+    <Typography component="h3" sx={{ m: 0, px: 1.35, py: 0.85, bgcolor: "var(--tq-panel, #f5f2ec)",
+      borderBottom: "1px solid var(--tq-border, #e6e0d7)", color: "var(--tq-text, #343832)", fontSize: 13, fontWeight: 600 }}>
       {section.title}
     </Typography>
-    <Box component="ol" sx={{ m: 0, py: 1, pl: 4.25, pr: 1.4, color: "#393b37",
+    <Box component="ol" sx={{ m: 0, py: 1, pl: 4.25, pr: 1.4, color: "var(--tq-text, #393b37)",
       "& li": { pl: 0.35, mb: 0.7, fontSize: 12.5, lineHeight: 1.55, whiteSpace: "pre-wrap" },
-      "& li:last-of-type": { mb: 0 }, "& li::marker": { color: "#718775", fontWeight: 600 } }}>
+      "& li:last-of-type": { mb: 0 }, "& li::marker": { color: "var(--tq-success, #718775)", fontWeight: 600 } }}>
       {section.items.map((item, i) => <li key={`${section.title}-${i}`}><Linked>{item}</Linked></li>)}
     </Box>
   </Box>)}
@@ -76,25 +76,25 @@ export default function DigestText({ text, sourceId = null }) {
   const digest = parseDigest(text);
   return <Box sx={{ textAlign: "left" }}>
     {digest.error && <Alert severity="error" variant="outlined" sx={{ mb: 1.25, alignItems: "flex-start",
-      bgcolor: "#fff8f5", borderColor: "#e6bcb2", "& .MuiAlert-message": { width: "100%" } }}>
+      bgcolor: "var(--tq-panel, #fff8f5)", borderColor: "var(--tq-edge-red, #e6bcb2)", "& .MuiAlert-message": { width: "100%" } }}>
       <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.35 }}>{digest.plain}</Typography>
       {digest.sections.length > 0 && <Typography sx={{ fontSize: 12.25, lineHeight: 1.5 }}>What it would have read is folded below, not yet summarised.</Typography>}
       {/* the AI's own words are the detail, never the headline */}
-      <Box component="details" sx={{ mt: 0.4, "& summary": { cursor: "pointer", fontSize: 12, color: "#817b72" } }}>
+      <Box component="details" sx={{ mt: 0.4, "& summary": { cursor: "pointer", fontSize: 12, color: "var(--tq-muted, #817b72)" } }}>
         <summary>What the AI said</summary>
-        <Typography sx={{ fontSize: 12, color: "#817b72", whiteSpace: "pre-wrap" }}>{digest.error}</Typography>
+        <Typography sx={{ fontSize: 12, color: "var(--tq-muted, #817b72)", whiteSpace: "pre-wrap" }}>{digest.error}</Typography>
       </Box>
       <DigestWayOn sourceId={sourceId} noAi={/^No active AI connector/.test(digest.error)} />
     </Alert>}
-    {digest.meta && <Typography variant="caption" sx={{ display: "block", color: "#817b72", mb: 1 }}>
+    {digest.meta && <Typography variant="caption" sx={{ display: "block", color: "var(--tq-muted, #817b72)", mb: 1 }}>
       {digest.meta}
     </Typography>}
     {!digest.error && <Sections sections={digest.sections} />}
     {digest.error && digest.sections.length > 0 && <Box component="details" sx={{ mt: 0.75,
-      "& summary": { cursor: "pointer", color: "#65766a", fontSize: 12, fontWeight: 600, py: 0.5 },
+      "& summary": { cursor: "pointer", color: "var(--tq-secondary, #65766a)", fontSize: 12, fontWeight: 600, py: 0.5 },
       "&[open] summary": { mb: 0.75 } }}>
       <summary>Show unreviewed source data</summary>
-      <Typography variant="caption" sx={{ display: "block", color: "#817b72", mb: 0.8 }}>
+      <Typography variant="caption" sx={{ display: "block", color: "var(--tq-muted, #817b72)", mb: 0.8 }}>
         The AI did not judge or summarize these items. They are grouped only to make the source readable.
       </Typography>
       <Sections sections={digest.sections} />

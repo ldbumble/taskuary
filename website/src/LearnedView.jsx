@@ -199,7 +199,7 @@ export default function LearnedView({ onChanged, onPerson, people = [] }) {
                   <Box key={subject || "-"} sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
                     {subject && <Typography variant="caption" sx={{ ...mono, fontSize: 10, color: DIM }}>
                       {subject}{page && onPerson ? <> · <Box component="button" type="button" data-tq-person-link={page} onClick={() => onPerson(page)}
-                        sx={{ border: 0, p: 0, bgcolor: "transparent", color: "#55697a", font: "inherit", textDecoration: "underline", cursor: "pointer" }}>their page</Box></> : null}
+                        sx={{ border: 0, p: 0, bgcolor: "transparent", color: "var(--tq-link, #55697a)", font: "inherit", textDecoration: "underline", cursor: "pointer" }}>their page</Box></> : null}
                     </Typography>}
                     {ls.map((l) => <Card key={l.key} l={l} />)}
                   </Box>);

@@ -86,7 +86,7 @@ export default function SoulInterview({ open, onClose, onWritten }) {
               placeholder={question.placeholder || "Answer in your own words"} value={answer}
               onChange={(e) => setAnswer(e.target.value)} disabled={!!busy}
               onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && answer.trim()) advance(); }}
-              sx={{ bgcolor: "#fff", "& textarea": { fontSize: 13.5, lineHeight: 1.55 } }} />
+              sx={{ bgcolor: "var(--tq-panel, #fff)", "& textarea": { fontSize: 13.5, lineHeight: 1.55 } }} />
             {!!answers.length && (
               <Box sx={{ mt: 2, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25 }}>
                 <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>

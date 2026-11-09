@@ -35,8 +35,8 @@ export function GoogleFiles({ conn, cfg, reload }) {
       <AllowFiles checked={cfg.allow_files} onChange={flip} disabled={!can}
         hint={can ? G_FILES_HINT : "Needs the Google sign-in first - Sign in with Google for the calendar, above"} />
       {went && <Typography variant="caption" sx={{ color: DIM }}>Finish in the Google tab, then come back - this card reads it again.
-        <Box component="button" type="button" onClick={() => { setWent(false); reload?.(); }} sx={{ ml: 0.75, border: 0, background: "none", color: "#55697a", cursor: "pointer", font: "inherit", p: 0 }}>Read it again</Box></Typography>}
-      {err && <Typography variant="caption" role="alert" sx={{ color: "#6b2733" }}>{err}</Typography>}
+        <Box component="button" type="button" onClick={() => { setWent(false); reload?.(); }} sx={{ ml: 0.75, border: 0, background: "none", color: "var(--tq-link, #55697a)", cursor: "pointer", font: "inherit", p: 0 }}>Read it again</Box></Typography>}
+      {err && <Typography variant="caption" role="alert" sx={{ color: "var(--tq-danger, #6b2733)" }}>{err}</Typography>}
     </Box>
   );
 }

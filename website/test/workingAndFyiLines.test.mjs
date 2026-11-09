@@ -17,7 +17,7 @@ test("an agent whose steps stream into the thread says it is working once, not a
 // ...and "should we not have the time on the fyi messages ... it should be white similar to messages showing up in tasks"
 test("each fyi line says when it came, on a white box", () => {
   assert.match(read("assistantCards.jsx"), /\{\(i\.since \|\| i\.when\) && <span className="at">\{fmtDateTime\(i\.since \|\| i\.when\)\}<\/span>\}/);
-  assert.match(read("assistantView.css"), /\.tq-fyi-box \{[^}]*background: #fffdfb;/);
+  assert.match(read("assistantView.css"), /\.tq-fyi-box \{[^}]*background: var\(--tq-panel, #fffdfb\);/);
 });
 
 // the owner, 2026-10-14: "we need to have general agent closed until i reopen and then continue session"

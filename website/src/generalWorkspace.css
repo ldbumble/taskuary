@@ -1,17 +1,17 @@
-.tq-aui-thread { width: 100%; max-width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: #fbfaf7; color: #292824; }
+.tq-aui-thread { width: 100%; max-width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--tq-panel, #fbfaf7); color: var(--tq-text, #292824); }
 .tq-aui-viewport { width: 100%; max-width: 100%; flex: 1 1 auto; min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; padding: 18px; box-sizing: border-box; scrollbar-width: thin; }
-.tq-aui-welcome { margin: auto 0 18px; max-width: none; display: flex; align-items: flex-start; gap: 10px; color: #667164; }
-.tq-aui-welcome-title { color: #343832; font-weight: 600; font-size: 15px; }
-.tq-aui-welcome-copy { color: #77766f; font-size: 12.5px; margin-top: 3px; line-height: 1.45; }
+.tq-aui-welcome { margin: auto 0 18px; max-width: none; display: flex; align-items: flex-start; gap: 10px; color: var(--tq-secondary, #667164); }
+.tq-aui-welcome-title { color: var(--tq-text, #343832); font-weight: 600; font-size: 15px; }
+.tq-aui-welcome-copy { color: var(--tq-muted, #77766f); font-size: 12.5px; margin-top: 3px; line-height: 1.45; }
 .tq-aui-message { width: 100%; max-width: 100%; min-width: 0; margin: 0 auto 18px; display: grid; grid-template-columns: 66px minmax(0, 1fr); gap: 10px; align-items: start; box-sizing: border-box; }
-.tq-aui-role { padding-top: 8px; color: #8b877e; font: 600 9px/1.2 'Cascadia Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
+.tq-aui-role { padding-top: 8px; color: var(--tq-muted, #8b877e); font: 600 9px/1.2 'Cascadia Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
 .tq-aui-brief > * { grid-column: 1 / -1; }
 /* the mail that carried a turn on, in its sender's words (GeneralWorkspace CameIn): a row like the owner's, white for someone else's */
 .tq-aui-mail { display: grid; grid-template-columns: 66px minmax(0, 1fr); gap: 10px; align-items: start; margin-bottom: 10px; }
 .tq-aui-mail .tq-aui-role { overflow-wrap: anywhere; }
-.tq-aui-mail-bubble { justify-self: start; min-width: 0; max-width: 88%; border: 1px solid #dfdbd3; background: #fff; border-radius: 13px; padding: 9px 13px;
+.tq-aui-mail-bubble { justify-self: start; min-width: 0; max-width: 88%; border: 1px solid var(--tq-border, #dfdbd3); background: var(--tq-panel, #fff); border-radius: 13px; padding: 9px 13px;
   font-size: 13px; line-height: 1.48; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-.tq-aui-user-bubble { justify-self: start; min-width: 0; max-width: 88%; border: 1px solid #dfdbd3; background: #f1eee8; border-radius: 13px; padding: 9px 13px; font-size: 13px; line-height: 1.48; overflow-wrap: anywhere; word-break: break-word; }
+.tq-aui-user-bubble { justify-self: start; min-width: 0; max-width: 88%; border: 1px solid var(--tq-border, #dfdbd3); background: var(--tq-inset, #f1eee8); border-radius: 13px; padding: 9px 13px; font-size: 13px; line-height: 1.48; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-user-bubble p { margin: 0; white-space: pre-wrap !important; overflow-wrap: anywhere; }
 .tq-aui-agent-body { min-width: 0; max-width: 100%; padding: 5px 3px; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-agent-body * { max-width: 100%; min-width: 0; box-sizing: border-box; }
@@ -25,63 +25,63 @@
 .tq-aui-agent-body th, .tq-aui-agent-body td, .tq-aui-agent-body a { overflow-wrap: anywhere; word-break: break-word; }
 /* WHAT THE AGENT ASKED (AgentAsks, the UI audit's W6): the amber of a raised hand; the choices wrap under the question at any width -
    the answer is typed in the composer below, never a box of the card's own (2026-11-03) */
-.tq-aui-asking { width: 100%; box-sizing: border-box; margin: 2px auto 10px; padding: 10px 12px; border: 1px solid #d8c9a8; border-left: 3px solid #b08b4f;
-  border-radius: 11px; background: #fbf7ee; display: flex; flex-direction: column; gap: 8px; }
-.tq-aui-asking b { color: #4d514b; font-size: 12px; }
-.tq-aui-asking-q { color: #3f423d; font-size: 13px; white-space: pre-wrap; }
-.tq-aui-asking-hint { color: #7a756b; font-size: 11.5px; }
+.tq-aui-asking { width: 100%; box-sizing: border-box; margin: 2px auto 10px; padding: 10px 12px; border: 1px solid var(--tq-edge-brass, #d8c9a8); border-left: 3px solid var(--tq-edge-brass, #b08b4f);
+  border-radius: 11px; background: var(--tq-panel, #fbf7ee); display: flex; flex-direction: column; gap: 8px; }
+.tq-aui-asking b { color: var(--tq-secondary, #4d514b); font-size: 12px; }
+.tq-aui-asking-q { color: var(--tq-text, #3f423d); font-size: 13px; white-space: pre-wrap; }
+.tq-aui-asking-hint { color: var(--tq-muted, #7a756b); font-size: 11.5px; }
 .tq-aui-asking-choices { display: flex; gap: 6px; flex-wrap: wrap; }
 /* a sign-in ask is a line of the conversation, not a card (2026-11-03): its words, and the fill page's link */
-.tq-aui-signin { margin: 2px 0 10px; color: #3f423d; font-size: 13px; line-height: 1.5; }
-.tq-aui-signin a { color: #41525f; text-decoration: underline; text-underline-offset: 2px; }
-.tq-aui-asking-err { color: #8a2f2f; font-size: 11.5px; }
+.tq-aui-signin { margin: 2px 0 10px; color: var(--tq-text, #3f423d); font-size: 13px; line-height: 1.5; }
+.tq-aui-signin a { color: var(--tq-link, #41525f); text-decoration: underline; text-underline-offset: 2px; }
+.tq-aui-asking-err { color: var(--tq-danger, #8a2f2f); font-size: 11.5px; }
 /* ...and so is the agent's own question (2026-11-04): its sentence in the answer's type, the choices under it only when it gave real ones */
 .tq-aui-asked { margin: 2px 0 10px; display: flex; flex-direction: column; gap: 8px; }
-.tq-aui-asked-q { margin: 0; color: #292824; font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tq-aui-asked-q { margin: 0; color: var(--tq-text, #292824); font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* "WORKING ON THIS…" (2026-11-04): one quiet line while the turn runs, its steps folded under it; a finished turn's steps fold the same way */
-.tq-aui-working { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 12.5px; color: #6e685f; }
-.tq-aui-working em { font-style: normal; font-variant-numeric: tabular-nums; color: #8b877e; }
+.tq-aui-working { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 12.5px; color: var(--tq-secondary, #6e685f); }
+.tq-aui-working em { font-style: normal; font-variant-numeric: tabular-nums; color: var(--tq-muted, #8b877e); }
 .tq-aui-working-fold { margin: 0 0 8px; }
-.tq-aui-working-fold > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #6e685f; list-style: none; }
+.tq-aui-working-fold > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--tq-secondary, #6e685f); list-style: none; }
 .tq-aui-working-fold > summary::-webkit-details-marker { display: none; }
-.tq-aui-working-fold > summary::after { content: "▸"; font-size: 10px; color: #a9a294; }
+.tq-aui-working-fold > summary::after { content: "▸"; font-size: 10px; color: var(--tq-warning, #a9a294); }
 .tq-aui-working-fold[open] > summary::after { content: "▾"; }
-.tq-aui-working-fold > summary:hover { color: #292824; }
+.tq-aui-working-fold > summary:hover { color: var(--tq-text, #292824); }
 .tq-aui-working-fold > .tq-aui-steps { margin-top: 6px; }
 /* a turn at work shows its steps open (GeneralWorkspace WorkSteps): the last six, the earlier ones one quiet line above them */
 .tq-aui-live-steps { margin: 0 0 8px; }
 .tq-aui-live-steps > .tq-aui-steps { margin: 0; }
-.tq-aui-live-earlier > summary { cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 2px 6px; font-size: 12px; color: #8b877e; list-style: none; }
+.tq-aui-live-earlier > summary { cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 2px 6px; font-size: 12px; color: var(--tq-muted, #8b877e); list-style: none; }
 .tq-aui-live-earlier > summary::-webkit-details-marker { display: none; }
-.tq-aui-live-earlier > summary::after { content: "▸"; font-size: 10px; color: #a9a294; }
+.tq-aui-live-earlier > summary::after { content: "▸"; font-size: 10px; color: var(--tq-warning, #a9a294); }
 .tq-aui-live-earlier[open] > summary::after { content: "▾"; }
-.tq-aui-live-earlier > summary:hover { color: #292824; }
+.tq-aui-live-earlier > summary:hover { color: var(--tq-text, #292824); }
 .tq-aui-live-earlier > .tq-aui-steps { margin: 2px 0 0; }
 /* the question keeps a readable width and the choices WRAP below it - unshrinkable choices beside a long question squeezed
    it to one word a line in a half-width chat (the 2026-10-08 portal run) */
-.tq-aui-progress { margin: 0 0 8px; border: 1px dashed #ddd7cd; border-radius: 9px; color: #77766f; font-size: 11.5px; }
-.tq-aui-progress summary { cursor: pointer; padding: 6px 9px; font-weight: 600; color: #676b64; }
+.tq-aui-progress { margin: 0 0 8px; border: 1px dashed var(--tq-border, #ddd7cd); border-radius: 9px; color: var(--tq-muted, #77766f); font-size: 11.5px; }
+.tq-aui-progress summary { cursor: pointer; padding: 6px 9px; font-weight: 600; color: var(--tq-secondary, #676b64); }
 .tq-aui-progress > div { padding: 0 9px 8px; white-space: pre-wrap; line-height: 1.45; }
-.tq-aui-tool { margin: 0 0 7px; border: 1px solid #ddd8cf; border-radius: 9px; background: #faf8f4; overflow: hidden; }
+.tq-aui-tool { margin: 0 0 7px; border: 1px solid var(--tq-border, #ddd8cf); border-radius: 9px; background: var(--tq-panel, #faf8f4); overflow: hidden; }
 .tq-aui-tool summary { min-height: 31px; padding: 5px 9px; display: flex; align-items: center; gap: 7px; cursor: pointer; list-style: none; font-size: 11.5px; }
 .tq-aui-tool summary::-webkit-details-marker { display: none; }
-.tq-aui-tool summary b { color: #4d514b; }
-.tq-aui-tool summary span:not(.tq-aui-tool-dot) { color: #858078; overflow-wrap: anywhere; word-break: break-word; }
-.tq-aui-tool summary em { margin-left: auto; color: #8d897f; font: 9px/1.2 'Cascadia Mono', Consolas, monospace; font-style: normal; text-transform: uppercase; }
-.tq-aui-tool pre { margin: 0; padding: 8px 10px; max-height: 220px; overflow-x: hidden; overflow-y: auto; border-top: 1px solid #e5e0d8; background: #22231f; color: #e8e4dc; font: 10.5px/1.45 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.tq-aui-tool summary b { color: var(--tq-secondary, #4d514b); }
+.tq-aui-tool summary span:not(.tq-aui-tool-dot) { color: var(--tq-muted, #858078); overflow-wrap: anywhere; word-break: break-word; }
+.tq-aui-tool summary em { margin-left: auto; color: var(--tq-muted, #8d897f); font: 9px/1.2 'Cascadia Mono', Consolas, monospace; font-style: normal; text-transform: uppercase; }
+.tq-aui-tool pre { margin: 0; padding: 8px 10px; max-height: 220px; overflow-x: hidden; overflow-y: auto; border-top: 1px solid var(--tq-border, #e5e0d8); background: #22231f; color: var(--tq-muted, #e8e4dc); font: 10.5px/1.45 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 /* AN AGENT AT WORK. One band above the trail: who, what it is doing right now, how far in, how
    long - and the sources it is already holding. The dock never renders this; it is the assistant
    that helps you run Taskuary, not an agent on a job. */
-.tq-aui-band { width: 100%; margin: 0 auto 14px; padding: 9px 12px; background: #fff;
-  border: 1px solid #d8d2c6; border-left: 3px solid #6f8a6e; border-radius: 0 9px 9px 0; }
+.tq-aui-band { width: 100%; margin: 0 auto 14px; padding: 9px 12px; background: var(--tq-panel, #fff);
+  border: 1px solid var(--tq-border, #d8d2c6); border-left: 3px solid var(--tq-border-strong, #6f8a6e); border-radius: 0 9px 9px 0; }
 .tq-aui-band-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .tq-aui-band-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #6f8a6e;
   align-self: center; animation: tqAuiPulse 1.6s ease-in-out infinite; }
 .tq-aui-band-head b { font: 600 10px/1.4 'Cascadia Mono', Consolas, monospace; letter-spacing: .13em;
-  text-transform: uppercase; color: #4d514b; }
-.tq-aui-band-head span { font-size: 12.5px; font-weight: 600; color: #292824; }
+  text-transform: uppercase; color: var(--tq-secondary, #4d514b); }
+.tq-aui-band-head span { font-size: 12.5px; font-weight: 600; color: var(--tq-text, #292824); }
 .tq-aui-band-head em { margin-left: auto; font-style: normal; font-variant-numeric: tabular-nums;
-  font: 500 11px/1.4 'Cascadia Mono', Consolas, monospace; color: #8b877e; }
+  font: 500 11px/1.4 'Cascadia Mono', Consolas, monospace; color: var(--tq-muted, #8b877e); }
 @media (max-width: 700px) { .tq-aui-band { width: 100%; } }
 
 /* A finished tool call is history. Six of them, each ending in the word COMPLETE - wrapped mid-word
@@ -92,21 +92,21 @@
 .tq-aui-tool-complete summary em { display: none; }
 .tq-aui-dock .tq-aui-tool-complete summary { min-height: 31px; }
 .tq-aui-dock .tq-aui-tool-complete summary em { display: block; }
-.tq-aui-tool-running summary em { color: #8a6d1f; white-space: nowrap; }
+.tq-aui-tool-running summary em { color: var(--tq-warning, #8a6d1f); white-space: nowrap; }
 .tq-aui-thinking { display: flex; align-items: center; gap: 5px; margin: 0 0 10px; }
 .tq-aui-thinking i { width: 6px; height: 6px; border-radius: 50%; background: #a9a294; animation: tqAuiThinking 1.1s ease-in-out infinite; }
 .tq-aui-thinking i:nth-child(2) { animation-delay: .15s; } .tq-aui-thinking i:nth-child(3) { animation-delay: .3s; }
-.tq-aui-thinking span { margin-left: 5px; color: #8b877e; font: 500 11px/1.2 'Cascadia Mono', Consolas, monospace; }
+.tq-aui-thinking span { margin-left: 5px; color: var(--tq-muted, #8b877e); font: 500 11px/1.2 'Cascadia Mono', Consolas, monospace; }
 @keyframes tqAuiThinking { 0%, 100% { opacity: .35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
-.tq-aui-footer { flex: 0 0 auto; padding: 10px 18px 8px; background: #fbfaf7; border-top: 1px solid #e4e0d9; }
-.tq-aui-composer { width: 100%; margin: 0 auto; min-height: 40px; display: flex; flex-wrap: nowrap; align-items: center; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
-.tq-aui-input { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 5px 5px; max-height: 150px; overflow-x: hidden; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
-.tq-aui-input::placeholder { color: #8f8b84; }
+.tq-aui-footer { flex: 0 0 auto; padding: 10px 18px 8px; background: var(--tq-panel, #fbfaf7); border-top: 1px solid var(--tq-border, #e4e0d9); }
+.tq-aui-composer { width: 100%; margin: 0 auto; min-height: 40px; display: flex; flex-wrap: nowrap; align-items: center; gap: 5px; padding: 6px 7px; border: 1px solid var(--tq-border, #d5d0c7); background: var(--tq-panel, #fff); border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
+.tq-aui-input { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; color: var(--tq-text, #292824); font: inherit; font-size: 13px; line-height: 1.45; padding: 5px 5px; max-height: 150px; overflow-x: hidden; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tq-aui-input::placeholder { color: var(--tq-muted, #8f8b84); }
 .tq-aui-send, .tq-aui-cancel { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-aui-send:disabled { cursor: default; opacity: .4; }
 .tq-aui-cancel { background: #9a6d65; }
 .tq-aui-cancel:disabled { display: none; }
-.tq-aui-hint { margin: 5px auto 0; text-align: center; color: #a09b92; font: 9px/1.2 'Cascadia Mono', Consolas, monospace; }
+.tq-aui-hint { margin: 5px auto 0; text-align: center; color: var(--tq-muted, #a09b92); font: 9px/1.2 'Cascadia Mono', Consolas, monospace; }
 .tq-aui-attachments { box-sizing: border-box; }
 .tq-aui-dock .tq-aui-viewport { padding: 14px 13px 8px; }
 .tq-aui-dock .tq-aui-message { width: 100%; grid-template-columns: 54px minmax(0, 1fr); gap: 7px; margin-bottom: 14px; }
@@ -120,16 +120,16 @@
 [data-tq-canvas-item] .tq-aui-hint:not([role]) { display: none; }
 .tq-aui-dock-expanded .tq-aui-message { width: 100%; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
 .tq-aui-dock-expanded .tq-aui-viewport { padding: 22px 24px 12px; }
-.tq-dock-actions { width: 100%; margin: 2px auto 12px; padding: 10px; border: 1px solid #d6cec1; border-left: 4px solid #98743e; border-radius: 12px; background: #fffdf9; box-shadow: 0 5px 18px rgba(51, 45, 35, .07); box-sizing: border-box; }
+.tq-dock-actions { width: 100%; margin: 2px auto 12px; padding: 10px; border: 1px solid var(--tq-border, #d6cec1); border-left: 4px solid #98743e; border-radius: 12px; background: var(--tq-panel, #fffdf9); box-shadow: 0 5px 18px rgba(51, 45, 35, .07); box-sizing: border-box; }
 .tq-dock-actions-expanded { width: 100%; padding: 13px 14px; }
-.tq-dock-action-kicker { min-height: 22px; display: flex; align-items: center; gap: 7px; color: #8d6b38; font: 600 9px/1.2 'Cascadia Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
-.tq-dock-action-kicker em { color: #989188; font-style: normal; letter-spacing: .04em; text-transform: none; }
+.tq-dock-action-kicker { min-height: 22px; display: flex; align-items: center; gap: 7px; color: var(--tq-warning, #8d6b38); font: 600 9px/1.2 'Cascadia Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
+.tq-dock-action-kicker em { color: var(--tq-muted, #989188); font-style: normal; letter-spacing: .04em; text-transform: none; }
 .tq-dock-action-nav { margin-left: auto; display: flex; }
-.tq-dock-action-nav button { width: 24px; height: 24px; color: #766f64; }
+.tq-dock-action-nav button { width: 24px; height: 24px; color: var(--tq-warning, #766f64); }
 .tq-dock-action-head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .tq-dock-action-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.tq-dock-action-head b { color: #34342f; font-size: 12.5px; line-height: 1.35; overflow-wrap: anywhere; }
-.tq-dock-action-head span { margin-top: 2px; color: #817c73; font-size: 10.5px; overflow-wrap: anywhere; }
+.tq-dock-action-head b { color: var(--tq-text, #34342f); font-size: 12.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.tq-dock-action-head span { margin-top: 2px; color: var(--tq-muted, #817c73); font-size: 10.5px; overflow-wrap: anywhere; }
 .tq-dock-action-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .tq-dock-action-buttons button { text-transform: none; font-size: 10.75px; }
 @media (max-width: 700px) {
@@ -152,12 +152,12 @@
 @media (max-width: 600px) {
   }
 /* a new line on the task's thread, where the chat is home (GeneralWorkspace Arrived): a rule across the stream with when and who, then their words */
-.tq-aui-arrived { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 12px; padding-top: 8px; border-top: 1px dashed #d6cfc2; font-size: 12.5px; line-height: 1.45; color: #5f5a50; }
-.tq-aui-arrived-head { color: #8b6f3a; font-weight: 600; font-size: 11.5px; }
-.tq-aui-arrived-subject { color: #2b2925; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.tq-aui-arrived-words { color: #3d3a33; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tq-aui-arrived { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 12px; padding-top: 8px; border-top: 1px dashed var(--tq-border, #d6cfc2); font-size: 12.5px; line-height: 1.45; color: var(--tq-secondary, #5f5a50); }
+.tq-aui-arrived-head { color: var(--tq-warning, #8b6f3a); font-weight: 600; font-size: 11.5px; }
+.tq-aui-arrived-subject { color: var(--tq-text, #2b2925); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tq-aui-arrived-words { color: var(--tq-text, #3d3a33); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* the ask, as the chat's first plain paragraph before any turn (GeneralWorkspace `reading`, the owner 2026-11-05: no boxes, no lines) */
-.tq-aui-ask { font-size: 13.5px; line-height: 1.55; color: #2b2925; margin: 0 0 14px; overflow-wrap: anywhere; }
+.tq-aui-ask { font-size: 13.5px; line-height: 1.55; color: var(--tq-text, #2b2925); margin: 0 0 14px; overflow-wrap: anywhere; }
 /* WHERE THE CHAT IS THE TASK'S HOME it reads as a chat (the owner, 2026-11-05: "show the chat like normal left side is them right side is
    ours"): the people on the thread on the left, the owner's own words on the right, the agent's answer the full width between them, no role column */
 .tq-aui-chat .tq-aui-message { grid-template-columns: minmax(0, 1fr); gap: 2px; }
@@ -165,35 +165,35 @@
 .tq-aui-chat .tq-aui-user > .tq-aui-role, .tq-aui-chat .tq-aui-brief > .tq-aui-role { display: none; }
 .tq-aui-chat .tq-aui-agent > .tq-aui-role { padding-top: 0; margin-bottom: 4px; }
 .tq-aui-chat .tq-aui-user { justify-items: end; }
-.tq-aui-chat .tq-aui-user .tq-aui-user-bubble { justify-self: end; max-width: 75%; background: #e7efe6; border-color: #cfdccd; }
-.tq-aui-chat .tq-aui-arrived { justify-self: end; max-width: 75%; border-top: 0; margin: 2px 0 14px; padding: 8px 12px; background: #fff; border: 1px solid #dfdbd3; border-radius: 13px; }
+.tq-aui-chat .tq-aui-user .tq-aui-user-bubble { justify-self: end; max-width: 75%; background: var(--tq-inset, #e7efe6); border-color: var(--tq-border, #cfdccd); }
+.tq-aui-chat .tq-aui-arrived { justify-self: end; max-width: 75%; border-top: 0; margin: 2px 0 14px; padding: 8px 12px; background: var(--tq-panel, #fff); border: 1px solid var(--tq-border, #dfdbd3); border-radius: 13px; }
 .tq-aui-chat .tq-aui-brief { justify-items: end; }
-.tq-aui-chat .tq-aui-arrived-own { justify-self: start; background: #f7f4ee; }
-.tq-aui-chat .tq-aui-arrived-head { color: #6b6559; font-weight: 600; font-size: 11.5px; }
+.tq-aui-chat .tq-aui-arrived-own { justify-self: start; background: var(--tq-panel, #f7f4ee); }
+.tq-aui-chat .tq-aui-arrived-head { color: var(--tq-warning, #6b6559); font-weight: 600; font-size: 11.5px; }
 /* ...the next of a burst from the same sender sits close under the first, its time alone over it (GeneralWorkspace Arrived) */
 .tq-aui-chat .tq-aui-arrived-more { margin-top: -8px; }
 .tq-aui-arrived-files > div { margin-top: 2px; }
-.tq-aui-chat .tq-aui-arrived-more .tq-aui-arrived-head { font-weight: 500; color: #8b877e; }
+.tq-aui-chat .tq-aui-arrived-more .tq-aui-arrived-head { font-weight: 500; color: var(--tq-muted, #8b877e); }
 /* ...and the summary keeps its breath under the agent's own words when they are shown over it (AgentSummary's first head has no top margin) */
 .tq-aui-chat .tq-aui-agent-body > div:not(.tq-aui-summary):not(.tq-aui-live-steps) + .tq-aui-summary[data-tq-summary=open] { margin-top: 12px; }
-.tq-aui-chat .tq-aui-user-head { justify-self: end; color: #6b6559; font-weight: 600; font-size: 11.5px; margin-bottom: 3px; }
+.tq-aui-chat .tq-aui-user-head { justify-self: end; color: var(--tq-warning, #6b6559); font-weight: 600; font-size: 11.5px; margin-bottom: 3px; }
 /* ...the owner's next line in a row sits close under the one before, a new minute's time alone over it (GeneralWorkspace UserMessage) */
 .tq-aui-chat .tq-aui-message:has(+ .tq-aui-user-more) { margin-bottom: 8px; }
-.tq-aui-chat .tq-aui-user-more .tq-aui-user-head { font-weight: 500; color: #8b877e; }
+.tq-aui-chat .tq-aui-user-more .tq-aui-user-head { font-weight: 500; color: var(--tq-muted, #8b877e); }
 /* ...THE CHAT TAKES THE ROOM (the owner, 2026-11-05: "let's make the ui components as minimal as possible to leave space for that chat"): its box
    sits on the card's foot, and inside it the draft is the message and its Send - no Redraft bar or button (the chat redrafts it when asked),
    no line explaining the two Sends */
 /* a file's name in the agent's words, pressable: it opens the file over the chat (GeneralWorkspace AssistantText, FileDialog) */
 .tq-aui-agent-body code[data-tq-folder-link], .tq-aui-agent-body code[data-tq-file-link] { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
-.tq-aui-agent-body code[data-tq-folder-link]:hover, .tq-aui-agent-body code[data-tq-file-link]:hover { background: #ece6da; }
+.tq-aui-agent-body code[data-tq-folder-link]:hover, .tq-aui-agent-body code[data-tq-file-link]:hover { background: var(--tq-inset, #ece6da); }
 .tq-aui-chat .tq-aui-footer { padding-bottom: 7px; border-top: 0; }
 .tq-aui-chat [data-tq-redraft-warn], .tq-aui-chat [data-tq-redraft-btn], .tq-aui-chat [data-tq-then-line], .tq-aui-chat [data-tq-review-reason],
 [data-tq-no-agent-chat] [data-tq-review-reason],
 [data-tq-no-agent-chat] [data-tq-redraft-warn], [data-tq-no-agent-chat] [data-tq-redraft-btn], [data-tq-no-agent-chat] [data-tq-then-line] { display: none !important; }
 /* a failed step opened: why first, in plain words; the raw tool output folded under it (AgentStepRows, 2026-11-05) */
-.tq-aui-step-why { font-size: 12.5px; color: #5f5a50; padding: 4px 0 2px 16px; overflow-wrap: anywhere; }
-.tq-aui-step-raw > summary { font-size: 11.5px; color: #8b877e; cursor: pointer; padding-left: 16px; }
+.tq-aui-step-why { font-size: 12.5px; color: var(--tq-secondary, #5f5a50); padding: 4px 0 2px 16px; overflow-wrap: anywhere; }
+.tq-aui-step-raw > summary { font-size: 11.5px; color: var(--tq-muted, #8b877e); cursor: pointer; padding-left: 16px; }
 
 /* a chat task's quiet lines (the owner, 2026-11-06): no AI over the box, and how a closed task closed at the stream's foot */
-.tq-aui-noai { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 4px 4px; color: #7a7468; font-size: 12px; }
-.tq-aui-closed { margin: 10px 16px 4px; color: #6f8a6e; font-size: 12.5px; }
+.tq-aui-noai { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 4px 4px; color: var(--tq-warning, #7a7468); font-size: 12px; }
+.tq-aui-closed { margin: 10px 16px 4px; color: var(--tq-success, #6f8a6e); font-size: 12.5px; }

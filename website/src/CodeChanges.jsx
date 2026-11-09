@@ -15,7 +15,7 @@ export default function CodeChanges({ taskId }) {
   if (!got) return <div className="tq-dv-empty" data-tq-changes="">No session of this task has worked in a checkout yet - nothing to compare.</div>;
   const files = parseUnified(got.diff), plus = files.reduce((t, f) => t + f.plus, 0), minus = files.reduce((t, f) => t + f.minus, 0);
   return <div data-tq-changes="">
-    <div style={{ fontSize: 12.5, color: "#5f5a52", margin: "0 0 8px" }}>
+    <div style={{ fontSize: 12.5, color: "var(--tq-secondary, #5f5a52)", margin: "0 0 8px" }}>
       {files.length ? `${plural(files.length, "file")} changed (+${plus} −${minus})` : "Nothing changed yet"} since it started on {got.base} ({got.start})
       {got.cut ? " - the diff is long; this is its start" : ""}</div>
     {!!files.length && <DiffView files={files} />}

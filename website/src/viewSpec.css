@@ -126,7 +126,7 @@
 .tq-view-note p { margin: 0; }
 .tq-view-note > div > p:last-child:not(:first-child) { color: var(--d-muted); }
 
-.tq-view-raw { margin: 6px 0; padding: 8px 10px; max-height: 260px; overflow: auto; font-size: 12px; background: #f6f4f1; border-radius: 6px;
+.tq-view-raw { margin: 6px 0; padding: 8px 10px; max-height: 260px; overflow: auto; font-size: 12px; background: var(--tq-canvas, #f6f4f1); border-radius: 6px;
   white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* a phone: the cards a little tighter */

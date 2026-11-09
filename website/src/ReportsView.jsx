@@ -526,7 +526,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             ...(unscheduled ? { borderColor: ALERT, borderRadius: 1, my: 0.5 } : {}) }}>
           <Box onClick={() => openOne(s.SourceId)}
             sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, cursor: "pointer",
-              "&:hover": { bgcolor: "#faf8f4" } }}>
+              "&:hover": { bgcolor: "var(--tq-panel, #faf8f4)" } }}>
             <StatusDot ok={!!s.Active} />
             <ChannelIcon channel={isWorkflowConfig(c) ? "workflow" : "report"} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -539,9 +539,9 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
                 No schedule — it only runs when you press Run now. Give it one in step 3.</Typography>}
             </Box>
             {c.ai_prompt && <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, px: 1, py: 0.25, borderRadius: 99,
-              bgcolor: "#eae4d8", border: "1px solid #d8cfbe" }}>
-              <AutoAwesomeIcon sx={{ fontSize: 12, color: "#55697a" }} />
-              <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 10 }}>AI summary</Typography>
+              bgcolor: "var(--tq-inset, #eae4d8)", border: "1px solid var(--tq-border, #d8cfbe)" }}>
+              <AutoAwesomeIcon sx={{ fontSize: 12, color: "var(--tq-link, #55697a)" }} />
+              <Typography variant="caption" sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600, fontSize: 10 }}>AI summary</Typography>
             </Box>}
             {/* each named for its report (the everyday-asks audit, 2026-11-02): the Assistant reads the shelf by these names, and five
                 rows of "Run now" and a switch with no name at all left it nothing to tell the AP ageing's from the headcount's */}
@@ -582,7 +582,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           <SetupWithAi kind="workflow" sx={{ mb: 2 }} />
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: -1.25, mb: 2 }}>
             Monthly Zoho invoices have a form of their own — <Box component="span" onClick={toInvoices}
-              sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>open it</Box>.
+              sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>open it</Box>.
           </Typography>
         </>} />
     : invoiceOpen
@@ -639,7 +639,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       tools: section === "playbooks" ? (browseState.open == null ? <Box sx={{ display: "flex", flexDirection: "column" }}>
         <NewPlaybook key={browseState.newFor || browseState.newPb || ""} connectorType={browseState.newFor || ""} asked={!!browseState.newPb} onDone={pbs.load} button={false}
           onManual={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}new` })} />
-        {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#6b2733" }}>✗ {pbs.err}</Typography>}</Box> : null)
+        {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "var(--tq-danger, #6b2733)" }}>✗ {pbs.err}</Typography>}</Box> : null)
       : section && browseState.open == null ? (
         <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
           <UndoLine kinds={["report", "workflow", "dashboard"]} onRestored={load} sx={{ mb: 0 }} />
@@ -656,7 +656,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           </Box>
           {/* ...and what a press said, on its own line under them: inside the row, Run now's three-line "running in the background"
               was squeezed between Set up with AI and the page's edge, and read as the toolbar breaking (2026-11-04) */}
-          {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
+          {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
         </Box>
       ) : null,
       cards: section === "playbooks" ? [...pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <PlaybookRow b={b}
@@ -703,7 +703,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         <Button size="small" variant={workflowOverview ? "contained" : "outlined"} disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
           onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={workflowOverview ? { background: GRADIENT } : {}}>New routine</Button>
       </Box>
-      {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
+      {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
       <UndoLine kinds={["report", "workflow", "dashboard"]} onRestored={load} />
       {!workflowOverview && !dashOverview && <SetupWithAi kind="report" sx={{ mb: 2 }} onOpen={() => { setDraft(null); setBucket("new-report"); }} />}
       {dashOverview && <SetupWithAi kind="dashboard" sx={{ mb: 2 }} onOpen={() => { setDashDraft(null); setBucket("new-dashboard"); }} />}
@@ -743,11 +743,11 @@ function Destination({ dest, onChange, targets, inboxes = {} }) {
   return (
     <>
       {inbox.length > 0 && (
-        <Typography variant="caption" sx={{ flexBasis: "100%", order: 99, color: "#9b2c2c", fontWeight: 600, fontSize: 11.5 }}>
+        <Typography variant="caption" sx={{ flexBasis: "100%", order: 99, color: "var(--tq-danger, #9b2c2c)", fontWeight: 600, fontSize: 11.5 }}>
           Not sent: Taskuary reads {named(inbox[0])} as an inbox, so nothing is ever posted there. Pick your own chat.
         </Typography>
       )}
-      <Select size="small" value={ch} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 130 }} displayEmpty
+      <Select size="small" value={ch} sx={{ bgcolor: "var(--tq-panel, #fff)", fontSize: 12.5, minWidth: 130 }} displayEmpty
         onChange={(e) => onChange({ channel: e.target.value, to: "" })}>
         {(!ch || chans.includes(ch) ? chans : [...chans, ch]).map((c) => (
           <MenuItem key={c} value={c} sx={{ fontSize: 12 }}>{c}{chans.includes(c) ? "" : " — not set up"}</MenuItem>
@@ -760,7 +760,7 @@ function Destination({ dest, onChange, targets, inboxes = {} }) {
           renderOption={(props, o) => (
             <li {...props} style={{ fontSize: 12.5 }}>{named(o)}{named(o) !== o && <span style={{ color: FAINT }}>&nbsp;&middot; {o}</span>}</li>
           )}
-          renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }} label="to — who gets it"
+          renderInput={(params) => <TextField {...params} sx={{ bgcolor: "var(--tq-panel, #fff)" }} label="to — who gets it"
             placeholder={picked.length ? "" : "pick, or type an address"} />} />
       ) : (
         /* A paired WhatsApp account knows every group its owner is in - around forty here - and a
@@ -785,7 +785,7 @@ function Destination({ dest, onChange, targets, inboxes = {} }) {
               </Typography>
             </li>
           )}
-          renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }} label="to — the chat it lands in"
+          renderInput={(params) => <TextField {...params} sx={{ bgcolor: "var(--tq-panel, #fff)" }} label="to — the chat it lands in"
             placeholder={opts.length ? "type to search your chats" : empty} />} />
       )}
     </>
@@ -809,7 +809,7 @@ function SavedReportSummary({ source, workflow = false }) {
     : labels.length > 1 ? `${labels.length} sources — ${labels.join(", ")}` : labels[0] || "one report source";
   return (
     <Box sx={{ ...card, ml: { xs: 0, sm: 4 }, mt: 2, p: 1.5, maxWidth: 720,
-      bgcolor: source.Active ? "#f2f7f1" : PANEL2, borderColor: source.Active ? "#cfdcc9" : BORDER }}>
+      bgcolor: source.Active ? "var(--tq-panel, #f2f7f1)" : PANEL2, borderColor: source.Active ? "var(--tq-border, #cfdcc9)" : BORDER }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.65 }}>
         <StatusDot ok={!!source.Active} />
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>
@@ -912,7 +912,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
             onChange={(e) => setCfg({ ...cfg, cron: e.target.value })} />
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>Customers included each month</Typography>
-        <Box sx={{ maxHeight: 210, overflowY: "auto", border: `1px solid ${BORDER}`, borderRadius: 1.5, mt: 0.5, bgcolor: "#fff" }}>
+        <Box sx={{ maxHeight: 210, overflowY: "auto", border: `1px solid ${BORDER}`, borderRadius: 1.5, mt: 0.5, bgcolor: "var(--tq-panel, #fff)" }}>
           {!customers.length && <Typography variant="body2" sx={{ color: DIM, p: 1.5 }}>No customers loaded. Save and connect the Zoho card, then return here.</Typography>}
           {customers.map((c) => <Box key={c.customer_id} onClick={() => toggle(c)} sx={{ display: "flex", alignItems: "center", px: 1, borderBottom: `1px solid ${BORDER}`, cursor: "pointer" }}>
             <Checkbox size="small" checked={picked.has(String(c.customer_id))} />
@@ -935,7 +935,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
         </Box>
         {batch?.items?.map((item) => <Box key={item.ItemId} sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(170px,1fr) 110px 130px minmax(180px,1fr) 140px" }, gap: 1, alignItems: "center", py: 1, borderTop: `1px solid ${BORDER}` }}>
           <Box><Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>{item.CustomerName}</Typography>
-            <Typography variant="caption" sx={{ color: item.Error ? "#6b2733" : FAINT }}>{item.Error || "copied from the latest prior invoice"}</Typography></Box>
+            <Typography variant="caption" sx={{ color: item.Error ? "var(--tq-danger, #6b2733)" : FAINT }}>{item.Error || "copied from the latest prior invoice"}</Typography></Box>
           <Typography variant="caption" sx={{ color: DIM }}>last: {item.PreviousAmount == null ? "—" : `${item.Currency} ${Number(item.PreviousAmount).toFixed(2)}`}</Typography>
           <TextField size="small" type="number" label="this month" value={item.Amount ?? ""} disabled={["review_ready", "sent"].includes(item.Status)}
             onChange={(e) => setBatch({ ...batch, items: batch.items.map((x) => x.ItemId === item.ItemId ? { ...x, Amount: e.target.value } : x) })}
@@ -943,7 +943,7 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
           <TextField size="small" label="send to" value={item.Recipient || ""} disabled={["review_ready", "sent"].includes(item.Status)}
             onChange={(e) => setBatch({ ...batch, items: batch.items.map((x) => x.ItemId === item.ItemId ? { ...x, Recipient: e.target.value } : x) })}
             onBlur={(e) => patchItem(item, { Recipient: e.target.value })} />
-          <Typography variant="caption" sx={{ color: item.Status === "sent" ? "#47654a" : DIM, fontWeight: 600 }}>{String(item.Status || "").replaceAll("_", " ")}{item.InvoiceNumber ? ` · ${item.InvoiceNumber}` : ""}</Typography>
+          <Typography variant="caption" sx={{ color: item.Status === "sent" ? "var(--tq-success, #47654a)" : DIM, fontWeight: 600 }}>{String(item.Status || "").replaceAll("_", " ")}{item.InvoiceNumber ? ` · ${item.InvoiceNumber}` : ""}</Typography>
         </Box>)}
         {batch?.items?.length > 0 && <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
           <Button variant="contained" disableElevation disabled={!!busy || batch.Status === "done"} onClick={prepare}>{busy === "prepare" ? "Preparing…" : "Prepare Zoho drafts"}</Button>
@@ -1025,10 +1025,10 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
     setBusy(false);
   };
   return (
-    <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720, bgcolor: "#fffdf7", borderColor: "#d8cfbe" }}>
+    <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720, bgcolor: "var(--tq-panel, #fffdf7)", borderColor: "var(--tq-border, #d8cfbe)" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25 }}>
-        <AutoAwesomeIcon sx={{ fontSize: 15, color: "#55697a" }} />
-        <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, flex: 1 }}>ONE PROMPT THAT ROUTES EACH RUN</Typography>
+        <AutoAwesomeIcon sx={{ fontSize: 15, color: "var(--tq-link, #55697a)" }} />
+        <Typography variant="caption" sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600, flex: 1 }}>ONE PROMPT THAT ROUTES EACH RUN</Typography>
       </Box>
       {drawn.map((line) => {
         const [how, when, r] = shownAs(line);
@@ -1040,7 +1040,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{label}</Typography>
                 <Typography variant="caption" sx={{ color: FAINT }}>{hint}</Typography>
               </Box>
-              <Select size="small" value={how} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 150 }}
+              <Select size="small" value={how} sx={{ bgcolor: "var(--tq-panel, #fff)", fontSize: 12.5, minWidth: 150 }}
                 onChange={(e) => set(line, { how: e.target.value, ...(e.target.value === "rule" && !r.rule ? { rule: "something_came_back" } : {}) })}>
                 <MenuItem value="always" sx={{ fontSize: 12 }}>every run</MenuItem>
                 <MenuItem value="ai" sx={{ fontSize: 12 }}>ask the AI</MenuItem>
@@ -1050,7 +1050,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
               </Select>
             </Box>
             {how === "ai" && (
-              <TextField fullWidth multiline minRows={1} size="small" sx={{ bgcolor: "#fff", mt: 0.8, "& .MuiInputBase-root": { fontSize: 13 } }}
+              <TextField fullWidth multiline minRows={1} size="small" sx={{ bgcolor: "var(--tq-panel, #fff)", mt: 0.8, "& .MuiInputBase-root": { fontSize: 13 } }}
                 placeholder={line === "alert" ? "a job has not run in over two hours"
                     : line === "triage" ? "something failed that someone has to fix"
                     : "anything happened that is worth my knowing about"}
@@ -1058,22 +1058,22 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
             )}
             {how === "rule" && (
               <Box sx={{ display: "flex", gap: 1, mt: 0.8, flexWrap: "wrap", alignItems: "center" }}>
-                <Select size="small" value={r.rule || "something_came_back"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 200 }}
+                <Select size="small" value={r.rule || "something_came_back"} sx={{ bgcolor: "var(--tq-panel, #fff)", fontSize: 12.5, minWidth: 200 }}
                   onChange={(e) => set(line, { rule: e.target.value })}>
                   {RULES.map((o) => <MenuItem key={o.v} value={o.v} sx={{ fontSize: 12 }}>{o.label}</MenuItem>)}
                 </Select>
                 {RULES.find((o) => o.v === r.rule)?.count && (
-                  <TextField size="small" type="number" sx={{ bgcolor: "#fff", width: 120 }} label="how many"
+                  <TextField size="small" type="number" sx={{ bgcolor: "var(--tq-panel, #fff)", width: 120 }} label="how many"
                     value={r.count ?? ""} onChange={(e) => set(line, { count: e.target.value === "" ? "" : Number(e.target.value) })} />
                 )}
                 {RULES.find((o) => o.v === r.rule)?.text && (
-                  <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} label="the words"
+                  <TextField size="small" sx={{ bgcolor: "var(--tq-panel, #fff)", flex: 1, minWidth: 160 }} label="the words"
                     value={r.text || ""} onChange={(e) => set(line, { text: e.target.value })} />
                 )}
               </Box>
             )}
             {how === "ai" && blank(when) && (
-              <Typography variant="caption" sx={{ color: "#8c6d3b", display: "block", mt: 0.5 }}>
+              <Typography variant="caption" sx={{ color: "var(--tq-warning, #8c6d3b)", display: "block", mt: 0.5 }}>
                 Say what to look for — until you do, this line happens on every run.
               </Typography>
             )}
@@ -1091,7 +1091,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
                 <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>{LINE_SAYS.triage[1]}</Typography>
                 {/* the brief triage reads a run it is sent against (reports.work_brief) - only worth asking for once a run can get there */}
                 {view.triage.how !== "never" && (
-                  <TextField fullWidth multiline minRows={1} size="small" sx={{ bgcolor: "#fff", mt: 0.8, "& .MuiInputBase-root": { fontSize: 13 } }}
+                  <TextField fullWidth multiline minRows={1} size="small" sx={{ bgcolor: "var(--tq-panel, #fff)", mt: 0.8, "& .MuiInputBase-root": { fontSize: 13 } }}
                     label="Make it a task when… (blank = your triage rules alone)"
                     placeholder="any error at all, or a job that did not run when it should have"
                     value={cfg.watch_for || ""} onChange={(e) => setCfg({ ...cfg, watch_for: e.target.value })} />
@@ -1111,7 +1111,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
               <Box sx={{ display: "flex", gap: 1, mt: 0.8, flexWrap: "wrap" }}>
                 <Destination dest={cfg.alert?.to ? cfg.alert : { ...firstDest() }} targets={targets} inboxes={inboxes}
                   onChange={(d) => setCfg({ ...cfg, alert: { ...(cfg.alert || {}), ...firstDest(), ...d } })} />
-                <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 180 }} label="what to say (optional)"
+                <TextField size="small" sx={{ bgcolor: "var(--tq-panel, #fff)", flex: 1, minWidth: 180 }} label="what to say (optional)"
                   value={cfg.alert?.note || ""} onChange={(e) => setCfg({ ...cfg, alert: { ...(cfg.alert || {}), note: e.target.value } })} />
               </Box>
             )}
@@ -1145,7 +1145,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
             {judgeWords(judge, cfg, brains)[1]}
           </Typography>
           {showPrompt && (
-            <Box component="pre" sx={{ mt: 0.8, p: 1, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1,
+            <Box component="pre" sx={{ mt: 0.8, p: 1, bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${BORDER}`, borderRadius: 1,
               fontSize: 11.5, whiteSpace: "pre-wrap", color: INK, maxHeight: 260, overflow: "auto" }}>
               {(judge?.kind === "decision" ? judgeQuestions(cfg, shown) : judgePrompt(cfg, shown))
                 || "nothing is asked — every line is set to every run or never"}
@@ -1162,7 +1162,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
           <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, display: "block" }}>
             ON THE LAST RUNS THIS WOULD HAVE
           </Typography>
-          {replay.error ? <Typography variant="caption" sx={{ color: "#8c3b3b" }}>{replay.error}</Typography>
+          {replay.error ? <Typography variant="caption" sx={{ color: "var(--tq-danger, #8c3b3b)" }}>{replay.error}</Typography>
             : !replay.data?.length ? <Typography variant="caption" sx={{ color: FAINT }}>This report has not run yet — there is nothing to replay.</Typography>
               : replay.data.map((r) => {
                 const went = ROUTE_LINES.filter((l) => r[l] && (l !== "send" || cfg.deliver?.to)).map((l) => LINE_CHIP[l]);
@@ -1410,7 +1410,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
         </Button>}
       </Box>
       {/* ...and what they answered, here: the shelf's line is off screen while the builder is open */}
-      {cur && said?.sid === cur.SourceId && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: said.ok ? "#47654a" : "#6b2733" }}>{said.ok ? "✓" : "✗"} {said.detail}</Typography>}
+      {cur && said?.sid === cur.SourceId && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: said.ok ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>{said.ok ? "✓" : "✗"} {said.detail}</Typography>}
       {removeErr && <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}>{removeErr}</Alert>}
       {/* the bell's "Open the report" lands here: the failure it rang for is the first thing on the page */}
       {cur && lastRun?.failed && (
@@ -1432,7 +1432,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 ? "Point it at the systems it should read on every check — write the query here, or reuse a data view you already saved. This report reads only those sources; the general Advisor and Morning digest are separate."
                 : "Sources at the top feed one prompt at the bottom. Add as many as you want — the same connection twice with different queries is fine, and every source's rows reach the summary together."}
             </Typography>
-            <TextField required label="title — the headline each run shows" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 720, mb: 2 }}
+            <TextField required label="title — the headline each run shows" value={cfg.title || ""} sx={{ bgcolor: "var(--tq-panel, #fff)", maxWidth: 720, mb: 2 }}
               fullWidth onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
 
             {isAssistant && (
@@ -1470,7 +1470,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 )}
                 <Box ref={stripRef} sx={{ display: "flex", gap: 1.5, flexWrap: "nowrap", overflowX: "auto", alignItems: "stretch", mb: 1.25, pb: 0.75,
                   "& > *": { flex: "0 0 auto" }, scrollbarWidth: "thin", "&::-webkit-scrollbar": { height: 8 },
-                  "&::-webkit-scrollbar-track": { bgcolor: "#f1ece3", borderRadius: 4 }, "&::-webkit-scrollbar-thumb": { bgcolor: "#cfc9bf", borderRadius: 4 } }}>
+                  "&::-webkit-scrollbar-track": { bgcolor: "var(--tq-inset, #f1ece3)", borderRadius: 4 }, "&::-webkit-scrollbar-thumb": { bgcolor: "var(--tq-inset, #cfc9bf)", borderRadius: 4 } }}>
                   {watchSrcs.map((src, i) => (
                     <SourceCard key={i} src={src} index={i} count={watchSrcs.length} removable
                       typeOptions={typeOptions.filter((t) => t.type !== "assistant")} connectors={connectors}
@@ -1482,8 +1482,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   ))}
                   <Box onClick={() => setWatchSrcs((cur) => [...cur, { type: "mssql" }])}
                     sx={{ ...card, width: { xs: 280, sm: 354 }, minHeight: 108, display: "flex", flexDirection: "column", alignItems: "center",
-                      justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed", bgcolor: "#fff",
-                      color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
+                      justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed", bgcolor: "var(--tq-panel, #fff)",
+                      color: DIM, "&:hover": { borderColor: "var(--tq-border, #d8cfbe)", color: "var(--tq-link, #55697a)" } }}>
                     <AddIcon sx={{ fontSize: 20 }} />
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>add a data source</Typography>
                     <Typography variant="caption" sx={{ color: FAINT }}>no saved report needed</Typography>
@@ -1514,7 +1514,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                       <Typography variant="caption" sx={{ color: FAINT }}>{o.type}{o.active ? "" : " · report schedule off"}</Typography>
                     </Box>
                   )}
-                  renderInput={(params) => <TextField {...params} size="small" sx={{ bgcolor: "#fff" }}
+                  renderInput={(params) => <TextField {...params} size="small" sx={{ bgcolor: "var(--tq-panel, #fff)" }}
                     placeholder={watchChoices.length ? "Choose views…" : "Create another report/data view first"} />} />
                 <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
                   A view may stay disabled as a standalone report and still be pulled here. Its query and credentials remain owned by that view and its connector.
@@ -1542,7 +1542,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               {!isAssistant && <Box onClick={() => setSrcs((cur) => [...cur, { type: "mssql" }])}
                 sx={{ ...card, width: { xs: "100%", sm: 354 }, minHeight: 120, display: "flex", flexDirection: "column", alignItems: "center",
                   justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed",
-                  color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
+                  color: DIM, "&:hover": { borderColor: "var(--tq-border, #d8cfbe)", color: "var(--tq-link, #55697a)" } }}>
                 <AddIcon sx={{ fontSize: 20 }} />
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>add a source</Typography>
               </Box>}
@@ -1553,14 +1553,14 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               <Box sx={{ width: 0, height: 0, borderLeft: "12px solid transparent", borderRight: "12px solid transparent",
                 borderTop: `14px solid ${BORDER}` }} />
             </Box>
-            <Box sx={{ ...card, p: 1.5, maxWidth: 720, bgcolor: "#fffdf7", borderColor: "#d8cfbe" }}>
+            <Box sx={{ ...card, p: 1.5, maxWidth: 720, bgcolor: "var(--tq-panel, #fffdf7)", borderColor: "var(--tq-border, #d8cfbe)" }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
-                <AutoAwesomeIcon sx={{ fontSize: 15, color: "#55697a" }} />
-                <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600 }}>
+                <AutoAwesomeIcon sx={{ fontSize: 15, color: "var(--tq-link, #55697a)" }} />
+                <Typography variant="caption" sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600 }}>
                   {isAssistant ? "WHAT SHOULD THE ADVISOR SURFACE?" : `ONE PROMPT OVER ALL ${srcs.length > 1 ? `${srcs.length} SOURCES` : "THE ROWS"}`}
                 </Typography>
               </Box>
-              <TextField fullWidth multiline minRows={3} value={cfg.ai_prompt || ""} sx={{ bgcolor: "#fff" }} inputRef={promptRef}
+              <TextField fullWidth multiline minRows={3} value={cfg.ai_prompt || ""} sx={{ bgcolor: "var(--tq-panel, #fff)" }} inputRef={promptRef}
                 placeholder={isAssistant
                   ? "Tell me only what needs attention now. Across finance and operations, flag unusual totals or changes, thresholds crossed, missing expected activity, failures, and contradictions. Give the number, comparison, and source."
                   : AI_FIELD[3]} onChange={(e) => setCfg({ ...cfg, ai_prompt: e.target.value })} />
@@ -1585,7 +1585,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               })()}
               {cfg.ai_prompt && (
                 <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
-                  <Select size="small" displayEmpty value={cfg.ai_brain || ""} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 230 }}
+                  <Select size="small" displayEmpty value={cfg.ai_brain || ""} sx={{ bgcolor: "var(--tq-panel, #fff)", fontSize: 12.5, minWidth: 230 }}
                     onChange={(e) => setCfg({ ...cfg, ai_brain: e.target.value })}>
                     <MenuItem value="" sx={{ fontSize: 12 }}>the AI that sorts your mail (default)</MenuItem>
                     {/* only brains that can actually answer: a connector with no key saved is
@@ -1609,7 +1609,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     onChange={(_e, v) => setCfg({ ...cfg, ai_model: v || "" })}
                     onInputChange={(_e, v, why) => { if (why === "input") setCfg({ ...cfg, ai_model: v }); }}
                     renderInput={(params) => (
-                      <TextField {...params} label="model (optional — the brain's default)" sx={{ bgcolor: "#fff" }} />
+                      <TextField {...params} label="model (optional — the brain's default)" sx={{ bgcolor: "var(--tq-panel, #fff)" }} />
                     )} />
                   <Typography variant="caption" sx={{ color: FAINT }}>
                     {isAssistant ? "which AI performs the proactive cross-system check" : "which AI writes this summary — a heavier model for the weekly review, the cheap tier for pings"}
@@ -1617,7 +1617,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 </Box>
               )}
               {cfg.ai_prompt && !aiActive && !cfg.ai_brain && (
-                <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "#55697a" }}>
+                <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "var(--tq-link, #55697a)" }}>
                   ⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one ({placeName("ai")}).
                 </Typography>
               )}
@@ -1648,7 +1648,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
                     <Destination dest={cfg.deliver} targets={targets} inboxes={inboxes}
                       onChange={(d) => setCfg({ ...cfg, deliver: { ...cfg.deliver, ...d } })} />
-                    <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 180 }}
+                    <TextField size="small" sx={{ bgcolor: "var(--tq-panel, #fff)", flex: 1, minWidth: 180 }}
                       label="subject (blank = the report's headline)" value={cfg.deliver.subject || ""}
                       onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, subject: e.target.value } })} />
                   </Box>
@@ -1656,12 +1656,12 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     Whether a given run actually goes out is one of the lines under “one prompt that routes each run”, below.
                   </Typography>
                   <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
-                    <Select size="small" value={cfg.deliver.gate || "review"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 260 }}
+                    <Select size="small" value={cfg.deliver.gate || "review"} sx={{ bgcolor: "var(--tq-panel, #fff)", fontSize: 12.5, minWidth: 260 }}
                       onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, gate: e.target.value } })}>
                       <MenuItem value="review" sx={{ fontSize: 12 }}>wait for me to approve it (Review)</MenuItem>
                       <MenuItem value="auto" sx={{ fontSize: 12 }}>send it without asking</MenuItem>
                     </Select>
-                    <Typography variant="caption" sx={{ color: (cfg.deliver.gate === "auto") ? "#55697a" : FAINT, flex: 1, minWidth: 200 }}>
+                    <Typography variant="caption" sx={{ color: (cfg.deliver.gate === "auto") ? "var(--tq-link, #55697a)" : FAINT, flex: 1, minWidth: 200 }}>
                       {cfg.deliver.gate === "auto"
                         ? "This report will send on its schedule with nobody reading it first. Everything else in Taskuary waits for you — this is the one place you can turn that off, deliberately."
                         : "Each run lands on the task as a draft. Approving it sends; editing first is fine."}
@@ -1700,8 +1700,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             <Box sx={{ mt: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}>
               <Button variant="contained" disableElevation onClick={async () => { if (cur && !(await save())) return; setStep(1); }}>
                 {cur ? "Save & continue" : "Continue"}</Button>
-              {saveErr && <Typography variant="body2" sx={{ color: "#6b2733" }}>{saveErr}</Typography>}
-              {savedMsg && <Typography variant="body2" sx={{ color: "#47654a" }}>{savedMsg}</Typography>}
+              {saveErr && <Typography variant="body2" sx={{ color: "var(--tq-danger, #6b2733)" }}>{saveErr}</Typography>}
+              {savedMsg && <Typography variant="body2" sx={{ color: "var(--tq-success, #47654a)" }}>{savedMsg}</Typography>}
             </Box>
           </StepContent>
         </Step>
@@ -1718,10 +1718,10 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 startIcon={busy === "preview" ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 15 }} />}>Preview pipeline</Button>
               <Button onClick={() => setStep(2)}>Continue</Button>
             </Box>
-            {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>{test.ok ? "✓" : "✗"} {test.detail}</Typography>}
+            {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>{test.ok ? "✓" : "✗"} {test.detail}</Typography>}
             {preview && (preview.ok ? (
               <Box sx={{ mt: 1 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: "#47654a" }}>✓ {preview.headline}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: "var(--tq-success, #47654a)" }}>✓ {preview.headline}</Typography>
                 <Box component="pre" sx={{ ...mono, whiteSpace: "pre-wrap", bgcolor: PANEL2, border: `1px solid ${BORDER}`,
                   borderRadius: 1.5, p: 1.25, fontSize: 11, maxHeight: 260, overflow: "auto", color: INK }}>{preview.summary}</Box>
                 {/* the chart is half of what a scheduled run hands back, so the dry run shows it too -
@@ -1731,12 +1731,12 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
                       The chart this report will hand back, from {plural(preview.rows, "row")}:
                     </Typography>
-                    <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "auto", bgcolor: "#fff" }}
+                    <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "auto", bgcolor: "var(--tq-panel, #fff)" }}
                       dangerouslySetInnerHTML={{ __html: preview.chart }} />
                   </Box>
                 )}
               </Box>
-            ) : <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#6b2733" }}>✗ {preview.error}</Typography>)}
+            ) : <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "var(--tq-danger, #6b2733)" }}>✗ {preview.error}</Typography>)}
           </StepContent>
         </Step>
         <Step completed={!!cur}>
@@ -1772,13 +1772,13 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               </Box>
             )}
             {!cfg.title && (
-              <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "#55697a", fontWeight: 600 }}>
+              <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "var(--tq-link, #55697a)", fontWeight: 600 }}>
                 No title yet — <Box component="span" sx={{ textDecoration: "underline", cursor: "pointer" }}
                   onClick={() => setStep(0)}>add one in step 1</Box> and this button wakes up.
               </Typography>
             )}
             {saveErr && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{saveErr}</Alert>}
-            {savedMsg && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#47654a" }}>✓ {savedMsg}</Typography>}
+            {savedMsg && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "var(--tq-success, #47654a)" }}>✓ {savedMsg}</Typography>}
           </StepContent>
         </Step>
       </Stepper>
@@ -1831,7 +1831,7 @@ function AwsPicker({ label, which, value, placeholder, service, onChange }) {
       onInputChange={(_e, v, reason) => reason === "input" && onChange({ value: v })}
       groupBy={spec.objects ? spec.group : (spec.rest ? (o) => (top.has(o) ? spec.label : spec.rest) : undefined)}
       renderInput={(params) => (
-        <TextField {...params} label={label} sx={{ bgcolor: "#fff" }}
+        <TextField {...params} label={label} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
           // the placeholder used to show s3 examples whatever the service was, which reads as a
           // suggestion rather than as an example and is wrong for every other service
           placeholder={which === "aws_operation" ? (service ? `an operation on ${service}` : "") : placeholder}
@@ -1914,7 +1914,7 @@ function IntacctFields({ object, connectorId, onPick }) {
           {rows && (
             <>
               <TextField size="small" fullWidth autoFocus placeholder="filter…" value={q}
-                onChange={(e) => setQ(e.target.value)} sx={{ bgcolor: "#fff", mb: 1 }} />
+                onChange={(e) => setQ(e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)", mb: 1 }} />
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
                 straight from Sage, custom fields included{onPick ? " — click one to add it to this card" : ""}
               </Typography>
@@ -1922,7 +1922,7 @@ function IntacctFields({ object, connectorId, onPick }) {
                 {shown.map((f) => (
                   <Box key={f.ID} onClick={() => onPick?.(f.ID)}
                     sx={{ display: "flex", gap: 1, alignItems: "baseline", py: 0.4, borderBottom: "1px solid " + BORDER,
-                      cursor: onPick ? "pointer" : "default", "&:hover": onPick ? { bgcolor: "#faf8f4" } : {} }}>
+                      cursor: onPick ? "pointer" : "default", "&:hover": onPick ? { bgcolor: "var(--tq-panel, #faf8f4)" } : {} }}>
                     <Typography sx={{ ...mono, fontSize: 11.5, color: INK, fontWeight: 600, minWidth: 170 }}>{f.ID}</Typography>
                     <Typography sx={{ fontSize: 11.5, color: DIM, flex: 1 }} noWrap>{f.LABEL}</Typography>
                     <Typography variant="caption" sx={{ ...mono, color: FAINT }}>{f.DATATYPE}</Typography>
@@ -2023,19 +2023,19 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
       sx={{ ...(bare ? { width: "100%" } : { ...card, width: { xs: "100%", sm: 354 }, p: 1.25 }), display: "flex", flexDirection: "column", gap: 1,
         opacity: dragging ? 0.45 : 1, ...(onDragStart ? { cursor: "grab", "&:active": { cursor: "grabbing" } } : {}) }}>
       {!bare && <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-        {onDragStart && <DragIndicatorIcon sx={{ fontSize: 16, color: "#cfc9bf" }} />}
+        {onDragStart && <DragIndicatorIcon sx={{ fontSize: 16, color: "var(--tq-muted, #cfc9bf)" }} />}
         {/* ...and the name the prompt calls it by, so "source 3 of 5" and [taskuary.work] read as one card */}
         <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
           title={`name it in the prompt as ${tokenOf(sourceKey(src, index + 1))}`}>
           source {index + 1} of {count}{src.type && src.type !== "assistant" && (src.type !== "taskuary" || src.card) ? ` · ${tokenOf(sourceKey(src, index + 1))}` : ""}
         </Typography>
         <ContentCopyIcon onClick={onCopy} titleAccess="Duplicate — same connection, different query"
-          sx={{ fontSize: 14, color: FAINT, cursor: "pointer", "&:hover": { color: "#55697a" } }} />
+          sx={{ fontSize: 14, color: FAINT, cursor: "pointer", "&:hover": { color: "var(--tq-link, #55697a)" } }} />
         {removable && <CloseIcon onClick={onRemove} titleAccess="Remove this source"
-          sx={{ fontSize: 15, color: FAINT, cursor: "pointer", "&:hover": { color: "#6b2733" } }} />}
+          sx={{ fontSize: 15, color: FAINT, cursor: "pointer", "&:hover": { color: "var(--tq-danger, #6b2733)" } }} />}
       </Box>}
       <Select size="small" value={src.type || "mssql"} onChange={(e) => onRetype(e.target.value)}
-        sx={{ fontSize: 12.5, bgcolor: "#fff" }}>
+        sx={{ fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
         {(() => {
           const have = new Set(typeOptions.map((t) => t.type));
           const grouped = TYPE_GROUPS.map(([g, ts]) => [g, ts.filter((t) => have.has(t))]).filter(([, ts]) => ts.length);
@@ -2043,7 +2043,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
           const rest = [...have].filter((t) => !spoken.has(t));
           return [...grouped, ...(rest.length ? [["Other", rest]] : [])].flatMap(([g, ts]) => [
             <ListSubheader key={`h-${g}`} sx={{ fontSize: 10, lineHeight: 2.2, letterSpacing: 0.8,
-              textTransform: "uppercase", color: FAINT, bgcolor: "#fff" }}>{g}</ListSubheader>,
+              textTransform: "uppercase", color: FAINT, bgcolor: "var(--tq-panel, #fff)" }}>{g}</ListSubheader>,
             ...ts.map((t) => (
               <MenuItem key={t} value={t} sx={{ fontSize: 12.5, pl: 2.5 }}>{TYPE_LABELS[t] || t}</MenuItem>
             )),
@@ -2051,7 +2051,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
         })()}
       </Select>
       {src.type === "agent" && (
-        <Typography variant="caption" sx={{ fontWeight: 600, color: writeEnabled ? "#8a3646" : "#47654a" }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: writeEnabled ? "var(--tq-danger, #8a3646)" : "var(--tq-success, #47654a)" }}>
           {writeEnabled ? "Routine · write access — this agent may change data"
             : "Report · read-only — this agent can retrieve data but cannot change it"}
         </Typography>
@@ -2061,14 +2061,14 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
           {matching.length > 1 && (
             <Select size="small" value={conn?.ConnectorId || ""}
               onChange={(e) => onChange({ connector_id: Number(e.target.value) })}
-              displayEmpty sx={{ fontSize: 12, bgcolor: "#fff" }}>
+              displayEmpty sx={{ fontSize: 12, bgcolor: "var(--tq-panel, #fff)" }}>
               {matching.map((c) => (
                 <MenuItem key={c.ConnectorId} value={c.ConnectorId} sx={{ fontSize: 12 }}>{c.Name}</MenuItem>
               ))}
             </Select>
           )}
           {/* not connected: the way there, not a sentence about it - the reason is the hover ("buttons do the talking", 2026-10-22) */}
-          {connOk ? <Typography variant="caption" sx={{ fontWeight: 600, color: "#47654a" }}>✓ uses {conn.Name} from Connections</Typography>
+          {connOk ? <Typography variant="caption" sx={{ fontWeight: 600, color: "var(--tq-success, #47654a)" }}>✓ uses {conn.Name} from Connections</Typography>
             : <Button size="small" variant="outlined" data-tq-open-card={cardType} onClick={() => openAppLink(`#connector=${cardType}`)}
               title={`${conn?.Name || CARD_LABELS[cardType] || cardType} is not set up in Connections yet - this opens its card`}
               sx={{ alignSelf: "flex-start", fontSize: 11.5 }}>{btnLabel("fix", "card")}</Button>}
@@ -2078,7 +2078,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
         placeholder={PLACEHOLDER_FOR[src.type] || "the rows this card should return"}
         onSources={(list) => onFill(list[0])} />}
       {!bare && (count > 1 || removable) && (
-        <TextField size="small" label="label" value={src.label || ""} sx={{ bgcolor: "#fff" }}
+        <TextField size="small" label="label" value={src.label || ""} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
           placeholder="cash balances" onChange={(e) => onChange({ label: e.target.value })} />
       )}
       {/* "I just want log history" should not require knowing a boto3 operation name. The generic
@@ -2101,7 +2101,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
           const def = TASKUARY_CARDS.find((c) => c.id === src.card);
           return (
             <Box key={key} sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              <Select size="small" displayEmpty value={src.card || ""} sx={{ fontSize: 12.5, bgcolor: "#fff" }}
+              <Select size="small" displayEmpty value={src.card || ""} sx={{ fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}
                 inputProps={{ "aria-label": "which of Taskuary's tables" }}
                 onChange={(e) => onChange({ card: e.target.value, label: src.label || cardLabel(e.target.value) })}>
                 <MenuItem value="" sx={{ fontSize: 12 }} disabled>choose what it reads…</MenuItem>
@@ -2116,7 +2116,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
                 <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
                   {def.knobs.map((n) => (
                     <TextField key={n.name} size="small" type="number" label={n.label} value={src[n.name] ?? n.default}
-                      sx={{ width: 150, bgcolor: "#fff" }} inputProps={{ "aria-label": `Taskuary · ${def.label} — ${n.label}` }}
+                      sx={{ width: 150, bgcolor: "var(--tq-panel, #fff)" }} inputProps={{ "aria-label": `Taskuary · ${def.label} — ${n.label}` }}
                       onChange={(e) => onChange({ [n.name]: e.target.value })} />
                   ))}
                 </Box>
@@ -2127,7 +2127,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
         if (kind === "taskuary_dataset") {
           // which of the app's own tables, as rows: the same list the dashboard composer is handed (dashboards.DATASETS)
           return (
-            <Select key={key} size="small" displayEmpty value={src.dataset || ""} sx={{ fontSize: 12.5, bgcolor: "#fff" }}
+            <Select key={key} size="small" displayEmpty value={src.dataset || ""} sx={{ fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}
               inputProps={{ "aria-label": "which of Taskuary's tables" }}
               onChange={(e) => onChange({ dataset: e.target.value, label: src.label || DASH.datasets[e.target.value]?.[0] })}>
               <MenuItem value="" sx={{ fontSize: 12 }} disabled>choose what it reads…</MenuItem>
@@ -2142,7 +2142,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
         }
         if (kind === "pick_file") {
           return (
-            <Select key={key} size="small" value={src.pick || "newest"} sx={{ fontSize: 12.5, bgcolor: "#fff" }}
+            <Select key={key} size="small" value={src.pick || "newest"} sx={{ fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}
               onChange={(e) => onChange({ pick: e.target.value })}>
               <MenuItem value="newest" sx={{ fontSize: 12 }}>the one that changed most recently</MenuItem>
               <MenuItem value="name" sx={{ fontSize: 12 }}>the highest name (sales-2026-08-25 beats -08-01)</MenuItem>
@@ -2154,7 +2154,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
             service={src.service}
             onChange={(x) => onChange({ [key]: x.value, ...(x.region !== undefined ? { region: x.region } : {}) })} />;
         }
-        return <TextField key={key} size="small" label={label} placeholder={ph} value={shown} sx={{ bgcolor: "#fff" }}
+        return <TextField key={key} size="small" label={label} placeholder={ph} value={shown} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
           multiline={kind === "multiline" || kind === "filter_lines"}
           minRows={kind === "multiline" ? 3 : kind === "filter_lines" ? 2 : undefined}
           inputProps={["multiline", "filter_lines", "csv_list"].includes(kind)
@@ -2184,7 +2184,7 @@ export function SourceCard({ src, index, count, typeOptions, connectors, draggin
       {src.type !== "taskuary" && <TextField size="small" label="max rows" type="number" placeholder="200" value={src.max_rows ?? ""}
         helperText="blank = 200, and only for list results"
         FormHelperTextProps={{ sx: { fontSize: 10.5, mx: 0 } }}
-        sx={{ bgcolor: "#fff", width: "100%" }} onChange={(e) => onChange({ max_rows: e.target.value })} />}
+        sx={{ bgcolor: "var(--tq-panel, #fff)", width: "100%" }} onChange={(e) => onChange({ max_rows: e.target.value })} />}
       {test || <SourceTest src={src} />}
     </Box>
   );
@@ -2210,25 +2210,25 @@ function LastRun({ r, sid, embedded, flush, onFix, fixing, onChanged }) {
   return (
     <Box sx={{ pl: embedded || flush ? 0 : 5.5, pr: embedded ? 0 : 1, pb: embedded || flush ? 0 : 1.25, mt: embedded ? 0 : flush ? 0.5 : -0.5 }}>
       {!embedded && (
-      <Typography variant="caption" sx={{ color: r.failed ? "#8a3646" : FAINT, display: "block", lineHeight: 1.5 }}>
-        <Box component="span" sx={{ fontWeight: 600, color: r.failed ? "#8a3646" : DIM }}>last run</Box>
+      <Typography variant="caption" sx={{ color: r.failed ? "var(--tq-danger, #8a3646)" : FAINT, display: "block", lineHeight: 1.5 }}>
+        <Box component="span" sx={{ fontWeight: 600, color: r.failed ? "var(--tq-danger, #8a3646)" : DIM }}>last run</Box>
         {` · ${timeAgo(r.at)}${r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""} · ${outcome}`}
         {rv && ` · read ${read.slice(0, 2).join(", ")}`}
         <Box component="span" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
-          sx={{ ml: 1, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
+          sx={{ ml: 1, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
           {open ? "hide ↑" : "details ↓"}
         </Box>
         {/* every run, not only the last: what each one read and why it said what it said (the owner, 2026-08-30) */}
         {sid != null && (
           <Box component="span" onClick={(e) => { e.stopPropagation(); setHist(true); }}
-            sx={{ ml: 1, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>history ↗</Box>
+            sx={{ ml: 1, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>history ↗</Box>
         )}
       </Typography>
       )}
       {hist && <RunHistory sid={sid} title={r.title} onClose={() => setHist(false)}
         onFix={onFix ? (runId) => { setHist(false); onFix(runId); } : null} />}
       {/* a workflow run as steps: the same top-to-bottom list as its editor, each step's status, time and output */}
-      {open && !!r.steps?.length && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, mb: flush ? 1.5 : 0, p: 1.25, borderRadius: 1.5, border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
+      {open && !!r.steps?.length && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, mb: flush ? 1.5 : 0, p: 1.25, borderRadius: 1.5, border: `1px solid ${BORDER}`, bgcolor: "var(--tq-panel, #fff)" }}>
         <RunSteps steps={r.steps} fixing={fixing} onFix={onFix && r.failed && (r.run_id || r.runId) ? () => onFix(r.run_id || r.runId) : null}
           repairs={r.repairs} />
       </Box>}
@@ -2247,21 +2247,21 @@ function LastRun({ r, sid, embedded, flush, onFix, fixing, onChanged }) {
         </Box>
       )}
       {open && !r.steps?.length && (
-        <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, p: 1.25, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
+        <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, p: 1.25, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "var(--tq-panel, #faf8f4)" }}>
           {rv && (
             <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5 }}>
-              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>what it reviewed · </Box>{read.join(" · ")}
+              <Box component="span" sx={{ fontWeight: 600, color: "var(--tq-warning, #6b5f45)" }}>what it reviewed · </Box>{read.join(" · ")}
               {rv.model === false ? " · no model — the facts in the hub's own words" : ""}
             </Typography>
           )}
           {rv?.notes && (
             <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5, mt: 0.4 }}>
-              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>note to its next check · </Box>{rv.notes}
+              <Box component="span" sx={{ fontWeight: 600, color: "var(--tq-warning, #6b5f45)" }}>note to its next check · </Box>{rv.notes}
             </Typography>
           )}
           {!!rv?.skipped?.length && (
             <Box sx={{ mt: 0.4 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600, color: "#6b5f45" }}>looked at and let go · {rv.skipped.length}</Typography>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: "var(--tq-warning, #6b5f45)" }}>looked at and let go · {rv.skipped.length}</Typography>
               {rv.skipped.map((c) => (
                 <Typography key={c.key} variant="caption" sx={{ display: "block", color: FAINT, pl: 1, borderLeft: `2px solid ${BORDER}`, mt: 0.3, whiteSpace: "pre-wrap" }}>
                   <Box component="span" sx={{ fontWeight: 600 }}>{ideaCounted(c.kind)} · </Box>{c.facts}
@@ -2271,18 +2271,18 @@ function LastRun({ r, sid, embedded, flush, onFix, fixing, onChanged }) {
           )}
           {r.summary && r.type !== "assistant" && (
             <Typography variant="caption" sx={{ color: DIM, display: "block", whiteSpace: "pre-wrap", mt: 0.4, maxHeight: 220, overflowY: "auto" }}>
-              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>what it filed · </Box>{r.summary}
+              <Box component="span" sx={{ fontWeight: 600, color: "var(--tq-warning, #6b5f45)" }}>what it filed · </Box>{r.summary}
             </Typography>
           )}
           {r.inputs && (
             <Box sx={{ mt: 0.6 }}>
               <Typography variant="caption" onClick={() => setShowInputs((v) => !v)}
-                sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+                sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
                 {showInputs ? "hide" : "show"} exactly what it read — {r.inputs.length.toLocaleString()} chars {showInputs ? "↑" : "↓"}
               </Typography>
               {showInputs && (
                 <Box component="pre" sx={{ ...mono, fontSize: 11, lineHeight: 1.45, color: INK, whiteSpace: "pre-wrap", m: 0, mt: 0.5, p: 1,
-                  bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1, maxHeight: 360, overflowY: "auto" }}>{r.inputs}</Box>
+                  bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${BORDER}`, borderRadius: 1, maxHeight: 360, overflowY: "auto" }}>{r.inputs}</Box>
               )}
             </Box>
           )}
@@ -2330,10 +2330,10 @@ function RunHistory({ sid, title, onClose, onFix }) {
           {!lost && runs && !runs.length && <Empty>No runs kept yet — the history starts with the next run.</Empty>}
           {(runs || []).map((r) => (
             <Box key={r.runId} onClick={() => setPick(r.runId)}
-              sx={{ px: 1, py: 0.6, mb: 0.4, borderRadius: 1, cursor: "pointer", bgcolor: pick === r.runId ? "#eef3ea" : "transparent",
-                border: `1px solid ${pick === r.runId ? "#cfd8c8" : "transparent"}`, "&:hover": { bgcolor: "#f4f3ef" } }}>
+              sx={{ px: 1, py: 0.6, mb: 0.4, borderRadius: 1, cursor: "pointer", bgcolor: pick === r.runId ? "var(--tq-inset, #eef3ea)" : "transparent",
+                border: `1px solid ${pick === r.runId ? "var(--tq-border, #cfd8c8)" : "transparent"}`, "&:hover": { bgcolor: "var(--tq-panel, #f4f3ef)" } }}>
               <Typography variant="caption" sx={{ display: "block", color: INK, fontWeight: 600, lineHeight: 1.4 }}>{(r.at || "").slice(0, 16)}</Typography>
-              <Typography variant="caption" sx={{ display: "block", color: r.failed ? "#8a3646" : DIM, lineHeight: 1.4 }}>
+              <Typography variant="caption" sx={{ display: "block", color: r.failed ? "var(--tq-danger, #8a3646)" : DIM, lineHeight: 1.4 }}>
                 {outcome(r)}{r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""}{r.inputChars ? ` · read ${r.inputChars.toLocaleString()} chars` : ""}
               </Typography>
             </Box>
@@ -2347,7 +2347,7 @@ function RunHistory({ sid, title, onClose, onFix }) {
               </Typography>
               {full[pick] ? <LastRun r={{ ...cur, inputs: cur.inputs || "" }} embedded onFix={onFix} />
                 : missed === pick ? <Typography variant="caption" sx={{ color: DIM }}>This run's details could not be loaded.{" "}
-                  <Box component="button" type="button" onClick={() => setMissed(null)} sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", textDecoration: "underline", border: 0, bgcolor: "transparent", p: 0, font: "inherit" }}>{btnLabel("try_again")}</Box></Typography>
+                  <Box component="button" type="button" onClick={() => setMissed(null)} sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600, cursor: "pointer", textDecoration: "underline", border: 0, bgcolor: "transparent", p: 0, font: "inherit" }}>{btnLabel("try_again")}</Box></Typography>
                   : <CircularProgress size={16} />}
             </>
           ) : <Typography variant="caption" sx={{ color: FAINT }}>Pick a run on the left.</Typography>}

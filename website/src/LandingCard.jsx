@@ -19,7 +19,7 @@ const btn = { minHeight: 32, py: 0, px: 1.4, fontSize: 12.5, textTransform: "non
 
 const FileLine = ({ f }) => (
   <Typography variant="caption" sx={{ ...mono, display: "block", color: DIM, fontSize: 11 }} noWrap>
-    <Box component="span" sx={{ color: "#47654a" }}>+{f.plus}</Box> <Box component="span" sx={{ color: "#7a2f3c" }}>-{f.minus}</Box> {f.path}
+    <Box component="span" sx={{ color: "var(--tq-success, #47654a)" }}>+{f.plus}</Box> <Box component="span" sx={{ color: "var(--tq-danger, #7a2f3c)" }}>-{f.minus}</Box> {f.path}
   </Typography>);
 export const SHOWN = 8;
 
@@ -57,9 +57,9 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
     setBusy("");
   };
   return (
-    <Box data-tq-landing="" sx={inChat ? { my: 1.5, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }
+    <Box data-tq-landing="" sx={inChat ? { my: 1.5, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }
       : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-      <Typography sx={{ color: ACCENT, fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", mb: 0.4 }}>LAND THE BRANCH</Typography>
+      <Typography sx={{ color: "var(--tq-link, #55697a)", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", mb: 0.4 }}>LAND THE BRANCH</Typography>
       <Typography variant="body2" sx={{ color: INK }}>
         <Box component="span" sx={{ ...mono, fontWeight: 600 }}>{s.branch}</Box>
         {s.own ? <> into <Box component="span" sx={mono}>{s.base}</Box></> : null}
@@ -89,9 +89,9 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
             Mark a part Revert to take it out of {s.branch} before it lands - one commit on the branch, nothing else touched.</Typography>}
           {diff === null && !diffErr && <Typography variant="body2" data-tq-diff-loading="" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1 }}>
             <CircularProgress size={14} color="inherit" />Loading the changes…</Typography>}
-          {diffErr && <Typography variant="body2" data-tq-diff-error="" sx={{ color: "#7a2f3c" }}>{diffErr}</Typography>}
+          {diffErr && <Typography variant="body2" data-tq-diff-error="" sx={{ color: "var(--tq-danger, #7a2f3c)" }}>{diffErr}</Typography>}
           {diff !== null && <DiffView files={files} marks={reviewing ? marks : null} onMark={reviewing ? (k, m) => setMarks((x) => ({ ...x, [k]: m })) : null} />}
-          {reviewing && !!picked.length && <Button size="small" variant="outlined" disabled={!!busy} data-tq-landing-revert="" sx={{ ...btn, mt: 0.75, color: "#7a2f3c", borderColor: BORDER }}
+          {reviewing && !!picked.length && <Button size="small" variant="outlined" disabled={!!busy} data-tq-landing-revert="" sx={{ ...btn, mt: 0.75, color: "var(--tq-danger, #7a2f3c)", borderColor: BORDER }}
             startIcon={busy === "revert" ? <CircularProgress size={12} color="inherit" /> : null} onClick={revert}>
             Revert {plural(picked.length, "marked part")}</Button>}
         </DialogContent>
@@ -103,16 +103,16 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
           {s.answers.map((a) => (
             <Button key={a.how} size="small" disableElevation disabled={!!busy} data-tq-land={a.how}
               variant={s.proposal?.how === a.how ? "contained" : "outlined"}
-              sx={{ ...btn, ...(a.how === "discard" ? { color: "#7a2f3c", borderColor: BORDER } : s.proposal?.how === a.how ? {} : { color: INK, borderColor: BORDER }) }}
+              sx={{ ...btn, ...(a.how === "discard" ? { color: "var(--tq-danger, #7a2f3c)", borderColor: BORDER } : s.proposal?.how === a.how ? {} : { color: INK, borderColor: BORDER }) }}
               startIcon={busy === a.how ? <CircularProgress size={12} color="inherit" /> : null}
               onClick={() => answer(a.how)}>{a.how === "discard" && sure ? `Yes, discard ${plural(s.ahead, "commit")}` : a.label}</Button>))}
           {sure && <Button size="small" sx={{ ...btn, color: DIM }} onClick={() => setSure(false)}>Keep it</Button>}
         </Box>
         <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.5 }}>{w.hint}</Typography>
       </>}
-      {said && <Typography variant="body2" sx={{ mt: 0.7, color: "#47654a" }}>{said}</Typography>}
-      {!said && s.landed && <Typography variant="body2" sx={{ mt: 0.7, color: "#47654a" }}>✓ {w.landed}</Typography>}
-      {err && <Typography variant="body2" sx={{ mt: 0.7, color: "#7a2f3c" }}>{err}</Typography>}
+      {said && <Typography variant="body2" sx={{ mt: 0.7, color: "var(--tq-success, #47654a)" }}>{said}</Typography>}
+      {!said && s.landed && <Typography variant="body2" sx={{ mt: 0.7, color: "var(--tq-success, #47654a)" }}>✓ {w.landed}</Typography>}
+      {err && <Typography variant="body2" sx={{ mt: 0.7, color: "var(--tq-danger, #7a2f3c)" }}>{err}</Typography>}
     </Box>
   );
 }

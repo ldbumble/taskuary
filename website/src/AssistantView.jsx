@@ -274,7 +274,7 @@ function SinceBlock({ onOpen, onReading }) {
     return () => ro.disconnect();
   }, [open, dg.text]);
   if (!pending && !dg.source_id) return null;
-  const spin = (words) => <span role="status" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><CircularProgress size={12} thickness={5} sx={{ color: "#827356" }} />{words}</span>;
+  const spin = (words) => <span role="status" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><CircularProgress size={12} thickness={5} sx={{ color: "var(--tq-warning, #827356)" }} />{words}</span>;
   const more = fit != null;
   return (
     <div className="tq-since" data-tq-since="">
@@ -819,7 +819,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                           {CIRCLED[rankNo[i.key] - 1] || rankNo[i.key]}</span>}
                         {/* what triage read the words as trying to make an AI do (message.Danger): its mark leads the title, its line on hover
                             and on the card (B3, 2026-10-29) - a warning in the row's own height, never a gate */}
-                        {!!i.danger && <span className="tq-pile-danger" data-tq-danger="" style={{ color: ALERT }} aria-label={dangerLine(i.danger, i.danger_aim)}>⚠</span>}
+                        {!!i.danger && <span className="tq-pile-danger" data-tq-danger="" style={{ color: "var(--tq-danger, #8a3646)" }} aria-label={dangerLine(i.danger, i.danger_aim)}>⚠</span>}
                         <b className={goal ? "goal-t" : undefined}>{i.title}</b>
                         {/* NO WORKSTREAM CHIP ON THE RAIL (the owner, 2026-11-08: "little card taskuary AI .... on rail. hate that") - the task's own page still says it */}
                         {/* ONE FYI ROW PER EMAIL THREAD (trust audit P2, 2026-10-28): the newest mail speaks, the rest are its "+N" */}
@@ -954,8 +954,8 @@ const DOCK_CHIPS = { flex: "0 1 auto", maxWidth: 220, minWidth: 0, pb: 0 };
 function Line({ m, lastBrief = false, live, last, further = false, actions, fresh, tableChips = [], barHolds = false, pageOver = false, canvas = null }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
-      s.url ? <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid #ddd6cb" }} />
-        : <span key={s.path} data-tq-file-sent={s.name} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 11, border: "1px solid #ddd6cb", background: "#f6f4f1" }}>📎 {s.name}</span>))}</div>}</div></div>;
+      s.url ? <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid var(--tq-border, #ddd6cb)" }} />
+        : <span key={s.path} data-tq-file-sent={s.name} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 11, border: "1px solid var(--tq-border, #ddd6cb)", background: "var(--tq-canvas, #f6f4f1)" }}>📎 {s.name}</span>))}</div>}</div></div>;
   // the day's opener draws the welcome, once - an earlier day's sits under it as nothing (actions.welcome)
   if (m.card?.kind === "brief") return lastBrief ? actions.welcome(m) : null;
   // BROWSING (the canvas redesign, 2026-09-29): Connections, Settings, Reports or Hub, walked by clicks on this line
@@ -3615,7 +3615,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               </div>
             </div>
           )}</>;
-  const errLine = err && <Typography component="div" data-tq-err-line="" sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>;
+  const errLine = err && <Typography component="div" data-tq-err-line="" sx={{ color: "var(--tq-danger, #7a2f3c)", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>;
   // THE CHAT IS ITS OWN UNIT ON A DESK (the owner, 2026-10-29: "it looks weird coming out of the bottom bar"): from 760px wide the box
   // leaves the bar - the bar ends before it, a gap between them - and stands alone in the corner as a small pill, like any app's chat
   // widget; pressed, it opens up out of its corner into the chat window, and shut it is the small pill again. Under 760px nothing moves
@@ -3632,7 +3632,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const growOut = () => { clearTimeout(hoverT.current); hoverT.current = setTimeout(() => setHover(false), 350); };
   const iconsInPill = chatApart && overChat(table);   // ...never both: in the pill only while a task or page is open over the chat
   const ownIcons = <>
-    <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" data-tq-speak="" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
+    <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" data-tq-speak="" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "var(--tq-success, #526b53)" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
     <Tooltip title="Past chats"><IconButton size="small" data-tq-past-chats="" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
     <Tooltip title="New chat — archives this one"><IconButton size="small" data-tq-new-chat="" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip></>;
   const composeBox = (
@@ -3715,7 +3715,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           <div className="tq-chats-list">
             {current && <AdvisorNotes keyOnTable={current} />}
             {chatsLoading && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>Loading past chats…</Typography>}
-            {chatsErr && <Typography role="alert" sx={{ color: "#7a2f3c", fontSize: 12, p: 1.5 }}>{chatsErr}{" "}
+            {chatsErr && <Typography role="alert" sx={{ color: "var(--tq-danger, #7a2f3c)", fontSize: 12, p: 1.5 }}>{chatsErr}{" "}
               <button type="button" className="tq-chip" onClick={openChats}>{btn("try_again")}</button></Typography>}
             {!chatsLoading && !chatsErr && !chats.length && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>No earlier chats yet.</Typography>}
             {chats.map((c) => (
@@ -3904,7 +3904,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 <Box key={emoji} component="button" type="button" aria-label={`Send ${label}`} title={label}
                   onClick={() => sendEmoji(emoji)} sx={{ appearance: "none", border: "1px solid transparent", borderRadius: 1.5,
                     bgcolor: "transparent", cursor: "pointer", width: 36, height: 36, p: 0, fontSize: 20, lineHeight: 1,
-                    "&:hover": { bgcolor: "#f4f1ec", borderColor: "#e1dcd5", transform: "scale(1.08)" } }}>
+                    "&:hover": { bgcolor: "var(--tq-panel, #f4f1ec)", borderColor: "var(--tq-border, #e1dcd5)", transform: "scale(1.08)" } }}>
                   {emoji}
                 </Box>
               ))}

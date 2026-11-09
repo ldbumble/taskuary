@@ -77,7 +77,7 @@ const Fork = ({ on, title, hint, onClick }) => (
   <Box onClick={onClick} role="button" tabIndex={0}
     onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onClick()}
     sx={{ flex: 1, minWidth: 0, border: `1px solid ${on ? ACCENT : BORDER}`, borderRadius: 2,
-      p: 1.25, cursor: "pointer", bgcolor: on ? "#fff" : "#fcfaf7",
+      p: 1.25, cursor: "pointer", bgcolor: on ? "var(--tq-panel, #fff)" : "var(--tq-panel, #fcfaf7)",
       boxShadow: on ? `inset 0 0 0 1px ${ACCENT}` : "none", transition: "border-color .15s" }}>
     <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK, mb: 0.4 }}>{title}</Typography>
     <Typography sx={{ fontSize: 11, color: FAINT, lineHeight: 1.5 }}>{hint}</Typography>
@@ -116,7 +116,7 @@ export const EmailRecipients = ({ value, onChange, options, placeholder, label =
     renderInput={(params) => (
       <TextField {...params} placeholder={value.length ? "Add another email" : placeholder}
         inputProps={{ ...params.inputProps, ...(label ? { "data-tq-label": label } : {}) }}
-        sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+        sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "var(--tq-panel, #fcfaf7)" } }} />
     )} />
   );
 };
@@ -143,7 +143,7 @@ export const ChatRecipient = ({ channel, options, value, onChange }) => {
       )}
       renderInput={(params) => (
         <TextField {...params} placeholder="Search people and conversations"
-          sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+          sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "var(--tq-panel, #fcfaf7)" } }} />
       )} />
   );
 };
@@ -189,10 +189,10 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
       InputProps={{ endAdornment: (
         <Box sx={{ display: "flex", alignSelf: "flex-start", gap: 0.25 }}>
           {withPics && <AttachImage pics={pics} sx={{ width: 30, height: 30 }} />}
-          <MicButton size={18} sx={{ width: 30, height: 30, p: 0, color: "#6e685f" }}
+          <MicButton size={18} sx={{ width: 30, height: 30, p: 0, color: "var(--tq-secondary, #6e685f)" }}
             onText={(t) => changed({ target: { value: value ? `${value} ${t}` : t } })} />
         </Box>) }}
-      sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7", alignItems: "flex-start" } }} />
+      sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "var(--tq-panel, #fcfaf7)", alignItems: "flex-start" } }} />
     {withPics && <ImageTray pics={pics} sx={{ mt: 0.75 }} />}
     </>
   );
@@ -578,14 +578,14 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           <>
             <Box>
               <Label>By</Label>
-              <TextField type="date" size="small" value={by} onChange={(e) => setBy(e.target.value)} inputProps={{ "data-tq-field": "by", "data-tq-label": "By" }} sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+              <TextField type="date" size="small" value={by} onChange={(e) => setBy(e.target.value)} inputProps={{ "data-tq-field": "by", "data-tq-label": "By" }} sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "var(--tq-panel, #fcfaf7)" } }} />
               <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>The date shows on the goal's row on your rail, as "due" and the day.</Typography>
             </Box>
             <Box>
               <Label>Who is involved</Label>
               <TextField fullWidth size="small" value={who} onChange={(e) => setWho(e.target.value)} placeholder="Ray Colton, Payworth (Marcus), the coding agent"
                 inputProps={{ "data-tq-field": "who", "data-tq-label": "Who is involved" }}
-                sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+                sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "var(--tq-panel, #fcfaf7)" } }} />
               <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>People it may chase and systems it may touch. Anyone else is a question to you first.</Typography>
             </Box>
             <Box>
@@ -609,7 +609,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 the view it was sent, so "come back to it friday" had nothing to fill (2026-11-02) */}
             <TextField type="datetime-local" size="small" value={when} onChange={(e) => setWhen(e.target.value)}
               inputProps={{ "data-tq-field": "when", "data-tq-label": "Come back to it" }}
-              sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+              sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "var(--tq-panel, #fcfaf7)" } }} />
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               Leave it empty for now. A date puts the row in that day and it stays quiet until then.
             </Typography>

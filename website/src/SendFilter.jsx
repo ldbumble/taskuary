@@ -51,7 +51,7 @@ export default function SendFilter() {
     try { await api.post("/api/sendfilter/scan"); setData((d) => ({ ...d, scanning: true })); setErr(""); }
     catch (e) { setErr(e?.response?.data?.detail || "The check did not start - try again."); }
   };
-  if (!data) return err ? <Typography variant="body2" role="alert" sx={{ color: "#a33b3b", py: 1.5 }}>{err}</Typography> : null;
+  if (!data) return err ? <Typography variant="body2" role="alert" sx={{ color: "var(--tq-danger, #a33b3b)", py: 1.5 }}>{err}</Typography> : null;
   const { left, kept } = linesOf(data);
   const both = !!(data.claude?.length && data.codex?.length);            // which CLI a line is on, said only when there are two
   if (!left.length && !kept.length) return null;
@@ -77,7 +77,7 @@ export default function SendFilter() {
           {open && kept.map((l) => <Line key={`${l.server}/${l.tool}`} l={l} busy={busy} onSet={set} both={both} />)}
         </>
       )}
-      {err && <Typography variant="body2" role="alert" sx={{ color: "#a33b3b", mt: 1 }}>{err}</Typography>}
+      {err && <Typography variant="body2" role="alert" sx={{ color: "var(--tq-danger, #a33b3b)", mt: 1 }}>{err}</Typography>}
     </Box>
   );
 }

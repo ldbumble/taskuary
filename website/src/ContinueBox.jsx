@@ -35,11 +35,11 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
   };
   const body = (
     <Box sx={{ p: 1.5, display: "grid", gap: 1, ...(inline ? {} : { width: 320 }) }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>{word}{taskRef ? ` · ${taskRef}` : ""}</Typography>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "var(--tq-link, #41525f)" }}>{word}{taskRef ? ` · ${taskRef}` : ""}</Typography>
       {/* a run that ended WAITING ON A SIGN-IN (2026-11-03): no answer in words - Continue opens its browser again, and the sign-in is asked there */}
-      {!asked && signin && <Typography data-tq-left-signin={signin} sx={{ fontSize: 12.5, color: "#2b3a45", overflowWrap: "anywhere" }}>
+      {!asked && signin && <Typography data-tq-left-signin={signin} sx={{ fontSize: 12.5, color: "var(--tq-link, #2b3a45)", overflowWrap: "anywhere" }}>
         {`Sign in to ${signin} to continue. Continue opens the agent browser on that page again - sign in there, or fill it in securely from the link it shows.`}</Typography>}
-      {asked && <Typography data-tq-left-asking sx={{ fontSize: 12.5, color: "#2b3a45", overflowWrap: "anywhere" }}>{asked}</Typography>}
+      {asked && <Typography data-tq-left-asking sx={{ fontSize: 12.5, color: "var(--tq-link, #2b3a45)", overflowWrap: "anywhere" }}>{asked}</Typography>}
       {/* THE ONE BOX (AgentSummary.PromptBox, the owner 2026-11-06: "it should be shared"): paperclip, pictures, words, mic, and its Send is
           Continue - empty is allowed, the agent carries on as it was */}
       <PromptBox text={note} setText={setText} pics={pics} busy={busy} onSend={go} emptyOk autoFocus label={word} title={word}
@@ -47,9 +47,9 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
       <Box sx={{ display: "flex", gap: 0.75 }}>
         <Button size="small" disabled={busy} onClick={onClose}>Cancel</Button>
       </Box>
-      {err && <Typography sx={{ fontSize: 11.5, color: "#7a2f3c" }}>{err}</Typography>}
+      {err && <Typography sx={{ fontSize: 11.5, color: "var(--tq-danger, #7a2f3c)" }}>{err}</Typography>}
     </Box>
   );
-  if (inline) return <Box data-tq-continue-card sx={{ border: "1px solid #d5d0c7", borderRadius: "12px", bgcolor: "#fffdfb" }}>{body}</Box>;
+  if (inline) return <Box data-tq-continue-card sx={{ border: "1px solid var(--tq-border, #d5d0c7)", borderRadius: "12px", bgcolor: "var(--tq-panel, #fffdfb)" }}>{body}</Box>;
   return <Popover open={!!anchor} anchorEl={anchor} onClose={onClose} anchorOrigin={{ vertical: "bottom", horizontal: "left" }}>{body}</Popover>;
 }

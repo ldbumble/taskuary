@@ -19,8 +19,8 @@ export default function CheckBackChip({ task, onChanged = null, sx }) {
     catch (e) { setErr(e?.response?.data?.detail || "That did not cancel - try again."); }
   };
   return <Box component="span" data-tq-check-back={cb.at} sx={{ display: { xs: "none", md: "inline-flex" }, alignItems: "center", gap: 0.5, minWidth: 0, ...sx }}>
-    <AttachChip name={line} title={cb.what ? `${line}: ${cb.what}` : line} icon={<AlarmIcon sx={{ fontSize: 13, color: "#55697a", flexShrink: 0 }} />}
+    <AttachChip name={line} title={cb.what ? `${line}: ${cb.what}` : line} icon={<AlarmIcon sx={{ fontSize: 13, color: "var(--tq-link, #55697a)", flexShrink: 0 }} />}
       onRemove={cancel} aria-label={line} />
-    {err && <Box component="span" role="alert" sx={{ fontSize: 11, color: "#7a2f3c" }}>{err}</Box>}
+    {err && <Box component="span" role="alert" sx={{ fontSize: 11, color: "var(--tq-danger, #7a2f3c)" }}>{err}</Box>}
   </Box>;
 }

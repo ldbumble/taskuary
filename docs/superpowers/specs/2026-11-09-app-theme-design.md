@@ -1,0 +1,9 @@
+# Light and dark application themes
+
+The owner wants a theme button in the top-right header and a dark appearance throughout the application. This is an upstream contribution, with an issue and pull request. Existing searches for “dark”, “theme” and “color scheme” found no matching feature issue or PR.
+
+Use Taskuary's existing Beacon palette: warm charcoal surfaces, readable warm text, slate links, sage success and oxblood attention. Keep the current light appearance. A sun/moon button switches immediately without remounting the work area; remember the choice in this browser. Before an explicit choice, follow the operating system. Synchronize other tabs and handle unavailable storage. Apply the choice before the first paint.
+
+Use shared CSS custom properties for application surfaces, text, borders and semantic tints, together with a matching MUI palette. Existing plain CSS and inline styles must use those properties too. This is preferable to a CSS inversion filter, which would recolor logos, photographs, charts and terminal output, or a MUI-only change, which would leave custom views light. Terminal palette choices and third-party content remain independent; the surrounding controls follow the application theme. Game controls and its scene background follow the theme without recoloring people or rebuilding the scene.
+
+Check Chat, tasks and agent output, Board, Game, Connections, Settings, Reports, Hub, menus, dialogs, search, markdown/diffs, initial/unlinked/error screens and narrow layouts. Use invented demo data for all published images. Verify persistence, system defaults, cross-tab changes, keyboard access, text contrast and no runtime errors. Rebuild the packaged web assets. Install only the verified web bundle into the existing local installation, preserving its Python fixes and private data.

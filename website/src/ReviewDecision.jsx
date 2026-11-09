@@ -38,7 +38,7 @@ const Inbound = ({ r }) => {
   if (!latest) return null;
   const long = latest.length > 360 || latest.split("\n").length > 4;
   return (
-    <Box sx={{ mb: 1, px: 1.25, py: 0.85, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, borderLeft: "3px solid #6f8a6e" }}>
+    <Box sx={{ mb: 1, px: 1.25, py: 0.85, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, borderLeft: "3px solid var(--tq-border-strong, #6f8a6e)" }}>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.25 }}>
         {r.FromName || r.FromEmail || "they"} wrote{r.SentAt ? ` · ${timeAgo(r.SentAt)}` : ""}
       </Typography>
@@ -48,7 +48,7 @@ const Inbound = ({ r }) => {
       </Typography>
       {long && (
         <Typography variant="caption" onClick={() => setFull((f) => !f)}
-          sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", display: "block", mt: 0.35, "&:hover": { textDecoration: "underline" } }}>
+          sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600, cursor: "pointer", display: "block", mt: 0.35, "&:hover": { textDecoration: "underline" } }}>
           {full ? "less ↑" : "the whole message ↓"}
         </Typography>
       )}
@@ -58,7 +58,7 @@ const Inbound = ({ r }) => {
 
 export const InvoiceLine = ({ meta }) => (
   <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mb: 1, px: 1.25, py: 0.8,
-    bgcolor: "#eef1ec", border: "1px solid #d9e0d6", borderRadius: 1.5 }}>
+    bgcolor: "var(--tq-inset, #eef1ec)", border: "1px solid var(--tq-border, #d9e0d6)", borderRadius: 1.5 }}>
     <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>{meta.customer}</Typography>
     <Typography variant="caption" sx={{ color: INK }}>${Number(meta.amount || 0).toFixed(2)}</Typography>
     <Typography variant="caption" sx={{ color: DIM }}>last month: {meta.previous_amount == null ? "—" : `$${Number(meta.previous_amount).toFixed(2)}`}</Typography>
@@ -95,14 +95,14 @@ export const CAL_PRESS = { accept: btn("accept_invite"), decline: btn("decline_i
 const CAL_OTHER = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: btn("propose_time") };
 // The times are the server's words (calwrite.when): the envelope carries them as they will be said.
 export const CalendarLine = ({ meta }) => (
-    <Box data-tq-calendar={meta.act} sx={{ display: "grid", gap: 0.25, mb: 1, px: 1.25, py: 0.8, bgcolor: "#eef1ec", border: "1px solid #d9e0d6", borderRadius: 1.5 }}>
+    <Box data-tq-calendar={meta.act} sx={{ display: "grid", gap: 0.25, mb: 1, px: 1.25, py: 0.8, bgcolor: "var(--tq-inset, #eef1ec)", border: "1px solid var(--tq-border, #d9e0d6)", borderRadius: 1.5 }}>
       <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>
         {CAL_ACT[meta.act] || "Answer"} · {meta.subject || "the meeting"}{meta.when ? ` · ${meta.when}` : ""}</Typography>
       <Typography variant="caption" sx={{ color: DIM }}>
         {meta.act === "schedule" ? `Invites ${(meta.to || []).join(", ") || "them"}` : `${(meta.to || [])[0] || "The organizer"} is told`}
         {meta.act === "propose" && meta.was ? ` · instead of ${meta.was}` : ""}</Typography>
       {!!meta.link && <Typography variant="caption" data-tq-calendar-link={meta.link} sx={{ color: DIM }}>With a {meta.link} link, made when it is sent</Typography>}
-      {!!meta.clash && <Typography variant="caption" sx={{ color: "#7a2f3c" }}>This {meta.clash}.</Typography>}
+      {!!meta.clash && <Typography variant="caption" sx={{ color: "var(--tq-danger, #7a2f3c)" }}>This {meta.clash}.</Typography>}
     </Box>
 );
 
@@ -115,7 +115,7 @@ export function SharedDashboard({ report, title }) {
     return () => { live = false; }; }, [report]);
   return <Box data-tq-shared-dashboard={report} sx={{ mb: 1, border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden", maxHeight: 420, overflowY: "auto" }}>
     <Typography variant="caption" sx={{ display: "block", px: 1.25, pt: 0.75, color: INK, fontWeight: 600 }}>{title || "Dashboard"}
-      <Box component="a" href={`#report=${report}`} sx={{ ml: 1, color: "#55697a", fontWeight: 400 }}>Open it</Box></Typography>
+      <Box component="a" href={`#report=${report}`} sx={{ ml: 1, color: "var(--tq-link, #55697a)", fontWeight: 400 }}>Open it</Box></Typography>
     {got?.data ? <React.Suspense fallback={null}><Dashboard spec={got.config} data={got.data} /></React.Suspense>
       : <Typography variant="caption" sx={{ display: "block", px: 1.25, pb: 0.75, color: FAINT }}>{got ? "It has not run yet." : "Loading…"}</Typography>}
   </Box>;
@@ -554,8 +554,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
 
   if (r.Status === "held") {
     return (
-      <Box sx={{ mt: 0.5, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
-        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}>
+      <Box sx={{ mt: 0.5, bgcolor: "var(--tq-inset, #e3e6e1)", border: "1px solid var(--tq-border, #d2d6cf)", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
+        <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", fontWeight: 600, display: "block" }}>
           Waiting on the agent working this task
         </Typography>
         <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.25 }}>
@@ -597,13 +597,13 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       }} />
       {/* a close-out says what it closes, whatever an older row's Reason worded it as */}
       {proposal?.kind === "closeout" ? (
-        <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{proposal.context}</Typography>
+        <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", display: "block", mb: 0.5 }}>{proposal.context}</Typography>
       ) : proposal?.lead ? (<Box data-tq-held-lead="" sx={{ mb: 0.75 }}>
         {/* a held step says what it does and why it waits, in words - its raw line is under Show the command (the owner, 2026-11-09) */}
         <Typography variant="body2" sx={{ color: INK, fontWeight: 600, overflowWrap: "anywhere" }}>{proposal.lead}</Typography>
-        <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block" }}>{proposal.leadWhy}</Typography>
+        <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", display: "block" }}>{proposal.leadWhy}</Typography>
       </Box>) : r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
-        <Typography data-tq-review-reason="" variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
+        <Typography data-tq-review-reason="" variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
       )}
       {meta.kind === "zoho_invoice" && <InvoiceLine meta={meta} />}
       {/* !!: the task detail carries the raw row, where Stale is the NUMBER 0 - and React draws a 0 */}
@@ -650,7 +650,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.5, flexWrap: "wrap" }}>
           <CcRow cc={ccNow} setCc={setCc} channel="email" />
           {!bccOpen && !bccNow.length && <Typography {...pressable(() => setBccOpen(true))} data-tq-add-bcc=""
-            sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>Add BCC</Typography>}
+            sx={{ ...FOCUS_RING, fontSize: 11.5, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>Add BCC</Typography>}
         </Box>
         {(bccOpen || bccNow.length > 0) && <CcRow cc={bccNow} setCc={setBcc} channel="email" label="BCC" />}
         <SubjectRow subject={subjNow} onChange={setSubj} disabled={off} />
@@ -662,15 +662,15 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       {/* THE WARNING SITS OVER THE DRAFT IT IS ABOUT, ITS REDRAFT IN IT (the owner, 2026-10-28: "redraft warning on top of the reply should
           have the redraft button on it, not below the message box") */}
       {warnTop && <Box data-tq-redraft-warn="" sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.75, px: 1.25, py: 0.75,
-        border: "1px solid #e3c9a8", bgcolor: "#fbf3e8", borderRadius: 1.5 }}>
-        <Typography component="span" data-tq-lit-why="" sx={{ flex: "1 1 220px", minWidth: 0, color: "#6b4a1f", fontSize: 13, overflowWrap: "anywhere" }}>{why}</Typography>
+        border: "1px solid var(--tq-edge-brass, #e3c9a8)", bgcolor: "var(--tq-panel, #fbf3e8)", borderRadius: 1.5 }}>
+        <Typography component="span" data-tq-lit-why="" sx={{ flex: "1 1 220px", minWidth: 0, color: "var(--tq-warning, #6b4a1f)", fontSize: 13, overflowWrap: "anywhere" }}>{why}</Typography>
         <Button size="small" variant="contained" disableElevation disabled={off} onClick={redraft} title={btnHint("redraft")}>
           {redraftLabel}</Button>
       </Box>}
       {/* ...named for the Assistant when the owner asks it about this draft (pageView.js): the reply's own box, filled through its onChange */}
       {/* ...and while the AI writes it, its spinner IN the box (the owner, 2026-10-30: "spin in the box of drafting") */}
       {proposal?.folded && <Typography {...pressable(() => setCmdOpen((o) => !o))} data-tq-show-command="" aria-expanded={cmdOpen}
-        sx={{ ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, mb: cmdOpen ? 0.5 : 0,
+        sx={{ ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, mb: cmdOpen ? 0.5 : 0,
           "&:hover": { textDecoration: "underline" } }}>{cmdOpen ? "Hide the command" : "Show the command"}</Typography>}
       <Box ref={draftRef} data-tq-draft-box="" data-tq-field="draft" data-tq-label="Reply draft" sx={{ position: "relative", ...(proposal?.folded && !cmdOpen ? { display: "none" } : {}) }}>
         {drafting && <CircularProgress size={14} data-tq-drafting-spin="" sx={{ position: "absolute", top: 12, right: 12, zIndex: 1, color: FAINT }} />}
@@ -678,8 +678,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         placeholder={proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
         inputProps={{ readOnly: off || delivery.frozen || !!proposal?.readOnly, style: { fontSize: 12.5, lineHeight: 1.45 } }} /></Box>
       {compare?.reviewId === r.ReviewId && (
-        <Box sx={{ mt: 0.75, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75, bgcolor: PANEL2 }}>
-          <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}>
+        <Box sx={{ mt: 0.75, border: "1px solid var(--tq-border, #d2d6cf)", borderRadius: 1.5, px: 1.25, py: 0.75, bgcolor: PANEL2 }}>
+          <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", fontWeight: 600, display: "block" }}>
             Refreshed draft - written after the new message. Your edit stays in the box above.
           </Typography>
           <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5, mt: 0.5 }}>{compare.refreshed || "(no refreshed draft - hit Redraft)"}</Typography>
@@ -829,7 +829,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         {/* WHY IT IS LIT, BESIDE IT (the owner, 2026-10-28): the Advisor's reason for lighting Redraft over Send stood in the folded Agent
             section, and Close out showed a lit Redraft with no word of why. `why`: the task's Advisor line, said where its button is lit */}
         {why && !warnTop && String(lit || "").startsWith(`${r.ReviewId}:`) && <Typography component="span" data-tq-lit-why="" variant="body2"
-          sx={{ alignSelf: "center", color: "#55697a", fontSize: 12.5, minWidth: 0, overflowWrap: "anywhere" }}>{why}</Typography>}
+          sx={{ alignSelf: "center", color: "var(--tq-link, #55697a)", fontSize: 12.5, minWidth: 0, overflowWrap: "anywhere" }}>{why}</Typography>}
         </>
       </Box>
       {connect && <Typography data-tq-not-connected="" variant="body2" sx={{ color: DIM, mt: 0.75 }}>{connect.says} - the draft waits here until it is.</Typography>}

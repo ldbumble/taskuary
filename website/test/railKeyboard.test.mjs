@@ -27,6 +27,6 @@ test("Up/Down move the ring, Enter is the click, Escape returns focus to where i
 });
 
 test("the only thing drawn for it is a focus outline", () => {
-  assert.match(css, /\.tq-pile-row \.card:focus-visible \{ outline: 2px solid #55697a; outline-offset: -2px; \}/);
+  assert.match(css, /\.tq-pile-row \.card:focus-visible \{ outline: 2px solid var\(--tq-link, #55697a\); outline-offset: -2px; \}/);
   assert.match(css, /\.tq-pile-row \.card:focus \{ outline: none; \}/, "a mouse click draws no ring");
 });

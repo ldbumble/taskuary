@@ -73,7 +73,7 @@ const Field = ({ label, hint, children }) => (
 export const SchedulePicker = ({ sched, setSched, cron = "" }) => (
   <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
     <Select size="small" value={sched.mode} onChange={(e) => setSched((s) => ({ at: s.at || "08:00", days: s.days || [1], day: s.day || 1,
-      minutes: s.minutes || 60, cron: s.cron || cron || "", mode: e.target.value }))} sx={{ minWidth: 190, bgcolor: "#fff", fontSize: 13 }}>
+      minutes: s.minutes || 60, cron: s.cron || cron || "", mode: e.target.value }))} sx={{ minWidth: 190, bgcolor: "var(--tq-panel, #fff)", fontSize: 13 }}>
       <MenuItem value="manual" sx={{ fontSize: 13 }}>Only when I press Run now</MenuItem>
       <MenuItem value="daily" sx={{ fontSize: 13 }}>Every day</MenuItem>
       <MenuItem value="weekly" sx={{ fontSize: 13 }}>Every week</MenuItem>
@@ -87,14 +87,14 @@ export const SchedulePicker = ({ sched, setSched, cron = "" }) => (
         onClick={() => setSched((s) => ({ ...s, days: on ? s.days.filter((x) => x !== i) : [...(s.days || []), i] }))} />;
     })}
     {sched.mode === "monthly" && <TextField size="small" type="number" label="day" value={sched.day}
-      inputProps={{ min: 1, max: 28 }} sx={{ width: 80, bgcolor: "#fff" }}
+      inputProps={{ min: 1, max: 28 }} sx={{ width: 80, bgcolor: "var(--tq-panel, #fff)" }}
       onChange={(e) => setSched((s) => ({ ...s, day: Math.min(28, Math.max(1, Number(e.target.value) || 1)) }))} />}
     {["daily", "weekly", "monthly"].includes(sched.mode) && <TextField size="small" type="time" label="at" value={sched.at}
-      sx={{ width: 120, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, at: e.target.value }))} />}
+      sx={{ width: 120, bgcolor: "var(--tq-panel, #fff)" }} onChange={(e) => setSched((s) => ({ ...s, at: e.target.value }))} />}
     {sched.mode === "every" && <TextField size="small" type="number" label="minutes" value={sched.minutes}
-      sx={{ width: 110, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, minutes: e.target.value }))} />}
+      sx={{ width: 110, bgcolor: "var(--tq-panel, #fff)" }} onChange={(e) => setSched((s) => ({ ...s, minutes: e.target.value }))} />}
     {sched.mode === "cron" && <TextField size="small" label="cron" value={sched.cron} placeholder="0 8 * * 1"
-      sx={{ width: 160, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, cron: e.target.value }))} />}
+      sx={{ width: 160, bgcolor: "var(--tq-panel, #fff)" }} onChange={(e) => setSched((s) => ({ ...s, cron: e.target.value }))} />}
   </Box>
 );
 
@@ -244,12 +244,12 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
       <Box sx={{ ...card, p: 2.5 }}>
         <Field label="Name" hint="the headline each run's task carries">
           <TextField size="small" fullWidth value={cfg.title || ""} placeholder="Weekly duplicate employee check"
-            onChange={(e) => set("title", e.target.value)} sx={{ bgcolor: "#fff" }} />
+            onChange={(e) => set("title", e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }} />
         </Field>
         {/* A WORKFLOW IS A GOAL (flow.repair): a broken step is fixed by itself only while this still holds */}
         {steps && <Field label="Goal" hint="what it is for, in plain words - a step that breaks is repaired toward this, and anything that would change it asks you first">
           <TextField size="small" fullWidth multiline minRows={1} value={cfg.goal || ""} placeholder="Every Monday, catch AP bills posted twice and get finance to void them."
-            onChange={(e) => set("goal", e.target.value)} sx={{ bgcolor: "#fff" }} />
+            onChange={(e) => set("goal", e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }} />
         </Field>}
         {steps ? <Field label="Steps" hint="top to bottom, each the same every run - test one before you save, and only the AI steps use a model">
           {/* READS ONLY IS A REPORT (the owner, 2026-10-18): every workflow run is a task, so steps that only read and judge are
@@ -260,37 +260,37 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
           <WorkflowSteps flow={cfg.flow || []} setFlow={setFlow} outputs={outputs} setOutputs={setOutputs} connectors={connectors} types={types}
             agents={roles} title={cfg.title} sourceId={cur?.SourceId} inputs={cfg.inputs} changed={changed} />
           {!(cfg.flow || []).length && <Typography component="button" type="button" onClick={() => setCfg((c) => { const n = { ...c }; delete n.flow; return n; })}
-            sx={{ border: 0, bgcolor: "transparent", p: 0, mt: 0.5, cursor: "pointer", color: "#55697a", fontSize: 12, fontWeight: 600 }}>
+            sx={{ border: 0, bgcolor: "transparent", p: 0, mt: 0.5, cursor: "pointer", color: "var(--tq-link, #55697a)", fontSize: 12, fontWeight: 600 }}>
             Use one agent prompt instead</Typography>}
         </Field>
         : <Field label="What it does" hint="the job, in plain words - the agent reads exactly this on every run">
           <TextField size="small" fullWidth multiline minRows={3} value={cfg.prompt || ""}
             placeholder="Check Intacct for active employees that share a name or SSN last four, and open a task for finance per pair."
-            onChange={(e) => set("prompt", e.target.value)} sx={{ bgcolor: "#fff" }} />
+            onChange={(e) => set("prompt", e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }} />
           {/* the same job as steps: code for the reads and writes, a model only where it judges (flow.py) */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 0.75, flexWrap: "wrap" }}>
             <Button size="small" variant="outlined" disabled={!!busy || !String(cfg.prompt || "").trim()} onClick={turnIntoSteps}
               startIcon={busy === "steps" ? <CircularProgress size={12} /> : null}>{busy === "steps" ? "Drafting steps…" : "Turn into steps"}</Button>
             <Typography component="button" type="button" onClick={() => set("flow", [])}
-              sx={{ border: 0, bgcolor: "transparent", p: 0, cursor: "pointer", color: "#55697a", fontSize: 12, fontWeight: 600 }}>or build the steps yourself</Typography>
+              sx={{ border: 0, bgcolor: "transparent", p: 0, cursor: "pointer", color: "var(--tq-link, #55697a)", fontSize: 12, fontWeight: 600 }}>or build the steps yourself</Typography>
             <Typography variant="caption" sx={{ color: FAINT }}>so the same reads and writes run as code, and the AI only judges</Typography>
           </Box>
         </Field>}
         <Field label="Who does it" hint="the profile whose rules it works by">
           <Select size="small" displayEmpty value={roles.includes(cfg.agent) ? cfg.agent : ""} onChange={(e) => set("agent", e.target.value)}
-            sx={{ minWidth: 220, bgcolor: "#fff", fontSize: 13 }}>
+            sx={{ minWidth: 220, bgcolor: "var(--tq-panel, #fff)", fontSize: 13 }}>
             <MenuItem value="" sx={{ fontSize: 13 }}>{roles.includes("assistant") ? "assistant (the default)" : "the default"}</MenuItem>
             {roles.filter((a) => a !== "assistant").map((a) => <MenuItem key={a} value={a} sx={{ fontSize: 13 }}>{a}</MenuItem>)}
           </Select>
         </Field>
         {brain && <Field label="Model" hint="the general agents' own unless this job is hard enough to need a stronger model or more thought">
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            <Select size="small" displayEmpty value={cfg.model || ""} sx={{ minWidth: 280, bgcolor: "#fff", fontSize: 13 }}
+            <Select size="small" displayEmpty value={cfg.model || ""} sx={{ minWidth: 280, bgcolor: "var(--tq-panel, #fff)", fontSize: 13 }}
               onChange={(e) => setCfg((c) => ({ ...c, model: e.target.value, effort: keepEffort(brain, e.target.value, c.effort) }))}>
               {models.map((m) => <MenuItem key={m.value || "same"} value={m.value} sx={{ fontSize: 13 }}>{m.label}</MenuItem>)}
             </Select>
             {!!efforts.length && <Select size="small" displayEmpty value={efforts.some((x) => x.value === cfg.effort) ? cfg.effort : ""}
-              onChange={(e) => set("effort", e.target.value)} sx={{ minWidth: 150, bgcolor: "#fff", fontSize: 13 }}>
+              onChange={(e) => set("effort", e.target.value)} sx={{ minWidth: 150, bgcolor: "var(--tq-panel, #fff)", fontSize: 13 }}>
               {efforts.map((x) => <MenuItem key={x.value || "default"} value={x.value} sx={{ fontSize: 13 }}>{x.label}</MenuItem>)}
             </Select>}
           </Box>
@@ -312,17 +312,17 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
         </Field>
         <Field label="Ask me before" hint="what it stops and asks you about, every run">
           <TextField size="small" fullWidth value={cfg.ask_first || ""} placeholder="changing or deleting any Intacct record"
-            onChange={(e) => set("ask_first", e.target.value)} sx={{ bgcolor: "#fff" }} />
+            onChange={(e) => set("ask_first", e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }} />
         </Field>
         <Field label="Done when" hint="what a finished run looks like - and what it says when there was nothing to do">
           <TextField size="small" fullWidth value={cfg.done_when || ""} placeholder='one finance task per duplicate pair; "all clear" when there are none'
-            onChange={(e) => set("done_when", e.target.value)} sx={{ bgcolor: "#fff" }} />
+            onChange={(e) => set("done_when", e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }} />
         </Field>
         {/* A MAIL STARTS IT (the owner, 2026-10-21): said in words, like a playbook's "when" - triage is shown it beside the playbooks
             and starts this workflow on a mail that is one; the run is that mail's task, and its steps read it as {{mail.subject}} */}
         <Field label="Start when a mail like this arrives" hint="optional - describe the mail in words; triage starts this routine when one like it comes in, and the steps read it as {{mail.from}}, {{mail.subject}}, {{mail.body}}">
           <TextField size="small" fullWidth value={cfg.on_mail || ""} placeholder="a vendor sends an invoice for something we ordered"
-            onChange={(e) => set("on_mail", e.target.value)} sx={{ bgcolor: "#fff" }} />
+            onChange={(e) => set("on_mail", e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }} />
         </Field>
         <Field label="When it runs">
           <SchedulePicker sched={sched} setSched={setSched} cron={cfg.cron} />
@@ -332,16 +332,16 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
           <Box sx={{ mt: 1.5 }}>
             <Field label="Saved skill" hint="a slash command with the steps written down, run before the words above (optional)">
               <TextField size="small" value={cfg.skill || ""} placeholder="weekly-user-review"
-                onChange={(e) => set("skill", e.target.value.replace(/^\//, ""))} sx={{ bgcolor: "#fff", width: 280 }} />
+                onChange={(e) => set("skill", e.target.value.replace(/^\//, ""))} sx={{ bgcolor: "var(--tq-panel, #fff)", width: 280 }} />
             </Field>
             {steps && <Field label="When a step fails" hint="the AI repairs the step toward the goal; a fix that would change the goal, or send or write somewhere new, always waits for you">
-              <Select size="small" value={cfg.repair || "auto"} onChange={(e) => set("repair", e.target.value)} sx={{ minWidth: 300, bgcolor: "#fff", fontSize: 13 }}>
+              <Select size="small" value={cfg.repair || "auto"} onChange={(e) => set("repair", e.target.value)} sx={{ minWidth: 300, bgcolor: "var(--tq-panel, #fff)", fontSize: 13 }}>
                 {REPAIR.map(([v, w]) => <MenuItem key={v} value={v} sx={{ fontSize: 13 }}>{w}</MenuItem>)}
               </Select>
             </Field>}
             <Field label="Repository folder" hint="only for work on code: the run is a coding session in this checkout">
               <TextField size="small" fullWidth value={cfg.cwd || ""} placeholder="C:/work/census"
-                onChange={(e) => set("cwd", e.target.value)} sx={{ bgcolor: "#fff" }} />
+                onChange={(e) => set("cwd", e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }} />
             </Field>
             {cur && <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
               onClick={remove}>Remove routine</Button>}

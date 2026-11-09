@@ -36,7 +36,7 @@ function AboutWorkstreams() {
       <Typography sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT, mb: 1 }}>WHAT YOU WORK ON</Typography>
       {!d ? <CircularProgress size={16} /> : <WorkstreamsSection d={d} text={text} onChange={change} heading={false}
         later="What you work on is still being read from your mail - it fills in on its own." />}
-      {msg && <Typography variant="caption" sx={{ color: msg === "Saved" ? FAINT : "#6b2733", display: "block", mt: 0.5 }}>{msg}</Typography>}
+      {msg && <Typography variant="caption" sx={{ color: msg === "Saved" ? FAINT : "var(--tq-danger, #6b2733)", display: "block", mt: 0.5 }}>{msg}</Typography>}
     </Box>
   );
 }
@@ -69,14 +69,14 @@ export default function AboutYou() {
     setPreview(data);
   };
   const keep = async () => { if (preview) { await save({ owner_avatar_style: preview.style, owner_avatar_seed: preview.seed }); setPreview(null); } };
-  if (!p) return err ? <Typography sx={{ color: "#6b2733" }}>{err}</Typography> : <CircularProgress size={22} sx={{ m: 4 }} />;
+  if (!p) return err ? <Typography sx={{ color: "var(--tq-danger, #6b2733)" }}>{err}</Typography> : <CircularProgress size={22} sx={{ m: 4 }} />;
   const f = p.facts;
   const activeStyle = preview?.style || f.owner_avatar_style || "monogram";
   const byChannel = p.identities.reduce((acc, i) => { (acc[i.channel] = acc[i.channel] || []).push(i); return acc; }, {});
   // no width of its own: every settings page is as wide as the shell's column (2026-09-18)
   return (
     <Box>
-      {err && <Typography variant="body2" sx={{ color: "#6b2733", mb: 1 }}>{err}</Typography>}
+      {err && <Typography variant="body2" sx={{ color: "var(--tq-danger, #6b2733)", mb: 1 }}>{err}</Typography>}
 
       {/* the card: avatar, name, the line under it */}
       <Box id={secId("about", S_YOU)} sx={{ display: "flex", gap: 3, alignItems: "flex-start", p: 2.5, border: `1px solid ${BORDER}`, borderRadius: 3, bgcolor: PANEL2, mb: 3, flexWrap: "wrap" }}>
@@ -87,8 +87,8 @@ export default function AboutYou() {
             {p.styles.map((s) => (
               <Box key={s} component="button" type="button" aria-pressed={activeStyle === s} onClick={() => shuffle(s)}
                 sx={{ px: 0.9, py: 0.25, borderRadius: 99, cursor: "pointer", fontSize: 10.5, fontWeight: 600, userSelect: "none", textAlign: "center", fontFamily: "inherit",
-                  bgcolor: activeStyle === s ? "#eae4d8" : "#fff",
-                  border: `1px solid ${BORDER}`, color: "#55697a" }}>{s}</Box>
+                  bgcolor: activeStyle === s ? "var(--tq-inset, #eae4d8)" : "var(--tq-panel, #fff)",
+                  border: `1px solid ${BORDER}`, color: "var(--tq-link, #55697a)" }}>{s}</Box>
             ))}
           </Box>
           <Box sx={{ display: "flex", gap: 0.5 }}>
@@ -134,7 +134,7 @@ export default function AboutYou() {
         <Box key={ch} sx={{ mb: 1.5, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2.5, overflow: "hidden",
           boxShadow: "0 1px 2px rgba(30,50,38,.04)" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.1, borderBottom: `1px solid ${BORDER}`,
-            background: "linear-gradient(180deg,#fffefc,#fbf9f6)" }}>
+            background: "linear-gradient(180deg,var(--tq-panel, #fffefc),var(--tq-panel, #fbf9f6))" }}>
             <ChannelIcon channel={ch} sx={{ fontSize: 17 }} />
             <Typography sx={{ fontWeight: 600, fontSize: 13.5, color: INK }}>{CHANNEL_LABEL[ch] || ch}</Typography>
             <Box sx={{ flex: 1 }} />
@@ -144,17 +144,17 @@ export default function AboutYou() {
             const live = r.source !== TYPED;
             return (
               <Box key={i} sx={{ display: "grid", gridTemplateColumns: "96px minmax(0,1fr) auto", gap: 1.75, alignItems: "center",
-                px: 2, py: 1, borderTop: i ? "1px solid #efeae2" : 0 }}>
+                px: 2, py: 1, borderTop: i ? "1px solid var(--tq-border, #efeae2)" : 0 }}>
                 <Typography sx={{ ...mono, fontSize: 10.5, letterSpacing: ".04em", textTransform: "uppercase", color: FAINT }}>{r.kind}</Typography>
                 <Typography noWrap sx={{ ...mono, fontSize: 13, color: INK, fontWeight: r.primary ? 700 : 500 }}
                   title={r.value + (r.name ? ` · ${r.name}` : "")}>
                   {r.value}{r.name ? <Box component="span" sx={{ color: FAINT }}>{`  ·  ${r.name}`}</Box> : null}
-                  {r.primary ? <Box component="span" sx={{ color: "#6b5f45", fontSize: 11, ml: 0.75 }}>★ owner</Box> : null}
+                  {r.primary ? <Box component="span" sx={{ color: "var(--tq-warning, #6b5f45)", fontSize: 11, ml: 0.75 }}>★ owner</Box> : null}
                 </Typography>
                 <Typography title={r.source} sx={{ justifySelf: "end", fontSize: 11, whiteSpace: "nowrap", maxWidth: 220,
                   overflow: "hidden", textOverflow: "ellipsis", borderRadius: 99, px: 1, py: 0.25,
-                  color: live ? "#4c6450" : FAINT, bgcolor: live ? "#eef3ec" : "#f4f1ec",
-                  border: `1px solid ${live ? "#cddac9" : BORDER}` }}>{r.source}</Typography>
+                  color: live ? "var(--tq-success, #4c6450)" : FAINT, bgcolor: live ? "var(--tq-inset, #eef3ec)" : "var(--tq-panel, #f4f1ec)",
+                  border: `1px solid ${live ? "var(--tq-border, #cddac9)" : BORDER}` }}>{r.source}</Typography>
               </Box>
             );
           })}

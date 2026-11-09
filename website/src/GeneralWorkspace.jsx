@@ -468,11 +468,11 @@ const AssistantMessage = () => {
         {!!rest.length && <PublishedPages pages={rest} open />}
         {!custom?.summary && files}
         {!custom?.summary && lead && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
-          <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{lead}</Box>}
+          <Typography component="span" sx={{ display: "block", color: "var(--tq-text, #292824)", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{lead}</Box>}
         {/* ...and where the chat is the task's home, the newest one's Next steps holds the draft cards (`next`, Task 4.2) */}
         {work && !custom?.summary && chat && <StaleDrafts reviews={work.reviews} turnId={id} />}
         {work && !custom?.summary && holds && work.next && freshNext(work.reviews) && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
-          <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{work.next}</Box>}
+          <Typography component="span" sx={{ display: "block", color: "var(--tq-text, #292824)", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{work.next}</Box>}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded && !(home && holds)} reviews={work.reviews} checklist={work.checklist}
           acts={work.acts} next={(home ? !holds : custom.folded) || !freshNext(work.reviews) ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} turnId={id} answered={answered} />}
         {landing?.after === id && landing.node}
@@ -621,7 +621,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
             )}
             <Button size="small" variant="outlined" disabled={!!busy} startIcon={<RefreshRoundedIcon />}
               onClick={() => redraft(review)}>{busy.includes("redraft") ? "Drafting…" : review.DraftText ? btn("redraft") : btn("redraft", "none")}</Button>
-            <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }} title={`${btnHint("close")} - this draft is not sent`} onClick={() => decide(review, "no_reply")}>{btn("close")}</Button>
+            <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "var(--tq-warning, #867f74)", borderColor: "var(--tq-border, #d6cec1)" }} title={`${btnHint("close")} - this draft is not sent`} onClick={() => decide(review, "no_reply")}>{btn("close")}</Button>
           </>}
           <Box sx={{ flex: 1 }} />
           <Button size="small" onClick={() => onNavigate?.("Assistant")}>All that needs you</Button>
@@ -636,7 +636,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
           <Button size="small" variant="contained" onClick={() => openTask(focusedTask.TaskId)}>Open task</Button>
           <Button size="small" variant="outlined" disabled={!!busy} startIcon={<DoneRoundedIcon />}
             title={btnHint("close")} onClick={() => settleTask(focusedTask, "done")}>{busy.includes("done") ? "Marking done…" : btn("close")}</Button>
-          <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }}
+          <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "var(--tq-warning, #867f74)", borderColor: "var(--tq-border, #d6cec1)" }}
             onClick={() => settleTask(focusedTask, "dropped")}>Dismiss</Button>
         </div>
       </>}
@@ -932,7 +932,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {/* A PLAYBOOK DRAFTED HERE IS APPROVED HERE (the owner, 2026-10-21): Close out, where it also waits, is hidden while the
               conversation is live - Approve was reachable only after a Stop and save nothing said to press */}
           {!dock && !!drafts?.length && (
-            <Box data-tq-playbook-drafts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }}>
+            <Box data-tq-playbook-drafts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
               <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>
                 Approve saves this playbook to Reports → Playbooks, and triage starts matching new mail against its when line. Nothing is sent to anyone.</Typography>
               {drafts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}
@@ -941,7 +941,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {/* ...AND A BROWSER ACT HELD HERE IS APPROVED HERE (2026-10-25): its card waited in the hidden Close out, and Stop and save, the
               only road to it, closed the very browser Approve runs in. The same card, where the owner already looks. */}
           {!dock && !!acts?.length && (
-            <Box data-tq-browser-acts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }}>
+            <Box data-tq-browser-acts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
               <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>{heldActsLine(acts)}</Typography>
               {acts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}
             </Box>
@@ -963,7 +963,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
           {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}
           {!dock && nextAt?.next && freshNext(nextAt.reviews) && !summed && !working && !cardTurn(nextAt.reviews, (messages || []).map((m) => m.id)) && (!chat || messages?.at(-1)?.role !== "assistant") && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
-            <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
+            <Typography component="span" sx={{ display: "block", color: "var(--tq-text, #292824)", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
           {/* ...the branch's landing, where the task works in a checkout (landing.has_checkout): in its turn (LandingCtx), here only before any */}
           {!dock && !landAt && landNode}
           {/* ...A START HELD FOR A NEW SENDER says so under what came in, with its Run anyway (HeldStart, the owner, 2026-11-09) */}
@@ -1436,7 +1436,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       </Box>}
       {dock && confirmNewChat && (
         <Box role="group" aria-label="Confirm new chat" sx={{ display: "flex", alignItems: "center", gap: 0.75,
-          px: 1.15, py: 0.8, flexWrap: "wrap", bgcolor: "#f8f5ee", borderBottom: `1px solid ${BORDER}` }}>
+          px: 1.15, py: 0.8, flexWrap: "wrap", bgcolor: "var(--tq-panel, #f8f5ee)", borderBottom: `1px solid ${BORDER}` }}>
           <Box sx={{ flex: 1, minWidth: 210 }}>
             <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 600 }}>Start a new chat?</Typography>
             <Typography sx={{ color: DIM, fontSize: 10.5 }}>

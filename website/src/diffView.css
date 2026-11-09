@@ -4,64 +4,64 @@
 /* LAID OUT LIKE A PULL REQUEST (DiffView, more than one file): the file list on the left stays put while the diffs scroll; on a narrow
    screen it sits on top, short, and scrolls on its own */
 .tq-dv.tq-dv-pr { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 12px; align-items: start; }
-.tq-dv-tree { position: sticky; top: 0; max-height: min(70vh, 640px); overflow: auto; border: 1px solid #e1dcd5; border-radius: 8px; background: #fbfaf7; padding: 6px 0; font-size: 12px; }
-.tq-dv-thead { display: flex; align-items: center; gap: 8px; padding: 2px 10px 6px; color: #6e685f; font-weight: 600; border-bottom: 1px solid #ece8e1; margin-bottom: 4px; }
+.tq-dv-tree { position: sticky; top: 0; max-height: min(70vh, 640px); overflow: auto; border: 1px solid var(--tq-border, #e1dcd5); border-radius: 8px; background: var(--tq-panel, #fbfaf7); padding: 6px 0; font-size: 12px; }
+.tq-dv-thead { display: flex; align-items: center; gap: 8px; padding: 2px 10px 6px; color: var(--tq-secondary, #6e685f); font-weight: 600; border-bottom: 1px solid var(--tq-border, #ece8e1); margin-bottom: 4px; }
 .tq-dv-thead .tq-dv-all { margin-left: auto; }
 .tq-dv-tgroup { padding: 2px 0; }
-.tq-dv-tdir { padding: 4px 10px 2px; color: #8b877e; font: 11px/1.4 'Cascadia Mono', Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tq-dv-tdir { padding: 4px 10px 2px; color: var(--tq-muted, #8b877e); font: 11px/1.4 'Cascadia Mono', Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tq-dv-tgen > summary { cursor: pointer; }
-.tq-dv-titem { appearance: none; width: 100%; display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 18px; border: 0; background: none; cursor: pointer; text-align: left; font: inherit; color: #292824; }
-.tq-dv-titem:hover { background: #efe9df; }
-.tq-dv-titem.tq-dv-on { background: #e5ded2; font-weight: 600; }
+.tq-dv-titem { appearance: none; width: 100%; display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 18px; border: 0; background: none; cursor: pointer; text-align: left; font: inherit; color: var(--tq-text, #292824); }
+.tq-dv-titem:hover { background: var(--tq-inset, #efe9df); }
+.tq-dv-titem.tq-dv-on { background: var(--tq-inset, #e5ded2); font-weight: 600; }
 .tq-dv-tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11.5px/1.4 'Cascadia Mono', Consolas, monospace; }
 .tq-dv-tstat { flex-shrink: 0; font-size: 10.5px; }
 .tq-dv-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .tq-dv-body .tq-dv-file { scroll-margin-top: 8px; }
-.tq-dv-gen { font-size: 10px; font-weight: 600; color: #8b877e; border: 1px solid #ddd6cb; border-radius: 99px; padding: 0 6px; }
+.tq-dv-gen { font-size: 10px; font-weight: 600; color: var(--tq-muted, #8b877e); border: 1px solid var(--tq-border, #ddd6cb); border-radius: 99px; padding: 0 6px; }
 @media (max-width: 760px) { .tq-dv.tq-dv-pr { grid-template-columns: minmax(0, 1fr); } .tq-dv-tree { position: static; max-height: 200px; } }
-.tq-dv-all button, .tq-dv-marks button { appearance: none; border: 0; background: none; padding: 0; font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1.4; color: #6e685f; cursor: pointer; }
-.tq-dv-all button:hover { color: #292824; text-decoration: underline; }
-.tq-dv-file { border: 1px solid #e1dcd5; border-radius: 8px; overflow: hidden; background: #fff; min-width: 0; }
-.tq-dv-file-row { appearance: none; width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 0; background: #f4f1ec; cursor: pointer; font: inherit; text-align: left; }
-.tq-dv-file-row:hover { background: #e9e3d8; }
-.tq-dv-chev { color: #a9a294; font-size: 10px; width: 10px; flex: 0 0 10px; }
-.tq-dv-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font: 11.5px/1.4 'Cascadia Mono', Consolas, monospace; color: #292824; }
+.tq-dv-all button, .tq-dv-marks button { appearance: none; border: 0; background: none; padding: 0; font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1.4; color: var(--tq-secondary, #6e685f); cursor: pointer; }
+.tq-dv-all button:hover { color: var(--tq-text, #292824); text-decoration: underline; }
+.tq-dv-file { border: 1px solid var(--tq-border, #e1dcd5); border-radius: 8px; overflow: hidden; background: var(--tq-panel, #fff); min-width: 0; }
+.tq-dv-file-row { appearance: none; width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 0; background: var(--tq-panel, #f4f1ec); cursor: pointer; font: inherit; text-align: left; }
+.tq-dv-file-row:hover { background: var(--tq-inset, #e9e3d8); }
+.tq-dv-chev { color: var(--tq-warning, #a9a294); font-size: 10px; width: 10px; flex: 0 0 10px; }
+.tq-dv-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font: 11.5px/1.4 'Cascadia Mono', Consolas, monospace; color: var(--tq-text, #292824); }
 .tq-dv-plus, .tq-dv-minus { font: 11px/1.4 'Cascadia Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
-.tq-dv-plus { color: #47654a; } .tq-dv-minus { color: #6b2733; }
-.tq-dv-marked { font-size: 10.5px; font-weight: 600; color: #7a2f3c; }
-.tq-dv-empty { padding: 8px 12px; color: #8b877e; font-size: 12px; }
-.tq-dv-hunk { border-top: 1px solid #ece8e1; overflow-x: auto; }
-.tq-dv-head { display: flex; align-items: center; gap: 10px; padding: 2px 10px; background: #e3e6e1; color: #6f8a6e; font: 11px/1.6 'Cascadia Mono', Consolas, monospace; }
+.tq-dv-plus { color: var(--tq-success, #47654a); } .tq-dv-minus { color: var(--tq-danger, #6b2733); }
+.tq-dv-marked { font-size: 10.5px; font-weight: 600; color: var(--tq-danger, #7a2f3c); }
+.tq-dv-empty { padding: 8px 12px; color: var(--tq-muted, #8b877e); font-size: 12px; }
+.tq-dv-hunk { border-top: 1px solid var(--tq-border, #ece8e1); overflow-x: auto; }
+.tq-dv-head { display: flex; align-items: center; gap: 10px; padding: 2px 10px; background: var(--tq-inset, #e3e6e1); color: var(--tq-success, #6f8a6e); font: 11px/1.6 'Cascadia Mono', Consolas, monospace; }
 .tq-dv-at { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-dv-marks { display: flex; gap: 2px; flex-shrink: 0; }
-.tq-dv-marks button { padding: 1px 8px; border-radius: 99px; font-weight: 600; color: #6e685f; }
-.tq-dv-marks button[aria-pressed=true][data-tq-hunk-keep] { background: #dfeade; color: #47654a; }
-.tq-dv-marks button[aria-pressed=true][data-tq-hunk-revert] { background: #f0e2e4; color: #6b2733; }
+.tq-dv-marks button { padding: 1px 8px; border-radius: 99px; font-weight: 600; color: var(--tq-secondary, #6e685f); }
+.tq-dv-marks button[aria-pressed=true][data-tq-hunk-keep] { background: var(--tq-inset, #dfeade); color: var(--tq-success, #47654a); }
+.tq-dv-marks button[aria-pressed=true][data-tq-hunk-revert] { background: var(--tq-inset, #f0e2e4); color: var(--tq-danger, #6b2733); }
 .tq-dv-reverting .tq-dv-lines { opacity: .55; }
-.tq-dv-lines { border-collapse: collapse; width: 100%; font: 11.5px/1.5 'Cascadia Mono', Consolas, monospace; color: #3d3a33; }
+.tq-dv-lines { border-collapse: collapse; width: 100%; font: 11.5px/1.5 'Cascadia Mono', Consolas, monospace; color: var(--tq-text, #3d3a33); }
 .tq-dv-lines td { padding: 0 6px; vertical-align: top; }
 /* ...a fixed gutter: inside a chat's body every child is min-width 0 (generalWorkspace.css), and the numbers ran into each other */
-.tq-dv-lines td.tq-dv-n { width: 34px; min-width: 34px !important; text-align: right; color: #a9a294; user-select: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tq-dv-lines td.tq-dv-op { width: 14px; min-width: 14px !important; padding: 0 2px !important; user-select: none; color: #8b877e; }
+.tq-dv-lines td.tq-dv-n { width: 34px; min-width: 34px !important; text-align: right; color: var(--tq-warning, #a9a294); user-select: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tq-dv-lines td.tq-dv-op { width: 14px; min-width: 14px !important; padding: 0 2px !important; user-select: none; color: var(--tq-muted, #8b877e); }
 .tq-dv-code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-.tq-dv-add { background: #dfeade; } .tq-dv-add .tq-dv-op { color: #47654a; }
-.tq-dv-del { background: #f0e2e4; } .tq-dv-del .tq-dv-op { color: #6b2733; }
-.tq-dv-note td { color: #8b877e; font-style: italic; }
-.tq-dv-kw { color: #55697a; font-weight: 600; }
-.tq-dv-str { color: #8b6f3a; }
-.tq-dv-com { color: #8b877e; font-style: italic; }
-.tq-dv-num { color: #7a5a8a; }
+.tq-dv-add { background: var(--tq-inset, #dfeade); } .tq-dv-add .tq-dv-op { color: var(--tq-success, #47654a); }
+.tq-dv-del { background: var(--tq-inset, #f0e2e4); } .tq-dv-del .tq-dv-op { color: var(--tq-danger, #6b2733); }
+.tq-dv-note td { color: var(--tq-muted, #8b877e); font-style: italic; }
+.tq-dv-kw { color: var(--tq-link, #55697a); font-weight: 600; }
+.tq-dv-str { color: var(--tq-warning, #8b6f3a); }
+.tq-dv-com { color: var(--tq-muted, #8b877e); font-style: italic; }
+.tq-dv-num { color: var(--tq-purple, #7a5a8a); }
 /* in the coding chat (GeneralWorkspace.jsx, its coding source): an edit is a step row that opens on its diff, and the Terminal a small toggle in the box */
 .tq-cc-edit { margin: 2px 0 6px; }
-.tq-cc-edit > summary { color: #3d3a33; font-weight: 500; }
-.tq-cc-diff { margin: 4px 0 6px 21px; border: 1px solid #e1dcd5; border-radius: 7px; overflow: hidden; background: #fff; }
+.tq-cc-edit > summary { color: var(--tq-text, #3d3a33); font-weight: 500; }
+.tq-cc-diff { margin: 4px 0 6px 21px; border: 1px solid var(--tq-border, #e1dcd5); border-radius: 7px; overflow: hidden; background: var(--tq-panel, #fff); }
 .tq-cc-diff > .tq-dv-hunk:first-child { border-top: 0; }
-.tq-cc-plan { list-style: none; margin: 4px 0 8px; padding: 6px 10px; border: 1px solid #e1dcd5; border-radius: 7px; background: #fff; }
-.tq-cc-plan li { display: flex; align-items: flex-start; gap: 6px; padding: 2px 0; color: #3d3a33; font-size: 13px; line-height: 1.45; }
-.tq-cc-plan li > svg { flex: 0 0 auto; margin-top: 2px; color: #8a857b; }
-.tq-cc-plan li[data-tq-plan-item=done] { color: #77736b; }
-.tq-cc-plan li[data-tq-plan-item=done] > svg { color: #3f7a4f; }
+.tq-cc-plan { list-style: none; margin: 4px 0 8px; padding: 6px 10px; border: 1px solid var(--tq-border, #e1dcd5); border-radius: 7px; background: var(--tq-panel, #fff); }
+.tq-cc-plan li { display: flex; align-items: flex-start; gap: 6px; padding: 2px 0; color: var(--tq-text, #3d3a33); font-size: 13px; line-height: 1.45; }
+.tq-cc-plan li > svg { flex: 0 0 auto; margin-top: 2px; color: var(--tq-muted, #8a857b); }
+.tq-cc-plan li[data-tq-plan-item=done] { color: var(--tq-muted, #77736b); }
+.tq-cc-plan li[data-tq-plan-item=done] > svg { color: var(--tq-success, #3f7a4f); }
 .tq-cc-plan li[data-tq-plan-item=now] { font-weight: 600; }
 /* the agent's screen, while it asks (GeneralWorkspace): a card in the stream with the live terminal in it */
-.tq-cc-screen { flex-shrink: 0; margin: 8px 0 12px; border: 1px solid #dfdbd3; border-radius: 10px; overflow: hidden; background: #fbfaf7; }
-.tq-cc-screen-head { padding: 7px 12px; font-size: 13px; font-weight: 600; color: #292824; border-bottom: 1px solid #ece6da; }
+.tq-cc-screen { flex-shrink: 0; margin: 8px 0 12px; border: 1px solid var(--tq-border, #dfdbd3); border-radius: 10px; overflow: hidden; background: var(--tq-panel, #fbfaf7); }
+.tq-cc-screen-head { padding: 7px 12px; font-size: 13px; font-weight: 600; color: var(--tq-text, #292824); border-bottom: 1px solid var(--tq-border, #ece6da); }

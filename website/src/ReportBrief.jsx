@@ -14,7 +14,7 @@ import { ChannelIcon } from "./ui.jsx";
 
 // the source's mark (evening.py: channels.CH_ICON, a task's 📌, an agent's 🤖) drawn as the rail draws that source; one it does not
 // know stays as written
-const CH = { "✉": "email", "👥": "teams", "🔧": "github", "📋": "asana", "🚨": "sentry", "📌": "assistant" }, ICON = { fontSize: 16, color: "#6e685f" };
+const CH = { "✉": "email", "👥": "teams", "🔧": "github", "📋": "asana", "🚨": "sentry", "📌": "assistant" }, ICON = { fontSize: 16, color: "var(--tq-secondary, #6e685f)" };
 const Mark = ({ m }) => {
   const k = m.replace(/\uFE0F/g, "");
   return k === "🗓" ? <EventIcon sx={ICON} /> : k === "💬" ? <ChatBubbleOutlineIcon sx={ICON} /> : k === "🤖" ? <TerminalIcon sx={ICON} />

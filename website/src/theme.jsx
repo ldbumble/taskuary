@@ -3,17 +3,18 @@
 // type, no decoration that carries meaning.
 import { createTheme } from "@mui/material/styles";
 import { WORD } from "./lanes.js";
+import { DARK, darkVariables } from "./appPalette.js";
 
 // Contrast is the design: near-black ink, secondary text you can actually read, and the
 // gray reserved for what is truly tertiary. The old DIM/FAINT washed the review panel's
 // blurbs into fog at README scale - quiet, not illegible.
-export const BG = "#f6f4f1";           // page canvas - a cool paper, not grey
-export const PANEL = "#fffdfb";        // cards - warm white, not clinical white
-export const PANEL2 = "#e9e3d8";       // inset panels / code-ish blocks
-export const BORDER = "#e1dcd5";
-export const INK = "#262521";          // primary text - near black, faintly warm
-export const DIM = "#4d4a43";          // secondary text - readable, not fog
-export const FAINT = "#6e685f";        // tertiary (timestamps, rails) - twice darkened: the first two
+export const BG = "var(--tq-canvas, #f6f4f1)";           // page canvas - a cool paper, not grey
+export const PANEL = "var(--tq-panel, #fffdfb)";        // cards - warm white, not clinical white
+export const PANEL2 = "var(--tq-inset, #e9e3d8)";       // inset panels / code-ish blocks
+export const BORDER = "var(--tq-border, #e1dcd5)";
+export const INK = "var(--tq-text, #262521)";          // primary text - near black, faintly warm
+export const DIM = "var(--tq-secondary, #4d4a43)";          // secondary text - readable, not fog
+export const FAINT = "var(--tq-muted, #6e685f)";        // tertiary (timestamps, rails) - twice darkened: the first two
                                        // passes still read as fog against oat paper
 export const ACCENT = "#55697a";       // slate blue - the brand: chrome, links, buttons
 export const ACCENT2 = "#6f8a6e";      // sage - section labels, secondary emphasis
@@ -28,8 +29,8 @@ export const LEVEL_COLOR = { task: PALETTE.sage, watching: PALETTE.oat, later: P
 // important the brand's slate, urgent the one loud oxblood - no new hues
 export const PRIORITY_COLOR = { regular: PALETTE.sage, important: PALETTE.slate, urgent: PALETTE.oxblood };
 // ...and the pale tint of each, for the row on the table: green in Tasks, brass in Reports (the owner, 2026-10-06)
-export const LEVEL_TINT = { task: "#e5ece2", watching: "#efece6", later: "#efece6",
-  reports: "#ede7da", ideas: "#ede7da", fyi: "#ece8e1" };
+export const LEVEL_TINT = { task: "var(--tq-tint-sage, #e5ece2)", watching: "var(--tq-tint-neutral, #efece6)", later: "var(--tq-tint-neutral, #efece6)",
+  reports: "var(--tq-tint-brass, #ede7da)", ideas: "var(--tq-tint-brass, #ede7da)", fyi: "var(--tq-tint-neutral, #ece8e1)" };
 // the primary was a slate-to-sage gradient; the brand is slate, solid
 export const GRADIENT = ACCENT;
 // The assistant shares the sync control's slate-to-sage family: the sage end identifies its
@@ -39,9 +40,9 @@ export const GRADIENT = ACCENT;
 // like the rest of the colors"). Identity comes from the dot, the icon and the label, which stay
 // sage; the surfaces stay quiet. Timeline rows take no assistant tint at all.
 // THE BRAND IS SLATE (variant C, 2026-10-06): the mark, the assistant's circle and every primary button
-export const BRAND = { solid: PALETTE.slate, deep: "#46586a", ink: "#41525f", tint: "#e4e9ee", bd: "#cbd4dc" };
+export const BRAND = { solid: PALETTE.slate, deep: "#46586a", ink: "var(--tq-link, #41525f)", tint: "var(--tq-tint-slate, #e4e9ee)", bd: "var(--tq-edge-slate, #cbd4dc)" };
 export const ASSISTANT = {
-  solid: "#7d9a7c", ink: "#526b53", tint: "#f3f5f0", bd: "#dde1d6", gradient: GRADIENT,
+  solid: "#7d9a7c", ink: "var(--tq-success, #526b53)", tint: "var(--tq-tint-sage, #f3f5f0)", bd: "var(--tq-edge-sage, #dde1d6)", gradient: GRADIENT,
 };
 
 /* The one loud colour, and the whole point of this palette: ALERT means "this is on you" and
@@ -52,9 +53,9 @@ export const ASSISTANT = {
    shares a family with the blue-grey instead of arguing with it. It is the only saturated thing
    on the screen. */
 export const ALERT = "#8a3646";        // oxblood - solid: dots, badges, the needs-you pill
-export const ALERT_INK = "#7a2f3c";    // text on a tint
-export const ALERT_TINT = "#f3e6e8";   // the tint, mixed toward the paper
-export const ALERT_BD = "#e0c6cb";
+export const ALERT_INK = "var(--tq-danger, #7a2f3c)";    // text on a tint
+export const ALERT_TINT = "var(--tq-tint-red, #f3e6e8)";   // the tint, mixed toward the paper
+export const ALERT_BD = "var(--tq-edge-red, #e0c6cb)";
 
 /* ── ROLES: one colour per MEANING, and nothing else decides a colour ────────────────────
    The bug this fixes is not any single hex. It is that "in progress" was wearing the
@@ -64,16 +65,16 @@ export const ALERT_BD = "#e0c6cb";
    badges, the one loud pill), an ink (text on a tint), a tint and a border. Everything that
    carries meaning reads from here; anything not in this table does not get to be coloured. */
 export const ROLES = {
-  you:     { solid: "#5f7a5f", ink: "#3f5943", tint: "#e3eadf",  bd: "#c4d2c0" },  // it is on YOU - sage, not an alarm (2026-10-06)
-  working: { solid: "#55697a", ink: "#41525f", tint: "#e4e9ee",  bd: "#cbd4dc" },  // an agent has it
-  handled: { solid: "#6f8a6e", ink: "#4c6450", tint: "#e4ebe2",  bd: "#cdd9cb" },  // done for you
-  done:    { solid: "#47654a", ink: "#3c5740", tint: "#e2ebe0",  bd: "#c9dcc8" },  // finished
-  info:    { solid: "#827356", ink: "#5f5440", tint: "#ece5d6",  bd: "#d8ccb4" },  // a report, to read - brass
-  muted:   { solid: "#7b7366", ink: "#5e574c", tint: "#ebe6de",  bd: "#d8d0c3" },  // filed, ignored - oat
+  you:     { solid: "#5f7a5f", ink: "var(--tq-success, #3f5943)", tint: "var(--tq-tint-sage, #e3eadf)",  bd: "var(--tq-edge-sage, #c4d2c0)" },  // it is on YOU - sage, not an alarm (2026-10-06)
+  working: { solid: "#55697a", ink: "var(--tq-link, #41525f)", tint: "var(--tq-tint-slate, #e4e9ee)",  bd: "var(--tq-edge-slate, #cbd4dc)" },  // an agent has it
+  handled: { solid: "#6f8a6e", ink: "var(--tq-success, #4c6450)", tint: "var(--tq-tint-sage, #e4ebe2)",  bd: "var(--tq-edge-sage, #cdd9cb)" },  // done for you
+  done:    { solid: "#47654a", ink: "var(--tq-success, #3c5740)", tint: "var(--tq-tint-sage, #e2ebe0)",  bd: "var(--tq-edge-sage, #c9dcc8)" },  // finished
+  info:    { solid: "#827356", ink: "var(--tq-warning, #5f5440)", tint: "var(--tq-tint-brass, #ece5d6)",  bd: "var(--tq-edge-brass, #d8ccb4)" },  // a report, to read - brass
+  muted:   { solid: "#7b7366", ink: "var(--tq-secondary, #5e574c)", tint: "var(--tq-tint-neutral, #ebe6de)",  bd: "var(--tq-border, #d8d0c3)" },  // filed, ignored - oat
   // PASSED is still yours, only put off - "your task" softened, never fyi's beige (the owner, 2026-09-28: "in rail
   // fyi/passed have same color?" - the one read as nothing to do, the other is work waiting on you)
-  passed:  { solid: "#b58790", ink: "#86505b", tint: "#f5eaec",  bd: "#e6d2d6" },
-  bad:     { solid: "#7e2d2d", ink: "#7e2d2d", tint: "#f4e7e5",  bd: "#e2c6c2" },  // failed, rejected
+  passed:  { solid: "#b58790", ink: "var(--tq-danger, #86505b)", tint: "var(--tq-tint-red, #f5eaec)",  bd: "var(--tq-edge-red, #e6d2d6)" },
+  bad:     { solid: "#7e2d2d", ink: "var(--tq-danger, #7e2d2d)", tint: "var(--tq-tint-red, #f4e7e5)",  bd: "var(--tq-edge-red, #e2c6c2)" },  // failed, rejected
 };
 
 const role = (r, label) => ({ bg: ROLES[r].tint, fg: ROLES[r].ink, label });
@@ -135,14 +136,15 @@ export const TASK_STATUS_COLORS = {
   done: ROLES.done.solid, dropped: ROLES.muted.solid,
 };
 
-export const theme = createTheme({
+export const createAppTheme = (mode = "light") => createTheme({
   palette: {
-    mode: "light",
-    background: { default: BG, paper: PANEL },
-    primary: { main: ACCENT },
-    secondary: { main: ACCENT2 },
-    text: { primary: INK, secondary: DIM },
-    divider: BORDER,
+    mode,
+    // MUI calculates alpha/contrast from these: use real colours here, CSS vars in the views.
+    background: { default: mode === "dark" ? DARK.canvas : "#f6f4f1", paper: mode === "dark" ? DARK.panel : "#fffdfb" },
+    primary: { main: mode === "dark" ? DARK.link : ACCENT, contrastText: mode === "dark" ? DARK.canvas : "#fff" },
+    secondary: { main: mode === "dark" ? DARK.success : ACCENT2 },
+    text: { primary: mode === "dark" ? DARK.text : "#262521", secondary: mode === "dark" ? DARK.secondary : "#4d4a43" },
+    divider: mode === "dark" ? DARK.border : "#e1dcd5",
   },
   typography: {
     fontFamily: "'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
@@ -157,15 +159,16 @@ export const theme = createTheme({
   shape: { borderRadius: 8 },
   components: {
     MuiCssBaseline: { styleOverrides: {
+      ':root[data-theme="dark"]': darkVariables,
       // Windows paints a classic scrollbar - arrow buttons and all - on every box that can
       // scroll, and a box that overflows by a pixel shows up as a pair of stray arrows at
       // its edge. Thin, arrowless, the app's own colour, everywhere; nothing else changes.
       // Chromium ignores the ::-webkit-scrollbar rules once scrollbar-width is set, so the
       // standard property is for Firefox only; Edge and Chrome take the webkit rules below
-      "@supports not selector(::-webkit-scrollbar)": { "*": { scrollbarWidth: "thin", scrollbarColor: "#d3ccc1 transparent" } },
+      "@supports not selector(::-webkit-scrollbar)": { "*": { scrollbarWidth: "thin", scrollbarColor: "var(--tq-scrollbar, #d3ccc1) transparent" } },
       "b, strong": { fontWeight: 600 },
       "*::-webkit-scrollbar": { width: 8, height: 8 },
-      "*::-webkit-scrollbar-thumb": { backgroundColor: "#d3ccc1", borderRadius: 8 },
+      "*::-webkit-scrollbar-thumb": { backgroundColor: "var(--tq-scrollbar, #d3ccc1)", borderRadius: 8 },
       "*::-webkit-scrollbar-track": { background: "transparent" },
       "*::-webkit-scrollbar-button": { display: "none", width: 0, height: 0 },
       "*::-webkit-scrollbar-corner": { background: "transparent" },
@@ -193,7 +196,7 @@ export const theme = createTheme({
     // slide back across its row rather than leave the screen
     MuiTooltip: { defaultProps: { disableTouchListener: true,
       slotProps: { popper: { modifiers: [{ name: "preventOverflow", options: { altAxis: true, tether: false, padding: 8 } }] } } },
-      styleOverrides: { tooltip: { backgroundColor: INK, fontSize: 11.5, borderRadius: 6, padding: "6px 10px" } } },
+      styleOverrides: { tooltip: { backgroundColor: INK, color: BG, fontSize: 11.5, borderRadius: 6, padding: "6px 10px" } } },
     MuiDialog: {
       styleOverrides: {
         paper: { borderRadius: 16, border: `1px solid ${BORDER}`, boxShadow: "0 24px 60px rgba(30,50,38,.18)", padding: 4 },
@@ -214,17 +217,19 @@ export const theme = createTheme({
   },
 });
 
+export const theme = createAppTheme();
+
 export const mono = { fontFamily: "'IBM Plex Mono', 'Cascadia Code', Consolas, monospace" };
 // Compact modern select styling, shared by the detail-header dropdowns and the hand-off form.
-export const selSx = { fontSize: 12.5, bgcolor: "#fff", borderRadius: 2,
+export const selSx = { fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)", borderRadius: 2,
   "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER },
-  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#d8cfbe" },
+  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "var(--tq-border, #d8cfbe)" },
   "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: ACCENT } };
 export const card = { bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2, p: 1.5,
   boxShadow: "0 1px 2px rgba(30,50,38,.04)" };
 // Double-border frame: a soft gray mat around a white card (layered, Linear/Arc-style).
 // Use for the big detail surfaces - review panel, task detail - so they read as raised.
-export const frame = { p: 0.75, bgcolor: "#eae5dd", border: "1px solid #dad4cb", borderRadius: 3,
+export const frame = { p: 0.75, bgcolor: "var(--tq-inset, #eae5dd)", border: "1px solid var(--tq-border, #dad4cb)", borderRadius: 3,
   boxShadow: "0 14px 44px rgba(30,50,38,.12)" };
 // THE TASK CARD'S TWO PIECES (the cleanup, 2026-10-06). A LABEL is sentence case at the small size, never 9px spaced-out
 // capitals - those read as noise, not as structure. A STEP is a section of the one card, divided by a hairline, never a
@@ -235,7 +240,7 @@ export const frameInner = { bgcolor: PANEL, border: `1px solid ${BORDER}`, borde
 
 export const hoverable = {
   transition: "box-shadow .15s, border-color .15s",
-  "&:hover": { borderColor: "#d8cfbe", boxShadow: "0 2px 8px rgba(47,107,79,.10)", cursor: "pointer" },
+  "&:hover": { borderColor: "var(--tq-border, #d8cfbe)", boxShadow: "0 2px 8px rgba(47,107,79,.10)", cursor: "pointer" },
 };
 // Feed entrance: quiet slide-up fade, staggered per row by animationDelay at the call site.
 export const fadeIn = {
@@ -251,7 +256,7 @@ export const PILL_COLORS = {
   // `pick` carries NO meaning: it is "this is the filter you have selected", for controls that
   // choose a SUBSET rather than report a state. Source-kind filters (code, boards, alerts) are
   // that: giving them state colours said an alerts feed was failing and a code feed was busy.
-  pick: { bg: "#e6e0d5", fg: "#33302a", bd: "#d3cabb" },
+  pick: { bg: "var(--tq-tint-neutral, #e6e0d5)", fg: "var(--tq-text, #33302a)", bd: "var(--tq-border, #d3cabb)" },
   you: pill("you"), working: pill("working"), handled: pill("handled"),
   done: pill("done"), info: pill("info"), gray: pill("muted"), bad: pill("bad"),
   // kept so nothing breaks mid-rename, but pointed at the right meaning

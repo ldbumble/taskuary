@@ -7,4 +7,4 @@ export const pressKeys = (press) => (e) => {
   e.preventDefault(); press(e);
 };
 export const pressable = (press, on = true) => (on && press ? { role: "button", tabIndex: 0, onClick: press, onKeyDown: pressKeys(press) } : {});
-export const FOCUS_RING = { "&:focus-visible": { outline: "2px solid #55697a", outlineOffset: 2 } };
+export const FOCUS_RING = { "&:focus-visible": { outline: "2px solid var(--tq-link, #55697a)", outlineOffset: 2 } };

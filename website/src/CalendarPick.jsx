@@ -29,10 +29,10 @@ export function SlotPicker({ mid, act, anchor, onClose, onPick, onRefused }) {
   return (
     <Popover open={!!anchor} anchorEl={anchor} onClose={onClose} anchorOrigin={{ vertical: "bottom", horizontal: "left" }}>
       <Box sx={{ p: 1.5, display: "grid", gap: 1, width: 260 }} data-tq-slots={act}>
-        <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, color: "var(--tq-link, #41525f)" }}>
           {act === "propose" ? `Instead of ${got?.now || "that time"}…` : `${minutes} minutes for ${got?.subject || "the meeting"}…`}</Typography>
-        {!got && !err && <Typography sx={{ fontSize: 12, color: "#6b6459" }}>Reading your calendar…</Typography>}
-        {got && !got.slots?.length && <Typography sx={{ fontSize: 12, color: "#6b6459" }}>No free time in those days - pick one below.</Typography>}
+        {!got && !err && <Typography sx={{ fontSize: 12, color: "var(--tq-warning, #6b6459)" }}>Reading your calendar…</Typography>}
+        {got && !got.slots?.length && <Typography sx={{ fontSize: 12, color: "var(--tq-warning, #6b6459)" }}>No free time in those days - pick one below.</Typography>}
         <Box sx={{ display: "grid", gap: 0.5 }}>
           {(got?.slots || []).map((s) => (
             <Button key={s.start} size="small" variant="outlined" onClick={() => pick(s)} sx={{ justifyContent: "flex-start", fontSize: 12, minHeight: 28 }}>
@@ -40,19 +40,19 @@ export function SlotPicker({ mid, act, anchor, onClose, onPick, onRefused }) {
           ))}
         </Box>
         {got && <>
-          <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "#6b6459" }}>
+          <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "var(--tq-warning, #6b6459)" }}>
             Or pick a day
             <input type="date" min={iso(new Date())} value={day} onChange={(e) => setDay(e.target.value)}
-              style={{ font: "inherit", fontSize: 13, padding: "4px 6px", borderRadius: 6, border: "1px solid #d8d1c5" }} />
+              style={{ font: "inherit", fontSize: 13, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--tq-border, #d8d1c5)" }} />
           </Box>
-          {!!day && <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "#6b6459" }}>
+          {!!day && <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "var(--tq-warning, #6b6459)" }}>
             …and a time ({minutes} minutes)
             <input type="time" onBlur={(e) => e.target.value && pick({ start: `${day} ${e.target.value}`, end: plus(day, e.target.value, minutes) })}
-              style={{ font: "inherit", fontSize: 13, padding: "4px 6px", borderRadius: 6, border: "1px solid #d8d1c5" }} />
+              style={{ font: "inherit", fontSize: 13, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--tq-border, #d8d1c5)" }} />
           </Box>}
         </>}
-        <Typography sx={{ fontSize: 11, color: "#8a8378" }}>A pick is drafted for your {label("approve")} - nothing goes out before it.</Typography>
-        {err && <Typography sx={{ fontSize: 11.5, color: "#7a2f3c" }}>{err}</Typography>}
+        <Typography sx={{ fontSize: 11, color: "var(--tq-warning, #8a8378)" }}>A pick is drafted for your {label("approve")} - nothing goes out before it.</Typography>
+        {err && <Typography sx={{ fontSize: 11.5, color: "var(--tq-danger, #7a2f3c)" }}>{err}</Typography>}
       </Box>
     </Popover>
   );

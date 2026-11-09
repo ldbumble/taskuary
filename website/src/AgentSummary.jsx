@@ -62,7 +62,7 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
   const stale = staleOn(reviews, turnId);
   const Stale = () => <StaleDrafts reviews={reviews} turnId={turnId} />;
   const fate = (r) => r.Status === "sent" || r.DeliveryState === "sent" ? "sent" : r.Status === "pending" ? "" : "not sent";
-  const Drafted = () => drafted.map((r) => <Box key={r.ReviewId} data-tq-drafted-then="" sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid #dcd6ca", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
+  const Drafted = () => drafted.map((r) => <Box key={r.ReviewId} data-tq-drafted-then="" sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid var(--tq-border, #dcd6ca)", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
     <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>
       {["Drafted", who(r) && `to ${who(r)}`, fate(r)].filter(Boolean).join(" · ")}</Typography>
     <Box sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 220, overflow: "auto" }}>{r.DraftText}</Box></Box>);
@@ -104,7 +104,7 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
 // A DRAFT THE OWNER'S NEWER MESSAGE OVERTOOK (general.draft_turns `stale`): under the turn that wrote it, "Drafted at 2:48 PM, before your last
 // message", read-only - never under the newest turn's Next steps
 export const StaleDrafts = ({ reviews, turnId }) => staleOn(reviews, turnId).map((r) => <Box key={r.ReviewId} data-tq-stale-draft={r.ReviewId}
-  sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid #dcd6ca", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
+  sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid var(--tq-border, #dcd6ca)", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
   <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>
     {[draftAt(r) && `Drafted at ${fmtTime12(draftAt(r))}`, "before your last message"].filter(Boolean).join(", ")}</Typography>
   <Box sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 220, overflow: "auto" }}>{r.DraftText}</Box></Box>);
@@ -153,12 +153,12 @@ export function OneBox({ root = "form", rootProps = {}, onFiles, accept, attachB
   return <Root className="tq-aui-composer" data-tq-one-box="" {...rootProps}>
     <Tooltip title={attachBusy ? "Uploading…" : attachTitle}><span>
       <IconButton size="small" className="tq-aui-attach" data-tq-box-attach="" aria-label={attachTitle.replace(/ - .*/, "")} disabled={attachBusy} onClick={() => pick.current?.click()}
-        sx={{ width: 30, height: 30, p: 0, color: "#6e685f" }}><AttachFileIcon sx={{ fontSize: 18 }} /></IconButton></span></Tooltip>
+        sx={{ width: 30, height: 30, p: 0, color: "var(--tq-secondary, #6e685f)" }}><AttachFileIcon sx={{ fontSize: 18 }} /></IconButton></span></Tooltip>
     <input ref={pick} hidden type="file" multiple accept={accept} onChange={(e) => { onFiles([...(e.target.files || [])]); e.target.value = ""; }} />
     {/* ...what goes with the words, in one line inside the box, left of them: the item it came from first, then the files (AttachRow) */}
     {chips && <AttachRow className="tq-aui-attachments" sx={INLINE_CHIPS}>{chips}</AttachRow>}
     {input}
-    <MicButton size={18} sx={{ color: "#6b5f45", p: 0.5 }} onText={onMic} />
+    <MicButton size={18} sx={{ color: "var(--tq-warning, #6b5f45)", p: 0.5 }} onText={onMic} />
     {extra}
     {send}
   </Root>;

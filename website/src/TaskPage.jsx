@@ -190,14 +190,14 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
   return rows.map((r, ri) => r.older ? (
     <Box key={`older${ri}`} component="button" type="button" data-tq-show-older={r.older} onClick={onExpand} title={`Older messages from ${r.names}`}
       sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
-        color: ACCENT, fontSize: 12, fontWeight: 600, py: 0.35, px: 0.5, mx: -0.5, borderRadius: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+        color: "var(--tq-link, #55697a)", fontSize: 12, fontWeight: 600, py: 0.35, px: 0.5, mx: -0.5, borderRadius: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        "&:hover": { bgcolor: "var(--tq-panel, #faf8f4)" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
       Show {r.older} older <Box component="span" sx={{ color: FAINT, fontWeight: 400 }}>· {r.names}</Box></Box>
   ) : r.gap ? (onExpand ? (
     <Box key={`gap${ri}`} component="button" type="button" data-tq-conversation-gap="" onClick={onExpand} title="Show the whole conversation"
       sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
         color: FAINT, fontSize: 12, py: 0.2, px: 0.5, mx: -0.5, borderRadius: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        "&:hover": { color: INK, bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+        "&:hover": { color: INK, bgcolor: "var(--tq-panel, #faf8f4)" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
       · · · {r.gap} more - {r.names}</Box>
   ) : (
     <Typography key={`gap${ri}`} variant="caption" sx={{ display: "block", color: FAINT, fontSize: 12, py: 0.2 }} noWrap>
@@ -211,8 +211,8 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
         sx={{ appearance: "none", font: "inherit", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
           display: "grid", gridTemplateColumns: narrow ? "minmax(0, 96px) minmax(0, 1fr) auto" : { xs: "minmax(0, 88px) minmax(0, 1fr) auto", sm: "112px minmax(0, 1fr) 64px" }, columnGap: 1.25,
           alignItems: "baseline", px: 0.5, mx: -0.5, py: 0.25, borderRadius: 1, fontSize: 12.5, color: DIM, minWidth: 0,
-          ...(newest === r.m.MessageId ? { bgcolor: "#f6f1e7", color: INK, fontSize: 13.5, py: 0.6 } : {}),
-          "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+          ...(newest === r.m.MessageId ? { bgcolor: "var(--tq-inset, #f6f1e7)", color: INK, fontSize: 13.5, py: 0.6 } : {}),
+          "&:hover": { bgcolor: "var(--tq-panel, #faf8f4)" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
         <Box component="span" sx={{ color: INK, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.who}</Box>
         <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{open === r.m.MessageId ? "" : rowText(r.m, files.get(r.m.MessageId))}</Box>
         <Box component="span" sx={{ color: FAINT, textAlign: "right", whiteSpace: "nowrap", fontSize: 11.5 }}>{whenShort(r.m.SentAt)}
@@ -263,13 +263,13 @@ const COLUMNS = { display: "flex", flexDirection: "column", rowGap: 2, flex: "1 
   [`@media ${PHONE_MQ}`]: { "& > [data-tq-from]:not([data-tq-from-open]):not(:has(> [data-tq-solo-box]))": { overflowY: "hidden" } } };
 // THE SHADE AND THE FOCUS (the owner, 2026-10-25: "shading for what to focus on"): the card's body a warm shade, the one section to act on
 // white with a hairline - no heavy shadow, just white against the shade
-export const SHADE = "#f5f2ed", FOCUS_EDGE = "#e4ded4";
-export const FOCUS = { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderRadius: "10px", boxShadow: "0 1px 2px rgba(40, 30, 20, 0.04)", px: 2, py: 1.5 };
+export const SHADE = "var(--tq-inset, #f5f2ed)", FOCUS_EDGE = "var(--tq-border, #e4ded4)";
+export const FOCUS = { bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${FOCUS_EDGE}`, borderRadius: "10px", boxShadow: "0 1px 2px rgba(40, 30, 20, 0.04)", px: 2, py: 1.5 };
 // FROM AS A SIDEBAR while an agent works (item 6, the owner 2026-10-21): laid OVER the agent's left edge - absolutely placed in the steps
 // box, so nothing under it moves or resizes - from under the folded line to the foot, scrolling on its own
 // ...from the tab at the body's left edge (DRAWER_TAB) to the foot, the whole height beside it
 const FROM_SIDE = { position: "absolute", top: 0, left: 0, bottom: 0, width: "min(420px, 88%)", zIndex: 6, overflowY: "auto", scrollbarWidth: "thin",
-  borderRadius: 0, borderLeft: 0, borderTop: 0, boxShadow: "6px 0 18px rgba(38, 37, 33, 0.14)", bgcolor: "#fffdfb" };
+  borderRadius: 0, borderLeft: 0, borderTop: 0, boxShadow: "6px 0 18px rgba(38, 37, 33, 0.14)", bgcolor: "var(--tq-panel, #fffdfb)" };
 // ONE MAIN VIEW AND TWO DRAWERS, AT EVERY WIDTH (the owner, 2026-10-26: "if task view is where the task opens to it should only open on
 // that, and then right side arrow should pull out the agent/close out screens. If up to agent or close out open those with coming from
 // in left side draw"): where the task is up to (taskLayout.mainOf) is the page; Came from is a drawer on the left, the work
@@ -301,7 +301,7 @@ export const SLOT = (open, w) => ({ position: "relative", overflow: "hidden", mi
 // ...a closed body is not drawn (display none: nothing in it can be found or pressed) - but a LIVE agent's is kept laid out and only made
 // invisible, so its terminal is never measured at nothing and refitted (`keep`)
 export const SECTION = (open, w, live = false, keep = false) => ({ position: "absolute", top: 0, left: 0, bottom: 0, width: w,
-  display: open || keep ? "flex" : "none", flexDirection: "column", bgcolor: live ? "#fff" : SHADE,   // the warm ground, its cards white
+  display: open || keep ? "flex" : "none", flexDirection: "column", bgcolor: live ? "var(--tq-panel, #fff)" : SHADE,   // the warm ground, its cards white
   overflowY: "auto", scrollbarWidth: "thin", overscrollBehaviorY: "contain", overflowAnchor: "none", containerType: "inline-size",
   px: live ? 1 : { xs: 1.5, md: 2.5 }, py: live ? 0.65 : 1.5, boxSizing: "border-box",
   visibility: open ? "visible" : "hidden", opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none",
@@ -321,21 +321,21 @@ export const tabW = (w) => (w > 0 ? Math.round(Math.min(TAB_W, Math.max(TAB_MIN,
 const CHAT_VERBS = new Set(["reply", "done", "close-note", "hand", "accept_invite", "decline_invite", "propose_time", "find_time",
   "continue", "run-another", "send-general", "start-agent", "save-end", "diff", "fix", "strong-again"]);
 const MINI_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: MINI_W,
-  border: 0, bgcolor: "#fff", color: INK, display: "flex", flexDirection: "column", alignItems: "center", gap: 1.25, py: 1.5, px: 0, boxSizing: "border-box",
+  border: 0, bgcolor: "var(--tq-panel, #fff)", color: INK, display: "flex", flexDirection: "column", alignItems: "center", gap: 1.25, py: 1.5, px: 0, boxSizing: "border-box",
   "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,
-    border: `1px solid ${here ? ACCENT : BORDER}`, bgcolor: here ? ACCENT : "#fff", color: here ? "#fff" : ACCENT },
+    border: `1px solid ${here ? ACCENT : BORDER}`, bgcolor: here ? ACCENT : "var(--tq-panel, #fff)", color: here ? "#fff" : ACCENT },
   "& [data-tq-tab-dot]": { mt: "auto", width: 8, height: 8, borderRadius: 99, boxSizing: "border-box" },
-  "&:hover": { bgcolor: "#f8f6f2" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: -2 } });
+  "&:hover": { bgcolor: "var(--tq-panel, #f8f6f2)" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: -2 } });
 // ...and each closed one a TAB, white, its words horizontal ("make the text horizontal and make them a little wider"): an arrow at the top,
 // its name, three short lines of where it stands, each clamped so the tab never scrolls ("maybe a little smaller and have more summary on
 // each one") - and like a book's SPINE (the owner, 2026-10-27), at its foot over a thin rule the one status line ("✓ Sorted: ...", "✓ Done
 // · Advisor: ...") - the one the task is at has its arrow filled in the accent. No "● Up to here" and no large faint number: labels nobody
 // had explained (audit, 2026-11-05)
 const SECTION_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: "100%",
-  border: 0, bgcolor: "#fff", color: INK, textAlign: "left",
+  border: 0, bgcolor: "var(--tq-panel, #fff)", color: INK, textAlign: "left",
   display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1, px: 1.5, py: 1.75, boxSizing: "border-box", overflow: "hidden",
   "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,
-    border: `1px solid ${here ? ACCENT : BORDER}`, bgcolor: here ? ACCENT : "#fff", color: here ? "#fff" : ACCENT },
+    border: `1px solid ${here ? ACCENT : BORDER}`, bgcolor: here ? ACCENT : "var(--tq-panel, #fff)", color: here ? "#fff" : ACCENT },
   "& [data-tq-tab-name]": { fontSize: 12.5, fontWeight: 600, lineHeight: 1.35, flexShrink: 0 },
   // ...each line WHOLE or not drawn (fitTabLines): squeezed by flex, the last one in was cut mid-word and the ones under it vanished
   "& [data-tq-tab-line]": { fontSize: 11.5, lineHeight: 1.4, color: DIM, overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
@@ -343,8 +343,8 @@ const SECTION_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "p
   "& [data-tq-tab-line][data-tq-unfit]": { display: "none" },
   "& [data-tq-tab-foot]": { mt: "auto", pt: 1, borderTop: `1px solid ${FOCUS_EDGE}`, width: "100%", display: "flex", flexDirection: "column", gap: 0.5, flexShrink: 0 },
   "& [data-tq-tab-status-box]": { height: "2.8em", fontSize: 11.5, lineHeight: 1.4, display: "flex", flexDirection: "column", overflow: "hidden" },
-  "& [data-tq-tab-status]": { fontSize: 11.5, lineHeight: 1.4, color: "#5f7a5f", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
-  "&:hover": { bgcolor: "#f8f6f2" }, "&:hover [data-tq-tab-arrow]": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
+  "& [data-tq-tab-status]": { fontSize: 11.5, lineHeight: 1.4, color: "var(--tq-success, #5f7a5f)", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
+  "&:hover": { bgcolor: "var(--tq-panel, #f8f6f2)" }, "&:hover [data-tq-tab-arrow]": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
   "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: -2 } });
 // ...the TAB each drawer folds to, one design for both edges and for a live agent's Came from: the whole height of the body, 34px wide, an
 // arrow in a disc at its middle and the drawer's name read along the edge - a tint on hover, a ring on focus, and the arrow turns while the
@@ -354,13 +354,13 @@ const SECTION_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "p
 // ...and WHITE at rest, both edges (the owner, 2026-10-27: "the right side thing should be white as well, like the left sidebar - otherwise
 // you won't notice it's there"): a beige strip on the shaded body read as part of the shade; white with its hairline reads as a thing to pull
 const DRAWER_TAB = (open, right = false, lit = false) => ({ appearance: "none", font: "inherit", cursor: "pointer", flex: "0 0 34px", width: 34, p: 0, py: 1.5, border: 0,
-  [right ? "borderLeft" : "borderRight"]: `1px solid ${lit ? ACCENT : BORDER}`, bgcolor: lit ? ACCENT : open ? "#f3efe9" : "#fff", color: lit ? "#fff" : INK,
+  [right ? "borderLeft" : "borderRight"]: `1px solid ${lit ? ACCENT : BORDER}`, bgcolor: lit ? ACCENT : open ? "var(--tq-inset, #f3efe9)" : "var(--tq-panel, #fff)", color: lit ? "#fff" : INK,
   display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 1.25, minHeight: 0, overflow: "hidden",
-  "& [data-tq-from-chevron]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, bgcolor: "#fff",
-    border: `1px solid ${lit ? "#fff" : BORDER}`, color: ACCENT, fontSize: 21, lineHeight: 1, fontWeight: 600 },
+  "& [data-tq-from-chevron]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, bgcolor: "var(--tq-panel, #fff)",
+    border: `1px solid ${lit ? "var(--tq-border, #fff)" : BORDER}`, color: "var(--tq-link, #55697a)", fontSize: 21, lineHeight: 1, fontWeight: 600 },
   "& [data-tq-from-words]": { writingMode: "vertical-rl", transform: right ? "none" : "rotate(180deg)", fontSize: 12.5, fontWeight: 600, letterSpacing: ".02em",
     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minHeight: 0 },
-  "&:hover": { bgcolor: lit ? "#46586a" : "#f3efe9" }, "&:hover [data-tq-from-chevron]": lit ? {} : { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
+  "&:hover": { bgcolor: lit ? "#46586a" : "var(--tq-inset, #f3efe9)" }, "&:hover [data-tq-from-chevron]": lit ? {} : { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
   "&:focus-visible": { outline: `2px solid ${lit ? INK : ACCENT}`, outlineOffset: -2 },
   ...(lit && !open ? { "@keyframes tqTabPeek": { "0%, 100%": { transform: "none" }, "50%": { transform: `translateX(${right ? -5 : 5}px)` } },
     animation: "tqTabPeek .6s ease-in-out .5s 2", "@media (prefers-reduced-motion: reduce)": { animation: "none" } } : {}) });
@@ -369,8 +369,8 @@ const PHONE_FROM = (open) => (open ? {} : { [`@media ${PHONE_MQ}`]: { maxHeight:
   maskImage: "linear-gradient(#000 70%, transparent)", WebkitMaskImage: "linear-gradient(#000 70%, transparent)" } });
 // the repo is a filter like the others, but it opens a picker rather than a menu of values
 const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py: 0, px: 1.25,
-  borderRadius: 13, bgcolor: "#f4f1ec", color: INK, borderColor: BORDER,
-  "&:hover": { borderColor: "#d8cfbe", bgcolor: "#f4f1ec" } };
+  borderRadius: 13, bgcolor: "var(--tq-panel, #f4f1ec)", color: INK, borderColor: BORDER,
+  "&:hover": { borderColor: "var(--tq-border, #d8cfbe)", bgcolor: "var(--tq-panel, #f4f1ec)" } };
 const barBtn = { minHeight: 34, py: 0, px: 1.6, fontSize: 12.5, color: INK, borderColor: BORDER };
 const TRUST_PILL = { minHeight: 22, py: 0, px: 1.1, ml: 0.5, my: 0.25, fontSize: 12, lineHeight: 1.6, borderRadius: 999, textTransform: "none", color: INK, borderColor: BORDER, verticalAlign: "baseline" };
 // ...and the one filled move beside them. Every card's bar reads [ primaryBtn ] | [ barBtn ] [ barBtn ].
@@ -386,12 +386,12 @@ const BAR_FOLD_BUT = Object.fromEntries(["", "nat", "hand", "reshape", "watch"].
 // Not filled - filled is Mark done's, one strip up, and a live session has no primary.
 // ...and SMALL, because every row this bar spends is a row the terminal does not get.
 const liveCtl = { fontSize: 10.5, fontWeight: 600, height: 23, minHeight: 23, py: 0, px: 0.9,
-  borderRadius: 11.5, color: ACCENT, bgcolor: "#f1f4f7", borderColor: "#c7d2dc", whiteSpace: "nowrap",
+  borderRadius: 11.5, color: "var(--tq-link, #55697a)", bgcolor: "var(--tq-panel, #f1f4f7)", borderColor: "var(--tq-border, #c7d2dc)", whiteSpace: "nowrap",
   "& .MuiButton-startIcon": { mr: 0.5, ml: 0 },
-  "&:hover": { borderColor: ACCENT, bgcolor: "#e7eef4" } };
+  "&:hover": { borderColor: ACCENT, bgcolor: "var(--tq-inset, #e7eef4)" } };
 // the same pill as chipBtn, for a fact you read rather than a control you press
 const chipBtnStatic = { display: "inline-flex", alignItems: "center", height: 26, px: 1.25,
-  borderRadius: 13, bgcolor: "#f4f1ec", border: `1px solid ${BORDER}`, color: INK,
+  borderRadius: 13, bgcolor: "var(--tq-panel, #f4f1ec)", border: `1px solid ${BORDER}`, color: INK,
   fontSize: 11.5, fontWeight: 600 };
 
 // ── the list rail's row ──────────────────────────────────────────────────────────────────
@@ -499,15 +499,15 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
 // words that take a tint on hover; a put-down (`down`: Not a task, Remind me) quiet and secondary, a faint edge - no new hue anywhere
 const PUT_DOWN = new Set(["nat", "remind", "watch"]);
 export const rankOf = (v, head = false) => { const k = String(v?.id || "").split(":").pop(); return head ? (k === "done" ? "done" : "task") : PUT_DOWN.has(k) ? "down" : "fwd"; };
-const OUTLINED = { bgcolor: "#fff", borderColor: ACCENT, color: ACCENT };
+const OUTLINED = { bgcolor: "var(--tq-panel, #fff)", borderColor: ACCENT, color: "var(--tq-link, #55697a)" };
 export const MOVE_LOOK = {
   "& .tq-ab.fwd:not(.p), & .tq-ab.done:not(.p)": OUTLINED, "& .tq-ab.done:not(.p)": { boxShadow: `inset 0 0 0 1px ${ACCENT}` },
-  "& .tq-ab.fwd:not(.p):hover:not(:disabled), & .tq-ab.done:not(.p):hover:not(:disabled)": { bgcolor: "#f1f4f7" },
+  "& .tq-ab.fwd:not(.p):hover:not(:disabled), & .tq-ab.done:not(.p):hover:not(:disabled)": { bgcolor: "var(--tq-panel, #f1f4f7)" },
   // ...the task's own quiet moves still wear their pill (the owner, 2026-10-29: "these should have circle pills around them"): a faint edge
-  "& .tq-ab.task:not(.p)": { bgcolor: "#fff", borderColor: "#cfc8bc", color: DIM },
-  "& .tq-ab.task:not(.p):hover:not(:disabled)": { bgcolor: "#f6f4f0", borderColor: ACCENT, color: INK },
-  "& .tq-ab.down:not(.p)": { bgcolor: "transparent", borderColor: "#d8d1c5", color: FAINT },
-  "& .tq-ab.down:not(.p):hover:not(:disabled)": { bgcolor: "#fff", borderColor: ACCENT, color: INK } };
+  "& .tq-ab.task:not(.p)": { bgcolor: "var(--tq-panel, #fff)", borderColor: "var(--tq-border, #cfc8bc)", color: DIM },
+  "& .tq-ab.task:not(.p):hover:not(:disabled)": { bgcolor: "var(--tq-panel, #f6f4f0)", borderColor: ACCENT, color: INK },
+  "& .tq-ab.down:not(.p)": { bgcolor: "transparent", borderColor: "var(--tq-border, #d8d1c5)", color: FAINT },
+  "& .tq-ab.down:not(.p):hover:not(:disabled)": { bgcolor: "var(--tq-panel, #fff)", borderColor: ACCENT, color: INK } };
 const SPINE_MOVES = { ...MOVE_LOOK, display: "flex", flexDirection: "column", gap: 0.6, position: "absolute", top: `${MOVES_AT * 100}%`, left: 12, right: 12,
   pt: 1, borderTop: `1px solid ${FOCUS_EDGE}`, cursor: "default",
   // ...a spine in ratio can be narrow (tabW): its move's words wrap to a second line rather than cut to "Hand it t..."
@@ -627,7 +627,7 @@ function HeadPop({ id, icon, title, children, wide = false }) {
   const [at, setAt] = useState(null);
   return <>
     <Tooltip title={title}><IconButton size="small" data-tq-head-pop={id} aria-label={title} aria-haspopup="dialog" aria-expanded={!!at}
-      onClick={(e) => setAt(e.currentTarget)} sx={{ color: "#41525f", flexShrink: 0 }}>{icon}</IconButton></Tooltip>
+      onClick={(e) => setAt(e.currentTarget)} sx={{ color: "var(--tq-link, #41525f)", flexShrink: 0 }}>{icon}</IconButton></Tooltip>
     <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
       transformOrigin={{ vertical: "top", horizontal: "right" }} slotProps={{ paper: { "data-tq-head-pop-body": id, sx: { p: 1.5, width: wide ? 760 : 380, maxWidth: "92vw", maxHeight: wide ? "75vh" : "60vh", overflowY: "auto" } } }}>
       {at && children}</Popover>
@@ -636,7 +636,7 @@ function HeadPop({ id, icon, title, children, wide = false }) {
 // ...an icon's own words, there for a reader and a test, never drawn
 const HIDDEN_WORDS = { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" };
 const STRIP_ARROW = { appearance: "none", font: "inherit", cursor: "pointer", width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0,
-  fontSize: 15, lineHeight: 1, border: `1px solid ${BORDER}`, bgcolor: "#fff", color: ACCENT, p: 0,
+  fontSize: 15, lineHeight: 1, border: `1px solid ${BORDER}`, bgcolor: "var(--tq-panel, #fff)", color: "var(--tq-link, #55697a)", p: 0,
   "&:hover": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
 // ...`name` and `keys` for an item's own sections (ItemSections: Came from | Report); `task`: where the task's one row of buttons stands
 export function PaneStrip({ sec, skip, onFold, fold = (to) => to, name = SEC_NAME[sec], keys = TASK_KEYS, task = null }) {
@@ -645,7 +645,7 @@ export function PaneStrip({ sec, skip, onFold, fold = (to) => to, name = SEC_NAM
     title={`Fold ${name} back to its tab`} sx={STRIP_ARROW} onClick={() => onFold(a.to)}>{a.mark}</Box>;
   return (
     <Box data-tq-pane-strip={sec} sx={{ position: "absolute", top: 0, left: 0, right: 0, height: STRIP_H, zIndex: 2,
-      boxSizing: "border-box", display: "flex", alignItems: "center", gap: 1, px: 1.5, bgcolor: "#fff", borderBottom: `1px solid ${FOCUS_EDGE}`,
+      boxSizing: "border-box", display: "flex", alignItems: "center", gap: 1, px: 1.5, bgcolor: "var(--tq-panel, #fff)", borderBottom: `1px solid ${FOCUS_EDGE}`,
       // ...a pane ~240px wide (a 900px desk, useStackBelow) gives its name's room to its moves: Mark done and the ▾ whole, the name still read out
       containerType: "inline-size", "@container (max-width: 280px)": { "& [data-tq-strip-name]": HIDDEN_WORDS } }}>
       {arrows.filter((a) => a.side === "left").map(arrow)}
@@ -726,7 +726,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
       <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{task.DoneWhen}</Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 0.6, flexWrap: "wrap" }}>
         {/* while they are read the line says nothing rather than something untrue; a failed read says so, with its way past it */}
-        {stepsFailed && !steps ? <Typography variant="caption" role="alert" sx={{ color: "#7a2f3c" }}>{"The steps didn't load. "}
+        {stepsFailed && !steps ? <Typography variant="caption" role="alert" sx={{ color: "var(--tq-danger, #7a2f3c)" }}>{"The steps didn't load. "}
             <Button size="small" variant="text" onClick={load} sx={{ fontSize: 11, textTransform: "none", minWidth: 0, p: 0, verticalAlign: "baseline" }}>{btn("try_again")}</Button></Typography>
           : <Typography variant="caption" data-tq-steps={steps ? list.length : "reading"} sx={{ color: FAINT, minWidth: 90 }}>{!steps ? "" : list.length ? `${done} of ${list.length} steps done` : "no steps yet"}</Typography>}
         <Typography variant="caption" sx={{ color: FAINT }}>by</Typography>
@@ -742,7 +742,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, py: 0.35 }}>
           <Typography variant="caption" sx={{ color: FAINT, width: 16, fontVariantNumeric: "tabular-nums" }}>{k + 1}</Typography>
           <Checkbox size="small" checked={!!s.done} onChange={() => tick(s)} disabled={!!s.ref} inputProps={{ "aria-label": `Step ${k + 1} done` }}
-            sx={{ p: 0.25, color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "#6f8a6e" } }} />
+            sx={{ p: 0.25, color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "var(--tq-success, #6f8a6e)" } }} />
           <Typography variant="body2" sx={{ flex: 1, color: s.done ? FAINT : INK, textDecoration: s.done ? "line-through" : "none" }}>{s.text}</Typography>
           {s.who && <Typography variant="caption" sx={{ color: FAINT }}>{s.who}</Typography>}
           {s.ref
@@ -762,7 +762,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
           sx={{ "& .MuiInputBase-root": { fontSize: 12 } }} />
         <Button size="small" variant="outlined" onClick={add} disabled={!draft.trim()} sx={{ fontSize: 11, textTransform: "none" }}>Add</Button>
       </Box>
-      {stepErr && <Typography variant="caption" role="alert" sx={{ color: "#7a2f3c", display: "block", mt: 0.4 }}>{stepErr}</Typography>}
+      {stepErr && <Typography variant="caption" role="alert" sx={{ color: "var(--tq-danger, #7a2f3c)", display: "block", mt: 0.4 }}>{stepErr}</Typography>}
     </Box>
   );
 }
@@ -1969,7 +1969,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             it (B3, 2026-10-29: a known sender's mail can be the phish too) */}
                         {dangerOf(detail) && (
                           <Typography variant="body2" data-tq-danger="" title={dangerAimOf(detail) === "owner" ? dangerOf(detail) : undefined}
-                            sx={{ color: ALERT, mt: 0.3, fontSize: 12.5, overflowWrap: "anywhere" }}>
+                            sx={{ color: "var(--tq-danger, #8a3646)", mt: 0.3, fontSize: 12.5, overflowWrap: "anywhere" }}>
                             {dangerLine(dangerOf(detail), dangerAimOf(detail))}
                           </Typography>
                         )}
@@ -1978,9 +1978,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {sources.length > 0 ? (
                           <Box ref={cameFromRef} sx={{ mt: 0.5, minWidth: 0, scrollMarginTop: 8 }}>
                             {sources.map((g, gi) => (
-                              <Box key={g.key} data-tq-conversation="" sx={{ py: 0.9, borderTop: gi ? "1px solid #ece7e0" : 0, minWidth: 0 }}>
+                              <Box key={g.key} data-tq-conversation="" sx={{ py: 0.9, borderTop: gi ? "1px solid var(--tq-border, #ece7e0)" : 0, minWidth: 0 }}>
                                 <Box sx={{ display: "grid", gridTemplateColumns: "24px minmax(0, 1fr)", columnGap: 1, rowGap: 0.15, minWidth: 0 }}>
-                                  <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                                  <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "var(--tq-inset, #f1eee8)", display: "grid", placeItems: "center", flexShrink: 0 }}>
                                     <ChannelIcon channel={g.channel} sx={{ fontSize: 14 }} /></Box>
                                   <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0, flexBasis: { xs: "calc(100% - 40px)", sm: "auto" } }} title={g.title}>{g.title}</Typography>
                                   <Typography noWrap variant="caption" sx={{ color: DIM, fontSize: 11, gridColumn: 2, minWidth: 0 }}>{groupMeta(g)}</Typography>
@@ -2002,7 +2002,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                              Run now, the assistant, your phone (the owner, 2026-10-16: "what does it show triggered it in the task card?") */
                           <Box data-tq-workflow-origin="" sx={{ mt: 0.5, py: 0.9,
                             display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: fromWorkflow.steps ? "wrap" : "nowrap" } }}>
-                            <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                            <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "var(--tq-inset, #f1eee8)", display: "grid", placeItems: "center", flexShrink: 0 }}>
                               <ChannelIcon channel="workflow" sx={{ fontSize: 14 }} /></Box>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
                               <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13 }} title={fromWorkflow.title}>Workflow · {fromWorkflow.title}</Typography>
@@ -2036,13 +2036,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // is brought into view rather than opening unseen.
   const pickOnAlert = (p, sx = {}) => p.key === "repo" && (
     <Button size="small" variant="outlined" data-tq-fact-pick="repo" title={heldRepo ? heldWhy : btnHint("pick_repo")}
-      startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />} sx={{ ...chipBtn, verticalAlign: "middle", ...sx }}
+      startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "var(--tq-link, #55697a)" }} />} sx={{ ...chipBtn, verticalAlign: "middle", ...sx }}
       onClick={() => { pickRepo(); if (twoUp) openSection("agent"); requestAnimationFrame(() => document.querySelector("[data-tq-repo-picker]")?.scrollIntoView({ block: "nearest", behavior: "smooth" })); }}>
       {PICK_CODE}</Button>);
   const fromSorted = () => (
                       <Box data-tq-sorted="" title={`${detail.ref} · ${made}${triaged.at ? ` · sorted ${whenShort(triaged.at)}` : ""}`}
                         sx={{ display: "flex", gap: 1, alignItems: "flex-start", pt: 1, borderTop: `1px solid ${BORDER}` }}>
-                        <AltRouteIcon sx={{ fontSize: 15, color: ACCENT, mt: 0.2, flexShrink: 0 }} />
+                        <AltRouteIcon sx={{ fontSize: 15, color: "var(--tq-link, #55697a)", mt: 0.2, flexShrink: 0 }} />
                         <Typography sx={{ fontSize: 12, color: DIM, minWidth: 0, overflowWrap: "anywhere", lineHeight: 1.5 }}>
                           {triageSays(facts, t?.Kind || "task", triaged.why)}
                           {triaged.later > 0 && ` · ${plural(triaged.later, "later message")} joined it`}
@@ -2056,7 +2056,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...WHAT CAME IN: who, on what, when, and their words - the conversation's newest from them (the one the draft answers), else the
   // workflow that made it, else where it was made; the facts under it (its files, how hard, whose words and the trust presses)
   // ...on white, as the mail itself reads (the owner, 2026-11-01: "shouldn't the came from full email be white") - the pane's tint is chrome
-  const CARD = { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderRadius: "12px", px: 2, py: 1.75, minWidth: 0, display: "flex", flexDirection: "column", gap: 0.75 };
+  const CARD = { bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${FOCUS_EDGE}`, borderRadius: "12px", px: 2, py: 1.75, minWidth: 0, display: "flex", flexDirection: "column", gap: 0.75 };
   const cardHead = { fontSize: 12, fontWeight: 600, color: DIM };
   const cameSummary = cameIn ? String(triaged.why || "").trim() : "";
   const fromCards = () => (
@@ -2078,7 +2078,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               : rowText(cameIn, sourceFiles.get(cameIn.MessageId)) || cleanText(cameIn.ReadText || cameIn.BodyText || "")}</Typography>}
           {/* ...and the way to the whole of it is a word you can see, not only a click on the text (the owner, 2026-10-28) */}
           {!flow && <Link component="button" type="button" underline="hover" data-tq-came-in-more="" aria-expanded={cameInFull}
-            onClick={() => setCameInFull((v) => !v)} sx={{ display: "block", fontSize: 12.5, color: ACCENT, mt: 0.4, textAlign: "left" }}>
+            onClick={() => setCameInFull((v) => !v)} sx={{ display: "block", fontSize: 12.5, color: "var(--tq-link, #55697a)", mt: 0.4, textAlign: "left" }}>
             {cameInFull ? "Show less" : "Show the whole email"}</Link>}
           {!flow && cameInFull && typeof cameIn.MessageId === "number" && <Attachments messageId={cameIn.MessageId} dense original={cameIn.SourceLink} />}
         </> : !sources.length && fromWorkflow ? fromConvs() : <Typography sx={{ fontSize: 13, color: DIM }}>{detail.ref} · {made}</Typography>}
@@ -2328,7 +2328,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {canContinue && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
         <Button size="small" variant={canContinue ? "outlined" : "contained"} disableElevation
           sx={canContinue ? barBtn : primaryBtn}
-          startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue ? "#6f8a6e" : undefined }} />}
+          startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue ? "var(--tq-success, #6f8a6e)" : undefined }} />}
           title="A fresh agent, with new instructions if you want. It gets what the last one saved, not its whole conversation."
           onClick={() => setRestartOpen(true)}>{labelOfRow("run-another")}</Button>
       </>}
@@ -2718,7 +2718,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           "sending" keeps it mounted behind, so a send that fails brings back what was typed */}
       {handInPane && handoff && <Box data-tq-handoff-card="" sx={{ ...FOCUS, mt: 1, mb: 0.5, display: handoff === true ? "block" : "none" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-          <ForwardToInboxIcon sx={{ fontSize: 17, color: "#55697a" }} />
+          <ForwardToInboxIcon sx={{ fontSize: 17, color: "var(--tq-link, #55697a)" }} />
           <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, flex: 1 }}>Hand this to a person</Typography>
           <IconButton aria-label="Close handoff" size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
         </Box>
@@ -2733,7 +2733,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         <Box sx={{ mt: 0.5 }}>
           {/* THE INVITE, AND WHAT IT CLASHES WITH (calwrite.of_task), over the row's Accept / Decline / Propose a new time */}
           {calAsk?.invite && <Typography data-tq-invite="" variant="body2" sx={{ mb: 1, color: INK }}>{calAsk.line}
-            {!!calAsk.clash && <Box component="span" sx={{ color: "#7a2f3c", fontWeight: 600 }}> - it {calAsk.clash}</Box>}</Typography>}
+            {!!calAsk.clash && <Box component="span" sx={{ color: "var(--tq-danger, #7a2f3c)", fontWeight: 600 }}> - it {calAsk.clash}</Box>}</Typography>}
           {/* the emails that close it (slots.py), where a task's close is decided - each with its own draft */}
           <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={detail?.reviews || []}
             onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
@@ -2815,7 +2815,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mt: 0.6, flexWrap: "wrap", minWidth: 0 }}>
                   <Typography sx={{ color: ACCENT2, fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>
                   {replyCc.map((a) => (
-                    <Box key={a} sx={{ px: 0.8, py: 0.15, borderRadius: 99, bgcolor: "#eef1ec", border: "1px solid #d9e0d6" }}>
+                    <Box key={a} sx={{ px: 0.8, py: 0.15, borderRadius: 99, bgcolor: "var(--tq-inset, #eef1ec)", border: "1px solid var(--tq-border, #d9e0d6)" }}>
                       <Typography sx={{ fontSize: 11.5, color: INK }}>{a}</Typography>
                     </Box>
                   ))}
@@ -2945,14 +2945,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   provenance line moved into the card (Came from, under its messages), where you go
                   and look at it rather than read it every time. */}
               <Box data-tq-task-head="" sx={{ px: liveSession ? 1.5 : 1.75, py: 0.7,
-                bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+                bgcolor: "var(--tq-panel, #fff)", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
                 {/* on a phone the strip WRAPS: ref and title keep the first line, the controls take the next - one line
                     pushed Next, Expand and the X off the right edge (the canvas redesign's phone pass, 2026-09-29) */}
                 {/* ...only while there ARE controls to wrap. On the assistant's canvas there are none up here, and the strip still
                     wrapped: Expand and the X took a row of their own under a cut title (the 2026-10-07 design pass) */}
                 <Box sx={{ display: "flex", gap: 0.9, rowGap: 0.5, alignItems: "center",
                   flexWrap: headControls ? { xs: "wrap", sm: "nowrap" } : "nowrap" }}>
-                  <Typography sx={{ color: "#41525f", fontVariantNumeric: "tabular-nums", flexShrink: 0,
+                  <Typography sx={{ color: "var(--tq-link, #41525f)", fontVariantNumeric: "tabular-nums", flexShrink: 0,
                     letterSpacing: ".015em", fontWeight: 600, fontSize: 11.5 }}>{detail.ref}</Typography>
                   {/* NO CHIPS BESIDE THE TITLE (the redesign, owner-approved 2026-10-21): what triage made of it is the last line of From,
                       and the state is the one pill at the right - the title has the row */}
@@ -2975,20 +2975,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         title={markDoneHint}
                         disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : labelOfRow("done")}</Button>
                       <Tooltip title={`${labelOfRow("nat")}. ${NAT_TITLE}`}>
-                        <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={notATask}>
+                        <IconButton size="small" sx={{ color: "var(--tq-danger, #7a2f3c)" }} onClick={notATask}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
                       <RemindMe task={t} compact onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession} />
                       <Tooltip title={`${labelOfRow("watch", watching ? "on" : null)} - ${hintOfRow("watch", watching ? "on" : null)}`}>
-                        <IconButton size="small" sx={{ color: "#55697a" }} onClick={watchIt} data-tq-verb="watch">
+                        <IconButton size="small" sx={{ color: "var(--tq-link, #55697a)" }} onClick={watchIt} data-tq-verb="watch">
                           <VisibilityOutlinedIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
                       <Tooltip title={`${labelOfRow("hand")} - ${hintOfRow("hand")}`}>
-                        <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
+                        <IconButton size="small" sx={{ color: "var(--tq-link, #55697a)" }} onClick={() => setHandoff(true)}>
                           <ForwardToInboxIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
                       <Tooltip title={`${labelOfRow("reshape")} - ${hintOfRow("reshape")}`}>
-                        <IconButton size="small" sx={{ color: "#6f8a6e" }} onClick={() => setReshape(true)}>
+                        <IconButton size="small" sx={{ color: "var(--tq-success, #6f8a6e)" }} onClick={() => setReshape(true)}>
                           <CallSplitIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
                     </Box>
@@ -3015,7 +3015,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {onExpand && (
                     <Tooltip title={expanded ? (backArrow ? "Back to the conversation" : "Half the height") : "Give this the whole canvas"}>
                       <IconButton size="small" data-tq-expand="" aria-label={expanded ? (backArrow ? "Back to the chat" : "Half the height") : "Expand to the whole canvas"}
-                        aria-pressed={expanded} onClick={onExpand} sx={{ color: "#41525f", flexShrink: 0 }}>
+                        aria-pressed={expanded} onClick={onExpand} sx={{ color: "var(--tq-link, #41525f)", flexShrink: 0 }}>
                         {/* a phone's full screen goes BACK to the chat - an arrow, the way every phone says it. The SAME size
                             as the icon it replaces: 2px more re-flowed the strip and shrank the pane, a grow on the way back */}
                         {expanded ? (backArrow ? <ArrowBackIcon sx={{ fontSize: 15 }} /> : <CloseFullscreenIcon sx={{ fontSize: 15 }} />) : <OpenInFullIcon sx={{ fontSize: 15 }} />}
@@ -3123,9 +3123,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             <Box key={i.id}>
                               <Box onClick={() => tickItem(i)}
                                 sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.75, ml: -0.75, py: 0.15,
-                                  borderRadius: 1, cursor: "pointer", "&:hover": { bgcolor: "#faf8f4" }, "&:hover [data-tq-todo-note-add]": { opacity: 1 } }}>
+                                  borderRadius: 1, cursor: "pointer", "&:hover": { bgcolor: "var(--tq-panel, #faf8f4)" }, "&:hover [data-tq-todo-note-add]": { opacity: 1 } }}>
                                 <Checkbox size="small" checked={!!i.done} onChange={() => {}} tabIndex={-1}
-                                  sx={{ p: 0.25, pointerEvents: "none", color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "#6f8a6e" } }} />
+                                  sx={{ p: 0.25, pointerEvents: "none", color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "var(--tq-success, #6f8a6e)" } }} />
                                 <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, textDecoration: i.done ? "line-through" : "none", lineHeight: 1.6 }}>
                                   {i.text}
                                 </Typography>
@@ -3312,7 +3312,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* ...opened, one press back to the result */}
                   {resultShown && !failedRun && !sessionView && twoUp && !resultRest && !chatPane && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined"
                     data-tq-full-result="" aria-expanded="true" onClick={() => setResultOpen(false)}
-                    sx={{ borderRadius: 999, px: 2, fontSize: 13, fontWeight: 600, textTransform: "none", color: INK, borderColor: "#c9c3b8" }}>
+                    sx={{ borderRadius: 999, px: 2, fontSize: 13, fontWeight: 600, textTransform: "none", color: INK, borderColor: "var(--tq-border, #c9c3b8)" }}>
                     ‹ Back to the result</Button></Box>}
                   {lineAt === "top" && <WriteupLine view={writeup} hasReply={!!replyMessage} />}
                   {shows("agent") && <>
@@ -3321,7 +3321,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* AN AGENT CLOSED IT: nothing waits on you (the redesign, owner-approved 2026-10-21) - said first, over who closed it and why */}
                   {/* ...never on a chat task (the owner, 2026-11-05: "Don't want the top line nothing to do here"): the agent says it in the chat */}
                   {!chatPane && !term?.alive && t?.Status === "done" && rowState === "agentdone" && (
-                    <Typography data-tq-handled="" sx={{ color: "#47654a", fontSize: 13, fontWeight: 600, mt: 0.9 }}>Nothing to do. It's handled.</Typography>)}
+                    <Typography data-tq-handled="" sx={{ color: "var(--tq-success, #47654a)", fontSize: 13, fontWeight: 600, mt: 0.9 }}>Nothing to do. It's handled.</Typography>)}
                   {!chatPane && !term?.alive && t?.Status === "done" && detail?.closedWhy && (
                     <Typography data-tq-closed-why="" sx={{ color: INK, fontSize: 12.5, lineHeight: 1.45, mt: 0.9 }}>{detail.closedWhy}</Typography>)}
                   {/* ...and the note it was closed with, one muted line, whole on hover: opened later on its work, the note stood only in a
@@ -3425,10 +3425,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>AI</Box>&nbsp;{factBrain}</Box>}
                       {/* the repository pill only where a coding tool is connected (B3) */}
                       {!isGeneral && canCode && <Button size="small" variant="outlined" sx={chipBtn}
-                        startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
+                        startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "var(--tq-link, #55697a)" }} />}
                         title={heldRepo ? heldWhy : btnHint("pick_repo")}
                         onClick={pickRepo}>{repoOf(t) || PICK_CODE.toLowerCase()}</Button>}
-                      {!isGeneral && canCode && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - {PICK_CODE.toLowerCase()}</Typography>}
+                      {!isGeneral && canCode && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "var(--tq-danger, #6b2733)", fontWeight: 600 }}>not started - {PICK_CODE.toLowerCase()}</Typography>}
                     </Box>
                   )}
                   </>}
@@ -3436,7 +3436,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {repoPick && (
                   <Box data-tq-repo-picker="" sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
-                      <AccountTreeIcon sx={{ fontSize: 16, color: "#55697a" }} />
+                      <AccountTreeIcon sx={{ fontSize: 16, color: "var(--tq-link, #55697a)" }} />
                       <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1 }}>
                         Which code is this about?
                       </Typography>
@@ -3480,7 +3480,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     // a chat task's chat, whose box stays at the card's foot from the first second (the stress run, 2026-11-05: 485px empty under it)
                     ...(!chatPane ? { "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } } : {}) }
                     : { flex: "0 0 auto", mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 0 auto" },
-                      ...(chatBelow ? { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}),
+                      ...(chatBelow ? { bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}),
                       // ...a finished agent's chat is the rest of its Result, behind the Result heading while the Result rests on its summary
                       // (the owner, 2026-10-27) - unless it holds a question the agent is waiting on you for, which is the move itself
                       // ...or that is at work again - a turn under way is the move, never a rest (2026-10-28, CI: a working agent's chat stood hidden)
@@ -3513,7 +3513,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!sessionView && detail.runs.length > 0 && (
                   <Fold title={`Run traces · ${detail.runs.length}`}>
                     {detail.runs.map((r) => (
-                      <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#dfeade" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
+                      <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "var(--tq-inset, #dfeade)" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                           <TaskuaryMark size={13} />
                           <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} title={instructionsHint(r.AgentName) || undefined}>run {r.RunId} · {shownAgent(r)} · {r.Status}</Typography>
@@ -3521,7 +3521,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           <Typography variant="caption" sx={{ color: FAINT }}>· {timeAgo(r.StartedAt)} · by {r.DispatchedBy}</Typography>
                         </Box>
                         <RunTrace traceJson={r.TraceJson} running={r.Status === "running"} />
-                        {r.Result && <Typography variant="caption" sx={{ mt: 0.25, whiteSpace: "pre-wrap", color: "#47654a", display: "block" }}>{r.Result}</Typography>}
+                        {r.Result && <Typography variant="caption" sx={{ mt: 0.25, whiteSpace: "pre-wrap", color: "var(--tq-success, #47654a)", display: "block" }}>{r.Result}</Typography>}
                         {r.LastError && <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>{r.LastError}</Alert>}
                       </Box>
                     ))}
@@ -3540,7 +3540,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   the header carries them (headControls). */}
               {!inRow && !sessionView && (
                 <Box data-tq-task-bar="" ref={bar.ref} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "nowrap", flexShrink: 0, minWidth: 0,
-                  px: 1.75, py: 1, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff", "& > *": { flexShrink: 0, whiteSpace: "nowrap" } }}>
+                  px: 1.75, py: 1, borderTop: `1px solid ${BORDER}`, bgcolor: "var(--tq-panel, #fff)", "& > *": { flexShrink: 0, whiteSpace: "nowrap" } }}>
                   {notDone ? <>
                     {/* THE TASKS TAB LIGHTS THE ADVISOR'S VERB, the canvas's own (the design, phase A): Mark done was dark on every task */}
                     <Button size="small" variant={barLit("close") ? "contained" : "outlined"} disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
@@ -3548,23 +3548,23 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       title={markDoneHint}
                       disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : labelOfRow("done")}</Button>
                     <Button size="small" variant={barLit("remove") ? "contained" : "outlined"} disableElevation startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
-                      sx={barLit("remove") ? primaryBtn : { ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }} data-tq-bar-item="nat" style={bar.shown("nat") ? undefined : HIDE}
+                      sx={barLit("remove") ? primaryBtn : { ...barBtn, color: "var(--tq-danger, #7a2f3c)", borderColor: "var(--tq-border, #e0c6cb)" }} data-tq-bar-item="nat" style={bar.shown("nat") ? undefined : HIDE}
                       title={NAT_TITLE}
                       onClick={notATask}>{labelOfRow("nat")}</Button>
                     <RemindMe task={t} sx={barLit("defer") ? primaryBtn : barBtn} lit={barLit("defer")} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession} said={saidDay} />
                     <Button size="small" variant={barLit("watch") ? "contained" : "outlined"} disableElevation sx={barLit("watch") ? primaryBtn : barBtn}
                       data-tq-bar-item="watch" data-tq-verb="watch" style={bar.shown("watch") ? undefined : HIDE}
-                      startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 15, color: barLit("watch") ? "inherit" : "#55697a" }} />}
+                      startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 15, color: barLit("watch") ? "inherit" : "var(--tq-link, #55697a)" }} />}
                       title={hintOfRow("watch", watching ? "on" : null)} onClick={watchIt}>{labelOfRow("watch", watching ? "on" : null)}</Button>
                     <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} data-tq-bar-item="sep" style={bar.shown("sep") ? undefined : HIDE} />
                     <Button size="small" variant={barLit("forward") ? "contained" : "outlined"} disableElevation sx={barLit("forward") ? primaryBtn : barBtn}
                       data-tq-bar-item="hand" style={bar.shown("hand") ? undefined : HIDE}
-                      startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: barLit("forward") ? "inherit" : "#55697a" }} />}
+                      startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: barLit("forward") ? "inherit" : "var(--tq-link, #55697a)" }} />}
                       title="Not ours to do — the AI writes the forward, you send it."
                       onClick={() => setHandoff(true)}>{labelOfRow("hand")}</Button>
                     <Button size="small" variant={barLit("split") ? "contained" : "outlined"} disableElevation sx={barLit("split") ? primaryBtn : barBtn}
                       data-tq-bar-item="reshape" style={bar.shown("reshape") ? undefined : HIDE}
-                      startIcon={<CallSplitIcon sx={{ fontSize: 16, color: barLit("split") ? "inherit" : "#6f8a6e" }} />}
+                      startIcon={<CallSplitIcon sx={{ fontSize: 16, color: barLit("split") ? "inherit" : "var(--tq-success, #6f8a6e)" }} />}
                       title="Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats."
                       onClick={() => setReshape(true)}>{labelOfRow("reshape")}</Button>
                     <Button size="small" variant="outlined" sx={barBtn} endIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />} data-tq-bar-item="change" style={bar.shown("change") ? undefined : HIDE}
@@ -3614,13 +3614,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       <Drawer anchor="right" open={!!diffOpen && !!t} onClose={() => setDiffOpen(false)}
         PaperProps={{ sx: { width: { xs: "100%", sm: 760 }, p: 2, bgcolor: PANEL2 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-          <DifferenceIcon sx={{ fontSize: 18, color: "#6f8a6e" }} />
+          <DifferenceIcon sx={{ fontSize: 18, color: "var(--tq-success, #6f8a6e)" }} />
           <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>What has it changed?</Typography>
           {diff && !!diff.files?.length && (
             <Typography sx={{ ...mono, fontSize: 11.5, color: DIM }}>
               {plural(diff.files.length, "file")}
-              <Box component="span" sx={{ color: "#47654a", ml: 1 }}>+{diff.added}</Box>
-              <Box component="span" sx={{ color: "#6b2733", ml: 0.75 }}>−{diff.removed}</Box>
+              <Box component="span" sx={{ color: "var(--tq-success, #47654a)", ml: 1 }}>+{diff.added}</Box>
+              <Box component="span" sx={{ color: "var(--tq-danger, #6b2733)", ml: 0.75 }}>−{diff.removed}</Box>
             </Typography>
           )}
           <Tooltip title="Ask git again — the agent may have written more since you opened this">
@@ -3641,7 +3641,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               click away, and says whose it is. */}
           <Box component="button" type="button" onClick={() => { const next = diffScope === "task" ? "checkout" : "task"; setDiffScope(next);
               api.get(`/api/tasks/${selected}/diff`, { params: { scope: next } }).then((r) => setDiff(r.data)).catch(() => {}); }}
-            sx={{ ml: 1, color: "#55697a", cursor: "pointer", background: "none", border: 0, p: 0, font: "inherit", textAlign: "left", "&:hover": { textDecoration: "underline" } }}>
+            sx={{ ml: 1, color: "var(--tq-link, #55697a)", cursor: "pointer", background: "none", border: 0, p: 0, font: "inherit", textAlign: "left", "&:hover": { textDecoration: "underline" } }}>
             {diff?.scope === "pr" ? "show the agent's checkout instead" : diffScope === "task" ? `show the whole checkout${diff?.checkout_files ? ` (${plural(diff.checkout_files, "file")})` : ""}` : (diff?.pr ? "back to the pull request's diff" : "back to this task's changes")}
           </Box>
         </Typography>
@@ -3659,7 +3659,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       <Drawer anchor="right" open={handoff === true && !!t && !handInPane} onClose={() => setHandoff(false)} ModalProps={{ keepMounted: !!handoff && !handInPane }}
         PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-          <ForwardToInboxIcon sx={{ fontSize: 18, color: "#55697a" }} />
+          <ForwardToInboxIcon sx={{ fontSize: 18, color: "var(--tq-link, #55697a)" }} />
           <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
           <IconButton aria-label="Close handoff" size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
@@ -3676,7 +3676,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       <Drawer anchor="right" open={reshape === true && !!t} onClose={() => setReshape(false)} ModalProps={{ keepMounted: !!reshape }}
         PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-          <CallSplitIcon sx={{ fontSize: 18, color: "#6f8a6e" }} />
+          <CallSplitIcon sx={{ fontSize: 18, color: "var(--tq-success, #6f8a6e)" }} />
           <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
           <IconButton aria-label="Close split or merge" size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
@@ -3727,8 +3727,8 @@ const Fold = ({ title, children }) => (
 const SENT_BEAT = 900;
 const SentHere = (p) => (
   <Box data-tq-sent-here={p.id || ""} sx={{ mt: 0.75 }}>
-    <Typography sx={{ fontSize: 13.5, lineHeight: 1.5, color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere", pl: 1.5, borderLeft: "3px solid #dcd6ca" }}>{p.text}</Typography>
-    <Typography role="status" data-tq-sent-line="" sx={{ mt: 0.75, fontSize: 13, color: "#47654a", fontWeight: 600 }}>✓ {sentLine(p)}</Typography>
+    <Typography sx={{ fontSize: 13.5, lineHeight: 1.5, color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere", pl: 1.5, borderLeft: "3px solid var(--tq-border, #dcd6ca)" }}>{p.text}</Typography>
+    <Typography role="status" data-tq-sent-line="" sx={{ mt: 0.75, fontSize: 13, color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ {sentLine(p)}</Typography>
   </Box>
 );
 

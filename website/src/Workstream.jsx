@@ -52,11 +52,11 @@ export const WorkstreamSelect = ({ taskId, value, onDone }) => {
       <LayersIcon sx={{ fontSize: 15, color: DIM }} />
       <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>workstream</Typography>
       <select aria-label="which workstream" value={value?.slug || ""} disabled={busy} onChange={(e) => pick(e.target.value)}
-        style={{ fontSize: 12.5, padding: "3px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "#fff", color: INK, minWidth: 180 }}>
+        style={{ fontSize: 12.5, padding: "3px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "var(--tq-panel, #fff)", color: INK, minWidth: 180 }}>
         {!value?.slug && <option value="">not placed yet…</option>}
         {xs.map((w) => <option key={w.slug} value={w.slug}>{w.name}{w.personal ? " (personal)" : ""}</option>)}
       </select>
-      {err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
+      {err && <Typography variant="caption" sx={{ color: "var(--tq-danger, #6b2733)" }}>{err}</Typography>}
     </Box>
   );
 };

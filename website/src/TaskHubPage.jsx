@@ -9,7 +9,7 @@ import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import { pollWhileVisible } from "./visible.js";
 import { holdLive, onLive } from "./live.js";
 import { covers, mine, seqOf } from "./liveSeq.js";
-import { ThemeProvider, CssBaseline } from "@mui/material";
+import { ThemeToggle } from "./AppThemeProvider.jsx";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import GridViewIcon from "@mui/icons-material/GridViewOutlined";
 import SportsEsportsIcon from "@mui/icons-material/SportsEsportsOutlined";
@@ -19,7 +19,7 @@ import api from "./api";
 import { quitTitle, stoppedLines } from "./appQuit.js";
 import { track } from "./demoTrack";
 import { fmtStamp } from "./dates.js";
-import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRAND } from "./theme.jsx";
+import { ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRAND } from "./theme.jsx";
 import { lazyView } from "./lazyView.jsx";
 const BoardView = lazyView(() => import("./BoardView.jsx"));   // the Board is a tab away from the first screen
 import { BOARD, canvasRequestFromHash } from "./canvasLinks.js";
@@ -107,7 +107,7 @@ function Bell({ onGo, onAsk }) {
     <>
       <Tooltip title={n ? `${plural(n, "thing")} failing — click to see` : news.length ? news[news.length - 1].title : "Nothing is failing"}>
         <IconButton size="small" onClick={(e) => { setEl(e.currentTarget); load(); }} sx={{ position: "relative" }}>
-          {n ? <NotificationsActiveIcon sx={{ fontSize: 18, color: ALERT }} /> : <NotificationsNoneIcon sx={{ fontSize: 18, color: DIM }} />}
+          {n ? <NotificationsActiveIcon sx={{ fontSize: 18, color: "var(--tq-danger, #8a3646)" }} /> : <NotificationsNoneIcon sx={{ fontSize: 18, color: DIM }} />}
           {!n && news.length > 0 && (
             <Box component="span" sx={{ position: "absolute", top: 3, right: 3, width: 7, height: 7, borderRadius: 99, bgcolor: "#47654a" }} />
           )}
@@ -199,9 +199,9 @@ function DemoBadge({ demo }) {
   return (
     <Tooltip title={`Everything here is invented${demo.owner ? ` - you are ${demo.owner}, who does not exist` : ""}: the people, the mail, the agents. Nothing sends, nothing connects, and no real system is reachable from this page.`}>
       <Box sx={{ display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 0.5, px: 0.9, py: 0.3, borderRadius: 99,
-        flexShrink: 0, border: "1px solid #d8cfbe", bgcolor: "#f1ead9" }}>
+        flexShrink: 0, border: "1px solid var(--tq-border, #d8cfbe)", bgcolor: "var(--tq-tint-brass, #f1ead9)" }}>
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#8a7a5c" }} />
-        <Typography variant="caption" noWrap sx={{ fontWeight: 600, color: "#6b5f45" }}>demo data</Typography>
+        <Typography variant="caption" noWrap sx={{ fontWeight: 600, color: "var(--tq-warning, #6b5f45)" }}>demo data</Typography>
       </Box>
     </Tooltip>
   );
@@ -244,9 +244,9 @@ function StaleBuild() {
       : "Taskuary has been updated on disk since this page was opened. Nothing is lost by reloading."}>
       <Box onClick={() => !restart && window.location.reload()}
         sx={{ display: "flex", alignItems: "center", gap: 0.6, cursor: restart ? "default" : "pointer", px: 1, py: 0.3,
-          borderRadius: 99, border: "1px solid #d8cfbe", bgcolor: "#f1ead9" }}>
+          borderRadius: 99, border: "1px solid var(--tq-border, #d8cfbe)", bgcolor: "var(--tq-tint-brass, #f1ead9)" }}>
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#6f8a6e" }} />
-        <Typography variant="caption" sx={{ fontWeight: 600, color: "#55697a" }}>{stale}</Typography>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: "var(--tq-link, #55697a)" }}>{stale}</Typography>
       </Box>
     </Tooltip>
   );
@@ -262,7 +262,7 @@ const SWITCH_VIEWS = [
 // ...the Board only in Developer mode (the owner, 2026-11-06): its agents and sessions are a developer's view; the Game stays for everyone
 export const ViewSwitch = ({ view, onView, dev }) => (
   <Box role="tablist" aria-label="View" data-tq-view-switch={view}
-    sx={{ display: "flex", gap: 0.4, p: 0.4, ml: { xs: 0.25, md: 1 }, borderRadius: 99, bgcolor: "#efe9df", border: "1px solid #ddd5c8", flexShrink: 0 }}>
+    sx={{ display: "flex", gap: 0.4, p: 0.4, ml: { xs: 0.25, md: 1 }, borderRadius: 99, bgcolor: "var(--tq-inset, #efe9df)", border: "1px solid var(--tq-border, #ddd5c8)", flexShrink: 0 }}>
     {SWITCH_VIEWS.filter((v) => dev || v.k !== "board").map((v) => {
       const on = view === v.k;
       return (
@@ -271,7 +271,7 @@ export const ViewSwitch = ({ view, onView, dev }) => (
           onClick={() => { onView(v.k); if (v.k === "chat") window.dispatchEvent(new Event("tq-setup-back")); }}
           sx={{ display: "flex", alignItems: "center", gap: 0.8, height: 34, px: { xs: 1.1, md: 1.8 }, borderRadius: 99, border: 0, cursor: "pointer",
             fontFamily: "inherit", fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", color: on ? "#fff" : INK,
-            background: on ? BRAND.solid : "transparent", "&:hover": on ? {} : { bgcolor: "#fff" } }}>
+            background: on ? BRAND.solid : "transparent", "&:hover": on ? {} : { bgcolor: "var(--tq-panel, #fff)" } }}>
           {v.icon(on)}<Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>{v.label}</Box>
         </Box>
       );
@@ -541,10 +541,9 @@ export default function TaskHubPage() {
     if (tab !== "Assistant") { setTab("Assistant"); tabRef.current = "Assistant"; }
   };
 
-  if (stopped) return <ThemeProvider theme={theme}><CssBaseline /><Stopped stopped={stopped} /></ThemeProvider>;
+  if (stopped) return <Stopped stopped={stopped} />;
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <>
       {/* textAlign left kills the CRA-default .App { text-align: center } leaking in */}
       <Box sx={{ minHeight: "100vh", bgcolor: BG, textAlign: "left" }}>
         {/* bottom-right, not under the top bar: up there it covered the row every tab keeps its
@@ -555,7 +554,7 @@ export default function TaskHubPage() {
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           sx={{ mb: 8 }}
           message={raised ? `${raised.ref} · ${raised.what}${raised.title ? ` — ${raised.title}` : ""}` : ""}
-          action={raised && <Button size="small" sx={{ color: ACCENT, fontWeight: 600 }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
+          action={raised && <Button size="small" sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600 }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
         {/* ── slim top bar ───────────────────────────────────────────── */}
         {/* Full width, deliberately. Constraining this to the page column squeezed the tab strip
             until its overflowX put a horizontal SCROLLBAR under the nav - a slider you have to
@@ -605,6 +604,7 @@ export default function TaskHubPage() {
           {/* ...and the static demo has the same Setup, which says how to install Taskuary: the chat's own setup button went (the owner,
               2026-10-19) and the demo was left with no way to that page. A server run with --demo keeps its badge where it was */}
           {(DEMO || !demo) && <SetupChip state={DEMO ? DEMO_SETUP : setup} onOpen={openSetup} />}
+          <ThemeToggle />
           {phone ? <HelpMenu onReload={() => setTick(tick + 1)} onStopped={setStopped} /> : <Tooltip title="Report a problem">
             <IconButton onClick={() => openBugReport()} size="small" aria-label="Report a problem">
               <HelpOutlineIcon sx={{ fontSize: 17, color: DIM }} />
@@ -657,6 +657,6 @@ export default function TaskHubPage() {
             it sat on top of the work - over the browser pane's own Take over button, in full screen. */}
       </Box>
       <BugReportDialog open={!!bug} onClose={() => setBug(null)} screen={tab} error={bug?.error} supportUrl={SUPPORT_URL} />
-    </ThemeProvider>
+    </>
   );
 }

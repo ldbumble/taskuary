@@ -10,7 +10,7 @@ import React, { useEffect, useState } from "react";
 import { Alert, Box, Button, TextField } from "@mui/material";
 import api from "./api";
 
-const Field = (p) => <TextField size="small" fullWidth sx={{ bgcolor: "#fff" }} {...p} />;
+const Field = (p) => <TextField size="small" fullWidth sx={{ bgcolor: "var(--tq-panel, #fff)" }} {...p} />;
 
 export default function OwnerForm({ onDone }) {
   const [name, setName] = useState("");
@@ -32,8 +32,8 @@ export default function OwnerForm({ onDone }) {
   };
   return (
     <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
-      <Field label="Your name" value={name} onChange={(e) => setName(e.target.value)} sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} />
-      <Field label="Email" value={email} onChange={(e) => setEmail(e.target.value)} sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} />
+      <Field label="Your name" value={name} onChange={(e) => setName(e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)", flex: 1, minWidth: 160 }} />
+      <Field label="Email" value={email} onChange={(e) => setEmail(e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)", flex: 1, minWidth: 160 }} />
       <Button variant="contained" disableElevation size="small" disabled={busy || !name.trim()} onClick={save}>
         {busy ? "…" : "Save"}
       </Button>

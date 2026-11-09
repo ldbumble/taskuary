@@ -22,10 +22,10 @@ export default function ChatPicker({ options = [], value = "", onChange, onLook 
                 <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>{chatName(o)}</Typography>
                 <Typography variant="caption" sx={{ color: DIM, fontSize: 10.5 }}>{chatTag(o)}</Typography>
               </Box>
-              {o.blocked && <Typography variant="caption" sx={{ display: "block", color: "#7a2f3c", fontSize: 10.5 }}>{o.blocked}</Typography>}
+              {o.blocked && <Typography variant="caption" sx={{ display: "block", color: "var(--tq-danger, #7a2f3c)", fontSize: 10.5 }}>{o.blocked}</Typography>}
               {chatId(o) && <Typography variant="caption" sx={{ display: "block", color: FAINT, fontSize: 10, fontFamily: "monospace" }}>{chatId(o)}</Typography>}
             </li>)}
-          renderInput={(params) => <TextField {...params} label={label} placeholder={placeholder} sx={{ bgcolor: "#fff" }}
+          renderInput={(params) => <TextField {...params} label={label} placeholder={placeholder} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
             inputProps={{ ...params.inputProps, ...attr }} />} />
         {onLook && <Button size="small" disabled={looking} onClick={onLook} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}
           title="Read the chats again - after you message yourself, make a group or add your bot">{looking ? "Looking…" : "Look again"}</Button>}

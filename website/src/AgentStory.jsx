@@ -16,7 +16,7 @@ const link = { fontSize: 11, minHeight: 0, p: 0, minWidth: 0 };
 export function StoryChip({ kind, text }) {
   const hot = storyAlarm(kind);
   return text ? <Box component="span" sx={{ fontSize: 11, fontWeight: 600, borderRadius: 99, px: 1, py: 0.2, whiteSpace: "nowrap",
-    color: hot ? PALETTE.oxblood : PALETTE.slate, bgcolor: hot ? "#f3e6e8" : "#e6ebef" }}>{text}</Box> : null;
+    color: hot ? PALETTE.oxblood : PALETTE.slate, bgcolor: hot ? "var(--tq-inset, #f3e6e8)" : "var(--tq-inset, #e6ebef)" }}>{text}</Box> : null;
 }
 
 // the state in one sentence: what happened to the session and what you can do about it. The server's sentence is whole

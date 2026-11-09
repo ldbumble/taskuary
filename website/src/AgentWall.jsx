@@ -47,7 +47,7 @@ const dayOf = (t) => String(t || "").slice(0, 10);
 const Face = ({ who, ownerName, size = 30 }) => {
   const owner = isOwnerAuthor(who, ownerName);
   return (
-    <Box sx={{ width: size, height: size, borderRadius: "50%", bgcolor: owner ? "#eae4d8" : PANEL2,
+    <Box sx={{ width: size, height: size, borderRadius: "50%", bgcolor: owner ? "var(--tq-inset, #eae4d8)" : PANEL2,
       border: `1px solid ${BORDER}`, color: DIM, flexShrink: 0, display: "grid", placeItems: "center" }}>
       {owner ? <PersonOutlineIcon sx={{ fontSize: size * 0.58 }} /> : <TaskuaryMark size={size * 0.64} />}
     </Box>
@@ -79,7 +79,7 @@ const Note = ({ n, onOpenTask, ownerName }) => {
           {!!n.TaskId && (
             <Typography component="button" type="button" disabled={!onOpenTask} onClick={() => onOpenTask?.(n.TaskId)}
               sx={{ ...mono, appearance: "none", border: 0, bgcolor: "transparent", p: 0,
-                fontSize: 10.5, color: "#55697a", cursor: onOpenTask ? "pointer" : "default",
+                fontSize: 10.5, color: "var(--tq-link, #55697a)", cursor: onOpenTask ? "pointer" : "default",
                 "&:hover": { textDecoration: onOpenTask ? "underline" : "none" } }}>
               TQ-{String(n.TaskId).padStart(4, "0")}
             </Typography>
@@ -151,11 +151,11 @@ export default function AgentWall({ onOpenTask, refresh, active = true }) {
           <TextField fullWidth multiline maxRows={4} size="small" value={body} placeholder="Leave a live handoff for the agents…"
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); post(); } }}
-            sx={{ bgcolor: "#fff", "& textarea": { fontSize: 13 } }} />
+            sx={{ bgcolor: "var(--tq-panel, #fff)", "& textarea": { fontSize: 13 } }} />
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1, pl: 5.5 }}>
           <Select size="small" value={kind} onChange={(e) => setKind(e.target.value)}
-            sx={{ bgcolor: "#fff", fontSize: 12, height: 30, minWidth: 150 }}>
+            sx={{ bgcolor: "var(--tq-panel, #fff)", fontSize: 12, height: 30, minWidth: 150 }}>
             {Object.entries(KINDS).filter(([k]) => k !== "summary").map(([k, v]) => (
               <MenuItem key={k} value={k} sx={{ fontSize: 12 }}>
                 <Box component="span" sx={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%",

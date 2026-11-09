@@ -134,9 +134,11 @@ def prompt(store, tid, ask: str, lookups: bool) -> tuple:
     said, prior = general.history_brief(store, tid, False)
     if said: system = f'{system}\n\n{said}'
     if prior: user = f'{prior}\n\n{user}'
-    system = f'{system}\n\n{QUICK_LINE}' + ('' if lookups else f'\n\n{NO_LOOKUP_LINE}')
+    system += '' if lookups else f'\n\n{NO_LOOKUP_LINE}'
     if selfclose.mode(store) == 'off' or selfclose.stays_open(store, tid): system += f'\n\n{NO_CLOSE_LINE}'
-    return system, f'{user}\n\n{ask}'
+    # ...the shape said LAST, in the turn (the night run, 2026-11-09: 3 of 4 quick calls on a CLI came back as prose - the 30K system prompt's
+    # markers and summary won over a line at its end, so the call was wasted and the agent started anyway)
+    return system, f'{user}\n\n{ask}\n\n{QUICK_LINE}'
 
 def ask(store, tid, ask: str, steps: list = None, cancel=None) -> 'QuickAnswer | None':
     "The one call. Raises what the brain raises; None for an answer that cannot be read."

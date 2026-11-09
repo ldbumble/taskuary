@@ -2518,11 +2518,13 @@ def wake_why(store, tid, msg: dict, mid, follow: dict | None, own: bool = False)
     if not general.handles(t): return 'not an assistant task'
     # ...with the assistant's conversation on it: a writer's draft alone (a reply task, an invite and its banter) never starts an agent
     # by itself - the reply writer's own redraft (attach, above) is that task's road
-    if not general.history(store, tid): return 'no agent conversation'
+    # A turn still OPENING counts (the night run, 2026-11-09: a colleague answered the group 6s into the task's quick call, the line went
+    # unheard, and the turn asked the owner for a password nobody needed any more)
+    live = live_agent(store, tid)
+    if not live and not general.history(store, tid): return 'no agent conversation'
     if (follow or {}).get('degraded'): return 'triage could not read it'
     if store.get_setting('answer_to_agent') == 'off': return 'passing lines to the agent is switched off'
     if msg.get('no_auto'): return 'the channel waits for the owner'
-    live = live_agent(store, tid)
     if live not in ('', 'general'): return 'another agent is live on it'
     if own:
         if live: return ''

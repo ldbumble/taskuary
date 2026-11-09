@@ -589,8 +589,14 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
     if own:
         from .senders import channel_name
+        from .store import task_ref
+        # ...and WHICH task a line in a shared room was filed on (the night run, 2026-11-09: "sending it tonight", said of the vendor list on
+        # another task in the same chat, was read as the answer to this task's bug reports and its draft withdrawn)
+        def on(x):
+            t = x.get('TaskId') and x['TaskId'] != tid and store.get_task(x['TaskId'])
+            return f" (filed on {task_ref(t['TaskId'])}, \"{t.get('Title') or ''}\" - judge whether it is about this task)" if t else ''
         out.append("WHAT THE OWNER REPLIED ON THE THREAD THEMSELVES SINCE YOUR LAST TURN - their own words to the people on it, not a request to you; "
-                   'take it as said:\n' + '\n'.join(f"- {clock(x.get('SentAt') or x.get('CreatedAt'))} on {channel_name(x.get('Channel')) or 'another channel'}: "
+                   'take it as said:\n' + '\n'.join(f"- {clock(x.get('SentAt') or x.get('CreatedAt'))} on {channel_name(x.get('Channel')) or 'another channel'}{on(x)}: "
                                                       f"{_quote(mail_row(store, x)['words'], 600)}" for x in own))
     if did: out.append('WHAT THE OWNER DID SINCE YOUR LAST TURN - take it as said; never undo it:\n' + '\n'.join(f'- {x}' for x in did))
     if handed: out.append('THE OWNER HANDED THIS TO A PERSON - it is theirs now; never send them what they were already sent:\n' + '\n'.join(

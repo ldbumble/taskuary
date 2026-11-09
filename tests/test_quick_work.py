@@ -96,7 +96,7 @@ def test_the_prompt_carries_what_the_general_agent_reads_plus_the_mail_history()
     with mock.patch('taskuary.context.for_prompt', return_value='TODAY 14:00 partner day prep'), \
          mock.patch.object(general, 'earlier_mail', return_value='Erin Blake wrote on Monday about the agenda'):
         system, user = quickwork.prompt(s, tid, ASK, lookups=True)
-    assert 'RULES (AGENT.md - every worker)' in system and quickwork.QUICK_LINE in system
+    assert 'RULES (AGENT.md - every worker)' in system and user.endswith(quickwork.QUICK_LINE)
     assert 'what counts as a task' not in system.lower()   # triage's sorting rules stay with triage; _prompt gives workers the SOUL/JOB background (brief.TRIAGE_ONLY)
     assert 'TODAY 14:00 partner day prep' in user and 'Erin Blake wrote on Monday' in user and ASK in user
 

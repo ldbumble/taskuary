@@ -103,7 +103,8 @@ class TheGuide(unittest.TestCase):
         self.assertIn('A different request is its own task, with its own agent', g)
         self.assertIn("whatever `combine.level` says about closeness", g)
         self.assertIn('When unsure with an agent on the task, it is a new task.', g)
-        self.assertIn('levels 1 to 4 widen nothing past that agent\'s own work', g)
+        # ...said once, where the agent is (2026-11-09): the levels section's "1 to 4 widen nothing" contradicted "IN A CHAT AT 4 TOO"
+        self.assertIn('How far a level reaches on a task an agent is working is said under **An agent already on it**', g)
         # ...and at 5 the owner wants one task per subject, agent or not (2026-11-08: "mostly join them unless they are totally unrelated")
         self.assertIn('AT `combine.level` 5 ALL OF THIS GIVES WAY, AND IN A CHAT AT 4 TOO', g); self.assertIn('JOIN UNLESS IT IS TOTALLY UNRELATED', g)
         # ...a stream of issues about one product is one agent's work, and a related fyi line stays on its task (2026-11-08)

@@ -348,6 +348,14 @@ def assigned_role(store, task: dict) -> str:
     return name if name and store.get_agent(name) else ''
 
 
+def _unset_gateway(store, pick: str) -> bool:
+    "A `connector:<id>` pick on a PICKED_ONLY card that no brain setting names now."
+    from . import agents
+    if not str(pick).startswith('connector:'): return False
+    c = next((c for c in store.list_connectors() if f"connector:{c['ConnectorId']}" == pick), None)
+    return bool(c) and c['Type'] in agents.PICKED_ONLY and not any(str(store.get_setting(k) or '').strip() == pick for k in agents.BRAIN_SETTINGS)
+
+
 def default_pick(store, task: dict = None) -> str:
     """Which provider the chat would use if nobody chose one - the SAME reading start_session makes.
 
@@ -361,8 +369,10 @@ def default_pick(store, task: dict = None) -> str:
     saved = store.saved_session((task or {}).get('TaskId')) or {}
     # a saved pick is the owner's own choice of BRAIN and nothing about the role contradicts it:
     # the role no longer nominates a provider, so there is nothing left to reconcile it against
-    if saved.get('Pick'):
-        if any(o['pick'] == saved['Pick'] for o in provider_options(store)): return saved['Pick']
+    # ...but never a gateway card no job is set to any more (agents.PICKED_ONLY): a session started while HIPAA AI was wrongly the
+    # general agent's brain kept every later turn on it after the setting was put back (the owner, 2026-11-09: "we changed it back")
+    if (p := saved.get('Pick')) and not _unset_gateway(store, p):
+        if any(o['pick'] == p for o in provider_options(store)): return p
     # ...and the same is true of any task with a BROWSER, whoever opened it. A workflow's repeat run
     # carried its browser and its brief and answered "opening the secure area cannot be done from
     # here", because the quick API brain this falls back to has no shell to run agent-browser in
@@ -388,14 +398,14 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
         # API/local connectors answer in-process and are dramatically quicker than launching a
         # coding CLI. Prefer that native path for chat; the owner can persist a CLI choice when
         # they need its tools.
-        native = next((o for o in options if o.get('type') != 'cli'), None)
+        native = next((o for o in options if o.get('type') != 'cli' and not _unset_gateway(store, o['pick'])), None)
         if native: wanted = native['pick']
     # what was asked for, else ONLY an AI that is ready - a connector, or a CLI that starts here and did not fail its test
     # (agents.ready_brains). It used to be options[0]: the first CLI connected, which was claude on a machine where the
     # person had set up Codex, and every researcher task started on a claude that was signed out (2026-10-21).
     ready = {f'cli:{k}' for k in hub_agents.ready_brains(store)}
     choice = next((o for o in options if o['pick'] == wanted), None) \
-        or next((o for o in options if o.get('type') != 'cli' or o['pick'] in ready), None)
+        or next((o for o in options if (o.get('type') != 'cli' and not _unset_gateway(store, o['pick'])) or o['pick'] in ready), None)
     if not choice: return '', '', model or ''
     saved_model = store.get_setting('assistant_model') if not explicit else ''
     return choice['pick'], choice['label'], model or saved_model or choice['model']

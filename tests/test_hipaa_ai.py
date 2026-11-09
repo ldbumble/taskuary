@@ -348,3 +348,16 @@ def test_a_blank_job_never_falls_to_hipaa_ai_only_a_job_set_to_it_runs_there():
     assert agents.ready_connector(s) is None and llm.brain_status(s, '')['ready'] is False
     s.set_setting('assistant_ai', f'connector:{cid}', 'owner')
     assert llm.brain_status(s, f'connector:{cid}')['ready'] is True
+
+
+def test_a_session_saved_on_hipaa_ai_follows_the_setting_once_it_is_put_back():
+    # the owner, 2026-11-09: tasks started while HIPAA AI was wrongly the general agent's brain stayed on it after the reset
+    from taskuary import general
+    s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']; pick = f'connector:{cid}'
+    s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1}, 'owner')
+    tid = s.create_task({'Title': 'Ask the bank for an allowlist', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.save_session(tid, pick, '', 'n1', 'k1')
+    s.set_setting('assistant_ai', pick, 'owner')
+    assert general._unset_gateway(s, pick) is False                 # set: a saved session on it is kept
+    s.set_setting('assistant_ai', '', 'owner')
+    assert general._unset_gateway(s, pick) is True and general.default_pick(s, s.get_task(tid)) != pick

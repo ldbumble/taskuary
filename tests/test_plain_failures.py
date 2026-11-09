@@ -21,6 +21,16 @@ class PlainFailureTests(unittest.TestCase):
         self.assertIn('did not answer in time', plain_failure(requests.ConnectTimeout('ConnectTimeout: read timed out')))
         self.assertIn('turned the connection away', plain_failure(ConnectionRefusedError(10061, 'No connection could be made because the target machine actively refused it')))
 
+    def test_a_raw_web_failure_left_on_a_run_is_said_in_words(self):
+        """A run's failure kept as requests words it (2026-11-09) - the host, port and seconds never reach the screen."""
+        from taskuary import failures
+        slow = failures.classify("HTTPSConnectionPool(host='ai.northwind.example', port=443): Read timed out. (read timeout=180)")['sentence']
+        gone = failures.classify("HTTPSConnectionPool(host='ai.northwind.example', port=443): Max retries exceeded with url: /v1 "
+                                 "(Caused by NewConnectionError('Failed to establish a new connection'))")['sentence']
+        self.assertTrue(slow.startswith('The service did not answer in time'), slow)
+        self.assertTrue(gone.startswith('The service could not be reached'), gone)
+        for x in (slow, gone): self.assertNotRegex(x, r'ConnectionPool|northwind|443')
+
     def test_our_own_words_pass_through(self):
         self.assertEqual(plain_failure(RuntimeError('no mailbox address set')), 'no mailbox address set')
         from taskuary.msauth import LAPSED

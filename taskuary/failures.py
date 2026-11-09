@@ -14,6 +14,9 @@ _NO_FOLDER = re.compile(r'working directory does not exist|needs a repository|no
 _NO_TOOL = re.compile(r'pick a coding tool first', re.I)
 _SIGNED_OUT = re.compile(r"isn't signed in on this machine", re.I)
 _NO_AI = re.compile(r'no AI connector|no AI is (set up|connected)|no brain', re.I)
+# a web call that never answered, as requests words it - its host, port and seconds are no reason anyone can act on (2026-11-09)
+_UNREACHED = re.compile(r'HTTPS?ConnectionPool\(|Max retries exceeded|Failed to establish a new connection', re.I)
+_SLOW = re.compile(r'timed? ?out|ReadTimeout|ConnectTimeout', re.I)
 
 
 def _fix(label: str, pid: str) -> dict: return {'label': label, 'href': words.href(pid)}
@@ -58,6 +61,9 @@ def classify(e, *, act: str = None, tid=None) -> dict:
     elif _NO_FOLDER.search(text):
         fix = fix or ({'label': 'Choose where it works', 'href': pick_repo_href(tid)} if tid else _fix('Choose where it works', 'coding'))
     elif _NO_AI.search(text): fix = fix or _fix('Connect an AI', 'ai')
+    elif _UNREACHED.search(text):
+        sentence = ('The service did not answer in time - it may be down or busy. Try again in a minute' if _SLOW.search(text)
+                    else 'The service could not be reached - check this computer is online, then try again')
     # an AI CLI that isn't signed in is a sign-in to do on its card, not an app bug to report (agents.signed_out_msg, 2026-10-25)
     elif _SIGNED_OUT.search(text): fix = fix or _fix('Sign it in', 'ai_apps')
     unknown = act in SENDS and not isinstance(e, str) and outbound.delivery_uncertain(e)

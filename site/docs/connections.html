@@ -47,7 +47,7 @@
 <div class="entry on">
       <a class="page" href="./connections" aria-current="page">Connections</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Connections's sections"></button>
-      <div class="secs"><a class="sec" href="#what-a-connection-is" data-sec="what-a-connection-is">What a connection is</a><a class="sec" href="#the-five-roles" data-sec="the-five-roles">The five roles</a><a class="sec" href="#mail" data-sec="mail">Mail</a><a class="sec" href="#chat" data-sec="chat">Chat</a><a class="sec" href="#repositories-and-trackers" data-sec="repositories-and-trackers">Repositories and trackers</a><a class="sec" href="#data-and-report-sources" data-sec="data-and-report-sources">Data and report sources</a><a class="sec" href="#coding-clis-and-ai-providers" data-sec="coding-clis-and-ai-providers">Coding CLIs and AI providers</a><a class="sec" href="#voice-notes-and-dictation" data-sec="voice-notes-and-dictation">Voice notes and dictation</a><a class="sec" href="#a-vendors-own-mcp-server" data-sec="a-vendors-own-mcp-server">A vendor's own MCP server</a><a class="sec" href="#a-vendors-api-read-with-a-key" data-sec="a-vendors-api-read-with-a-key">A vendor's API, read with a key</a><a class="sec" href="#cards-that-sign-in-with-your-own-app" data-sec="cards-that-sign-in-with-your-own-app">Cards that sign in with your own app</a><a class="sec" href="#mail-and-messages-a-vendor-pushes" data-sec="mail-and-messages-a-vendor-pushes">Mail and messages a vendor pushes</a><a class="sec" href="#a-system-with-no-card" data-sec="a-system-with-no-card">A system with no card</a><a class="sec" href="#adding-another-of-the-same-kind" data-sec="adding-another-of-the-same-kind">Adding another of the same kind</a><a class="sec" href="#pushing-something-in-yourself" data-sec="pushing-something-in-yourself">Pushing something in yourself</a></div>
+      <div class="secs"><a class="sec" href="#what-a-connection-is" data-sec="what-a-connection-is">What a connection is</a><a class="sec" href="#the-five-roles" data-sec="the-five-roles">The five roles</a><a class="sec" href="#mail" data-sec="mail">Mail</a><a class="sec" href="#chat" data-sec="chat">Chat</a><a class="sec" href="#repositories-and-trackers" data-sec="repositories-and-trackers">Repositories and trackers</a><a class="sec" href="#shared-inboxes-phones-forms-and-candidates" data-sec="shared-inboxes-phones-forms-and-candidates">Shared inboxes, phones, forms and candidates</a><a class="sec" href="#replies-go-back-where-the-work-came-from" data-sec="replies-go-back-where-the-work-came-from">Replies go back where the work came from</a><a class="sec" href="#data-and-report-sources" data-sec="data-and-report-sources">Data and report sources</a><a class="sec" href="#coding-clis-and-ai-providers" data-sec="coding-clis-and-ai-providers">Coding CLIs and AI providers</a><a class="sec" href="#voice-notes-and-dictation" data-sec="voice-notes-and-dictation">Voice notes and dictation</a><a class="sec" href="#a-vendors-own-mcp-server" data-sec="a-vendors-own-mcp-server">A vendor's own MCP server</a><a class="sec" href="#a-vendors-api-read-with-a-key" data-sec="a-vendors-api-read-with-a-key">A vendor's API, read with a key</a><a class="sec" href="#cards-that-sign-in-with-your-own-app" data-sec="cards-that-sign-in-with-your-own-app">Cards that sign in with your own app</a><a class="sec" href="#mail-and-messages-a-vendor-pushes" data-sec="mail-and-messages-a-vendor-pushes">Mail and messages a vendor pushes</a><a class="sec" href="#a-system-with-no-card" data-sec="a-system-with-no-card">A system with no card</a><a class="sec" href="#adding-another-of-the-same-kind" data-sec="adding-another-of-the-same-kind">Adding another of the same kind</a><a class="sec" href="#pushing-something-in-yourself" data-sec="pushing-something-in-yourself">Pushing something in yourself</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./tasks-and-agents">Tasks and agents</a>
@@ -498,6 +498,93 @@ whatever permission the card has. A name that matches two people, or a status th
 offer, is refused and nothing is changed. A scheduled report never runs them.</p>
 <p>Monday&#39;s board can have several status and People columns. The first of each is used unless the
 card&#39;s settings name one (<code>status_column</code>, <code>people_column</code>).</p>
+<h2 id="shared-inboxes-phones-forms-and-candidates">Shared inboxes, phones, forms and candidates<a class="anchor" href="#shared-inboxes-phones-forms-and-candidates" aria-label="Link to this section">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>System</th>
+<th>What comes in</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Front, Help Scout, Gorgias</strong></td>
+<td>Open conversations and tickets assigned to you</td>
+</tr>
+<tr>
+<td><strong>RingCentral, Aircall, Dialpad</strong></td>
+<td>Missed calls and voicemails to you (with the vendor&#39;s transcript where it has one); RingCentral texts too</td>
+</tr>
+<tr>
+<td><strong>Typeform, Jotform, SurveyMonkey, Tally, Google Forms</strong></td>
+<td>New responses on the forms you pick - Test lists your forms and their ids</td>
+</tr>
+<tr>
+<td><strong>Lever</strong></td>
+<td>Candidates you own, when they change</td>
+</tr>
+</tbody></table>
+<p>Each card&#39;s Test finds you in that system, so only what points at you comes in. A customer, a caller,
+a form respondent or a candidate is a stranger&#39;s words: nothing starts on them by itself until you
+trust the source. A Front or Help Scout message written by one of your own teammates is a colleague&#39;s.
+Google Forms needs no key of its own - it reads with the Google Sheets card&#39;s sign-in, minted with the
+forms scopes. Nothing is approved or changed in any of them; the one thing that goes back is a reply you
+Send (below).</p>
+<h2 id="replies-go-back-where-the-work-came-from">Replies go back where the work came from<a class="anchor" href="#replies-go-back-where-the-work-came-from" aria-label="Link to this section">#</a></h2>
+<p>A reply drafted on a task that a helpdesk, a chat, a phone line or a social account filed goes back on
+that item&#39;s own thread when you press Send - never before. Each of those cards has a <strong>Replies</strong> switch:</p>
+<table>
+<thead>
+<tr>
+<th>Card</th>
+<th>What your reply becomes</th>
+<th>Replies start</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Zendesk, Freshdesk, Intercom, ServiceNow, Front, Help Scout, Gorgias</td>
+<td>A reply on the ticket or conversation - or, with the card&#39;s note switch, an internal note</td>
+<td>On</td>
+</tr>
+<tr>
+<td>Shortcut, Wrike, Smartsheet, Airtable, Bitbucket, Basecamp</td>
+<td>A comment on the story, task, row, record, pull request or to-do</td>
+<td>On</td>
+</tr>
+<tr>
+<td>HubSpot, Salesforce</td>
+<td>A note on the ticket; a comment on the case (or a post on the task&#39;s feed)</td>
+<td>On</td>
+</tr>
+<tr>
+<td>Zulip, Webex, Zoom Team Chat, Signal, LINE</td>
+<td>A message in the same topic, thread or chat</td>
+<td>On</td>
+</tr>
+<tr>
+<td>Twilio, RingCentral, Aircall, Dialpad</td>
+<td>A text back from your number</td>
+<td>On</td>
+</tr>
+<tr>
+<td>Mailgun, SendGrid Inbound Parse</td>
+<td>An email reply, from your own mailbox</td>
+<td>On</td>
+</tr>
+<tr>
+<td>GitHub Projects, Discourse, Reddit, Threads, Instagram, Facebook Pages, WordPress</td>
+<td>A public comment or reply (a Page message within Messenger&#39;s 24 hours)</td>
+<td>Off</td>
+</tr>
+</tbody></table>
+<p>A public reply is something you turn on, card by card. With Replies off, Send is not offered and the
+card says why, with the way to the switch. A card that is not connected, or a key that may not write,
+comes back as <strong>Not sent</strong> with Reconnect; a vendor that failed mid-answer is <strong>delivery unknown</strong>, and
+nothing is sent twice. Some sign-ins need one more scope to write - Webex, Threads and HubSpot ask for it
+now, so sign those cards in again once.</p>
+<p>No reply goes back to YouTube (its card reads on an API key, and posting needs a Google sign-in), X (its
+card holds an app token, and X takes a post only from your own sign-in), Microsoft Planner (Graph keeps no
+task comments), or the cards whose items nobody wrote to you: bookings, orders, disputes, envelopes, form
+responses and candidates.</p>
 <h2 id="data-and-report-sources">Data and report sources<a class="anchor" href="#data-and-report-sources" aria-label="Link to this section">#</a></h2>
 <p>The full list is long and grows; these are the ones worth knowing about by shape.</p>
 <p>A data card feeds reports, dashboards and agent look-ups. It never puts work on your rail or your
@@ -517,7 +604,7 @@ in a read transaction. Each driver is an extra: <code>pip install taskuary[mongo
 Azure (blob containers, Log Analytics, arbitrary ARM paths, and it can reuse the Outlook app
 registration), Microsoft Entra ID, Prometheus, Datadog, WinRM for PowerShell on a remote Windows
 machine.</p>
-<p><strong>Finance</strong> — Sage Intacct, QuickBooks Online, Zoho Invoice, and bank and card feeds through
+<p><strong>Finance</strong> — Sage Intacct, QuickBooks Online, FreshBooks (signed in by OAuth), Zoho Invoice, and bank and card feeds through
 SimpleFIN or Teller. These are the cards where the read/write distinction bites: each ships at
 <code>read</code>, so an agent proposes a bill or an invoice and you approve it on the task. Raising a card to
 <code>write</code> is what lets a routing policy pass small, known items through without you.</p>
@@ -697,7 +784,8 @@ words on the card. These built-in services handle live dictation; voice-note fil
 transcription card. On a Mac, click in the box and press the Dictation key (or Fn twice).</p>
 <h2 id="a-vendors-own-mcp-server">A vendor&#39;s own MCP server<a class="anchor" href="#a-vendors-own-mcp-server" aria-label="Link to this section">#</a></h2>
 <p>Many cards — Notion MCP, Linear MCP, Atlassian, Airtable, Dropbox, Figma, Stripe MCP, Sentry MCP,
-Cloudflare, Vercel, Supabase, Zapier and about thirty more — are the vendor&#39;s own hosted MCP server,
+Cloudflare, Vercel, Supabase, Zapier, Canva, PostHog, and for money and people Xero, BILL, Expensify, Ramp, Brex,
+Mercury, Avalara, Deel, Greenhouse and Ashby, and about thirty more — are the vendor&#39;s own hosted MCP server,
 added to your agent CLI. <strong>Add</strong> registers it in Claude Code and Codex on this computer; <strong>Sign in</strong>
 opens the vendor&#39;s own sign-in page in your browser, once. Taskuary never holds that sign-in, so it
 cannot list the server&#39;s tools: adding the card is your word that your agents may use all of them.
@@ -709,11 +797,26 @@ header the vendor names. Codex reads such a token only from an environment varia
 add to Claude Code alone.</p>
 <h2 id="a-vendors-api-read-with-a-key">A vendor&#39;s API, read with a key<a class="anchor" href="#a-vendors-api-read-with-a-key" aria-label="Link to this section">#</a></h2>
 <p>DigitalOcean, Terraform Cloud, Better Stack, CircleCI, Buildkite, Coda, Intrinio, Benzinga, Tradier,
-Diffbot, and the self-hosted Jenkins, SonarQube, Elasticsearch, Splunk, Dynatrace and Kubernetes each
+Diffbot, Mercury, Lattice, and the self-hosted Jenkins, SonarQube, Elasticsearch, Splunk, Dynatrace and Kubernetes each
 take a key (and, when self-hosted, the address). Google Drive, OneDrive and Microsoft 365 files take
 nothing: they read with the Google Sheets card&#39;s and the Outlook card&#39;s sign-ins. <strong>Test</strong> makes one
 cheap read. A report or an agent then asks any address under that vendor&#39;s API by its path, and only
-ever reads: nothing but a GET is sent, so a Tradier key on this card places no order.</p>
+ever reads: a GET, or a POST only where the vendor reads that way (a search, a report query, a tracking
+lookup), so a Tradier key on this card places no order.</p>
+<p>The same road carries CRMs (Pipedrive, Copper), time tracking (Toggl Track, Harvest, Clockify), parcel
+tracking (UPS, FedEx, USPS), analytics and BI (Google Analytics 4, Search Console and Google Ads on the
+Google sign-in, Power BI on the Microsoft one, Meta Ads, Segment, Looker, Tableau, Metabase, Databricks,
+dbt Cloud, Fivetran), commerce and billing (eBay, Etsy, WooCommerce, BigCommerce, Paddle, Chargebee,
+Recurly, Zuora, Toast, Clover), publishing and marketing (TikTok, Ghost, Mailchimp, Kit, Vimeo) and
+Gong and Veeva Vault. Where a vendor swaps your client id and secret for a short-lived session first,
+the card does that itself. eBay, Etsy and TikTok take a user token that expires within a day for now -
+a sign-in on the card comes later.</p>
+<p>Some of these cards bring work in as well: WooCommerce orders waiting to ship, BigCommerce orders
+awaiting fulfillment, comments on your Instagram posts and Facebook Page, messages to your Page, posts on
+X that mention you, and WordPress comments held for moderation. Everyone who writes from outside is a
+stranger until you trust them, and an order carries no author at all.</p>
+<p>An <strong>Obsidian</strong> card takes the folder your vault is in and reads the notes there - never its .obsidian
+folder, its trash, or anything outside it.</p>
 <p>Some take more than a key, and the card asks for each piece:</p>
 <ul>
 <li><strong>A token swapped first</strong> — Docker Hub (a personal access token), Charles Schwab, Workday and

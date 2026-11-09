@@ -137,6 +137,9 @@ class CacheTests(unittest.TestCase):
                 self.assertEqual(funnel.pile(s)['items'][0]['lane'], 'working')
             n = len(builds)
             with mock.patch('taskuary.terminal.live_sessions', return_value=live(['editing export.py'], files=['export.py'])):
+                # warm() never waits on a build (2026-11-09); one a neighbouring test left running may hold the lock a moment
+                deadline = time.time() + 5
+                while not funnel.warm(s) and time.time() < deadline: time.sleep(0.05)
                 self.assertTrue(funnel.warm(s))
                 row = funnel.pile(s)['items'][0]
             self.assertEqual(len(builds), n, 'a new line on a working screen rebuilt the pile')

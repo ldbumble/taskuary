@@ -1,6 +1,7 @@
 """THE ASSISTANT ON A THINKING MODEL BEHIND A GATEWAY (the owner, 2026-11-09: "what is this garbage???"). On the HIPAA AI card the Assistant
 showed "VIEW:", a stub cut mid-sentence, then "say it again" - and never acted on "set up a routine", then "log into <a portal> and
 review my denials". The model spent its 380 tokens thinking and handed back a few words with finish_reason 'length'."""
+import contextlib
 import json
 from unittest import mock
 
@@ -75,7 +76,12 @@ def test_a_routine_asked_for_then_described_opens_new_routine_and_says_where_its
     assert 'set up a new routine' in seen[-1]['conversation_before'].lower()        # the sort read what came before
     assert out['new']['kind'] == 'workflow' and 'review my denials' in out['new']['text'] and 'routine' in out['new']
     assert 'billingportal.example' in out['say'] and 'Saved sign-ins' in out['say'] and 'CALL' not in out['say']
-    signin.save(s, 'billingportal.example', 'alex@northwind.example', 'pw')
+    # a sign-in is sealed in the computer's keychain; CI's macOS and Linux have none, so an in-memory one stands in (as test_signin)
+    import sys
+    from taskuary import vault
+    from tests.test_signin import FakeKeyring
+    with mock.patch.object(vault, '_keyring', return_value=FakeKeyring()) if sys.platform != 'win32' else contextlib.nullcontext():
+        signin.save(s, 'billingportal.example', 'alex@northwind.example', 'pw')
     out = turn(s, 'and one more like it', {'kind': 'task.setup', 'params': {'text': 'log into the billing portal and review my denials'}}, ROUTINE, seen)
     assert 'is in Saved sign-ins, so the browser fills it' in out['say']
 

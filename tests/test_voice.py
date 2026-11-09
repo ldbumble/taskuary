@@ -635,11 +635,11 @@ class SilenceIsNotInventedIntoWords(unittest.TestCase):
 class FixIsAButton(unittest.TestCase):
     "The owner, 2026-11-09: 'just request the permission like a normal app' - the mic's fix opens Windows' own page, on this computer only."
     def test_the_page_opens_here_and_never_for_another_device(self):
-        with mock.patch.object(server.sys, 'platform', 'win32'), mock.patch('os.startfile', create=True) as sf, \
+        with mock.patch.object(server.sys, 'platform', 'win32'), mock.patch('taskuary.spawn.bare') as sf, \
              mock.patch.object(server, '_is_loopback', return_value=True):
             self.assertEqual(c_api.post('/api/voice/open-settings', params={'which': 'speech'}).json(), {'opened': 'speech'})
-            sf.assert_called_once_with('ms-settings:privacy-speech')
+            sf.assert_called_once_with(['explorer.exe', 'ms-settings:privacy-speech'])
             self.assertEqual(c_api.post('/api/voice/open-settings', params={'which': 'calc'}).status_code, 422)
-        with mock.patch.object(server.sys, 'platform', 'win32'), mock.patch('os.startfile', create=True) as sf, \
+        with mock.patch.object(server.sys, 'platform', 'win32'), mock.patch('taskuary.spawn.bare') as sf, \
              mock.patch.object(server, '_is_loopback', return_value=False):
             self.assertEqual(c_api.post('/api/voice/open-settings', params={'which': 'microphone'}).status_code, 409); sf.assert_not_called()

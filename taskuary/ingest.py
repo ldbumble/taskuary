@@ -2124,10 +2124,27 @@ def _who_said(msg: dict) -> str: return msg.get('from_name') or msg.get('from_em
 def _note_of(msg: dict) -> str: return f"{_who_said(msg)}: {msg.get('subject') or ' '.join(str(msg.get('body') or '').split())[:80]}"
 
 
+# A HELD STRANGER'S TASK A TRUSTED PERSON'S LINE LIFTS STARTS ITS AGENT (the owner, 2026-11-09): "as if they had opened the task" - the
+# line lifted it (origin.lifted), so the start the hold kept back goes now, through the same gate a fresh task's start passes (auto_start_ok)
+def start_lifted(store, tid, msg: dict, mid, actor: str) -> bool | None:
+    "True when the lifted task's agent was set going, False when it may not start (said on the task), None when this is no such task."
+    from . import origin
+    t = store.get_task(tid) or {}
+    if not store.task_has_tag(tid, HOLD_TAG) or live_agent(store, tid) or started(store, tid): return None
+    if origin.of_task(store, tid)[0] == 'stranger' or (kind := t.get('Kind')) not in task_kinds.AGENT: return None    # ...it drops the hold
+    ok, who = auto_start_ok(store, msg, mid, kind)
+    if not ok: not_started(store, tid, who); return False
+    store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}, whom you trust, wrote on it - it starts as if they had opened it.")
+    store.audit('task', tid, 'auto_start', actor, 'agent', {'message_id': mid, 'kind': kind, 'lifted': True})
+    _spawn(_auto_code if kind == 'coding' else _auto_general, store, tid)
+    return True
+
+
 def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bool:
     """New work on a task with an agent: a live one hears it as its next turn (_pass_in), a stopped one carries its conversation
     on (carry_on_why). The turn is the owner's Continue without the press - the same session, told what came in since - and like
     every agent turn it sends nothing: a reply it writes waits for the owner's Send. True when the line went to an agent."""
+    if (went := start_lifted(store, tid, msg, mid, actor)) is not None: return went
     if live_agent(store, tid) in task_kinds.AGENT: return _pass_in(store, tid, msg, mid, follow, actor)
     if (store.get_task(tid) or {}).get('Kind') == 'reply': return agent_on_reply(store, tid, msg, mid, follow, actor)
     if why := carry_on_why(store, tid, msg, mid, follow):
@@ -2574,6 +2591,7 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
     """A line joined the task: wake its assistant to re-plan (wake_why) - queued behind a live or opening turn as its next one, else
     the conversation carried on. Once per arrival; nothing is sent or closed by it. True when the agent was handed the turn."""
     from . import general
+    if not own and (went := start_lifted(store, tid, msg, mid, actor)) is not None: return went
     if why := wake_why(store, tid, msg, mid, follow, own):
         if why not in _QUIET_WAKE: not_started(store, tid, why)
         return False

@@ -69,8 +69,9 @@ def test_a_live_general_session_starts_its_cli_again_in_the_new_mode():
     assert not sess.trust_moved()
 
 
-# ── in a group, only a line joined as this work lifts it; (the owner, 2026-11-09) ─────────────────
+# ── in a group, only a line joined as this work lifts it; a lifted held task starts its agent (the owner, 2026-11-09) ─────────────────
 from unittest import mock
+from taskuary import ingest
 
 GROUP = 'whatsapp:120363-site@g.us'
 def _said(s, t, who, verdict=None):
@@ -90,3 +91,19 @@ def test_in_a_group_only_a_line_joined_as_this_work_lifts_it():
         _said(s, t, 'Erin Blake', {'intent': 'task', 'same_problem': True})         # asks about that very work
         assert origin.of_task(s, t)[0] == 'trusted'
 
+
+def test_a_lifted_held_task_starts_its_agent_as_if_they_had_opened_it():
+    s = _store(); t, _ = _opened_by_a_stranger(s); s.tag_task(t, ingest.HOLD_TAG)
+    erin = _mail(s, t, 'erin@northwind.example', FromName='Erin Blake')
+    with mock.patch.object(ingest, 'auto_start_ok', return_value=(True, '')), mock.patch.object(ingest, '_spawn') as spawn:
+        assert ingest.start_lifted(s, t, {'from_name': 'Erin Blake'}, erin, 'router') is True
+        assert ingest.start_lifted(s, t, {'from_name': 'Erin Blake'}, erin, 'router') is None       # once
+    assert [c[0][0].__name__ for c in spawn.call_args_list] == ['_auto_general']
+    assert not s.task_has_tag(t, ingest.HOLD_TAG)
+
+
+def test_a_held_task_still_a_strangers_starts_nothing():
+    s = _store(); t, first = _opened_by_a_stranger(s); s.tag_task(t, ingest.HOLD_TAG)
+    with mock.patch.object(ingest, '_spawn') as spawn:
+        assert ingest.start_lifted(s, t, {'from_name': 'Vendor Billing'}, first, 'router') is None
+    assert not spawn.called

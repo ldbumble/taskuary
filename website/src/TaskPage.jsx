@@ -2697,6 +2697,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // went out, the proposals - drawn once, in the agent's newest summary (AgentSummary's Next steps) or under the chat's thread
   // ...an act with its card (a post, a tracker comment) is drawn in the turn that set it up (GeneralWorkspace, ActionCard) - never here again
   const asks = proposals.filter((p) => !isCardReview(p));
+  const asksBelow = !!(pendingReview || moreDrafts.length || owesEmails || (handInPane && handoff) || calAsk?.invite);
   const chatBody = () => <>
       {/* HAND IT TO A PERSON, IN THE CHAT (the owner, 2026-10-29: "you click the button and the matching UI opens in its pane"): on
           the canvas the hand-off is a compose card here - who, the forward the AI drafts, and Send it - where the drawer stood;
@@ -2876,7 +2877,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {asks.length > 0 && (
             <Box sx={{ mt: 1.4, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
               <Typography sx={{ ...label, display: "block", mb: 0.5 }}>
-                {asks.length === 1 ? "Also waiting on you" : `Also waiting on you · ${asks.length}`}
+                {/* ..."Also" only under something else waiting above it (the owner, 2026-11-09: one stale ask read "Also" over nothing) */}
+                {`${asksBelow ? "Also waiting on you" : "Waiting on you"}${asks.length > 1 ? ` · ${asks.length}` : ""}`}
               </Typography>
               {asks.map((p) => (
                 <ReviewDecision key={p.ReviewId} review={p} toRow={inRow && !pendingReview && proposals.length === 1}

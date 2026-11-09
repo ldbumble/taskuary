@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { heldActsLine, proposalPresentation, reviewStatusLabel, reviewText } from "../src/reviewProposal.js";
 
 const playbook = {
@@ -149,4 +150,27 @@ test("a held delete names the folder it aims at, and the line over the card says
   assert.match(heldActsLine([del]), /^This step waits for your yes\./);
   assert.match(heldActsLine([browse]), /^The agent's browser waits/);
   assert.match(heldActsLine([browse, del]), /^These steps wait/);
+});
+
+// THE OWNER, 2026-11-09: a held run's card was only "Approve runs: <a long PowerShell line>" with nothing saying why. It leads with the
+// agent's own words for the call, else what the gate read it as, and why it waits; the raw line is folded under "Show the command"
+test("a held shell step leads with what it does and why, its command folded", () => {
+  const p = (x) => proposalPresentation({ Kind: "action", Reason: "held before it ran, in the agent's shell: delete build in ledger - it can't be undone",
+    DraftText: JSON.stringify({ action: "shell_act", sid: "s1", command: "Remove-Item -Recurse -Force C:\work\ledger\build", what: "delete build in ledger",
+      why: "it can't be undone", ...x }) });
+  const own = p({ about: "clean checkout before the release build" });
+  assert.equal(own.lead, "Clean checkout before the release build");
+  assert.equal(own.leadWhy, "Held before it ran - it can't be undone: it would delete build in ledger.");
+  assert.equal(own.folded, true);
+  const gate = p({});
+  assert.equal(gate.lead, "Delete build in ledger"); assert.equal(gate.leadWhy, "Held before it ran - it can't be undone.");
+  const card = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
+  assert.match(card, /\{cmdOpen \? "Hide the command" : "Show the command"\}/);
+  assert.match(card, /\.\.\.\(proposal\?\.folded && !cmdOpen \? \{ display: "none" \} : \{\}\)/, "the command's box stays folded until asked for");
+});
+
+test("the section says Also waiting on you only under something else that waits", () => {
+  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(page, /\$\{asksBelow \? "Also waiting on you" : "Waiting on you"\}\$\{asks\.length > 1 \? ` · \$\{asks\.length\}` : ""\}/);
+  assert.match(page, /const asksBelow = !!\(pendingReview \|\| moreDrafts\.length \|\| owesEmails/);
 });

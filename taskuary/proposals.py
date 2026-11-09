@@ -16,7 +16,7 @@ The agent emits, anywhere in its transcript:
 Unknown actions, bad shapes and unpermitted actions are REFUSED and recorded - a malformed
 proposal is never a partially-executed one.
 """
-import json, re
+import json, re, time
 from loguru import logger
 from .timewords import plural
 from . import buttons
@@ -394,6 +394,27 @@ def held_pending(store, tid) -> dict | None:
     return None
 
 
+# A HELD STEP THE AGENT HAS MOVED PAST WAITS ON NOBODY (the owner, 2026-11-09): a coding agent's run of a command, held, was declined in its
+# chat - the agent said so and asked something else - and "Approve runs: <the command>" stood on as the one thing waiting on them. Once the
+# owner speaks to that session again its next turn is under way, and the held step from before it is settled as superseded, never run late.
+MOVED_PAST = 'the agent went on past it'
+# ...never the one being run on the owner's press right now: Approve tells the agent, and its told turn's prompt can land before the yes is kept
+_PRESSED, PRESS_HOLD = {}, 300
+
+
+def moved_past(store, tid, sid) -> int:
+    "Every pending held step of session `sid` on the task, settled as superseded; how many."
+    n = 0
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (int(tid),)):
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): continue
+        if time.time() - _PRESSED.get(r['ReviewId'], 0) < PRESS_HOLD: continue
+        if isinstance(p, dict) and p.get('action') in HELD_ACTS and str(p.get('sid') or '') == str(sid):
+            n += store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', MOVED_PAST)
+    if n: store.audit('task', tid, 'held_step_moved_past', 'taskuary', 'system', {'sid': str(sid), 'n': n})
+    return n
+
+
 def owed(store, tid: int) -> bool:
     """Something of the close-out still waits on the owner: a reply, a close-out act, any other proposal - not the playbook."""
     return any(_action(r) not in PLAYBOOKS for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (tid,)))
@@ -563,6 +584,7 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']
+    if a in HELD_ACTS and rv.get('ReviewId'): _PRESSED[rv['ReviewId']] = time.time()     # proposals.moved_past leaves it to this press
     if a in ('land', 'open_pr', 'push_direct'):
         from . import ci
         fn = {'land': ci.land, 'open_pr': ci.open_for_task, 'push_direct': ci.push_direct}[a]

@@ -102,7 +102,8 @@ def decide(tc: dict, ctx: dict) -> tuple:
     # ...put to the owner as buttons (answerer): the Approve card is filed only if they do not answer, so nothing waits twice
     if ctx.get('owner_asks') and not shellgate.trusted(store, cwd, todo := shellgate.acts(t['command'], cwd)):
         return HELD, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for your answer'
-    said = shellgate.check(store, int(tid), str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False)
+    raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
+    said = shellgate.check(store, int(tid), str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False, about=str(raw.get('description') or ''))
     if not said: return ALLOWED, 'a repo the owner trusts to act on its own'
     return HELD, said['hookSpecificOutput']['permissionDecisionReason']
 
@@ -125,7 +126,7 @@ def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
     raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
     t, cwd = tool_of(tc), str(raw.get('cwd') or ctx.get('cwd') or '')
     shell = 'PowerShell' if re.search(r'powershell|pwsh', t['name'] + t['command'], re.I) else 'Bash'
-    said = shellgate.check(store, tid, str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False) if t['command'] else {}
+    said = shellgate.check(store, tid, str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False, about=str(raw.get('description') or '')) if t['command'] else {}
     return HELD, (said.get('hookSpecificOutput') or {}).get('permissionDecisionReason') or why
 
 

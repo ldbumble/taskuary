@@ -386,6 +386,10 @@ def _events(t, p: dict) -> None:
             from .background import is_wake
             ws.record(st, tid, sid, 'working', text=ws.WAKE if is_wake(p.get('prompt')) else '', source='hook')
             if not is_wake(p.get('prompt')):                # ...and the owner's words are their next move after a stop (outcomes.py)
+                try:                                         # ...past any step held before it (proposals.moved_past, 2026-11-09)
+                    from . import proposals
+                    proposals.moved_past(st, tid, sid)
+                except Exception as e: logger.debug(f'task {tid}: a held step stayed pending - {e}')
                 try:
                     from . import outcomes
                     outcomes.moved_on(st, tid, p.get('prompt'))
@@ -838,7 +842,8 @@ def browser(payload: dict, brain=None, sid: str = '') -> dict:
         try: browserview.on_demand(t.sid, cmd)
         except Exception as e: logger.warning(f'the browser for {t.sid} did not start on its first page - {e}')
     # ...asked in the CLI's own prompt where the owner can answer it there, held for the task's Approve where nobody can (shellgate.asks)
-    if out: return shellgate.check(st, t.task_id, t.sid, cmd, tool, str(payload.get('cwd') or getattr(t, 'cwd', '') or ''), shellgate.asks(st, t))
+    if out: return shellgate.check(st, t.task_id, t.sid, cmd, tool, str(payload.get('cwd') or getattr(t, 'cwd', '') or ''), shellgate.asks(st, t),
+                                   about=str((payload.get('tool_input') or {}).get('description') or ''))
     # a line that drives both is judged desktop first: either one held holds the whole line
     if desk and (held := agentdesktop.check(st, t.task_id, t.sid, cmd, brain)): return held
     return browsergate.check(st, t.task_id, t.sid, cmd, brain) if browse else {}

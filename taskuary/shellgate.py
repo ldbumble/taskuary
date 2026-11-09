@@ -305,9 +305,10 @@ def trusted(store, cwd: str, todo: list) -> str:
     return repo if all(a.get('what') in ok and a.get('why') == OUT for a in todo) else ''
 
 
-def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool = False) -> dict:
+def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool = False, about: str = '') -> dict:
     """The hook's answer for one shell command: {} lets it run; `ask` hands it to the CLI's own prompt (never an allow); else a refusal
-    holds it and puts the step on the task. ONE step holds the whole command - the line is the agent's, and half of it is not what it asked."""
+    holds it and puts the step on the task. ONE step holds the whole command - the line is the agent's, and half of it is not what it asked.
+    `about`: the agent's own words for the call (a CLI's shell tool takes a `description`) - the card leads with them (the owner, 2026-11-09)"""
     todo = acts(cmd, cwd)
     if not todo: return {}
     what, why = ('; '.join(dict.fromkeys(a[k] for a in todo)) for k in ('what', 'why'))
@@ -324,7 +325,8 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
         from . import proposals
         proposals.queue(store, tid, {'action': 'shell_act', 'sid': str(sid), 'command': str(cmd)[:4000], 'shell': shell, 'cwd': cwd or '',
                                      # the card's In: the folder a delete aims at, never the agent's own scratch folder it ran from
-                                     'what': what, 'why': why, 'where': next((a['where'] for a in todo if a.get('where')), '')}, 'agent')
+                                     'what': what, 'why': why, 'where': next((a['where'] for a in todo if a.get('where')), ''),
+                                     **({'about': ' '.join(str(about).split())[:300]} if str(about or '').strip() else {})}, 'agent')
         store.audit('task', tid, 'shell_act_held', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
     return _deny(f"{HELD}: {what} ({why}). It is on the task for the owner to approve; once they do, Taskuary runs this "
                  "exact command in the same folder and tells you what happened. Do not try it another way. End your turn now, or go on "

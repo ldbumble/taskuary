@@ -176,13 +176,16 @@ TOOLS = {
                       _S({'answer': {'type': 'string', 'enum': ['accept', 'decline', 'propose']}, 'start': _STR, 'end': _STR, 'note': _STR},
                          ('answer',)), ('POST', '/api/agent/answer-invite')),
     'set_up_meeting': ('propose', "Set up a meeting: `with` (names or addresses - names are looked up in the owner's mail and "
-                                  "directory; one nobody can place comes back to you: ask the owner, never guess), `title`, `minutes`"
+                                  "directory; one nobody can place comes back to you: then put your best guess in `with` - their first name"
+                                  " at the company's domain - and name it in `guessed`, and the invite card says it is guessed for the owner"
+                                  " to check before Send), `title`, `minutes`"
                                   " (15, 30, 45, 60). With no `start`/`end` it takes the first time free on the owner's calendar and "
                                   "theirs where it can see it; `within` (this_week, next_week) narrows the days. The owner's calendar"
                                   " adds a Teams or Meet link unless `online` is false. `note`: the invite's words. An invite card "
                                   "with the owner's Send invite - nothing is sent until they press it. Never an .ics file instead.",
                        _S({'with': {'type': 'array', 'items': _STR}, 'title': _STR, 'minutes': _INT, 'within': _STR, 'start': _STR, 'end': _STR,
-                           'note': _STR, 'online': {'type': 'boolean'}}, ('with', 'title')), ('POST', '/api/agent/meeting')),
+                           'note': _STR, 'online': {'type': 'boolean'}, 'guessed': {'type': 'array', 'items': _STR}}, ('with', 'title')),
+                       ('POST', '/api/agent/meeting')),
     'share': ('propose', "Share a dashboard or report you made: `report` its number (the N of #report=N), `to` the person, `text` the"
                          " message with it - what it shows, the numbers that matter. `via`: chat (this task's chat with them) or "
                          "email; none = the way they wrote to the owner. A Share with <name> card in this chat - nothing is sent "

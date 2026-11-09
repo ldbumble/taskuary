@@ -100,3 +100,15 @@ def test_with_no_agent_to_start_an_invite_stays_the_owners_reply():
     with mock.patch.object(ingest, '_spawn', lambda *a: None):
         out = arrive(s)
     assert s.get_task(out['task_id'])['Kind'] == 'reply' and calwrite.of_task(s, out['task_id'])['invite']
+
+
+def test_a_guessed_invitee_goes_on_the_invite_and_the_card_says_so():
+    # invites follow the emails' guess-and-mark rule (the owner, 2026-11-09): no address on record, the agent guesses and marks it
+    s = outlook_store(); tid = s.create_task({'Title': 'Plan the Q4 review', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    guess = 'ray@northwind.example'
+    with mock.patch.object(server, 'store', s), mock.patch.object(calwrite, 'busy', return_value=BUSY), \
+            mock.patch.object(calwrite, 'their_busy', return_value=([], [guess], [])), mock.patch.object(calwrite, 'requests', Fake()):
+        got, bad = call(tid, 'set_up_meeting', **{'with': [guess], 'title': 'Q4 review', 'guessed': [guess]})
+    assert not bad and got['ok'] and 'guessed, check before Send: ' + guess in s.get_review(got['review'])['Reason']
+    from taskuary import agenttools
+    assert 'name it in `guessed`' in agenttools.TOOLS['set_up_meeting'][1] and 'never guess' not in agenttools.TOOLS['set_up_meeting'][1]

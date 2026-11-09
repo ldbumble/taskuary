@@ -5822,7 +5822,7 @@ def agent_propose(body: AgentProposeBody, request: Request):
 class AgentInviteBody(BaseModel): task_id: int; answer: str; start: str | None = None; end: str | None = None; note: str | None = None
 class AgentMeetingBody(BaseModel):
     task_id: int; title: str = ''; minutes: int = 30; within: str = ''; start: str | None = None; end: str | None = None; note: str = ''
-    online: bool = True; people: list[str] = Field([], alias='with')
+    online: bool = True; people: list[str] = Field([], alias='with'); guessed: list[str] = []
     model_config = {'populate_by_name': True}
 class AgentShareBody(BaseModel): task_id: int; report: int | None = None; to: str = ''; text: str = ''; via: str = ''
 
@@ -5846,7 +5846,7 @@ def agent_meeting(body: AgentMeetingBody, request: Request):
     """A new meeting set up on the session's OWN task (calwrite.meeting): its invite card waits on the owner's Send invite."""
     from . import calwrite
     return _agent_set_up(request, body.task_id, lambda: calwrite.meeting(store, body.task_id, body.people, body.title, body.minutes, body.within,
-                                                                          body.start, body.end, body.note, body.online))
+                                                                          body.start, body.end, body.note, body.online, guessed=body.guessed))
 
 @app.post('/api/agent/share')
 def agent_share(body: AgentShareBody, request: Request):

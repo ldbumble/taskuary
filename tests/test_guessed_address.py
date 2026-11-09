@@ -29,4 +29,4 @@ def test_a_rewrite_with_the_address_known_clears_the_mark():
 
 
 def test_the_agent_is_told_to_guess_and_mark_rather_than_hold_the_email():
-    assert 'guessed' in general._ACTION and 'never hold the email back' in general._ACTION
+    assert 'guessed' in general._ACTION and 'never hold the email or the meeting invite back' in general._ACTION

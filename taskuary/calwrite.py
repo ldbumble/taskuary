@@ -697,17 +697,23 @@ def answer(store, tid: int, act: str, start: str = None, end: str = None, note: 
 
 
 def meeting(store, tid: int, who, subject: str, minutes: int = 30, within: str = '', start: str = None, end: str = None, note: str = '',
-            online: bool = True, actor: str = 'agent') -> dict:
-    """The agent's "set up a meeting" on task `tid`: who by name or address (people_of - a name nobody can place is said back, never
-    guessed), the first free time on the owner's calendar and theirs (suggest) unless one is named. {ok, review, to, when, link, says}."""
+            online: bool = True, actor: str = 'agent', guessed=()) -> dict:
+    """The agent's "set up a meeting" on task `tid`: who by name or address (people_of - a name nobody can place is said back), the first
+    free time on the owner's calendar and theirs (suggest) unless one is named. {ok, review, to, when, link, says}. `guessed`: addresses
+    the agent guessed for a name with none on record - the invite card says so (slots.with_guess), the owner's Send is the check (the owner,
+    2026-11-09: invites follow the emails' guess-and-mark rule)."""
     to, miss = people_of(store, who)
-    if miss: raise ValueError(f"no address for {_and(miss)} in the owner's mail or directory - give the address, or ask the owner for it")
+    if miss: raise ValueError(f"no address for {_and(miss)} in the owner's mail or directory - give the address, or your best guess "
+                              "(their first name at the company's domain) named in `guessed`")
     if not (start and end):
         free = suggest(store, to, minutes, within)['slots']
         if not free: raise ValueError('no free time in those days - name other days (within) or a start and end')
         start, end = free[0]['start'], free[0]['end']
     to, subject, acct = _checked(store, to, subject, start, end)
     got = _invite(store, int(tid), to, subject, start, end, note, actor, acct, online)
+    if (g := [a for a in (str(x).strip().lower() for x in guessed or ()) if a in {t.lower() for t in to}]):
+        from .slots import with_guess
+        store.update_review_reason(got['reviewId'], with_guess((store.get_review(got['reviewId']) or {}).get('Reason'), g))
     env = env_of(store.get_review(got['reviewId']))
     return {'ok': True, 'review': got['reviewId'], 'to': to, 'when': env['when'], 'link': env.get('link') or '',
             'says': _told(got['head'] + (f" ({got['clash']})" if got['clash'] else ''))}

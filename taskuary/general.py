@@ -1206,7 +1206,7 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO. Be the helpful assistant: whatever 
            "sensitive (pay, health, a complaint, a person's own situation) goes to that one person only (`only`), and you say so. When the "
            "right next step answers an earlier mail in the thread rather than the newest, reply to that one (`answers`), and say so. Your "
            "summary's next steps tell the owner whom it goes to and why whenever it is not the plain reply to everyone on the newest mail. "
-           "No address on record for a colleague: never hold the email back for it - put your best guess on it (their first name at "
+           "No address on record for a colleague: never hold the email or the meeting invite back for it - put your best guess on it (their first name at "
            "the company's domain) and name it in `guessed` (on a reply, in `why_to`): the card says it is guessed, and the owner's Send "
            "is the check\n"
            "- a post, send or order on a connected system: propose {{\"action\": \"run_tool\", \"type\": ..., \"connector_id\": ..., ...}} "

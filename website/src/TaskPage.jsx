@@ -45,7 +45,7 @@ import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
-import { noteKey, noteOf, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
+import { noteKey, noteOf, onYouLine, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
 import { fmtDate, fmtTime } from "./dates.js";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
@@ -283,6 +283,7 @@ export const STACK_BELOW = 760;
 export const DESK_W = 601, DESK_STACK_BELOW = 440, OPEN_MIN = 180;
 export const useStackBelow = (table = true) => (useMediaQuery(`(min-width:${DESK_W}px)`) && table ? DESK_STACK_BELOW : STACK_BELOW);
 const TODO_SHOWN = 6;   // open to-dos shown before "Show N more"
+const ON_YOU_SX = { display: "block", color: DIM, fontSize: 12.5, lineHeight: 1.5, overflowWrap: "anywhere" };   // the On you line: quiet, under the work
 const REOPEN_ROW_MS = 2500, REOPEN_MAX_MS = 15000;     // the longest the row says "Reopening…" past the server's yes, waiting on the re-read to draw from
 // ...the main view the whole width, as a live agent's is (the owner, 2026-10-26: "no main view should fill the screen. why waste space?" -
 // a 900px column had been tried), scrolling on its own
@@ -1617,7 +1618,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   useEffect(() => { setTicks({}); }, [selected]);
   const checklist = withTicks(detail?.checklist, ticks);
   // what the To do list shows: the emails a task owes are the chat's cards, not boxes to tick here
-  const todo = checklist.filter((i) => !i.out);
+  // ...AND ONLY THE WORK (the owner, 2026-11-09: one task reached 11 lines for 4 pieces of work): triage's asks and the agent's own to-dos. The
+  // steps left on the owner - an agent's "press Send on the draft", a "connect a calendar" - are ONE quiet line under it, never boxes (`on_you`)
+  const todo = checklist.filter((i) => !i.out && !i.on_you);
+  const onYouLeft = onYouLine(checklist);
   const todoFrom = todoSources(todo, sources);
   // a to-do's "from" opens its message in Came from, the whole conversation drawn so the row is there to open
   const openSource = (mid) => {
@@ -3102,6 +3106,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Part>}
                       {t?.DoneWhen && <Part label="Steps" data-tq-todo="" focus={focus === "list"}><GoalSteps task={t} onOpenTask={(tid) => (onOpenTask ? onOpenTask(tid) : onSelect?.(tid))}
                         onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Part>}
+                      {!t?.DoneWhen && !todo.length && onYouLeft && <Typography data-tq-on-you-line="" sx={ON_YOU_SX}>{onYouLeft}</Typography>}
                       {!t?.DoneWhen && todo.length > 0 && (
                         <Part label="To do" sub={`${todo.filter((i) => i.done).length} of ${todo.length}`} subTitle={progressLine(todo)} data-tq-todo="" focus={focus === "list"}>
                           {/* NEWEST FIRST, the open ones only - TODO_SHOWN of them, the rest behind "Show N more" (the owner, 2026-10-28: "hide the
@@ -3145,6 +3150,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {todo.some((i) => i.done) && <Link component="button" type="button" underline="hover" data-tq-todo-done-fold="" aria-expanded={doneOpen}
                             onClick={() => setDoneOpen((v) => !v)} sx={{ display: "block", fontSize: 12, color: FAINT, mt: 0.3, textAlign: "left" }}>
                             {todo.filter((i) => i.done).length} done {doneOpen ? "▾" : "▸"}</Link>}
+                          {onYouLeft && <Typography data-tq-on-you-line="" sx={{ ...ON_YOU_SX, mt: 0.6 }}>{onYouLeft}</Typography>}
                         </Part>
                       )}
                       {/* CAME FROM - the task's messages as the conversations they are: each one's first message and its latest two, with

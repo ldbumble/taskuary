@@ -59,7 +59,7 @@ test("a brief is its own step, listed for a coding run and left to the chat for 
   assert.match(read("BriefLine.jsx"), /component="details"/, "folded until clicked");
   assert.match(read("AgentRecord.jsx"), /s\.k === "brief"\) return <BriefLine text=\{s\.text\} \/>/);
   const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /m\.brief \? \{ brief: true, mail: m\.mail \|\| \[\] \} : \{\}/, "the server's flag reaches the thread");
+  assert.match(ws, /m\.brief \? \{ brief: true, mail: m\.mail \|\| \[\](, \.\.\.\(m\.fold \? \{ fold: m\.fold \} : \{\}\))? \} : \{\}/, "the server's flag reaches the thread (a fold names its task)");
   assert.match(ws, /metadata: \{ custom \}/);
   // ...with the mail that carried the turn on, in its sender's words, over the folded line (general.shown_history)
   assert.match(ws, /return brief \? \(\s*<MessagePrimitive\.Root className="tq-aui-message tq-aui-brief">\s*<CameIn mail=\{mail \|\| \[\]\} \/>\s*<BriefLine>/);

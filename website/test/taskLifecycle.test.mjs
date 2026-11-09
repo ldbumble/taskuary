@@ -53,7 +53,7 @@ test("timeline exposes task state beside current agent or reply attention", () =
 
 test("terminal output never triggers whole-task HTTP refreshes", () => {
   const source = taskSource();
-  assert.match(source, /pollWhileActive\(active, \(\) => loadDetail\(selected\), 3000\)/);
+  assert.match(source, /pollCalming\(active, async \(\) => \{[^\n]*await loadDetail\(selected\)[^\n]*\}, 3000, 12000\)/);   // calms to 12s while nothing changes
   assert.doesNotMatch(source, /onLive\([^\n]*run-tail[^\n]*loadDetail/);
   for (const file of ["ui.jsx", "FeedView.jsx", "BoardView.jsx", "WallView.jsx", "AssistantGame.jsx"]) {
     const view = readFileSync(fileURLToPath(new URL(`../src/${file}`, import.meta.url)), "utf8");

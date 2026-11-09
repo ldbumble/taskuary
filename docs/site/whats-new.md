@@ -2,6 +2,10 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.29 - 2026-11-09
+
+- An agent on an API card reads and writes its files, reads the web, and asks to run a command
+
 ## 0.3.11.28 - 2026-11-09
 
 - Outlook signs in with the person's own app, work or personal: a blank tenant goes through common, a personal-only app through consumers, and the card walks an Outlook.com user through registering one

@@ -209,7 +209,29 @@ def merge_tasks(store, src: int, dst: int, actor: str = 'owner') -> dict:
                       f'{plural(len(msgs), "message")} moved over'
                       + (f'; {plural(len(notes), "note")} stayed on {task_ref(src)}.' if notes else '.'))
     store.add_comment(src, actor, 'human', f'Folded into {task_ref(dst)} - same job as that one. Nothing to do here.')
+    # A's agent's result rides into B's agent as plain text (ingest.folded_in) - its drafts are dropped here, never left with a Send on
+    # a dropped task: a held one too, which the drop's own sweep (pending only) leaves
+    from . import ingest, verdicts
+    result, drafts = agent_result(store, src)
+    for rid in [r['rid'] for r in verdicts.unsent(store, src)]: store.decide_review(rid, 'superseded', None, actor, note=f'folded into {task_ref(dst)}')
     store.update_task(src, {'Status': 'dropped'}, actor)
     store.audit('task', src, 'merged_into_task', actor, detail={'into': dst, 'messages': [m['MessageId'] for m in msgs]})
     store.audit('task', dst, 'merged_from_task', actor, detail={'from_task': src, 'messages': len(msgs)})
-    return {'task_id': dst, 'ref': task_ref(dst), 'dropped': src, 'moved': len(msgs), 'reopened': reopened}
+    told = ingest.folded_in(store, dst, src, str(a.get('Title') or ''), msgs, result, drafts, actor)
+    return {'task_id': dst, 'ref': task_ref(dst), 'dropped': src, 'moved': len(msgs), 'reopened': reopened, 'agent_told': told}
+
+
+def agent_result(store, tid) -> tuple[str, list]:
+    """What the task's agent left, as plain text: its newest turn summary (what it did, what it left on the owner), else its newest
+    answer cut short - and the words of each unsent draft. Never its transcript."""
+    from . import general, verdicts
+    summ = list(general.turn_summaries(store, tid).values())
+    s = summ[-1] if summ and isinstance(summ[-1], dict) else None
+    if s:
+        left = '; '.join(str(o) for o in s.get('on_you') or [] if isinstance(o, str))
+        result = ' '.join(x for x in [str(s.get('did') or ''), f'Left on the owner: {left}.' if left else ''] if x)
+    else:
+        last = next((c for c in reversed(store.list_comments(tid, internal=True)) if c.get('ActorType') == general.ASSISTANT_TYPE), None)
+        result = str((last or {}).get('Body') or '')[:1500]
+    drafts = [str((store.get_review(r['rid']) or {}).get('DraftText') or '') for r in verdicts.unsent(store, tid) if r['kind'] != 'action']
+    return result.strip(), [d for d in drafts if d.strip()]

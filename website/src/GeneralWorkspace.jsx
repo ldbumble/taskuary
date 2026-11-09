@@ -79,6 +79,7 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import KeyIcon from "@mui/icons-material/VpnKeyOutlined";
 import AlarmIcon from "@mui/icons-material/AccessTime";
+import CallMergeIcon from "@mui/icons-material/CallMerge";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -87,7 +88,7 @@ const textOf = (message) => (message?.content || []).filter((p) => p.type === "t
 const initial = (messages) => {
   const folded = foldedSummaries(messages);
   return (messages || []).map((m) => {
-    const custom = { ...(m.brief ? { brief: true, mail: m.mail || [] } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id), drafts: m.drafts_then || null } : {}),
+    const custom = { ...(m.brief ? { brief: true, mail: m.mail || [], ...(m.fold ? { fold: m.fold } : {}) } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id), drafts: m.drafts_then || null } : {}),
       ...(m.since ? { since: m.since } : {}), ...(m.press ? { press: true } : {}) };   // a press of the owner's (general.press_lines): their line, no turn
     return { ...m, ...(Object.keys(custom).length ? { metadata: { custom } } : {}),
       // ...a stamp is the SERVER'S LOCAL time (dates.js, store.norm_stamp), read through asUtc with the zone setting - read as UTC, every
@@ -270,6 +271,7 @@ const Arrived = ({ mail }) => mail.map((x, i, all) => {
 export const checkBackDue = (w) => (/^TASKUARY: the check-back you set on this task is due - ([\s\S]*?)\. Check it now/.exec(String(w || "").trim()) || [])[1] || "";
 const UserMessage = () => {
   const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail), chat = React.useContext(ChatCtx);
+  const fold = useAuiState((s) => s.message.metadata?.custom?.fold || "");
   const at = useAuiState((s) => s.message.createdAt), line = useAuiState((s) => s.message.id);
   // ...a brief with no mail but a SHORT line of its own is a trigger of Taskuary's ("Signed in to the site") - on the right, with the time;
   // a long one is Taskuary's instructions to the agent, never drawn - nor one carrying only the owner's own reply: a short brief over it drew
@@ -283,6 +285,10 @@ const UserMessage = () => {
   if (due) return <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="check-back">
     <span className="tq-aui-arrived-head"><AlarmIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{["Check-back due", at && when(new Date(at))].filter(Boolean).join(" · ")}</span>
     <span className="tq-aui-arrived-words" dir="auto">{due}</span></div></MessagePrimitive.Root>;
+  // ...a FOLD is an input too (general.shown_history `fold`): "Folded in TQ-12: <title>" on the right, the mail it brought under it
+  if (brief && chat && fold) return <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="fold">
+    <span className="tq-aui-arrived-head"><CallMergeIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{[fold, at && when(new Date(at))].filter(Boolean).join(" · ")}</span></div>
+    {!!mail?.length && <Arrived mail={mail} />}</MessagePrimitive.Root>;
   if (brief && chat) return mail?.length ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root>
     : !mail?.length && words && words.length <= 140 ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="">
       <span className="tq-aui-arrived-head"><KeyIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{at ? when(new Date(at)) : ""}</span>

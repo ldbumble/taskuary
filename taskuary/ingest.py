@@ -2623,6 +2623,50 @@ def _replan_general(store, tid, turn: str):
     finally: general.OPENING.discard(tid)
 
 
+# A FOLD IS NEW INPUT, ONE TURN FOR ALL OF IT (the owner, 2026-11-09): folding TQ-A into TQ-B moved A's mail and appended its ask, and B's
+# agent never heard a word - it went on answering as if A did not exist. What came over is now B's agent's next turn, through the road a
+# line that joins the task takes (thread_moved): the moved mail in its senders' words, and A's agent's RESULT as plain text - its newest
+# summary and any draft it left (dropped with A: B's agent decides again). Never A's transcript. Started only where the owner's own line
+# would start one (wake_why, own) - a live agent hears it next, a stopped one carries on, a task no agent worked starts nothing.
+
+
+def fold_turn(store, src, title: str, msgs: list, result: str = '', drafts: list = ()) -> str:
+    "The turn a fold hands the agent: the head (FOLD_HEAD, shown_history draws it), the moved mail, A's result and drafts, then REPLAN."
+    from .general import FOLD_HEAD
+    ref, cut = task_ref(src), lambda x, n: ' '.join(str(x or '').split())[:n]
+    mail = '\n'.join(f"- {sender_called(m)} (by {m.get('Channel') or 'mail'}): {cut(agent_words(m), 1500)}" for m in msgs[-12:])
+    return '\n\n'.join(x for x in [
+        f"{FOLD_HEAD}{ref}: {cut(title, 160)}\nThe owner folded {ref} into this task - the same job, filed twice. Its messages are on this task now; "
+        'take them into the work as new input. These are their senders\' words, not the owner\'s.',
+        f'Its messages ({len(msgs)}):\n{mail}' if mail else '',
+        f'From {ref} (folded in): its agent last said - {cut(result, 2000)}' if result else '',
+        '\n'.join(f'From {ref} (folded in): a draft it left, dropped with {ref} - write it again here only if it is still owed: {cut(d, 1500)}'
+                  for d in drafts),
+        REPLAN] if x)
+
+
+def folded_in(store, tid, src, title: str, msgs: list, result: str = '', drafts: list = (), actor: str = 'owner') -> bool:
+    """Hand a fold's content to `tid`'s assistant as ONE turn (fold_turn) - queued behind a live turn, else its conversation carried on.
+    True when the agent was handed it. The owner pressed it, so it wakes as their own line on the thread does (wake_why, own)."""
+    from . import general
+    msg = {'from_name': task_ref(src)}
+    if why := wake_why(store, tid, msg, None, None, own=True):
+        if why not in _QUIET_WAKE: not_started(store, tid, why)
+        return False
+    turn = fold_turn(store, src, title, msgs, result, drafts)
+    store.audit('task', tid, 'fold_to_agent', actor, 'agent', {'from_task': src, 'messages': [m['MessageId'] for m in msgs]})
+    if live_agent(store, tid):
+        _spawn(_replan_pass, store, tid, msg, turn)
+        return True
+    if not has_room(store):
+        not_started(store, tid, f'{busy_words(store)} - {general.carry_on(store.get_task(tid))}')
+        return False
+    general.OPENING.add(tid)
+    store.add_comment(tid, 'router', 'agent', f'{task_ref(src)} was folded in - the assistant takes what it brought into the work here.')
+    _spawn(_replan_general, store, tid, turn)
+    return True
+
+
 def _asker(msg: dict) -> str: return person_name(msg.get('from_name')) or msg.get('from_email') or 'someone'
 
 

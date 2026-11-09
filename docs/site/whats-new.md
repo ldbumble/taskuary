@@ -2,6 +2,18 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.25 - 2026-11-09
+
+- A turn the owner answered over while it worked ends on what is left
+- A chat's own question stays in its chat's task
+- A promise task is titled with the thing promised
+- A scam on the owner says what to do about it
+- A trusted person who writes on a stranger's task lifts it
+- In a group, only a line joined as the task's work lifts a stranger's task
+- A meeting invite with no address on record guesses and marks it, as an email does
+- A held stranger's task a trusted person lifts starts its agent, as if they had opened it
+- The source package no longer carries tests/
+
 ## 0.3.11.24 - 2026-11-09
 
 - A general task's agent reads none of the owner's own Claude setup

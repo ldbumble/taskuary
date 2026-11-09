@@ -2008,8 +2008,10 @@ export const ContactPicker = ({ value, onChange, onPick, placeholder = "name or 
 // Cohn ?") could only be dropped (the owner, 2026-10-06: "i should be able to edit the email address"). Saves on pick.
 // ...the line wears the sender's name ("Erin Blake <erin@…>", replyDelivery.deliveryTo); the box and the save carry the addresses alone -
 // saved back as it stood, the name went into the envelope as the address
-export const ToRow = ({ to, onSave, disabled }) => {
-  const [open, setOpen] = useState(false);
+// ...and an email with NO address asks for one (`needs`, replyDelivery.needsAddress): the box open and focused, never a name in To
+export const ToRow = ({ to, onSave, disabled, needs = false, who = "" }) => {
+  const [open, setOpen] = useState(needs && !disabled);
+  useEffect(() => { if (needs && !disabled) setOpen(true); }, [needs, disabled]);
   const [text, setText] = useState("");
   const [err, setErr] = useState("");
   const people = useContacts();
@@ -2027,6 +2029,9 @@ export const ToRow = ({ to, onSave, disabled }) => {
           placeholder="name or email address" sx={{ width: 300 }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(text); }
                               if (e.key === "Escape") { setOpen(false); setErr(""); } }} />
+      ) : needs ? (
+        <Typography {...(disabled ? {} : pressable(() => { setText(""); setOpen(true); }))} variant="body2" data-tq-to-change
+          sx={{ ...FOCUS_RING, color: "#6b4a1f", fontWeight: 600, cursor: disabled ? "default" : "pointer" }}>needs an email address</Typography>
       ) : (
         <>
           <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{to || "nobody yet"}</Typography>
@@ -2037,6 +2042,8 @@ export const ToRow = ({ to, onSave, disabled }) => {
         </>
       )}
       {!!err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
+      {needs && !err && open && <Typography variant="caption" data-tq-to-needed="" sx={{ color: "#6b4a1f" }}>
+        needs an email address - {who ? `none found for ${who}` : "none found"}; Send waits for one</Typography>}
     </Box>
   );
 };

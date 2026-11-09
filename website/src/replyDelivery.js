@@ -21,6 +21,12 @@ export const deliveryTo = (review) => {
   if (review?.FromName && review?.FromEmail) return `${review.FromName} <${review.FromEmail}>`;
   return review?.FromName || review?.FromEmail || review?.ConversationId || "this conversation";
 };
+// AN EMAIL WITH NOBODY TO GO TO (the owner, 2026-11-09: "To: <a bank's name>" - "it needs to be email address"): an envelope whose To
+// holds no address - empty, or a name an older draft carried - asks for one; a reply to an inbound message carries no To, and is not it
+export const needsAddress = (review) => {
+  const raw = deliveryMeta(review).to;
+  return raw !== undefined && !(Array.isArray(raw) ? raw : [raw]).some((a) => String(a || "").includes("@"));
+};
 export const deliveryFiles = (review) => {
   const raw = deliveryMeta(review).attachments;
   return Array.isArray(raw) ? raw.filter((f) => f && f.name) : [];

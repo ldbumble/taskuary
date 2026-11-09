@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { bareAddresses, deliveryCc,deliveryFiles, deliveryMeta, deliveryTo, replyContext } from "../src/replyDelivery.js";
+import { bareAddresses, deliveryCc,deliveryFiles, deliveryMeta, deliveryTo, needsAddress, replyContext } from "../src/replyDelivery.js";
 
 const deliver = (obj) => ({ Deliver: JSON.stringify(obj) });
 
@@ -68,4 +68,20 @@ test("a chat reply names the room it lands in; an email says only who it goes to
   // a chat's address is no name, and a one-to-one chat named after the person is no room (the stress run, 2026-11-05)
   assert.equal(replyContext({ FromName: "Ray Colton", FromEmail: "15550000332@s.whatsapp.net", Channel: "whatsapp", SourceName: "Ray Colton" }), "Ray Colton");
   assert.equal(replyContext({ FromName: "Ray Colton", FromEmail: "15550000332@s.whatsapp.net", Channel: "whatsapp", SourceName: "Northwind ops" }), "Ray Colton in Northwind ops");
+});
+
+// "To: <a bank's name>" on an agent's email (the owner, 2026-11-09): a To with no address asks for one; a reply to a mail has no To
+test("an envelope whose To holds no address needs one - an address, or no To at all, does not", () => {
+  assert.equal(needsAddress(deliver({ channel: "email", to: [] })), true);
+  assert.equal(needsAddress(deliver({ channel: "email", to: ["Northwind Bank"] })), true);
+  assert.equal(needsAddress(deliver({ channel: "email", to: ["treasury@northwind-bank.example"] })), false);
+  assert.equal(needsAddress(deliver({ kind: "reply" })), false);
+  assert.equal(needsAddress({}), false);
+});
+
+test("the card holds Send and opens To while the address is missing", async () => {
+  const { readFileSync } = await import("node:fs");
+  const rd = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
+  assert.match(rd, /needsTo && \[no\("approve"\), no\("send_close"\), no\("anyway"\)\]\.includes\(v\.id\) \? \{ \.\.\.v, disabled: true/);
+  assert.match(rd, /needs=\{needsTo\}/);
 });

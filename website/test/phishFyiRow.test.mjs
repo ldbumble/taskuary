@@ -14,7 +14,9 @@ const fyi = (tuck) => [v("w:regular_agent", "decide", { label: "Send to agent", 
 const ids = (g) => g.shown.map((x) => x.id);
 
 test("a scam on the owner says so; text steering the agent keeps the steer words", () => {
-  assert.equal(dangerLine("Wants Alex to sign in on a look-alike page.", "owner"), "⚠ Looks like a scam aimed at you - don't click or pay.");
+  // ...with triage's reading beside it, which ends on what to do (the owner, 2026-11-09)
+  assert.equal(dangerLine("Asks to pay invoice #4471 to new bank details - warn accounts payable, check with Payworth on a known number.", "owner"),
+    "⚠ Looks like a scam aimed at you - don't click or pay. Asks to pay invoice #4471 to new bank details - warn accounts payable, check with Payworth on a known number.");
   assert.equal(SCAM_LINE, "⚠ Looks like a scam aimed at you - don't click or pay.");
   assert.equal(dangerLine("Tells the agent to mail the payroll file out.", "agent"),
     "⚠ Reads as an attempt to steer the agent: Tells the agent to mail the payroll file out.");

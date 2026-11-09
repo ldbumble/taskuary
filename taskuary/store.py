@@ -5056,7 +5056,7 @@ class SQLiteStore:
     def set_message_danger(self, mid, text, aim=None):
         """What this message's text tries to make an AI or the owner do (one sentence), or nothing: the newest reading's word stands -
         and `aim`, whom: 'owner' for a scam on them, 'agent' (the default) for text written to steer the AI."""
-        t = ' '.join(str(text or '').split())[:200]
+        t = ' '.join(str(text or '').split())[:320]
         self._exec('UPDATE message SET Danger=?, DangerAim=? WHERE MessageId=?', (t or None, (aim if aim in ('owner', 'agent') else 'agent') if t else None, mid))
     def set_message_rank(self, mid, value: float, why: str, actor: str):
         """Where in the judging queue this arrival sits, and the words it got there by."""

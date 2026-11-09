@@ -104,3 +104,12 @@ def test_the_guide_says_banners_are_no_evidence_and_a_verified_service_s_link_is
     # the danger bullet itself - the one a document that takes only the shape is handed - carries the same two sentences
     assert "You don't often get email from" in triage.DANGER and 'is not a scam' in triage.DANGER
     assert 'a scam aimed at the owner' in triage.DANGER, 'the 2026-10-30 reading of a phish on the owner stays'
+
+
+def test_a_scam_on_the_owner_says_what_to_do():
+    # a scam filed FYI with its warning told the owner nothing to do (the owner, 2026-11-09): the model writes it, in the danger sentence
+    assert 'what they should do about it' in triage.DANGER and 'number or address already known' in triage.DANGER
+    s = MemoryStore(); mid = s.add_message({'ExternalId': 'x1', 'Channel': 'email', 'BodyText': 'pay today', 'Status': 'filed'})
+    said = 'Asks to pay invoice #4471 to new bank details. Warn accounts payable and check with Payworth on a number you already have.'
+    s.set_message_danger(mid, said, 'owner')
+    assert s.get_message(mid)['Danger'] == said

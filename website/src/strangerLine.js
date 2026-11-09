@@ -26,6 +26,8 @@ export const trustInBox = (story) => story?.kind === "held" && !!story.trust?.pe
 // triage's (message.DangerAim): 'owner' says "a scam aimed at you" - its reason on hover (DangerNote) - and the steer words stay for text
 // written to hijack the agent, and for a reading that never said whom (rows from before)
 export const SCAM_LINE = "⚠ Looks like a scam aimed at you - don't click or pay.";
-export const dangerLine = (danger, aim = null) => (!danger ? null : aim === "owner" ? SCAM_LINE : `⚠ Reads as an attempt to steer the agent: ${danger}`);
+// ...and its reading said beside it, not only on hover (the owner, 2026-11-09: a scam filed quietly told them nothing to do) - triage's
+// sentence ends on what to do about it: warn whoever would pay, check with the real sender on a number already known
+export const dangerLine = (danger, aim = null) => (!danger ? null : aim === "owner" ? `${SCAM_LINE} ${danger}` : `⚠ Reads as an attempt to steer the agent: ${danger}`);
 export const dangerOf = (d) => d?.origin?.danger || null;
 export const dangerAimOf = (d) => d?.origin?.danger_aim || null;

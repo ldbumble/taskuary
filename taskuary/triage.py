@@ -1043,7 +1043,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if out['intent'] == 'task' and j.get('needs_desktop') is True: out['needs_desktop'] = True
                 # ...and what it tries to make an AI do (TRIAGE.md's danger): asked for since 2026-10-15 and dropped here, so only ranking's
                 # reading ever reached message.Danger - and it holds the unattended start now (ingest.danger, the owner 2026-10-28)
-                dg = ' '.join(str(j.get('danger') or '').split())[:200]
+                dg = ' '.join(str(j.get('danger') or '').split())[:320]
                 if dg and dg.lower() not in ('null', 'none', 'no', 'false'):
                     out['danger'] = dg
                     if j.get('danger_aim') in ('owner', 'agent'): out['danger_aim'] = j['danger_aim']

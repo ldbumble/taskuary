@@ -596,19 +596,16 @@ def held_for(store, tid: int, sid: str) -> bool:
 
 
 # ...and never on a turn its own summary says is finished (the owner, 2026-11-09: a complete answer "ready for your Mark done" went back to
-# "Working on this..." by itself, and a hedge "check before you press Send" woke a second turn): nothing_left, or only the owner's presses left
-PRESSES = re.compile(r'\b(send|sent|approve|mark(ed)? (it )?done|decid\w*|decision|press\w*|bring it back|accept|decline)\b', re.I)
-def owner_presses_only(summ) -> bool:
-    "Does the turn's summary (selfclose.summary_marker) leave nothing but the owner's own presses - Send, a decision, Mark done?"
-    if not isinstance(summ, dict): return False
-    return summ.get('nothing_left') is True or bool(summ.get('on_you')) and all(PRESSES.search(x) for x in summ['on_you'])
+# "Working on this..." by itself). Only the turn's own nothing_left is taken as read: whether what is left is just the owner's press is the
+# judge's call (ENDED_SYSTEM says so), never a word list
+def finished(summ) -> bool: return isinstance(summ, dict) and summ.get('nothing_left') is True
 
 
 def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = False, then=None, summ=None):
     """Read a headless turn's last message for work it left unfinished; hand `then` what it still waits on, when it did - never a failure.
-    `summ`: the turn's own summary - one that says it is finished (owner_presses_only) is never read."""
+    `summ`: the turn's own summary - one that says it is finished (nothing_left) is never read."""
     import hashlib
-    if owner_presses_only(summ): return
+    if finished(summ): return
     key = (str(sid), hashlib.sha1(said.encode('utf-8', 'replace')).hexdigest())
     def go():
         from . import workerstate as ws

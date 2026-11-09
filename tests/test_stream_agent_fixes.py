@@ -128,9 +128,8 @@ def test_remind_sets_the_owners_reminder_not_the_agents_check_back():
 
 # ── F7: a finished turn is never woken ─────────────────────────────────────────────────────────────────────────────────────────────
 def test_a_turn_its_summary_calls_finished_is_not_judged():
-    assert hooks.owner_presses_only({'nothing_left': True})
-    assert hooks.owner_presses_only({'on_you': ['Press Send on the reply to Ray', 'Decide whether to add a blank box']})
-    assert not hooks.owner_presses_only({'on_you': ['Call the vendor about the credit']}) and not hooks.owner_presses_only(None)
+    assert hooks.finished({'nothing_left': True})
+    assert not hooks.finished({'on_you': ['Press Send on the reply to Ray']}) and not hooks.finished(None)
     brain = mock.Mock(side_effect=AssertionError('never read'))
     hooks.judge_ended(MemoryStore(), 1, 's1', 'Ready for your Mark done.', brain=brain, wait=True, then=brain, summ={'nothing_left': True})
     assert 'Send or decision is finished, not unfinished' in hooks.ENDED_SYSTEM

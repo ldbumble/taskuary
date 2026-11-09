@@ -33,7 +33,7 @@ an answer, a plan, a draft, a list, a filled-in form - whole, ready to use.
   or a mark saying it needs confirming.
 
 ## A stream of reports
-When one person sends many reports about one product, the task's to-do list IS the issue list: keep it accurate with the to-do
+When one person sends many reports about one product, the task's to-do list IS the issue list: keep it accurate with the `todos`
 tool - add, merge, reword - fold duplicates, and tick what is fixed or answered. Never draft a "thanks, noted" reply per line:
 draft a reply only when they ask {{owner}} something, or {{owner}} asks for one.
 

@@ -997,32 +997,43 @@ def _same_words(a: str, b: str, n: int = 160) -> bool:
     return bool(x) and x == y
 
 
-REREAD_SYSTEM = ('You read a reply drafted for the owner, not sent yet, and one line the owner has since written themselves on the same chat. '
-                 'Decide how much of what the draft answers the owner\'s line already covers: "covered" (all of it - nothing more to send), '
-                 '"partly" (some of it) or "none". For "partly", `left` is the draft cut to only what the owner\'s line left unanswered - in '
-                 'the draft\'s own voice, language and greeting, nothing new added, nothing the owner\'s line already said. Reply with JSON '
-                 'only: {"covered": "covered" | "partly" | "none", "left": "the cut draft for partly, else empty"}')
+# ...one read for both things the owner's line can make stale (the owner, 2026-11-09): a draft waiting on their Send, and the closing words of
+# an agent turn that was working when the line came - the night run's turn ended "the reply waiting says 3pm, check your calendar before
+# Send" over the owner's own "yes 3pm, same room" and a draft already retired
+REREAD_SYSTEM = ('You read words written for the owner and not acted on yet - a reply drafted for them to send, or their agent\'s closing '
+                 'words to them - and one line the owner has since written themselves on the same chat. Decide how much of what the words '
+                 'answer, report or ask the owner\'s line already covers: "covered" (all of it - nothing more to send or do), "partly" (some '
+                 'of it) or "none". For "partly", `left` is the words cut to only what the owner\'s line left open - in their own voice, '
+                 'language and greeting, nothing new added, nothing the owner\'s line already said. Reply with JSON '
+                 'only: {"covered": "covered" | "partly" | "none", "left": "the cut words for partly, else empty"}')
 REREAD_WANT = {'type': 'object', 'properties': {'covered': {'type': 'string', 'enum': ['covered', 'partly', 'none']}, 'left': {'type': 'string'}},
                'required': ['covered']}
 COVERED, CHECK_IT = 'Your line covers this, nothing more to send.', 'You wrote on the thread since - check the draft still fits.'
+COVERED_TURN = 'That covers what this turn found - nothing left on it.'
+
+
+def reread(store, tid, words: str, line: str, what: str = 'THE DRAFT', brain=None) -> tuple:
+    "(covered | partly | none | None when unread, left): `words` read against the owner's `line` since - one small model call, REREAD_SYSTEM."
+    from .llm import build_llm, ask_json
+    try:
+        b = brain or build_llm(store, job='judge', task_id=tid)
+        v = (ask_json(b, REREAD_SYSTEM, f"{what}:\n{words[:6000]}\n\nTHE OWNER'S LINE SINCE:\n{line[:2000]}", want=REREAD_WANT,
+                      need=('covered',)).data if b else None) or {}
+    except Exception as e: logger.debug(f'task {tid}: {what.lower()} was not re-read against the owner\'s line - {e}'); v = {}
+    if not isinstance(v, dict): return None, ''
+    return (v.get('covered') if v.get('covered') in ('covered', 'partly', 'none') else None), str(v.get('left') or '').strip()
 
 
 def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
-    """A pending draft on a chat, re-read against the line the owner wrote there since - one small model call that reads only the two:
+    """A pending draft on a chat, re-read against the line the owner wrote there since (reread):
     covered -> retired (COVERED), partly -> its text cut to what is still unanswered (same recipient, same quote), none -> left as it is.
     Unreadable, or no AI: the draft stays untouched and the task says CHECK_IT. Returns which it was."""
-    from .llm import build_llm, ask_json
     from .sessionrecord import NOTE_ACTOR
     from . import funnel
     line, draft = ' '.join(str(sent.get('BodyText') or '').split())[:2000], str(rv.get('DraftText') or '').strip()
     note = lambda t: tid and store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', t)
     if not draft: return 'none'
-    try:
-        b = brain or build_llm(store, job='judge', task_id=tid)
-        v = (ask_json(b, REREAD_SYSTEM, f"THE DRAFT:\n{draft[:6000]}\n\nTHE OWNER'S LINE SINCE:\n{line}", want=REREAD_WANT, need=('covered',)).data
-             if b else None) or {}
-    except Exception as e: logger.debug(f'task {tid}: the draft was not re-read against the owner\'s line - {e}'); v = {}
-    got, left = v.get('covered') if isinstance(v, dict) else None, str((v or {}).get('left') or '').strip() if isinstance(v, dict) else ''
+    got, left = reread(store, tid, draft, line, brain=brain)
     if got == 'covered':
         store.decide_review(rv['ReviewId'], 'superseded', None, 'you', COVERED)
         if tid:

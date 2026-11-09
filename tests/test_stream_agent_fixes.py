@@ -172,3 +172,39 @@ def test_the_owners_own_line_is_drawn_at_the_time_they_wrote_it():
     at('message', 'MessageId', mine, '2026-11-08 21:40:00')                  # filed on the task late, written early
     order = [w['words'] for m in general.shown_history(s, tid) for w in m.get('mail') or []]
     assert order.index('Ray, which build?') < order.index('Downloads pop up too')
+
+
+# ── the owner's line while a turn works: its closing words are re-read, never a new turn (the owner, 2026-11-09) ─────────────────────
+def mid_turn(s, text='yes 3pm, same room'):
+    import time
+    tid = s.create_task({'Title': 'Budget meeting today?', 'Kind': 'general', 'Status': 'open'}, 'router')
+    s.add_message({'TaskId': tid, 'ExternalId': 'wa1', 'ConversationId': 'wa:gail', 'Channel': 'whatsapp', 'FromName': 'Erin Blake',
+                   'SentAt': stamp(-60), 'BodyText': 'still on for 3pm?', 'Status': 'routed'})
+    t0 = time.time() - 2                                                   # the turn began; the line comes after
+    s.add_message({'TaskId': tid, 'ExternalId': 'wa2', 'ConversationId': 'wa:gail', 'Channel': 'whatsapp', 'FromName': 'You', 'SentAt': stamp(),
+                   'BodyText': text, 'Status': 'context', 'Direction': 'out'})
+    return tid, t0
+
+
+STALE = 'The reply waiting says 3pm today - check your calendar before Send.'
+
+
+def test_a_turn_the_owners_line_covered_ends_saying_so():
+    s = MemoryStore(); tid, t0 = mid_turn(s)
+    with reads('covered'): reply, summ = general.heard_meanwhile(s, tid, STALE, {'did': 'looked', 'on_you': ['Check the calendar']}, t0)
+    assert channels.COVERED_TURN in reply and 'yes 3pm, same room' in reply and 'check your calendar' not in reply
+    assert summ['on_you'] == [] and summ['nothing_left'] and hooks.finished(summ)
+
+
+def test_a_turn_the_line_partly_covered_keeps_only_what_is_left():
+    s = MemoryStore(); tid, t0 = mid_turn(s)
+    with reads('partly', 'The room is booked till 4.'): reply, _ = general.heard_meanwhile(s, tid, STALE + ' The room is booked till 4.', None, t0)
+    assert reply == 'The room is booked till 4.'
+
+
+def test_no_line_meanwhile_is_no_read():
+    import time
+    s = MemoryStore(); tid, t0 = mid_turn(s)
+    with mock.patch('taskuary.llm.build_llm', side_effect=AssertionError('nothing to re-read')):
+        assert general.heard_meanwhile(s, tid, STALE, None, time.time() + 5) == (STALE, None)
+    with reads('none'): assert general.heard_meanwhile(s, tid, STALE, None, t0) == (STALE, None)

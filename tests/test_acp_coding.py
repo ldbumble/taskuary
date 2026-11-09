@@ -199,6 +199,19 @@ def test_words_typed_while_it_works_go_into_the_turn_where_the_adapter_steers(wo
     assert 'heard: and keep it short' in [x for k, x in t.history if k == 'said'][-1]
 
 
+def test_a_steer_the_adapter_echoes_back_is_one_line_not_two(world, monkeypatch):
+    """The owner typed one line mid-turn and the chat drew it twice in one bubble: claude-agent-acp echoed the steer back as a
+    user_message_chunk, beside the line Taskuary draws itself - and the chat joins a run of the owner's chunks into one."""
+    s, tid, repo = world
+    for k in ('FAKE_ACP_HANG', 'FAKE_ACP_STEER', 'FAKE_ACP_STEER_ECHO'): monkeypatch.setenv(k, '1')
+    t = open_(s, tid, repo, seed='look at the totals')
+    assert until(lambda: t.in_turn) and t.steerable()
+    assert waitroom.add(s, tid, 'merge and deploy', 'owner')['state'] == 'steered'
+    assert idle(t)
+    ups = [u['content']['text'] for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'user_message_chunk' and '_meta' not in u]
+    assert ups.count('merge and deploy') == 1 and not t._echoes
+
+
 def test_a_coding_session_idle_past_its_period_closes_quietly_and_the_next_input_brings_it_back(world, monkeypatch):
     """QUIET WHEN IDLE, as the general agent (general.idle_out, its period clipool.IDLE_SECONDS): nothing said in the chat, the chat the
     same, and the next input reopens the same run (its sid) on the agent's own conversation - session/resume."""

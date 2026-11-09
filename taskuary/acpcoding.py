@@ -30,6 +30,7 @@ from . import acp as acp_mod, codingchat
 FELL_BACK: set = set()            # the CLIs that did not start over ACP this process: said once in the log
 SCROLLBACK = 200_000
 HOT_S = 30                        # a file touched this recently is "under its hands" (touching)
+ECHO_SECS = 600                   # how long a steer's echo is waited for: it comes when the CLI takes the words in, after the tool at work
 _SHELL = re.compile(r'^(bash|powershell|pwsh|shell|execute|terminal|local_shell|exec_command|cmd)$', re.I)
 
 
@@ -97,6 +98,7 @@ class ACPCoding:
         self.alive, self.busy, self.client, self.stop_reason, self.in_turn = True, True, None, None, False   # busy from the start: opening is working
         self.turn_at = time.time()                                # when the turn at work began: its clock (codingchat.live_of `turnStarted`)
         self._q, self._qlock, self._wake, self._steer_lock = [], threading.Lock(), threading.Event(), threading.Lock()
+        self._echoes = {}                                         # steered words -> when sent: the adapter's echo of them is not a line of its own
         self.touched, self.calls, self.history, self.has_output, self._live_at = {}, {}, [], False, 0.
         self.held, self.steps, self.gate, self.turns = {}, None, None, 0
 
@@ -282,8 +284,13 @@ class ACPCoding:
         """MID-TURN, INTO THE TURN (the owner, 2026-11-06): the words join the turn at work - drawn in the chat as a turn's are - instead of
         waiting for it to end. A turn that ended meanwhile, or an adapter that could not take them, queues them for the next, as before."""
         with self._steer_lock:
+            # ...marked BEFORE the request: claude-agent-acp 0.101.0 can echo a steer back as a user_message_chunk - when the CLI absorbs it
+            # mid-turn under a uuid of its own, the adapter takes it for words typed in another client - and the echo can beat the reply.
+            # Drawn beside our own line, the owner's one "merge and deploy" read "merge and deploymerge and deploy" (2026-11-09).
+            self._echoes[item[0]] = time.time()
             try: got = self.client.steer(item[0]) if self.steerable() else ''
             except Exception as e: got = ''; logger.debug(f'acp coding {self.sid}: the steer was not taken - {e}')
+            if got != 'injected': self._echoes.pop(item[0], None)
             if got == 'injected':
                 self._show([item]); self.witness.note({'k': 'turn'})
                 return item[3] and item[3](True)
@@ -370,7 +377,14 @@ class ACPCoding:
         self.client.cancel(); return True
 
     # ── updates, steps, permissions ────────────────────────────────────────────────────────────────────────────────────────
+    def _echo(self, u: dict) -> bool:
+        "Is this update the adapter echoing words we steered in (and drew ourselves, _show)? Each echo is dropped once, within ECHO_SECS."
+        if u.get('sessionUpdate') != 'user_message_chunk' or not self._echoes: return False
+        now = time.time(); self._echoes = {k: v for k, v in self._echoes.items() if now - v < ECHO_SECS}
+        return self._echoes.pop(str((u.get('content') or {}).get('text') or '').strip(), None) is not None
+
     def _update(self, u: dict):
+        if self._echo(u): return
         self._record(u)
         kind = u.get('sessionUpdate')
         if kind in ('tool_call', 'tool_call_update'):

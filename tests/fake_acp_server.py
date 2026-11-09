@@ -14,6 +14,7 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_HANG=1        a turn that only ends when it is cancelled (session/cancel) - or steered
   FAKE_ACP_STEER=1       it advertises mid-turn input (_meta.steering.supported, as claude-agent-acp and codex-acp do): `_session/steering`
                          joins the running turn, which then ends saying what it was steered with; with no turn running it is promptRequired
+  FAKE_ACP_STEER_ECHO=1  ...and echoes the steered words back as a user_message_chunk before it answers the steer
   FAKE_ACP_USAGE=1       each turn's answer carries its usage and _meta.quota, as both adapters' PromptResponses do
   FAKE_ACP_MODELS=<a,b>  the model values it offers (default opus,sonnet)
 It offers config options (mode, model, effort) the way claude-agent-acp and codex-acp do, and says what they were set to.
@@ -139,6 +140,8 @@ for line in sys.stdin:
         if _prompt_id is None:
             reply(mid, {'outcome': 'promptRequired', 'reason': 'noRunningTurn'}); continue
         steered = ' '.join(str(b.get('text') or '') for b in msg['params'].get('prompt') or [])
+        # ...echoed back first, as claude-agent-acp does when the CLI takes a steer in under a uuid of its own
+        if os.environ.get('FAKE_ACP_STEER_ECHO') == '1': update('user_message_chunk', content={'type': 'text', 'text': steered})
         reply(mid, {'outcome': 'injected'})
         update('agent_message_chunk', content={'type': 'text', 'text': f'steered: {steered} - {_heard}'})
         reply(_prompt_id, ended()); _prompt_id = None

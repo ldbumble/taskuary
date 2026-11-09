@@ -48,7 +48,24 @@ def test_no_picture_or_a_cli_that_cannot_take_one_keeps_the_plain_prompt(tmp_pat
     assert '--input-format' not in seen['argv'] and seen['stdin'] == 'What is this message?'
     _out, seen = run(tmp_path, ['-p'], [PNG])                     # plain text out: no stream-json input to carry it
     assert '--input-format' not in seen['argv'] and seen['stdin'] == 'What is this message?'
-    assert not agents.sees_images('codex', ['exec', '--json'])
+    assert not agents.sees_images('codex', ['exec', '--json'], resume='t1')        # a resumed thread keeps today's road
+    assert not agents.sees_images('gemini', ['-p'])
+
+
+def test_a_one_shot_codex_exec_attaches_the_picture_as_a_file_and_leaves_none_behind(tmp_path):
+    from pathlib import Path
+    kept = {}
+    real = Claude.__init__
+    def look(self, cmd, *a, **k):
+        real(self, cmd, *a, **k)
+        kept.update({f: Path(f).read_bytes() for f in (str(x)[len('--image='):] for x in cmd if str(x).startswith('--image='))})
+    with mock.patch.object(Claude, '__init__', look), mock.patch.object(agents, '_resolve_cmd', lambda name: ['codex']),          mock.patch.object(agents.spawn, 'popen', Claude):
+        agents.run_cli({'cmd': 'codex', 'args': ['exec', '--sandbox', 'read-only'], 'cwd': str(tmp_path)}, 'What is this message?',
+                       lambda *a, **k: None, images=[PNG])
+    [(f, data)] = kept.items()
+    import base64
+    assert f.endswith('.png') and data == base64.b64decode(PNG[1]) and not Path(f).exists()
+    assert Claude.seen['stdin'] == 'What is this message?' and '--input-format' not in Claude.seen['argv']
 
 
 def test_the_cli_brain_hands_its_images_on(monkeypatch):

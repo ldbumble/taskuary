@@ -1570,8 +1570,10 @@ def spawn_env(profile: dict, extra_env: dict = None) -> dict:
     return child_env({**base, **(extra_env or {})})
 
 
-def sees_images(family: str, args) -> bool:
-    "Does a one-shot run of this CLI take pictures in its input: claude printing stream-json, whose stream-json input carries image blocks."
+def sees_images(family: str, args, resume=None) -> bool:
+    """Does a one-shot run of this CLI take pictures in its input: claude printing stream-json, whose stream-json input carries image blocks,
+    and a fresh `codex exec`, which attaches files by --image (codex-cli's own --help, 2026-11-09)."""
+    if family == 'codex': return bool(args) and args[0] in ('exec', 'e') and not resume
     return family == 'claude' and ('-p' in args or '--print' in args) and 'stream-json' in args and '--input-format' not in args
 
 
@@ -1615,8 +1617,16 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         return _run_live(profile, name, cmd, prompt, trace, keep, resume, cancel, extra_env)
     # A PICTURE IS SHOWN, NOT NAMED (2026-11-09): triage on claude has no tools to open a file, so a screenshot-only chat line was judged
     # blind and became its own task beside the one it was about. Claude's stream-json input takes image blocks, as the API does
-    pics = sees_images(family, args) and list(images or [])
-    if pics: cmd += ['--input-format', 'stream-json']
+    # ...and Codex's exec takes them as files: each written to a private temp file for the run and removed after it, as the devin prompt is
+    pics, pic_files = sees_images(family, args, resume) and list(images or []), []
+    if pics and family == 'claude': cmd += ['--input-format', 'stream-json']
+    elif pics:
+        import base64, tempfile
+        for ct, b64 in pics:
+            fd, f = tempfile.mkstemp(prefix='tq-pic-', suffix='.' + ct.split('/')[-1].replace('jpeg', 'jpg'))
+            with os.fdopen(fd, 'wb') as fh: fh.write(base64.b64decode(b64))
+            pic_files.append(f)
+        cmd += [f'--image={f}' for f in pic_files]     # `=`: --image takes a list, and a bare path after it would swallow what follows
     # Keep exec's existing sandbox/config flags, and resume the exact thread.
     if resume: cmd += resume_argv(profile, resume) + (['--json', '-'] if is_codex else [])
     # Kimi's current CLI does not read its prompt from stdin. --prompt is print mode
@@ -1671,7 +1681,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # emitting output can deadlock both pipes otherwise
     def _feed():
         try:
-            if pics: p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': [
+            if pics and family == 'claude': p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': [
                 *({'type': 'image', 'source': {'type': 'base64', 'media_type': ct, 'data': b64}} for ct, b64 in pics), {'type': 'text', 'text': prompt}]}}) + '\n')
             elif family != 'kimi' and not prompt_file: p.stdin.write(prompt)
             p.stdin.close()
@@ -1770,8 +1780,9 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     finally:
         killer.cancel()
         with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.discard(p)
-        if prompt_file:                                  # the prompt can carry mail: never left in the temp folder
-            try: os.remove(prompt_file)
+        for f in [prompt_file, *pic_files]:              # the prompt and its pictures can carry mail: never left in the temp folder
+            if not f: continue
+            try: os.remove(f)
             except OSError: pass
     err_t.join(5)      # the exit code can land before the stderr reader has appended - 'boom' read as 'no output' on a fast CI box
     if p.returncode != 0:

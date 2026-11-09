@@ -374,7 +374,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     else: prof['timeout'] = int(prof.get('timeout') or ONE_SHOT)     # a look-up is one-shot: it keeps a leash
     def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None):
         """max_tokens is advisory here - a CLI has no such flag; the system prompt already says
-        how long the answer should be. `images` go to a one-shot claude as image blocks (agents.sees_images: triage has no tools to
+        how long the answer should be. `images` go to a one-shot claude or codex exec (agents.sees_images: triage has no tools to
         open a file, 2026-11-09); any other CLI drops them and reads files off disk itself, by the paths the prompt names. `want` is accepted and dropped
         too, and takes_want is never set: there is no wire to put a schema on, so the prompt and
         the caller's recheck (ask_json) are the whole contract here."""

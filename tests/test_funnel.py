@@ -103,6 +103,35 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(answers, ['build0', 'build1'])
 
+    def test_a_working_agent_printing_keeps_the_pile_warm_and_its_row_shows_the_new_lines(self):
+        """A working agent prints every second; its screen is not a new pile. Every line it printed threw the cached pile away, and the
+        Advisor, the walk and each tab rebuilt it in turn - a Not for me sat ~45 s (2026-11-09). A parked agent's screen IS its card."""
+        s = store()
+        t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
+        mail(s, 'Export still broken', hours=1, tid=t)
+        def live(tail, waiting=False, files=()):
+            return [{'sid': 's1', 'taskId': t, 'agent': 'claude', 'label': 'claude', 'started': ago(minutes=5), 'idle': 1,
+                     'waiting': waiting, 'tail': tail, 'files': list(files)}]
+        builds = []
+        real = funnel.build
+        def counted(*a, **kw): builds.append(1); return real(*a, **kw)
+        with mock.patch.object(funnel, 'build', side_effect=counted):
+            with mock.patch('taskuary.terminal.live_sessions', return_value=live(['reading export.py'])):
+                self.assertEqual(funnel.pile(s)['items'][0]['lane'], 'working')
+            n = len(builds)
+            with mock.patch('taskuary.terminal.live_sessions', return_value=live(['editing export.py'], files=['export.py'])):
+                self.assertTrue(funnel.warm(s))
+                row = funnel.pile(s)['items'][0]
+            self.assertEqual(len(builds), n, 'a new line on a working screen rebuilt the pile')
+            self.assertEqual((row['lane'], row['tail']), ('working', ['editing export.py']))       # ...and the row shows it all the same
+            with mock.patch('taskuary.terminal.live_sessions', return_value=live(['Overwrite export.py? (y/n)'], waiting=True)):
+                self.assertFalse(funnel.warm(s))                                                  # parked: a different pile
+                funnel.pile(s)
+            n = len(builds)
+            with mock.patch('taskuary.terminal.live_sessions', return_value=live(['Delete the backup too? (y/n)'], waiting=True)):
+                funnel.pile(s)
+            self.assertEqual(len(builds), n + 1, "a parked agent's screen is what its card says")
+
 
 class PausedConversationTests(unittest.TestCase):
     def test_saved_general_work_is_a_paused_agent_with_its_last_answer(self):

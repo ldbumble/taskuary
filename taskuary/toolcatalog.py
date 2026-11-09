@@ -298,7 +298,7 @@ def vocabularies(store=None, items: list = None) -> dict:
     if items is not None: return _values(items)
     # ...READ ONCE PER CHANGE (the canvas timing, 2026-10-26): every typed turn built the whole pipe for these few words - twice, the
     # index's selector asking too - a build that is ~290 ms on a real mailbox. They stand while nothing is written and no worker moved
-    try: from . import terminal; mark = (funnel._rail_top(store), funnel.workers_signature(terminal.live_sessions(tail=6)))
+    try: mark = (funnel._rail_top(store), funnel.workers_signature(funnel.observe()))
     except Exception: mark = (None, None)
     if None not in mark and _VOCAB.get('store') is store and _VOCAB.get('mark') == mark: return _VOCAB['v']
     try:

@@ -103,6 +103,23 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(answers, ['build0', 'build1'])
 
+    def test_a_setting_rewritten_as_it_was_keeps_the_pile_warm(self):
+        """A setting written on a loop with the value it already holds changed nothing, and still emptied the pile and left a dirty
+        row - each rewrite a cold rebuild (2026-11-09). A new value, or a new writer, is still a write."""
+        s = store()
+        mail(s, 'Invoice 12', hours=1)
+        s.set_setting('pane_geometry', '120x40', 'system'); s.set_setting('feed_days', '14', 'owner')
+        builds, real = [], funnel.build
+        with mock.patch.object(funnel, 'build', side_effect=lambda *a, **kw: builds.append(1) or real(*a, **kw)), \
+             mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            funnel.invalidate(); funnel.pile(s); n, top = len(builds), s.rail_top()
+            s.set_setting('pane_geometry', '120x40', 'system'); s.set_setting('feed_days', '14', 'owner'); funnel.pile(s)
+            self.assertEqual((len(builds), s.rail_top()), (n, top), 'a rewrite of the same value rebuilt the pile')
+            s.set_setting('feed_days', '7', 'owner'); funnel.pile(s)
+            self.assertEqual(len(builds), n + 1, 'a new value must rebuild it')
+        self.assertEqual(s.get_setting('feed_days'), '7')
+        s.set_setting('feed_days', '7', 'migration'); self.assertEqual(s.setting_writer('feed_days'), 'migration')
+
     def test_a_working_agent_printing_keeps_the_pile_warm_and_its_row_shows_the_new_lines(self):
         """A working agent prints every second; its screen is not a new pile. Every line it printed threw the cached pile away, and the
         Advisor, the walk and each tab rebuilt it in turn - a Not for me sat ~45 s (2026-11-09). A parked agent's screen IS its card."""

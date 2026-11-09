@@ -6107,6 +6107,11 @@ class SQLiteStore:
         r = self._one('SELECT UpdatedBy FROM setting WHERE Name=?', (name,))
         return str((r or {}).get('UpdatedBy') or '')
     def set_setting(self, name, value, actor):
+        # A write that says what the row already says - the same value from the same writer - changes nothing, so it moves no stamp and
+        # empties no cache: a setting rewritten on a loop (a pane's size, a router note) used to throw the whole pile away each time
+        # (2026-11-09). str() as SQLite keeps it: a number written as 3 reads back '3' only through the TEXT column's affinity.
+        was = self._one('SELECT Value, UpdatedBy FROM setting WHERE Name=?', (name,))
+        if was is not None and was['UpdatedBy'] == actor and (was['Value'] == value or (value is not None and was['Value'] == str(value))): return
         self._exec('INSERT INTO setting (Name, Value, UpdatedBy) VALUES (?,?,?) ON CONFLICT(Name) DO UPDATE SET Value=?, UpdatedBy=?',
                    (name, value, actor, value, actor))
         if name == 'ingest_status':

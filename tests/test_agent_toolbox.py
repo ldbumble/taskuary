@@ -137,6 +137,23 @@ class TheServer(unittest.TestCase):
             text, err = tool(self.tid, 'run_system', type='linkedin_post', text='We shipped.')
         self.assertFalse(err, text); self.assertIn('"queued": true', text); self.assertEqual(ran, [])
 
+    def test_an_agent_reading_a_system_again_and_again_leaves_the_pile_warm(self):
+        """A general agent called run_system every few seconds while the owner pressed Next (2026-11-09). A read of the owner's own
+        system is no card on the rail: it may leave its audit row, never a stamp the pile is keyed on - so no call rebuilds it."""
+        from taskuary import funnel
+        card = self.s.get_connector_by_type('mssql')
+        self.s.save_connector({'ConnectorId': card['ConnectorId'], 'Active': 1, 'Roles': 'tool'}, 'test')
+        builds, real = [], funnel.build
+        with mock.patch.object(funnel, 'build', side_effect=lambda *a, **kw: builds.append(1) or real(*a, **kw)), \
+             mock.patch('taskuary.terminal.live_sessions', return_value=[]), mock.patch.dict(REGISTRY, {'mssql': lambda cfg: ('1 row', 'n\n1')}):
+            funnel.invalidate(); funnel.pile(self.s); n, top = len(builds), self.s.rail_top()
+            for _ in range(3):
+                text, err = tool(self.tid, 'run_system', type='mssql', connector_id=card['ConnectorId'], query='select 1')
+                self.assertFalse(err, text); self.assertIn('1 row', text)
+                funnel.pile(self.s)
+            self.assertEqual(self.s.rail_top(), top, 'a tool run left a dirty row')
+            self.assertEqual(len(builds), n, 'a tool run rebuilt the pile')
+
     def test_search_tasks_finds_a_task_by_its_words(self):
         text, err = tool(self.tid, 'search_tasks', words='renewal')
         self.assertFalse(err, text); self.assertIn('Brief Alex before the renewal call', text)

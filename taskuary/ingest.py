@@ -1278,6 +1278,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     # the trust rule that let it through is said on the task (PW-080), so 'why did an agent start on
                     # a stranger's mail' has an answer
                     store.add_comment(tid, 'router', 'agent', f'Starting by itself: {who}')
+                    store.audit('task', tid, 'auto_start', actor, 'agent', {'message_id': mid, 'kind': f['kind']})
                     if f['kind'] == 'coding': starts.append((_auto_code, store, tid))
                     else: starts.append((_auto_general, store, tid, advisor_brief(store, msg, mid)))
                 else:
@@ -2125,6 +2126,13 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
 FIRST_AGENT = ('no conversation to carry on', 'it is your own task, so no agent works it', 'no saved coding session to reopen')
 
 
+# ...a start already set going on an open task counts as an agent on it: a burst's second line lands before that start has a conversation
+STARTS = ('auto_start', 'first_agent', 'reply_to_agent')
+def started(store, tid) -> bool:
+    "A start set going since the task last (re)opened - the newest of the two in its audit, which lists newest first."
+    return next((r['Action'] in STARTS for r in store.list_audit('task', tid) if r['Action'] in (*STARTS, 'reopen', 'reopened')), False)
+
+
 def first_agent(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bool | None:
     """Start the agent `follow` names on a task none has worked yet, the task given its kind (FIRST_AGENT). True when one was set going,
     False when it may not start by itself (said on the task), None when this is no such task."""
@@ -2132,7 +2140,8 @@ def first_agent(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> 
     v, t = follow or {}, store.get_task(tid) or {}
     kind = str(v.get('kind') or '').lower()
     if v.get('degraded') or v.get('intent') != 'task' or kind not in task_kinds.AGENT or live_agent(store, tid): return None
-    if t.get('Kind') in task_kinds.AGENT and (general.history(store, tid) or store.list_runs(tid) or store.resumable_session(tid)): return None
+    if t.get('Kind') in task_kinds.AGENT and (general.history(store, tid) or store.list_runs(tid) or store.resumable_session(tid)
+                                              or started(store, tid)): return None
     if t.get('Kind') not in (*task_kinds.AGENT, 'task'): return None
     ok, who = auto_start_ok(store, msg, mid, kind)
     if not ok:

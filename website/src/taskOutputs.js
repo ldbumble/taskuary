@@ -39,10 +39,12 @@ export function parseOutput(raw, link = false) {
 export const outputOf = (raw, tid) => { const o = parseOutput(raw); return o && tid != null && o.tid === Number(tid) ? o.rel : null; };
 
 const PREVIEW = { xlsx: "sheet", xlsm: "sheet", csv: "table", pdf: "pdf", png: "picture", jpg: "picture", jpeg: "picture", gif: "picture",
-  webp: "picture", md: "text", txt: "text", json: "text", log: "text", tsv: "text", svg: "page", html: "page", htm: "page", docx: "document" };
+  webp: "picture", md: "text", txt: "text", json: "text", log: "text", tsv: "text", svg: "page", html: "page", htm: "page", docx: "document",
+  mp4: "video", m4v: "video", webm: "video", mov: "video", mp3: "audio", wav: "audio", m4a: "audio", ogg: "audio" };
 const TYPES = { csv: "text/csv", md: "text/markdown", txt: "text/plain", json: "application/json", log: "text/plain", tsv: "text/plain",
   pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
-  svg: "image/svg+xml", html: "text/html", htm: "text/html" };
+  svg: "image/svg+xml", html: "text/html", htm: "text/html", mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", mov: "video/quicktime",
+  mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", ogg: "audio/ogg" };
 const ext = (name) => (/\.([a-z0-9]+)$/i.exec(name || "")?.[1] || "").toLowerCase();
 
 // the row the page draws for a file an answer named: the server's own row when the task's listing has it (outputs.row), else one

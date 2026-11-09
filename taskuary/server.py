@@ -3841,11 +3841,13 @@ def task_output(tid: int, rel: str, download: bool = False, preview: bool = Fals
             raise HTTPException(422, 'This workbook could not be read for a preview - Download it to open it.')
     ct = outputs.content_type(path.name)
     low = ct.lower()
-    if download or not (low.startswith(('image/', 'text/')) or low in ('application/json', 'application/pdf')):
+    if download or not (low.startswith(('image/', 'text/', 'video/', 'audio/')) or low in ('application/json', 'application/pdf')):
         resp = FileResponse(path, media_type=ct, filename=_att_filename(path.name), content_disposition_type='attachment')
     else:
-        # in place: a picture as itself, a PDF for the viewer, text (and SVG/HTML, which could run as Taskuary) as plain text
-        media = ct if (low.startswith('image/') or low == 'application/pdf') and low not in _NOSCRIPT else 'text/plain; charset=utf-8'
+        # in place: a picture as itself, a PDF for the viewer, a video or sound for the player (FileResponse answers its Range asks, so it
+        # seeks), text (and SVG/HTML, which could run as Taskuary) as plain text
+        media = ct if low.startswith(('image/', 'video/', 'audio/')) or low == 'application/pdf' else 'text/plain; charset=utf-8'
+        if low in _NOSCRIPT: media = 'text/plain; charset=utf-8'
         resp = FileResponse(path, media_type=media, filename=_att_filename(path.name), content_disposition_type='inline')
     resp.headers['X-Content-Type-Options'], resp.headers['Cache-Control'] = 'nosniff', 'no-cache'
     return resp

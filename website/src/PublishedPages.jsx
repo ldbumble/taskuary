@@ -21,12 +21,16 @@ export const SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbo
 // a published page is not a run of the session: AgentReport numbers only its own session results
 export const isPublished = (a) => !!a?.external_url;
 const type = (p) => p?.content_type || "";
-export const isHtml = (p) => !/markdown|csv/.test(type(p)) && !isPicture(p);
+export const isHtml = (p) => !/markdown|csv/.test(type(p)) && !isPicture(p) && !isMedia(p);
+// a video or a sound PLAYS where it is opened, streamed from its address so it seeks (Gabi, 2026-11-08: an MP4 opened as its raw bytes)
+export const isMedia = (p) => ["video", "audio"].includes(p?.preview) || /^(video|audio)\//.test(type(p));
+const isVideo = (p) => p?.preview === "video" || /^video\//.test(type(p));
 // drawn by <img> as itself; an SVG can carry script, so it goes through the sandboxed frame like a page
 export const isPicture = (p) => /^image\//.test(type(p)) && !/svg/.test(type(p));
 // ...and a file the agent made for its task (taskOutputs.js, outputs.py): previewed by what it is, everything else Download only
 const isOutput = (p) => p?.kind === "output";
-const OUTPUT_LABEL = { sheet: "spreadsheet", table: "table", pdf: "PDF", picture: "picture", text: "text", page: "page", document: "document" };
+const OUTPUT_LABEL = { sheet: "spreadsheet", table: "table", pdf: "PDF", picture: "picture", text: "text", page: "page", document: "document",
+  video: "video", audio: "sound" };
 // ...an SVG previews through the page frame (isPicture) but it IS a picture, and the card says so: "page" read as a broken image
 const isImage = (p) => /^image\//.test(type(p)) || /\.svg$/i.test(p?.name || "");
 // ...and a PDF - one it made or one it showed - is read in place by the browser's own viewer (Preview), never only downloaded (2026-11-04)
@@ -94,12 +98,27 @@ function DocPreview({ page }) {
   );
 }
 
+// the browser's own player, fed from the file's address (attUrl: the token rides in its query, as a picture's does); a codec it cannot
+// play (an HEVC .mov) says so and points at Download, never a blank box
+function MediaPlayer({ page }) {
+  const [err, setErr] = useState(false), V = isVideo(page) ? "video" : "audio";
+  if (err) return <div className="tq-published-note" data-tq-media-error="">This {V === "video" ? "video" : "sound"} can't play here - Download it to open it in your player.</div>;
+  return (
+    <div className="tq-published-media" data-tq-media={V}>
+      <V controls preload="metadata" src={attUrl(page)} onError={() => setErr(true)} title={page.name}
+        style={V === "video" ? { display: "block", width: "100%", maxHeight: "70vh", background: "#000" } : { display: "block", width: "100%" }} />
+    </div>
+  );
+}
+
 export function Preview({ page }) {
   const [body, setBody] = useState(null), [err, setErr] = useState("");
   const sheet = isOutput(page) && page.preview === "sheet", pdf = isPdf(page), doc = isOutput(page) && page.preview === "document";
   const picture = isPicture(page) || pdf, text = isOutput(page) && page.preview === "text" && !/markdown/.test(type(page));
+  // ...and a file of a kind with no preview (a zip, a .pptx) says so: read as text it drew its raw bytes over the chat
+  const media = isMedia(page), none = isOutput(page) && !page.preview && !media;
   React.useEffect(() => {
-    if (sheet || doc) return undefined;
+    if (sheet || doc || media || none) return undefined;
     let live = true, url = "";
     api.get(page.url, picture ? { responseType: "blob" } : { responseType: "text", transformResponse: (x) => x })
       .then((r) => {
@@ -113,9 +132,11 @@ export function Preview({ page }) {
         if (live) setErr(why);
       });
     return () => { live = false; if (url) URL.revokeObjectURL(url); };
-  }, [page.url, page.version, picture, pdf, sheet, doc]);
+  }, [page.url, page.version, picture, pdf, sheet, doc, media, none]);
   if (sheet) return <SheetPreview page={page} />;
   if (doc) return <DocPreview page={page} />;
+  if (none) return <div className="tq-published-note" data-tq-no-preview="">There is no preview for this kind of file here - Download it to open it.</div>;
+  if (media) return <MediaPlayer key={page.url} page={page} />;
   if (err) return <div className="tq-published-note">{err}</div>;
   if (body == null) return <div className="tq-published-note"><CircularProgress size={12} /></div>;
   if (pdf) return <iframe className="tq-published-frame" title={page.name} src={body} />;

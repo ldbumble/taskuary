@@ -60,6 +60,18 @@ class TaskOutputsTests(unittest.TestCase):
         self.assertTrue(got.headers['content-type'].startswith('text/plain'))
         self.assertEqual(got.headers['x-content-type-options'], 'nosniff')
 
+    def test_a_video_plays_in_place_and_seeks(self):
+        "Gabi, 2026-11-08: the MP4 opened as its raw bytes - it is a video the page plays, streamed in ranges so it seeks."
+        (self.dir / 'opening test.mp4').write_bytes(b'\x00\x00\x00\x18ftypisom' + bytes(range(256)) * 8)
+        row = next(r for r in self.client.get(f'/api/task-outputs/{self.tid}').json()['data'] if r['name'] == 'opening test.mp4')
+        self.assertEqual((row['preview'], row['content_type']), ('video', 'video/mp4'))
+        got = self.client.get(row['url'])
+        self.assertEqual((got.status_code, got.headers['content-type']), (200, 'video/mp4'))
+        self.assertIn('inline', got.headers['content-disposition'])
+        part = self.client.get(row['url'], headers={'Range': 'bytes=0-15'})
+        self.assertEqual((part.status_code, len(part.content)), (206, 16))
+        self.assertIn('attachment', self.client.get(row['url'], params={'download': 'true'}).headers['content-disposition'])
+
     def test_nothing_outside_the_folder_is_served(self):
         (config.home() / 'scratch' / 'outputs' / 'loose.txt').write_text('above the folder', encoding='utf-8')
         for bad in ('..%2Floose.txt', '../loose.txt', '..%5Cloose.txt', f'..%2F{task_ref(self.other)}%2Fsecret.txt',

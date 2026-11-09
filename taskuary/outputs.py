@@ -22,11 +22,15 @@ TYPES = {'.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
          '.log': 'text/plain', '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
          '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.html': 'text/html', '.htm': 'text/html',
          '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-         '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'}
-# how the page previews each kind; anything not here is Download only
+         '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+         '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+         '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg'}
+# how the page previews each kind; anything not here is Download only. A video or a sound PLAYS in place (Gabi, 2026-11-08: "we need to
+# be able to play/interact/edit things taskuary generates right on screen" - an MP4 opened as its raw bytes)
 PREVIEW = {'.xlsx': 'sheet', '.xlsm': 'sheet', '.csv': 'table', '.pdf': 'pdf', '.png': 'picture', '.jpg': 'picture', '.jpeg': 'picture',
            '.gif': 'picture', '.webp': 'picture', '.md': 'text', '.txt': 'text', '.json': 'text', '.log': 'text', '.tsv': 'text',
-           '.svg': 'page', '.html': 'page', '.htm': 'page', '.docx': 'document'}
+           '.svg': 'page', '.html': 'page', '.htm': 'page', '.docx': 'document',
+           '.mp4': 'video', '.m4v': 'video', '.webm': 'video', '.mov': 'video', '.mp3': 'audio', '.wav': 'audio', '.m4a': 'audio', '.ogg': 'audio'}
 
 
 def folder(tid: int) -> Path: return config.home() / 'scratch' / 'outputs' / task_ref(tid)

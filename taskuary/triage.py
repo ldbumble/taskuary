@@ -135,7 +135,9 @@ _ma = re.search(r'^\*\*An agent already on it\*\*.*?(?=\n\s*\n|\Z)', SHIPPED, re
 FIELDS['agent_on_it'] = ("agent_on_it, on a task in thread_task, room_tasks or open_work, is the agent on that task right now - {state: working or "
                          "waiting for its next turn, kind, brief: what it was put to, doing: the task's latest line}. "
                          + (_ma.group(0) if _ma else ''))
-FIELDS['open_todos'] = "open_todos, on a task in thread_task, room_tasks or open_work, is that task's to-dos not yet done."
+FIELDS['open_todos'] = ("open_todos, on a task in thread_task, room_tasks or open_work, is that task's to-dos not yet done, each with its "
+                       "number n. When this message corrects what one of them asks for on the task it joins, answer reword: "
+                       "[{n, text}] with that to-do as corrected, and leave it out of checklist.")
 ON_TASKS = ('agent_on_it', 'open_todos')      # the FIELDS that ride on a task in the payload rather than at its top
 
 
@@ -337,6 +339,9 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
         # ...and when it joins with a part the title does not cover, the title that covers both: the task widens, never narrows to the
         # line (the owner, 2026-10-29: a chat bridge's later lines joined at combine 4 - the task should read as the bridge's, not the last line's)
         p['task_title'] = {'type': ['string', 'null']}
+        # ...and a correction rewords the open to-do it corrects, by its number in open_todos (ingest.reword_todos, the owner 2026-11-09)
+        p['reword'] = {'type': ['array', 'null'], 'items': {'type': 'object', 'additionalProperties': False, 'required': ['n', 'text'],
+                                                            'properties': {'n': {'type': 'integer'}, 'text': {'type': 'string'}}}}
     p['thread'] = THREAD_SCHEMA   # every verdict reads the whole thread, so it is never optional on the wire (2026-11-04)
     # the earlier lines of the exchange the ask rests on - shown with the task so its ask can be checked (2026-10-22)
     if earlier: p['rests_on'] = {'type': ['array', 'null'], 'items': {'type': 'integer'}}
@@ -978,6 +983,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     if v in earlier_ids and v not in rests: rests.append(v)
                 if rests: out['rests_on'] = rests
                 if (th := thread_of(j, earlier_ids)): out['thread'] = th
+                # reword: a numbered to-do and its corrected words - which task's is the join's, and the number is checked there
+                rw = [{'n': x['n'], 'text': ' '.join(str(x.get('text') or '').split())[:300]} for x in (j.get('reword') if isinstance(j.get('reword'), list) else [])
+                      if isinstance(x, dict) and isinstance(x.get('n'), int) and str(x.get('text') or '').strip()][:6]
+                if rw: out['reword'] = rw
                 # notes_applied: only the ids of notes it was shown - which standing notes bore on this message is the model's word
                 applied = j.get('notes_applied') if isinstance(j.get('notes_applied'), list) else []
                 if note_ids: out['notes_applied'] = [i for i in dict.fromkeys(str(x) for x in applied) if i in note_ids]

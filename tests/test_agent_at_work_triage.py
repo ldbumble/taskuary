@@ -48,7 +48,7 @@ class WhatTriageSees(unittest.TestCase):
         self.assertEqual((tt['agent_on_it']['state'], tt['agent_on_it']['kind']), ('working', 'coding'))
         self.assertTrue(tt['agent_on_it']['doing'], "the task's latest line says what it is doing")
         self.assertNotIn('brief', tt['agent_on_it'], 'put to the task\'s own ask, which is not said twice')
-        self.assertEqual(tt['open_todos'], TODOS)
+        self.assertEqual(tt['open_todos'], [{'n': 1, 'text': TODOS[0]}, {'n': 2, 'text': TODOS[1]}])
 
     def test_a_parked_session_reads_as_waiting_for_its_next_turn(self):
         seen = []
@@ -59,7 +59,7 @@ class WhatTriageSees(unittest.TestCase):
         self.s.tick_checklist_item(self.tid, self.s.task_checklist(self.tid)[0]['id'], True, 'owner')
         seen = []; mail(self.s, 'b', 'Any news?', brain(seen, new_job=None), at='2026-11-02 10:00:00')
         tt = seen[-1][1]['thread_task']
-        self.assertNotIn('agent_on_it', tt); self.assertEqual(tt['open_todos'], TODOS[1:])
+        self.assertNotIn('agent_on_it', tt); self.assertEqual(tt['open_todos'], [{'n': 1, 'text': TODOS[1]}])     # numbered as shown
 
     def test_a_general_agents_brief_is_what_it_was_put_to(self):
         brief = [{'brief': True, 'content': [{'type': 'text', 'text': 'Your Advisor raised this idea: check the March rent accrual.'}]}]

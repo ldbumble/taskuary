@@ -2,6 +2,10 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.24 - 2026-11-09
+
+- A general task's agent reads none of the owner's own Claude setup
+
 ## 0.3.11.23 - 2026-11-09
 
 - Night scenarios, round 4: the owner's phone line during a turn is heard, and one draft per person

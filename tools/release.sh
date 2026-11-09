@@ -101,7 +101,8 @@ import re, sys
 for p in ('README.md', 'README.zh-CN.md'):
     t = open(p, encoding='utf8', newline='').read(); open(p, 'w', encoding='utf8', newline='').write(re.sub(r'asof=[0-9a-z.-]+', f'asof={sys.argv[1]}-live', t))
 PY
-git commit -qam "Refresh the README's PyPI pill for $V" && git push -q origin HEAD:master || say "pill push skipped (master moved) - bump asof= by hand"
+# only the two READMEs: `commit -a` swept an agent's uncommitted edits in the owner's checkout into this commit (2026-11-09)
+git commit -q -m "Refresh the README's PyPI pill for $V" -- README.md README.zh-CN.md && git push -q origin HEAD:master || say "pill push skipped (master moved) - bump asof= by hand"
 say "v$V is out. The owner's app runs from the main checkout: restart Taskuary to load it."
 
 # THE NUMBER THAT MATTERS (the owner, 2026-10-28: measure the agreement rate after each release): how often the lit button was the one

@@ -260,3 +260,18 @@ def test_a_step_still_held_is_said_held_and_nothing_is_moved_past(home):
     [r] = rec['sessions']
     assert r['result'] == HELD and not any(x.get('stale') for x in r['steps'])
     assert [(h['state'], h['answered']) for h in rec['held']] == [('held', '')]
+
+
+def test_a_view_the_agent_showed_is_still_drawn_once_its_turn_is_filed(home):
+    # the kept step cut the show call's arguments to strings, so a filed turn's table was gone from the chat (2026-11-09)
+    from taskuary import viewspec
+    s = MemoryStore(); tid = Factory(s).task(title='Renewals', kind='general')
+    rid = s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Two renewals are due.')
+    answer = viewspec.shown({'root': 'a', 'elements': {'a': {'type': 'list', 'props': {'items': ['Payworth', 'Trainly']}}}})
+    sessionrecord.keep_turn(tid, rid, [
+        {'type': 'tool_call', 'name': 'mcp__taskuary__show', 'detail': {'tool_call_id': 'v1', 'args': {'root': 'a', 'elements': {}}}},
+        {'type': 'tool_result', 'name': 'v1', 'detail': {'tool_call_id': 'v1', 'result': answer}},
+        {'type': 'tool_call', 'name': 'Read', 'detail': {'tool_call_id': 'r1', 'args': {'file_path': 'x.csv'}}},
+        {'type': 'tool_result', 'name': 'r1', 'detail': {'tool_call_id': 'r1', 'result': 'a,b'}}])
+    show, read = [x for x in sessionrecord.general_steps(s, tid) if x['k'] == 'tool']
+    assert show['output'] == answer and 'output' not in read

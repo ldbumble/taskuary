@@ -117,10 +117,10 @@ class TheTool(unittest.TestCase):
 
     def tearDown(self): self.p.stop()
 
-    def test_it_is_listed_as_a_read_and_says_it_is_optional(self):
+    def test_it_is_listed_as_a_read_and_invites_use(self):     # 2026-11-09: once in 50 scenarios, with "never required" in it
         cls, desc, schema, _ = agenttools.TOOLS['show']
         self.assertEqual(cls, 'read')
-        self.assertIn('plain text is fine otherwise', desc); self.assertIn('never sends, pays or closes', desc)
+        self.assertIn('Use it freely', desc); self.assertIn('never sends, pays or closes', desc)
         self.assertEqual(schema['required'], ['root', 'elements'])
 
     def test_a_call_answers_with_the_view_and_a_bad_one_with_what_to_fix(self):

@@ -73,8 +73,8 @@ TOOLS = {
                    {'type': 'object', 'properties': {'type': _STR, 'connector_id': _INT}, 'required': ['type'],
                     'additionalProperties': True}, ('POST', '/api/tools/run')),
     # ...and a VIEW in its own chat (viewspec.py, after Vercel's json-render): changes nothing outside the chat, so its door is the task's own read
-    'show': ('read', "Show the owner a small view in this chat when a table, chart or checklist would be clearer than text - plain text is "
-             "fine otherwise, and this is never required. Your words then say what the view means - never the same table or list again in text. "
+    'show': ('read', "Draw a view in this chat - a table, a chart, tiles, a checklist - whenever numbers, a comparison, options, steps or a "
+             "status would take more than a few lines of text. Use it freely. Your words then say what it means - never the same table or list again in text. "
              "`elements` maps an id to {type, props, children?}; `root` is the id drawn first. Types: grid, stats, chart, table, checklist, list, "
              "steps, text, note, badge, button - each one's props, and a worked example, are the guide tool's `show` topic: read it before your "
              "first view. A button only lights or opens - it never sends, pays or closes. A bad spec comes back saying what to fix.",

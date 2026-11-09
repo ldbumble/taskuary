@@ -1157,6 +1157,11 @@ LOOK_CLAUSE = (", and look in THE OWNER'S REPOSITORIES and the folders you can r
                "such as an .env holds settings: read the value the job needs")
 LOGIN_SENTENCE = ("A login or secret you find in their files goes only in the reply you draft - their Send shares it - never in the "
                   "conversation, your steps or your summary. ")
+# SHORT, AND SHOWN (the owner, 2026-11-09: "no one reads long responses. use visuals if you have to. ensure they are used liberally"): an
+# instruction, never a cap - 50 overnight scenarios called `show` once, and answered in screens of prose. Not a stranger's: no `show` there
+SHORT_LINE = ("KEEP THE CHAT SHORT: nobody reads a long answer. Give the result in a few lines; when numbers, a comparison, options, steps "
+              "or a status would take more than that, draw them with `show` - a table, a chart, tiles, a checklist - and let your words say "
+              "what it means. Use it freely. Anything longer - a write-up, a full list - goes in a file in the task's outputs folder, named in one line.")
 # ...and on a STRANGER's task neither where to look nor the login: their session is never steered toward the owner's files or credentials
 # (the floor blocks credential folders for them too)
 STRANGER_GOAL_LINE = _GOAL.format(look='', login='')
@@ -1512,7 +1517,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF):
-        system += (f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}')
+        system += (f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}\n\n{SHORT_LINE}')
                    + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}' + ('' if stranger else f'\n\n{LESSON_LINE}\n\n{CHECK_BACK_LINE}'))
     # ...and a setup walk works the same way: AGENT.md no longer repeats how a step is checked or a failing way given up (2026-11-09)
     elif not dock: system += f'\n\n{WORK_LINE}'

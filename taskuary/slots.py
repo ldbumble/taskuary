@@ -152,6 +152,10 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     cc = [a.lower() for a in cc]
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {'ok': False, 'why': 'that task is closed'}
     to = split(to)[1] if channel == 'email' else ' '.join(str(to or '').split())
+    # ...a chat id is no mailbox (the night run, 2026-11-09: two "emails" went to whatsapp:1555... - the person was only known by their chat)
+    from .ingest import CHAT_CHANNELS
+    if channel == 'email' and str(to).split(':')[0].lower() in CHAT_CHANNELS:
+        return {'ok': False, 'why': f"{to} is a chat, not a mailbox - answer them in that chat (propose_reply, `answers` their line) or find their email address"}
     want = ' '.join(str(to or '').split()).casefold()
     hit = next((i for i in all_(store, tid) if slot and i['id'] == slot), None) or \
           next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want), None) or \

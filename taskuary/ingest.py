@@ -2814,7 +2814,8 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     # a group carries many people's asks, and the 2026-09-24 ruling stands there. `new` is its own task in both. One-to-one is what
     # the platform said on the line (the poller's mail_meta dm), never who has spoken.
     if rel == 'uncertain' and dm:
-        cur = target or next((c['task_id'] for c in reversed(cands) if _joinable_task(store, c['task_id'])), None) \
+        # ...the task triage named as this line's own (same_as: a nudge about an EMAILED ask, the night run 2026-11-09) before the room's newest
+        cur = target or _joinable_task(store, intent.get('same_as')) or next((c['task_id'] for c in reversed(cands) if _joinable_task(store, c['task_id'])), None) \
               or _open_task(store, store.task_for_conversation(msg.get('conversation_id')))
         if cur:
             closed = (store.get_task(cur) or {}).get('Status') == 'done'

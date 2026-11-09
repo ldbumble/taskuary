@@ -242,3 +242,18 @@ class SameProblemTests(unittest.TestCase):
         self.assertEqual(triage.relationship_of({**base, 'same_problem': False}, cands)['relationship'], 'new')
         self.assertEqual(triage.relationship_of({**base, 'same_problem': True}, cands)['relationship'], 'continues')
         self.assertEqual(triage.relationship_of(base, cands)['relationship'], 'continues')     # not asked: unchanged
+
+
+def test_an_unsure_line_in_a_one_to_one_chat_joins_the_task_triage_named_not_the_rooms():
+    """The night run, 2026-11-09: Gail's WhatsApp nudge about an EMAILED accrual question was judged uncertain in the room, with same_as the
+    emailed task - and joined the room's other task (a budget battery), where the owner's "tell her to wait" then rewrote the wrong draft."""
+    s = MemoryStore()
+    room = s.create_task({'Title': 'Battery in December?', 'Kind': 'general', 'Status': 'open'}, 't')
+    mid = s.add_message({'ExternalId': 'g1', 'ConversationId': 'whatsapp:gail', 'Channel': 'whatsapp', 'FromName': 'Gail', 'SentAt': f'{datetime.now():%Y-%m-%d} 01:00:00',
+                         'BodyText': 'push the battery or keep it?', 'Status': 'routed'}); s.attach_message(mid, room)
+    mailed = s.create_task({'Title': 'October accrual', 'Kind': 'general', 'Status': 'open'}, 't')
+    msg = {'channel': 'whatsapp', 'conversation_id': 'whatsapp:gail', 'body': 'sent you an email about the accrual', 'from_name': 'Gail',
+           'sent_at': f'{datetime.now():%Y-%m-%d} 02:00:00', 'mail_meta': {'dm': True}}
+    with mock.patch.object(ingest, 'judge', return_value=({'intent': 'reply_only', 'relationship': 'uncertain', 'same_as': mailed}, None)):
+        route, _ = ingest.chat_route(s, msg, {}, llm=lambda *a, **k: '{}')
+    assert route['decision'] == 'attach' and route['task_id'] == mailed, route

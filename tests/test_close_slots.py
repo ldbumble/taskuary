@@ -187,6 +187,13 @@ def test_by_recipient_and_again_rewrites_the_same_draft(s):
     assert a['review_id'] == b['review_id'] and s.get_review(a['review_id'])['DraftText'] == 'second'
 
 
+def test_a_chat_id_is_no_mailbox(s):
+    # the night run, 2026-11-09: two emails were filed to whatsapp:1555... - a person known only by their chat
+    tid = typed(s, FOUR[:1])
+    out = slots.draft(s, tid, 'Your Q3 figures, please.', to='whatsapp:15550004444', subject='Q3 figures')
+    assert not out['ok'] and 'is a chat, not a mailbox' in out['why']
+
+
 def test_an_unmatched_recipient_adds_a_slot_and_says_so(s):
     tid = typed(s, FOUR[:1])
     out = slots.draft(s, tid, 'Tab 5 too.', to='omar@northwind.example', subject='Tab 5')

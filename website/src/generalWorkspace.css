@@ -197,3 +197,6 @@
 /* a chat task's quiet lines (the owner, 2026-11-06): no AI over the box, and how a closed task closed at the stream's foot */
 .tq-aui-noai { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 4px 4px; color: #7a7468; font-size: 12px; }
 .tq-aui-closed { margin: 10px 16px 4px; color: #6f8a6e; font-size: 12.5px; }
+/* an owner's press on the task (Remind me, Change, a hand-off): an event in the stream, never a bubble that reads as typed */
+.tq-aui-press > * { grid-column: 1 / -1; }
+.tq-aui-press-line { margin: 2px 16px 10px; color: #858078; font-size: 12px; }

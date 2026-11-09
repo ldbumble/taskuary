@@ -702,6 +702,8 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
     failover.takes_web = any(getattr(b, 'takes_web', False) for _, b in brains)
     # a prompt that says lookups exist is written before the answering brain is known: every brain of the chain must have them
     failover.looks_up = all(getattr(b, 'looks_up', getattr(b, 'takes_web', False)) for _, b in brains)
+    # a tool loop runs on the primary alone: a backup's own tools and conversation are not this one's (apiagent.py)
+    failover.chat = getattr(brains[0][1], 'chat', None) if brains[0][0] == primary else None
     return failover
 
 
@@ -1148,6 +1150,29 @@ def make_llm(t, cfg: dict, key: str):
                     raise RuntimeError(f'{t}: the model ran out of room before answering, even with {ROOM} tokens (finish_reason {e}) - '
                                        f'model {model}; pick a non-thinking model on its card') from None
                 raise RuntimeError(f'{t} sent back no answer (finish_reason {e}) - model {model}') from None
+    # ONE STEP OF A TOOL LOOP (apiagent.py): the model's message - its words and/or tool_calls - for a whole conversation and the tools
+    # it may call, in the OpenAI schema every endpoint here speaks. Without it an API brain was one system + one user message and nothing
+    # it could DO: a HIPAA-only install, with no CLI, answered "logging in cannot be done from here" (the owner, 2026-11-09). LiteLLM
+    # carries `tools` on to the Gemini and Claude models behind a gateway (verified live on the HIPAA AI card, 2026-11-09).
+    def chat(messages, tools, max_tokens=MAX_TOKENS, **extra):
+        last = None
+        for url in urls:
+            for tok_param in ('max_completion_tokens', 'max_tokens'):
+                body = {'messages': messages, 'tools': tools, tok_param: max_tokens, **extra, **({'model': model} if model else {}),
+                        **({'reasoning_effort': effort} if effort and ek not in _NO_EFFORT else {})}
+                r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
+                if budget_spent(r): raise BudgetSpent(BUDGET_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t))
+                if r.status_code in (400, 422) and body.pop('reasoning_effort', None) and _EFFORT_REFUSED.search(r.text or ''):
+                    r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
+                if r.status_code == 200:
+                    aiusage.openai(r.json())
+                    return (r.json().get('choices') or [{}])[0].get('message') or {}
+                last = r
+                if r.status_code == 404: break
+                if r.status_code == 400 and 'max_completion_tokens' in (r.text or ''): continue
+                raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
+        raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}{tried(last)}: {last.text[:300]}')
+    llm.chat = chat
     llm.takes_want = True
     llm.takes_web = t in ('openai', 'azure_openai')
     return llm

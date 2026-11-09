@@ -275,6 +275,8 @@ const Arrived = ({ mail }) => mail.map((x, i, all) => {
     <CameWith x={x} />
   </div>;
 });
+// a press's event line: its words without the closing stop, then the time - "You changed its workstream · 3:12 PM"
+export const pressLine = (words, stamp) => [String(words || "").trim().replace(/\.$/, ""), stamp].filter(Boolean).join(" · ");
 // what a check-back come due asked to verify, from Taskuary's own line (checkback.TURN) - '' for any other brief
 export const checkBackDue = (w) => (/^TASKUARY: the check-back you set on this task is due - ([\s\S]*?)\. Check it now/.exec(String(w || "").trim()) || [])[1] || "";
 const UserMessage = () => {
@@ -286,7 +288,12 @@ const UserMessage = () => {
   // Taskuary's own "THE THREAD CHANGED: …" as a trigger on the right (the scenario run, 2026-11-06)
   const words = useAuiState((s) => textOf(s.message));
   const prev = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === s.message.id), p = ms[i - 1];
-    return p?.role === "user" && !p.metadata?.custom?.brief ? (p.createdAt ? when(new Date(p.createdAt)) : "") : null; });
+    return p?.role === "user" && !p.metadata?.custom?.brief && !p.metadata?.custom?.press ? (p.createdAt ? when(new Date(p.createdAt)) : "") : null; });
+  // A PRESS IS AN EVENT, NOT A LINE TYPED (the owner, 2026-11-09: "You changed its workstream." stood in a bubble under "You" as if typed):
+  // a quiet line like the close's own (tq-aui-closed) - the agent still hears it with the owner's next line (general.owner_did)
+  const press = useAuiState((s) => !!s.message.metadata?.custom?.press);
+  if (press) return <MessagePrimitive.Root className="tq-aui-message tq-aui-press" data-tq-chat-press="">
+    <div className="tq-aui-press-line">{pressLine(words, at ? when(new Date(at)) : "")}</div></MessagePrimitive.Root>;
   // ...and a CHECK-BACK come due is the input of the turn it wakes (checkback.TURN): its own "what", under a clock - long, it was Taskuary's
   // instructions and drew nothing, and the turn stood with no input over it, read as a second agent (the scenario run, 2026-11-06)
   const due = brief && chat ? checkBackDue(words) : "";

@@ -21,9 +21,10 @@ test("the next message of the same sender on the same channel carries its time a
 // THE OWNER'S LINES TYPED IN A ROW READ AS ONE, as a sender's burst does (the scenario run, 2026-11-06: "You · 6:48 PM" over each of three lines)
 test("the owner's next line in a row carries a new minute's time alone, a same minute nothing", () => {
   const ws = read("GeneralWorkspace.jsx"), um = ws.slice(ws.indexOf("const UserMessage = "), ws.indexOf("const ShownCtx"));
+  // ...a press before it is an event, not a line of theirs (pressLine.test.mjs): the line after it gets its own head
   // the hook is read before the component's first return (hooks keep their order)
   assert.ok(um.indexOf("const prev = useAuiState") > 0 && um.indexOf("const prev = useAuiState") < um.indexOf("return"));
-  assert.match(um, /return p\?\.role === "user" && !p\.metadata\?\.custom\?\.brief \? \(p\.createdAt \? when\(new Date\(p\.createdAt\)\) : ""\) : null;/);
+  assert.match(um, /return p\?\.role === "user" && !p\.metadata\?\.custom\?\.brief && !p\.metadata\?\.custom\?\.press \? \(p\.createdAt \? when\(new Date\(p\.createdAt\)\) : ""\) : null;/);
   assert.match(um, /\{prev === null \? <div className="tq-aui-user-head">/);
   assert.match(um, /: stamp && stamp !== prev \? <div className="tq-aui-user-head">\{stamp\}<\/div> : null\}/);
   const css = read("generalWorkspace.css");

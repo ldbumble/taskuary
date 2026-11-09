@@ -2098,11 +2098,9 @@ class GeneralSession:
                 system = f'{system}\n\n{str(delivery_instructions).strip()}'
             if not as_owner: user = f'{user}\n\n{text}'      # the instruction, carried but not attributed
             browser_tools, browser_env, browser_offer = False, None, False
-            if self.browser_wanted and not self.pick.startswith('cli:'):
-                # AN API CARD HAS NO SHELL, so no browser: said in the turn and to it, instead of a pane over a chat that "forgot" (2026-10-25)
-                self._remember_trace('progress', 'browser', NO_BROWSER_LINE)
-                system = f'{system}\n\nTHIS AI CANNOT USE THE BROWSER for this task (it has no shell). If the work needs the browser, say so '\
-                         'in one line: pick an AI CLI such as Claude Code or Codex in the brain menu to run it.'
+            # AN API CARD HAS NO SHELL - but it can call tools (apiagent.py): the browser is the server's to run for it, on the owner's own
+            # task. Which of hands, "the browser is not set up" or "this AI takes no tools" it gets is read once the brain is built (below)
+            api_hands = not self.pick.startswith('cli:') and not is_dock(self.store.get_task(self.task_id))
             if self.pick.startswith('cli:'):
                 # This is still the conversational Assistant, not a coding PTY. Give its headless
                 # CLI the same named browser session as the pane, and wait for the one background
@@ -2262,6 +2260,31 @@ class GeneralSession:
             build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
             brain = llm_mod.build_llm(self.store, **build_args, job='general')
             if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
+            from . import apiagent
+            looped, api_tools = False, None
+            if api_hands:
+                # THE CLI'S TOOLBOX ON AN API CARD (the owner, 2026-11-09: "make sure hipaa thing matches capabilities of claude cli"): Taskuary's
+                # own tools through the same gated server a CLI session reaches (apiagent.tools_for), and the browser on the owner's own task.
+                # A stranger's task gets the stranger's tools alone, as its CLI would
+                from . import browserview
+                stranger = _origin_of(self.store, self.task_id) == 'stranger'
+                looped = apiagent.can(brain)
+                browser = looped and not stranger and browserview.installed()
+                if looped:
+                    api_tools = apiagent.tools_for(self.task_id, self.sid, browser, stranger)
+                    # ...nothing to do with them (the toolbox unreachable, no browser): the plain way, as before
+                    looped = bool(browser or apiagent.TOOLBOX.get((self.task_id, self.sid)))
+                if looped:
+                    system = f'{system}\n\n{apiagent.TOOLS_BRIEF}'
+                    # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose_reply, not the marker line beside it
+                    if 'propose_reply' in apiagent.TOOLBOX.get((self.task_id, self.sid), ()): system = system.replace(f'\n\n{_sc.REPLY_LINE}', '')
+                if browser:
+                    browser_tools, browser_offer = True, not browserview.state(self.sid, fresh=True).get('open')
+                    system = f'{system}\n\n{apiagent.BRIEF}'
+                elif not stranger:
+                    # ...and where it cannot, the next real step as the owner's question - never "cannot be done from here" (2026-11-09)
+                    if self.browser_wanted: self._remember_trace('progress', 'browser', NO_BROWSER_LINE)
+                    system = f'{system}\n\n{apiagent.no_browser_line() if apiagent.can(brain) else apiagent.no_tools_line()}'
             if self.cli_sid:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
                 user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
@@ -2275,8 +2298,15 @@ class GeneralSession:
                 user += '\n\nATTACHED FILES (read these when relevant)\n' + '\n'.join(str(Path(p).resolve()) for p in paths)
             try:
                 limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
-                with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
-                    reply = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
+                if looped:
+                    try: reply = str(apiagent.turn(brain, self.store, self.task_id, self.sid, system, user, limit, trace=visible, cancel=cancel,
+                                                   images=_images(paths), tools=api_tools) or '').strip()
+                    except apiagent.ToolsRefused as e:
+                        logger.info(f'task {self.task_id}: {self.provider} took no tools - asked the plain way ({str(e)[:160]})')
+                        looped, system = False, f"{system.replace(apiagent.BRIEF, '').replace(apiagent.TOOLS_BRIEF, '')}\n\n{apiagent.no_tools_line()}"
+                if not looped:
+                    with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
+                        reply = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
             except Exception as e:
                 # the CLI could not pick that conversation back up (it was restarted, its history
                 # was cleared, the id aged out). Start a fresh one and say the whole thing, once.

@@ -834,22 +834,38 @@ def browser(payload: dict, brain=None, sid: str = '') -> dict:
     # publish, a mail) waits for the owner too (shellgate.py, the Advisor's risky-step hold, the owner 2026-10-28), and so does a desktop
     # act that can't be undone (agentdesktop.py, 2026-10-31)
     # ...and a delete outside the agent's own folder, read against the folder it runs in (shellgate.deletes, 2026-11-03)
-    browse, out, desk = browsergate.EXE in cmd.lower(), shellgate.acts(cmd, str(payload.get('cwd') or '')), agentdesktop.EXE in cmd.lower()
-    if not browse and not out and not desk: return {}
+    if not needs_gate(cmd, str(payload.get('cwd') or '')): return {}
     t = _pane(payload, 'claude') or _general(payload, sid)
     st = getattr(t, 'store', None) if t else None
     if not t or not st: return {}
+    # ...asked in the CLI's own prompt where the owner can answer it there, held for the task's Approve where nobody can (shellgate.asks)
+    return command_gate(st, t.task_id, t.sid, cmd, tool, str(payload.get('cwd') or getattr(t, 'cwd', '') or ''), shellgate.asks(st, t),
+                        about=str((payload.get('tool_input') or {}).get('description') or ''), brain=brain)
+
+
+def needs_gate(cmd: str, cwd: str = '') -> bool:
+    "The cheap test first: does this shell line touch the browser, the desktop, or leave the machine / delete outside its folder?"
+    from . import agentdesktop, browsergate, shellgate
+    return browsergate.EXE in cmd.lower() or agentdesktop.EXE in cmd.lower() or bool(shellgate.acts(cmd, cwd))
+
+
+def command_gate(st, tid: int, sid: str, cmd: str, tool: str = 'Bash', cwd: str = '', ask: bool = False, about: str = '', brain=None) -> dict:
+    """THE ONE DECISION for a shell command an agent of ours is about to run - a CLI's (its PreToolUse hook, browser above) and an API
+    agent's (apiagent.run_command) alike: {} runs it; anything else holds it, with the reason in permissionDecisionReason (or `ask`, the
+    CLI's own prompt). A step that leaves the machine or deletes outside its folder (shellgate), a desktop act or a browser act that can't
+    be undone (agentdesktop, browsergate) waits for the owner; everything else runs, as on a CLI."""
+    from . import agentdesktop, browsergate, shellgate
+    browse, out, desk = browsergate.EXE in cmd.lower(), shellgate.acts(cmd, cwd), agentdesktop.EXE in cmd.lower()
+    if not browse and not out and not desk: return {}
     # ...and the browser comes up HERE, at the agent's first navigate - never before it has an address (browserview.on_demand)
     if browse:
         from . import browserview
-        try: browserview.on_demand(t.sid, cmd)
-        except Exception as e: logger.warning(f'the browser for {t.sid} did not start on its first page - {e}')
-    # ...asked in the CLI's own prompt where the owner can answer it there, held for the task's Approve where nobody can (shellgate.asks)
-    if out: return shellgate.check(st, t.task_id, t.sid, cmd, tool, str(payload.get('cwd') or getattr(t, 'cwd', '') or ''), shellgate.asks(st, t),
-                                   about=str((payload.get('tool_input') or {}).get('description') or ''))
+        try: browserview.on_demand(sid, cmd)
+        except Exception as e: logger.warning(f'the browser for {sid} did not start on its first page - {e}')
+    if out: return shellgate.check(st, tid, sid, cmd, tool, cwd, ask, about=about)
     # a line that drives both is judged desktop first: either one held holds the whole line
-    if desk and (held := agentdesktop.check(st, t.task_id, t.sid, cmd, brain)): return held
-    return browsergate.check(st, t.task_id, t.sid, cmd, brain) if browse else {}
+    if desk and (held := agentdesktop.check(st, tid, sid, cmd, brain)): return held
+    return browsergate.check(st, tid, sid, cmd, brain) if browse else {}
 
 
 def run_sid(payload: dict, tid: int) -> str:

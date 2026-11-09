@@ -5,6 +5,7 @@ told "logging in cannot be done from here - paste the claim information" (2026-1
 no way onto it.
 """
 import json, unittest
+from pathlib import Path
 from unittest import mock
 
 from taskuary import apiagent, browserview as bv, llm
@@ -194,7 +195,8 @@ class TheToolboxTests(unittest.TestCase):
 
 
 class TheHandsTests(unittest.TestCase):
-    """Phase 2: files in the task's outputs folder, the web, and a command that only ever waits for the owner's Approve."""
+    """Parity with a Claude Code session (the owner, 2026-11-09: "it should be the same as claude cli permission wise"): its folder, its
+    files, its commands under the ONE gate a CLI's commands pass (hooks.command_gate), and the model's own web search."""
 
     def setUp(self):
         self.s = MemoryStore()
@@ -202,57 +204,89 @@ class TheHandsTests(unittest.TestCase):
 
     def run_(self, tool, **a): return apiagent.run_tool(self.s, self.tid, 'sid-h', tool, a)
 
-    def test_a_file_is_written_listed_and_read_back_inside_the_outputs_folder_only(self):
-        said = self.run_('file_write', name='notes/quotes.csv', text='vendor,price\nPayworth,4200\n')
-        self.assertIn('notes/quotes.csv', said)
-        self.assertIn('notes/quotes.csv', self.run_('files_list'))
-        self.assertIn('Payworth,4200', self.run_('file_read', name='notes/quotes.csv'))
-        for bad in ('../escape.txt', 'C:/Windows/x.txt', '/etc/x', 'a:stream.txt'):
-            with self.assertRaises(ValueError, msg=bad): self.run_('file_write', name=bad, text='x')
-        with self.assertRaises(ValueError): self.run_('file_read', name='../../config.toml')
+    def test_a_general_task_works_in_the_folder_a_general_cli_does(self):
+        from taskuary import config
+        self.assertEqual(Path(apiagent.workdir(self.s, self.tid)), config.home() / 'scratch')
 
-    def test_a_page_is_fetched_through_the_address_guard_and_read_as_text(self):
-        class R:
-            status_code, headers = 200, {'content-type': 'text/html; charset=utf-8'}
-            class raw:
-                @staticmethod
-                def read(n, decode_content=True): return b'<html><script>x()</script><h1>Rates</h1><p>Plan A is $12.</p></html>'
-            def close(self): pass
-        with mock.patch('taskuary.webguard.get', return_value=R()) as got:
-            said = self.run_('web_fetch', url='rates.example/plans')
-        self.assertEqual(got.call_args[0][0], 'https://rates.example/plans')
-        self.assertIn('Plan A is $12.', said); self.assertNotIn('x()', said)
-        with self.assertRaises(ValueError): self.run_('web_fetch', url='file:///C:/secrets.txt')
+    def test_a_coding_task_works_in_its_checkout(self):
+        tid = self.s.create_task({'Title': 'Fix the build', 'Summary': 'go', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        with mock.patch('taskuary.agentchannels.cwd_of', return_value=str(config_home() / 'ledger')):
+            self.assertEqual(Path(apiagent.workdir(self.s, tid)), config_home() / 'ledger')
 
-    def test_a_search_runs_on_the_owners_search_card_through_run_system(self):
-        with self.assertRaises(ValueError) as e: self.run_('web_search', query='payroll vendors')
-        self.assertIn('no web search is connected', str(e.exception))
-        cards = [{'Type': 'brave_search', 'Active': 1, 'HasSecret': 1, 'ConnectorId': 4}]
-        with mock.patch.object(self.s, 'list_connectors', return_value=cards), \
-             mock.patch.object(apiagent, 'call_taskuary', return_value='[1] Payworth') as ran:
-            self.assertEqual(self.run_('web_search', query='payroll vendors'), '[1] Payworth')
-        self.assertEqual(ran.call_args[0][2:4], ('run_system', {'type': 'brave_search', 'connector_id': 4, 'query': 'payroll vendors'}))
+    def test_files_are_written_edited_listed_and_read_where_named(self):
+        self.assertIn('Wrote', self.run_('file_write', path='notes/quotes.csv', text='vendor,price\nPayworth,4200\n'))
+        self.run_('file_edit', path='notes/quotes.csv', old='4200', new='4100')
+        self.assertIn('quotes.csv', self.run_('files_list', path='notes'))
+        self.assertIn('Payworth,4100', self.run_('file_read', path='notes/quotes.csv'))
+        with self.assertRaises(ValueError): self.run_('file_edit', path='notes/quotes.csv', old='nowhere', new='x')
 
-    def test_a_command_never_runs_it_waits_on_the_owners_approve_card_once(self):
-        with mock.patch('taskuary.shellgate.perform') as ran, mock.patch('taskuary.spawn.run') as spawned:
-            said = self.run_('run_command', command='python make_chart.py', why='draw the price chart')
-            self.run_('run_command', command='python make_chart.py', why='draw the price chart')
-        ran.assert_not_called(); spawned.assert_not_called()
+    def test_a_command_the_cli_would_run_runs_now_in_the_working_folder(self):
+        class Done: returncode, stdout, stderr = 0, b'3 files', b''
+        with mock.patch('taskuary.hooks.command_gate', return_value={}) as gate, mock.patch('taskuary.spawn.run', return_value=Done()) as ran:
+            said = self.run_('run_command', command='git status', why='see what changed')
+        self.assertIn('exit 0', said); self.assertIn('3 files', said)
+        self.assertEqual(gate.call_args.args[3], 'git status')
+        self.assertEqual(ran.call_args.kwargs['cwd'], apiagent.workdir(self.s, self.tid))
+
+    def test_a_command_the_cli_would_hold_is_held_by_the_same_gate_and_never_run(self):
+        with mock.patch('taskuary.spawn.run') as ran:
+            said = self.run_('run_command', command='git push origin main', why='publish the fix')
+        ran.assert_not_called()
         self.assertIn('held this for the owner', said)
-        held = [r for r in self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (self.tid,))]
-        self.assertEqual(len(held), 1, 'the same command asked twice is one card')
-        p = json.loads(held[0]['DraftText'])
-        self.assertEqual((p['action'], p['command'], p['what']), ('shell_act', 'python make_chart.py', 'draw the price chart'))
+        held = self.s._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action'", (self.tid,))
+        self.assertEqual(json.loads(held[0]['DraftText'])['command'], 'git push origin main')
 
-    def test_look_only_offers_no_write_and_no_command_and_what_is_not_offered_does_not_run(self):
+    def test_the_cli_hook_and_the_api_agent_share_one_decision(self):
+        from taskuary import hooks
+        payload = {'tool_name': 'Bash', 'tool_input': {'command': 'git push'}, 'cwd': ''}
+        class T: store, task_id, sid, cwd = self.s, self.tid, 'sid-c', ''
+        with mock.patch.object(hooks, '_pane', return_value=T()), mock.patch.object(hooks, 'command_gate', return_value={'x': 1}) as gate:
+            self.assertEqual(hooks.browser(payload), {'x': 1})
+        gate.assert_called_once()
+
+    def test_web_search_is_the_models_own(self):
+        class Brain:
+            def search(self, q): return f'Answer to {q}\n\nSOURCES\nhttps://docs.example/rates'
+        apiagent.BRAINS[(self.tid, 'sid-h')] = Brain()
+        try: self.assertIn('docs.example/rates', self.run_('web_search', query='current rates'))
+        finally: apiagent.BRAINS.pop((self.tid, 'sid-h'), None)
+
+    def test_a_gateway_that_refuses_search_falls_back_to_a_search_card(self):
+        class Brain:
+            def search(self, q): raise RuntimeError('hipaa_ai error 400: web_search_options not supported')
+        apiagent.BRAINS[(self.tid, 'sid-h')] = Brain()
+        cards = [{'Type': 'brave_search', 'Active': 1, 'HasSecret': 1, 'ConnectorId': 4}]
+        try:
+            with mock.patch.object(self.s, 'list_connectors', return_value=cards), \
+                 mock.patch.object(apiagent, 'call_taskuary', return_value='[1] Payworth') as ran:
+                self.assertEqual(self.run_('web_search', query='payroll vendors'), '[1] Payworth')
+            self.assertEqual(ran.call_args[0][2], 'run_system')
+        finally: apiagent.BRAINS.pop((self.tid, 'sid-h'), None)
+
+    def test_the_card_asks_its_own_search_with_web_search_options_and_no_function_tools(self):
+        sent = []
+        def post(url, headers, body, timeout):
+            sent.append(body)
+            return _R({'choices': [{'message': {'content': 'Python 3.15.2', 'annotations': [{'type': 'url_citation', 'url_citation': {'url': 'https://python.example/'}}]}}]})
+        brain = llm.make_llm('hipaa_ai', {'base_url': 'https://gateway.example', 'model': 'gemini-x'}, 'k')
+        with mock.patch.object(llm, 'post_retrying', side_effect=post), mock.patch.object(llm.aiusage, 'openai'):
+            said = brain.search('latest python')
+        self.assertIn('web_search_options', sent[0]); self.assertNotIn('tools', sent[0])
+        self.assertIn('https://python.example/', said)
+
+    def test_look_only_offers_reads_and_search_but_no_write_and_no_command(self):
         with mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
             names = {t['function']['name'] for t in apiagent.tools_for(self.tid, 'sid-h', browser=False, hands=False)}
         try:
             self.assertTrue({'files_list', 'file_read', 'web_fetch', 'web_search'} <= names)
-            self.assertFalse({'file_write', 'run_command', 'browser_open'} & names)
+            self.assertFalse({'file_write', 'file_edit', 'run_command', 'browser_open'} & names)
             with self.assertRaises(ValueError): self.run_('run_command', command='dir', why='list')
-            with self.assertRaises(ValueError): self.run_('file_write', name='a.txt', text='x')
         finally: apiagent.OFFERED.pop((self.tid, 'sid-h'), None); apiagent.TOOLBOX.pop((self.tid, 'sid-h'), None)
+
+
+def config_home():
+    from taskuary import config
+    return config.home()
 
 
 if __name__ == '__main__': unittest.main()

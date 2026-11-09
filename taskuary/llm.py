@@ -1173,6 +1173,23 @@ def make_llm(t, cfg: dict, key: str):
                 raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
         raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}{tried(last)}: {last.text[:300]}')
     llm.chat = chat
+
+    # THE MODEL'S OWN WEB SEARCH, through the gateway (the owner, 2026-11-09: "why can't the model itself do web search?"): LiteLLM's
+    # web_search_options is Google Search grounding for a Gemini model and Anthropic's web search for a Claude one. Asked on a call of its
+    # own - beside function tools it is ignored (Gemini called the other tool, Claude said it could not search; verified live 2026-11-09)
+    def search(question, max_tokens=2000):
+        body = {'messages': [{'role': 'user', 'content': f'Search the web and answer, naming each source with its address: {question}'}],
+                'max_tokens': max_tokens, 'web_search_options': {'search_context_size': 'medium'}, **({'model': model} if model else {})}
+        r = post_retrying(urls[0], headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
+        if budget_spent(r): raise BudgetSpent(BUDGET_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t))
+        if r.status_code != 200: raise RuntimeError(f'{t} error {r.status_code}: {r.text[:300]}')
+        aiusage.openai(r.json())
+        m = (r.json().get('choices') or [{}])[0].get('message') or {}
+        cites = list(dict.fromkeys(str((a.get('url_citation') or a).get('url') or '') for a in m.get('annotations') or [] if isinstance(a, dict)))
+        said = said_text(m).strip()
+        if not said: raise RuntimeError('the search came back empty')
+        return said + ('\n\nSOURCES\n' + '\n'.join(c for c in cites if c) if any(cites) else '')
+    llm.search = search
     llm.takes_want = True
     llm.takes_web = t in ('openai', 'azure_openai')
     return llm

@@ -2303,7 +2303,7 @@ class GeneralSession:
                     # ...nothing to do with them (a stranger's task whose toolbox did not answer): the plain way, as before
                     looped = any(t['function']['name'] != 'show' for t in api_tools)
                 if looped:
-                    system = f'{system}\n\n{apiagent.TOOLS_BRIEF}'
+                    system = f'{system}\n\n{apiagent.TOOLS_BRIEF}\n\n{apiagent.where_line(self.store, self.task_id)}'
                     # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose_reply, not the marker line beside it
                     if 'propose_reply' in apiagent.TOOLBOX.get((self.task_id, self.sid), ()): system = system.replace(f'\n\n{_sc.REPLY_LINE}', '')
                 if browser:

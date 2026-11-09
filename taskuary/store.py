@@ -3002,6 +3002,11 @@ class SQLiteStore:
     def last_inbound_in(self, conversation_id):
         return self._one("SELECT * FROM message WHERE ConversationId=? AND Status NOT IN ('context','history','skipped') AND IFNULL(Direction,'in')<>'out' "
                          'ORDER BY SentAt DESC LIMIT 1', (conversation_id,))
+    def inbound_before(self, conversation_id, at):
+        "The newest line the other side wrote on the thread up to `at` - what the owner's line there answers (sentjudge._item)."
+        if not conversation_id: return None
+        return self._one("SELECT * FROM message WHERE ConversationId=? AND IFNULL(Direction,'in')<>'out' AND Status NOT IN ('context','skipped') "
+                         'AND SentAt<=? ORDER BY SentAt DESC, MessageId DESC LIMIT 1', (conversation_id, str(at or '9999')))
     def shown_message_of(self, mid):
         """The newest message the feed SHOWS on the thread of one it hides (the owner's own sent mail, a back-filled `history` start):
         its task's, else its conversation's - None when nothing of that thread is shown. A hidden row is no row of its own, but its

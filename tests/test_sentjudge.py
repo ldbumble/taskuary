@@ -120,6 +120,16 @@ class JudgeTests(unittest.TestCase):
         self.assertEqual(judged(s, PROMISE, calls), 0)
         self.assertEqual(len(calls), 1, 'a judged message is never sent to the model again')
 
+    def test_a_promise_is_read_with_the_message_it_answers(self):
+        # the owner's "sending it tonight" became a task titled "Send it" (the night run, 2026-11-09): what "it" is lives in the line it answers
+        s = _store(); calls = []
+        _theirs(s, 'Can you send me the Q3 vendor invoices?', 3, 'c1'); _mine(s, 'sending it tonight', 2, 'c1')
+        _theirs(s, 'thanks!', 1, 'c1')                                       # a line after it is not what it answers
+        judged(s, {}, calls)
+        self.assertIn('THE MESSAGE IT ANSWERS, from Ray Colton: "Can you send me the Q3 vendor invoices?"', calls[0])
+        self.assertNotIn('"thanks!"', calls[0].split('THE MESSAGE IT ANSWERS')[1])
+        self.assertIn("never 'send it'", sentjudge.SYSTEM)
+
     def test_one_call_judges_the_batch(self):
         s = _store(); calls = []
         for i in range(5): _theirs(s, 'Hi', 4, f'c{i}'); _mine(s, f'Line {i}', 3, f'c{i}')

@@ -28,7 +28,8 @@ SYSTEM = ("You read messages the OWNER sent and say what each one means for foll
           "- promise: true when the owner committed THEMSELF to do or send something later ('I'll send it Friday', 'On it, by EOD', "
           "'I can have it to you tomorrow', 'leave it with me'). Something already done in this very message is not a promise.\n"
           "- what: for a promise, the thing promised as a short verb phrase in the owner's voice, without the date "
-          "('send the revised budget'); otherwise ''.\n"
+          "('send the revised budget'); otherwise ''. It names the thing itself: when the owner's words only say 'it' or 'that', "
+          "read what from THE MESSAGE IT ANSWERS ('send Gail the October accrual numbers', never 'send it').\n"
           "- due: for a promise with a day, that day as YYYY-MM-DD, worked out from the date the message was SENT ('today'/'EOD' "
           "= the sent day, 'tomorrow' = the next day, 'Friday' = the next Friday on or after it); null when no day was given.\n"
           "- delivered: for a promise, true when one of YOUR LATER WORDS shown under it plainly delivers it; otherwise false.\n"
@@ -83,6 +84,10 @@ def _item(store, m: dict, open_: list, later: list, work: list = ()) -> str:
     to = store.last_inbound_in(m['ConversationId']) or {}
     out = [f"[m{m['MessageId']}] sent {_day(m.get('SentAt'))} to {to.get('FromName') or to.get('FromEmail') or 'them'} "
            f"re \"{' '.join(str(m.get('Subject') or '').split())[:90]}\":\n  \"{_words(m)}\""]
+    # ...and THE MESSAGE IT ANSWERS (the night run, 2026-11-09): the owner's "sending it tonight" on a chat became a task titled "Send it" -
+    # their words alone never say what "it" is, and a chat line has no subject to say it either
+    if (q := store.inbound_before(m['ConversationId'], m.get('SentAt'))) and (w := _words(q, 300)):
+        out.append(f"  THE MESSAGE IT ANSWERS, from {q.get('FromName') or q.get('FromEmail') or 'them'}: \"{w}\"")
     if open_: out.append('  OPEN PROMISES on this thread: ' + '; '.join(
         f"[m{p['MessageId']}] \"{p.get('PromiseWhat') or _words(p, 120)}\"" + (f" (due {p['PromiseDue']})" if p.get('PromiseDue') else '') for p in open_))
     if later: out.append('  YOUR LATER WORDS on this thread: ' + '; '.join(f"{_day(x.get('SentAt'))}: \"{_words(x, 200)}\"" for x in later))

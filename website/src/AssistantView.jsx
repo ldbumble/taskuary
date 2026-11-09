@@ -64,7 +64,7 @@ import { ALERT, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, PRIORITY_COLOR, ROLES 
 import { dangerLine } from "./strangerLine.js";
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
-import { adviceRead, overChat, tableOf, tableWords } from "./tableState.js";
+import { adviceRead, backToWork, overChat, tableOf, tableWords, workWords, workedOn } from "./tableState.js";
 import { ReportLink } from "./BugReportDialog.jsx";
 import { openBugReport, shownError } from "./bugReportOpen.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
@@ -78,7 +78,7 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
-import { FYI_PAGE, ageHover, fyiCap, answersTo, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, rowKeys, sameRow, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, answersTo, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -528,9 +528,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // the rail genuinely does not fit and scrolls: tasks are never trimmed.
   const headroom = CAPPED.reduce((n, level) => n + Math.max(0, (base[level] ?? 0) - FLOOR), 0);
   const caps = trimCaps(base, bands, trim);
-  // ...and FYI is a fixed count by window height, not a fit (fyiCap); the rest wait behind "N more fyi". `room` follows a resize, so this does too
-  const fyiN = bands.find((b) => b.level === "fyi")?.items.length;
-  if (fyiN != null) caps.fyi = Math.min(fyiN, fyiCap(typeof window === "undefined" ? 900 : window.innerHeight));
+  // ...and FYI FILLS THE ROOM like reports do (the owner, 2026-11-09: "why is this not unfurling if there is space until the bottom??"): a
+  // fixed 6/4 by window height (2026-11-02, "leave it for now") drew 6 rows, "14 more fyi" and half a rail of nothing. Only what does not fit waits
   // ...and the FYI band asks for its next page while the rail has room for it (fyiHasRoom), not only once it is opened by hand - once
   // per count it has, so a page that brings nothing new is never asked for again
   const fyiHave = bands.find((b) => b.level === "fyi")?.items.length ?? 0, fyiAsked = useRef(-1);
@@ -1392,7 +1391,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [foldedKey, setFoldedKey] = useState(null);
   // the card browsed open, in words - what "this" means to the next turn (concierge.say open_card)
   const openCardRef = useRef(null);
-  const browseRef = useRef(null), openTaskRef = useRef(null), openMsgRef = useRef(null), browseDownRef = useRef(null), browsingRef = useRef(null);
+  const browseRef = useRef(null), openTaskRef = useRef(null), byNameTid = useRef(0), openMsgRef = useRef(null), browseDownRef = useRef(null), browsingRef = useRef(null);
   const openCard = useCallback((label) => { openCardRef.current = label || null; }, []);
   // the table changed: the next item opens un-expanded and unfolded - a NEW item only. A close once emptied the table on the way to
   // the next one, and resetting the fold then drew the task just closed again until the next landed (the owner, 2026-10-05:
@@ -3086,7 +3085,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     openLater.current = req;
   };
-  browseRef.current = browse; openTaskRef.current = openTaskCard; browseDownRef.current = browseDown;
+  browseRef.current = browse; openTaskRef.current = (req) => { byNameTid.current = Number(req?.tid) || 0; openTaskCard(req); };   // by name: a look elsewhere (workedOn)
+  browseDownRef.current = browseDown;
   useEffect(() => {
     if (busy || resetting || !openLater.current) return;
     const req = openLater.current; openLater.current = null;
@@ -3269,6 +3269,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // over it would name another button (assistantLight.js); it goes out at the next press or when the table moves on
   const litTable = { key: table.key, tid: currentItem?.tid ?? Number(/^task:(\d+)$/.exec(table.key || "")?.[1] || 0) };
   const litNow = litPick(lit, litTable);
+  // THE TASK YOU WERE WORKING ON, and the corner's way back to it from a page or another task (tableState.workedOn / backToWork)
+  const [worked, setWorked] = useState(null);
+  const inView = !!table.key && !table.folded && !table.place;
+  useEffect(() => {
+    const w = inView ? workedOn(table, { ...currentItem, tid: litTable.tid }, byNameTid.current) : null;
+    if (w) setWorked((was) => (was?.key === w.key && was.title === w.title ? was : w));
+  }, [table.key, inView, litTable.tid, currentItem?.title]);   // eslint-disable-line react-hooks/exhaustive-deps
   // the day typed with Remind me ("remind me Monday"): the walk's picker leads with it (assistantLight's light.day)
   const litDayRef = useRef(null); litDayRef.current = litNow?.verb === "defer" ? litNow.day || null : null;
   useEffect(() => { setLit((l) => litAfter(l, litTable)); }, [litTable.key, litTable.tid, lit]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -3630,11 +3637,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const grow = chatApart && !boxWide && (hover || !!text.trim());
   const growIn = () => { clearTimeout(hoverT.current); setHover(true); };
   const growOut = () => { clearTimeout(hoverT.current); hoverT.current = setTimeout(() => setHover(false), 350); };
-  const iconsInPill = chatApart && overChat(table);   // ...never both: in the pill only while a task or page is open over the chat
+  const iconsInPill = chatApart && overChat(table);
+  const newChatIcon = (attr) => <Tooltip title="New chat — archives this one"><IconButton size="small" {...{ [attr]: "" }} onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>;
+  const backWork = !firstRun && !old && !walk && backToWork(table, worked, litTable.tid);
+  // ...the page put down over its own task, else that task pulled back by number (any task, on the rail or not)
+  const toWork = () => { if (!worked) return; if (table.place && table.key === worked.key) unfoldTable(); else pull(`task:${worked.tid}`, null); };   // ...never both: in the pill only while a task or page is open over the chat
   const ownIcons = <>
     <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" data-tq-speak="" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
     <Tooltip title="Past chats"><IconButton size="small" data-tq-past-chats="" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
-    <Tooltip title="New chat — archives this one"><IconButton size="small" data-tq-new-chat="" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip></>;
+    {newChatIcon("data-tq-new-chat")}</>;
   const composeBox = (
     <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
     data-tq-continue={!boxWide && isMini && winLines.length ? "" : undefined} data-tq-grow={grow ? "" : undefined}
@@ -3699,6 +3710,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             the box chooses this chat's AI, a new chat starts on Settings -> AI defaults, and the default is changed there */}
         {/* ...and THE ASSISTANT'S OWN ICONS ARE IN ITS PILL on a desk while a task or page is open (the owner, 2026-11-06): over the task
             they read as the task's. On the home screen the pane is the Assistant's chat, and they are here, top right (overChat) */}
+        {/* THE WAY BACK, top right (the owner, 2026-11-09: "always a button on top corner when you are in settings or reports to go back to
+            the main task you were working on, or clear it with the pencil for new chat"): Back over a page or another task, and New chat */}
+        {backWork && <Tooltip title={`Back to ${worked.ref}${worked.title ? ` - ${worked.title}` : ""}`}>
+          <button type="button" className="tq-chip tq-back-work" data-tq-back-work={worked.tid} onClick={toWork}>
+            <ArrowBackIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: "-2px" }} />{workWords(worked)}</button></Tooltip>}
+        {iconsInPill && !firstRun && !old && newChatIcon("data-tq-new-chat-head")}
         {!iconsInPill && ownIcons}
       </div>
       {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} said={remindOn.said} onClose={() => setRemindOn(null)}
@@ -3956,7 +3973,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         current={old ? null : readGone?.keys.includes(currentItem?.key) ? (readGone.coming ? { key: readGone.coming, kind: "fyis", members: readGone.coming.slice(5).split(",") } : null)
           : (table.folded && !flight?.from) || (leavingTid && currentItem?.tid === leavingTid) || table.place || (opening && opening !== currentItem?.key) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
-        onPull={(key, asUser) => { if (asUser) pull(key, asUser); else railPress(key); }}
+        onPull={(key, asUser) => { byNameTid.current = 0; if (asUser) pull(key, asUser); else railPress(key); }}
         onSection={walkSection} onMoreFyi={moreFyi} onCurrent={() => backToTable()} moved={movedTo} /></>}
       stage={chat}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}

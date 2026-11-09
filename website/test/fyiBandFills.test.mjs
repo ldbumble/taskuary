@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { BIG_H, HEAD_PX, ROW_PX, awayFromClear, fillCaps, fyiCap, fyiHasRoom } from "../src/funnelPile.js";
+import { HEAD_PX, MORE_PX, ROW_PX, awayFromClear, fillCaps, fyiHasRoom } from "../src/funnelPile.js";
 
 const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
 const rows = (n, at = {}) => Array.from({ length: n }, (_, i) => ({ key: `k${i}`, ...at }));
@@ -37,10 +37,16 @@ test("a trim taken for one moment's overflow is given back with the room, and th
   assert.match(view, /scroller\.getBoundingClientRect\(\)\.top \+ scroller\.scrollTop;/);
 });
 
-// the owner, 2026-11-02: "you also need some room for expanding the window. Okay leave it for now: 6 on big and 4 on small"
-test("fyi shows a fixed 6 rows on a big window and 4 on a small one, recomputed with the room", () => {
-  assert.equal(BIG_H, 900);
-  assert.equal(fyiCap(900), 6); assert.equal(fyiCap(1200), 6);
-  assert.equal(fyiCap(899), 4); assert.equal(fyiCap(700), 4);
-  assert.match(view, /if \(fyiN != null\) caps\.fyi = Math\.min\(fyiN, fyiCap\(/);
+// the owner, 2026-11-09, 6 fyi rows, "14 more fyi" and half a rail empty under them: "why is this not unfurling if there is space until the bottom??"
+test("fyi and reports draw as many rows as the rail's measured room holds; 'N more' is only what does not fit", () => {
+  const bands = [{ level: "task", items: rows(2) }, { level: "reports", items: rows(8) }, { level: "fyi", items: rows(20) }];
+  const fixed = 3 * HEAD_PX + 2 * ROW_PX;
+  assert.deepEqual(fillCaps(fixed + 28 * ROW_PX, bands), { reports: 8, fyi: 20 });              // a tall rail: everything, no "more"
+  const mid = fillCaps(fixed + 8 * ROW_PX + 14 * ROW_PX + MORE_PX, bands);
+  assert.deepEqual(mid, { reports: 8, fyi: 14 });                                              // past six: what the height holds
+  assert.ok(fillCaps(fixed + 4 * ROW_PX + 2 * MORE_PX, bands).fyi <= 2);                        // a short rail still caps
+  // ...and no fixed count by window height overrides the fit any more
+  assert.doesNotMatch(view, /fyiCap|caps\.fyi = /);
+  assert.match(view, /const base = fillCaps\(room - /);
+  assert.match(view, /new ResizeObserver\(measure\)/);
 });

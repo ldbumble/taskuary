@@ -49,3 +49,19 @@ export function sameTarget(ev, cur) {
   const tid = m ? Number(m[1]) : cur?.tid;
   return ev?.target_kind === "task" && tid != null && Number(ev.target_id) === Number(tid);
 }
+
+// THE TASK YOU WERE WORKING ON (the owner, 2026-11-09: "there should always be a button on top corner when you are in settings or reports to
+// go back to the main task you were working on"): the last task in view that the walk or the rail brought - a task opened BY NAME (a link,
+// the Board, an answer's "Open TQ-0005") is a look elsewhere, not a change of work, until the table moves on from it
+export const workedOn = (table, item, byNameTid = 0) => {
+  const tid = Number(item?.tid) || 0;
+  if (!table?.key || table.folded || table.place || !tid || tid === Number(byNameTid)) return null;
+  return { key: table.key, tid, ref: item.ref || `TQ-${String(tid).padStart(4, "0")}`, title: item.title || "" };
+};
+// ...and the corner offers the way back while something else is in front of it: a page, or another task. On that task itself, no Back
+export const backToWork = (table, worked, tid = 0) =>
+  !!worked && (!!table?.place || (!!table?.key && !table.folded && Number(tid) !== worked.tid));
+export const workWords = (w, n = 28) => {
+  const t = (w?.title || "").trim();
+  return `Back to ${w.ref}${t ? ` ${t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t}` : ""}`;
+};

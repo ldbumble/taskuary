@@ -189,6 +189,8 @@
 .tq-chat-head .who { min-width: 0; }
 .tq-chat-head .who span { display: inline; font-size: 10.5px; color: #6e685f; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-chat-head .grow { flex: 1; }
+/* the way back to the task you were working on: quiet, the size of the header icons, never wider than half the head (a phone) */
+.tq-chat-head .tq-back-work { padding: 3px 10px; font-size: 12px; color: #4b4740; max-width: 50%; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
 .tq-stage-mode { display: inline-flex; border: 1px solid #ddd6cb; border-radius: 99px; overflow: hidden; flex: 0 0 auto; }
 .tq-stage-mode button { border: 0; background: transparent; padding: 4px 10px; font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; cursor: pointer; white-space: nowrap; }
 .tq-stage-mode button.on { background: #eae4d8; color: #55697a; }

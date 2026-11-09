@@ -561,10 +561,6 @@ export const heldSince = (pile, now = Date.now()) => {
 // or ACTS reads pile.items - the row on the table and the walk's next pick are always among them - and whatever COUNTS
 // (a heading, the day's opener, "in today", "N more fyi") reads pileRows, which is every row, the same as before paging.
 export const FYI_PAGE = 50;
-// FYI SHOWS A FIXED COUNT (the owner, 2026-11-02: "you also need some room for expanding the window. Okay leave it for now: 6 on big and 4 on
-// small"): a window at least BIG_H tall is big. Height, not the 960px width breakpoint, since this is about rows the rail can hold.
-export const BIG_H = 900;
-export const fyiCap = (h) => (h >= BIG_H ? 6 : 4);
 const tails = new WeakMap();
 export const fyiTail = (pile) => {
   const t = pile?.fyi_tail;

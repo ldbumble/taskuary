@@ -2,6 +2,20 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.20 - 2026-11-08
+
+- Work that waits on you elsewhere: shared inboxes, phones, forms and candidates as sources
+- Money and hiring vendors' own MCP servers, and Mercury and Lattice keyed reads
+- The connections guide names the waiting-on-you cards
+- waiting.py imports the inboxes helpers last, so either module may be imported first
+- Pipedrive, Copper, Toggl Track, Harvest, Clockify, UPS, FedEx and USPS on the keyed-read road
+- Analytics and BI read with the sign-ins and keys they already have; PostHog's own MCP server
+- Commerce and billing read on their keys; WooCommerce and BigCommerce orders come in too
+- Social, publishing, marketing and the rest; comments, Page messages, mentions and held comments come in
+- The connections guide names the CRM, social, analytics, commerce and shipping cards
+- FreshBooks reads on the OAuth sign-in road
+- Replies go back to the sources that file work: a ticket's comment, a chat's thread, a text back - on the owner's Send
+
 ## 0.3.11.19 - 2026-11-08
 
 - MongoDB, Redis and Neo4j cards: reads only, each engine its own way

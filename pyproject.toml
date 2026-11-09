@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "taskuary"
-version = "0.3.11.19"
+version = "0.3.11.20"
 description = "Your AI work partner. Mail, chats and tickets become one list in the right order; your agents do the work, and nothing goes out until you approve. Free, open source, runs on your computer."
 readme = "README.md"
 license = { text = "MIT" }

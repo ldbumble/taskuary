@@ -64,6 +64,13 @@ const pendingReply = (r) => r?.Status === "pending" && r.Kind !== "action" && r.
 // ...the newest turn's Next steps hold the drafts only while one of them is fresh
 export const freshNext = (reviews) => { const ps = (reviews || []).filter(pendingReply); return !ps.length || ps.some((r) => !staleDraft(r)); };
 export const staleOn = (reviews, turnId) => (reviews || []).filter((r) => pendingReply(r) && staleDraft(r) && turnId != null && String(draftTurn(r)) === String(turnId));
+// THE LIVE CARD STAYS ON THE TURN THAT WROTE IT (the owner, 2026-11-09: "again suggested reply stayed on bottom after i asked it questions"): a
+// draft the agent KEPT through later turns is current with its Send (general.draft_turns, 2026-11-08), and it followed whichever turn was newest -
+// under every question asked since. Its home is the turn that last wrote it (a rewrite moves it there, a new letter replaces it); null when no
+// shown turn wrote one, and the newest answer holds the cards as before
+export const cardTurn = (reviews, ids) => { const on = new Set((ids || []).map(String));
+  const r = (reviews || []).filter((x) => pendingReply(x) && !staleDraft(x) && on.has(String(draftTurn(x)))).sort((a, b) => a.ReviewId - b.ReviewId).at(-1);
+  return r ? String(draftTurn(r)) : null; };
 // ...the payload's `drafts` (general.draft_turns: {review, turn, at, stale, before}) read onto the reviews they name
 export const withTurns = (reviews, drafts) => (drafts?.length ? (reviews || []).map((r) => { const d = drafts.find((x) => x?.review === r?.ReviewId);
   return d ? { ...r, turn: d.turn, stale: !!d.stale, drafted_at: d.at, before: d.before } : r; }) : reviews || []);

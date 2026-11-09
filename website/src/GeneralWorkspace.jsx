@@ -69,7 +69,7 @@ import ReviewDecision from "./ReviewDecision.jsx";
 import { heldActsLine } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import AgentSummary, { OneBox, StaleDrafts } from "./AgentSummary.jsx";
-import { turnAnswered, foldedSummaries, freshNext, lastAnswerSummed, withTurns } from "./agentSummary.js";
+import { cardTurn, turnAnswered, foldedSummaries, freshNext, lastAnswerSummed, withTurns } from "./agentSummary.js";
 import { asUtc, dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
@@ -423,6 +423,8 @@ const AssistantMessage = () => {
   const newest = useAuiState((s) => s.thread.messages.at(-1)?.id === s.message.id && !live(s.message));
   // the newest turn that ANSWERED (a summary, not at work): its draft stays on it when something newer comes
   const lastAnswered = useAuiState((s) => [...s.thread.messages].reverse().find((m) => m.role === "assistant" && !live(m) && m.metadata?.custom?.summary)?.id === s.message.id);
+  // ...the live draft card sits on the turn that wrote it (agentSummary.cardTurn), never on whichever turn is newest; no such turn shown: the newest
+  const home = useAuiState((s) => work ? cardTurn(work.reviews, s.thread.messages.map((m) => m.id)) : null), holds = home ? home === id : newest;
   // WHAT THIS TURN MADE AND SET UP, IN IT (the owner, 2026-11-05): in a chat, the files it made inline, and an act it proposed drawn as its
   // connector declares it (a post as the post, ActionCard) under its Next steps - live on the newest turn, read-only (gone, or not) before
   const posts = work && chat ? (work.cards || []).filter((p) => p.after === id) : [];
@@ -456,10 +458,10 @@ const AssistantMessage = () => {
           <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{lead}</Box>}
         {/* ...and where the chat is the task's home, the newest one's Next steps holds the draft cards (`next`, Task 4.2) */}
         {work && !custom?.summary && chat && <StaleDrafts reviews={work.reviews} turnId={id} />}
-        {work && !custom?.summary && newest && work.next && freshNext(work.reviews) && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
+        {work && !custom?.summary && holds && work.next && freshNext(work.reviews) && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
           <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{work.next}</Box>}
-        {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded} reviews={work.reviews} checklist={work.checklist}
-          acts={work.acts} next={custom.folded || !freshNext(work.reviews) ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} turnId={id} answered={answered} />}
+        {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded && !(home && holds)} reviews={work.reviews} checklist={work.checklist}
+          acts={work.acts} next={(home ? !holds : custom.folded) || !freshNext(work.reviews) ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} turnId={id} answered={answered} />}
         {landing?.after === id && landing.node}
       </div>
     </MessagePrimitive.Root>
@@ -947,7 +949,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {/* ...a chat no turn has summed up yet: its cards (TaskPage's chatCards), under the thread */}
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
           {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}
-          {!dock && nextAt?.next && freshNext(nextAt.reviews) && !summed && !working && (!chat || messages?.at(-1)?.role !== "assistant") && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
+          {!dock && nextAt?.next && freshNext(nextAt.reviews) && !summed && !working && !cardTurn(nextAt.reviews, (messages || []).map((m) => m.id)) && (!chat || messages?.at(-1)?.role !== "assistant") && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
             <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
           {/* ...the branch's landing, where the task works in a checkout (landing.has_checkout): in its turn (LandingCtx), here only before any */}
           {!dock && !landAt && landNode}

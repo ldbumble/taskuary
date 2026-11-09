@@ -389,10 +389,17 @@ def said(trace: list) -> str:
 
 def keep_turn(tid: int, reply_id, trace: list):
     """A general turn's tool calls and thinking, filed under the reply they led to (general.send_prompt)."""
-    steps = []
+    from .viewspec import MARK
+    steps, calls = [], {}
     for e in trace or []:
         k, name, d = e.get('type'), e.get('name'), e.get('detail')
-        if k == 'tool_call': steps.append(_tool(name, (d or {}).get('args') if isinstance(d, dict) else d))
+        if k == 'tool_call':
+            steps.append(s := _tool(name, (d or {}).get('args') if isinstance(d, dict) else d))
+            if isinstance(d, dict): calls[d.get('tool_call_id')] = s
+        # ...a VIEW the agent showed keeps its answer, the checked spec the chat draws (2026-11-09): its arguments are cut to strings here, so
+        # once the turn was filed the table or chart was gone from the chat - only the live turn had ever drawn one
+        elif k == 'tool_result' and isinstance(d, dict) and MARK in str(d.get('result') or '') and (s := calls.get(d.get('tool_call_id') or name)):
+            s['output'] = str(d['result'])
         elif k == 'progress' and name in ('thinking', 'reasoning') and str(d or '').strip(): steps.append({'k': 'thought', 'text': _cut(d, THOUGHT_N)})
         elif k == 'progress' and name in ('text', 'agent_message') and str(d or '').strip(): steps.append({'k': 'said', 'text': _cut(d, SAID_N)})
         elif k == 'tool_result' and isinstance(d, dict) and d.get('is_error'): steps.append({'k': 'error', 'text': _cut(d.get('result'), 400)})

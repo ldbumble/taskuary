@@ -169,12 +169,12 @@ def sections(text: str) -> dict:
         else: out[head] = out.get(head, '') + line + '\n'
     return {k: v.strip('\n') for k, v in out.items()}
 
-def pick(store, *heads: str) -> str:
-    """The intro plus the named sections. None of them present (an owner renamed the headings)
+def pick(store, *heads: str, intro=True) -> str:
+    """The intro (unless intro=False) plus the named sections. None of them present (an owner renamed the headings)
     means the whole document: guidance is never dropped silently (PW-243)."""
     text = load(store); parts = sections(text)
     if not any(h in parts for h in heads): return text
-    return '\n\n'.join([parts.get('', '')] + [f'## {h}\n{parts[h]}' for h in parts if h in heads]).strip()
+    return '\n\n'.join([parts.get('', '')]*intro + [f'## {h}\n{parts[h]}' for h in parts if h in heads]).strip()
 
 # CODING EXISTS ONLY WHERE A CODING TOOL CAN START (agents.coding_ready): a finance user offered "Coding agent | Regular agent"
 # picked coding and was refused (2026-10-17 audit). The shipped document opens each coding-only bullet with these words, so
@@ -202,7 +202,9 @@ def for_chat(store) -> str:
     return text if capabilities.can_code(store) else without_coding(text, NO_CODING if agents.developer_mode(store) else NO_DEV)
 def for_brief(store) -> str: return pick(store, GOAL_HEAD, VOICE_HEAD)
 def for_discussion(store) -> str: return pick(store, VOICE_HEAD)
-def for_worker(store) -> str: return pick(store, VOICE_HEAD)
+# A worker gets the Voice alone (2026-11-09): the intro is the desk's ("I do not do the work myself: I ... bring up the button"),
+# and it opened every task agent's style section - an agent whose whole job is to do the work.
+def for_worker(store) -> str: return pick(store, VOICE_HEAD, intro=False)
 
 # ...and the Docs editor's meter shows it (doclimits). 10,000 since 2026-11-02: the shipped document measured 7,994 of 8,000, so the
 # meter would have stood amber on a fresh install for a document nobody had touched.

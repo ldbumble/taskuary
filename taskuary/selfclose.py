@@ -503,12 +503,14 @@ def withdraw_markers(text: str) -> tuple:
     return (text, []) if not found else (_WITHDRAW_RE.sub('', text).strip(), found)
 
 
+# ...a VIEW freely, a FILE only when it truly helps (the owner, 2026-11-09: "use visuals ... ensure they are used liberally"; the 2026-10-09
+# "random scratch stuff not" stands for files): "either way" here held the views back as well
 _SHOW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?SHOW\s*:?\s*(.+?)\s*\]\][ \t]*\n?', re.I | re.M)
 SHOW_LINE = ('SHOWING YOUR ANSWER: a table, a chart, a few numbers or a checklist goes in the chat itself through the `show` tool, '
              'where your session has it - drawn in place, nothing to open. Make a file only for what show cannot draw: an image, a '
              'long page, a spreadsheet the owner keeps (.png .jpg .svg .html .md .csv .pdf in your working folder), and name it on its '
-             'own line: [[TASKUARY-SHOW: <full path>]] - it appears in the chat under this answer and stays on the task. Only when it '
-             'truly helps, either way; never your working files, test data or drafts. An .html page runs with no network: put its data and '
+             'own line: [[TASKUARY-SHOW: <full path>]] - it appears in the chat under this answer and stays on the task. A file only '
+             'when it truly helps - never your working files, test data or drafts. An .html page runs with no network: put its data and '
              'scripts in it.')
 
 

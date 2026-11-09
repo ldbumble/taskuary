@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MARK, buttonOf, fmtAs, labels, normalise, placesOf, specIn, verbOf, viewOf } from "../src/viewSpec.js";
-import { turnParts } from "../src/chatStream.js";
+import { eventsOf, turnParts } from "../src/chatStream.js";
 
 const SPEC = {
   title: "Northwind renewals",
@@ -123,4 +123,11 @@ test("a number in its format: money with none or two decimals, counts grouped, a
   assert.equal(fmtAs(12.5, "percent"), "12.5%");
   assert.equal(fmtAs(null, "currency"), "");
   assert.equal(fmtAs("n/a", "currency"), "n/a");
+});
+
+// ...and a FILED turn draws it too (2026-11-09): its kept step carries the tool's answer as `output` (sessionrecord.keep_turn)
+test("a filed turn's show step draws its view from the answer it kept", () => {
+  const steps = [{ k: "tool", name: "mcp__taskuary__show", text: "", output: `Shown in the owner's chat. ${MARK}${JSON.stringify(SPEC)}` }, { k: "said", text: "Three are due." }];
+  const view = turnParts(eventsOf(steps, false)).find((p) => p.type === "view");
+  assert.equal(view?.spec.title, "Northwind renewals");
 });

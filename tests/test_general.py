@@ -640,7 +640,7 @@ class OneGoalTests(unittest.TestCase):
         for tid in (plain, mailed):
             system = general._prompt(s, tid)[0]
             for want in ("off the owner's hands", 'only what you cannot find', 're-plan', 'never send', 'goes only in the reply you draft',
-                         selfclose.SUMMARY_OPEN, selfclose.SUMMARY_LINE):
+                         selfclose.SUMMARY_OPEN, selfclose.SUMMARY_LINE, general.SHORT_LINE):
                 self.assertIn(want, system, (tid, want))
             self.assertNotIn('into the conversation or a draft', system)
         # ...never the guide's chat, nor a connector card's walk
@@ -661,6 +661,7 @@ class OneGoalTests(unittest.TestCase):
                      'supply a login', '.env', 'folders you can read'):
             self.assertNotIn(gone, flat, gone)
         for gone in ("THE OWNER'S REPOSITORIES", 'folders you can read', 'A login'): self.assertNotIn(gone, general.STRANGER_GOAL_LINE, gone)
+        self.assertNotIn(general.SHORT_LINE, system, 'a stranger has no `show` to be told of')
         # ...and the owner's own task keeps all of it, from code
         own = general_task(s); system = general._prompt(s, own)[0]
         for want in ('goes only in the reply you draft', "THE OWNER'S REPOSITORIES and the folders you can read", '.env'):

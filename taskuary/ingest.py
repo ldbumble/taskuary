@@ -988,7 +988,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             if talking: _hand_to_agent(store, cfg, tid, msg, actor)
             # ...and nothing for the owner is still a change for the assistant on it: someone else may have answered what its draft
             # answers (thread_moved - the agent re-plans; a filed line's own verdict and reading ride with it)
-            elif not kept: thread_moved(store, tid, msg, mid, follow, actor)
+            # ...and with no agent on it, a writer's draft is re-read by its writer when SOMEONE ELSE spoke - it may find no reply owed any more
+            # (the night run, 2026-11-09: a colleague answered "it's PO-5512" on the thread and the drafted "It's PO-5512" stayed ready to send)
+            elif not kept and not thread_moved(store, tid, msg, mid, follow, actor) and (store.get_task(tid) or {}).get('Kind') != 'coding':
+                from .wrapup import _person
+                rv = store.pending_review(tid, kind='draft') or {}
+                if str(rv.get('DraftText') or '').strip() and _person(store, rv.get('AnswersMid') or rv.get('MessageId')) != _person(store, mid):
+                    _spawn(_auto_draft, store, tid, rv['ReviewId'])
             return {'status': 'filed', 'task_id': tid, 'message_id': mid}
         mid = _land(store, msg, tid, 'routed')
         back = bool(r.get('reopen')) and _reopen(store, tid, msg, actor, follow)
@@ -3197,7 +3203,9 @@ def _start_general(store, tid, brief: str = None) -> bool:
     try:
         session = general.start_session(store, tid, actor='router')
         general.OPENING.discard(tid)            # a hand-over's hold (agent_on_reply `opening`): the session is live from here
-        fresh = not general.history(store, tid)
+        # ...fresh until the agent has ANSWERED once (the night run, 2026-11-09): a first turn that failed left its prompt in the history, so
+        # the retry "carried on the conversation" without putting the ask, and the task sat with no agent at work and nothing said
+        fresh = not any(m['role'] == 'assistant' or not m.get('brief') for m in general.history(store, tid))
         store.add_comment(tid, 'router', 'agent', 'The assistant started by itself'
                           + ('.' if fresh else ' - it carries on the conversation already open here.'))
         # ...and a conversation of quick answers only is put the ask too: the agent has not run on it yet (quickwork.escalate, a retry)

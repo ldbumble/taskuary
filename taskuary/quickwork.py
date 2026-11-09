@@ -58,7 +58,7 @@ QUICK_LINE = ('QUICK WORK: answer in one go, as one JSON object with the fields 
     # ...nor is a question only the OWNER can answer about themselves (2026-11-05: "are you here yet" started an agent that ran a command for it)
     'Nor is a question only the owner can answer about themselves - where they are, whether they are coming, what they want or will do: there is '
     'nothing to look up. Put a short draft reply for them to edit in draft (or null if it is theirs alone to word), say so in report, never escalate. '
-    'Never claim an action you did not take. You have no mail search, no connectors and no files: when the answer depends on any of them, '
+    'Never claim an action you did not take. You have no mail search, no connectors and no files - a picture or attachment on the mail is one: when the answer depends on any of them, '
     'or on anything you cannot verify, set escalate rather than answer from memory. Never set done while a question is pending.')
 NO_LOOKUP_LINE = 'THIS AI CANNOT LOOK ANYTHING UP. When the answer depends on a fact that must be checked, set escalate (why: what needs checking) rather than answer from memory.'
 NO_CLOSE_LINE = 'DO NOT CLOSE THIS TASK: set done to false; the owner decides when it is finished.'

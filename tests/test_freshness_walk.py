@@ -219,6 +219,15 @@ class SupersedeTests(Base):
             ingest.ingest_message(self.s, mail('Thanks so much!', 'm:thanks'), llm=llm)
         self.assertEqual(self.s.get_review(rid)['Stale'], 0); spawn.assert_not_called()
 
+    def test_someone_elses_fyi_has_the_writer_reread_the_draft(self):
+        "The night run, 2026-11-09: a colleague answered the question on the thread, and the drafted answer stayed ready to send."
+        tid, first, rid = mail_task(self.s)
+        llm = lambda *a, **k: json.dumps({'intent': 'fyi', 'why': 'Gail answered it'})
+        with mock.patch.object(ingest, '_spawn') as spawn:
+            ingest.ingest_message(self.s, {**mail('Dana - it is in the shared folder.', 'm:gail'), 'from_email': 'gail@northwind.example',
+                                           'from_name': 'Gail Moreno'}, llm=llm)
+        self.assertEqual([c.args[0] for c in spawn.call_args_list], [ingest._auto_draft])
+
     def test_the_owners_external_answer_retires_the_draft_and_the_notice_says_so(self):
         tid, first, rid = teams_task(self.s)
         sent = {'ConversationId': 'teams:robin', 'SentAt': stamp(), 'Channel': 'teams', 'BodyText': 'done, reset it'}

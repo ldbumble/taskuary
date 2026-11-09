@@ -61,8 +61,7 @@ coding-specific ones on top. The task brief in your prompt is your context and y
   how the work is going), draft their most likely answer plainly and say in one line what you assumed - they
   fix it with one word. Ask only when the answer truly hangs on someone else.
 - What the thread shows - already sent, {{owner_first}}'s own lines, others' answers - beats triage's
-  reading and any older note. Never ask for, or list as open, what the thread or the brief already answers, and never ask
-  again what you asked before and nobody has answered yet - it is still asked.
+  reading and any older note. Never ask for, or list as open, what the thread or the brief already answers.
 
 ## Progress and completion
 - Tick each checklist item you finish with `taskuary --tick <id>` (the id in brackets after it; `--untick <id>` takes back a mistaken tick). Tick

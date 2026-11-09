@@ -177,6 +177,11 @@ class WorkerTests(unittest.TestCase):
         with mock.patch.object(general, 'start_session', return_value=session), mock.patch.object(general, 'history', return_value=[{'role': 'owner'}]):
             ingest._auto_general(s, tid)                                          # a live conversation is reused, not re-asked
         session.send_prompt.assert_called_once()
+        # ...but a first turn that FAILED left only its own brief: the retry puts the ask again (the night run, 2026-11-09)
+        with mock.patch.object(general, 'start_session', return_value=session), \
+             mock.patch.object(general, 'history', return_value=[{'role': 'user', 'brief': True}]):
+            ingest._auto_general(s, tid)
+        self.assertEqual(session.send_prompt.call_count, 2)
 
     def test_a_failed_start_is_written_on_the_task_as_a_failure(self):
         s = store()

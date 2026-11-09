@@ -172,3 +172,18 @@ def test_the_owners_presses_since_the_last_turn_are_in_the_turns_context():
     lines = [m for m in general.shown_history(s, tid) if m.get('press')]
     assert [m['content'][0]['text'] for m in lines] == [f'You {monday}.', 'You changed its priority from regular to urgent.']
     assert all(m['role'] == 'user' for m in lines) and not [m for m in general.history(s, tid) if m.get('press')]
+
+
+def test_a_question_still_waiting_is_in_the_turns_context_and_a_wake_does_not_clear_it():
+    # the night run, 2026-11-09: every line on the thread woke the agent, the wake read as the owner speaking and cleared its question,
+    # so it asked "who runs the portal?" on six turns running to keep it on screen
+    from taskuary import workerstate as ws
+    s = MemoryStore(); tid = s.create_task({'Title': 'Portal bugs', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Added the export bug to the list.')
+    with mock.patch.object(ws, 'current_sid', return_value='s1'):
+        ws.record(s, tid, 's1', 'working', source='api')
+        ws.record(s, tid, 's1', 'input_needed', request_id='q1', text='Who runs the portal: in-house or a vendor?', source='api')
+        ws.record(s, tid, 's1', 'working', text=ws.WAKE, source='api')          # Taskuary's turn on Ray's next line
+        assert 'Who runs the portal' in general.latest_block(s, tid, resumed=True)
+        ws.record(s, tid, 's1', 'working', source='api')                        # the owner speaks: it is overtaken
+        assert 'YOUR QUESTION STILL WAITING' not in general.latest_block(s, tid, resumed=True)

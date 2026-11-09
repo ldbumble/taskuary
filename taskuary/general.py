@@ -573,7 +573,11 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     others = [x for x in verdicts.unsent(store, tid) if not rv or x['rid'] != rv['ReviewId']]
     handed = [c for c in store.list_comments(tid, internal=True) if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
     did, own = owner_did(store, tid), own_replies(store, tid)
-    if not (rv or sent or answered or others or handed or did or own): return ''
+    try:
+        from . import workerstate as ws
+        asked = [r['text'] for r in ws.status(store, tid)['requests'] if r.get('kind') == 'input_needed' and r.get('text')]
+    except Exception: asked = []
+    if not (rv or sent or answered or others or handed or did or own or asked): return ''
     out = [selfclose.LATEST_LINE]
     if new: out.append(f"THE NEWEST MESSAGE - from {new['who']}, at {clock(new['at'])}: {_quote(new['words'], 600)}")
     if rv:
@@ -591,6 +595,8 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         + ('' if rv else f'\n{selfclose.WITHDRAW_LINE}'))
     if sent: out.append('ALREADY SENT ON THIS TASK - never draft these again:\n' + '\n'.join(
         f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
+    if asked: out.append('YOUR QUESTION STILL WAITING FOR THE OWNER - it stays on their screen until they answer; never ask it again:\n'
+                         + '\n'.join(f'- {_quote(q, 300)}' for q in asked))
     if own:
         from .senders import channel_name
         from .store import task_ref
@@ -1942,7 +1948,9 @@ class GeneralSession:
                 except Exception as e: logger.debug(f'task {self.task_id}: the hand-over was not read - {e}')
             try:
                 from . import workerstate as ws
-                ws.record(self.store, self.task_id, self.sid, 'working', source='api')
+                # ...Taskuary's own turn (a line on the thread, a check-back) is not the owner speaking: their question still waits (the night run,
+                # 2026-11-09: every wake cleared it, so the agent asked "who runs the portal?" again on six turns to keep it on screen)
+                ws.record(self.store, self.task_id, self.sid, 'working', text=ws.WAKE if brief or not as_owner else '', source='api')
             except Exception: pass
             # ...and a run under way is not a session saved: a mark left on the task spoke over this run's own ending (2026-11-04)
             from . import terminal

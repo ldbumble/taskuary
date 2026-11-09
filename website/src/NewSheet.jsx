@@ -297,6 +297,11 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const submit = useCallback(async () => {
     setBusy(true); setErr(""); setErrAi(false); setOk("");
     const about = String((agentBoxRef.current ? wordsRef.current : aboutRef.current?.value) || "").trim();
+    // THE BUTTON SPINS UNTIL WHAT IT MADE IS UP (the owner, 2026-11-09: "it should open new task right away or if it needs a second the create
+    // new agent button should spin"): the card in the conversation is put down by the task landing on the table (AssistantView pull, holdsNew),
+    // so its press stays busy until then - free again, it could be pressed twice and file the task twice. A dialog's host closes it itself
+    let opened = false;
+    const openIt = (tid) => { opened = !!tid && !!onOpenTask; onOpenTask?.(tid); };
     try {
       if (kind === "send") {
         const { data } = await api.post("/api/outbox", {
@@ -306,7 +311,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         setOk(mode === "task"
           ? `${data.ref} — an agent is finding out first; the message is drafted when it is done.`
           : `${data.ref} — drafted. It is open now, waiting for you to send it.`);
-        aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
+        aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); openIt(data.taskId);
       } else if (kind === "agent") {
         // one module decides chat-vs-terminal for the whole app, so the Board and this sheet can
         // never disagree about what "no repository" means
@@ -349,7 +354,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         filed.current = null;
         if (out?.said) onSaid?.(out.said);
         setOk(`${data.ref} — ${outcomeOf({ ...out, ref: "" }).text}.`);      // the line leads with the ref: said once, not twice
-        aboutRef.current?.clear(); setText(""); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
+        aboutRef.current?.clear(); setText(""); setHasAbout(false); pics.clear(); onDone?.(); openIt(data.taskId);
       } else if (kind === "chat") {
         // said in the chat as if typed there: the Assistant answers, or files it as whatever it turns out to be
         askAssistant(about); aboutRef.current?.clear(); setHasAbout(false); onClose?.();
@@ -369,15 +374,15 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         // ...and with no AI nothing plans them: it promised steps that never came (the UI audit, 2026-10-21)
         setOk(`${data.ref} — ${!plan ? "on your rail; add the steps on the task." : noAi ? "on your rail. No AI is connected, so nothing can plan the steps - add them on the task."
           : "planning the steps; they land on the task in a moment."}`);
-        aboutRef.current?.clear(); setHasAbout(false); setBy(""); setWho(""); onDone?.(); onOpenTask?.(data.taskId);
+        aboutRef.current?.clear(); setHasAbout(false); setBy(""); setWho(""); onDone?.(); openIt(data.taskId);
       } else {
         const { data } = await api.post("/api/notes", { title: about.slice(0, 300), body: "", when: when || null });
         setOk(`Noted — it sits on ${String(data.at).slice(0, 16)} and nothing will touch it.`);
         aboutRef.current?.clear(); setHasAbout(false); setWhen(""); onDone?.();
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
-    setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, noAi, onDone, onOpenTask, onClose, pics, line, onSaid]);
+    if (!(inline && opened)) setBusy(false);
+  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, noAi, onDone, onOpenTask, onClose, pics, line, onSaid, inline]);
 
   // ...and no live session without a coding tool the owner chose (owner-approved, 2026-10-21): Send to coding agent stays disabled
   const noCodingTool = kind === "agent" && how === "terminal" && (!agentsRead || !codingReady);

@@ -101,7 +101,7 @@ import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, dueWord, levelOf, placed, pressOnto, pulledRow, withWalk } from "./funnelPile.js";
+import { MORE_PX, backAt, dueWord, holdsNew, levelOf, placed, pressOnto, pulledRow, withWalk } from "./funnelPile.js";
 import { STAYS, dropHeld, ghostsOf, keepHeld, movedEntry } from "./movedFyi.js";
 import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
@@ -3122,7 +3122,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...and the row it leaves is off the table at the press (`opening`): New's Send put the new task's pull out and the FYI under New wore
     // "on the table" again until the task loaded (the owner, 2026-11-05)
     setOpening(key && key !== currentRef.current?.key ? key : null);
-    setRailOpen(false); if (old) setOld(null); browseDown(); surface(key, asUser || null);
+    // ...but New's own press, opening the task it just made, keeps the card up - its button spinning - until that task is on the table
+    // (holdsNew): put down at the press, the task it was opened over came back under the "…" (the owner, 2026-11-09)
+    const held = holdsNew(msgsRef.current, browsingRef.current, pileRef.current?.items, key);
+    setRailOpen(false); if (old) setOld(null); if (!held) browseDown();
+    const going = surface(key, asUser || null);
+    if (held) Promise.resolve(going).finally(() => browseDownRef.current?.());
   };
   pullRef.current = pull;
 

@@ -221,7 +221,8 @@ test("a row, a task or an fyi puts the open browse view down AT THE CLICK, as on
   // ...and a rail row clicked mid-turn is drawn at once from its rail row (2026-11-03), its move in the same one slot - the latest ask wins
   assert.match(view, /if \(!resetting && \(busy \|\| turnFlight\.current\)\) \{\n\s+const row = \(pileRef\.current\?\.items \|\| \[\]\)\.find\(\(i\) => i\.key === key && !i\.settling\);/);
   assert.match(view, /putOnTable\(row\); setFoldedKey\(\(k\) => \(k === row\.key \? null : k\)\);\n\s+\}\n\s+openLater\.current = \{ kind: "pull", key, asUser \}; return;/);
-  assert.match(view, /if \(old\) setOld\(null\); browseDown\(\); surface\(key, asUser \|\| null\);/, "pull");
+  // ...every view but New's own card, held up until the task it made lands (holdsNew, newOpensWhatItMade.test.mjs - 2026-11-09)
+  assert.match(view, /if \(old\) setOld\(null\); if \(!held\) browseDown\(\);\s+const going = surface\(key, asUser \|\| null\);/, "pull");
   // ...and a message asked for by id (a card's link, #msg=) goes the same road, as its own card - waiting out a turn as a task does
   assert.match(view, /const openMsgCard = \(mid\) => \{\n\s+if \(!mid\) return;\n\s+if \(busy \|\| resetting \|\| turnFlight\.current\) \{ openLater\.current = \{ kind: "msg", mid \}; return; \}\n\s+pull\(`msg:\$\{mid\}`\);/);
   assert.doesNotMatch(view, /pullOrOpen|openByMid|openByItem/, "no road opens a row anywhere but on the canvas");

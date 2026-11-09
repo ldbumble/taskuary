@@ -350,6 +350,13 @@ export const pressOnto = (walk, rail, { putDown = null, how = "next", fromKey = 
     : key && how === "next" && key !== card?.key && !key.startsWith("fyis:") ? key : null;
   return { onIt, below };
 };
+// NEW STAYS UP UNTIL WHAT IT MADE IS ON THE TABLE (the owner, 2026-11-09, said twice: "it closed the new ui, then opened the old task up with
+// dots on bottom"): New's press opens a task made a second ago, which no rail row holds yet, so nothing draws at the press (pressOnto) - put
+// down then, the card took itself away and the task it had been opened over stood under the "…" until the read landed. Held while it is the
+// live page and the rail has no row to draw; a row there draws at once, and the card goes with the press as ever
+export const holdsNew = (msgs, browsing, rail, key) => !!key && !!browsing
+  && (msgs || []).some((m) => m.id === browsing && m.role === "browse" && m.area === "new")
+  && !(rail || []).some((i) => i.key === key && !i.settling);
 // NEXT TURNS BLUE AS SOON AS THE MOVE SAVES (the owner, 2026-11-06): a light walk answer (no rail rides) carries the walk's whole word -
 // below included - and the rail on screen takes it until its own read lands, so a second press draws its row and Back stands at once
 export const withWalk = (pile, walk) => (pile && walk && "below" in walk ? { ...pile, walk } : pile);

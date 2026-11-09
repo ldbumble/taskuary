@@ -25,7 +25,7 @@ import { steady } from "./steadyAnchor.js";
 import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { ROW_LOOK } from "./ButtonBar.jsx";
-import { foldRow, onPressed, onPressing, press, sectionsOf, taskButtons, useSpineAll, useSpineVerbs, useVerbs } from "./actionRow.js";
+import { foldRow, heldOff, onPressed, onPressing, press, sectionsOf, taskButtons, useSpineAll, useSpineVerbs, useVerbs } from "./actionRow.js";
 import { notePress, pagePress } from "./pressLog.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
@@ -515,7 +515,7 @@ const SPINE_MOVES = { ...MOVE_LOOK, display: "flex", flexDirection: "column", ga
     lineHeight: 1.2, height: "auto" } };
 const SEC_NAME = { from: "Came from", agent: "Agent" };
 const OPENS_FORM = new Set(["send-general", "start-agent", "run-another"]);   // the agent's moves that open its start box
-const stageBtn = (v, word = v.label, head = false) => <button key={v.id} type="button" className={`tq-ab ${v.tone} ${rankOf(v, head)}`} disabled={v.disabled} data-tq-verb={v.id}
+const stageBtn = (v, word = v.label, head = false) => <button key={v.id} type="button" className={`tq-ab ${v.tone} ${rankOf(v, head)}`} disabled={v.disabled} aria-disabled={v.disabled || undefined} data-tq-inert={v.inert ? "" : undefined} data-tq-verb={v.id}
   title={(v.disabled && v.why) || v.title || word} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}>{word}</button>;
 // THE TASK'S OWN MOVES RIDE THE CHAT'S PANE (the owner, 2026-10-30, and 2026-11-06: one chat, no Close out): Mark done first (2026-11-02), a closed
 // task's Reopen in its place (2026-11-05), then Close with a note, Attach a file and Share; Came from carries Change ▾
@@ -527,10 +527,10 @@ function useTaskMoves(sec) {
 }
 const NO_MOVES = [];
 function ChangeMoves({ change, even = false }) {
-  const [at, setAt] = useState(null);
+  const [at, setAt] = useState(null), inert = heldOff(change);
   return <>
     <button type="button" className={even ? "tq-ab row" : "tq-ab s task"} aria-haspopup="menu" aria-expanded={!!at} data-tq-more="change"
-      title="Split or merge, who does it or the priority" onClick={(e) => setAt(e.currentTarget)}>{"Change ▾"}</button>
+      disabled={inert} aria-disabled={inert || undefined} data-tq-inert={inert ? "" : undefined} title="Split or merge, who does it or the priority" onClick={(e) => setAt(e.currentTarget)}>{"Change ▾"}</button>
     <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)}>
       {change.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
         onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu></>;
@@ -604,7 +604,7 @@ function MovesLine({ items, tucked, sec, name, even = false }) {
   const rest = [...out.flatMap((x) => (x.change ? x.change : [x.v])), ...tucked];
   const btn = (x) => (x.change ? <ChangeMoves key="change" change={x.change} even={even} /> : even ? rowBtn(x.v) : stageBtn(x.v, x.v.label, !!x.head));
   const fold = rest.length > 0 && <button key="fold" type="button" className={even ? "tq-ab row" : "tq-ab s task"} aria-label="More" aria-haspopup="menu" data-tq-more={sec}
-    onClick={(e) => setAt(e.currentTarget)}>▾</button>;
+    disabled={heldOff(rest)} aria-disabled={heldOff(rest) || undefined} onClick={(e) => setAt(e.currentTarget)}>▾</button>;
   const secs = even ? sectionsOf([...shown, ...(fold ? [{ key: "fold", grp: "more", fold }] : [])]) : [];
   return <Box ref={box} data-tq-pane-moves={sec} role="group" aria-label={`${name} moves`} sx={even ? EVEN_ROW : { ...MOVE_LOOK, display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden",
     "& .tq-ab": { flexShrink: 0 } }}>
@@ -617,7 +617,7 @@ function MovesLine({ items, tucked, sec, name, even = false }) {
 }
 const isDoneMove = (v) => v.id === "done" || /:done$/.test(String(v.id));
 // THE TASK ROW'S ONE BUTTON: one height, padding, font and radius for every move, outlined; the lit one (the Advisor's pick) alone filled
-const rowBtn = (v, word = v.label) => <button key={v.id} type="button" className={`tq-ab row${v.tone === "p" ? " p" : ""}`} disabled={v.disabled} data-tq-verb={v.id}
+const rowBtn = (v, word = v.label) => <button key={v.id} type="button" className={`tq-ab row${v.tone === "p" ? " p" : ""}`} disabled={v.disabled} aria-disabled={v.disabled || undefined} data-tq-inert={v.inert ? "" : undefined} data-tq-verb={v.id}
   title={(v.disabled && v.why) || v.title || word} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}>{word}</button>;
 const EVEN_ROW = { ...ROW_LOOK, display: "flex", alignItems: "center", gap: 1, flexWrap: "nowrap", minWidth: 0, overflow: "hidden" };
 // A QUIET CORNER BUTTON IN THE TASK'S HEADER (the owner, 2026-11-06: "AI used" and "Talk to this agent from…" must not sit at the bottom of the

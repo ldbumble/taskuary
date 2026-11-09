@@ -3,7 +3,7 @@
 // ONE filled button at most - the Advisor's pick, and none before it answers - and a greyed decision says why it is greyed.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, MenuItem, useMediaQuery } from "@mui/material";
-import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, advisedAny, fitRow, navShort, press, shortParts, putSpineVerbs, rowOf, lightOnCard, sameRow, splitRow, laidOf, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, advisedAny, fitRow, navShort, press, shortParts, putSpineVerbs, rowOf, lightOnCard, sameRow, heldOff, heldRow, splitRow, laidOf, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 import { label } from "./buttons.js";
 const shortNext = (w) => (w === label("next", "batch") ? label("next", "batch_short") : w);   // a squeezed desk bar's word for a batch's Next
@@ -51,11 +51,11 @@ function Cluster({ g, btn, act = press }) {
         {g.shown.map(btn)}
         {g.rest.length > 0 && <>
           <button type="button" className="tq-ab s tq-cl-more" aria-haspopup="menu" aria-expanded={!!at} aria-label={`More ${g.label ? g.label.toLowerCase() + " " : ""}actions`}
-            data-tq-more={g.type} onClick={(e) => setAt(e.currentTarget)}>▾</button>
+            data-tq-more={g.type} disabled={heldOff(g.rest)} aria-disabled={heldOff(g.rest) || undefined} onClick={(e) => setAt(e.currentTarget)}>▾</button>
           <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "center" }} transformOrigin={{ vertical: "bottom", horizontal: "center" }}
             slotProps={{ paper: { sx: { minWidth: 200, borderRadius: 2 } } }}>
             {g.rest.map((v) => (
-              <MenuItem key={v.id} dense disabled={v.disabled} title={(v.disabled && v.why) || v.title || undefined} data-tq-verb={v.id} data-tq-for={v.at}
+              <MenuItem key={v.id} dense disabled={v.disabled} data-tq-inert={v.inert ? "" : undefined} title={(v.disabled && v.why) || v.title || undefined} data-tq-verb={v.id} data-tq-for={v.at}
                 onClick={(e) => { const a = at; setAt(null); act(v.id, e, a, v.of); }} sx={{ fontSize: 13 }}>{v.label}</MenuItem>
             ))}
           </Menu></>}
@@ -67,7 +67,8 @@ function Cluster({ g, btn, act = press }) {
 // the row says what to do, by type - not which task or how long it waited: the card above says both (the owner, 2026-10-13)
 export default function ActionRow({ inline = false, advised: given = null, hold = false, early = true }) {
   // `hold` (actionRow.useRowHold, its number): the new row is not whole yet - the row drawn last stays up as it was, and its presses do
-  // nothing, until it is; with none drawn yet (a reload) there is no row until then. Never hidden, never greyed, never drawn twice
+  // nothing, until it is; with none drawn yet (a reload) there is no row until then. Never hidden, never drawn twice - and a held button
+  // that would do nothing is greyed while it would (heldRow)
   // ...and at most ROW_HOLD_MS from the moment the held row is kept off one that may be drawn (`early`: the new item's own verbs are up)
   // - counted once for a run of holds, a click on another row before this one was whole included - then the live one until the holding
   // is over - and ROW_STUCK_MS from the first difference in one hold, whatever the live row is. The lit pick drawn is the held one: the press that
@@ -93,19 +94,8 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   // ...and LIT as they are now too (the owner, 2026-11-04: "i clicked a watching task and there is no next/back thing yet? took a long time
   // to light up"): the held row's own Nav was drawn, greyed where the live one was lit - a click from the top row kept Back grey, and from a
   // row with no Nav none stood, until the hold let go (up to ROW_HOLD_MS after the new item's verbs, ROW_STUCK_MS at worst)
-  const nav = (v) => v.group === "next" || v.group === "back";
-  const navNow = (v) => (!nav(v) ? v : now.list.find((x) => x.group === v.group && !x.disabled) || { ...v, disabled: true });
-  const verbs = kept === now ? now : { ...kept, list: [...kept.list.map(navNow),
-    ...now.list.filter((x) => nav(x) && !x.disabled && !kept.list.some((k) => k.group === x.group))] };
-  // ...a held button acts only where it stands for no item and is still live - never the item being left's own
-  // ...and a held button of the item STILL ON THE TABLE acts too (2026-10-27, Run another agent on a general agent did nothing): while its
-  // write-up ran the row kept re-drawing and stayed held, and every press of the item's own verbs fell through to nothing
-  // ...and a held Back or Next is the live row's own Back or Next, whatever name the item drawn under it gives it: a batch coming in registers
-  // its Next as its line's (chat:next), and the held "next" found nothing and every Next pressed while it came did nothing (the stress walk,
-  // 2026-11-02)
-  const liveOf = (id) => { const h = verbs.list.find((x) => x.id === id), at = h?.at;
-    return now.list.find((x) => x.id === id && (!x.at || (!!at && x.at === at)))
-      || (h && (h.group === "next" || h.group === "back") ? now.list.find((x) => x.group === h.group && !x.disabled) : undefined); };
+  // ...and a held button whose press would do nothing stands greyed until it would (actionRow.heldRow)
+  const { verbs, liveOf } = heldRow(kept, now);
   const act = verbs === now ? press : (id, e, a) => { const v = liveOf(id); return v ? press(v.id, e, a, v.of) : undefined; };
   // a "none" answer lights its one move: no AI lights the row's own Connect an AI where the row has one (a failure's fix named after
   // its place) - it lit nothing, a move named "ai" no button carries (the design, phase A) - and any other none lights Next
@@ -171,7 +161,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   // ONE NAME PER BUTTON (buttons.json, the owner, 2026-10-17): the bar says the same words the hover, the Advisor and the menu say -
   // a short bar word ("Snooze", "Stop") beside a long hover one was two names for one button
   const btn = (v) => (
-    <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id} data-tq-for={v.at} data-tq-own={v.own ? "" : undefined}
+    <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} aria-disabled={v.disabled || undefined} data-tq-inert={v.inert ? "" : undefined} data-tq-verb={v.id} data-tq-for={v.at} data-tq-own={v.own ? "" : undefined}
       title={(v.disabled && v.why) || v.title || (fit.tight ? v.label : undefined)} onClick={(e) => act(v.id, e, e.currentTarget, v.of)}>{v.label}</button>
   );
   return (
@@ -184,9 +174,9 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
               arrow alone, its name on it for a reader */}
           <div className="tq-cl-b">
             {back && <button type="button" className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-walk-back="" data-tq-short={short ? "" : undefined}
-              aria-label={back.label} title={back.title || back.label} disabled={back.disabled}
+              aria-label={back.label} title={back.title || back.label} disabled={back.disabled} aria-disabled={back.disabled || undefined}
               onClick={(e) => act(back.id, e, e.currentTarget, back.of)}>{short ? "" : back.label}</button>}
-            {next && <button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" data-tq-bare={nextWord !== next.label ? "" : undefined} {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} title={next.title || undefined} disabled={next.disabled}
+            {next && <button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" data-tq-bare={nextWord !== next.label ? "" : undefined} {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} title={next.title || undefined} disabled={next.disabled} aria-disabled={next.disabled || undefined}
               onClick={(e) => act(next.id, e, e.currentTarget, next.of)}>{nextWord}</button>}</div></div>}
         {fit.groups.map((g) => <Cluster key={g.type} g={g} btn={btn} act={act} />)}
       </div>

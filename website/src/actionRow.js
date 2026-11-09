@@ -109,6 +109,26 @@ export function useRowHold(sig, ready, shape = "") {
 // ...while it holds, the row drawn follows the live one only where they are the same buttons for the same item - a label turned to its
 // busy word ("Reopening…"), a flag - so the press still answers at once
 export const sameRow = (a, b) => { const ids = (r) => (r?.list || []).map((v) => `${v.id}@${v.at || ""}`).join("|") + (r?.end ? "|end" : ""); return ids(a) === ids(b); };
+// THE HELD ROW, AS DRAWN (ActionRow): the row kept up while the new one is not whole, its Back and Next the live row's (greyed from a press
+// until its move lands, the owner 2026-11-03; lit as they are now, 2026-11-04), and `liveOf` the live verb a held button's press runs - or none.
+// ...AND A HELD BUTTON THAT WOULD DO NOTHING IS DRAWN GREYED (the owner, 2026-11-09: "I thought it's greyed out until you can click it
+// again"): a second Mark done in the ~1.5 s the next task took to load did nothing, under a button that looked live. `inert` marks it, and
+// it comes back the moment its press runs something again - the same rule press uses, so what looks live is what acts
+export function heldRow(kept, now) {
+  if (kept === now) return { verbs: now, liveOf: (id) => now.list.find((x) => x.id === id) };
+  const nav = (v) => v.group === "next" || v.group === "back";
+  const navNow = (v) => now.list.find((x) => x.group === v.group && !x.disabled) || { ...v, disabled: true };
+  // ...a held button acts where its live verb stands for no item, or for the same item still on the table (2026-10-27: Run another agent did
+  // nothing while a write-up re-drew the row) - never the item being left's own; a held Back or Next is the live row's, whatever the item
+  // under it names it (a batch registers chat:next; the stress walk, 2026-11-02)
+  const of = (h) => (nav(h) ? now.list.find((x) => x.group === h.group && !x.disabled)
+    : now.list.find((x) => x.id === h.id && (!x.at || (!!h.at && x.at === h.at))));
+  const list = [...kept.list.map((v) => (nav(v) ? navNow(v) : of(v) && !of(v).disabled ? v : { ...v, disabled: true, inert: true })),
+    ...now.list.filter((x) => nav(x) && !x.disabled && !kept.list.some((k) => k.group === x.group))];
+  return { verbs: { ...kept, list }, liveOf: (id) => { const h = list.find((x) => x.id === id); return h ? of(h) : undefined; } };
+}
+// ...a ▾ whose every move is held inert greys with them: opened, it held nothing a press would run
+export const heldOff = (vs) => vs.length > 0 && vs.every((v) => v.inert);
 // EVERY PRESS IS AN ACT THE ADVISOR MUST SEE (2026-10-19): its line was read when the item opened and never again, so after Send it
 // still said the sender was waiting. Whoever shows advice hears each press once it settles (onPressed) and reads it again.
 // A card's own button that acts without the row (the draft's Send under it) says so the same way: acted(id).

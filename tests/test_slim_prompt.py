@@ -72,3 +72,11 @@ def test_each_rule_is_said_once_and_true():
         assert want in system, want
     assert 'IS the confirmation' in selfclose.SUMMARY_LINE and 'group chat' in selfclose.SUMMARY_LINE
     assert 'the thread wins' in general.learned_block(s, 'x') or not general.learned_block(s, 'x')
+
+
+def test_the_rarer_proposal_shapes_are_a_guide_away_not_in_every_tools_list():
+    # the tool descriptions were shortened (2026-11-09): what a post, a GitHub issue or a tracker write takes is read when one is made
+    d = agenttools.TOOLS['propose'][1]
+    assert '`propose` topic' in d and 'jira_move' not in d
+    got = agenttools.call(MemoryStore(), 1, 'guide', {'topic': 'propose'}, {})
+    for want in ('linkedin_post', 'github_issue', 'jira_move', 'monday_', 'Post button'): assert want in got, want

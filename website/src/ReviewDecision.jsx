@@ -16,7 +16,7 @@ import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, DraftField, SubjectRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
-import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, replyContext } from "./replyDelivery.js";
+import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, replyContext } from "./replyDelivery.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
 import { boxText, editAfterRefile, followDraft, useDraftJob } from "./replyDraft.js";
@@ -216,6 +216,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const subjFiled = deliverySubject(r), subjNow = delivery.frozen ? deliverySubject(filedDelivery) : subj ?? subjFiled;
   const meta = deliveryMeta(r);
   const isEmail = String(r.Channel || meta.channel || "").toLowerCase() === "email";     // the one email card: To, CC, BCC, Subject, files
+  // ...whose To holds no address asks for one, and nothing sends until it has it (slots.address_for found nobody)
+  const needsTo = isEmail && !proposal && !delivery.frozen && meta.kind !== "calendar" && needsAddress(r);
   const isCal = meta.kind === "calendar";             // an invite answered or a meeting booked: its note may be empty
   const newMeeting = isCal && meta.act === "schedule";
   const [switching, setSwitching] = useState("");
@@ -539,7 +541,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       : [...(canRedraft && !r.Stale ? [{ id: no("redraft"), group: "decide", tone: "s", label: redraftLabel, disabled: off, run: redraft,
           title: btnHint("redraft") }] : []),
         ...(onMarkDone && canSendIt ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: btn("close"), disabled: off, run: onMarkDone, title: doneTitle }] : [])]),
-  ].map((v) => ({ ...v, group: "decide", disabled: v.disabled || (delivery.frozen && ![no("approve"), no("anyway"), no("done")].includes(v.id)) }));
+  ].map((v) => ({ ...v, group: "decide", disabled: v.disabled || (delivery.frozen && ![no("approve"), no("anyway"), no("done")].includes(v.id)) }))
+    .map((v) => needsTo && [no("approve"), no("send_close"), no("anyway")].includes(v.id) ? { ...v, disabled: true, why: "give the email address first" } : v);
   // ...and behind More where the decision does not carry it already (a close-out; a stale draft's Refresh is the move itself)
   // The draft's own buttons are drawn under it, never on the task's bar (2026-10-06) - but they are REGISTERED as `card` verbs, so
   // the row knows the card holds the move and the Advisor's Send finds this Send instead of drawing a second one (B4, 2026-10-17)
@@ -629,7 +632,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       {meta.share?.report != null && <SharedDashboard report={meta.share.report} title={meta.share.title} />}
       {newMeeting && !delivery.frozen && r.Status === "pending" && <SubjectRow subject={subjNow} onChange={setSubj} disabled={off} />}
       {isCal ? <CalendarLine meta={meta} /> : !proposal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" ? (
-        <ToRow to={replyContext(filedDelivery)} disabled={off || delivery.frozen}
+        <ToRow to={replyContext(filedDelivery)} disabled={off || delivery.frozen} needs={needsTo} who={String(meta.needs || [].concat(meta.to || []).join(", "))}
           onSave={async (to) => { await api.put(`/api/reviews/${r.ReviewId}/envelope`, { to }); onChanged?.(); }} />
       ) : (
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>

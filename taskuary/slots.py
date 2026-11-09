@@ -168,10 +168,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     if hit and hit.get('done'): return {'ok': False, 'why': f"the email to {hit['out'].get('to')} was already sent or dropped"}
     if hit and want and '@' in want and str(hit['out'].get('to')).casefold() != want:
         # a slot that named a person: the address the agent found is where this one goes (never guessed by us)
-        items = store.task_checklist(tid)
-        for i in items:
-            if i.get('id') == hit['id']: i['out'] = {**i['out'], 'to': ' '.join(str(to).split())}; hit = i
-        store._write_checklist(tid, items, f'agent:{agent}')
+        hit = _point(store, tid, hit, ' '.join(str(to).split()), agent)
     if not hit:
         if not want: return {'ok': False, 'why': 'name the slot (--slot) or who it goes to (--to)'}
         made = add(store, tid, [{'to': to, 'about': subject, 'kind': channel, **({} if agent == 'owner' else {'by': 'agent'}), **({'name': name} if name else {})}], f'agent:{agent}')
@@ -180,6 +177,12 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what this task owes.')
     o = hit['out']; kind = o.get('kind') or 'email'
     if kind == 'email' and _chat_id(o.get('to')): return {'ok': False, 'why': _NO_MAILBOX.format(to=o.get('to'))}
+    missing, found = '', False
+    if kind == 'email' and '@' not in str(o.get('to') or ''):
+        who = ' '.join(str(o.get('to') or '').split())
+        addr, found = address_for(store, tid, who)
+        if addr: hit = _point(store, tid, hit, addr, agent, name=o.get('name') or who); o = hit['out']
+        else: missing = who or 'them'
     subj = subject_of(store, tid, hit, subject) if kind == 'email' else ''
     rv = store.get_review(hit['rid']) if hit.get('rid') else None
     # a rewrite that names no From keeps the one already picked - the owner's, or the agent's first draft's
@@ -187,8 +190,10 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     except (TypeError, ValueError): was = None
     box = (mailbox or was) if kind == 'email' else None
     guessed = [a.lower() for a in (split(x)[1] for x in ([guessed] if isinstance(guessed, str) else guessed or [])) if a]
-    deliver = json.dumps({'channel': kind, 'to': [o['to']], 'cc': cc, 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid),
-                          **({'mailbox': box} if box else {}), **({'guessed': guessed} if guessed else {})})
+    if found and o['to'].lower() not in guessed: guessed.append(o['to'].lower())
+    # ...an email's To holds addresses only: none found is an EMPTY To the card asks the owner to fill, never the name
+    deliver = json.dumps({'channel': kind, 'to': [] if missing else [o['to']], 'cc': cc, 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid),
+                          **({'mailbox': box} if box else {}), **({'guessed': guessed} if guessed else {}), **({'needs': missing} if missing else {})})
     if rv and rv.get('Status') == 'pending':
         rid = rv['ReviewId']
         if not store.set_review_deliver(rid, deliver): return {'ok': False, 'why': 'that email is already being sent'}
@@ -197,20 +202,52 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
                                 'Reason': 'your email - approve to send' if agent == 'owner' else f"{agent} wrote this email - approve to send"})       # who it goes to is on the card once
         mark(store, tid, hit['id'], rid=rid, actor=f'agent:{agent}')
     was = str((store.get_review(rid) or {}).get('Reason') or '')
-    if agent != 'owner' and (guessed or GUESSED in was): store.update_review_reason(rid, with_guess(was, guessed))
+    if (agent != 'owner' and guessed) or found or missing or GUESSED in was or NEEDS in was: store.update_review_reason(rid, with_guess(was, guessed, missing))
     if agent != 'owner':                          # the agent's sign-off off, the saved block on once (signatures.agent_signed)
         from .signatures import agent_signed
         text = agent_signed(store, store.get_review(rid), text) or text
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
-    return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added}
+    return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added,
+            **({'to_missing': f"no address for {missing} in the owner's mail or directory - the card's To is empty and waits for the owner; "
+                              "find one (someone at that organisation in the owner's mail) and draft again with it as `to`"} if missing else {})}
+
+
+def _point(store, tid: int, hit: dict, to: str, agent: str, name: str = '') -> dict:
+    "The slot's `to` re-pointed at an address - the name it said kept as its label."
+    items = store.task_checklist(tid)
+    for i in items:
+        if i.get('id') == hit['id']: i['out'] = {**i['out'], 'to': to, **({'name': name} if name and not i['out'].get('name') else {})}; hit = i
+    store._write_checklist(tid, items, f'agent:{agent}')
+    return hit
+
+
+# NO NAME IN TO (the owner, 2026-11-09: an agent's email read "To: <a bank's name>" - "it needs to be email address"): triage's slot
+# named an organisation and the draft copied the name onto the envelope. A name becomes an address when the draft is saved: the person
+# it names in the owner's mail or directory, else someone at that organisation (marked guessed), else none - and To stays empty
+_ORG = {'bank', 'inc', 'llc', 'ltd', 'plc', 'gmbh', 'co', 'corp', 'corporation', 'company', 'group', 'holdings', 'services', 'team', 'the', 'of', 'and'}
+def address_for(store, tid: int, who: str) -> tuple:
+    """(address, guessed) for the name on an email: a person found by every word of their name is known; a hit by company or domain
+    is someone AT it, a guess. Those who wrote on this task come first. ('', False) when nobody can be put to it."""
+    from . import peoplesearch as ps
+    q = ' '.join(str(who or '').split())[:120]
+    if '@' in q: return split(q)[1].lower(), False
+    ws = ps._words(q)
+    if not ws: return '', False
+    here = {str(r.get('e') or '') for r in store._rows("SELECT DISTINCT LOWER(FromEmail) e FROM message WHERE TaskId=?", (tid,))}
+    first = lambda hs: sorted((h for h in hs if '@' in str(h.get('to'))), key=lambda h: str(h['to']).lower() not in here)
+    if hits := first(ps.search(store, q, 'email').get('data') or []):
+        h = hits[0]; return h['to'].lower(), not set(ws) <= set(ps._words(h.get('name')))
+    core = ' '.join(w for w in ws if w not in _ORG)
+    if core and core != ' '.join(ws) and (hits := first(ps.plain(ps.known(store, 'email'), core))): return hits[0]['to'].lower(), True
+    return '', False
 
 
 # A GUESSED ADDRESS IS SAID ON THE CARD (the owner, 2026-11-09): with none on record one agent held its emails back and another put a
 # firstname@ guess on the draft - the guess is allowed, the card says it, and the owner's Send is the check
-GUESSED = ' - guessed, check before Send: '
-def with_guess(reason: str, guessed) -> str:
-    base = str(reason or '').partition(GUESSED)[0]
-    return f"{base}{GUESSED}{', '.join(guessed)}" if guessed else base
+GUESSED, NEEDS = ' - guessed, check before Send: ', ' - needs an email address for '
+def with_guess(reason: str, guessed, missing: str = '') -> str:
+    base = str(reason or '').partition(GUESSED)[0].partition(NEEDS)[0]
+    return f"{base}{GUESSED + ', '.join(guessed) if guessed else ''}{NEEDS + missing if missing else ''}"
 
 
 def _reopen(store, tid: int, want: str, agent: str):
@@ -245,11 +282,11 @@ def readdress(store, rv: dict, to: list, actor: str = 'owner') -> dict:
     if not to: raise ValueError('give at least one email address')
     try: d = json.loads(rv.get('Deliver') or '{}') or {}
     except ValueError: d = {}
-    d['to'] = to
+    d['to'] = to; d.pop('needs', None)
     # ...and an address the owner typed is no guess: only those still on it stay marked
     if d.get('guessed'): d['guessed'] = [a for a in d['guessed'] if a in to + [str(c).lower() for c in d.get('cc') or []]]
     if not store.set_review_deliver(rv['ReviewId'], json.dumps(d)): raise ValueError('that email is already being sent')
-    if GUESSED in str(rv.get('Reason') or ''): store.update_review_reason(rv['ReviewId'], with_guess(rv['Reason'], d.get('guessed')))
+    if GUESSED in str(rv.get('Reason') or '') or NEEDS in str(rv.get('Reason') or ''): store.update_review_reason(rv['ReviewId'], with_guess(rv['Reason'], d.get('guessed')))
     tid, sid = rv.get('TaskId'), d.get('slot') or of_review(rv)
     if tid and sid:
         items = store.task_checklist(tid)

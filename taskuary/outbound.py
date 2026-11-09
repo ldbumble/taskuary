@@ -586,6 +586,8 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, 
                       'Taskuary may write to, and they govern outbound reports too', *REPLIES)
     if ch == 'email':
         if not to: raise RuntimeError('no recipient - an outbound email needs an address')
+        # ...and a name is none: "To: <a bank's name>" reached the card (2026-11-09) - it never reaches a provider as the recipient
+        if bad := [t for t in to if '@' not in t]: raise RuntimeError(f"{', '.join(bad)} is not an email address - give theirs in To")
         # the mailbox the owner picked to send FROM: through the card that owns that address, never a guess at another one
         if mailbox:
             box = next((m for m in mailboxes(store) if m['address'].lower() == str(mailbox).lower()), None)

@@ -200,3 +200,7 @@
 /* an owner's press on the task (Remind me, Change, a hand-off): an event in the stream, never a bubble that reads as typed */
 .tq-aui-press > * { grid-column: 1 / -1; }
 .tq-aui-press-line { margin: 2px 16px 10px; color: #858078; font-size: 12px; }
+/* ...an approved step's command folded under its line, and the turn a press let go on drawn under the same head (chatStream.continues) */
+.tq-aui-press-cmd summary { cursor: pointer; display: inline; margin-left: 6px; }
+.tq-aui-press-cmd code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; font-size: 11.5px; }
+.tq-aui-chat .tq-aui-agent-more { margin-top: -8px; }

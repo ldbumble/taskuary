@@ -320,7 +320,7 @@ class SignedInIsAPressOnEveryAgent(unittest.TestCase):
         s = MemoryStore(); tid = Factory(s).task('Pay the toll', kind='coding'); signin._TRIED.clear()
         pty = SimpleNamespace(sid='run1', alive=True, task_id=tid, agent='coding', label='Claude Code', argv=['claude'])
         typed = []
-        with mock.patch.dict(terminal.SESSIONS, {'run1': pty}, clear=True),                 mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://login.toll.example/', 'port': 1}),                 mock.patch.object(terminal, 'type_into', lambda t, text: typed.append((t.sid, text))):
+        with mock.patch.dict(terminal.SESSIONS, {'run1': pty}, clear=True),                 mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://login.toll.example/', 'port': 1}),                 mock.patch.object(terminal, 'type_into', lambda t, text, brief=False: typed.append((t.sid, text))):
             signin.needs(s, tid, 'run1')
             self.assertEqual(ws.status(s, tid)['requests'][-1]['choices'], [])          # still no chooser on the pty: the card draws it
             out = ws.answer(s, tid, 'signin:toll.example', 'Signed in', 'owner')

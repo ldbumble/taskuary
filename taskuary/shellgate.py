@@ -30,7 +30,7 @@ somewhere else, a pipe into Remove-Item - is held, never let through for being h
 """
 import json, ntpath, os, re, shlex, shutil, subprocess, tempfile
 from loguru import logger
-from .browsergate import _segments, _deny, _tell
+from .browsergate import _segments, _deny, _tell, NEXT
 
 HELD = 'Taskuary held this for the owner'
 # ...said to the agent the hold covers, as the browser's hold is (browserview.HOLD_LINE): told nothing, a general agent asked "Should I delete
@@ -388,8 +388,9 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     rc, said = (run or go)(_argv(p.get('shell') or 'Bash', cmd), cwd)
     if rc != 0: raise RuntimeError(failed(said, rc))
     said = ' '.join(str(said or '').split())[-600:]
-    _tell(store, tid, f"The owner approved it and Taskuary ran `{cmd[:300]}` in {cwd or 'its folder'}. It said: {said[-300:] or 'done'}. Carry on.")
-    store.audit('task', tid, 'shell_act_done', 'owner', 'human', {'what': p.get('what')})
+    _tell(store, tid, f"The owner approved it and Taskuary ran `{cmd[:300]}` in {cwd or 'its folder'}. It said: {said[-300:] or 'done'}. "
+                    + NEXT)
+    store.audit('task', tid, 'shell_act_done', 'owner', 'human', {'what': p.get('what'), 'about': p.get('about'), 'command': cmd[:300], 'said': said[-300:]})
     return {'performed': p.get('what') or cmd[:200], 'said': said[-300:]}
 
 

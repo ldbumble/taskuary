@@ -348,7 +348,7 @@ def ready(store, tid: int, sid: str, act: dict, v: dict) -> dict:
 def perform(store, tid: int, p: dict, run=None) -> dict:
     """The owner's yes: run the held command as it was. A control gone since makes agent-desktop refuse its ref (STALE_REF) - said
     as "nothing was done", never retried on a guess. `run`: the runner (tests stand one in)."""
-    from .browsergate import _tell
+    from .browsergate import _tell, NEXT
     args = list(p.get('args') or [])
     if not args: raise RuntimeError('this held act names no desktop command')
     if not on(store): raise RuntimeError('Agent Desktop is off on this computer now - nothing was done. Turn it on under Connections, '
@@ -362,8 +362,8 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
                                'the agent to look again - it will be held for you again.')
         raise RuntimeError(f"agent-desktop refused it: {(err.get('message') or ' '.join(str(said or '').split()))[-300:]}")
     _tell(store, tid, f"The owner approved it and Taskuary ran `{p.get('command')}`. It said: {' '.join(str(said).split())[-300:] or 'done'}. "
-                      'Snapshot the app again and continue.')
-    store.audit('task', tid, 'desktop_act_done', 'owner', 'human', {'what': p.get('what')})
+                      'Snapshot the app again, then ' + NEXT[0].lower() + NEXT[1:])
+    store.audit('task', tid, 'desktop_act_done', 'owner', 'human', {'what': p.get('what'), 'command': str(p.get('command') or '')[:300]})
     return {'performed': p.get('what') or p.get('command')}
 
 

@@ -233,7 +233,14 @@ def deliver(store, tid: int) -> dict:
                      shown=[parts(x.get('Note'))[0] for x in notes if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)])
             how = 'sent into the running turn of' if steer else 'sent to'
         # ...with what other agents said since its last turn in front, framed as theirs (peers.py) - one turn, not two
-        else: how = term.tell(t, ' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left)) if x))
+        else:
+            said_ = ' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left)) if x)
+            # ...Taskuary's own notes alone (an approval's result, a landing) are its brief in the record, never the owner's line: kept as a
+            # seed (sessionrecord.mark_briefs); a batch carrying the owner's notes is split there into their lines and Taskuary's head
+            if all((x.get('CreatedBy') or 'owner') == 'router' for x in notes):
+                from . import sessionrecord
+                sessionrecord.keep_seed(tid, said_)
+            how = term.tell(t, said_)
         store.deliver_waiting([x['WId'] for x in notes], 'typed')
         store.add_comment(tid, 'router', 'agent', f'{len(notes)} waiting-room note(s) {how} the live session'
                           + (' while the agent worked.' if steer else ' once the agent stopped.')

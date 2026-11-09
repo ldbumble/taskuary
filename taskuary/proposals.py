@@ -145,7 +145,8 @@ def receipt(rv: dict, final_text, out: dict, fields: dict = None) -> str:
     "Posted" and its link when the chat is read again."""
     try: p = json.loads(rv.get('DraftText') or '{}')
     except ValueError: return rv.get('DraftText')
-    return json.dumps({**_edited(p, final_text, fields), 'result': out}, default=str) if p.get('action') == 'run_tool' else rv.get('DraftText')
+    # ...every act keeps what it did, so its card reads as its result once pressed - "Approved · ran", its link (the owner, 2026-11-09)
+    return json.dumps({**(_edited(p, final_text, fields) if p.get('action') == 'run_tool' else p), 'result': out}, default=str)
 
 # What a proposal may touch: routing and visibility only. Never a permission that lets anything OUT
 # (agent_push_enabled, github_replies_ok, reply channels), never a token, key, model or document.

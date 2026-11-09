@@ -554,6 +554,14 @@ def _landed(store, tid, how, said_, actor, at_sha='', **extra) -> dict:
     _save(store, tid, r)
     store.add_comment(tid, actor, 'human', said_)
     store.audit('task', tid, 'landed', actor, detail={'how': how, 'sha': at_sha[:12], **extra})
+    # ...AND THE AGENT GOES ON, as it does after a push (_push): a branch landed or a pull request opened was the press its turn waited on
+    # (the owner, 2026-11-09: "when you hit approve the agent continues and says what it did and what the next steps are")
+    if how not in PUSH_HOW:
+        try:
+            from . import waitroom
+            from .browsergate import NEXT
+            waitroom.add(store, tid, f"{said_} The owner pressed {HOW[how]} on your branch. {NEXT}", 'router')
+        except Exception as e: logger.debug(f'{task_ref(tid)}: the landing was not handed back to the agent - {e}')
     return {'ok': True, 'how': how, 'says': said_, **extra}
 
 

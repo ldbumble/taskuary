@@ -135,7 +135,7 @@ class ScreenChooserTests(unittest.TestCase):
     def test_a_pick_is_delivered_as_its_number(self):
         typed = []
         with mock.patch.dict(terminal.SESSIONS, {'run1': self.t}, clear=True), self._showing(self.SCREEN), \
-             mock.patch.object(terminal, 'type_into', side_effect=lambda t, text: typed.append(text)):
+             mock.patch.object(terminal, 'type_into', side_effect=lambda t, text, **kw: typed.append(text)):
             req = ws.reconcile_screen_request(self.s, self.t, True)
             out = ws.answer(self.s, self.tid, req['request_id'], 'Upload-only for now, no form engine')
         self.assertTrue(out['delivered'])

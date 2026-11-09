@@ -2815,7 +2815,7 @@ def _until(cond, secs: float, t) -> bool:
     return cond()
 
 
-def type_into(t, text: str, done=None):
+def type_into(t, text: str, done=None, brief: bool = False):
     """Type `text` into a live session the way seed() proved works: flattened to one line (a
     newline is Enter in a TUI), fed in frame-sized bites (a one-shot paste drops bytes
     mid-stream), then Enter until the box answers. Runs on its own thread; returns at once.
@@ -2827,7 +2827,13 @@ def type_into(t, text: str, done=None):
     while it works. `done(ok)` hears the outcome; a line that never left the box is cleared out of it
     first (^U, never Esc: that interrupts the agent), so nothing half-said sits there under its turn."""
     text = clean_typed(text)
-    if is_acp(t): return t.say(text, done=done)     # an ACP session takes a prompt, never keystrokes
+    # ...`brief`: TASKUARY'S WORDS, NEVER THE OWNER'S (the owner, 2026-11-09: "i hit approve why was this then an input on the right side??"):
+    # the note an approved step hands the agent drew as the owner's bubble. Only what the owner typed, or what came in on the task's thread,
+    # is an input; over ACP the prompt is marked Taskuary's, on a pty it is kept as a seed the record reads as a brief (sessionrecord.mark_briefs)
+    if is_acp(t): return t.prompt(text, brief=True, done=done) if brief else t.say(text, done=done)    # a prompt, never keystrokes
+    if brief and (tid := getattr(t, 'task_id', None)):
+        from . import sessionrecord as _sr
+        _sr.keep_seed(tid, text)
     def go():
         for i in range(0, len(text), SEED_CHUNK):
             t.write(text[i:i + SEED_CHUNK])

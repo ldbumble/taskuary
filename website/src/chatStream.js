@@ -173,7 +173,12 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
     const close = () => { if (turn) rows.push(turn); turn = null; };
     steps.forEach((s) => {
       if (s.k === "you" || s.k === "brief") {
-        close(); const w = s.k === "you" ? s.text : ownerIn(s.text);
+        const w = s.k === "you" ? s.text : ownerIn(s.text);
+        // A PRESS LETS THE TURN GO ON (the owner, 2026-11-09: "a button click is not a new prompt, just allowing the agent to continue. If you send
+        // a new message, that's a new turn"): Taskuary's note after an Approve, a Push, a sign-in joins the turn at work - only the owner's line,
+        // or a mail come in since the turn's last step, opens a new one
+        if (!w && turn && !cameIn(mails, turn.steps.at(-1)?.at || turn.at, s.at)) return;
+        close();
         if (w) rows.push({ kind: "you", at: s.at, text: w });
         return;
       }
@@ -195,6 +200,7 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
     ? { kind: "turn", id: `r${i}`, at: r.at, running: !!r.running, waiting: !!r.running && waiting, parts: turnParts(eventsOf(r.steps, !!r.running)), answer: lastSaid(r.steps) }
     : { ...r, id: `r${i}` }));
 }
+const cameIn = (mails, from, upto) => (mails || []).some((m) => { const t = at(m.joined || m.at); return t > at(from) && (!upto || t <= at(upto)); });
 const lastSaid = (steps) => [...steps].reverse().find((s) => s.k === "said")?.text || "";
 
 // ...and those rows as the one thread's messages (GeneralWorkspace's AssistantThread): a mail is Taskuary's brief carrying it (drawn as what
@@ -210,3 +216,20 @@ export const rowMessages = (rows, sid = "coding") => (rows || []).map((r) => (r.
 // WHICH SOURCE a task's chat reads: a coding task, or any task with a coding CLI live on it, is its sessions (codingchat.py); every other is
 // the general agent's conversation (general.py). The one component draws either - this picks, nothing in the page does
 export const chatSource = (task, term) => (task?.Kind === "coding" || liveTerminal(term) ? "coding" : "general");
+
+// ── WHAT MAY DRAW AS AN INPUT (the owner, 2026-11-09: "inputs are messages in the prompt box or from the input channel - either the user
+// themselves or someone else responds on the thread"): a bubble is what the owner TYPED, or what came in on the task's THREAD (a mail, a
+// teammate's line, the owner's own reply from their phone). A press, an approval, a send, Taskuary's note to the agent, a wake, a fold, a
+// check-back, an error - each is an event line or its card's result, never a bubble ──
+export const INPUT_ORIGINS = ["typed", "thread"];
+export const originOf = (m) => (m?.role !== "user" ? "agent" : (m.press || m.metadata?.custom?.press) ? "press"
+  : (m.mail?.length || m.metadata?.custom?.mail?.length) ? "thread" : (m.brief || m.metadata?.custom?.brief) ? "taskuary" : "typed");
+export const isInput = (m) => INPUT_ORIGINS.includes(originOf(m));
+// what TASKUARY's own short line that woke a turn says, as an event line ('' for its long instructions, which are never drawn)
+export const eventOf = (words, fold = "", mail = []) => { const due = checkBackDue(words);
+  return fold ? fold : due ? `Check-back due: ${due}` : !mail?.length && words && words.length <= 140 ? words : ""; };
+export const linkWords = (u) => { const m = /github\.com\/[^/]+\/[^/]+\/(pull|issues)\/(\d+)/.exec(u); return m ? `${m[1] === "pull" ? "PR" : "issue"} #${m[2]}` : u.replace(/^https?:\/\//, "").slice(0, 60); };
+export const checkBackDue = (w) => (/^TASKUARY: the check-back you set on this task is due - ([\s\S]*?)\. Check it now/.exec(String(w || "").trim()) || [])[1] || "";
+// ...and in the general chat a turn after a press is the same turn going on: no new head, unless an input came between (isInput)
+export const continues = (messages, i) => { for (let j = i - 1; j >= 0; j--) { const m = messages[j];
+  if (m?.role === "assistant") return true; if (isInput(m)) return false; } return false; };

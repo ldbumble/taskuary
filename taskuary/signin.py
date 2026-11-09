@@ -475,7 +475,7 @@ def _continue(store, tid, rid, site, actor, code=False):
     except Exception as e: logger.debug(f'signin: the trigger line for task {tid} was not filed - {e}')
     try:
         if hasattr(sess, 'send_prompt'): sess.send_prompt(said, as_owner=False)
-        else: term.type_into(sess, said)
+        else: term.type_into(sess, said, brief=True)      # Taskuary's, never the owner's line
     except Exception as e:
         logger.warning(f'signin: task {tid} signed in to {site}, but the agent was not told - {e}')
         store.add_comment(tid, actor, 'agent', f'{did}, but the agent could not be told - say "{said}" to it.')

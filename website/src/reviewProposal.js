@@ -225,3 +225,16 @@ export const REVIEW_STATUS = {
   superseded: "overtaken",
 };
 export const reviewStatusLabel = (status) => REVIEW_STATUS[status] || String(status || "").replace(/_/g, " ");
+
+// AN APPROVED ACT'S CARD IS ITS RESULT (the owner, 2026-11-09: "once i approve it should say sent and what to do next, not a new prompt"): what
+// it did in words, its link, and the command it ran folded - read off the receipt the server keeps (proposals.receipt). Null while it waits
+const VERB = { shell_act: "ran", browser_act: "ran on the page", desktop_act: "ran", comment_issue: "commented", close_issue: "closed",
+  merge_pr: "merged", land: "landed", open_pr: "opened the pull request", push_direct: "pushed", close_item: "closed", run_tool: "done" };
+export const resultOf = (review) => {
+  if (review?.Kind !== "action" || !["approved", "edited"].includes(review?.Status)) return null;
+  let p = {};
+  try { p = JSON.parse(review.FinalText || review.DraftText || "{}") || {}; } catch { p = {}; }
+  const r = p.result || {}, url = r.url || (/https?:\/\/\S+/.exec(String(r.said || "")) || [""])[0].replace(/[.,)]+$/, "");
+  const what = String(p.about || p.what || r.performed || r.commented || r.closed || r.merged || "").trim();
+  return { said: `Approved · ${VERB[p.action] || "done"}`, what, url, command: String(p.command || "") };
+};

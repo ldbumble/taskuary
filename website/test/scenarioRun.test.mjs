@@ -58,16 +58,16 @@ test("a moved row's words wrap away whole before they are cut", () => {
   assert.ok(av.indexOf('<span className="ref" role="link"') < av.indexOf('<span className="w">Moved to Tasks ·</span>'), "the ref comes first in the page");
 });
 
-// A CHECK-BACK COME DUE is the input of the turn it wakes, on the right under a clock (the scenario run, 2026-11-06): long, it was drawn as
-// nothing, and the turn stood under the one before with no input over it
-test("a check-back's turn opens on what it was set to verify", () => {
+// A CHECK-BACK COME DUE opens the turn it wakes, as an event line (the scenario run, 2026-11-06; an event, never an input, 2026-11-09): long,
+// it was drawn as nothing, and the turn stood under the one before with nothing over it
+test("a check-back's turn opens on what it was set to verify", async () => {
+  const { checkBackDue, eventOf } = await import("../src/chatStream.js");
   const ws = read("GeneralWorkspace.jsx"), py = readFileSync(new URL("../../taskuary/checkback.py", import.meta.url), "utf8");
-  const src = ws.slice(ws.indexOf("export const checkBackDue"), ws.indexOf("const UserMessage = "));
-  const checkBackDue = new Function(`${src.replace("export ", "")}; return checkBackDue;`)();
   const turn = /TURN = \("([^"]+)"\s*\n\s*"([^"]+)"\)/.exec(py);
   assert.ok(turn, "the server's check-back line is where the test reads it");
   const said = (turn[1] + turn[2]).replace("{what}", "whether Ray sent the paper");
   assert.equal(checkBackDue(said), "whether Ray sent the paper");
   assert.equal(checkBackDue("THE THREAD CHANGED: Ray Colton wrote on this task"), "");
-  assert.match(ws, /data-tq-chat-trigger="check-back"/);
+  assert.equal(eventOf(said), "Check-back due: whether Ray sent the paper");
+  assert.ok(ws.includes('checkBackDue(words) ? "check-back"'));
 });

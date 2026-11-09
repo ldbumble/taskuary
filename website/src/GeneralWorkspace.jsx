@@ -26,7 +26,8 @@ import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
 import { baseName, isWork } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { PARTS, chatRows, chatSource, partsMessage, rowMessages, turnParts, workCount } from "./chatStream.js";
+import { PARTS, chatRows, chatSource, checkBackDue, continues, eventOf, linkWords, partsMessage, rowMessages, turnParts, workCount } from "./chatStream.js";
+export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
 import { PermissionCards } from "./AgentChannels.jsx";
@@ -79,9 +80,6 @@ import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import TelegramIcon from "@mui/icons-material/Telegram";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
-import KeyIcon from "@mui/icons-material/VpnKeyOutlined";
-import AlarmIcon from "@mui/icons-material/AccessTime";
-import CallMergeIcon from "@mui/icons-material/CallMerge";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -91,7 +89,7 @@ const initial = (messages) => {
   const folded = foldedSummaries(messages);
   return (messages || []).map((m) => {
     const custom = { ...(m.brief ? { brief: true, mail: m.mail || [], ...(m.fold ? { fold: m.fold } : {}) } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id), drafts: m.drafts_then || null } : {}),
-      ...(m.since ? { since: m.since } : {}), ...(m.press ? { press: true } : {}) };   // a press of the owner's (general.press_lines): their line, no turn
+      ...(m.since ? { since: m.since } : {}), ...(m.press ? { press: true, ...(m.result ? { result: m.result } : {}) } : {}) };   // a press of the owner's (general.press_lines): their line, no turn
     return { ...m, ...(Object.keys(custom).length ? { metadata: { custom } } : {}),
       // ...a stamp is the SERVER'S LOCAL time (dates.js, store.norm_stamp), read through asUtc with the zone setting - read as UTC, every
       // answer said 7:32 AM for 12:32 PM (the owner, 2026-11-05: "time is wrong. we have settings for time zone")
@@ -278,36 +276,31 @@ const Arrived = ({ mail }) => mail.map((x, i, all) => {
 // a press's event line: its words without the closing stop, then the time - "You changed its workstream · 3:12 PM"
 export const pressLine = (words, stamp) => [String(words || "").trim().replace(/\.$/, ""), stamp].filter(Boolean).join(" · ");
 // what a check-back come due asked to verify, from Taskuary's own line (checkback.TURN) - '' for any other brief
-export const checkBackDue = (w) => (/^TASKUARY: the check-back you set on this task is due - ([\s\S]*?)\. Check it now/.exec(String(w || "").trim()) || [])[1] || "";
 const UserMessage = () => {
   const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail), chat = React.useContext(ChatCtx);
   const fold = useAuiState((s) => s.message.metadata?.custom?.fold || "");
   const at = useAuiState((s) => s.message.createdAt), line = useAuiState((s) => s.message.id);
-  // ...a brief with no mail but a SHORT line of its own is a trigger of Taskuary's ("Signed in to the site") - on the right, with the time;
-  // a long one is Taskuary's instructions to the agent, never drawn - nor one carrying only the owner's own reply: a short brief over it drew
-  // Taskuary's own "THE THREAD CHANGED: …" as a trigger on the right (the scenario run, 2026-11-06)
+  // ...a brief with no mail but a SHORT line of its own is Taskuary's trigger ("Signed in to the site") - an event line (eventOf); a long one is
+  // Taskuary's instructions to the agent, never drawn - nor one carrying only the owner's own reply (the scenario run, 2026-11-06)
   const words = useAuiState((s) => textOf(s.message));
   const prev = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === s.message.id), p = ms[i - 1];
     return p?.role === "user" && !p.metadata?.custom?.brief && !p.metadata?.custom?.press ? (p.createdAt ? when(new Date(p.createdAt)) : "") : null; });
   // A PRESS IS AN EVENT, NOT A LINE TYPED (the owner, 2026-11-09: "You changed its workstream." stood in a bubble under "You" as if typed):
   // a quiet line like the close's own (tq-aui-closed) - the agent still hears it with the owner's next line (general.owner_did)
-  const press = useAuiState((s) => !!s.message.metadata?.custom?.press);
+  const press = useAuiState((s) => !!s.message.metadata?.custom?.press), result = useAuiState((s) => s.message.metadata?.custom?.result);
+  const stampOf = at ? when(new Date(at)) : "";
+  // ...an APPROVED STEP'S LINE IS ITS RESULT (the owner, 2026-11-09: "once i approve it should say sent"): its link, the command folded under it
   if (press) return <MessagePrimitive.Root className="tq-aui-message tq-aui-press" data-tq-chat-press="">
-    <div className="tq-aui-press-line">{pressLine(words, at ? when(new Date(at)) : "")}</div></MessagePrimitive.Root>;
-  // ...and a CHECK-BACK come due is the input of the turn it wakes (checkback.TURN): its own "what", under a clock - long, it was Taskuary's
-  // instructions and drew nothing, and the turn stood with no input over it, read as a second agent (the scenario run, 2026-11-06)
-  const due = brief && chat ? checkBackDue(words) : "";
-  if (due) return <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="check-back">
-    <span className="tq-aui-arrived-head"><AlarmIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{["Check-back due", at && when(new Date(at))].filter(Boolean).join(" · ")}</span>
-    <span className="tq-aui-arrived-words" dir="auto">{due}</span></div></MessagePrimitive.Root>;
-  // ...a FOLD is an input too (general.shown_history `fold`): "Folded in TQ-12: <title>" on the right, the mail it brought under it
-  if (brief && chat && fold) return <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="fold">
-    <span className="tq-aui-arrived-head"><CallMergeIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{[fold, at && when(new Date(at))].filter(Boolean).join(" · ")}</span></div>
-    {!!mail?.length && <Arrived mail={mail} />}</MessagePrimitive.Root>;
-  if (brief && chat) return mail?.length ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root>
-    : !mail?.length && words && words.length <= 140 ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="">
-      <span className="tq-aui-arrived-head"><KeyIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{at ? when(new Date(at)) : ""}</span>
-      <span className="tq-aui-arrived-words">{words}</span></div></MessagePrimitive.Root> : null;
+    <div className="tq-aui-press-line">{pressLine(words, stampOf)}
+      {result?.url && <> · <a href={result.url} target="_blank" rel="noreferrer" data-tq-press-link="">{linkWords(result.url)}</a></>}
+      {result?.command && <details className="tq-aui-press-cmd"><summary>Show the command</summary><code>{result.command}</code></details>}</div>
+  </MessagePrimitive.Root>;
+  // ...and what TASKUARY says woke the agent - a sign-in, a check-back come due, a fold - is an event too, never an input: an input is only what
+  // the owner typed or what came in on the task's thread (the owner, 2026-11-09). The mail a fold brought is the input under its line
+  const event = brief && chat ? eventOf(words, fold, mail) : "";
+  if (event) return <MessagePrimitive.Root className="tq-aui-message tq-aui-press" data-tq-chat-press="" data-tq-chat-trigger={fold ? "fold" : checkBackDue(words) ? "check-back" : ""}>
+    <div className="tq-aui-press-line">{pressLine(event, stampOf)}</div>{!!mail?.length && <Arrived mail={mail} />}</MessagePrimitive.Root>;
+  if (brief && chat) return mail?.length ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root> : null;
   // ...and what the owner types is theirs on the right, under their mark and the time ("if user interjects it will show user logo")
   // ...three lines typed in a row read as one, as a sender's burst does (Arrived): the head once, then a new minute's time alone, a same minute nothing
   const stamp = at ? when(new Date(at)) : "";
@@ -480,6 +473,9 @@ const AssistantMessage = () => {
   const postPics = new Set(posts.map((p) => String(p.post?.image || "").split(/[\\/]/).pop()).filter(Boolean));
   const rest = chat ? shownRest.filter((p) => !madeNames.has(p.name) && !postPics.has(String(p.name || "").split(/[\\/]/).pop())) : shownRest;
   const running = useAuiState((s) => live(s.message));
+  // ...A TURN AFTER A PRESS IS THE SAME TURN GOING ON (the owner, 2026-11-09: "a button click is not a new prompt"): no head of its own
+  const agentName = React.useContext(AgentNameCtx);
+  const more = useAuiState((s) => chat && continues(s.thread.messages, s.thread.messages.findIndex((m) => m.id === s.message.id)));
   // ...and it copies at its corner (the owner, 2026-11-05): what the turn says - its words, else its summary's parts
   // ...and ONE OF THE TWO, never both (the owner, 2026-11-08: "never show anything twice in a turn"): the agent's own words are the turn, and its
   // summary's prose is drawn only for a turn with none (a work-only run) - what it set up as cards stays under the words either way
@@ -487,9 +483,10 @@ const AssistantMessage = () => {
   const said = custom?.summary && !answered
     ? [custom.summary.about, custom.summary.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : words;
   return (
-    <MessagePrimitive.Root className={`tq-aui-message tq-aui-agent${chat && said ? " tq-copy-host" : ""}`} data-tq-chat-line={id}>
+    <MessagePrimitive.Root className={`tq-aui-message tq-aui-agent${chat && said ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-chat-line={id}
+      data-tq-turn-goes-on={more ? "" : undefined}>
       {chat && !!said && !running && <CopyCorner text={said} label="Copy this answer" />}
-      <div className="tq-aui-role">{React.useContext(AgentNameCtx)}{React.useContext(ChatCtx) && <RanFor />}</div>
+      {!more && <div className="tq-aui-role">{agentName}{chat && <RanFor />}</div>}
       <div className="tq-aui-agent-body">
         {/* THE AGENT'S WORDS ARE THE TURN (the owner, 2026-11-08: "never show anything twice in a turn"): drawn whenever it said any, and its
             summary's prose then stays out (AgentSummary `answered`) - it was drawn under the words, saying them again */}

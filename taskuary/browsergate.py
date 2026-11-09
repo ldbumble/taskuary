@@ -386,14 +386,18 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
         return {'performed': None, 'refused': f"{p.get('site') or 'The page'} did not take it - {why}. The agent was told and goes on another way."}
     now = str(browserview.state(sid, fresh=True).get('url') or '')
     _tell(store, tid, f"The owner approved it and Taskuary ran `{p.get('command')}` in your browser. It said: {said[-300:] or 'done'}. "
-                      f"The page is now {now or 'unknown'} - look at it and continue.")
-    store.audit('task', tid, 'browser_act_done', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what')})
+                      f"The page is now {now or 'unknown'} - look at it, then " + NEXT[0].lower() + NEXT[1:])
+    store.audit('task', tid, 'browser_act_done', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what'), 'command': str(p.get('command') or '')[:300],
+                                                          'said': now or said[-300:]})
     return {'performed': p.get('what') or p.get('command'), 'site': p.get('site'), 'page': now}
 
 
 def declined(store, tid: int, p: dict) -> None:
     _tell(store, tid, f"The owner did not approve it: {p.get('what') or p.get('command')} was NOT done. Do not try it another way - "
                       'carry on without it, or ask the owner what they want instead.')
+
+
+NEXT = ('Tell the owner in a line what it did (with its link, if it gave one) and what comes next, then carry on.')     # the turn an approval wakes says what happened
 
 
 def _tell(store, tid: int, text: str, wait: bool = False) -> None:
@@ -408,7 +412,7 @@ def _tell(store, tid: int, text: str, wait: bool = False) -> None:
     def go():
         try:
             if hasattr(sess, 'send_prompt'): sess.send_prompt(text, as_owner=False)
-            else: term.type_into(sess, text)
+            else: term.type_into(sess, text, brief=True)       # Taskuary's note, never the owner's line
         except Exception as e:
             logger.warning(f'browsergate: task {tid} - the agent was not told - {e}')
             store.add_comment(tid, 'taskuary', 'agent', f'{text} (The agent could not be told: {str(e)[:200]} - open the task and tell it.)')

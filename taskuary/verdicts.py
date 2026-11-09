@@ -537,10 +537,22 @@ def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: st
 def decide(store, rv: dict, verb_in: str, *a, **kw) -> dict:
     """_decide, and a yes that went wakes the task's agent where its last turn said it waits on that Send (general.follow_up)."""
     out = _decide(store, rv, verb_in, *a, **kw)
-    if verb_in in ('approve', 'edit') and out.get('ok') and not out.get('send_error') and rv.get('TaskId'):
-        from . import general
-        general.follow_up(store, rv['TaskId'], 'send', a[2] if len(a) > 2 else kw.get('actor', 'owner'))
+    if verb_in in ('approve', 'edit', 'merge_anyway') and out.get('ok') and not out.get('send_error') and rv.get('TaskId'):
+        from . import general, proposals
+        # ...EVERY yes that went, not only one its turn said it waits on (the owner, 2026-11-09) - a held step's own road tells its agent
+        if proposals._action(rv) not in proposals.HELD_ACTS:
+            try: general.approved(store, rv['TaskId'], *pressed(rv, out), a[2] if len(a) > 2 else kw.get('actor', 'owner'))
+            except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it went - {e}")
     return out
+
+
+def pressed(rv: dict, out: dict) -> tuple:
+    "(the press, what it did) of an answered review, in words for its agent."
+    if rv.get('Kind') == 'action':
+        from . import proposals
+        a = proposals._action(rv) or 'action'
+        return 'Approve', f"{a.replace('_', ' ')} - {json.dumps(out.get('result') or {}, default=str)[:300]}"
+    return 'Send', f"the {'reply' if rv.get('MessageId') else 'message'} was sent" + (f" ({out['sent']})" if isinstance(out.get('sent'), str) else '')
 
 
 def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,

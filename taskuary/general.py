@@ -517,7 +517,13 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if 
            'handoff': lambda d: f"handed this to {d.get('to')} by {d.get('channel')}", 'reopened': lambda d: 'reopened it', 'reopen': lambda d: 'reopened it',
            'split_into_task': lambda d: f"split part of it off as its own task: {d.get('title') or ''}".rstrip(': '),
            'set_repo': lambda d: 'changed where its code lives', 'set_workstream': lambda d: 'changed its workstream',
-           'not_coding': lambda d: 'said it is not coding work', 'funnel_later': lambda d: 'put it for later'}
+           'not_coding': lambda d: 'said it is not coding work', 'funnel_later': lambda d: 'put it for later',
+           # ...an APPROVED HELD STEP is the owner's press too, said with what it did (the owner, 2026-11-09: "once i approve it should say sent")
+           'shell_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_done': lambda d: f"approved: {_held_what(d)} - it ran on the page",
+           'desktop_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_refused': lambda d: 'approved it - the page did not take it'}
+def _held_what(d) -> str: return _cut(' '.join(str(d.get('about') or d.get('what') or '').split()), 120) or 'the held step'
+# ...and what it said back, kept with the line: its link, the command folded under it
+HELD_DONE = ('shell_act_done', 'browser_act_done', 'desktop_act_done')
 QUIET = {'chat', 'continue', 'continue-work', 'continue-session', 'create', 'judged', 'kind_by_typing', 'reopened_by_typing',
          'waitroom_image', 'stay_open', 'funnel_pin'}       # the turn itself, or said by it
 DECIDED = {'approved': 'approved (sent, if it sends)', 'edited': 'edited and sent', 'rejected': 'turned down', 'closed_unsent': 'closed, unsent',
@@ -532,25 +538,32 @@ def presses(store, tid: int, since: str = '') -> list:
     "The owner's presses on task `tid` after `since`, oldest first: [(audit id, at, what)] - its own and its shares."
     from .processing_unread import OWNER_ACTORS
     who = ','.join('?' * len(OWNER_ACTORS))
-    out = [(r['Id'], r['CreatedAt'], (PRESSES.get(r['Action']) or (lambda d, a=r['Action']: a.replace('_', ' ').replace('-', ' ')))(_detail(r)))
+    out = [(r['Id'], r['CreatedAt'], (PRESSES.get(r['Action']) or (lambda d, a=r['Action']: a.replace('_', ' ').replace('-', ' ')))(_detail(r)),
+            *((_held_result(_detail(r)),) if r['Action'] in HELD_DONE else ()))
            for r in store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id",
                                 (tid, *OWNER_ACTORS, since or '')) if r['Action'] not in QUIET]
     out += [(r['Id'], r['CreatedAt'], f"shared it ({r['Action']})") for r in store._rows(
         f"SELECT * FROM audit WHERE EntityType='share' AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id", (*OWNER_ACTORS, since or ''))
         if _detail(r).get('task') == tid]
     return sorted(out, key=lambda x: x[0])
+def _held_result(d) -> dict:
+    import re
+    url = (re.search(r'https?://\S+', str(d.get('said') or '')) or [''])[0].rstrip('.,)')
+    return {k: v for k, v in (('url', url), ('command', str(d.get('command') or ''))) if v}
 def press_lines(store, tid: int) -> list:
-    """EACH PRESS IS A LINE OF THE OWNER'S IN THE CHAT (the owner, 2026-11-08: "You handed this to Erin by email"), on the right where their
-    typed lines are - drawn by the page, never a turn: the agent hears them with the owner's next line (owner_did)."""
-    return [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at}
-            for i, at, what in presses(store, tid)]
+    """EACH PRESS IS AN EVENT IN THE CHAT (the owner, 2026-11-08: "You handed this to Erin by email"), drawn by the page as a quiet line, never
+    a bubble and never a turn: the agent hears them with the owner's next line (owner_did). An approved held step carries what it gave back
+    (`result`: its link, the command) - the card that asked turns into this line (the owner, 2026-11-09: "same as email: when you hit send")."""
+    return [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at,
+             **({'result': x[0]} if x and x[0] else {})}
+            for i, at, what, *x in presses(store, tid)]
 def owner_did(store, tid: int) -> list:
     "The owner's presses on task `tid` since its agent last answered, oldest first: ['<time>: <what>']. [] before any answer."
     from .processing_unread import OWNER_ACTORS
     since = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE)) or {}).get('at')
     if not since: return []
     who = ','.join('?' * len(OWNER_ACTORS))
-    out = [(at, what) for _, at, what in presses(store, tid, since)]
+    out = [(at, what) for _, at, what, *_r in presses(store, tid, since)]
     out += [(r['DecidedAt'], f"{DECIDED[r['Status']]} rv{r['ReviewId']}" + (f" ({' '.join(str(r['Reason']).split())[:120]})" if r.get('Reason') else ''))
             for r in store._rows(f"SELECT * FROM review WHERE TaskId=? AND DecidedBy IN ({who}) AND DecidedAt>?", (tid, *OWNER_ACTORS, since))
             if r['Status'] in DECIDED]
@@ -560,19 +573,34 @@ def owner_did(store, tid: int) -> list:
 FOLLOW_UP = ('The owner just pressed what your last turn waited on (see what the owner did since your last answer). Carry on from there as '
              'you said you would - check it landed first; never redo it.')
 _WOKEN: set = set()
-def follow_up(store, tid, press: str, actor: str = 'owner') -> bool:
-    "Start one turn on task `tid` when its agent's newest summary waits on `press` ('send', 'handoff'). True when one was started."
+def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None) -> bool:
+    """Start one turn on task `tid` when its agent's newest summary waits on `press` ('send', 'handoff') - or, with `said` (approved), after
+    any answer of its own, `said` its prompt. True when one was started."""
     try:
         last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') in (SUMMARY_TYPE, ASSISTANT_TYPE)), None)
         summ = json.loads(last['Body']) if last and last.get('ActorType') == SUMMARY_TYPE else None
     except (TypeError, ValueError): summ = None
-    if not isinstance(summ, dict) or summ.get('after_press') != press or last['CommentId'] in _WOKEN: return False
+    if not last or last['CommentId'] in _WOKEN: return False
+    if not said and (not isinstance(summ, dict) or summ.get('after_press') != press): return False
     _WOKEN.add(last['CommentId'])
     def go():
-        try: start_session(store, int(tid), actor=actor).send_prompt(FOLLOW_UP, as_owner=False, echo=False)
+        try: start_session(store, int(tid), actor=actor).send_prompt(said or FOLLOW_UP, as_owner=False, echo=False)
         except Exception as e: logger.warning(f'task {tid}: the follow-up after {press} did not start - {e}')
     threading.Thread(target=go, daemon=True, name=f'follow-up-{tid}').start()
     return True
+# AN APPROVAL WAKES THE AGENT THAT SET IT UP (the owner, 2026-11-09: "when you hit approve the agent continues and says what it did and what
+# the next steps are"): every press that sends or runs what an agent set up - a card's Post, a Send, a merge - is handed to it as Taskuary's
+# words, never the owner's line. A held step tells its own agent (browsergate._tell); a landing its own (landing._landed)
+APPROVED = 'The owner pressed {press} on what you set up, and it went through: {what}. '
+def approved(store, tid: int, press: str, what: str, actor: str = 'owner') -> str:
+    """Hand task `tid`'s agent the approval that went: 'told' a live (or resting coding) agent as its next prompt, 'woke' a resting
+    general agent that has answered on it, '' where no agent ever worked it."""
+    from . import acpcoding, waitroom, workerstate as ws
+    from .browsergate import NEXT
+    said = APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400]) + NEXT
+    if ws._live(int(tid)) or acpcoding.idled(int(tid), store): waitroom.add(store, int(tid), said, 'router'); return 'told'
+    t = store.get_task(int(tid))
+    return 'woke' if t and handles(t) and follow_up(store, tid, 'send', actor, said=said) else ''
 # WHAT THE OWNER SAID ON THE THREAD THEMSELVES (the owner, 2026-11-08: replies from their phone between the other side's lines): a line of theirs
 # in a chat is never a turn of its own (channels.ingest_own_message), so the next turn hears each one since the agent last answered
 def own_replies(store, tid: int, since: str = None) -> list:

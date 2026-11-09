@@ -427,6 +427,23 @@ def keep_seed(tid: int, seed: str):
     except OSError as e: logger.warning(f'the seed of task {tid} was not kept: {e}')
 
 
+# THE WAITING ROOM'S BATCH TYPED INTO A PTY (waitroom.batch) is Taskuary's head round the owner's notes: drawn whole it was their bubble, "While
+# you were working, the owner queued 1 note for you..." (the owner, 2026-11-09: only what they typed, or what came in on the thread, is an input)
+_QUEUED = re.compile(r'(?:While you were working, (?P<a>[\w ]+?) queued \d+ notes? for you\. Take them in order, after finishing the step you are on; '
+                     r'if one conflicts with work already done, say so instead of undoing it:|(?P<b>[\w ]+?) left \d+ notes? for you after the last '
+                     r'session ended\. Take them in order:)')
+_LEFT = re.compile(r'\s*\(\d+ more notes? waits? behind this one.*$', re.S)
+def queued(text):
+    "[(k, text)] of a typed waiting-room batch - the owner's notes `you`, the rest `brief` - or None when `text` is not one."
+    s = ' '.join(str(text or '').split()); m = _QUEUED.search(s)
+    if not m: return None
+    if 'owner' not in (m.group('a') or m.group('b') or '').lower(): return [('brief', s)]
+    rest = s[m.end():]; tail = _LEFT.search(rest)
+    head, rest = (s[:m.end()] + (tail.group(0) if tail else '')).strip(), rest[:tail.start()] if tail else rest
+    notes = [n.strip() for n in re.split(r'(?:^|\s)\(\d+\)\s+', rest) if n.strip()]
+    return [('brief', head)] + [('you', n) for n in notes]
+
+
 def mark_briefs(tid: int, steps: list) -> list:
     """The told steps that are a seed Taskuary sent, as `brief` - and the owner's words a seed carries ("FROM THE OWNER: ..."), as their own
     `you` line just before it (outcomes.owner_split). A told step headed with those words is ours too, kept seed or not: only Taskuary writes
@@ -442,6 +459,7 @@ def mark_briefs(tid: int, steps: list) -> list:
         a = ''.join(_flat(x.get('text')).split())[:SEED_N]
         return any(s and a and (s.startswith(a) or a.startswith(s)) and min(len(a), len(s)) >= 20 for s in seeds)
     def mark(x):
+        if x.get('k') == 'you' and (b := queued(x.get('text'))) is not None: return [{**x, 'k': k, 'text': t} for k, t in b]
         if x.get('k') not in ('you', 'brief') or (x['k'] == 'you' and not ours(x) and not owner_split(x.get('text'))[0]): return [x]
         w, rest = owner_split(x.get('text'))
         return ([{**x, 'k': 'you', 'text': w}] if w else []) + ([{**x, 'k': 'brief', 'text': rest}] if rest.strip() else [])

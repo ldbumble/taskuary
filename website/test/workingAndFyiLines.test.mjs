@@ -11,7 +11,7 @@ test("an agent whose steps stream into the thread says it is working once, not a
   assert.match(ws, /const atWork = dock \? <Thinking provider=\{provider\} \/> : <AtWork /);
   assert.match(ws, /return folded && level !== "summary" \? null : <AgentBand \{\.\.\.props\} since=/);
   assert.match(ws, /<ThreadPrimitive\.If running>\s*\{atWork\}/);
-  assert.match(ws, /\{serverBusy && atWork\}/);
+  assert.match(ws, /\{dock \? serverBusy && atWork\s*: <PendingTurn busy=\{serverBusy\}/);
 });
 
 // ...and "should we not have the time on the fyi messages ... it should be white similar to messages showing up in tasks"

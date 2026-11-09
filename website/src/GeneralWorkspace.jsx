@@ -62,6 +62,7 @@ import { hint as btnHint, label as btn } from "./buttons.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
 import { starting as startingLine } from "./laneSays.js";
+import { live, pendingTurn, sentNow, settled } from "./pendingTurn.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import ConnectAi from "./ConnectAi.jsx";
@@ -336,7 +337,7 @@ const LandingCtx = React.createContext(null);
 const WorkCtx = React.createContext(null);
 // a turn still running is ONE LINE, "Working on this…", its steps folded under it (the closeout-in-chat spec, 2026-11-04); a turn that
 // ended in its summary keeps them folded above it. A turn with no summary - older ones, a CLI that wrote none, one that died - as ever
-const live = (m) => m?.status?.type === "running" || String(m?.id || "").startsWith("live-");
+// (pendingTurn.live)
 // ...and a fold the owner opened stays open: the server's live message is `live-<sid>-<trace revision>` - a new id at every step - and the pane
 // itself mounts again when the owner comes back to the task. Kept by the turn, never by the message's id or the DOM
 const OPEN_FOLDS = new Set();
@@ -410,6 +411,21 @@ const AtWork = ({ since, began, ...props }) => {
   const typed = useAuiState((s) => turnBegan(s.thread.messages.filter((m) => m.role === "user").map((m) => m.createdAt)));
   // ...the server's own start wins when it has said it: a mail that joined mid-turn is newer than the turn and set its clock back to 0s
   return folded && level !== "summary" ? null : <AgentBand {...props} since={began || Math.max(since || 0, typed || 0) || null} />;
+};
+// THE AGENT'S TURN BEFORE THE THREAD HAS IT (pendingTurn.js, the owner 2026-11-09): its head - "Agent · 2:05 PM" - and its line, drawn from the
+// press; a turn the thread draws takes the same spot at the same render (both read the thread's state). Where the thread already draws the live
+// turn, only the line under it, as ever
+// ...`foot`: the turn answers a line held at the chat's foot (an answer sent on the server's road), so its row stands under that line
+const PendingTurn = ({ busy, sent, at, foot = false, atFoot = false, children }) => {
+  const thread = useAuiState((s) => s.thread.messages), [shown] = useState(() => Date.now()), name = React.useContext(AgentNameCtx);
+  const due = pendingTurn(thread, { busy, sent });
+  if (!due) return busy && !foot ? children : null;
+  if (foot !== atFoot) return null;
+  const t = new Date(sent?.at || at || shown);
+  return <div className="tq-aui-message tq-aui-agent" data-tq-pending-turn="">
+    <div className="tq-aui-role">{name}<span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
+      · {when(t)}</span></div>
+    <div className="tq-aui-agent-body">{children}</div></div>;
 };
 // WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
 // each answer in a chat task, its time and the time from what it answered (the message before it) to the answer
@@ -843,13 +859,26 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     // ...and drawn ONCE: where the answer goes into this thread (answerAsk's own-session road) the thread draws it, and notShown keeps the held copy away
     const id = `held-${Date.now()}`, after = (messages || []).filter((m) => m?.role === "user").length;
     setHeld((h) => [...h, { id, text: w, after, drawn: mineDrawn.length }]);
-    Promise.resolve(onAnswer?.(w)).catch((x) => { setHeld((h) => h.filter((l) => l.id !== id)); c.setText(w); setAskErr(errText(x)); })
+    // ...and the agent's turn under it, from the press - never after the request's round trip (the owner, 2026-11-09)
+    setSent(sentNow(runtime.thread.getState().messages));
+    Promise.resolve(onAnswer?.(w)).catch((x) => { setHeld((h) => h.filter((l) => l.id !== id)); setSent(null); c.setText(w); setAskErr(errText(x)); })
       .finally(() => { answering.current = false; });
   };
   /* TALK WHILE IT WORKS (the owner's stress run, 2026-11-05): Enter while the turn runs put a newline in the box and the line never left -
      under a placeholder that says "Add something for it to pick up". The line is held: drawn at once as the owner's, and sent to the same
      session, which takes it as its next turn (send_prompt waits its turn). The thread's own copy replaces it once the server has it. */
   const [held, setHeld] = useState([]);
+  // THE TURN A PRESS ASKED FOR (pendingTurn.js): kept before the request goes, let go once the thread has a turn after it, or once the agent it
+  // woke has been at work and stopped - a terminal's agent answers on its own screen, never in this thread
+  const [sent, setSent] = useState(null), wasBusy = useRef(false);
+  useEffect(() => {
+    if (!sent) return undefined;
+    const read = () => { if (settled(runtime.thread.getState().messages, sent)) setSent(null); };
+    read(); return runtime.thread.subscribe(read);
+  }, [sent, runtime]);
+  useEffect(() => { if (!sent) { wasBusy.current = false; return; } if (serverBusy) wasBusy.current = true; else if (wasBusy.current) setSent(null); }, [sent, serverBusy]);
+  // ...and a press nothing ever took up stops claiming the agent is coming
+  useEffect(() => { if (!sent) return undefined; const t = setTimeout(() => { if (!wasBusy.current) setSent(null); }, 30000); return () => clearTimeout(t); }, [sent]);
   // WHAT A RESTART PUT BACK IN THE BOX (general.to_box, the owner 2026-11-07): lines no turn took are the owner's again to send, change or
   // clear - never sent for them. Into an empty box, once per text; sending anything from the box ends the offer (general.box_sent)
   const boxed = useRef("");
@@ -888,6 +917,11 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const landNode = landing ? React.cloneElement(landing, { onState: setLandState }) : null;
   const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : "Answer the agent's question…";
   const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} began={began} starting={starting} />;
+  // ...a turn a press asked for counts from the press, and says it is starting until the agent is at work
+  const sentWork = sent && !dock ? <AtWork name={name} provider={provider} work={work} since={sent.at} began={serverBusy ? began : null}
+    starting={serverBusy ? starting : starting || startingLine(name, provider)} /> : atWork;
+  const footLines = [...waitingShown(waiting, held, mineDrawn, messages).map((w) => ({ id: `waiting-${w.id}`, text: w.text, at: w.at })), ...notShown(held, mineDrawn)];
+  const atFoot = !!sent && footLines.length > 0;
   return (
     <AssistantRuntimeProvider runtime={runtime}><LandingCtx.Provider value={landAt && !dock ? { after: landAt, node: landNode } : null}>
       <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>
@@ -913,7 +947,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           </ThreadPrimitive.If>
           {/* the answer is being written somewhere else - another tab, or this pane before it was
               reopened - and the poll is what tells us so */}
-          <ThreadPrimitive.If running={false}>{serverBusy && atWork}</ThreadPrimitive.If>
+          {/* ...drawn as the agent's turn, its head and its line, until the thread draws that turn itself (PendingTurn) */}
+          <ThreadPrimitive.If running={false}>{dock ? serverBusy && atWork
+            : <PendingTurn busy={serverBusy} sent={sent} at={began || since} atFoot={atFoot}>{sentWork}</PendingTurn>}</ThreadPrimitive.If>
           {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
           {!dock && cards}
           {/* Only once it has stopped typing. An offer to "run this again, daily" hanging under a
@@ -953,12 +989,14 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               clock, an empty head with the owner's words below it (the scenario run, 2026-11-06) */}
           {/* ...the SERVER'S copy first (`waiting`, kept the moment each was sent - on every screen, through a reload or a restart), each at the
               time it was typed, then this screen's own not yet kept; all of them waiting for the agent until a turn takes them (2026-11-07) */}
-          {[...waitingShown(waiting, held, mineDrawn, messages).map((w) => ({ id: `waiting-${w.id}`, text: w.text, at: w.at })), ...notShown(held, mineDrawn)].map((l) =>
+          {footLines.map((l) =>
             <div key={l.id} className="tq-aui-message tq-aui-user" data-tq-held="">
             {/* ...under the owner's own head, as every line of theirs is - "you" in grey read as somebody else's (the product audit, 2026-11-08) */}
             <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{l.at ? ` · ${when(l.at)}` : ""}</div>
             <div className="tq-aui-user-bubble" dir="auto">{l.text}</div>
-            {l.err ? <div className="tq-aui-hint" role="alert">{l.err}</div> : <div className="tq-aui-hint" data-tq-waiting="">Waiting for the agent</div>}</div>)}
+            {l.err ? <div className="tq-aui-hint" role="alert">{l.err}</div> : !atFoot && <div className="tq-aui-hint" data-tq-waiting="">Waiting for the agent</div>}</div>)}
+          {/* ...and the turn its answer asked for, under it (PendingTurn `foot`) */}
+          {atFoot && <ThreadPrimitive.If running={false}><PendingTurn busy={serverBusy} sent={sent} foot atFoot>{sentWork}</PendingTurn></ThreadPrimitive.If>}
           {/* ...a chat no turn has summed up yet: its cards (TaskPage's chatCards), under the thread */}
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
           {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}

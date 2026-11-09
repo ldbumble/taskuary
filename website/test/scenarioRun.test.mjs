@@ -31,7 +31,7 @@ test("Working on this… counts from the turn's own start", () => {
 // ...and the lines typed while it works come under that line, never between the turn's head and its clock
 test("lines typed mid-turn are drawn under Working on this…", () => {
   const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  const i = ws.indexOf("<ThreadPrimitive.Messages components"), a = ws.indexOf("{atWork}", i), b = ws.indexOf("{serverBusy && atWork}", i), h = ws.indexOf("notShown(held, mineDrawn)].map(", i);
+  const i = ws.indexOf("<ThreadPrimitive.Messages components"), a = ws.indexOf("{atWork}", i), b = ws.indexOf("<PendingTurn busy={serverBusy}", i), h = ws.indexOf("{footLines.map(", i);
   assert.ok(i > 0 && a > i && b > a && h > b, "messages, the running line, the server's running line, then the held lines");
 });
 

@@ -167,7 +167,7 @@ test("regression: the owner's line shows once (heldLines notShown)", () => {
   const thread = [{ role: "user", content: [{ type: "text", text: "Run the whole suite too." }] }];
   assert.deepEqual(notShown([{ id: "h", text: "Run the whole suite too.", drawn: 0 }], thread), []);
   assert.equal(stillHeld([{ id: "h", text: "yes", after: 1 }], [{ role: "user", content: [{ type: "text", text: "yes" }] }]).length, 1, "an earlier yes never takes a new one");
-  assert.match(gw, /\.\.\.notShown\(held, mineDrawn\)\]\.map\(\(l\) =>/);      // after the server's kept lines (waitingShown), each drawn once
+  assert.match(gw, /\.\.\.notShown\(held, mineDrawn\)\];[\s\S]*\{footLines\.map\(\(l\) =>/);      // after the server's kept lines (waitingShown), each drawn once
 });
 
 test("regression: the mail that came in stays above the owner's first typed line", () => {

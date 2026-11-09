@@ -13,7 +13,7 @@ test("a running turn says so, whichever backend is answering", () => {
   // 2026-11-04) - folded over the turn's steps once they stream in (WorkSteps), on its own until then (AtWork -> AgentBand)
   assert.match(view, /const atWork = dock \? <Thinking provider=\{provider\} \/> : <AtWork name=\{name\}/);
   assert.match(view, /<ThreadPrimitive\.If running>\s*\{atWork\}/);
-  assert.match(view, /\{serverBusy && atWork\}/);
+  assert.match(view, /\{dock \? serverBusy && atWork\s*: <PendingTurn busy=\{serverBusy\}/);
   assert.match(view, /serverBusy=\{busy \|\| codingBusy\} provider=\{coding \? cc\.live\?\.cli \|\| "" : session\?\.provider \|\| pickedLabel\} name=\{name\}/);
   assert.match(view, /const Thinking = \(/);
   assert.match(view, /const AgentBand = \(\{ name, provider, work, since, starting = "" \}\)/);
@@ -82,7 +82,7 @@ test("the question card has no box of its own - the composer answers an open que
   const typed = view.slice(view.indexOf("const answerTyped"), view.indexOf("const askWords"));
   assert.match(typed, /if \(dock \|\| !asking\) return;\s*e\.preventDefault\(\);/, "only while a question is open; otherwise the composer sends as ever");
   assert.match(typed, /onAnswer\?\.\(w\)/, "the same road the card's presses take - so the card and the waiting chip clear the same way");
-  assert.match(typed, /\.catch\(\(x\) => \{ setHeld\(\(h\) => h\.filter\(\(l\) => l\.id !== id\)\); c\.setText\(w\); setAskErr\(errText\(x\)\); \}\)/,
+  assert.match(typed, /\.catch\(\(x\) => \{ setHeld\(\(h\) => h\.filter\(\(l\) => l\.id !== id\)\); setSent\(null\); c\.setText\(w\); setAskErr\(errText\(x\)\); \}\)/,
     "a refused answer keeps its words - back in the box, not held as well");
   assert.match(view, /String\(asking\.request_id \|\| ""\)\.startsWith\("signin:"\) \? "Message the agent - never your password" : "Answer the agent's question…";/);
   assert.doesNotMatch(read("generalWorkspace.css"), /tq-aui-asking-box/);

@@ -5599,6 +5599,33 @@ def agent_check_back(body: AgentCheckBackBody, request: Request):
     try: return checkback.set_check(store, body.task_id, body.when, body.what, body.agent)
     except ValueError as e: raise HTTPException(422, str(e))
 
+class AgentTodosBody(BaseModel): task_id: int; add: list[str] = []; reword: dict[str, str] = {}; merge: list[dict] = []; agent: str = 'agent'
+
+@app.post('/api/agent/todos')
+def agent_todos(body: AgentTodosBody, request: Request):
+    """The todos tool: the session adds, rewords and folds its OWN task's to-dos (store.agent_todos) - on a stream of reports the list is the
+    issue list (the owner, 2026-11-09). Only the boxes' words; nothing leaves."""
+    from .store import agent_todos as todos
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    return todos(store, body.task_id, body.add, body.reword, body.merge, body.agent)
+
+class AgentRemindBody(BaseModel): task_id: int; until: str | None = None; agent: str = 'agent'
+
+@app.post('/api/agent/remind')
+def agent_remind(body: AgentRemindBody, request: Request):
+    """The remind tool: the owner's "remind me Friday" set by the session as the task's Remind me sets it (remind_task) - the owner's
+    reminder, off the rail until then, never the agent's own wake (check_back). The owner, 2026-11-09."""
+    from . import remind
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    try: out = remind.set_reminder(store, body.task_id, body.until, body.agent, agent=True)
+    except ValueError as e: raise HTTPException(404 if 'not found' in str(e) else 422, str(e))
+    operations.record_direct(store, 'task.defer', body.task_id, {'until': body.until or 'none'}, body.agent, out)
+    if out.get('remindAt'):
+        store.add_comment(body.task_id, body.agent, 'agent', f"Reminder set for you: {out['when']}." + (f" {out['warn']}" if out.get('warn') else ''))
+    return {'ok': True, **out}
+
 @app.delete('/api/tasks/{tid}/check-back')
 def cancel_check_back(tid: int, request: Request):
     "The × on a task's check-back chip: the owner's, never a session's - the agent sets its own and sets another when it wants one."
@@ -5888,6 +5915,8 @@ async def mcp_rpc(request: Request, task: int = 0):
              'not_needed': lambda tid, why: agent_not_needed(AgentNotNeededBody(task_id=tid, why=why), request),
              'withdraw': lambda tid, why, which='', keep=0: agent_withdraw_draft(AgentWithdrawBody(task_id=tid, why=why, which=which, keep=keep), request),
              'check_back': lambda tid, when, what: agent_check_back(AgentCheckBackBody(task_id=tid, when=when, what=what), request),
+             'todos': lambda tid, a: agent_todos(AgentTodosBody(**{k: v for k, v in a.items() if k in ('add', 'reword', 'merge')}, task_id=tid), request),
+             'remind': lambda tid, until: agent_remind(AgentRemindBody(task_id=tid, until=until), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),
              'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='': agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files), cc=list(cc), mailbox=mailbox), request),

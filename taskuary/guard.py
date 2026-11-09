@@ -136,8 +136,9 @@ AGENT_WRITES = (
     (r'POST', r'^/api/hooks/claude/(floor|permit)$', "a stranger's session asking the floor, or the owner, before a tool call"),
     (r'POST', r'^/api/hooks/claude/reason$', "the Reason Network hook - a message to someone untrusted is refused, an approval goes to the owner"),
     (r'POST', r'^/api/hooks/claude/browser$', "the browser hook - an act that can't be undone is held for the owner (browsergate)"),
-    (r'POST', r'^/api/agent/(reply|done|draft|item|tick|waiting|not-needed|withdraw-draft|check-back)$',
-     "`taskuary --reply/--done/--draft/--item/--tick/--waiting-on/--reply-not-needed/--withdraw-draft/--check-back` on the session's OWN task (owns_task); nothing leaves"),
+    (r'POST', r'^/api/agent/(reply|done|draft|item|tick|waiting|not-needed|withdraw-draft|check-back|todos|remind)$',
+     "`taskuary --reply/--done/--draft/--item/--tick/--waiting-on/--reply-not-needed/--withdraw-draft/--check-back`, the todos and remind "
+     "tools, on the session's OWN task (owns_task); nothing leaves"),
     (r'POST', r'^/api/agent/propose$', "an act only the owner's press runs (proposals.queue), filed on the session's OWN task; nothing runs"),
     (r'POST', r'^/api/agent/(answer-invite|meeting|share)$', "an invite's answer, a new meeting or a share set up on the session's OWN task - a card the owner presses; nothing leaves"),
     (r'POST', r'^/api/agent/ask-stronger$', "the session's own question to a stronger model (askstronger), on its OWN task - an answer in words, nothing moves"),

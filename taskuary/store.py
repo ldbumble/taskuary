@@ -292,6 +292,37 @@ def agent_tick(store, tid, item, done: bool = True, actor: str = 'agent') -> tup
     if not agent_tickable(hit): return None, (422, f"\"{hit['text']}\" ticks itself - when its email goes, or its task closes")
     store.tick_checklist_item(tid, hit['id'], done, actor)
     return hit, None
+# THE TO-DO LIST IS THE ISSUE LIST (the owner, 2026-11-09: no new table): on a stream of reports the agent keeps triage's list accurate -
+# adds what came in, rewords a box to what it really is, folds duplicates into one. Boxes that tick themselves (an email, a goal's step)
+# are never reworded or folded, as never ticked by hand (agent_tickable)
+def agent_todos(store, tid, add=(), reword=None, merge=(), actor: str = 'agent') -> dict:
+    """{ok, checklist} with the list as written, or {ok: False, why}. `reword`: {id: new words}; `merge`: [{ids: [...], text?}] - each group
+    folds into its first box (its words, or `text`), done when any of them was."""
+    with store.lock:
+        items = store.task_checklist(tid); by = {i['id']: i for i in items}
+        bad = [k for k in [*(reword or {}), *(x for g in merge or () for x in (g.get('ids') or []))] if k not in by]
+        if bad: return {'ok': False, 'why': f"no to-do {', '.join(map(str, bad))} on this task - the ids are in my_task's checklist"}
+        fixed = [by[k]['text'] for k in [*(reword or {}), *(x for g in merge or () for x in (g.get('ids') or []))] if not agent_tickable(by[k])]
+        if fixed: return {'ok': False, 'why': f"\"{fixed[0]}\" is an email or a step that ticks itself - its words are not yours to change"}
+        for k, w in (reword or {}).items():
+            if (w := ' '.join(str(w or '').split())[:300]): by[k]['text'] = w
+        gone = set()
+        for g in merge or ():
+            ids = [k for k in dict.fromkeys(g.get('ids') or []) if k not in gone]
+            if len(ids) < 2: continue
+            keep = by[ids[0]]
+            if (w := ' '.join(str(g.get('text') or '').split())[:300]): keep['text'] = w
+            keep['done'] = any(by[k].get('done') for k in ids)
+            gone.update(ids[1:])
+        items = [i for i in items if i['id'] not in gone]
+        have = {i['text'] for i in items}; used = {i['id'] for i in items} | gone
+        for text in store.clean_checklist(list(add or ()), cap=False):
+            if text in have: continue
+            d = hashlib.sha1(text.encode()).hexdigest()
+            items.append({'id': next((d[:n] for n in range(8, len(d) + 1) if d[:n] not in used), d), 'text': text, 'done': False})
+            have.add(text); used.add(items[-1]['id'])
+        store._write_checklist(tid, items, actor)
+    return {'ok': True, 'checklist': [f"[{i['id']}] {'x' if i.get('done') else ' '} {i['text']}" for i in items]}
 def auto_code_enabled(src) -> bool:
     """Does new coding work start its agent by itself? ONE read of `coding_auto_enabled` (a store or its settings
     dict), missing = the seeded default. Four readers used to disagree: three read missing as off, one as on."""
@@ -5439,7 +5470,7 @@ class SQLiteStore:
                              'ORDER BY SentAt DESC, MessageId DESC LIMIT 1', (conv, after)) if conv and after else None
             if sent:
                 from .channels import retire_draft_answered_elsewhere
-                retire_draft_answered_elsewhere(self, fields.get('TaskId'), sent)
+                retire_draft_answered_elsewhere(self, fields.get('TaskId'), sent, later=True)   # a model read, never inside this write
         return rid
     def get_review(self, rid): return self._one('SELECT * FROM review WHERE ReviewId=?', (rid,))
     def reviews_for_message(self, mid):

@@ -49,6 +49,12 @@ class EveryRoadFilesItOnceTests(unittest.TestCase):
         self.assertEqual(events[-1]['type'], 'done', events[-1])
         self.assertEqual(mine(self.s, self.tid), [LINE], 'the paths ride the turn, never the line the chat draws')
         self.assertIn('line-once.png', said[0])
+        # ...and the file is the task's own, in its folder, where sign_form and the propose tools take it (the owner, 2026-11-09)
+        from taskuary import outputs
+        import shutil
+        self.addCleanup(shutil.rmtree, outputs.folder(self.tid), True)
+        self.assertEqual((outputs.folder(self.tid) / 'line-once.png').read_bytes(), b'png')
+        self.assertIn(str(outputs.folder(self.tid) / 'line-once.png'), said[0])
 
     def test_an_api_brain_files_the_line_once(self):
         sess = general.GeneralSession(self.s, self.tid); sess.pick, sess.provider = 'connector:1', 'Azure OpenAI'

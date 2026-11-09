@@ -47,6 +47,26 @@ def _base_ok(base: Path) -> bool:
 
 _DRIVE = re.compile(r'^[A-Za-z]:|^[\\/]{2}')
 
+# A FILE THE OWNER ATTACHES IN THE CHAT IS THE TASK'S (the owner, 2026-11-09): a PDF dropped in the box stayed under attachments/prompt/, and
+# sign_form and the propose tools - which take a file in the task folder only - refused it, so the agent had to copy it over first
+_STAMPED = re.compile(r'^\d{8}-\d{6}-[0-9a-f]{6}-')       # the upload's own prefix (server.prompt_file), not the owner's name for it
+def take_in(tid: int, paths) -> list:
+    "`paths` as files in task `tid`'s folder: each one this server saved under attachments/ copied in under its own name; the rest as given."
+    root, out = (config.home() / 'attachments').resolve(), []
+    for raw in paths or []:
+        try:
+            p = Path(str(raw)).resolve()
+            if not (p.is_file() and p.is_relative_to(root)): out.append(raw); continue
+            d = folder(tid); d.mkdir(parents=True, exist_ok=True)
+            stem, ext = Path(_STAMPED.sub('', p.name) or p.name).stem, p.suffix
+            q = next(d / f'{stem}{f"-{i}" if i else ""}{ext}' for i in range(1000) if not (d / f'{stem}{f"-{i}" if i else ""}{ext}').exists()
+                     or (d / f'{stem}{f"-{i}" if i else ""}{ext}').read_bytes() == p.read_bytes())
+            if not q.exists(): shutil.copyfile(p, q)
+            out.append(str(q))
+        except (OSError, ValueError, StopIteration): out.append(raw)
+    return out
+
+
 def resolve(tid: int, rel: str, base: Path = None):
     """The file `rel` names inside task `tid`'s outputs folder (or `base`, a turn's kept copies - turn_folder), or None. A name only: never
     absolute, never a drive or a share, no `..` or empty step, no `:` (an NTFS stream), no link anywhere on the way - and after resolving,

@@ -11,6 +11,7 @@ needs-me count was wrong by however many things you had already dealt with.
 import unittest
 
 from taskuary.store import MemoryStore
+from test_freshness_walk import reads
 
 CONV = 'teams:19:priya'
 
@@ -140,8 +141,8 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         self.assertFalse([c for c in s.list_comments(tid) if 'You replied' in c['Body']])
 
     def test_a_whatsapp_reply_retires_the_unused_draft_and_says_so(self):
-        """Tess answered in WhatsApp after Taskuary drafted a reply. The sync is the verdict:
-        never leave the old Approve button asking the owner to send a second answer."""
+        """Tess answered in WhatsApp after Taskuary drafted a reply. Read against the draft, the line covers it: never leave the old
+        Approve button asking the owner to send a second answer (on a chat only when it covers it - the owner, 2026-11-09)."""
         from taskuary import concierge, general
         from taskuary.channels import ingest_own_message
         s = _store()
@@ -154,18 +155,19 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         rid = s.add_review({'MessageId': mid, 'TaskId': tid, 'Kind': 'draft_reply',
                             'Status': 'pending', 'DraftText': 'Yes, my house.'})
 
-        ingest_own_message(s, {'external_id': 'wa-out', 'conversation_id': 'whatsapp:tess',
-                               'channel': 'whatsapp', 'source_name': 'Tess', 'sent_at': '2026-09-04 12:36:00',
-                               'body': 'yes'}, 'your line in this chat - kept for context')
+        with reads('covered'):
+            ingest_own_message(s, {'external_id': 'wa-out', 'conversation_id': 'whatsapp:tess',
+                                   'channel': 'whatsapp', 'source_name': 'Tess', 'sent_at': '2026-09-04 12:36:00',
+                                   'body': 'yes'}, 'your line in this chat - kept for context')
 
         self.assertEqual(s.get_review(rid)['Status'], 'superseded')
         self.assertEqual(s.get_task(tid)['Status'], 'open')             # answered, and open for Mark done (2026-10-18)
         self.assertEqual(_row(s, mid)['NeedsYou'], 0)
         # ...said on the task it settled, never in the Assistant's conversation (the owner, 2026-10-06: the task being
         # worked is the main thing there, nothing else)
-        self.assertTrue(any('replied in WhatsApp' in c['Body'] and 'reply was taken care of' in c['Body'] for c in s.list_comments(tid)))
+        self.assertTrue(any('wrote on the chat' in c['Body'] and 'nothing more to send' in c['Body'] for c in s.list_comments(tid)))
         dock, _ = general.dock_task(s)
-        self.assertFalse([m for m in concierge.history(s, dock['TaskId']) if 'replied in WhatsApp' in (m.get('text') or '')])
+        self.assertFalse([m for m in concierge.history(s, dock['TaskId']) if 'nothing more to send' in (m.get('text') or '')])
 
     def test_an_earlier_owner_line_does_not_retire_a_later_ask(self):
         from taskuary.channels import ingest_own_message

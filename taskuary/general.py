@@ -466,7 +466,7 @@ def newest_message(store, tid: int) -> dict | None:
     a = {'who': 'the owner (in this chat)', 'at': str(said[-1].get('CreatedAt') or ''), 'words': said[-1].get('Body')} if said else None
     m = mail[-1] if mail else None
     b = {'who': 'the owner (their own reply on the thread)' if m.get('Own') else m.get('FromName') or m.get('FromEmail') or 'someone',
-         'at': str(m.get('JoinedAt') or ''), 'words': m.get('OwnText') or m.get('BodyText') or m.get('Subject')} if m else None
+         'at': str(m.get('JoinedAt') or ''), 'words': m.get('OwnText') or m.get('BodyText') or m.get('Subject'), 'mid': m.get('MessageId')} if m else None
     return max((x for x in (a, b) if x), key=lambda x: x['at'], default=None)
 
 def _quote(x, n) -> str: return '"' + _cut(' '.join(str(x or '').split()), n) + '"'
@@ -573,9 +573,13 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     if rv:
         s = wrapup.left_by(store, rv['ReviewId']); at = str((s or rv).get('CreatedAt') or '')
         m = store.get_message(rv.get('AnswersMid') or rv.get('MessageId')) or {}
-        to, before = m.get('FromName') or m.get('FromEmail') or '', bool(new) and at < new['at']
+        # ...one WRITTEN FOR the newest message is not an earlier draft (the owner, 2026-11-09): the quick drafter answered it the same second,
+        # and the agent withdrew that correct answer as "a stale copy" and drafted nothing
+        to, mine = m.get('FromName') or m.get('FromEmail') or '', bool(new and new.get('mid') and m.get('MessageId') == new['mid'])
+        before = not mine and bool(new) and at < new['at']
         out.append(f"THE DRAFT WAITING NOW (rv{rv['ReviewId']}{', to ' + to if to else ''}, drafted at {clock(at)}"
-                   f"{' - BEFORE the newest message' if before else ''}): {_quote(rv['DraftText'], 1500)}\n{selfclose.WITHDRAW_LINE}")
+                   f"{' - written for this message - keep it or improve it' if mine else ' - BEFORE the newest message' if before else ''}): "
+                   f"{_quote(rv['DraftText'], 1500)}\n{selfclose.WITHDRAW_LINE}")
     if others: out.append('ALSO SET UP AND NOT SENT - take back any the newest message undoes:\n' + '\n'.join(
         f"- rv{x['rid']}: {x['what']}" for x in others)
         + ('' if rv else f'\n{selfclose.WITHDRAW_LINE}'))
@@ -638,7 +642,10 @@ def shown_history(store, tid: int) -> list:
     # filed - its report, else its transcript's last words - is its one answer, so the chat draws it in the same look
     if not rows: rows = _record_turn(store, tid); msgs = [dict(m) for m in rows]
     # ...the FIRST brief too, with what started the task (the owner, 2026-11-05: "the inputs on right ... email came in from x and was sent to agent")
-    mail = store._rows(JOINED, (tid,))
+    # ...the OWNER'S OWN line at the time they wrote it, never when it was filed here (the owner, 2026-11-09: their 9:03 PM opening line was put
+    # on the task late and drawn under the 9:30 PM ones) - what came in from others stays where it joined, which is when the agent heard it
+    mail = sorted(({**x, 'JoinedAt': x.get('SentAt') or x['JoinedAt']} if x.get('Own') else x for x in store._rows(JOINED, (tid,))),
+                  key=lambda x: (str(x['JoinedAt']), x['MessageId']))
     # `at`: when it was sent, in this server's zone like every stamp here (store.norm_stamp) - the page reads it through the zone setting.
     # `words`: the text Taskuary kept of it
     # (OwnText - no "sent from outside" banner, no quoted history), else its own words read from the body
@@ -1288,7 +1295,7 @@ def reading_block(store, tid: int) -> str:
     done = '; '.join(f"{s(o.get('who'))} - {s(o.get('did'))}" for o in ls('others') if isinstance(o, dict) and s(o.get('who')))
     aside = '; '.join(f'[#{int(m)}] {w}' for m, w in objs('aside', 'why') if str(m).isdigit())   # an int, or one written as text
     on = '; '.join(x for x in map(s, ls('on_you')) if x)
-    rows = [('Asking', s(t.get('asking'))), ('Your part', s(t.get('your_part'))), ('Already handled', done),
+    rows = [('Asking', s(t.get('asking'))), ('Your part', s(t.get('your_part'))), ('Who did what', done),
             ('The mail the reply answers', f'[#{tgt}] {who.get(tgt, "someone")} · {_md(at.get(tgt))}'.rstrip(' ·') if tgt else ''),
             ('Aside', aside), ('On you', on)]
     if not any(v for k, v in rows if k != 'The mail the reply answers'): return ''
@@ -2362,7 +2369,10 @@ class GeneralSession:
         # do what it said it would - never a failure in the chat (the owner, 2026-11-05: "failure means nothing to the user")
         if not asks and signing is None and turn is None and closing is None and not is_dock(self.store.get_task(self.task_id)):
             from . import hooks
-            hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake)
+            hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ)
+            # ...and one that ENDED ON QUESTIONS in its prose, no marker, is waiting on the owner - read as a coding turn's is (hooks.judge_turn):
+            # the chip said "agent done" over two questions only the owner could answer (the owner, 2026-11-09)
+            if hooks.BACKGROUND: hooks.judge_turn(self.store, self.task_id, self.sid, reply[:4000])
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         # ...and the files this turn wrote, as it left them: a later turn rewrites them in place (outputs.keep_turn, the owner 2026-11-07)
         from . import outputs
@@ -2626,8 +2636,10 @@ def say_line(store, tid: int, text: str, attachments=None, connector_id=None, mo
     turn alike. Kept the moment it is sent (send_prompt), handed to the agent's session - started, or brought back, as needed - and, where
     that session ends under it (a turn failed, it idled out, a wrap-up closed it), handed once to a fresh one, which takes the kept line: a
     held line came back "reload the page and ask again" where the first line's road had started again quietly. -> (session, reply);
-    `started(session)` hears each session it is given to."""
+    `started(session)` hears each session it is given to. A file sent with it is put in the task's folder first (outputs.take_in)."""
+    from . import outputs
     box_sent(store, tid)
+    attachments = outputs.take_in(tid, attachments) if attachments else attachments
     for again in (False, True):
         ses = start_session(store, tid, connector_id, model, actor, pick)
         if started: started(ses)

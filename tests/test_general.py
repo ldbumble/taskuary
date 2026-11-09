@@ -679,7 +679,7 @@ class OneGoalTests(unittest.TestCase):
                    aside=[{'mid': erin, 'why': 'thanks only'}], on_you=['confirm Gail has it'])
         user = general._prompt(s, tid)[1]
         for want in ('THE ASK, AS TRIAGE READ IT (check it against the mail):', 'Your part: give Gail the portal login',
-                     'Already handled: Erin Blake - said thanks', f'The mail the reply answers: [#{ray}] Ray Colton', f'Aside: [#{erin}] thanks only',
+                     'Who did what: Erin Blake - said thanks', f'The mail the reply answers: [#{ray}] Ray Colton', f'Aside: [#{erin}] thanks only',
                      'On you: confirm Gail has it', 'THE MAIL ON THIS TASK:', f'[#{ray}] Ray Colton', f'[#{erin}] Erin Blake'):
             self.assertIn(want, user, want)
         self.assertLess(user.index('TASK '), user.index('THE ASK, AS TRIAGE READ IT'))

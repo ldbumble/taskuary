@@ -90,7 +90,7 @@ class NextTurn(unittest.TestCase):
         self.carried_on(s, tid)
         self.assertEqual(general.session_for(tid).cli_sid, 'cli-conv-1')        # its own CLI conversation, so the turn is all it is told
         self.assertIn(ASK, self.brain.turn)
-        self.assertLess(self.brain.turn.index(ASK), self.brain.turn.index(continuity.RESUME_PROMPT))   # the news leads, Resume's words follow
+        self.assertLess(self.brain.turn.index(ASK), self.brain.turn.index(ingest.CARRY_ON_PROMPT))   # the news leads, the carry-on line follows
         self.assertNotIn('the owner says', self.brain.turn)                    # Taskuary's words, never put in the owner's mouth
         brief = [c for c in s.list_comments(tid, internal=True) if general.is_brief(c)][-1]
         self.assertIn(ASK, brief['Body'])                                       # ...and the chat shows the line it was handed

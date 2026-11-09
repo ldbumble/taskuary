@@ -568,7 +568,8 @@ ENDED_SYSTEM = ('You read the last message an agent wrote before its turn ended.
                 'back with the result later? An answer that delivers the work, a question to the owner, or a plain statement that '
                 'something cannot be done is not that - and neither is waiting on a PERSON: the owner, the sender, or someone a reply '
                 'it drafted asks for more (their output, their notes, their answer). That turn delivered its step; the next one comes '
-                'when they write back. Reply with JSON only: {"unfinished": true or false, "why": "what it is still '
+                'when they write back. Waiting for the owner\'s Send or decision is finished, not unfinished. Reply with JSON only: '
+                '{"unfinished": true or false, "why": "what it is still '
                 'waiting on, in a few plain words; empty when unfinished is false"}')
 ENDED_WANT = {'type': 'object', 'properties': {'unfinished': {'type': 'boolean'}, 'why': {'type': 'string'}}, 'required': ['unfinished']}
 _ENDED = {}
@@ -594,9 +595,20 @@ def held_for(store, tid: int, sid: str) -> bool:
     return False
 
 
-def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = False, then=None):
-    "Read a headless turn's last message for work it left unfinished; hand `then` what it still waits on, when it did - never a failure."
+# ...and never on a turn its own summary says is finished (the owner, 2026-11-09: a complete answer "ready for your Mark done" went back to
+# "Working on this..." by itself, and a hedge "check before you press Send" woke a second turn): nothing_left, or only the owner's presses left
+PRESSES = re.compile(r'\b(send|sent|approve|mark(ed)? (it )?done|decid\w*|decision|press\w*|bring it back|accept|decline)\b', re.I)
+def owner_presses_only(summ) -> bool:
+    "Does the turn's summary (selfclose.summary_marker) leave nothing but the owner's own presses - Send, a decision, Mark done?"
+    if not isinstance(summ, dict): return False
+    return summ.get('nothing_left') is True or bool(summ.get('on_you')) and all(PRESSES.search(x) for x in summ['on_you'])
+
+
+def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = False, then=None, summ=None):
+    """Read a headless turn's last message for work it left unfinished; hand `then` what it still waits on, when it did - never a failure.
+    `summ`: the turn's own summary - one that says it is finished (owner_presses_only) is never read."""
     import hashlib
+    if owner_presses_only(summ): return
     key = (str(sid), hashlib.sha1(said.encode('utf-8', 'replace')).hexdigest())
     def go():
         from . import workerstate as ws

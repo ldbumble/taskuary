@@ -997,13 +997,53 @@ def _same_words(a: str, b: str, n: int = 160) -> bool:
     return bool(x) and x == y
 
 
-def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict) -> list:
+REREAD_SYSTEM = ('You read a reply drafted for the owner, not sent yet, and one line the owner has since written themselves on the same chat. '
+                 'Decide how much of what the draft answers the owner\'s line already covers: "covered" (all of it - nothing more to send), '
+                 '"partly" (some of it) or "none". For "partly", `left` is the draft cut to only what the owner\'s line left unanswered - in '
+                 'the draft\'s own voice, language and greeting, nothing new added, nothing the owner\'s line already said. Reply with JSON '
+                 'only: {"covered": "covered" | "partly" | "none", "left": "the cut draft for partly, else empty"}')
+REREAD_WANT = {'type': 'object', 'properties': {'covered': {'type': 'string', 'enum': ['covered', 'partly', 'none']}, 'left': {'type': 'string'}},
+               'required': ['covered']}
+COVERED, CHECK_IT = 'Your line covers this, nothing more to send.', 'You wrote on the thread since - check the draft still fits.'
+
+
+def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
+    """A pending draft on a chat, re-read against the line the owner wrote there since - one small model call that reads only the two:
+    covered -> retired (COVERED), partly -> its text cut to what is still unanswered (same recipient, same quote), none -> left as it is.
+    Unreadable, or no AI: the draft stays untouched and the task says CHECK_IT. Returns which it was."""
+    from .llm import build_llm, ask_json
+    from .sessionrecord import NOTE_ACTOR
+    from . import funnel
+    line, draft = ' '.join(str(sent.get('BodyText') or '').split())[:2000], str(rv.get('DraftText') or '').strip()
+    note = lambda t: tid and store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', t)
+    if not draft: return 'none'
+    try:
+        b = brain or build_llm(store, job='judge', task_id=tid)
+        v = (ask_json(b, REREAD_SYSTEM, f"THE DRAFT:\n{draft[:6000]}\n\nTHE OWNER'S LINE SINCE:\n{line}", want=REREAD_WANT, need=('covered',)).data
+             if b else None) or {}
+    except Exception as e: logger.debug(f'task {tid}: the draft was not re-read against the owner\'s line - {e}'); v = {}
+    got, left = v.get('covered') if isinstance(v, dict) else None, str((v or {}).get('left') or '').strip() if isinstance(v, dict) else ''
+    if got == 'covered':
+        store.decide_review(rv['ReviewId'], 'superseded', None, 'you', COVERED)
+        if tid:
+            from . import verdicts
+            verdicts._settle_task_after_sent_reply(store, rv, 'you', True)
+        note(f'You wrote on the chat: "{line[:180]}". {COVERED}')
+    elif got == 'partly' and left and store.update_review_draft(rv['ReviewId'], left, rv.get('RunId'), by=rv.get('DraftBy')):
+        note(f'You wrote on the chat: "{line[:180]}". The draft now says only what your line left unanswered.')
+    elif got != 'none': got = 'unread'; note(CHECK_IT)
+    funnel.invalidate(); store._poke('feed-changed', 'task-changed', task_id=tid)
+    return got or 'unread'
+
+
+def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict, later: bool = False) -> list:
     """Resolve reply drafts made obsolete by a reply the owner sent in the native app.
 
     A provider sync can land well after triage wrote its draft.  The draft belongs to the
     inbound message it was written against, so an owner line later on that same conversation
     is the missing verdict: the reply already went out.  Action approvals are deliberately
-    excluded -- sending a chat line cannot approve an unrelated proposed action.
+    excluded -- sending a chat line cannot approve an unrelated proposed action. On a chat the
+    line is re-read against each draft instead (reread_draft) - on its own thread when `later`.
     """
     conv, sent_at = sent.get('ConversationId'), sent.get('SentAt')
     if not conv or not sent_at:
@@ -1018,6 +1058,19 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict) -> list:
              and (not rv.get('SentAt') or rv['SentAt'] <= sent_at)]
     if not stale:
         return []
+    # ...A CHAT LINE IS ONE LINE, NOT THE REPLY (the owner, 2026-11-09): "voice to text is fixed in 18" from the phone retired a draft that
+    # answered six points, five of which never went out. On a chat the draft is re-read against the owner's line (reread_draft); email keeps
+    # the retire below - a mail sent from the mailbox is the whole answer. A draft with no words yet (its writer still at work when the
+    # owner answered) has nothing to re-read: the owner's line is the reply it was going to be, retired as before
+    from .ingest import CHAT_CHANNELS
+    if str(sent.get('Channel') or '').lower() in CHAT_CHANNELS:
+        worded = [rv for rv in stale if str(rv.get('DraftText') or '').strip()]
+        if worded:
+            go = lambda: [reread_draft(store, tid, rv, sent) for rv in worded]
+            if later: threading.Thread(target=go, daemon=True, name=f'reread-draft-{tid}').start()
+            else: go()
+        stale = [rv for rv in stale if rv not in worded]
+        if not stale: return []
 
     place = SENT_FROM.get(sent.get('Channel'), 'outside Taskuary')
     for rv in stale:

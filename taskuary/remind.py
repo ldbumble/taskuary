@@ -139,8 +139,9 @@ def agent_open(tid: int) -> bool:
     except Exception: return False
 
 
-def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
-    """Put the task away until `until` (or bring it back now with none). The receipt says when it comes back."""
+def set_reminder(store, tid: int, until, actor: str = 'owner', agent: bool = False) -> dict:
+    """Put the task away until `until` (or bring it back now with none). The receipt says when it comes back. `agent`: the task's own
+    agent sets it on the owner's word (its remind tool) - the session asking is the one open, so it is no reason to refuse."""
     t = store.get_task(tid)
     if not t: raise ValueError('task not found')
     if t.get('Status') in ('done', 'dropped'):
@@ -158,7 +159,7 @@ def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
     at, prev = parse(until), t.get('RemindAt') or None
     # Put away with an agent still open, it was deferred anyway and its row stayed under "agent waiting on you" (press
     # audit, 2026-10-01). The owner: the agent is open - save and end it first. Bringing it back is never refused.
-    if at and agent_open(tid): raise AgentOpen(OPEN_SAYS)
+    if at and not agent and agent_open(tid): raise AgentOpen(OPEN_SAYS)
     # ...one road back at a time: a day set ends a watch (watch.py)
     store.update_task(tid, {'RemindAt': at or '', **({'WatchedAt': '', 'WatchBack': ''} if at and (t.get('WatchedAt') or t.get('WatchBack')) else {})}, actor)
     if at:

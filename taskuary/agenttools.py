@@ -82,11 +82,26 @@ TOOLS = {
              ('GET', '/api/tasks/1')),
     'tick': ('own', "Tick (done=true) or untick one of this task's to-dos by its id. Only what you actually finished.",
              _S({'item': _STR, 'done': {'type': 'boolean'}}, ('item',)), ('POST', '/api/agent/tick')),
+    # ...and the list itself (the owner, 2026-11-09: "no new table - triage's to-do list IS the issue list")
+    'todos': ('own', "Keep this task's to-do list accurate: `add` new to-dos (their words), `reword` {id: new words} a to-do to what it really "
+              "is, `merge` [{ids: [the ids of one thing said twice], text?: its words}] folds duplicates into the first. On a stream of reports "
+              "- one person's bugs, ideas and questions about one product - the to-do list is the issue list: one to-do per issue, duplicates "
+              "folded, each ticked (tick) once it is fixed or answered. Returns the list with each id. Only the words of the list change; "
+              "nothing is sent.",
+              _S({'add': {'type': 'array', 'items': _STR}, 'reword': {'type': 'object', 'additionalProperties': _STR},
+                  'merge': {'type': 'array', 'items': {'type': 'object', 'properties': {'ids': {'type': 'array', 'items': _STR}, 'text': _STR},
+                                                       'required': ['ids']}}}), ('POST', '/api/agent/todos')),
     # ...and a wake of its own later on this task (checkback.py, the owner 2026-11-05) - for what only time settles
     'check_back': ('own', "Check back on this task later: at `when` (\"tomorrow 9am\", \"in 2 days\", \"2026-11-12\", \"in 3 hours\") you are "
                    "woken here with `what` as your next turn - a payment that should clear, a reply expected by a date, a form that takes a "
-                   "day. One per task; a new one replaces it. Nothing is sent and the task stays where it is.",
+                   "day. One per task; a new one replaces it. Nothing is sent and the task stays where it is. Only for when you wait on "
+                   "someone else - \"remind me\" is the owner's reminder: the remind tool.",
                    _S({'when': _STR, 'what': _STR}, ('when', 'what')), ('POST', '/api/agent/check-back')),
+    # ...and the owner's own reminder (the owner, 2026-11-09: "remind me Friday" set the agent's alarm, and the task's Remind me stayed empty)
+    'remind': ('own', "Set the owner's reminder on this task - exactly what its Remind me button does: the task goes off their list until "
+               "`when` (\"friday\", \"tomorrow 9am\", \"in 2 days\", \"2026-11-12\") and comes back to them then. \"Remind me\" from the owner is "
+               "this; check_back is only for when you wait on someone else. Nothing is sent.",
+               _S({'when': _STR}, ('when',)), ('POST', '/api/agent/remind')),
     # ...and a stronger model for one hard question (askstronger.py, the owner 2026-11-06: "if it needs it, it calls it")
     'ask_stronger': ('read', "Ask a stronger model ONE question you are stuck on - a hard judgement, a tricky calculation, a reasoning step "
                      "you cannot settle. `context` is what it needs to know: it sees nothing else and has no tools. It answers in words; "
@@ -117,10 +132,10 @@ TOOLS = {
                       "mail. `answers`: the number of the mail it replies to, when that is an earlier one than the newest (THE MAIL ON THIS "
                       "TASK in your brief). Who hears it is yours to decide: `only: true` sends it to that mail's sender alone (something "
                       "sensitive), `cc` lists who else is copied instead of the thread's own, and `why_to` says in one line why it goes to "
-                      "whom it goes. It becomes a pending reply with a Send button for the owner - nothing is sent. `replaces`: as on "
-                      "propose_email.",
+                      "whom it goes. It becomes a pending reply with a Send button for the owner - nothing is sent. A new reply takes "
+                      "the old reply's place by itself.",
                       _S({'text': _STR, 'to': _STR, 'answers': _INT, 'only': {'type': 'boolean'}, 'cc': {'type': 'array', 'items': _STR},
-                          'why_to': _STR, 'attach': _ATTACH, 'replaces': _STR}, ('text',)), ('POST', '/api/agent/reply')),
+                          'why_to': _STR, 'attach': _ATTACH}, ('text',)), ('POST', '/api/agent/reply')),
     'reply_not_needed': ('own', "The reply waiting on this task is no longer needed - someone else answered, the owner already did. `why` "
                          "says it in one line. The draft stays, marked, with the owner's Send still on it - nothing is sent, deleted or "
                          "closed; a new reply clears the mark.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
@@ -216,7 +231,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     """Run one tool for the session on task `tid`. `doors` are the server's own handlers for the acts that have one (tool_run, tick,
     reply, draft, propose), called with the caller's request so their own checks - owns_task, scopes, the send-to-proposal rule -
     are the ones that hold. Raises ValueError for a call the model can correct; the answer is text the model reads."""
-    from . import mailsearch
+    from . import mailsearch, verdicts
     a = args or {}
     if name == 'search_messages':
         hits = mailsearch.search(store, a.get('sender', ''), a.get('subject', ''), a.get('words', ''), a.get('since', ''), a.get('until', ''),
@@ -268,7 +283,13 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         if s and s not in learned_cut.SECTIONS: raise ValueError(f"no section {s!r} - one of {', '.join(learned_cut.SECTIONS)}")
         return _out(learned_cut.whole(store, 'agents', target=f'task:{tid}', sections=(s,) if s else None) or 'nothing learned about the owner yet')
     if name == 'calendar':
-        from .calendar import run_calendar
+        from .calendar import reachable, run_calendar
+        # ...and no calendar to read says where one is connected, as set_up_meeting does (the owner, 2026-11-09: the agent told the owner to
+        # "connect Outlook calendar access" in prose, with no link to press)
+        if not reachable(store):
+            from .calwrite import connect_fix
+            fix = connect_fix(store)
+            return f"No calendar is connected, so the owner's busy times cannot be read. Give the owner this link: [{fix['label']}]({fix['href']})"
         head, body = run_calendar({'store': store, 'days': a.get('days') or 14})
         return _out(f'{head}\n{body}', fence_it=True)
     if name == 'list_systems':
@@ -282,6 +303,8 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         return viewspec.shown(a)
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
     if name == 'check_back': return _j(doors['check_back'](tid, str(a.get('when') or ''), str(a.get('what') or '')))
+    if name == 'todos': return _j(doors['todos'](tid, a))
+    if name == 'remind': return _j(doors['remind'](tid, str(a.get('when') or '')))
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))
         return out['answer'] if out.get('ok') else out.get('says') or _j(out)
@@ -297,12 +320,14 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'withdraw_draft': return _j(doors['withdraw'](tid, str(a.get('why') or ''), str(a.get('which') or '')))
     if name == 'propose_reply':
         who = {k: a[k] for k in ('answers', 'only', 'cc', 'why_to') if a.get(k) not in (None, '')}
+        was = verdicts.unsent(store, tid)
         out = doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach')), **who)
-        return _j(replaced(doors, tid, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place"))
+        return _j(replaced(store, doors, tid, was, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place"))
     if name == 'propose_email':
+        was = verdicts.unsent(store, tid)
         out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(tid, a.get('attach')),
                             a.get('cc') or (), str(a.get('from') or ''))
-        return _j(replaced(doors, tid, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place"))
+        return _j(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place"))
     if name == 'sign_form':
         out = doors['sign'](tid, a)
         return out['says'] if out.get('says') else _j(out)
@@ -310,20 +335,29 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'set_up_meeting': return _j(doors['meeting'](tid, a))
     if name == 'share': return _j(doors['share'](tid, a))
     if name == 'propose':
-        old = a.get('replaces')
-        return _j(replaced(doors, tid, doors['propose'](tid, {k: v for k, v in a.items() if k != 'replaces'}), old, 'a new proposal takes its place'))
+        old, was = a.get('replaces'), verdicts.unsent(store, tid)
+        out = doors['propose'](tid, {k: v for k, v in a.items() if k != 'replaces'})
+        return _j(replaced(store, doors, tid, was, out, old, 'a new proposal takes its place'))
     raise ValueError(f'no tool {name!r} - tools/list names them; use one of those')
 
 
-def replaced(doors, tid: int, out, old, why: str):
-    "The new draft's answer, with the one it `replaces` withdrawn once the new one stands - so the owner has one Send, never two."
+def replaced(store, doors, tid: int, was: list, out, old, why: str):
+    """The new draft's answer, with the one it `replaces` withdrawn once the new one stands - so the owner has one Send, never two. `was`:
+    what was unsent before this call (verdicts.unsent)."""
+    from . import verdicts
     o = json.loads(out.body) if hasattr(out, 'body') else out
     if not old or not (isinstance(o, dict) and o.get('ok')): return o
     # ...an email to the same person was rewritten in its own review: withdrawing `old` then took back the new one with it
     if str(old).casefold().removeprefix('rv') == str(o.get('review_id')): return {**o, 'replaced': o['review_id']}
     w = doors['withdraw'](tid, why, str(old), keep=o.get('review_id') or 0)
     w = json.loads(w.body) if hasattr(w, 'body') else w
-    return {**o, 'replaced': w.get('review_id')} if w.get('ok') else {**o, 'not_replaced': w.get('why')}
+    if w.get('ok'): return {**o, 'replaced': w.get('review_id')}
+    # ...this very call already took its place (a new reply supersedes the old one itself): "nothing unsent to withdraw" read to the agent
+    # as its earlier reply having gone out, and it told the owner to check before Send - four times in one chat (the owner, 2026-11-09)
+    k, now = str(old).casefold().removeprefix('rv'), {r['rid'] for r in verdicts.unsent(store, tid)}
+    hit = [r['rid'] for r in was if (r['rid'] == int(k) if k.isdigit() else k in r['to'].casefold() or k in r['what'].casefold())]
+    gone = next((i for i in hit if i not in now and (store.get_review(i) or {}).get('Status') == 'closed_unsent'), None)
+    return {**o, 'replaced': gone} if gone else {**o, 'not_replaced': w.get('why')}
 
 
 def attached(tid: int, names) -> list:

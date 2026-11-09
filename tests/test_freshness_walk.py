@@ -18,6 +18,12 @@ from taskuary import channels, funnel, ingest, railwalk, responder, server
 from taskuary.store import MemoryStore
 
 
+def reads(covered, left=''):
+    "The chat road's one model read of the draft against the owner's line (channels.reread_draft), answered as `covered`."
+    return mock.patch.multiple('taskuary.llm', build_llm=mock.Mock(return_value=object()),
+                               ask_json=mock.Mock(return_value=mock.Mock(data={'covered': covered, 'left': left})))
+
+
 def stamp(seconds=0): return (datetime.now() + timedelta(seconds=seconds)).strftime('%Y-%m-%d %H:%M:%S')
 
 
@@ -215,8 +221,8 @@ class SupersedeTests(Base):
 
     def test_the_owners_external_answer_retires_the_draft_and_the_notice_says_so(self):
         tid, first, rid = teams_task(self.s)
-        sent = {'ConversationId': 'teams:robin', 'SentAt': stamp(), 'Channel': 'teams'}
-        channels.retire_draft_answered_elsewhere(self.s, tid, sent)
+        sent = {'ConversationId': 'teams:robin', 'SentAt': stamp(), 'Channel': 'teams', 'BodyText': 'done, reset it'}
+        with reads('covered'): channels.retire_draft_answered_elsewhere(self.s, tid, sent)
         rv = self.s.get_review(rid)
         self.assertEqual(rv['Status'], 'superseded')
         line = server._context_update_line({'after': {'FromName': 'You', 'BodyText': 'done, reset it'}, 'item': {'ref': 'TQ-0001', 'rid': rid, 'tid': tid}})
@@ -249,5 +255,5 @@ class OurAcknowledgementIsNotAnAnswerTests(Base):
         tid, first, rid = teams_task(self.s)
         channels.retire_draft_answered_elsewhere(self.s, tid, self._ack(tid))
         self.assertEqual(self.s.get_review(rid)['Status'], 'pending')
-        channels.retire_draft_answered_elsewhere(self.s, tid, self._ack(tid, ext='teams:mine', text='done, reset it'))
+        with reads('covered'): channels.retire_draft_answered_elsewhere(self.s, tid, self._ack(tid, ext='teams:mine', text='done, reset it'))
         self.assertEqual(self.s.get_review(rid)['Status'], 'superseded')

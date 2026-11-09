@@ -70,11 +70,12 @@ class CarryOnTests(unittest.TestCase):
         self.assertEqual(spawned, [])
         self.assertTrue(ingest.carry_on_why(s, tid, mail(**AGAIN), None, {'intent': 'task'}))
 
-    def test_a_question_is_a_drafted_reply_not_a_turn(self):
+    def test_a_question_is_the_agents_replan_not_a_second_drafter(self):
+        # ...one drafter on a task its agent works (the owner, 2026-11-09): the quick writer's draft of the same line was withdrawn as stale
         s = store(); finished_task(s)
         _out, spawned = ingested(s, mail(**{**AGAIN, 'body': 'Did you get my last note?'}), intent='reply_only')
         self.assertNotIn('_continue_general', spawned)
-        self.assertIn('_auto_draft', spawned)
+        self.assertEqual(spawned, ['_replan_general'])
 
     def test_never_over_a_live_session(self):
         s = store(); tid = finished_task(s)
@@ -82,12 +83,13 @@ class CarryOnTests(unittest.TestCase):
             _out, spawned = ingested(s, mail(**AGAIN))
         self.assertNotIn('_continue_general', spawned)
 
-    def test_a_task_with_no_conversation_is_not_carried_on(self):
+    def test_a_task_with_no_conversation_starts_its_first_agent_not_a_carry_on(self):
+        # ..."no conversation to carry on" left the first real ask with no agent at all (the owner, 2026-11-09): it starts one, as a fresh task would
         s = store()
         out, _ = ingested(s, mail())
         s.update_task(out['task_id'], {'Status': 'done'}, 't')
         _out, spawned = ingested(s, mail(**AGAIN))
-        self.assertEqual(spawned, [])
+        self.assertEqual(spawned, ['_auto_general'])
 
     def test_a_coding_task_with_no_saved_session_waits_for_the_owners_continue(self):
         s = store(); tid = finished_task(s)
@@ -103,8 +105,8 @@ class CarryOnTests(unittest.TestCase):
             ingest._continue_general(s, tid)
         self.assertEqual(start.call_args.kwargs.get('actor'), 'router')
         args, kw = ses.send_prompt.call_args
-        # the news IS the turn, ahead of Resume's words, filed as Taskuary's brief (2026-11-03) - never only behind it in the instructions
-        self.assertEqual(args[0], 'NEW SINCE YOUR LAST TURN: one message\n\n' + continuity.RESUME_PROMPT)
+        # the news IS the turn, filed as Taskuary's brief (2026-11-03) - and never Resume's "the owner chose Resume": nobody pressed it (2026-11-09)
+        self.assertEqual(args[0], 'NEW SINCE YOUR LAST TURN: one message\n\n' + ingest.CARRY_ON_PROMPT)
         self.assertEqual((kw.get('brief'), 'delivery_instructions' in kw), (True, False))
         self.assertNotIn(tid, general.OPENING)
 

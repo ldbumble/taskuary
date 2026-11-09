@@ -4,6 +4,7 @@
 
 import { agentWord } from "./kinds.js";
 import { WORD } from "./lanes.js";
+import { HOLD_TAG } from "./timelineState.js";
 
 // the chip beside "Agent work" - only the two that wait on the owner wear oxblood. `finished`: its run said it was done - the chip read
 // "not started" over "finished its work" (G7, 2026-10-20); the word is the one the list and the Board give it (lanes.json agentdone)
@@ -29,3 +30,8 @@ export const hhmm = (ts) => String(ts || "").slice(11, 16);
 // whole record with its timeline behind More. With none it is the account itself - folded, its sentence.
 export const storyPlace = (story, { open, hasRecord } = {}) =>
   !story?.line ? null : hasRecord ? (open ? "record" : "summary") : open ? "story" : "line";
+
+// A START HELD FOR A NEW SENDER, said in the chat with its Run anyway (HeldStart.jsx, the owner, 2026-11-09): the story's held line, only on a
+// task wearing the new-sender hold and only while no agent ever ran on it - a hold on where the code is, or auto-start off, has its own way on
+export const heldStartOf = ({ story, tags, ran }) =>
+  !ran && story?.kind === "held" && String(tags || "").split(/[\s,]+/).includes(HOLD_TAG) ? story.line || "" : "";

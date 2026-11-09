@@ -439,6 +439,8 @@ GitHub-style Markdown checklist describing the actual requested work.
 - [x] <a id="pw-076"></a>**PW-076** Give checklist items stable identity so edits, progress, and fresh-triage
   additions do not duplicate items or reset checked boxes. Preserve owner edits;
   surface substantive changes from new messages rather than overwriting silently.
+  Amended 2026-11-09: a message that CORRECTS an open to-do ("Wednesday, not Tuesday") rewords
+  that one box (triage's `reword`, ingest.reword_todos), said on the task; it never unticks or deletes.
 - [x] <a id="pw-077"></a>**PW-077** Keep checklist progress separate from agent/session state and task completion;
   rendering or generating a checklist must not mark work done. Completion rules
   remain subject to the later lifecycle walkthrough. Amended 2026-09-18 (TQ-0626): the

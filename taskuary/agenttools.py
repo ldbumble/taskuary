@@ -204,7 +204,12 @@ TOOLS = {
 }
 ANNOTATIONS = {'read': {'readOnlyHint': True, 'openWorldHint': False}, 'own': {'readOnlyHint': False, 'destructiveHint': False},
                'propose': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}}
-# a stranger's session reaches its own task and nothing else (guard.stranger_denied) - and /mcp is not one of its doors yet
+# A STRANGER'S SESSION GETS THE OWNER'S HARMLESS TOOLS (the owner, 2026-11-09: "remind me ..." on a stranger's task came back "I can't set a
+# reminder" beside the task's own Remind me button). Its CLI conversation stays open across turns, so what it is wired with is there for the
+# stranger's words too - each tool here is one a stranger's text could have it call to no harm: it moves only this task's own clock, sends
+# nothing, reads nothing of the owner's (stranger_config's token is the task's own, guard.stranger_denied). Search is NOT here: it reads the
+# owner's other tasks and mail, which a stranger's session never sees (server._owner_history refuses it on this task whoever asks)
+STRANGER_TOOLS = ('remind', 'check_back')
 NOT_PROPOSABLE = ('merge_pr', 'close_item', 'repair_workflow', 'push_direct')     # the owner's close-out, a workflow's own repair, a push past review
 
 
@@ -471,11 +476,22 @@ def claude_config(task_id) -> str:
     from . import config, guard
     d = config.home() / 'agent-tools'; d.mkdir(parents=True, exist_ok=True)
     f = d / f'TQ-{int(task_id)}.mcp.json'
-    body = json.dumps({'mcpServers': {SERVER: {'type': 'http', 'url': url(task_id),
-                                               'headers': {'X-Taskuary-Token': '${%s}' % guard.AGENT_ENV,
-                                                           guard.TASK_HDR: '${%s}' % guard.TASK_ENV}}}}, indent=1)
+    return _config(f, {'X-Taskuary-Token': '${%s}' % guard.AGENT_ENV, guard.TASK_HDR: '${%s}' % guard.TASK_ENV}, task_id)
+def stranger_config(task_id) -> str:
+    "A stranger's session's: its token alone, which is bound to this task and is its proof (terminal.stranger_env) - STRANGER_TOOLS only."
+    from . import config, guard
+    d = config.home() / 'agent-tools'; d.mkdir(parents=True, exist_ok=True)
+    return _config(d / f'TQ-{int(task_id)}.stranger.mcp.json', {'X-Taskuary-Token': '${%s}' % guard.AGENT_ENV}, task_id)
+def _config(f, headers: dict, task_id) -> str:
+    body = json.dumps({'mcpServers': {SERVER: {'type': 'http', 'url': url(task_id), 'headers': headers}}}, indent=1)
     if not f.exists() or f.read_text(encoding='utf-8') != body: f.write_text(body, encoding='utf-8')
     return str(f)
+def stranger_args(cli: str, task_id, argv: list = ()) -> list:
+    """What a stranger's Claude session adds for STRANGER_TOOLS: our server alone (its auto mode already carries --strict-mcp-config, so none
+    of the owner's own MCP servers ride with it). Other CLIs run a stranger's task with no tools of ours, as before."""
+    if cli != 'claude' or not str(task_id or '').isdigit() or '--mcp-config' in argv: return []
+    try: return ['--mcp-config', stranger_config(task_id)]
+    except Exception as e: logger.warning(f'stranger tools not wired into task {task_id}: {e}'); return []
 
 
 def codex_args(task_id) -> list:

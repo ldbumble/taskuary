@@ -73,9 +73,22 @@ class TheServer(unittest.TestCase):
         r = c.post(f'/api/mcp?task={other}', headers=hdr(self.tid), json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
         self.assertEqual(r.status_code, 403)
 
-    def test_a_strangers_token_never_reaches_it_and_the_token_gate_covers_it(self):
-        st = {'X-Taskuary-Token': guard.stranger_token(SRV, self.tid)}
-        self.assertEqual(rpc(self.tid, 'tools/list', headers=st).status_code, 403)
+    def test_a_strangers_token_gets_only_the_harmless_tools_on_its_own_task_and_the_token_gate_covers_it(self):
+        # 2026-11-09: "remind me ..." on a stranger's task came back "I can't set a reminder" beside the task's own Remind me
+        theirs = self.s.create_task({'Title': 'Look at this', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'stranger'}, 'triage')
+        st = {'X-Taskuary-Token': guard.stranger_token(SRV, theirs)}
+        self.assertEqual(rpc(self.tid, 'tools/list', headers=st).status_code, 403)                      # never another task's
+        self.assertEqual(guard.stranger_denied('POST', '/api/mcp', {'task': str(self.tid)}, theirs, None), guard.STRANGER_WHY)
+        r = rpc(theirs, 'tools/list', headers=st)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual({t['name'] for t in r.json()['result']['tools']}, set(agenttools.STRANGER_TOOLS))
+        for name in ('search_tasks', 'search_messages', 'propose_reply', 'my_task'):
+            r = rpc(theirs, 'tools/call', {'name': name, 'arguments': {'words': 'renewal'}}, headers=st).json()
+            self.assertIn('unknown tool', r['error']['message'])
+        r = rpc(theirs, 'tools/call', {'name': 'remind', 'arguments': {'when': 'in 2 days'}}, headers=st).json()['result']
+        self.assertFalse(r['isError'], r); self.assertTrue(self.s.get_task(theirs).get('RemindAt'))
+        r = rpc(theirs, 'tools/call', {'name': 'check_back', 'arguments': {'when': 'tomorrow 9am', 'what': 'the export ran'}}, headers=st).json()['result']
+        self.assertFalse(r['isError'], r); self.assertTrue(self.s.get_task(theirs).get('CheckBackAt'))
         self.assertTrue(agenttools.url(1).split(':', 2)[2].split('/', 1)[1].startswith('api/'))   # under /api: token and origin gates apply
 
     def test_a_strangers_task_does_not_read_the_owners_mail(self):
@@ -182,7 +195,11 @@ class EverySessionGetsThem(unittest.TestCase):
         self.assertLess(args.index('--mcp-config'), args.index('-p'))           # before the options: the list is closed
         theirs = s.create_task({'Title': 'Look at this', 'Kind': 'general', 'Status': 'open', 'OriginBase': 'stranger'}, 'triage')
         with mock.patch('taskuary.origin.launch_mode', return_value='auto'):
-            self.assertNotIn('--mcp-config', turn(s, theirs)['profile']['args'])
+            args = turn(s, theirs)['profile']['args']
+        # ...a stranger's gets its own server file: its token alone, served the harmless tools (agenttools.STRANGER_TOOLS)
+        f = args[args.index('--mcp-config') + 1]
+        self.assertIn(f'TQ-{theirs}.stranger.mcp.json', f); self.assertIn('--strict-mcp-config', args)
+        self.assertNotIn(guard.TASK_HDR, open(f, encoding='utf-8').read())
 
     def test_older_agent_rules_still_hear_of_the_tools(self):
         from taskuary import terminal

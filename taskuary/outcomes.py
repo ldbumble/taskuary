@@ -38,14 +38,31 @@ def stopped(store, tid, actor: str, facts: dict = None) -> int:
     """A stop is ONE row per stretch of waiting, not one per turn: the Stop hook fires at every response's end, and a session
     the owner is typing into ends thirty of them. The row opens at the first stop and closes at the owner's next move."""
     return 0 if open_stop(store, tid) else record(store, 'agent.stopped', 'task', tid, actor, facts=facts)
+OWNER_HEAD = 'FROM THE OWNER:'
+def _resume_at():
+    import re
+    from .continuity import RESUME_PROMPT
+    return r'\s+'.join(map(re.escape, RESUME_PROMPT.split()[:5]))
+def owner_split(text) -> tuple:
+    """(what the owner typed, Taskuary's rest) of a turn Taskuary wrapped round their words - "FROM THE OWNER: <words>" with news ahead of it
+    and Resume's handover or the Assistant's addition behind, often flattened to one line by a typed seed. ('', text) when the head is not in
+    it. THE ONE READ of the owner's words in our own turns (2026-11-09: a coding chat drew "FROM THE OWNER: trynow The owner chose Resume..."
+    as the owner's line). Their words end at a blank line, Resume's handover or the Assistant's addition (general.RELAY)."""
+    import re
+    from .general import RELAY
+    s = str(text or ''); i = s.upper().find(OWNER_HEAD)
+    if i < 0: return '', s
+    rest = s[i + len(OWNER_HEAD):].lstrip()
+    while rest.upper().startswith(OWNER_HEAD): rest = rest[len(OWNER_HEAD):].lstrip()     # a wrapped turn wrapped again (seed_text)
+    m = re.search(rf'\n\s*\n|{_resume_at()}|{re.escape(RELAY)}', rest); k = m.start() if m else len(rest)
+    return ' '.join(rest[:k].split()), '\n\n'.join(x for x in (s[:i].strip(), rest[k:].strip()) if x)
 def owner_words(text: str) -> str:
     """What the owner typed, without what Taskuary typed around it: a Resume arrives as "FROM THE OWNER: <words> <the resume
     handover>", and the whole of it sat in the ledger as the owner's words - the Advisor read our own instructions back as theirs
     (2026-10-13)."""
-    from .continuity import RESUME_PROMPT
-    t = ' '.join(str(text or '').split())
-    t = t.split(' '.join(RESUME_PROMPT.split()[:5]))[0].strip()
-    return t[len('FROM THE OWNER:'):].strip() if t.upper().startswith('FROM THE OWNER:') else t
+    import re
+    t = str(text or '')
+    return owner_split(t)[0] if OWNER_HEAD in t.upper() else ' '.join(re.split(_resume_at(), t)[0].split())
 def moved_on(store, tid, words: str, where: str = 'pane'):
     """The owner's next move after a stop, in their words (a prompt typed into the pane): the open stop row closes now."""
     r = open_stop(store, tid)

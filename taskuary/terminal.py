@@ -450,7 +450,9 @@ class Term:
             while self.alive and not self.n and time.time() - start < SEED_WAIT: time.sleep(.1)
             if not self.settle(3): return                 # a breath after first output - the toe probes the rest
             self.seeded = fit_typed(text)
-            toe, rest = self.seeded[:20], self.seeded[20:]
+            # ...the toe never ends on a space: a TUI's box trims it, and "FROM THE OWNER: try now" landed "trynow" (2026-11-09)
+            cut = next((i for i in range(20, len(self.seeded)) if not self.seeded[i - 1].isspace()), len(self.seeded))
+            toe, rest = self.seeded[:cut], self.seeded[cut:]
             for attempt in range(SEED_RETRIES):
                 self.write(toe)                           # attempt > 0 = retyped: the first toe was eaten
                 end = time.time() + 12                    # generous: a loaded CI runner echoes LATE, and a
@@ -1165,6 +1167,8 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
             argv, theme = _take_settings(argv)          # one --settings: the session's own file carries the theme
             # ...and an option straight after it closes --add-dir's list, so the prompt is never read as a folder
             argv = _clis.auto_args(cli_named(profile, argv), list(argv)) + ['--add-dir', sd, '--settings', _origin.session_settings(store, task_id, theme)]
+            from . import agenttools                    # ...and the owner's harmless tools, Remind me's among them (agenttools.STRANGER_TOOLS)
+            argv = agenttools.insert(argv, agenttools.stranger_args(cli_named(profile, argv), task_id, argv))
         # TRUSTED WORK GETS TASKUARY'S OWN TOOLS, and the owner's own MCP tools minus the ones that send (the owner, 2026-10-25):
         # Claude and Codex, whose flags for both are proven (agenttools.session_args); a stranger's session keeps its strict mode
         elif mode == 'full':
@@ -1931,7 +1935,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     if not stranger and (heard := peers.take(store, tid)): parts.append(heard)
     # the owner's own words stay in the prompt (the reviewer should read them as the owner's); text a caller built from a message does not
     if instruction and instruction.strip():
-        if stranger and not instruction_theirs: parts.append(f'FROM THE OWNER: {instruction.strip()}')
+        if stranger and not instruction_theirs:
+            from .outcomes import OWNER_HEAD      # ...once: Continue's fresh road hands it already headed (server.continue_work)
+            parts.append(instruction.strip() if instruction.strip().upper().startswith(OWNER_HEAD) else f'{OWNER_HEAD} {instruction.strip()}')
         else: say(f'ASK: {fence(instruction.strip()) if instruction_theirs else instruction.strip()}', theirs_too=True)
     # A finished session can be continued with a new ask. Its PTY is gone, but its result is
     # durable task context: hand that result to the next terminal so "now make the changes" does

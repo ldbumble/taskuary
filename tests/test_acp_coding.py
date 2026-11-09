@@ -312,7 +312,7 @@ def test_a_strangers_coding_session_on_claude_keeps_its_terminal_and_its_floor(f
     a = [str(x) for x in p.argv]
     assert a[a.index('--permission-mode') + 1] == 'auto' and '--strict-mcp-config' in a and '--dangerously-skip-permissions' not in a
     assert a[a.index('--settings') + 1] == origin.session_settings(s, t)
-    assert '--mcp-config' not in a                              # Taskuary's toolbox is trusted work's only
+    assert a[a.index('--mcp-config') + 1].endswith(f'TQ-{t}.stranger.mcp.json')   # ...the owner's harmless tools only (agenttools.STRANGER_TOOLS)
 
 
 def test_a_strangers_coding_session_on_a_cli_with_no_reviewer_starts_nowhere(floor):

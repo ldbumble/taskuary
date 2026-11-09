@@ -958,6 +958,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             store.add_comment(same, 'triage', 'agent', f"Joined from {task_ref(tid)}'s thread, which is closed - same job: {follow.get('why') or ''}")
             return res
     if r['decision'] == 'attach':
+        reword_todos(store, tid, follow)         # ...a correction first, filed or not: the words it changes are on the list already
         # the follow-up's own twelve words, like a new message's - an attached row read its raw subject (X2)
         if follow and follow.get('title'): msg['_title'] = str(follow['title']).strip()[:140] or None
         # A CLOSED TASK COMES BACK ONLY WITH NEW WORK (the owner, 2026-10-15: "it should update the task description if something
@@ -1045,7 +1046,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     _spawn(_auto_draft, store, tid, behind['ReviewId'])
         if follow and follow.get('checklist'):
             # a later message that asks for something new adds boxes; nothing moves or unticks, and the
-            # change is said on the task rather than made silently (PW-076)
+            # change is said on the task rather than made silently (PW-076) - only a correction rewords an open one (reword_todos, above)
             added = store.merge_task_checklist(tid, follow['checklist'], 'triage', src=mid)
             if added: store.add_comment(tid, 'triage', 'agent', 'New from the latest message:\n' + '\n'.join(f"- [ ] {i['text']}" for i in added))
         if (follow and follow.get('intent') == 'reply_only' and not follow.get('degraded') and not talking and not follow.get('invite')
@@ -1585,6 +1586,7 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
                     verdict=_stored_verdict(intent))
     store.add_comment(tid, actor, 'agent', f"{_note_of(msg)} - the same ask, kept here")
     _retitle(store, t, msg, intent, actor, closed)
+    reword_todos(store, tid, intent)
     if intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage', src=mid)
     if intent.get('outputs'):
         from . import slots
@@ -1721,11 +1723,31 @@ def agent_on(store, tid) -> dict | None:
                               'doing': _latest(store, tid)}.items() if v}
 
 
+def open_todos(store, tid) -> list:
+    "A task's to-dos not yet done, as triage is shown them - numbered from 1 in this order, so a correction names the one it changes."
+    return [i for i in store.task_checklist(tid) if not i.get('done')][:OPEN_TODOS] if tid else []
+
+
+def reword_todos(store, tid, intent: dict) -> list:
+    """A CORRECTION REWORDS THE TO-DO IT CORRECTS (the owner, 2026-11-09: "Tuesday 10am... sorry, Wednesday" left "book Tuesday" standing beside
+    "book Wednesday"): triage's `reword` [{n, text}] names an open to-do of the task the message joins, by the number it was shown it under
+    (open_todos). Only its words change - nothing is added, ticked or removed here, and a box that ticks itself keeps its words. Said on
+    the task. [(old, new)]"""
+    from .store import agent_tickable, agent_todos
+    if not tid or not intent or intent.get('degraded') or not intent.get('reword'): return []
+    shown = open_todos(store, tid)
+    want = {shown[x['n'] - 1]['id']: (shown[x['n'] - 1]['text'], x['text']) for x in intent['reword'] if 0 < x['n'] <= len(shown)
+            and agent_tickable(shown[x['n'] - 1]) and x['text'] != shown[x['n'] - 1]['text']}
+    if not want or not agent_todos(store, tid, reword={k: new for k, (_, new) in want.items()}, actor='triage').get('ok'): return []
+    store.add_comment(tid, 'triage', 'agent', 'Changed by the latest message:\n' + '\n'.join(f'- {a} -> {b}' for a, b in want.values()))
+    return list(want.values())
+
+
 def with_agent(store, w: dict) -> dict:
     """A task triage may join `w` ({tid, ...}), with the agent on it (agent_on) and its open to-dos: what tells a follow-up to that
     exact work from a different ask that gets its own task and agent. A brief that is the task's own ask is not said twice."""
     tid = w.get('tid')
-    todos = [i['text'][:160] for i in store.task_checklist(tid) if not i.get('done')][:OPEN_TODOS] if tid else []
+    todos = [{'n': n, 'text': i['text'][:160]} for n, i in enumerate(open_todos(store, tid), 1)]
     ag = agent_on(store, tid) if tid and w.get('status') != 'closed' else None
     if ag and w.get('ask') and ag.get('brief') and w['ask'].startswith(ag['brief'][:120]): ag = {k: v for k, v in ag.items() if k != 'brief'}
     return {**w, **({'agent_on_it': ag} if ag else {}), **({'open_todos': todos} if todos else {})}

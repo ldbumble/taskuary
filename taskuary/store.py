@@ -2411,7 +2411,7 @@ class SQLiteStore:
         self._write_checklist(task_id, items, actor)
         return items
     def merge_task_checklist(self, task_id, texts, actor: str, src=None) -> list:
-        """Add the items a later message brings; nothing existing moves or unticks. Returns the new ones, each with `src`, the
+        """Add the items a later message brings; nothing existing moves or unticks (a correction rewords one: ingest.reword_todos). Returns the new ones, each with `src`, the
         message that brought it, when one did."""
         items = self.task_checklist(task_id)
         have, used_ids, new = {i['text'] for i in items}, {i.get('id') for i in items}, []

@@ -49,10 +49,12 @@ def test_the_chat_is_warmed_with_the_process_its_first_ask_takes(fast_fake):
 
 
 def test_warm_does_nothing_for_an_api_brain_or_a_cli_that_keeps_no_conversation(fast_fake):
-    s = _store(); s.set_setting(concierge.AI_KEY, 'connector:1', 't')
-    assert concierge.warm(s, wait=True) is False
-    s = _store(); s.upsert_agent('claude', 'general', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))   # no stream-json: one shot per call
-    assert concierge.warm(s, wait=True) is False
+    from taskuary import config
+    with mock.patch.object(config, 'load', return_value={}):    # a CLI another test left in the loaded config is not this store's
+        s = _store(); s.set_setting(concierge.AI_KEY, 'connector:1', 't')
+        assert concierge.warm(s, wait=True) is False
+        s = _store(); s.upsert_agent('claude', 'general', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))   # no stream-json: one shot per call
+        assert concierge.warm(s, wait=True) is False
     assert clipool.live() == [] and _pids(fast_fake) == []
 
 

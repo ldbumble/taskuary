@@ -54,7 +54,7 @@ class ShippedWordingTests(unittest.TestCase):
 
     def test_the_seed_says_it_too_when_pushing_is_off(self):
         s = MemoryStore(); tid = s.create_task({'Title': 'Ship the export fix', 'Kind': 'coding', 'Status': 'open'}, 'o')
-        self.assertIn("must it go live? propose_land (how push, deploy <branch>) puts it on the owner's button", terminal.seed_text(s, tid))
+        self.assertIn("to go live, propose_land (how push, deploy <branch>) - never ask it in words", terminal.seed_text(s, tid))
 
     def test_the_migration_says_what_the_templates_say(self):
         self.assertIn(store_mod._DEPLOY_NOW, CODING)

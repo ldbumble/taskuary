@@ -2,7 +2,7 @@
 computer runs the bridge's install: no Node, or Node without Git (Baileys fetched libsignal through git). The failure lived only
 on the card in npm's own words, the app log had no line of it, every status poll spent Windows' 2 s refused-connect retry, and
 the card's chat list answered a raw 409 that the Assistant's bug report filed."""
-import json, unittest
+import json, os, unittest
 from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
@@ -60,6 +60,7 @@ class NoNodeTests(Base):
         self.assertTrue(st.call_args.kwargs['fetch_node']); self.assertTrue(rs.call_args.kwargs['fetch_node'])
 
 
+@unittest.skipUnless(os.name == 'nt', 'the portable Node road is for the Windows exe')
 class PortableNodeTests(Base):
     """noderuntime: the official zip, its sha256 checked, unpacked under the data folder - no installer, no administrator."""
     def zipped(self, a):
@@ -100,6 +101,7 @@ class PortableNodeTests(Base):
         self.assertEqual(noderuntime.asset('Windows', 'x86'), '')
 
 
+@unittest.skipUnless(os.name == 'nt', 'the portable Node road is for the Windows exe')
 class NpmTests(Base):
     def test_no_git_is_said_plainly_not_as_npm_debug_lines(self):
         why = wabridge.npm_why(NPM_NO_GIT)

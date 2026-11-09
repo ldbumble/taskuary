@@ -85,7 +85,7 @@ class DevPhoneTests(unittest.TestCase):
             land.assert_not_called()                                           # the model naming `how` lands nothing
             self.assertIn('How should it land?', said)
             picks = devphone.take()
-            self.assertEqual([a['how'] for _, a in picks], ['rebase', 'merge', 'pr', 'discard'])
+            self.assertEqual([a['how'] for _, a in picks], list(landing.HOW))           # every way the card offers, push and deploy too
             labels, acts = [l for l, _ in picks], dict(picks)
             self.assertEqual(devphone.typed('merge commit', labels, acts)['how'], 'merge')       # typed instead of tapped: the same pick
             self.assertIsNone(devphone.typed('just do whatever', labels, acts))

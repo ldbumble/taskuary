@@ -299,6 +299,8 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         if stranger_mode == 'auto':
             # its folder is its cwd already; --add-dir says so to Claude whatever cwd a resume or a profile brings (R25)
             prof['args'] = clis.auto_args(c, args) + ['--add-dir', sd, '--settings', origin.session_settings(store, task_id)]
+            from . import agenttools                    # ...and the owner's harmless tools, Remind me's among them (agenttools.STRANGER_TOOLS)
+            prof['args'] = agenttools.insert(['', *prof['args']], agenttools.stranger_args(hub_agents.cli_of(prof, agent_name), task_id, prof['args']))[1:]
             prof['acp_ok'] = False      # the reviewer rides argv; ACP's own permission answer allows everything
         elif stranger_mode == 'look': prof['args'], prof['acp_ok'] = clis.readonly_args(c, args), False     # its floor is argv's too
         if stranger_mode in ('auto', 'look'):

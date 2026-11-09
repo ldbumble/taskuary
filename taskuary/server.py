@@ -5899,7 +5899,7 @@ def agent_sign_form(body: AgentSignBody, request: Request):
 @app.post('/api/mcp')
 async def mcp_rpc(request: Request, task: int = 0):
     """Taskuary's tools as an MCP server (agenttools) for the session on `task` - its agent token and task proof in the headers, which
-    the middleware already read: a stranger's token never gets here (guard.stranger_denied), and every door below checks the task is
+    the middleware already read: a stranger's token only on its own task, served STRANGER_TOOLS alone, and every door below checks the task is
     the session's own. JSON-RPC answered as plain JSON; a notification gets 202. Reads of the owner's history refuse a stranger's task."""
     from . import agenttools
     try: msg = await request.json()
@@ -5940,6 +5940,8 @@ async def mcp_rpc(request: Request, task: int = 0):
     from .general import GENERAL_KINDS
     skip = (agenttools.REPLY_TOOLS if no_correspondent(store, task) else ()) + (
         agenttools.CODING_TOOLS if (store.get_task(task) or {}).get('Kind') in GENERAL_KINDS else ())
+    # ...a stranger's session is served the owner's harmless tools and nothing else (agenttools.STRANGER_TOOLS)
+    if guard.scope_of(cfg['server'], request.headers) == guard.STRANGER: skip = tuple(n for n in agenttools.TOOLS if n not in agenttools.STRANGER_TOOLS)
     def one(m): return agenttools.rpc(m, run, skip) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
     out = await run_in_threadpool(lambda: [r for r in map(one, msg if isinstance(msg, list) else [msg]) if r is not None])   # the doors are sync
     if not out: return Response(status_code=202)

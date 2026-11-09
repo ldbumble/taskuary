@@ -1167,6 +1167,8 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
             argv, theme = _take_settings(argv)          # one --settings: the session's own file carries the theme
             # ...and an option straight after it closes --add-dir's list, so the prompt is never read as a folder
             argv = _clis.auto_args(cli_named(profile, argv), list(argv)) + ['--add-dir', sd, '--settings', _origin.session_settings(store, task_id, theme)]
+            from . import agenttools                    # ...and the owner's harmless tools, Remind me's among them (agenttools.STRANGER_TOOLS)
+            argv = agenttools.insert(argv, agenttools.stranger_args(cli_named(profile, argv), task_id, argv))
         # TRUSTED WORK GETS TASKUARY'S OWN TOOLS, and the owner's own MCP tools minus the ones that send (the owner, 2026-10-25):
         # Claude and Codex, whose flags for both are proven (agenttools.session_args); a stranger's session keeps its strict mode
         elif mode == 'full':

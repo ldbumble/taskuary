@@ -292,7 +292,8 @@ def stranger_tid(server: dict, presented) -> int | None:
 # the token's own task, so it never reaches another session's seed (blackboard.live_notes, wave B). Not the Hub, the data
 # tools or a report rerun: each of those reaches past its own task.
 _STRANGER_WRITES = (re.compile(r'^/api/hooks/[a-z]+$'), re.compile(r'^/api/agent/(reply|done|draft|item|tick|waiting|not-needed|withdraw-draft)$'), re.compile(r'^/api/board/notes$'))
-_STRANGER_TASK_HOOK = re.compile(r'^/api/hooks/claude/(floor|permit)$')
+# ...and Taskuary's tools on its own task alone (server.mcp_rpc serves it agenttools.STRANGER_TOOLS only, 2026-11-09)
+_STRANGER_TASK_HOOK = re.compile(r'^/api/(hooks/claude/(floor|permit)|mcp)$')
 _STRANGER_FILE = re.compile(r'^/api/(attachments|task-artifacts)/(\d+)$')
 STRANGER_WHY = "a session working a stranger's task reaches its own task and nothing else"
 STRANGER_TASK_READS = ('history', 'worker', 'proof', 'work', 'diff', 'record', 'waitroom')   # each answers for this task only

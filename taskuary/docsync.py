@@ -58,38 +58,40 @@ def sync_connections(store, actor='system'):
         cfg = json.loads(s.get('ConfigJson') or '{}')
         sched = reports.schedule_words(cfg)
         lines.append(f"- Report \"{cfg.get('title') or s['Address']}\" ({cfg.get('type', 'rest')}, {sched})")
-    # the tool role is only real if the agents know how to reach it - spell out the call
-    if any('tool' in roles_of(c) for c in store.list_connectors() if c['Active']):
-        from . import apireads, config
+    # the tool role is only real if the agents know how to reach it - spell out the call, with the types THIS install's cards run.
+    # It listed the whole registry - some 200 types (QuickBooks, Epic, Stripe...) to an owner who had connected WhatsApp - and
+    # `.replace('{auth}', ...)` bound to the last literal only, so the agents read a literal {auth} in the URL (the 2026-11-08 audit, F8)
+    if (have := tool_cards(store)):
+        from . import config
         srv = config.load().get('server') or {}
         auth = ' (header X-Taskuary-Token)' if srv.get('token') else ''
-        lines.append(f"- To USE one of the systems above, POST http://{srv.get('host', '127.0.0.1')}:{srv.get('port', 7787)}"
-                     '/api/tools/run{auth} with {"type": "mssql|database|aws|s3_object|cloudwatch_logs|'
-                     'azure|azure_blob|azure_logs|winrm|mcp|rest|sqlite|rss|kb_search|'
-                     # intacct was reachable all along (the card carries the tool role by default) and
-                     # was the one system this list never named, so the only road an agent could SEE
-                     # to the ERP was "get a report pipeline saved first"
-                     'intacct|intacct_fields|quickbooks|quickbooks_vendors|quickbooks_accounts|teller_accounts|teller_transactions|teller_balances|teller_spend|simplefin_accounts|simplefin_transactions|simplefin_balances|simplefin_spend|amazon_report|amazon_sales_traffic|amazon_orders|amazon_inventory|amazon_settlement|amazon_marketplaces|amazon_business_transactions|amazon_invoice_pdf'
-                     '|stripe_balance|stripe_balance_transactions|stripe_charges|stripe_payments|stripe_payouts|stripe_refunds|'
-                     'stripe_disputes|stripe_customers|stripe_subscriptions|stripe_invoices'
-                     '|yahoo_quotes|yahoo_history|edgar_filings|edgar_facts|coingecko_prices|alchemy_prices|alchemy_wallet|fx_rates|'
-                     'td_quotes|td_indicator|av_quotes|fred_series|markets_screen|'
-                     'finnhub_quotes|finnhub_news|finnhub_earnings|finnhub_insiders|'
-                     'polygon_bars|polygon_snapshot|tiingo_history|tiingo_news|marketstack_eod|eodhd_eod|dynamodb|mongodb|redis|neo4j|obsidian_read|' + '|'.join(f'{t}_read' for t in apireads.types()) + '|'
-                     'fmp_fundamentals|fmp_ratios|alpaca_quotes|alpaca_bars", ...} — '
-                     'saved credentials are filled in for you; if several cards have that type, pass '
-                     '"connector_id": <the id named above>; the raw output comes back. '
-                     # the writes exist and are named, and the road to them is the proposal - an agent
-                     # that finds no way to post a bill invents one
-                     'WRITES to the books (quickbooks_bill, quickbooks_expense) are never yours to run directly: '
-                     'propose one - TASKUARY-PROPOSE {"action": "run_tool", "type": "quickbooks_bill", "vendor": ..., '
-                     '"amount": ..., "account": ..., "date": ..., "memo": ..., "doc_number": ...} in your session - '
-                     'and the owner approves it on the task.'.replace('{auth}', auth))
+        kinds = '|'.join(sorted({k for _, ks in have for k in ks}))
+        books = ' WRITES to the books (quickbooks_bill, quickbooks_expense) are never yours to run directly: propose one - TASKUARY-PROPOSE ' \
+                '{"action": "run_tool", "type": "quickbooks_bill", "vendor": ..., "amount": ..., "account": ..., "date": ..., "memo": ..., ' \
+                '"doc_number": ...} in your session - and the owner approves it on the task.' if any(c['Type'] == 'quickbooks' for c, _ in have) else ''
+        lines.append(f"- To USE one of the systems above, POST http://{srv.get('host', '127.0.0.1')}:{srv.get('port', 7787)}/api/tools/run{auth} "
+                     f'with {{"type": "{kinds}", ...}} - saved credentials are filled in for you; if several cards have that type, pass '
+                     f'"connector_id": <the id named above>; the raw output comes back.{books}')
     block = '\n'.join(lines) or '_(no connections yet — add them in the Connections tab)_'
     head, rest = doc.split(CONN_START, 1)
     _, tail = rest.split(CONN_END, 1)
     new = f'{head}{CONN_START}\n{block}\n{CONN_END}{tail}'
     if new != doc: store.save_doc('soul', new, actor)
+
+
+def _kinds(c):
+    "The TOOL types a card runs, by name - never the card's own type when its tools are named apart from it (agent_systems)."
+    from .reports import REGISTRY, card_of
+    return sorted(t for t in REGISTRY if card_of(t) == c['Type'] and not t.startswith('_'))
+
+def tool_cards(store) -> list:
+    "[(card, its tool types)] for every card that is on, an agent tool, and runs at least one tool."
+    from .store import roles_of
+    return [(c, k) for c in store.list_connectors() if c['Active'] and 'tool' in roles_of(c) and (k := _kinds(c))]
+
+def data_cards(store) -> list:
+    "The tool cards that hold the owner's own data - every one but the Hub's, which is notes, not figures (general.NUMBER_LINE)."
+    return [c for c, _ in tool_cards(store) if c['Type'] != 'handbook']
 
 
 def agent_systems(store) -> str:
@@ -104,8 +106,7 @@ def agent_systems(store) -> str:
     # is `handbook` and its tools handbook_search/..., so "type handbook" came back "unknown tool type" (2026-10-05). A card with
     # no tool at all is not listed as one: the Gmail card read "tools: gmail" and the agent sending from it got "unknown tool type:
     # gmail" (TQ-1354) - a mailbox is sent FROM with propose_email, named below
-    def kinds(c): return sorted(t for t in REGISTRY if card_of(t) == c['Type'] and not t.startswith('_'))
-    tools = [(c, k) for c in store.list_connectors() if c['Active'] and 'tool' in roles_of(c) and (k := kinds(c))]
+    tools = tool_cards(store)
     boxes = mailboxes(store)
     mail = ('MAILBOXES you can send FROM (an email waits for the owner\'s Send): ' + ', '.join(f"{m['address']} ({m['kind']})" for m in boxes)
             + ' - propose_email with `from` set to one (taskuary --draft ... --from <address>); they are not run_system tools.') if boxes else ''

@@ -28,6 +28,10 @@ def answered(s, tid, did, on_you=()):
 # ── the brief ───────────────────────────────────────────────────────────────────────────────
 def test_the_brief_carries_the_ladder_the_work_line_and_the_override():
     s = MemoryStore(); system = general._prompt(s, task(s))[0]
+    # the override rides only for an AGENT.md copy that still tells a worker to run --done: the shipped one no longer does (2026-11-09)
+    assert general.GENERAL_OVER not in system
+    s.save_doc('agent', (s.doc('agent') or '') + '\n- When the work is over, run `taskuary --done "<one sentence>"`.', 'owner')
+    system = general._prompt(s, task(s))[0]
     for want in (general.WORK_LINE, general.GENERAL_OVER, 'more than twice', 'three genuinely different ways', 'one line per way you tried',
                  'WHILE A QUESTION WAITS, KEEP WORKING', 'CHECK EACH STEP BEFORE THE NEXT', 'DONE MEANS THE GOAL IS MET AND CHECKED'):
         assert want in system, want
@@ -38,8 +42,9 @@ def test_agent_md_no_longer_tells_a_general_agent_to_stop_hunting_wait_or_close(
     text = (TEMPLATES / 'agent.md').read_text(encoding='utf-8')
     for gone in ('Do not go hunting for the task', 'stay at the prompt until the answer comes', 'Do not widen the job'):
         assert gone not in text, gone
-    assert 'A general assistant never\n  closes its task' in text and "When a coding session's work is over" in text
-    assert 'taskuary --done' in text                       # ...the coding road is unchanged
+    # ...and `--done` is a coding session's alone, so it lives in CODING.md; the general agent hears who closes from owner_closes_line
+    assert '--done' not in text and '--done' in (TEMPLATES / 'coding.md').read_text(encoding='utf-8')
+    assert 'taskuary --done' in (TEMPLATES / 'coding.md').read_text(encoding='utf-8')      # ...the coding road is unchanged
 
 
 def test_the_windows_are_large():

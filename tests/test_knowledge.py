@@ -200,7 +200,7 @@ class ApiTests(unittest.TestCase):
         card = next(x for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'knowledge')
         self.assertEqual((card['Name'], card['Roles']), ('Knowledge base', 'report,tool'))
         from taskuary import docsync
-        self.assertIn('rss|kb_search', Path(docsync.__file__).read_text(encoding='utf-8'))   # the SOUL.md tool line names the type
+        self.assertIn('kb_search', docsync._kinds(card))     # the SOUL.md tool line names the type while the card is on (tool_cards)
 
 
 if __name__ == '__main__': unittest.main()

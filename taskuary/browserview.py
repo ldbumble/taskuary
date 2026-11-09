@@ -758,6 +758,22 @@ def brief(held: bool = True, open_now: bool = True) -> str:
             'touching the tab throws away what they have typed. Their answer is what tells you to look.')
 
 
+# A BROWSER OFFERED IS A LINE, ITS RULES A GUIDE (2026-11-09, the owner: "the tools should be progressive disclosure"): the whole brief
+# rode on every task an agent MIGHT open a page on - 4,500 characters on a WhatsApp bug report. The offer keeps what must hold from the
+# first command (only this browser, no password or CAPTCHA, the last press) and names the guide; the rest is read when a page is needed.
+GUIDE_LINE = ('Before your first browser command, read the guide `browser` (the guide tool, or `taskuary --guide browser`): how to look '
+              'at a page, sign in, and hand the owner a step only they can do. NEVER type a password, a 2FA code or a card number, and never '
+              'solve or work around a CAPTCHA. ')
+
+def offer(held: bool = True) -> str:
+    "The browser OFFERED, short: brief()'s head and the rules that hold from the first command, the rest in guide()."
+    return OFFER_HEAD + OWN_ONLY + GUIDE_LINE + (HOLD_LINE if held else ASK_FIRST_LINE)
+
+def guide() -> str:
+    "How to drive the browser - brief() without its head, and without the hold line, which the offer says for this session's own hook."
+    return "TASKUARY'S BROWSER - how to drive it\n" + brief(open_now=False)[len(OFFER_HEAD):].replace(HOLD_LINE, '')
+
+
 def hint() -> str:
     """One line for the seed, only when the tool is installed: an agent has to be TOLD the browser
     exists and that the owner is watching it - and told that credentials are typed by the owner,

@@ -356,12 +356,15 @@ SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"abou
                 f'else leave it out>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. You are talking TO the owner in their own chat: say "you" and "your", never their name or '
                 f'"they" ("You asked...", "This is ready for your Mark done") - above the block and in it. A drafted reply is '
                 f'already its own card with Send under Next steps, and so is a post or any act you proposed; a question you ask is shown on its own: none '
-                f'is ever an on_you step - on_you is only what is truly the owner\'s, with why. When you '
+                f'is ever an on_you step - on_you is only what is truly the owner\'s, with why. A draft\'s Send card IS the confirmation: never '
+                f'also ask "shall I send?", "anyone else to copy?" or "does this look right?". When you '
                 f'need the owner, say what you got and what you are unsure about in one or two plain sentences above it; offer choices '
                 f'(through [[TASKUARY-ASK]]) only when there are real ones. When the owner\'s newest message CORRECTS you, add "corrections": '
                 f'[{{"kind": "redraft" (their words for the draft) or "ask" (you read what the task wants wrongly), "review": <the draft\'s id or null>, '
                 f'"said": "<what they corrected, in their words where you can>"}}] - never show them as anything. The three parts are for a real ask. '
-                f'When what came in needs nothing from you or the owner - you judge that from the thread, not from its wording alone - the whole turn is '
+                f'When what came in needs nothing from you or the owner - you judge that from the thread, not from its wording alone; in a group chat '
+                f'that is banter, a question someone else already answered, or a reply that would only say "ok", "thanks" or "nice" (there you are a '
+                f'participant, not the owner\'s voice) - the whole turn is '
                 f'ONE plain line saying what it was ("Ray thanked you."), and the block is {SUMMARY_OPEN}{{"did": "<that same line>", "about": "", '
                 f'"on_you": []}}{SUMMARY_CLOSE}: no draft, no new research, and the draft already waiting is left as it is, never written again.')
 _SUMMARY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?SUMMARY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?SUMMARY\s*\]\]', re.I | re.S)
@@ -561,8 +564,8 @@ def tick_markers(text: str) -> tuple:
 ASK_MARKER = '[[TASKUARY-ASK]]'
 _ASK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?\s*(.*)', re.I | re.S)
 ASK_LINE = (f'ASKING THE OWNER: when you cannot continue without their answer, end your reply with a final line: '
-            f'{ASK_MARKER} <the exact question>. The owner answers it in their own words. Several questions: one such line each, '
-            f'at the end. Taskuary shows them as questions waiting for them and brings their answers back to you together. '
+            f'{ASK_MARKER} <the exact question>. The owner answers it in their own words. One a turn: the question the rest hangs on, '
+            f'with your recommended answer in it. Taskuary shows it as a question waiting for them and brings their answer back to you. '
             f'Only for a real blocker, never for a rhetorical question - and never after you have answered: a part you could not '
             f'do is said in the answer (what you could not check and what would let you), not asked as a question.')
 

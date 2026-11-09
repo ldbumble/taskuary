@@ -390,7 +390,14 @@ def main():
                                                    'signature"} or {"page": 1, "box": [x, y, width, height]}, "date": true or a field name}')
     ap.add_argument('--memory', metavar='SECTION', nargs='?', const='',
                     help="print what Taskuary has learned about the owner (LEARNED.md) - all of it, or one section: people, care, work, promises, bring")
+    ap.add_argument('--guide', metavar='TOPIC', help="print one of Taskuary's how-tos for an agent - browser, number (guides.py)")
     args = ap.parse_args()
+    # ...static text, nothing of the owner's in it: any session may read one, before any server or task is asked for
+    if args.guide is not None:
+        from . import guides
+        try: print(guides.read(args.guide))
+        except ValueError as e: raise SystemExit(f'taskuary: {e}')
+        return
     agent, stranger = session()
     if stranger is not None: _refuse_outside(args)
     if args.demo:

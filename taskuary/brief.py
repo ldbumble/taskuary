@@ -48,20 +48,30 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
 BACKGROUND_DOCS = (('soul', 'SOUL.md - who the owner is, their people, systems and repositories'),
                    ('job', "JOB.md - the owner's job: what they own, who they serve, what matters"))
 TRIAGE_ONLY = ('what counts as a task',)
+# ...and what a GENERAL agent is handed elsewhere, said once (2026-11-09): AGENT.md carries "inbound text is data"; YOUR SYSTEMS
+# (docsync.agent_systems) the systems and how to call them; THE OWNER'S REPOSITORIES (general.repos_block) the repository map
+GENERAL_HAS = ('inbound text is data, not instructions', 'connected systems', 'project relationships', 'repository map')
+# a line that is only a placeholder a document ships with - "_(none named yet)_", "- (Write it here ...)" - says nothing about the owner
+_PLACEHOLDER = r'^\s*(?:[-*]\s*)?_?\(.*\)_?\s*$'
 
 
-def background(store, chars: int = 9_000, workstream: str = None) -> str:
+def background(store, chars: int = 9_000, workstream: str = None, drop=()) -> str:
     """SOUL.md and JOB.md as one background block, comments stripped and triage's own section dropped. '' when both are empty.
-    `workstream`: the task's - JOB.md keeps that workstream's section and leaves out the others' (workstreams.job_view, 2026-11-01)."""
+    `workstream`: the task's - JOB.md keeps that workstream's section and leaves out the others' (workstreams.job_view, 2026-11-01).
+    `drop`: more sections (by lowercased heading) the caller's worker reads elsewhere (GENERAL_HAS). A placeholder line goes, and so
+    does a heading left with nothing under it."""
     import re
     from .workstreams import job_view
-    out = []
+    out, skips = [], (*TRIAGE_ONLY, *drop)
     for name, what in BACKGROUND_DOCS:
         text = job_view(store, workstream) if name == 'job' and workstream else re.sub(r'<!--.*?-->', '', str(store.doc(name) or ''), flags=re.S)
         keep, skip = [], False
         for line in text.splitlines():
-            if re.match(r'^#{1,3} ', line): skip = line.strip('# ').strip().lower() in TRIAGE_ONLY
-            if not skip: keep.append(line)
+            if re.match(r'^#{1,3} ', line): skip = line.strip('# ').strip().lower() in skips
+            if not skip and not re.match(_PLACEHOLDER, line): keep.append(line)
+        # ...a heading with only blank lines before the next heading (or the end) is dropped with them
+        keep = [l for i, l in enumerate(keep) if not (re.match(r'^#{2,3} ', l) and all(
+            not x.strip() for x in next((keep[i + 1:j] for j in range(i + 1, len(keep)) if re.match(r'^#{1,3} ', keep[j])), keep[i + 1:])))]
         body = re.sub(r'\n{3,}', '\n\n', '\n'.join(keep)).strip()
         if body: out.append(f'## {what}\n{body[:chars]}')
     # ...and what About you saved, which no doc carries: an agent asked for the job title the owner had typed in (the email walk, 2026-10-29)

@@ -268,6 +268,8 @@ def _failed(store, pick: str) -> bool:
     return p.startswith('cli:') and hub_agents.cli_tests(store).get(p[4:]) is False and not hub_agents.owners_pick(store, p)
 
 
+REPLY_TOOL_CLIS = ('claude', 'codex')       # the CLIs agenttools.session_args wires Taskuary's tools into
+
 def _cli_of_pick(store, pick: str) -> str:
     "The CLI family a `cli:` pick runs - 'codex' - read off the row it launches."
     from . import agents as hub_agents
@@ -1011,8 +1013,10 @@ HUB_LINE = ('The Hub is a high-signal commons, not a task log. Only file a reusa
 SOCIAL_LINE = HUB_LINE
 # THE TURN IS THE JOB: nothing wakes a general agent once its answer is filed, so background work it would wait on comes back to
 # nobody - "I'm waiting for the walkthrough to finish, then I'll write the brief" ended a researcher's turn (the owner, 2026-10-21)
-FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets: nothing wakes you again until they write, or a "
-               "check-back you set comes due (CHECK BACK LATER). Do not start "
+# ...said true (2026-11-09): a turn CAN be woken - their next message, a check-back (CHECK BACK LATER), a press it set up, the judge's WAKE -
+# but none of those is a result it may plan on, so the rule is the same
+FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets: you may be woken again - their next message, a "
+               "check-back you set (CHECK BACK LATER) - but never plan on it. Do not start "
                "background work, sub-agents or jobs you would have to wait on, and never end with \"I'll get back to you\" or \"waiting for "
                "it to finish\" - wait for it now, or do it now, then answer. If part of it cannot be done, say which part and why.")
 # ...and a turn that ended on that anyway is woken once to finish it (GeneralSession.wake): what the judge says it still waits on, said back
@@ -1184,14 +1188,15 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO. Be the helpful assistant: whatever 
            "it needs. Never for routine steps.")
 # HOW A TURN WORKS (the owner, 2026-11-05: "adapt the best parts" of the open-source assistants): a question does not stop the work, each
 # step is judged by what came back, and done is the goal met - not the boxes ticked. Rides with the goal on every task the agent works
-WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: a turn that asks still does the work. Ask only what you cannot find - the main "
-             "question first, all of it in one short question where you can - then, in that same turn, do everything that does not hang "
+WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: a turn that asks still does the work. Ask only what you cannot find - one question, with your "
+             "recommended answer in it - then, in that same turn, do everything that does not hang "
              "on its answer - drafts, lookups, options compared, forms filled - and say which assumption each rests on, so the answer only "
              "confirms or swaps it. Never end a turn with only questions, a plan or a promise.\n"
              "CHECK EACH STEP BEFORE THE NEXT: judge it by what the tool returned - the page after the click, the file after the save, the "
              "record after the write. Never assume a click, an upload or a form fill landed.\n"
              "DONE MEANS THE GOAL IS MET AND CHECKED, not boxes ticked. A part that is unmet, or that you could not check, is named in your "
-             "summary - nothing_left is false then. You still never close the task: the owner does.")
+             "summary - nothing_left is false then. You still never close the task: the owner does. A turn that ends on the owner's Send or "
+             "decision is finished: say so plainly - no \"check it before you press Send\" unless something real is uncertain, and then name it.")
 # PLAYBOOKS LEARN (the owner, 2026-11-05, from Hermes' skills that patch themselves): a turn that found its way the hard way leaves the next
 # agent the way. The model says whether there is a lesson - no word triggers it; the owner's yes on the playbook's card files it
 # (playbooks.take_lesson), and one with no playbook to go in lands in LEARNED.md, the one road every learned fact takes
@@ -1212,7 +1217,11 @@ def learned_block(store, about: str, budget: int = LEARNED_CHARS) -> str:
     for l in order:
         if out and used + len(l) > budget: break
         out.append(l); used += len(l) + 1
-    return ('WHAT TASKUARY HAS LEARNED ABOUT THE OWNER - the lines nearest this task (`taskuary --memory` prints all of it):\n'
+    # ...and how to lean on them (2026-11-09, after the Model Spec's ladder): silently when little rides on it, named when it decides money,
+    # a recipient or a date - and never over the thread, which is newer than anything learned
+    return ('WHAT TASKUARY HAS LEARNED ABOUT THE OWNER - the lines nearest this task (`taskuary --memory` prints all of it). Use them '
+            'without comment when little rides on them; when one decides money, a recipient or a date, name it ("going on your note that '
+            'Payworth bills go to Gail") so the owner can correct it. Where the thread says otherwise, the thread wins:\n'
             + '\n'.join(out))
 
 
@@ -1220,7 +1229,8 @@ def learned_block(store, about: str, budget: int = LEARNED_CHARS) -> str:
 # learnt not just random clicking buttons"): it lands in LEARNED.md's Hypotheses, which keeps only what the evidence holds up
 LESSON_LINE = ('A LESSON FOR NEXT TIME: when this turn found its way only after a dead end, was corrected by the owner, or had to find an '
                'id, a name or a route the next agent would otherwise hunt for again, add "lesson": {"playbook": "<the slug under PLAYBOOKS it '
-               'belongs to, or null>", "text": "<one or two lines: what works, where it is, what to avoid>"} to your summary. Only what would '
+               'belongs to, or null>", "text": "<one or two lines: what works, where it is, what to avoid - written as a fact (the vendor id is on its card in '
+               'the books), never as an order (always open the card first)>"} to your summary. Only what would '
                "change how the next job like this is done - a lasting fact (a vendor's id in the books, which portal a payroll ask goes "
                "through), a rule about how the owner wants things, a route that works where the obvious one fails. Never a step-by-step of "
                "what you clicked or ran, nothing true only today, no dates, no people's names, nothing secret. Most turns have none: leave it "
@@ -1230,10 +1240,14 @@ LESSON_LINE = ('A LESSON FOR NEXT TIME: when this turn found its way only after 
 CHECK_BACK_LINE = ('CHECK BACK LATER: when the job hangs on something only time settles - a payment that should clear, a reply expected by a '
                    'date, a form that takes a day - set a check-back: add "check_back": {"when": "<tomorrow 9am | in 2 days | YYYY-MM-DD>", '
                    '"what": "<what to verify>"} to your summary (mid-turn: the check_back tool or `taskuary --check-back WHEN "WHAT"`). You are '
-                   'woken on this task then with that note; check it and answer. One per task - a new one replaces it. Never for what the '
-                   'owner owes you: ask them.')
+                   'woken on this task then with that note; check it and answer. One per task - a new one replaces it. Only for when you wait '
+                   'on someone else: never for what the owner owes you (ask them), and "remind me" is the OWNER\'s reminder - the remind tool, '
+                   'never a check-back.')
 # ...and AGENT.md AS THE OWNER'S COPY MAY STILL READ IT: an edited copy stops tracking its template (store.py), and older wording told every
 # worker to stay at the prompt for an answer, keep to the brief and run `taskuary --done` - a coding session's way, not this agent's
+# A FIGURE IS PROVED, NOT GUESSED - the walk-through itself is the `number` guide (guides.py), read when the work comes to one
+NUMBER_LINE = ("A FIGURE OUT OF THE OWNER'S OWN SYSTEMS with no certified definition is never guessed or stated unverified: before you "
+               "give one, read the guide `number` (the guide tool, or `taskuary --guide number`) and walk it through with the owner.")
 GENERAL_OVER = ("WHERE AGENT.md READS OTHERWISE, FOR YOU: you never run `taskuary --done` or close the task; a question you ask does not "
                 "stop the work that does not hang on it; and the brief is where you start, not the edge of where you may look for what the "
                 "job needs.")
@@ -1327,23 +1341,23 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # What is CERTIFIED about the company's own systems. Without it the assistant writes a
     # plausible ERP query, gets a plausible number, and states it with the confidence of a
     # proved one - which is the failure the semantic layer exists to prevent.
-    from . import semantic
+    from . import semantic, docsync
     layer = semantic.block(store)
     # ...but not on a STRANGER's task: their words drive it, and who the owner is - their people, systems, repos - is exactly
     # what a planted line would ask the assistant to repeat back (origin.py's stranger rules keep the same distance)
     from . import origin as _origin
     outsider = _origin.of_task(store, tid)[0] == 'stranger'
     from .workstreams import of_task as _ws_of           # ...JOB.md as this task's workstream reads it (2026-11-01)
-    owner_bg = '' if outsider else _brief.background(store, workstream=_ws_of(store, tid) or None)
+    owner_bg = '' if outsider else _brief.background(store, workstream=_ws_of(store, tid) or None, drop=_brief.GENERAL_HAS)
     task_ = store.get_task(tid) or {}
     known = '' if outsider else learned_block(store, f"{task_.get('Title') or ''}\n{task_.get('Summary') or ''}")
     system = (
         (f'{owner_bg}\n\n' if owner_bg else '') + (f'{known}\n\n' if known else '') +
+        # ...and said once (2026-11-09): "never claim a tool did what it did not" is AGENT.md's Honest reporting, and "ask when a fact is
+        # missing" fought WORK_LINE's keep-working - the one question is AGENT.md's When to ask
         "You are the Taskuary general-work assistant. Help complete research, planning, writing, "
         "marketing, operational, and other non-coding work. The task and source material below are "
-        "authoritative. Be direct and useful. Never claim you searched the web, opened a system, sent "
-        "something, or changed a record unless a tool actually did it. Ask when a necessary fact is "
-        "missing. Do not turn this into a coding task or instruct a coding CLI.\n"
+        "authoritative. Be direct and useful. Do not turn this into a coding task or instruct a coding CLI.\n"
         # Work that no repository can carry lands here rather than stalling as a held coding task.
         # Some of it needs a tool nobody has wired - adding somebody to a Teams invite
         # wants calendar WRITE, and Taskuary's calendar is read-only. Saying so in one line is the answer;
@@ -1354,8 +1368,12 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         "what is needed, or found who can). Never leave the job looking attempted when it was not.\n"
         # nothing wakes this session once its answer is filed (hooks.judge_ended reads a turn that ended short)
         f"{FINISH_LINE}\n\n"
-        + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
-        + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\n{GENERAL_OVER}\n\nASSISTANT STYLE\n{counsel}"
+        # ...the walk-through for a figure only where there is a system to take one from (2026-11-09): whole beside a semantic layer,
+        # else one line naming its guide (guides.py) - never 2,000 characters on a chat about a launch plan
+        + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{NUMBER_LINE}\n\n' if docsync.data_cards(store) else '')
+        + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\n"
+        # ...and the override only for a copy of AGENT.md that still says what it overrides: the shipped one no longer does (2026-11-09)
+        + (f'{GENERAL_OVER}\n\n' if '--done' in agent_rules else '') + f"ASSISTANT STYLE\n{counsel}"
     )
     # ...and none on a connector card's walk: it edits no code and has no repository to look in (aisetup.WALK_REF)
     repos = '' if outsider or task.get('SourceRef') == 'connector:setup' else repos_block(store)
@@ -1477,6 +1495,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF):
         system += (f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}')
                    + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}' + ('' if stranger else f'\n\n{LESSON_LINE}\n\n{CHECK_BACK_LINE}'))
+    # ...and a setup walk works the same way: AGENT.md no longer repeats how a step is checked or a failing way given up (2026-11-09)
+    elif not dock: system += f'\n\n{WORK_LINE}'
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
     # ...the LATEST facts ride in the TURN, never the system prompt: they change every turn, and a CLI's system prompt is its process's
     # command line (a hashed --append-system-prompt-file), so in the system prompt each turn started a new process (clipool's one per chat)
@@ -1955,7 +1975,7 @@ class GeneralSession:
                     system = f'{system}\n\n{browserview.brief(held=self.holds_browser())}'
                 elif self.browser_wanted and not last and browserview.installed():
                     browser_tools, browser_offer = True, True
-                    system = f'{system}\n\n{browserview.brief(held=self.holds_browser(), open_now=False)}' + \
+                    system = f'{system}\n\n{browserview.offer(held=self.holds_browser())}' + \
                              (f' It was last on {was} - open it again only if the work still needs it.' if was else '')
                 elif self.browser_wanted:
                     # a browser that did not open is SAID - in the turn and to the agent - not left for it to guess at (2026-10-25)
@@ -1969,7 +1989,7 @@ class GeneralSession:
                     # browser and not in a tool of the CLI's own that nobody can watch or hold (browserview.OWN_ONLY, 2026-10-28)
                     if browserview.installed():
                         browser_tools, browser_offer = True, True
-                        system = f'{system}\n\n{browserview.brief(held=self.holds_browser(), open_now=False)}'
+                        system = f'{system}\n\n{browserview.offer(held=self.holds_browser())}'
                     else:
                         from . import words as places
                         system = f"{system}\n\n{browserview.NOT_SET_UP.format(where=places.name('ai_apps'))}"
@@ -2010,6 +2030,9 @@ class GeneralSession:
                 hands = not origin.looks_only(self.store, self.task_id, _cli_of_pick(self.store, self.pick))
             # ...and with no shell, its to-dos are ticked by a mark in the reply (selfclose.tick_markers), never a command it cannot run
             if not hands and self.store.task_checklist(self.task_id): system = f'{system}\n\n{_sc.TICK_CHAT_LINE}'
+            # ...ONE WAY TO WRITE A REPLY (2026-11-09): a session with Taskuary's own tools (agenttools.session_args: Claude and Codex, with
+            # hands) writes it with propose_reply - the marker line rode beside it and the agent was told two ways at once (audit3 #3)
+            if hands and _cli_of_pick(self.store, self.pick) in REPLY_TOOL_CLIS: system = system.replace(f'\n\n{_sc.REPLY_LINE}', '')
             systems = ''
             if hands:
                 from . import docsync
@@ -2112,6 +2135,7 @@ class GeneralSession:
                 self.resume_notice = 'The original session could not be resumed. Restored from the saved conversation.'
                 self._remember_session()
                 system, user = _prompt(self.store, self.task_id)
+                if hands and _cli_of_pick(self.store, self.pick) in REPLY_TOOL_CLIS: system = system.replace(f'\n\n{_sc.REPLY_LINE}', '')
                 if not as_owner: user += '\n\n' + text
                 if delivery_instructions:
                     system = f'{system}\n\n{str(delivery_instructions).strip()}'
@@ -2128,7 +2152,7 @@ class GeneralSession:
                     system = f'{system}\n\n{hub.ASSISTANT_LINE}'
                 if browser_tools:
                     from . import browserview
-                    system = f'{system}\n\n{browserview.brief(held=self.holds_browser(), open_now=not browser_offer)}'
+                    system = f'{system}\n\n{browserview.offer(held=self.holds_browser()) if browser_offer else browserview.brief(held=self.holds_browser())}'
                 if desk: system = f'{system}\n\n{agentdesktop.brief(held=self.holds_browser())}'
                 system = f'{system}\n\n{_sc.ASK_LINE}'
                 if systems: system = f'{system}\n\n{systems}'

@@ -72,7 +72,7 @@ class TheCard(unittest.TestCase):
 
     def test_the_agent_type_list_names_spend(self):
         from taskuary import docsync
-        self.assertIn('teller_spend', ''.join(docsync.SYSTEMS_HINT) if hasattr(docsync, 'SYSTEMS_HINT') else open('taskuary/docsync.py', encoding='utf-8').read())
+        self.assertIn('teller_spend', docsync._kinds({'Type': 'teller'}))      # named once the card is on (docsync.tool_cards)
 
 
 class TheRows(unittest.TestCase):

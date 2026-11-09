@@ -5930,14 +5930,16 @@ async def mcp_rpc(request: Request, task: int = 0):
              'use_repo': lambda tid, target, why: agent_use_repo(AgentUseRepoBody(task_id=tid, path_or_name=target, why=why), request)}
     def run(name, args):
         cls = agenttools.TOOLS[name][0]
-        if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system', 'ask_stronger', 'show') and not (
+        if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system', 'ask_stronger', 'show', 'guide') and not (
                 name == 'read_message' and agenttools.own_message(store, task, args)): _owner_history(request, task)
         # ...this door is never a stranger's session's, so a stranger's words on its own task are never read through it (agenttools.UNVOUCHED)
         if name == 'read_message' and agenttools.unvouched(store, task, args): raise HTTPException(403, agenttools.UNVOUCHED)
         out = agenttools.call(store, task, name, args, doors)
         return out.body.decode() if isinstance(out, JSONResponse) else out
     from .wrapup import no_correspondent
-    skip = agenttools.REPLY_TOOLS if no_correspondent(store, task) else ()
+    from .general import GENERAL_KINDS
+    skip = (agenttools.REPLY_TOOLS if no_correspondent(store, task) else ()) + (
+        agenttools.CODING_TOOLS if (store.get_task(task) or {}).get('Kind') in GENERAL_KINDS else ())
     def one(m): return agenttools.rpc(m, run, skip) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
     out = await run_in_threadpool(lambda: [r for r in map(one, msg if isinstance(msg, list) else [msg]) if r is not None])   # the doors are sync
     if not out: return Response(status_code=202)

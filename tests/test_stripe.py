@@ -267,8 +267,9 @@ class Wiring(unittest.TestCase):
             self.assertIn(word, cat[t]['takes'], t); self.assertEqual(cat[t]['connection'], 'stripe')
 
     def test_agents_are_told_the_tool_names(self):
-        src = (ROOT / 'taskuary' / 'docsync.py').read_text(encoding='utf-8')
-        for t in reports.STRIPE_TYPES: self.assertIn(f'|{t}|' if t != 'stripe_invoices' else f'|{t}', src.replace("'\n                     '", ''))
+        # ...by the card's own tool types, named once it is on (docsync.tool_cards) - no longer a hand-kept list of every type there is
+        from taskuary import docsync
+        self.assertLessEqual(set(reports.STRIPE_TYPES), set(docsync._kinds({'Type': 'stripe'})))
 
 
 if __name__ == '__main__':

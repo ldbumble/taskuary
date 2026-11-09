@@ -351,7 +351,7 @@ def brief(tid: int) -> str:
     return (f'FILES YOU MAKE FOR THE OWNER (a spreadsheet, a document, a PDF, a chart): save each one in {d} . Every file there shows on '
             'this task with Preview and Download, so the owner opens it from the chat. To point at one, write its full path in your '
             'answer. Never write a URL or a link to it - Taskuary serves that folder itself, and an address you make up leads nowhere. '
-            f'Asked to send it "here", it already is: name the file. {ONE_FILE}')
+            'Asked to send it "here", it already is: name the file.')     # ...one final file per thing: AGENT.md's Files you make (with_fence_rule)
 
 
 # ...and a TERMINAL session is told the same by its environment (terminal.session_env: TASKUARY_OUTPUTS) and its standing rules

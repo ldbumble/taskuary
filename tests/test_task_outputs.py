@@ -189,7 +189,8 @@ class OneOfEachTests(unittest.TestCase):
 
     def test_every_worker_hears_one_final_file(self):
         from taskuary import terminal
-        self.assertIn('one final file', outputs.brief(self.tid))
+        # ...said once, in AGENT.md's Files you make (or appended to an older copy): the outputs brief no longer repeats it (2026-11-09)
+        self.assertNotIn('one final file', outputs.brief(self.tid))
         self.assertIn('one final file', self.store.doc('agent') or open(Path(outputs.__file__).parent / 'templates' / 'agent.md', encoding='utf-8').read())
         older = terminal.with_fence_rule('Rules from before files had a rule.')
         self.assertIn('one final file', older)

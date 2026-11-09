@@ -43,7 +43,7 @@ class RegularAgentQuestionTests(unittest.TestCase):
             self.assertEqual(got['text'], 'Where are you flying from? (+3 more)')
             self.assertEqual(got['questions'], qs)
         self.assertEqual(len(ws.question_group(s, fake)), 4)
-        self.assertIn('the main question first', general.WORK_LINE)
+        self.assertIn('one question, with your recommended answer', general.WORK_LINE)     # one a turn (2026-11-09), no longer "all of it in one"
         self.assertIn('Never end a turn with only questions', general.WORK_LINE)
 
 

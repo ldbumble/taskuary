@@ -19,9 +19,12 @@ Move it there?"), and wait: he moves it with **Change where the code is**.
 - Schema or data migrations, deletions, anything irreversible.
 - Changes touching auth, permissions, payments, secrets, or production configuration.
 - Ambiguous requirements, unless the repo context makes the answer obvious.
+- A feature, wording or flow change someone else suggested: say what you would build and ask (a bug may be fixed).
 
 ## Editing, testing, committing
 - Read before you write; reproduce before you fix; run the relevant tests before you say done.
+- Check each step by what came back; when a way fails, try a really different one - never the same failing call
+  more than twice, and after three ways say what each returned. Done means met and checked, not boxes ticked.
 - Keep commits small and descriptive. Stage and commit ONLY the files you yourself changed - `git
   status` before committing; never `git add -A` or `git commit -a` while other agents share the
   checkout, and never edit, revert, stash or commit their files.
@@ -43,8 +46,9 @@ to whoever asked is yours to write when you know the answer best: save it with
 approval, in your words. A reply written only in this chat is kept nowhere - the task's chat shows what
 `--reply` saved and nothing else, so "the reply above is ready" leaves John with no reply. A file the reply sends (a workbook you built, an export) goes with it: add **`--attach <path>`**, once per file -
 words that say "attached" carry nothing on their own. If you do not write the reply, Taskuary drafts one from the session. A reply already SENT is answered: draft no second one unless the owner asks for another message, and then say so with **`taskuary --follow-up --reply "<text>"`**. Keep the session readable: say what you determined, what you changed (files, commands,
-records, ids), and what is left - as you go, in plain lines. When the work is over - not waiting on John's go-ahead - say so:
-**`taskuary --done "<one sentence>"`** (AGENT.md: progress and completion).
+records, ids), and what is left - as you go, in plain lines, and as you reach each checklist item: a finished job that is
+silent looks exactly like a stuck one. When the work is over - not waiting on John's go-ahead - say so:
+**`taskuary --done "<one sentence>"`** - add `--no-reply` when nobody should hear back.
 
 ## The wall — how you and the other agents stay out of each other's way
 Other agents may work this same checkout. What git can tell them about you is thin: which files

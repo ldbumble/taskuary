@@ -147,7 +147,8 @@ def test_the_tool_says_not_to_repeat_the_view_in_words():
 
 
 def test_the_tools_one_example_is_a_good_spec_with_a_grid_tiles_a_chart_a_table_and_a_checklist():
-    d = agenttools.TOOLS['show'][1]
-    v = viewspec.check(json.loads(d[d.index('Example: ') + len('Example: '):]))
+    # ...read through the guide tool now (guides.py, 2026-11-09): the tool's description names it, and stays short
+    assert '`show` topic' in agenttools.TOOLS['show'][1] and agenttools.SHOW_EXAMPLE in agenttools.call(None, 1, 'guide', {'topic': 'show'}, {})
+    v = viewspec.check(json.loads(agenttools.SHOW_EXAMPLE))
     assert sorted({e['type'] for e in v['elements'].values()}) == ['chart', 'checklist', 'grid', 'stats', 'table']
     assert len(v['elements']['kpi']['props']['items']) == 3

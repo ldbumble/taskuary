@@ -26,6 +26,16 @@ _STR, _INT = {'type': 'string'}, {'type': 'integer'}
 _ATTACH = {'type': 'array', 'items': _STR, 'description': 'files in your task folder to attach, by name - a form sign_form signed'}
 
 # name -> (cls, description, input schema, door). Descriptions say what the tool reads, where from, and what it never does.
+# the `show` tool's worked example, read through the guide tool (guides.py) instead of riding in every tools/list (2026-11-09)
+SHOW_EXAMPLE = ('{"title":"Expense tools for 40 people","root":"top","elements":{"top":{"type":"grid","props":{"cols":1},"children":["kpi","row","todo"]},'
+             '"kpi":{"type":"stats","props":{"items":[{"label":"Cheapest","value":0,"format":"currency","note":"Spendly Free"},'
+             '{"label":"Cheapest paid","value":200,"format":"currency","note":"Payworth Basic"},{"label":"Top tier","value":540,"format":"currency",'
+             '"trend":{"dir":"up","text":"+$340 vs Basic"}}]}},"row":{"type":"grid","props":{"cols":2},"children":["c","t"]},'
+             '"c":{"type":"chart","props":{"kind":"bar","title":"Per month","format":"currency","points":[{"label":"Spendly Free","value":0},'
+             '{"label":"Payworth Basic","value":200,"highlight":true},{"label":"Payworth Pro","value":540}]}},"t":{"type":"table","props":'
+             '{"title":"What each plan costs","columns":["Plan",{"label":"Per month","format":"currency"},{"label":"Per person","format":"currency"}],'
+             '"rows":[["Spendly Free",0,0],["Payworth Basic",200,5],["Payworth Pro",540,13.5]]}},"todo":{"type":"checklist","props":{"title":"Rollout",'
+             '"items":[{"text":"Pick the plan","done":true},{"text":"Invite the team","done":false}]}}}}')
 TOOLS = {
     'search_messages': ('read', "Search the mail and chat messages Taskuary has saved for the owner - by words, sender, subject and "
                         "date (YYYY-MM-DD). Best match first. Read-only; it reaches only what Taskuary has polled, so say how far "
@@ -54,6 +64,9 @@ TOOLS = {
                  "Read-only.", _S({'days': _INT}), ('GET', '/api/calendar/upcoming')),
     'list_systems': ('read', "The owner's other systems you may use (databases, ERPs, file shares, SharePoint...), each with its "
                      "connector id, its Authority and the tool types it runs. Read-only.", _S({}), ('GET', '/api/connectors')),
+    # ...and a how-to read when the work comes to one, instead of riding in every prompt (guides.py, 2026-11-09)
+    'guide': ('read', "Read one of Taskuary's how-tos before work that needs it - " + __import__('taskuary.guides', fromlist=['index']).index()
+              + ". Read-only.", _S({'topic': _STR}, ('topic',)), ('GET', '/api/tasks/1')),
     'run_system': ('read', "Run one tool on one of the owner's systems (see list_systems): {type, connector_id, ...its own fields}. "
                    "Reads run at once; a file saved to SharePoint or OneDrive runs at write Authority and says where it landed. "
                    "Anything that would send, post, pay or order never runs here - it waits for the owner's press and you are told so.",
@@ -68,16 +81,8 @@ TOOLS = {
              "{items: [{text, done}]}, list {items}, steps {items}, text {text: markdown}, note {tone: info|success|warning, text}, badge {text, "
              "variant?: default|secondary|outline|success|warning}, button {label, verb: a task-page button to light for the owner (close, defer, "
              "reply, continue...) | open: an app link as BRINGING THINGS UP writes them - #task=12, #connector=quickbooks, #settings=updates, #report=new}. format is currency|number|percent (12.5 -> 12.5%); give numbers as numbers. "
-             "A button only lights or opens - it never sends, pays or closes. A bad spec comes back saying what to fix. Example: "
-             '{"title":"Expense tools for 40 people","root":"top","elements":{"top":{"type":"grid","props":{"cols":1},"children":["kpi","row","todo"]},'
-             '"kpi":{"type":"stats","props":{"items":[{"label":"Cheapest","value":0,"format":"currency","note":"Spendly Free"},'
-             '{"label":"Cheapest paid","value":200,"format":"currency","note":"Payworth Basic"},{"label":"Top tier","value":540,"format":"currency",'
-             '"trend":{"dir":"up","text":"+$340 vs Basic"}}]}},"row":{"type":"grid","props":{"cols":2},"children":["c","t"]},'
-             '"c":{"type":"chart","props":{"kind":"bar","title":"Per month","format":"currency","points":[{"label":"Spendly Free","value":0},'
-             '{"label":"Payworth Basic","value":200,"highlight":true},{"label":"Payworth Pro","value":540}]}},"t":{"type":"table","props":'
-             '{"title":"What each plan costs","columns":["Plan",{"label":"Per month","format":"currency"},{"label":"Per person","format":"currency"}],'
-             '"rows":[["Spendly Free",0,0],["Payworth Basic",200,5],["Payworth Pro",540,13.5]]}},"todo":{"type":"checklist","props":{"title":"Rollout",'
-             '"items":[{"text":"Pick the plan","done":true},{"text":"Invite the team","done":false}]}}}}',
+             "A button only lights or opens - it never sends, pays or closes. A bad spec comes back saying what to fix; the guide tool's "
+             "`show` topic has a worked example.",
              _S({'title': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': {'type': 'object'}}}, ('root', 'elements')),
              ('GET', '/api/tasks/1')),
     'tick': ('own', "Tick (done=true) or untick one of this task's to-dos by its id. Only what you actually finished.",
@@ -211,6 +216,9 @@ NOT_PROPOSABLE = ('merge_pr', 'close_item', 'repair_workflow', 'push_direct')   
 # ...and on the owner's own ask (wrapup.no_correspondent) there is nobody to reply to: the reply tools are not offered at all. withdraw_draft
 # is not one of them - an own ask's emails and posts are the agent's to take back too (a "send it to Gail instead" left Paula's armed)
 REPLY_TOOLS = ('propose_reply', 'reply_not_needed')
+# ...and the tools only a coding agent has a use for are not offered on any other task (2026-11-09): a general agent called find_repos
+# for a WhatsApp bug report - and four tool schemas rode on every turn for nothing
+CODING_TOOLS = ('note_peers', 'use_repo', 'find_repos', 'propose_land')
 def listing(skip=()) -> list:
     "tools/list: every tool with what it does and whether it only reads - but those in `skip`."
     return [{'name': n, 'description': d, 'inputSchema': s, 'annotations': ANNOTATIONS[c]} for n, (c, d, s, _) in TOOLS.items() if n not in skip]
@@ -295,6 +303,9 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'list_systems':
         from .docsync import agent_systems
         return agent_systems(store) or 'no connection is marked as an agent tool - the owner turns that on per card'
+    if name == 'guide':
+        from . import guides
+        return _out(guides.read(a.get('topic')))
     if name == 'run_system':
         r = doors['tool_run']({**a, 'task_id': tid})
         return _out(_j(json.loads(r.body) if hasattr(r, 'body') else r), fence_it=True)     # a 202 (queued) comes back as a response

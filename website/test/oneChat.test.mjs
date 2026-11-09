@@ -8,7 +8,7 @@ import test from "node:test";
 import { chatRows, chatSource, eventsOf, rowMessages, stepsFromAcp, turnParts, workCount } from "../src/chatStream.js";
 import { SHIPPED, defaultDetail, detailFor, keepOwnDetail, ownDetail } from "../src/chatDetail.js";
 import { notShown, stillHeld } from "../src/heldLines.js";
-import { freshNext, staleOn, withTurns } from "../src/agentSummary.js";
+import { cardTurn, freshNext, staleOn, withTurns } from "../src/agentSummary.js";
 
 const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const gw = read("GeneralWorkspace.jsx"), page = read("TaskPage.jsx");
@@ -268,11 +268,32 @@ test("a draft stays under its own turn; a stale one is never under the newest tu
   assert.equal(freshNext([fresh]), true); assert.equal(freshNext([stale]), false); assert.equal(freshNext([]), true);
   assert.deepEqual(staleOn([fresh, stale], "m1").map((r) => r.ReviewId), [2]); assert.deepEqual(staleOn([stale], "m2"), []);
   assert.deepEqual(staleOn([{ ...fresh }], "m1"), [], "a payload without the fields draws as before");
-  assert.match(gw, /next=\{custom\.folded \|\| !freshNext\(work\.reviews\) \? null : work\.next\}/);
+  assert.match(gw, /next=\{\(home \? !holds : custom\.folded\) \|\| !freshNext\(work\.reviews\) \? null : work\.next\}/);
   // ...read off the payload's `drafts` (general.draft_turns), under the message whose id is the draft's turn
   const got = withTurns([{ ReviewId: 7, Status: "pending", DraftText: "On it." }], [{ review: 7, turn: "comment-12", at: "2026-11-06 14:48:00", stale: true, before: "2026-11-06 15:00:00" }]);
   assert.deepEqual(staleOn(got, "comment-12").map((r) => r.drafted_at), ["2026-11-06 14:48:00"]);
   assert.match(gw, /reviews: withTurns\(reviews, data\?\.drafts\)/);
   assert.match(gw, /work\.next && freshNext\(work\.reviews\) && chat/);
   assert.match(gw, /nextAt\?\.next && freshNext\(nextAt\.reviews\)/);
+});
+
+// THE OWNER, 2026-11-09 (said as a repeat): "again suggested reply stayed on bottom after i asked it questions" - a draft the agent KEPT through
+// later turns is current (general.draft_turns), and its card with Send followed whichever turn was newest, under every question since
+test("regression: a kept draft's card stays on the turn that wrote it while questions are asked under it", () => {
+  const ids = ["mail-1", "comment-10", "q-1", "comment-11", "q-2", "comment-12"];
+  const kept = { ReviewId: 4, Status: "pending", Kind: "draft_reply", DraftText: "Hi Erin - Thursday works.", turn: "comment-10", stale: false };
+  assert.equal(cardTurn([kept], ids), "comment-10", "two questions later, still the turn that drafted it");
+  // ...a later turn that rewrote it moves it there; a new letter (a newer review) replaces it
+  assert.equal(cardTurn([{ ...kept, turn: "comment-12" }], ids), "comment-12");
+  assert.equal(cardTurn([kept, { ...kept, ReviewId: 5, turn: "comment-11" }], ids), "comment-11");
+  // ...stale (read-only under its turn, StaleDrafts), sent, or no shown turn wrote it: no home, the newest answer holds the cards as before
+  assert.equal(cardTurn([{ ...kept, stale: true }], ids), null); assert.equal(cardTurn([{ ...kept, Status: "sent" }], ids), null);
+  assert.equal(cardTurn([{ ...kept, turn: "comment-9" }], ids), null); assert.equal(cardTurn([{ ...kept, turn: undefined }], ids), null);
+  assert.equal(cardTurn([{ ...kept, Kind: "action" }], ids), null);
+  // ...wired: every road that draws `work.next` asks for the home first - a turn without a summary, a summed one (unfolded to hold it), the foot
+  assert.match(gw, /holds = home \? home === id : newest/);
+  assert.match(gw, /!custom\?\.summary && holds && work\.next/);
+  assert.match(gw, /folded=\{!!custom\.folded && !\(home && holds\)\}/);
+  assert.match(gw, /!working && !cardTurn\(nextAt\.reviews, /);
+  assert.doesNotMatch(gw, /!custom\?\.summary && newest && work\.next/);
 });

@@ -85,7 +85,7 @@ import { NoAgentChat } from "./AgentSummary.jsx";
 import { chatReplyShown } from "./agentSummary.js";
 import { sentLine } from "./sentLine.js";
 import ThreadReading from "./ThreadReading.jsx";
-import { alreadyAnswered, answeredLine, latestDrafts } from "./agentDraftAsk.js";
+import { latestDrafts } from "./agentDraftAsk.js";
 import { LastView } from "./BrowserPane.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
@@ -2696,10 +2696,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     window.addEventListener("tq-agent-ask", on);
     return () => window.removeEventListener("tq-agent-ask", on);
   });
-  // YOU ALREADY ANSWERED (the owner, 2026-11-02): a reply that went to that person after the message the draft answers - outside Taskuary or
-  // from here, in any round - is said on the draft, and its Send says it would be a second one
-  const answeredYet = answeredLine(alreadyAnswered({ draft: pendingReview, sent: rounds.flatMap((r) => r.sent),
-    against: storedMessages.find((m) => m.MessageId === pendingReview?.MessageId), ms: tsMs }), (s) => fmtDateTime(s));
   // THE CHAT'S CARDS - the hand-off, a failed write-up, the invite, the emails owed, the draft and the drafts beside it with their Sends, what
   // went out, the proposals - drawn once, in the agent's newest summary (AgentSummary's Next steps) or under the chat's thread
   // ...an act with its card (a post, a tracker comment) is drawn in the turn that set it up (GeneralWorkspace, ActionCard) - never here again
@@ -2763,7 +2759,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {pendingReview ? (<>
             <Box data-tq-review={pendingReview.ReviewId}>
             <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend liveWork={liveWork} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
-              onEmailInstead={() => setEmailOpen(true)} why={warn?.line || ""} answered={answeredYet}
+              onEmailInstead={() => setEmailOpen(true)} why={warn?.line || ""}
               onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box>   {/* the list's row moves too (T19) */}
             <MoreDrafts reviews={moreDrafts} messages={storedMessages} onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
           </>) : (

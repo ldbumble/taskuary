@@ -56,7 +56,7 @@ def test_a_line_that_covers_the_draft_retires_it_with_why():
     s = MemoryStore(); tid, _first, rid = teams_task(s)
     with reads('covered'): channels.retire_draft_answered_elsewhere(s, tid, own_line('reset it, try now'))
     assert s.get_review(rid)['Status'] == 'superseded'
-    assert any(channels.COVERED in c['Body'] for c in s.list_comments(tid))
+    assert any('yourself - no new response needed.' in c['Body'] and 'reset it' not in c['Body'] for c in s.list_comments(tid))
 
 
 def test_a_line_that_covers_part_cuts_the_draft_to_what_is_left():
@@ -192,7 +192,7 @@ STALE = 'The reply waiting says 3pm today - check your calendar before Send.'
 def test_a_turn_the_owners_line_covered_ends_saying_so():
     s = MemoryStore(); tid, t0 = mid_turn(s)
     with reads('covered'): reply, summ = general.heard_meanwhile(s, tid, STALE, {'did': 'looked', 'on_you': ['Check the calendar']}, t0)
-    assert channels.COVERED_TURN in reply and 'yes 3pm, same room' in reply and 'check your calendar' not in reply
+    assert channels.COVERED_TURN in reply and 'yes 3pm, same room' not in reply and 'check your calendar' not in reply  # their line is drawn left, never quoted again
     assert summ['on_you'] == [] and summ['nothing_left'] and hooks.finished(summ)
 
 

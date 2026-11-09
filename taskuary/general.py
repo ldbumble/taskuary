@@ -607,7 +607,7 @@ def heard_meanwhile(store, tid: int, reply: str, summ, t0: float, drafted: str =
     if drafted and (rv := store.pending_review(tid, 'draft_reply')): reread_draft(store, tid, rv, {'BodyText': line}, brain)
     if not str(reply or '').strip(): return reply, summ
     got, left = reread(store, tid, reply, line, "THE AGENT'S CLOSING WORDS", brain)
-    if got == 'covered': return f'You wrote on the chat while I worked: "{line[:180]}". {COVERED_TURN}', summ and {**summ, 'on_you': [], 'nothing_left': True}
+    if got == 'covered': return f'You answered it yourself while I worked. {COVERED_TURN}', summ and {**summ, 'on_you': [], 'nothing_left': True}
     return (left, summ) if got == 'partly' and left else (reply, summ)
 def latest_block(store, tid: int, resumed: bool = False) -> str:
     """LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none.
@@ -622,11 +622,13 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     others = [x for x in verdicts.unsent(store, tid) if not rv or x['rid'] != rv['ReviewId']]
     handed = [c for c in store.list_comments(tid, internal=True) if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
     did, own = owner_did(store, tid), own_replies(store, tid)
+    from . import slots
+    nowhere = slots.needs_address(store, tid)
     try:
         from . import workerstate as ws
         asked = [r['text'] for r in ws.status(store, tid)['requests'] if r.get('kind') == 'input_needed' and r.get('text')]
     except Exception: asked = []
-    if not (rv or sent or answered or others or handed or did or own or asked): return ''
+    if not (rv or sent or answered or others or handed or did or own or asked or nowhere): return ''
     out = [selfclose.LATEST_LINE]
     if new: out.append(f"THE NEWEST MESSAGE - from {new['who']}, at {clock(new['at'])}: {_quote(new['words'], 600)}")
     if rv:
@@ -642,6 +644,7 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     if others: out.append('ALSO SET UP AND NOT SENT - take back any the newest message undoes:\n' + '\n'.join(
         f"- rv{x['rid']}: {x['what']}" for x in others)
         + ('' if rv else f'\n{selfclose.WITHDRAW_LINE}'))
+    if nowhere: out.append('AN EMAIL YOU DRAFTED HAS NO ADDRESS:\n' + '\n'.join(f'- rv{r}: {slots.to_missing(w)}' for r, w in nowhere))
     if sent: out.append('ALREADY SENT ON THIS TASK - never draft these again:\n' + '\n'.join(
         f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
     if asked: out.append('YOUR QUESTION STILL WAITING FOR THE OWNER - it stays on their screen until they answer; never ask it again:\n'
@@ -710,6 +713,19 @@ def with_failure(store, tid: int, msgs: list) -> list:
                     'createdAt': ev.get('CreatedAt'), 'failed': True}]
 
 
+# ...AND THE OWNER'S LINE ON THE THREAD WHEREVER IT WAS FILED (the owner, 2026-11-09: "don't see the sent message on left side like we discussed"):
+# in a room holding two tasks, or with no task matching it, their reply is filed on one task or none (channels.ingest_own_message) - the agent
+# here heard it (own_replies reads the thread) and quoted it, while the chat drew it nowhere. The thread's own lines since the task began are
+# drawn on its chat too, on the left, as theirs
+ROOM_OWN = ("SELECT m.* FROM message m WHERE (IFNULL(m.Direction,'in')='out' OR m.Status='context') AND IFNULL(m.TaskId,0)<>? "
+            "AND m.Status NOT IN ('history','skipped') AND IFNULL(m.Channel,'')<>'report' AND IFNULL(m.ConversationId,'')<>'' "
+            "AND m.ConversationId IN (SELECT ConversationId FROM message WHERE TaskId=? AND IFNULL(ConversationId,'')<>'') "
+            "AND IFNULL(m.SentAt,m.CreatedAt)>=? ORDER BY m.SentAt, m.MessageId")
+def room_own(store, tid: int) -> list:
+    "The owner's own lines on task `tid`'s thread filed elsewhere (another task in the room, or none), since the task began - as JOINED rows."
+    t0 = str((store.get_task(tid) or {}).get('CreatedAt') or '')
+    return [{**x, 'Own': 1, 'JoinedAt': x.get('SentAt') or x.get('CreatedAt')} for x in store._rows(ROOM_OWN, (tid, tid, t0))]
+
 def shown_history(store, tid: int) -> list:
     """history, as the pane draws it: each carried-on brief with the mail that woke it (`mail`: who, channel, at, their own words), and
     each answer with the `summary` filed after it."""
@@ -723,8 +739,8 @@ def shown_history(store, tid: int) -> list:
     # ...the FIRST brief too, with what started the task (the owner, 2026-11-05: "the inputs on right ... email came in from x and was sent to agent")
     # ...the OWNER'S OWN line at the time they wrote it, never when it was filed here (the owner, 2026-11-09: their 9:03 PM opening line was put
     # on the task late and drawn under the 9:30 PM ones) - what came in from others stays where it joined, which is when the agent heard it
-    mail = sorted(({**x, 'JoinedAt': x.get('SentAt') or x['JoinedAt']} if x.get('Own') else x for x in store._rows(JOINED, (tid,))),
-                  key=lambda x: (str(x['JoinedAt']), x['MessageId']))
+    mail = sorted([*({**x, 'JoinedAt': x.get('SentAt') or x['JoinedAt']} if x.get('Own') else x for x in store._rows(JOINED, (tid,))),
+                   *room_own(store, tid)], key=lambda x: (str(x['JoinedAt']), x['MessageId']))
     # `at`: when it was sent, in this server's zone like every stamp here (store.norm_stamp) - the page reads it through the zone setting.
     # `words`: the text Taskuary kept of it
     # (OwnText - no "sent from outside" banner, no quoted history), else its own words read from the body
@@ -2420,6 +2436,7 @@ class GeneralSession:
             for attrs, body in drafts:
                 out = slots.draft(self.store, self.task_id, body, attrs.get('to', ''), attrs.get('subject', ''), attrs.get('slot', ''), 'assistant')
                 if not out.get('ok'): logger.info(f"assistant email draft not saved on task {self.task_id}: {out.get('why')}")
+                elif out.get('to_missing'): logger.info(f"task {self.task_id}: {out['to_missing']} - its next turn hears it (latest_block)")
         reply, ticks = selfclose.tick_markers(reply)          # the to-dos it finished, on the road `taskuary --tick` takes
         # ...and where the owner stands, taken out of the answer - with no line of a letter waiting on them in it (selfclose.without_letters)
         letters = [drafted, *(r['DraftText'] for r in self.store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Status='pending'", (self.task_id,)))]

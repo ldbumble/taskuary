@@ -165,9 +165,10 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
         self.assertEqual(_row(s, mid)['NeedsYou'], 0)
         # ...said on the task it settled, never in the Assistant's conversation (the owner, 2026-10-06: the task being
         # worked is the main thing there, nothing else)
-        self.assertTrue(any('wrote on the chat' in c['Body'] and 'nothing more to send' in c['Body'] for c in s.list_comments(tid)))
+        # ...one line, never quoting the owner's words again - their line stands on the chat's left (the owner, 2026-11-09)
+        self.assertIn('You answered Tess yourself - no new response needed.', [c['Body'] for c in s.list_comments(tid)])
         dock, _ = general.dock_task(s)
-        self.assertFalse([m for m in concierge.history(s, dock['TaskId']) if 'nothing more to send' in (m.get('text') or '')])
+        self.assertFalse([m for m in concierge.history(s, dock['TaskId']) if 'no new response needed' in (m.get('text') or '')])
 
     def test_an_earlier_owner_line_does_not_retire_a_later_ask(self):
         from taskuary.channels import ingest_own_message

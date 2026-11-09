@@ -2,35 +2,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { alreadyAnswered, answeredLine } from "../src/agentDraftAsk.js";
-
-// AN AGENT'S DRAFT IS A CARD IN THE ONE CHAT (the owner, 2026-11-06), and a draft the owner already answered says so. Invented people only.
+// AN AGENT'S DRAFT IS A CARD IN THE ONE CHAT (the owner, 2026-11-06). One the owner answered themselves is retired, never bannered (2026-11-09).
+// Invented people only.
 const mine = { ReviewId: 7, Kind: "draft_reply", Status: "pending", DraftText: "Hi Erin - which week should the report cover?", DraftBy: "agent:Claude Code",
   MessageId: 40, FromName: "Erin Blake", FromEmail: "erin@northwind.example" };
 
-test("already answered: a reply to that person newer than the message the draft answers - outside Taskuary or from here", () => {
-  const against = { MessageId: 40, FromEmail: "erin@northwind.example", SentAt: "2026-11-02 09:00:00" };
-  const outside = { at: "2026-11-02 09:30:00", text: "Hi Erin, the report covers the week of the 26th - all of it, night shift too.",
-    msg: { RecipientsJson: JSON.stringify({ to: ["erin@northwind.example"] }) } };
-  const a = alreadyAnswered({ draft: mine, sent: [outside], against });
-  assert.equal(a.who, "Erin Blake");
-  assert.equal(a.at, "2026-11-02 09:30:00");
-  assert.ok(a.words.startsWith("Hi Erin, the report covers") && a.words.endsWith("...") && a.words.length < 70, a.words);
-  assert.equal(answeredLine(a, () => "9:30 AM"), `You already answered Erin Blake at 9:30 AM: "${a.words}"`);
-  const fromHere = { at: "2026-11-02 10:00:00", text: "Sent from Taskuary", review: { ReviewId: 3, FromEmail: "erin@northwind.example" } };
-  assert.equal(alreadyAnswered({ draft: mine, sent: [outside, fromHere], against }).words, "Sent from Taskuary", "the newest one");
-  // ...not: one older than the message the draft answers, one to someone else, the draft itself, or nothing at all
-  assert.equal(alreadyAnswered({ draft: mine, sent: [{ ...outside, at: "2026-11-02 08:00:00" }], against }), null);
-  assert.equal(alreadyAnswered({ draft: mine, sent: [{ ...outside, msg: { RecipientsJson: '["gail@northwind.example"]' } }], against }), null);
-  assert.equal(alreadyAnswered({ draft: mine, sent: [{ ...fromHere, review: mine }], against }), null);
-  assert.equal(alreadyAnswered({ draft: null, sent: [outside], against }), null);
-  assert.equal(answeredLine(null), "");
-});
-
-test("the draft is one card, in the chat, its answered line on it - no notice pointing anywhere else", () => {
+test("the draft is one card, in the chat - no notice pointing anywhere else, no answered banner over it", () => {
   const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(page, /AgentDraftNotice|noticeOn|askWhere/, "nowhere else to point at");
-  assert.match(page, /<ReviewDecision review=\{pendingReview\}[^\n]*\n[^\n]*answered=\{answeredYet\}/);
+  assert.doesNotMatch(page, /answeredYet|alreadyAnswered|answeredLine/, "the superseded draft is retired, never bannered");
   assert.equal(page.match(/<ReviewDecision review=\{pendingReview\}/g).length, 1, "one card for the draft: the chat's");
 });
 

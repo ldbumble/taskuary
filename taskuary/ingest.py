@@ -2525,7 +2525,7 @@ def _continue_general(store, tid, msg: dict = None, mid=None):
 # ...and a message that changes nothing is said so in a line (the owner, 2026-11-05: "it can just say this is the same result nothing
 # changed if it wants")
 REPLAN = ('Re-plan the WHOLE next step from here, not only the draft: it may need no reply any more (then mark the waiting draft with '
-          '`taskuary --reply-not-needed "<why>"` or the reply_not_needed tool - it stays for the owner, never deleted), new research, a '
+          '`taskuary --reply-not-needed "<why>"` or the reply_not_needed tool - it is put down, kept under Not sent, never deleted), new research, a '
           'corrected or an added draft, or nothing left at all. Open with one plain line on what changed, in the owner\'s terms - "I see you answered '
           'Ray there", "Gail took care of it" - then either that we are good, nothing left (nothing_left true), or what is still open as next '
           'steps. Start the summary\'s "did" with that same line: the owner reads the summary, not the words above it. Your answer is to the '

@@ -336,8 +336,8 @@ def main():
                          "(their name or address) - without it, it answers the newest mail on the task. Use - to read it from stdin.")
     ap.add_argument('--reply-file', metavar='PATH', help='--reply, read from a file (for a long or multi-line reply)')
     ap.add_argument('--reply-not-needed', metavar='WHY', help='the reply waiting on this task is no longer needed (someone else answered, '
-                                                             'the owner already did) - say why in one line. The draft stays, marked, with '
-                                                             "the owner's Send still on it; nothing is sent, deleted or closed.")
+                                                             'the owner already did) - say why in one line. The draft is put down, '
+                                                             "kept under Not sent; nothing is sent or deleted.")
     ap.add_argument('--withdraw-draft', metavar='WHY', help='the reply draft waiting on this task no longer answers the newest message - '
                                                            'take it off the table, why in one line. It is kept under Not sent; nothing is sent.')
     ap.add_argument('--follow-up', action='store_true',
@@ -487,7 +487,7 @@ def main():
         got = _post('/api/agent/not-needed', {'task_id': int(tid), 'why': args.reply_not_needed, 'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger)
         if not got: return
         r, out = got
-        print("marked not needed - the draft stays for the owner, Send still sends it." if out.get('ok')
+        print("marked not needed - the draft is put down, kept under Not sent." if out.get('ok')
               else f"not marked: {out.get('why') or out.get('detail') or r.text[:200]}")
         return
     if args.withdraw_draft:

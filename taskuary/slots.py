@@ -208,8 +208,22 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         text = agent_signed(store, store.get_review(rid), text) or text
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added,
-            **({'to_missing': f"no address for {missing} in the owner's mail or directory - the card's To is empty and waits for the owner; "
-                              "find one (someone at that organisation in the owner's mail) and draft again with it as `to`"} if missing else {})}
+            **({'to_missing': to_missing(missing)} if missing else {})}
+
+
+# ...said to the agent in the same words whichever road the draft took: the tool or `taskuary --draft` returns it at once; a draft MARKER in an
+# API-backed answer (the HIPAA AI's) is read after the turn ends, so its next turn hears it with what is waiting (general.latest_block)
+def to_missing(who: str) -> str:
+    return (f"no address for {who} in the owner's mail or directory - the card's To is empty and waits for the owner; "
+            "find one (someone at that organisation in the owner's mail) and draft again with it as `to`")
+def needs_address(store, tid: int) -> list:
+    "[(review id, who)] of the task's unsent emails whose To is still empty for want of an address."
+    out = []
+    for r in store._rows("SELECT ReviewId, Deliver FROM review WHERE TaskId=? AND Kind=? AND Status IN ('pending','held') ORDER BY ReviewId", (int(tid), KIND)):
+        try: d = json.loads(r.get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): d = {}
+        if isinstance(d, dict) and d.get('needs') and not d.get('to'): out.append((r['ReviewId'], str(d['needs'])))
+    return out
 
 
 def _point(store, tid: int, hit: dict, to: str, agent: str, name: str = '') -> dict:

@@ -134,8 +134,8 @@ TOOLS = {
                       _S({'text': _STR, 'to': _STR, 'answers': _INT, 'only': {'type': 'boolean'}, 'cc': {'type': 'array', 'items': _STR},
                           'why_to': _STR, 'attach': _ATTACH}, ('text',)), ('POST', '/api/agent/reply')),
     'reply_not_needed': ('own', "The reply waiting here is no longer needed (someone else answered, the owner already did); `why` in "
-                                "one line. The draft stays, marked, its Send still on it - nothing is sent, deleted or closed; a new "
-                                "reply clears the mark.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
+                                "one line. The draft is put down - kept under Not sent, never sent or deleted - and the page shows only "
+                                "your turn saying so; draft a new reply if something is still owed.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
     'withdraw_draft': ('own', "Take back something you set up here that has not gone out - the reply, an email, a post, another "
                               "proposal - when the goal changed or it no longer answers the newest message. `which`: its review id "
                               "(each propose tool returns one) or who it was to; none for the reply. `why`: one line on what changed."

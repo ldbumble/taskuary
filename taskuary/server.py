@@ -5576,7 +5576,7 @@ class AgentNotNeededBody(BaseModel): task_id: int; why: str; agent: str = 'agent
 @app.post('/api/agent/not-needed')
 def agent_not_needed(body: AgentNotNeededBody, request: Request):
     """`taskuary --reply-not-needed "<why>"` from the session working the task: the reply waiting there is no longer needed - someone
-    else answered, the owner already did (verdicts.not_needed). The card says so with Send still on it; nothing is sent, deleted or closed."""
+    else answered, the owner already did (verdicts.not_needed). The draft is put down, kept under Not sent; nothing is sent or deleted."""
     from . import verdicts
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')

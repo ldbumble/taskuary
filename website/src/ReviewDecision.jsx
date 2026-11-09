@@ -141,15 +141,13 @@ export const BlankAsk = ({ line, onSend, onCancel }) => (
 // `liveWork`: what is still working on the task ("the agent is working") - the server keeps it open after the send, and the line says so.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
 // `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
-// `answered`: "You already answered <who> at <time>: ..." (agentDraftAsk.alreadyAnswered) - said over the draft, and its Send a second reply.
 // ...an act a connector declares a card for (a post, a tracker comment) is drawn as that card (ActionCard.jsx), wherever its proposal shows -
 // the same decide road, its own face
 export default function ReviewDecision(props) {
   const act = cardOf(props.review);
   return act ? <ActionCard row={act} tid={props.review?.TaskId} onChanged={props.onChanged} /> : <Decision {...props} />;
 }
-function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "",
-  answered = "" }) {
+function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "" }) {
   const [text, setTextNow] = useState(() => heldOf(r)?.text ?? null);   // the owner's edit; null means "the draft as filed"
   const setText = (v) => { hold(r, { text: v ?? null }); setTextNow(v); };
   const [cc, setCcNow] = useState(() => heldOf(r)?.cc ?? null);         // null means "the CC the draft was filed with"
@@ -267,8 +265,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     : chatFile ? `A ${r.Channel} message cannot carry a file. Reply by email with the file, or send the words alone.`
     : isCal && !r.Stale ? (closesIt ? `${closeWord} tells the calendar, with the note above if there is one - ${closeThen}; ${sendWord} tells it and ${stays}.`
       : `${sendWord} tells the calendar, with the note above if there is one - ${stays}.`)
-    : onTask && !r.Stale && canSendIt ? (closesIt ? `${closeWord} sends this to ${replyContext(r)}${answered ? " as a second reply" : ""} - ${closeThen}; ${sendWord} sends it and ${stays}.`
-      : `${sendWord} sends this to ${replyContext(r)}${answered ? " as a second reply" : ""} - ${stays}.`) : "";
+    : onTask && !r.Stale && canSendIt ? (closesIt ? `${closeWord} sends this to ${replyContext(r)} - ${closeThen}; ${sendWord} sends it and ${stays}.`
+      : `${sendWord} sends this to ${replyContext(r)} - ${stays}.`) : "";
   // each send's hover says exactly what it does here
   const twoSends = closesIt && !simulated && !co && !proposal && canSendIt && !r.Stale && !chatFile && !delivery.frozen;
   const copying = ccNow.length && !isCal ? `, copying ${ccNow.length}` : "", to = isCal ? "Tells the calendar" : `Sends this to ${replyContext(r)}`;
@@ -598,8 +596,6 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         setText(res.edits[r.ReviewId] ?? value); setCompare(res.compare); setInterrupt(null);
       }} />
       {/* a close-out says what it closes, whatever an older row's Reason worded it as */}
-      {/* ...and a reply the owner already sent that person is said over everything (the owner, 2026-11-02): Send would be a second one */}
-      {answered && !proposal && <Alert severity="warning" data-tq-already-answered="" sx={{ mb: 1, py: 0.25 }}>{answered}</Alert>}
       {proposal?.kind === "closeout" ? (
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{proposal.context}</Typography>
       ) : proposal?.lead ? (<Box data-tq-held-lead="" sx={{ mb: 0.75 }}>
@@ -608,10 +604,6 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block" }}>{proposal.leadWhy}</Typography>
       </Box>) : r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
         <Typography data-tq-review-reason="" variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
-      )}
-      {/* the agent re-planned on a change and found no reply needed (Task 4.5): said plainly, the draft and its Send kept - the owner decides */}
-      {!!r.NotNeeded && (
-        <Typography variant="body2" data-tq-not-needed="" sx={{ color: DIM, mb: 1 }}>Not needed - {r.NotNeeded}</Typography>
       )}
       {meta.kind === "zoho_invoice" && <InvoiceLine meta={meta} />}
       {/* !!: the task detail carries the raw row, where Stale is the NUMBER 0 - and React draws a 0 */}

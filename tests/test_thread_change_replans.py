@@ -72,13 +72,13 @@ class ThreadChangeReplans(unittest.TestCase):
         self.assertIn('Gail Moreno - answered: it ships Friday', turn)                    # triage's reading rides with it
         self.assertIn('WHOLE next step', turn); self.assertIn('--reply-not-needed', turn); self.assertIn('TASKUARY-SUMMARY', turn)
         self.assertIn(tid, general.OPENING)
-        # the stand-in agent decides no reply is needed: the card says so, Send stays, nothing closes
+        # the stand-in agent decides no reply is needed: the draft is put down - kept under Not sent, no card, no Send - and the task stays open
         got = verdicts.not_needed(s, tid, 'Gail Moreno answered this', 'assistant')
         self.assertTrue(got['ok'])
         rv = s.get_review(rid)
-        self.assertEqual((rv['Status'], rv['NotNeeded']), ('pending', 'Gail Moreno answered this'))
+        self.assertEqual((rv['Status'], rv['NotNeeded'], rv['DecideNote']), ('closed_unsent', 'Gail Moreno answered this', 'withdrawn - Gail Moreno answered this'))
         self.assertNotIn(s.get_task(tid)['Status'], ('done', 'dropped'))
-        self.assertEqual(s.pending_review(tid, kind='draft')['ReviewId'], rid)
+        self.assertIsNone(s.pending_review(tid, kind='draft'))
 
     def test_the_owners_own_teams_reply_is_context_for_the_next_turn_never_a_turn(self):
         # a line the owner said in a chat is theirs on the thread, not a prompt (the owner, 2026-11-08): no turn starts, the next one hears it
@@ -116,11 +116,10 @@ class ThreadChangeReplans(unittest.TestCase):
         _out, calls = ingested(s, mail(**GAIL), intent='fyi', thread=ANSWERED)
         self.assertEqual(names(calls), [])
 
-    def test_a_redraft_clears_not_needed(self):
+    def test_a_put_down_draft_is_not_marked_twice(self):
         s = store(); tid, rid = drafted_task(s)
         verdicts.not_needed(s, tid, 'Gail Moreno answered this', 'assistant')
-        s.update_review_draft(rid, 'Hi Erin - Friday, Gail booked it.', None)
-        self.assertIsNone(s.get_review(rid)['NotNeeded'])
+        self.assertFalse(verdicts.not_needed(s, tid, 'still answered', 'assistant')['ok'])       # nothing waits any more
 
     def test_the_agent_marks_it_through_its_tool_or_the_cli(self):
         from taskuary import agenttools, cli, floor

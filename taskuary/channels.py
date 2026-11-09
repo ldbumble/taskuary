@@ -1033,15 +1033,18 @@ def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
     line, draft = ' '.join(str(sent.get('BodyText') or '').split())[:2000], str(rv.get('DraftText') or '').strip()
     note = lambda t: tid and store.add_comment(tid, NOTE_ACTOR, 'assistant_agent', t)
     if not draft: return 'none'
+    # ...said in one line that never quotes the owner's words again: their line stands on the chat's left, just above (general.shown_history)
+    m = store.get_message(rv.get('AnswersMid') or rv.get('MessageId')) or {}
+    who = str(m.get('FromName') or '').strip() if m.get('FromName') != 'You' else ''
     got, left = reread(store, tid, draft, line, brain=brain)
     if got == 'covered':
         store.decide_review(rv['ReviewId'], 'superseded', None, 'you', COVERED)
         if tid:
             from . import verdicts
             verdicts._settle_task_after_sent_reply(store, rv, 'you', True)
-        note(f'You wrote on the chat: "{line[:180]}". {COVERED}')
+        note(f"You answered {who or 'them'} yourself - no new response needed.")
     elif got == 'partly' and left and store.update_review_draft(rv['ReviewId'], left, rv.get('RunId'), by=rv.get('DraftBy')):
-        note(f'You wrote on the chat: "{line[:180]}". The draft now says only what your line left unanswered.')
+        note(f"You answered {who or 'them'} on part of it yourself - the draft now says only what is still open.")
     elif got != 'none': got = 'unread'; note(CHECK_IT)
     funnel.invalidate(); store._poke('feed-changed', 'task-changed', task_id=tid)
     return got or 'unread'

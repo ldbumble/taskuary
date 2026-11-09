@@ -388,17 +388,22 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
             store.finish_review_delivery(rid, token, 'unknown', reason='Delivery unknown after an interrupted attempt; verify with the provider before retrying.')
 
 
-# A REPLY NO LONGER NEEDED IS SAID, NOT DELETED (Task 4.5, the owner 2026-11-04): a colleague on the thread answered what the owner was
-# asked, and the drafted reply kept sitting there "ready to send". The agent, re-planning on the change, says so on the draft - the card
-# shows "Not needed - <why>" with Send still under it. Nothing is sent, deleted or closed: the owner decides, and a redraft clears it.
+# A REPLY NO LONGER NEEDED IS GONE (the owner, 2026-11-09, said ~40 times: "if we respond show on left side and then agent reevaluates if
+# action still required"): the owner answered it themselves, or a colleague did, and the agent re-planning on that says so in its turn. The
+# draft it no longer needs is retired like a withdrawn one - closed unsent, its words kept under Close out's "Not sent", Bring it back still
+# sends it. It was once kept on the card as "Not needed - <why>" with Send under it (Task 4.5, 2026-11-04): that drew a reply nobody owed,
+# with a Send, under the turn that said none was owed. Never deleted, never sent; a redraft is a new draft.
 def not_needed(store, tid: int, why: str, by: str) -> dict:
-    "Mark the task's pending reply not needed, for `why`. {'ok': False, 'why': ...} when there is none or no reason was given."
+    "Retire the task's pending reply as not needed, for `why`. {'ok': False, 'why': ...} when there is none or no reason was given."
+    from .wrapup import WITHDRAWN
     why = ' '.join(str(why or '').split())
     if not why: return {'ok': False, 'why': 'say why the reply is not needed - who answered it, or what changed'}
     rv = store.pending_review(tid, kind='draft') or store.pending_review(tid, kind='draft_reply')
     if not rv: return {'ok': False, 'why': 'no reply is waiting on this task, so there is nothing to mark'}
     store.set_review_not_needed(rv['ReviewId'], why)
-    store.add_comment(tid, by, 'agent', f"The drafted reply is not needed: {why.rstrip('.')}. It stays on the task - Send still sends it.")
+    if not store.decide_review(rv['ReviewId'], 'closed_unsent', None, by, note=WITHDRAWN + why[:300]):
+        return {'ok': False, 'why': 'that reply is being sent or already went - it cannot be put down'}
+    store.add_comment(tid, by, 'agent', f"The drafted reply is not needed: {why.rstrip('.')}. It is kept under Not sent - Bring it back still sends it.")
     return {'ok': True, 'review_id': rv['ReviewId']}
 
 

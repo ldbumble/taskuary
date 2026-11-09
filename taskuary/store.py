@@ -1231,9 +1231,12 @@ class SQLiteStore:
             # WHICH MAIL THE DRAFT ANSWERS (the delivery target), kept apart from MessageId, the newest mail it saw (freshness); and the drafter's one line on why
             if 'AnswersMid' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN AnswersMid INTEGER')
             if 'DraftWhy' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftWhy TEXT')
-            # ...and the agent's word that the reply is NO LONGER NEEDED (someone else answered, the owner already did): the card says so
-            # with Send still on it - never deleted, never sent, nothing closed; a redraft clears it (Task 4.5, 2026-11-04)
+            # ...and the agent's word that the reply is NO LONGER NEEDED (someone else answered, the owner already did) - kept as the why
             if 'NotNeeded' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN NotNeeded TEXT')
+            # ...which retires the draft now (verdicts.not_needed, 2026-11-09). One marked under the old rule still sat pending with Send under it:
+            # it goes where a withdrawn draft goes - closed unsent, under Not sent, Bring it back still sends it
+            self.cx.execute("UPDATE review SET Status='closed_unsent', DecidedBy='agent', DecidedAt=?, DecideNote='withdrawn - '||NotNeeded "
+                            "WHERE Status='pending' AND IFNULL(NotNeeded,'')<>'' AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'')<>'sent'", (_now(),))
             # the triage-generated checklist (PW-075): JSON items with stable ids, separate from Status
             tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
             if 'Checklist' not in tcols:

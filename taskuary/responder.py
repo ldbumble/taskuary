@@ -680,8 +680,8 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
         # the task STAYS OPEN with the writer's why (selfclose.nothing_left): the owner's No reply closes a task, the writer's never does
         from . import selfclose, verdicts
         rv = store.get_review(review_id)
-        # a draft already waiting (a new mail joined the thread and this was the redraft) is never put down or deleted: it is marked
-        # Not needed, with the writer's WHY, and Send still sends it
+        # a draft already waiting (a new mail joined the thread and this was the redraft) is never deleted: it is put down as
+        # not needed, with the writer's WHY, and kept under Not sent (verdicts.not_needed)
         if rv and rv.get('Status') == 'pending' and str(rv.get('DraftText') or '').strip() and not resolution:
             verdicts.not_needed(store, task_id, seen.get('why') or 'the thread no longer asks you for a reply', 'drafter')
             logger.info(f'redraft for task {task_id}: the writer says no reply is owed now; the draft is marked not needed')

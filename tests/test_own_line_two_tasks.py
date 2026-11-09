@@ -58,7 +58,8 @@ class TwoTasksOneRoom(unittest.TestCase):
         with mock.patch.object(ingest, 'thread_moved', lambda store, tid, *a, **k: woke.append((tid, k.get('own')))):
             self.assertEqual(_own(self.s, 'o5', '2026-10-29 11:43:00', 'interesting one..'), self.b)
         self.assertEqual(woke, [])
-        for t in (self.a, self.b): self.assertIn('on WhatsApp: "interesting one.."', general.latest_block(self.s, t))
+        # ...each task hears it, and the one it was not filed on is told where it was (2026-11-09: a promise on one task read as another's answer)
+        for t in (self.a, self.b): self.assertRegex(general.latest_block(self.s, t), r'on WhatsApp( \(filed on [^)]*\))?: "interesting one\.\."')
 
     def test_a_room_with_one_task_keeps_it(self):
         s = MemoryStore()

@@ -44,6 +44,15 @@ def timed_out_line(e=None, agent='the agent') -> str:
     "No limit is named: an agent's run has none, and this is only said of a run cut on an old profile's limit or a one-shot cap."
     return (f"{agent[:1].upper() + agent[1:]}'s run was cut off by a time limit while it was still working. What it made so far is kept - "
             f"{CARRY_ON} from there.")
+def unreached_line(e, who: str = '') -> str:
+    """An API brain that never answered, in words - '' for any other failure. The raw "HTTPSConnectionPool(host=..., port=443): Read timed
+    out. (read timeout=180)" reached the rail as the reason, naming the gateway's host and nothing the owner could do (2026-11-09)."""
+    import requests
+    who = str(who or '').replace(' (API)', '').strip() or 'The AI'
+    while e is not None and not isinstance(e, requests.RequestException): e = e.__cause__ or e.__context__
+    if isinstance(e, requests.Timeout): return f"{who} didn't answer in time - it may be down or busy. Type to try again, or pick another AI in Settings."
+    if isinstance(e, requests.ConnectionError): return f"Couldn't reach {who} - check this computer is online, then type to try again, or pick another AI in Settings."
+    return ''
 # ON A CHAT TASK TYPING IS THE WAY ON (the owner, 2026-11-07; the chat rulings of 2026-11-05): it has no Continue button, so nothing said
 # on one names it. A coding task keeps its Continue
 CARRY_ON = 'type to carry on'
@@ -670,6 +679,18 @@ def mail_row(store, x: dict, n: int = 3000) -> dict:
             'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'), 'mid': x['MessageId'],
             'files': len(store.list_attachments(x['MessageId']) or []),
             'words': (str(x.get('OwnText') or '').strip() or own_words(str(x.get('BodyText') or '')).strip())[:n] or x.get('Subject') or ''}
+
+
+def with_failure(store, tid: int, msgs: list) -> list:
+    """A TURN THAT FAILED SAYS SO IN THE CHAT, in the words a turn the pane streamed itself gets ("⚠ <why>"). A turn the server woke - a typed
+    ask picked up in the background - failed with nothing in the chat: the owner's line, then an empty pane under "agent stopped", the reason
+    only on the rail row (2026-11-09). The run's last word, when it is a failure newer than anything the chat shows."""
+    from . import funnel
+    f = funnel.run_failed(store, tid)
+    ev = f and store.last_worker_event(tid, kinds=('failed',))
+    if not ev or (msgs and str(msgs[-1].get('createdAt') or '') > str(ev.get('CreatedAt') or '')): return msgs
+    return [*msgs, {'id': f"failed-{ev['Id']}", 'role': 'assistant', 'content': [{'type': 'text', 'text': f"⚠ {f['sentence']}"}],
+                    'createdAt': ev.get('CreatedAt'), 'failed': True}]
 
 
 def shown_history(store, tid: int) -> list:
@@ -2241,7 +2262,7 @@ class GeneralSession:
             stopped = cancel.is_set() or getattr(self, 'closing', False)
             timed = None if stopped else _timed_out(e)
             # ...a turn that ran out of time says so in words, not as "Codex exit 1: timed out after 1500s." (2026-11-04)
-            said = timed_out_line(e) if timed is not None else str(e)
+            said = timed_out_line(e) if timed is not None else (unreached_line(e, self.provider) or str(e))
             self._remember_trace('error', 'assistant', {'result': said, 'is_error': True})
             self._emit(f'\x1b[1;31merror>\x1b[0m {said}\r\n\r\n')
             self._unusable(e)
@@ -2268,7 +2289,7 @@ class GeneralSession:
                 raise Stopped(str(e)) from e
             try:
                 from . import workerstate as ws
-                ws.record(self.store, self.task_id, self.sid, 'stopped' if stopped else 'failed', text=str(e)[:4000], source='api')
+                ws.record(self.store, self.task_id, self.sid, 'stopped' if stopped else 'failed', text=said[:4000], source='api')
             except Exception as skipped: logger.debug(f'api worker event skipped: {skipped}')
             logger.warning(f'assistant turn failed on task {self.task_id}: {e}')
             # ITS CLI DIED PART-WAY THROUGH (clipool.MID_TURN): the turn was not sent again, as it may have done some of the work.

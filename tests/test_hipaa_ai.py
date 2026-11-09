@@ -76,6 +76,25 @@ class ModelsByJobTests(unittest.TestCase):
         self.assertEqual(r['discovery'], {'fast': 'gemini-3.8-flash', 'agent': 'claude-sonnet-5-5'})
         self.assertEqual((s.get_setting('triage_ai'), s.get_setting('assistant_ai')), ('cli:claude', f'connector:{cid}'))
 
+    def test_switching_it_on_never_takes_a_job_a_brain_already_runs(self):
+        """2026-11-09: switched on in Connections, the card took the general agent off the Claude Code the blank slot already ran on, and
+        wrote it as the owner's pick - a general ask then started on a gateway nobody chose. A ready CLI, or another AI card on, keeps
+        every blank job blank; with neither, the card fills them, saved for the owner, never as their choice."""
+        from taskuary import firstrun
+        for ready, other in ((['claude'], False), ([], True)):
+            s = MemoryStore()
+            if other: s.save_connector({'ConnectorId': s.get_connector_by_type('azure_openai')['ConnectorId'], 'Secret': 'az-key-123456', 'Active': 1}, 'owner')
+            cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+            s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1}, 'owner')
+            with mock.patch('taskuary.llm.list_models', return_value=self.MODELS), mock.patch('taskuary.agents.ready_brains', return_value=ready):
+                firstrun.models_by_job(s, {}, cid, only_blank=True)
+            self.assertEqual([s.get_setting(k) or '' for k in ('triage_ai', 'concierge_ai', 'assistant_ai')], ['', '', ''], (ready, other))
+        s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1}, 'owner')
+        with mock.patch('taskuary.llm.list_models', return_value=self.MODELS), mock.patch('taskuary.agents.ready_brains', return_value=[]):
+            firstrun.models_by_job(s, {}, cid, only_blank=True)
+        self.assertEqual((s.get_setting('assistant_ai'), s.setting_writer('assistant_ai')), (f'connector:{cid}', 'migration'))
+
 
 class _Gateway:
     """A gateway on this computer that answers /v1/models and /v1/chat/completions - or turns every code away (`status`)."""

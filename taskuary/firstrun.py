@@ -319,9 +319,9 @@ def pick_models(models) -> tuple:
 
 
 def models_by_job(store, cfg: dict, cid: int, only_blank: bool = False) -> dict:
-    """Point triage and the Assistant at the card's fastest model and the general agent at its Sonnet. `only_blank`: a job the
-    owner already pointed somewhere keeps it (the Connections page); setup's pick sets them all."""
-    from . import aidefaults, llm
+    """Point triage and the Assistant at the card's fastest model and the general agent at its Sonnet. `only_blank`: the Connections
+    page - a job the owner pointed somewhere, or one a brain already runs, keeps it; setup's pick sets them all."""
+    from . import agents, aidefaults, llm
     c = store.get_connector(cid, with_secret=True) or {}
     try: conf = json.loads(c.get('ConfigJson') or '{}')
     except ValueError: conf = {}
@@ -329,9 +329,14 @@ def models_by_job(store, cfg: dict, cid: int, only_blank: bool = False) -> dict:
     except Exception as e:
         logger.info(f'{c.get("Type")}: no model list from its gateway - {e}'); fast, agent = '', ''
     pick = f'connector:{cid}'
-    free = lambda slot: not only_blank or not str(store.get_setting(slot) or '').strip()
+    # A BLANK JOB IS NOT AN UNPOINTED ONE (2026-11-09: the card switched on in Connections took the general agent off the owner's own
+    # Claude Code, which the blank slot already ran on, and wrote it as the owner's pick - "who decided this"). From Connections it takes only
+    # a job nothing else would run: no CLI ready here, no other AI card on. Saved FOR the owner, never as their choice
+    other = only_blank and (agents.ready_brains(store) or any(o['ConnectorId'] != cid and o['Type'] in llm.AI_TYPES and o['Active']
+                                                               and (o['HasSecret'] or o['Type'] == 'ollama') for o in store.list_connectors()))
+    free = lambda slot: not only_blank or (not str(store.get_setting(slot) or '').strip() and not other)
     for slot, model in (('triage_ai', fast), ('concierge_ai', fast), ('assistant_ai', agent)):
-        if model and free(slot): aidefaults.apply(store, cfg, slot, pick, model)
+        if model and free(slot): aidefaults.apply(store, cfg, slot, pick, model, actor='migration' if only_blank else 'owner')
     return {'fast': fast, 'agent': agent}
 
 

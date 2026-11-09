@@ -2,6 +2,15 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.26 - 2026-11-09
+
+- New stays up, its button spinning, until the task it made is on the table
+- Switching an AI card on never takes a job a brain already runs; a failed API turn says why in words and in the chat
+- A kept draft's card stays on the turn that wrote it while questions are asked under it
+- A picture Google cannot decode no longer stops a HIPAA AI agent; a refused turn is said in words
+- A working agent's screen no longer throws the cached pile away
+- HIPAA AI answers only a job set to it in Settings; a blank job never falls to it
+
 ## 0.3.11.25 - 2026-11-09
 
 - A turn the owner answered over while it worked ends on what is left

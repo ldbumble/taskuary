@@ -217,6 +217,15 @@ PROVIDER_DEFAULT = {'anthropic': 'claude-opus-5', 'openai': 'gpt-4o-mini', 'open
 # thinking before it writes, so a 400-token triage came back with no message at all - read as a refused format, then as an error with
 # no reason, and a connected Vertex AI sorted no mail (2026-10-15). Once more with this much room; empty after that says so.
 ROOM = 8000
+# ...and an answer CUT SHORT by its thinking is no answer either: the HIPAA AI gateway's Gemini spent 360 of the Assistant's 380 tokens
+# reasoning and handed back 16 words with finish_reason 'length' - "Tell me what you'd like the routine to do-what", a CALL cut at
+# `{"params` - and the chat showed the stub (the owner, 2026-11-09). A route seen thinking is asked with ROOM from then on.
+_THINKS = set()            # (type, endpoint, model) whose answers were seen cut by reasoning tokens
+def cut_by_thinking(j: dict) -> bool:
+    "A 'length' finish whose budget went mostly to reasoning: the visible words are a stub, not the answer the cap allowed."
+    ch, u = (j.get('choices') or [{}])[0], j.get('usage') or {}
+    r = ((u.get('completion_tokens_details') or {}).get('reasoning_tokens')) or 0
+    return ch.get('finish_reason') == 'length' and r > 0 and r * 2 >= (u.get('completion_tokens') or r)
 
 
 class _ImageRefused(Exception): "A 400 that is the picture, not the question (_IMAGE_REFUSED)."
@@ -1095,6 +1104,7 @@ def make_llm(t, cfg: dict, key: str):
                         aiusage.openai(r.json())
                         ch = (r.json().get('choices') or [{}])[0]
                         said = said_text(ch.get('message') or {})
+                        if cut_by_thinking(r.json()): _THINKS.add(ek); raise _Empty('length')
                         if said.strip(): return said
                         raise _Empty(ch.get('finish_reason') or 'none given')
                     last = r
@@ -1112,6 +1122,7 @@ def make_llm(t, cfg: dict, key: str):
         # endpoint refused a format is remembered, so every mail after the first asks only what it takes.
         fmts = [{'type': 'json_schema', 'json_schema': {**want, 'strict': True}}, {'type': 'json_object'}] if want else []
         where = (urls[0], model)
+        if ek in _THINKS: max_tokens = max(max_tokens, ROOM)
         def ask():
             try: return asked()
             except _ImageRefused:
@@ -1125,15 +1136,18 @@ def make_llm(t, cfg: dict, key: str):
                     if fmt or want: _FORMAT_FROM[where] = i
                     return out
             raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}{tried(last)}: {last.text[:300]}')
-        try: return ask()
-        except _Empty as e:
-            if str(e) != 'length' or max_tokens >= ROOM:
+        # ...and an empty 'stop' is asked once more as it was: Gemini behind the HIPAA AI gateway now and then thinks and writes nothing
+        spent = 0
+        while True:
+            try: return ask()
+            except _Empty as e:
+                spent += 1
+                if str(e) == 'length' and max_tokens < ROOM: max_tokens = ROOM; continue
+                if str(e) != 'length' and spent < 3: continue
+                if str(e) == 'length':
+                    raise RuntimeError(f'{t}: the model ran out of room before answering, even with {ROOM} tokens (finish_reason {e}) - '
+                                       f'model {model}; pick a non-thinking model on its card') from None
                 raise RuntimeError(f'{t} sent back no answer (finish_reason {e}) - model {model}') from None
-        max_tokens = ROOM
-        try: return ask()
-        except _Empty as e:
-            raise RuntimeError(f'{t}: the model ran out of room before answering, even with {ROOM} tokens (finish_reason {e}) - '
-                               f'model {model}; pick a non-thinking model on its card') from None
     llm.takes_want = True
     llm.takes_web = t in ('openai', 'azure_openai')
     return llm

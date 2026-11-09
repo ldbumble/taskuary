@@ -688,10 +688,15 @@ def facts(store, item: dict, whole: bool = False) -> str:
 # staying in the part is the model's, IN_PART). Jargon is noted for the record, never rewritten.
 _HALF = re.compile(r'\s*\bCALL:.*$', re.I | re.S)
 _BARE = re.compile(r'^\s*(?:```\w*\s*)?\{\s*"(?:kind|verb|params)"', re.I)
-LOST = "I lost my train of thought there - say it again?"
+# ...and it is a plain failure, never a request to say it again (the owner, 2026-11-09, after "I lost my train of thought there - say it
+# again?" answered a "?" that followed two cut-off replies): the owner said it right; the answer is what broke, and nothing was done
+LOST = "The AI's answer came back broken, so nothing was done. Nothing you said was lost - send it once more, or pick another AI below."
+# A MARKER WITH NOTHING BEHIND IT is the model's syntax, never words: a reply cut off after "VIEW:" showed "VIEW:" to the owner (2026-11-09).
+# The parsers take every whole VIEW, OPTIONS, DECIDE and CALL line first, so one still here is a fragment
+_DANGLING = re.compile(r'\n?^[ \t]*(?:VIEW|OPTIONS|DECIDE)\s*:[^\n]*\Z', re.M)
 def gate(text: str) -> tuple[str, bool]:
     """(what may be shown, whether it was broken). A CALL left in the words, or an answer that is only a fragment of one, is broken."""
-    t = str(text or '')
+    t = _DANGLING.sub('', str(text or '')).rstrip()
     if _BARE.match(t): return '', True
     if re.search(r'\bCALL:', t, re.I): return _HALF.sub('', t).strip(), True
     if (j := places.jargon_in(t)): logger.info(f'concierge: a reply said {j[:5]} to the owner')
@@ -3426,7 +3431,10 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # ON THE DESK A NEW JOB IS NEW, FILLED IN (routes): the words on the tab that starts it, its own button the one to press
     # ...and a job the model said REPEATS (`recurs`) is New → Routine, never a one-off agent started now
     recurs = recurs_of(params.get('recurs')) if kind == 'task.create_from_text' else None
-    if routes() and kind in ('task.create_from_text', 'task.setup'):
+    # ...and a SET-UP is sorted first, with what was said before it (setup_turn): "help me set up a new routine", then "log into <a portal> and
+    # review my denials" as task.setup, started a one-off agent - the routine the owner had just asked for never came up (2026-11-09)
+    if routes() and kind == 'task.setup': return setup_turn(store, tid, text, str(params.get('text') or text or '').strip(), item, actor)
+    if routes() and kind == 'task.create_from_text':
         want = str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general'
         return _new(store, tid, item, want if want in NEW_TAB else 'general', str(params.get('text') or text or '').strip(), str(params.get('to') or ''),
                     channel=str(params.get('channel') or ''), recurs=recurs or (recurs_of({'objective': params.get('text') or text}) if want == 'routine' else None))
@@ -4986,7 +4994,13 @@ SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small comp
                      '"repo": "<a repository the owner named, or null>", "skill": "<a skill the owner named, its slash-command name, or null>"}; '
                      'else null>, '
                      '"title": "<what to call it on a task list - a few words naming the job, e.g. Add Erin Blake to payroll>", '
-                     '"name": "<for a connection: the system the owner named, as they wrote it, or null>"}. '
+                     '"name": "<for a connection: the system the owner named, as they wrote it, or null>", '
+                     '"signs_in": "<the web address of the site the job must sign in to (e.g. portal.example.com), or null>"}. '
+                     # "help me set up a new routine" then "log into <a portal> and review my denials" was sorted alone, as digging, and the
+                     # routine the owner had just asked for was lost (2026-11-09)
+                     'conversation_before, when given, is what was said just before: the request continues it - a routine asked for '
+                     'there and described here is that routine - kind routine even when it reads a portal behind a sign-in (the agent a routine runs has '
+                     'a browser), its schedule null when no clock was said. '
                      # (the owner, 2026-10-08: "the assistant should be able to walk a user through setting up new role and work")
                      'A ROLE is the owner naming their JOB and asking for Taskuary to be set up for it ("I am an AP rep, set me '
                      'up", "I do accounts payable") - answer role, with its key from roles, when the job is one of them; a job '
@@ -5061,7 +5075,7 @@ def catalogue_near(name: str, n: int = 3) -> list:
     return list({id(keys[k]): keys[k] for k in hits}.values())[:n]
 
 
-def sort_setup(store, text: str, llm) -> dict:
+def sort_setup(store, text: str, llm, before: str = '') -> dict:
     """What kind of set-up the words ask for, by the model: a report, a connection (and to what), or digging."""
     from . import compose
     from . import connectorcatalog
@@ -5070,7 +5084,7 @@ def sort_setup(store, text: str, llm) -> dict:
     titled = {t: (connectorcatalog.by_type(t) or {}).get('title') or t for t in types}
     from . import roles
     have = {k: r['title'] for k, r in roles.ROLES.items()}
-    try: out = compose._json(llm(SETUP_SORT_SYSTEM, json.dumps({'request': text, 'connector_types': titled, 'roles': have}), max_tokens=300)) or {}
+    try: out = compose._json(llm(SETUP_SORT_SYSTEM, json.dumps({'request': text, **({'conversation_before': before} if before else {}), 'connector_types': titled, 'roles': have}), max_tokens=300)) or {}
     except Exception as e:
         logger.warning(f'concierge: the set-up sort failed - {e}'); out = {}
     kind = str(out.get('kind') or 'report').lower(); prov = str(out.get('provider') or '').lower().strip()
@@ -5079,7 +5093,7 @@ def sort_setup(store, text: str, llm) -> dict:
     if kind == 'role' and role not in have: kind = 'investigate'
     return {'kind': kind if kind in ('report', 'routine', 'playbook', 'connection', 'role', 'investigate') else 'report', 'provider': prov if prov in types else None,
             'role': role if kind == 'role' else None, 'why': str(out.get('why') or '')[:300], 'title': _title_cut(out.get('title') or ''),
-            'name': str(out.get('name') or '').strip()[:80],
+            'name': str(out.get('name') or '').strip()[:80], 'signs_in': str(out.get('signs_in') or '').strip()[:120],
             **({'recurs': recurs_of(out.get('recurs'))} if kind == 'routine' else {})}
 
 
@@ -5178,6 +5192,16 @@ def _walkthrough(store, tid: int, ask: str, item: dict | None, actor: str, lead:
     return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
 
 
+# A JOB THAT SIGNS IN SAYS WHERE ITS LOGIN COMES FROM (the owner, 2026-11-09: "it should be creating a vault login"): the agent's browser
+# fills a saved sign-in itself (signin.py); with none saved, the first sign-in page asks the owner for it, and Save keeps it for every run
+def signin_lead(store, signs_in) -> str:
+    from . import signin
+    if not (site := signin.site_from(str(signs_in or '').strip())): return ''
+    if signin.saved(store, site): return f"Its sign-in to {site} is in Saved sign-ins, so the browser fills it."
+    return (f"No sign-in to {site} is saved yet: when the browser reaches its login it asks you for it, "
+            f"and Save keeps it in Saved sign-ins for every run after.")
+
+
 def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: str = 'owner', llm=None,
                trace=None, cancel=None, sorted_as: str = None) -> dict:
     """A set-up asked for in the chat (PW-194): sorted by the model, gathered by the composer - its questions come back as
@@ -5196,15 +5220,16 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
         if pending.get('role') and not routes(): return _propose_role(store, tid, ask, pending['role'], item, actor, cllm, answers)
         sort = sort_setup(store, f"{ask}. The owner answered: {text}", cllm)
     elif sorted_as: sort = {'kind': sorted_as, 'provider': None, 'why': ''}      # the chat model already named it
-    else: sort = sort_setup(store, ask, cllm)
+    else: sort = sort_setup(store, ask, cllm, before=_turns(store, tid, 4))
+    vault = signin_lead(store, sort.get('signs_in'))
     # ON THE DESK A SET-UP IS ITS OWN PAGE (routes): a report is New's report box, a connection its card, a role its Set up on Profiles, and
     # digging an agent's job in New - each with its own button to press; nothing is composed into a card to confirm here
     if routes():
         if sort['kind'] in ('report', 'playbook'): return _new(store, tid, item, sort['kind'], ask)
-        if sort['kind'] == 'routine': return _new(store, tid, item, 'workflow', ask, recurs=sort.get('recurs') or recurs_of({'objective': ask}))
+        if sort['kind'] == 'routine': return _new(store, tid, item, 'workflow', ask, recurs=sort.get('recurs') or recurs_of({'objective': ask}), lead=vault)
         if sort['kind'] == 'role':
             return _page(store, tid, item, '#profiles', "Opened Profiles - press Set up beside the job you do.")
-        if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask)
+        if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask, lead=vault)
         if sort.get('provider'):
             return call_turn(store, tid, {'kind': 'connection.create', 'params': {'type': sort['provider']}}, item, text, actor)
         # A SYSTEM THE CATALOGUE HAS NO CARD FOR is said so, with its closest cards: it opened #connector=None, Connections with nothing

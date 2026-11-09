@@ -90,9 +90,9 @@ test("the job reads as a document, and Edit opens its text", () => {
   // ...the job's Edit and Write it again under the job, never under the list that follows it
   assert.match(src, /\{under && moves\.length > 0 && <Box data-tq-job-moves=""/);
   assert.match(src, /: <WorkstreamsConfirm text=\{text\} onChange=\{onChange\} \/>\}/);
-  // ...each line's box keeps it, "Personal" said in words (the owner, 2026-11-03: "Personal" and "Keep" on a lone card said nothing)
-  assert.match(src, /inputProps=\{\{ "aria-label": `Keep \$\{r\.name \|\| "this workstream"\}` \}\}/); assert.match(src, /label="Personal"/);
-  assert.match(src, /Untick any that isn't yours to leave it out\. Tick <b>Personal<\/b> for life outside/);
+  // ...one tick per line: used or left out (the owner, 2026-11-09: "either you want taskuary to use this or not. no need for personal button")
+  assert.match(src, /inputProps=\{\{ "aria-label": `Keep \$\{r\.name \|\| "this workstream"\}` \}\}/); assert.doesNotMatch(src, /label="Personal"/);
+  assert.match(src, /Taskuary uses what's ticked\. Untick anything that isn't your work\./);
   assert.match(src, /<Md text=\{text\} \/>/);
   assert.match(src, /\{editing === step \? "Done editing" : "Edit"\}/);
 });

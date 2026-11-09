@@ -14,7 +14,7 @@
 // ...AND THE JOB WITH WHAT YOU WORK ON, ONE STEP (the owner, 2026-11-06): the workstreams the mail was grouped into sit under the job
 // description, their own line in place while the grouping runs, and one Next keeps both - never waiting on the grouping (aboutWork.js).
 import React, { useEffect, useRef, useState } from "react";
-import { Box, Button, Checkbox, Chip, CircularProgress, FormControlLabel, TextField, Typography } from "@mui/material";
+import { Box, Button, Checkbox, Chip, CircularProgress, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { DIM, FAINT, INK } from "./theme.jsx";
 import { useVerbs } from "./actionRow.js";
@@ -47,7 +47,7 @@ const SAYS = {
   // or leave it out; a personal one is never learned from. Drawn under the job since 2026-11-06, where `busy` is its line in place
   workstreams: { running: "Reading six months of your mail to see what you work on - about a minute.",
     failed: (why) => `I couldn't tell what you work on from your mail (${why}).`,
-    ready: "Here's what I think you work on. Rename any, mark the personal one, untick any that's wrong, then press Next.",
+    ready: "Here's what I think you work on. Rename any, untick anything that isn't your work, then press Next.",
     none: "Press Write it - I read six months of your mail and list what you work on.", busy: "Grouping your mail into what you work on…" },
   style: { running: "Reading your sent mail to describe how you write - about a minute.",
     failed: (why) => `I couldn't write it from your sent mail (${why}). Press Write it again, or describe it in your own words.`,
@@ -324,8 +324,8 @@ export function WorkstreamsConfirm({ text, onChange }) {
   // start keeps a workstream, the name is the field beside it, and "Personal" is spelled out once above and again on the line it marks
   return (
     <Box data-tq-workstreams-confirm="" sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-      <Typography sx={{ fontSize: 13, color: DIM }}>Untick any that isn't yours to leave it out. Tick <b>Personal</b> for life outside
-        work - asks there are FYIs, and nothing there is learned from.</Typography>
+      {/* ONE TICK (the owner, 2026-11-09: "either you want taskuary to use this or not. no need for personal button. wording is confusing") */}
+      <Typography sx={{ fontSize: 13, color: DIM }}>Taskuary uses what's ticked. Untick anything that isn't your work.</Typography>
       <Box sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff" }}>
         {rows.map((r, i) => { const kept = r.keep !== false; return (
           <Box key={r.slug} data-tq-workstream-row={r.slug} sx={{ px: 1.5, py: 1.25, "& + &": { borderTop: "1px solid #ece6db" } }}>
@@ -334,14 +334,11 @@ export function WorkstreamsConfirm({ text, onChange }) {
                 inputProps={{ "aria-label": `Keep ${r.name || "this workstream"}` }} />
               <TextField size="small" value={r.name} onChange={(e) => put(i, { name: e.target.value })} disabled={!kept}
                 sx={{ flex: 1, minWidth: 0, "& .MuiInputBase-root": { fontSize: 14.5 } }} inputProps={{ "aria-label": "Workstream name" }} />
-              <FormControlLabel disabled={!kept} control={<Checkbox size="small" checked={!!r.personal} onChange={(e) => put(i, { personal: e.target.checked })} sx={{ p: 0.5 }} />}
-                label="Personal" sx={{ m: 0, flexShrink: 0, gap: 0.25, "& .MuiFormControlLabel-label": { fontSize: 13, color: DIM } }} />
             </Box>
             <Box sx={{ pl: 4, pt: 0.5, opacity: kept ? 1 : 0.55 }}>
-              {!kept ? <Typography sx={{ fontSize: 12.5, color: DIM }}>Left out - Taskuary won't treat this as part of your work.</Typography> : <>
+              {!kept ? <Typography sx={{ fontSize: 12.5, color: DIM }}>Left out - Taskuary won't use this.</Typography> : <>
                 {r.about && <Typography sx={{ fontSize: 13, color: DIM }}>{r.about}</Typography>}
-                {r.section && !r.personal && <Box sx={{ mt: 0.25, "& ul": { pl: 2.5, my: 0.25 }, "& li": { fontSize: 13.5, lineHeight: 1.5 } }}><Md text={r.section} /></Box>}
-                {r.personal && <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.25 }}>Personal - asks here are FYIs, and nothing here is learned from.</Typography>}
+                {r.section && <Box sx={{ mt: 0.25, "& ul": { pl: 2.5, my: 0.25 }, "& li": { fontSize: 13.5, lineHeight: 1.5 } }}><Md text={r.section} /></Box>}
               </>}
             </Box>
           </Box>); })}

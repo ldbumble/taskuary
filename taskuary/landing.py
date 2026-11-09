@@ -10,6 +10,12 @@ next turn ("resolve these conflicts, then say done"). A merge commit onto a base
 working tree (merge-tree + commit-tree + a compare-and-swap of the branch ref), so the agents working in the checkout are not disturbed.
 
 The agent may PROPOSE how (propose_land); the same question shows with its pick marked, and only the owner's answer lands anything.
+
+WORK ON THE SHARED BASE IS A PUSH, ASKED WITH BUTTONS (the owner, 2026-11-09, ~20th time: "i thought actions should be cards/buttons??? why is
+this text??"). A coding agent that committed straight onto master ended its turn "Ready to push 3a1b9a8 and deploy <app> (master -> deploy) - go
+ahead?" over this card, which on a shared base asked nothing, so the owner typed "yes". Its own commits not yet on origin are the question now:
+Push (origin/<base> up to its newest own commit) and, where a deploy branch is known - the agent's proposal, else the one last deployed to from
+this repo - Push & deploy (that commit pushed to the deploy branch too). Never forced: a branch that moved refuses, and says so.
 """
 from .timewords import plural
 import json, os, re, time
@@ -18,7 +24,9 @@ from loguru import logger
 from .store import task_ref
 
 KEY = 'landing'                      # :<tid> -> {cwd, base, start, branch, proposal?, landed?}
-HOW = {'rebase': 'Rebase and fast-forward', 'merge': 'Merge commit', 'pr': 'Open a PR', 'discard': 'Discard'}
+HOW = {'rebase': 'Rebase and fast-forward', 'merge': 'Merge commit', 'pr': 'Open a PR', 'discard': 'Discard', 'push': 'Push', 'deploy': 'Push & deploy'}
+OWN_HOW, PUSH_HOW = ('rebase', 'merge', 'pr', 'discard'), ('push', 'deploy')   # a branch of its own lands; work on the shared base is pushed
+DEPLOY_KEY = 'deploy_branch'         # :<owner/repo> -> the branch the owner last pushed to deploy it - the next card's Push & deploy
 DIFF_CAP = 400_000
 
 
@@ -268,8 +276,10 @@ def state(store, tid: int, full: bool = False) -> dict | None:
            'at': _stamp(int(_git(cwd, 'log', '-1', '--format=%ct', br) or 0)) if mine else o['at'],
            'files': files, 'changed': len(files), 'plus': sum(f['plus'] for f in files), 'minus': sum(f['minus'] for f in files),
            'landed': r.get('landed'), 'proposal': r.get('proposal')}
-    out['ask'] = mine and ahead > 0 and not r.get('landed')
-    out['answers'] = [{'how': k, 'label': v} for k, v in HOW.items() if k != 'discard' or mine] if out['ask'] else []
+    out['push'] = None if mine else _unpushed(store, cwd, base, o['commits'], r.get('proposal'), out['repo'])
+    out['ask'] = (mine and ahead > 0 and not r.get('landed')) or bool(out['push'])
+    hows = (OWN_HOW if mine else PUSH_HOW[:1 + bool((out['push'] or {}).get('deploy'))]) if out['ask'] else ()
+    out['answers'] = [{'how': k, 'label': HOW[k]} for k in hows]
     out['line'] = said(out)
     if full: out['diff'] = (_git(cwd, 'diff', _fork(cwd, base, br, start), br) if mine else _own_diff(cwd, o))[:DIFF_CAP]
     return out
@@ -298,11 +308,35 @@ def changes(store, tid: int) -> dict | None:
     return {'base': base, 'start': start[:7], 'since': r.get('at'), 'shared': not mine, 'diff': diff[:DIFF_CAP], 'cut': len(diff) > DIFF_CAP}
 
 
+_BRANCH = re.compile(r'(?!-)(?!.*(?:\.\.|//|@\{|\.lock$|/$|\.$))[A-Za-z0-9._/-]{1,100}')
+def _branch_ok(b) -> bool: return bool(_BRANCH.fullmatch(str(b or '')))    # git's own ref rules, the ones a name typed by an agent breaks
+
+
+def _deploy_to(store, prop, repo) -> str:
+    "The branch a push deploys to: the agent's proposal, else the one the owner last deployed this repo to - '' when neither says."
+    d = (prop or {}).get('deploy') or (store.get_setting(f'{DEPLOY_KEY}:{repo.lower()}', '') if repo else '')
+    return d if _branch_ok(d) else ''
+
+
+def _unpushed(store, cwd, base, commits, prop, repo) -> dict | None:
+    """The task's own commits on the shared base that origin does not have yet: {'tip', 'ahead', 'to', 'deploy'} - None when there is no
+    origin to push to, or nothing of its own left to push. The tip is its newest own commit still on the base."""
+    up = sha(cwd, f'refs/remotes/origin/{base}')
+    if not (up and commits): return None
+    tip = ''                                     # the newest by the graph, not the clock: two commits in one second sort either way
+    for c in commits:
+        if is_ancestor(cwd, c, base) and (not tip or is_ancestor(cwd, tip, c)): tip = c
+    if not tip or is_ancestor(cwd, tip, up): return None
+    return {'tip': tip, 'ahead': int(_git(cwd, 'rev-list', '--count', f'{up}..{tip}') or 0), 'to': base, 'deploy': _deploy_to(store, prop, repo)}
+
+
 def said(s: dict) -> str:
     "One line: what changed and what is asked."
     if not s: return ''
     n = f"{plural(s['changed'], 'file')} changed, +{s['plus']} -{s['minus']}"
     if s.get('landed'): return f"{s['branch']} landed ({HOW.get(s['landed'].get('how'), s['landed'].get('how'))}) - {n}."
+    if (p := s.get('push')): return (f"{plural(p['ahead'], 'commit')} on {s['base']} not on origin yet, up to {p['tip'][:7]}: {n}. Push it"
+                                     + (f" and deploy it to {p['deploy']}?" if p['deploy'] else '?'))
     if s['ask']: return f"{s['branch']} is {plural(s['ahead'], 'commit')} ahead of {s['base']}: {n}. How should it land?"
     if s['own']: return f"{s['branch']} has nothing {s['base']} does not already have."
     return f"The agent worked on {s['base']} itself, shared with other agents - {n} by its own commits and edits; there is no branch of its own to land."
@@ -313,24 +347,50 @@ def _repo(cwd) -> str:
     return shellgate.repo_of(cwd)
 
 
-def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent') -> dict:
-    """The agent's own read of how its work should land: the close-out's question shows it marked. It lands nothing."""
-    how = str(how or '').strip().lower()
+def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent', deploy: str = '') -> dict:
+    """The agent's own read of how its work should land: the close-out's question shows it marked. It lands nothing. On the shared base
+    that is a push - `deploy` names the branch a push to deploys (the card's Push & deploy)."""
+    how, deploy = str(how or '').strip().lower(), str(deploy or '').strip()
     if how not in HOW: raise ValueError(f"how is one of: {', '.join(HOW)}")
+    if deploy and not _branch_ok(deploy): raise ValueError(f'{deploy!r} is not a branch name to deploy to')
+    if how == 'push' and deploy: how = 'deploy'
+    if how == 'deploy' and not deploy: raise ValueError('deploy needs the branch it deploys to: `deploy`')
+    r = record(store, tid)
+    if deploy:                                    # ...read into the question below: its Push & deploy button is drawn from it
+        r['proposal'] = {**(r.get('proposal') or {}), 'deploy': deploy}; _save(store, tid, r)
     s = state(store, tid)
     if not s: raise ValueError('no session of this task started in a git checkout - there is nothing to land')
     if not s['ask']: raise ValueError(s['line'])
     if how == 'discard' and not s['own']: raise ValueError('discard is only for a branch of your own')
+    if how not in {a['how'] for a in s['answers']}: raise ValueError(f"how is one of: {', '.join(a['how'] for a in s['answers'])} here - {s['line']}")
     r = record(store, tid)
-    r['proposal'] = {'how': how, 'why': ' '.join(str(why or '').split())[:400], 'at': time.strftime('%Y-%m-%d %H:%M:%S')}
+    r['proposal'] = {'how': how, 'why': ' '.join(str(why or '').split())[:400], 'at': time.strftime('%Y-%m-%d %H:%M:%S'), **({'deploy': deploy} if deploy else {})}
     _save(store, tid, r)
-    store.add_comment(tid, actor, 'agent', f"Proposes to land {s['branch']}: {HOW[how]}" + (f" - {r['proposal']['why']}" if r['proposal']['why'] else '') + '.')
+    store.add_comment(tid, actor, 'agent', f"Proposes to land {s['branch']}: {HOW[how]}" + (f' to {deploy}' if deploy else '') + (f" - {r['proposal']['why']}" if r['proposal']['why'] else '') + '.')
     store.audit('task', tid, 'land_proposed', actor, detail={'how': how})
     try:                                          # ...and asked on a chat bound to the task (agentchannels.py): answered there by the owner alone
         from . import agentchannels
         agentchannels.landing_proposed(store, tid)
     except Exception as e: logger.debug(f'{task_ref(tid)}: the landing question was not put on its channel - {e}')
     return {'ok': True, 'says': f"The owner sees the landing question with {HOW[how]} marked - nothing lands until they answer it."}
+
+
+# A GIT ACT PROPOSED ANY WAY IS THE CARD'S BUTTONS (the owner, 2026-11-09: "actions should be cards/buttons"): `propose {"action": "push"}`,
+# a TASKUARY-PROPOSE mark of `land` or `open_pr` - with "Agents may push / deploy" off a land/open_pr proposal was REFUSED, and the agent,
+# left with no road, asked "go ahead?" in words. On a task whose work is in a checkout each is the landing card's question instead: the
+# owner's press is the push, so no agent switch gates it. Elsewhere (no checkout, nothing to land) the proposal goes its old way.
+GIT_ACTS = {'push': 'push', 'deploy': 'push', 'push_direct': 'push', 'land': '', 'open_pr': 'pr'}
+
+
+def from_proposal(store, tid: int, p: dict) -> dict | None:
+    "A proposed git act as the landing card's question (propose) - None when it is not one, or the task has nothing to land."
+    a = str((p or {}).get('action') or '').strip()
+    if a not in GIT_ACTS: return None
+    s = state(store, tid)
+    if not (s and s['ask']): return None
+    how = 'pr' if s['own'] and GIT_ACTS[a] in ('', 'pr') else 'push' if not s['own'] else GIT_ACTS[a]
+    if s['own'] and how == 'push': how = 'pr'                     # a branch of its own goes out as a pull request, never straight over the base
+    return propose(store, tid, how, str(p.get('why') or ''), deploy=str(p.get('deploy') or p.get('target') or '') if not s['own'] else '')
 
 
 class Refused(RuntimeError): pass
@@ -367,6 +427,8 @@ def land(store, tid: int, how: str, actor: str = 'owner') -> dict:
     s = state(store, tid)
     if not s or not s['ask']: raise ValueError((s or {}).get('line') or 'nothing to land on this task')
     if how == 'discard' and not s['own']: raise ValueError('discard is only offered for a branch the agent made itself')
+    if how not in {a['how'] for a in s['answers']}: raise ValueError(f"{HOW[how]} is not offered here - {s['line']}")
+    if how in PUSH_HOW: return _push(store, tid, s, how, actor)
     cwd, base, br = s['cwd'], s['base'], s['branch']
     head, said_ = head_branch(cwd), ''
     if how == 'rebase':
@@ -493,6 +555,33 @@ def _landed(store, tid, how, said_, actor, at_sha='', **extra) -> dict:
     store.add_comment(tid, actor, 'human', said_)
     store.audit('task', tid, 'landed', actor, detail={'how': how, 'sha': at_sha[:12], **extra})
     return {'ok': True, 'how': how, 'says': said_, **extra}
+
+
+def _push(store, tid, s, how, actor) -> dict:
+    """Push the task's own commits on the shared base: origin/<base> up to its newest one, and for Push & deploy that commit to the deploy
+    branch too. Never forced - a branch that moved refuses, and says what was and was not pushed. Kept as ci's PUSHED mark, so the CI watch
+    follows it as it follows any push."""
+    from . import ci
+    cwd, base, p = s['cwd'], s['base'], s['push']
+    tip, done = p['tip'], []
+    for b in [base] + ([p['deploy']] if how == 'deploy' else []):
+        rc, out, err = _run(cwd, 'push', 'origin', f'{tip}:refs/heads/{b}', timeout=180)
+        if rc:
+            why = ci.TOKEN_URL.sub('https://', (err or out))[:300]
+            fix = ' - pull and rebase, then push again (never forced)' if re.search(r'non-fast-forward|fetch first|rejected', why) else ''
+            raise Refused(f"the push of {tip[:7]} to {b} was refused: {why}{fix}" + (f' - {done[0]} was pushed' if done else ' - nothing was pushed'))
+        done.append(b)
+    if how == 'deploy' and s['repo']: store.set_setting(f"{DEPLOY_KEY}:{s['repo'].lower()}", p['deploy'], actor)
+    ci._save_push(store, tid, {'repo': s['repo'], 'branch': base, 'from': base, 'sha': tip, 'commits': p['ahead'], 'state': 'pushed',
+                               'url': f"https://github.com/{s['repo']}/commit/{tip}" if s['repo'] else '', 'checks': None, 'checked_at': None}, actor)
+    said_ = f"Pushed {plural(p['ahead'], 'commit')} to origin/{base} ({tip[:7]})" + (f" and deployed it to {p['deploy']}." if how == 'deploy' else '.')
+    out = _landed(store, tid, how, said_, actor, tip, **({'deploy': p['deploy']} if how == 'deploy' else {}))
+    try:                                          # ...the press was the go-ahead the agent waits on: its next turn checks it and finishes
+        from . import waitroom
+        waitroom.add(store, tid, f"{said_} The owner pressed {HOW[how]} on your proposal. " + ("Check it is live, then finish."
+                     if how == 'deploy' else "Finish the task."), 'router')
+    except Exception as e: logger.debug(f'{task_ref(tid)}: the push was not handed back to the agent - {e}')
+    return out
 
 
 def _pr(store, tid, s, actor) -> dict:

@@ -120,10 +120,12 @@ TOOLS = {
     'find_repos': ('read', "The git checkouts under the folders you may look in, newest commit first: name (from origin), folder, "
                            "remote, last commit date. `query` narrows by name or folder. Read-only.",
                    _S({'query': _STR}), ('GET', '/api/agent/repos')),
-    'propose_land': ('propose', "How your branch lands when the task closes: `how` rebase (rebase and fast-forward), merge (a merge "
-                                "commit), pr or discard; `why` in one line. The owner answers the landing question with your pick "
-                                "marked - nothing lands, merges or pushes until they do.",
-                     _S({'how': {'type': 'string', 'enum': ['rebase', 'merge', 'pr', 'discard']}, 'why': _STR}, ('how',)),
+    'propose_land': ('propose', "How your work lands, as the owner's buttons - never ask it in words. Your own branch: `how` rebase "
+                                "(rebase and fast-forward), merge (a merge commit), pr or discard. Commits straight on the shared base "
+                                "(master/main): `how` push, and `deploy` the branch a push to deploys (e.g. deploy, production) when it "
+                                "must go live - the card shows Push and Push & deploy. `why` in one line. Nothing lands, merges or pushes "
+                                "until the owner presses.",
+                     _S({'how': {'type': 'string', 'enum': ['rebase', 'merge', 'pr', 'discard', 'push']}, 'why': _STR, 'deploy': _STR}, ('how',)),
                      ('POST', '/api/agent/propose-land')),
     'propose_reply': ('propose', "The reply to a person on this task, on the channel of the message it answers (email, WhatsApp, "
                                  "Teams...). `to`: a name or address, else the newest message's sender. `answers`: the number of the "
@@ -193,7 +195,8 @@ TOOLS = {
               _S({'report': _INT, 'to': _STR, 'text': _STR, 'via': {'type': 'string', 'enum': ['chat', 'email']}}, ('report', 'to', 'text')),
               ('POST', '/api/agent/share')),
     'propose': ('propose', "Ask the owner to approve one act Taskuary runs on their press: comment_issue {body} (a public GitHub "
-                           "comment), close_issue, open_pr, land, run_tool {type, connector_id, ...} (a send, post or order on one of"
+                           "comment), close_issue, open_pr, land, push {deploy?: the branch that deploys it} (on a coding task "
+                           "these three are the landing card's Push / Push & deploy / PR buttons), run_tool {type, connector_id, ...} (a send, post or order on one of"
                            " their systems - a post, a new GitHub issue and a Jira, Monday or Linear write are the guide tool's "
                            "`propose` topic), write_playbook {slug, text}, settings {changes}. Always give `why`. It puts an Approve "
                            "button in front of the owner - nothing happens until they press it. `replaces`: as on propose_email.",

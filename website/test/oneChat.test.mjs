@@ -8,7 +8,7 @@ import test from "node:test";
 import { chatRows, chatSource, eventsOf, rowMessages, stepsFromAcp, turnParts, workCount } from "../src/chatStream.js";
 import { SHIPPED, defaultDetail, detailFor, keepOwnDetail, ownDetail } from "../src/chatDetail.js";
 import { notShown, stillHeld } from "../src/heldLines.js";
-import { cardTurn, freshNext, staleOn, withTurns } from "../src/agentSummary.js";
+import { cardTurn, codingDrafts, freshNext, staleOn, withTurns } from "../src/agentSummary.js";
 
 const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const gw = read("GeneralWorkspace.jsx"), page = read("TaskPage.jsx");
@@ -272,7 +272,7 @@ test("a draft stays under its own turn; a stale one is never under the newest tu
   // ...read off the payload's `drafts` (general.draft_turns), under the message whose id is the draft's turn
   const got = withTurns([{ ReviewId: 7, Status: "pending", DraftText: "On it." }], [{ review: 7, turn: "comment-12", at: "2026-11-06 14:48:00", stale: true, before: "2026-11-06 15:00:00" }]);
   assert.deepEqual(staleOn(got, "comment-12").map((r) => r.drafted_at), ["2026-11-06 14:48:00"]);
-  assert.match(gw, /reviews: withTurns\(reviews, data\?\.drafts\)/);
+  assert.match(gw, /reviews: withTurns\(reviews, coding \? codingDrafts\(reviews, shownMessages\) : data\?\.drafts\)/);
   assert.match(gw, /work\.next && freshNext\(work\.reviews\) && chat/);
   assert.match(gw, /nextAt\?\.next && freshNext\(nextAt\.reviews\)/);
 });
@@ -296,4 +296,29 @@ test("regression: a kept draft's card stays on the turn that wrote it while ques
   assert.match(gw, /folded=\{!!custom\.folded && !\(home && holds\)\}/);
   assert.match(gw, /!working && !cardTurn\(nextAt\.reviews, /);
   assert.doesNotMatch(gw, /!custom\?\.summary && newest && work\.next/);
+});
+
+// THE OWNER, 2026-11-09, on a coding task worked from a group chat: "it also disappeared once i asked next question. i thought actions stay on
+// the past prompt it was connected to??" - the coding chat's payload names no turn per draft, so the card had no home and rode the newest turn
+test("regression: on a coding task the draft's card stays on the turn that wrote it after the owner asks another question", () => {
+  const step = (k, at, text) => ({ k, at, text });
+  const rows = chatRows({ sessions: [{ sid: "s1", cli: "claude", at: "2026-11-09 09:00:00", source: "saved", steps: [
+    step("you", "2026-11-09 09:00:00", "Look into Erin's report and draft her an answer"),
+    step("said", "2026-11-09 09:01:00", "Found it - the link was dropped. Drafted Erin a reply."),
+    step("you", "2026-11-09 09:30:00", "is the fix committed?"),
+    step("said", "2026-11-09 09:30:10", "Not yet - the suite is still running."),
+    step("you", "2026-11-09 09:31:00", "is it on master"),
+    step("said", "2026-11-09 09:31:10", "It is on your local master only."),
+  ] }] });
+  const msgs = rowMessages(rows), turns = msgs.filter((m) => m.role === "assistant").map((m) => m.id);
+  const draft = { ReviewId: 9, Status: "pending", Kind: "draft_reply", DraftText: "Hi Erin - found it, the fix is in.", CreatedAt: "2026-11-09 09:02:30" };
+  const got = codingDrafts([draft], msgs);
+  assert.deepEqual(got.map((d) => [d.turn, d.stale]), [[turns[0], false]], "the turn at work when it was written, two questions later");
+  assert.equal(cardTurn(withTurns([draft], got), msgs.map((m) => m.id)), turns[0]);
+  // ...asked after it and not yet answered: stale under its own turn, never the newest turn's Next steps
+  const asked = codingDrafts([draft], msgs.slice(0, 3));
+  assert.equal(asked[0].stale, true); assert.equal(asked[0].before, "2026-11-09 09:30:00");
+  // ...written before any turn (the triage draft from the mail alone): no home, the newest answer holds it as before; retired: nothing
+  assert.equal(codingDrafts([{ ...draft, CreatedAt: "2026-11-09 08:00:00" }], msgs)[0].turn, null);
+  assert.deepEqual(codingDrafts([{ ...draft, Status: "closed_unsent" }], msgs), []);
 });

@@ -15,7 +15,7 @@ test("the landing card says the branch's stat and the agent's pick", () => {
 });
 
 test("the four answers are the server's and discard asks once more before it goes", () => {
-  assert.deepEqual(Object.keys(HOW), ["rebase", "merge", "pr", "discard"]);
+  assert.deepEqual(Object.keys(HOW), ["rebase", "merge", "pr", "discard", "push", "deploy"]);
   const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
   assert.match(body, /how === "discard" && !sure/);
   assert.match(body, /\/api\/tasks\/\$\{taskId\}\/landing/);
@@ -54,4 +54,21 @@ test("See the diff opens its window at the press, reading the changes in it, and
   assert.match(body, /const seeDiff = \(\) => \{ if \(open\) return setOpen\(false\); setOpen\(true\); setDiff\(null\); readDiff\(\); \};/);
   assert.match(body, /<CircularProgress size=\{14\} color="inherit" \/>Loading the changes…<\/Typography>/);
   assert.match(body, /\{diffErr && <Typography variant="body2" data-tq-diff-error=""/);
+});
+
+// the owner, 2026-11-09 (~20th time): "i thought actions should be cards/buttons??? why is this text??" - an agent's commits straight on
+// master, unpushed, under a card with no button; the owner typed "yes"
+test("unpushed commits on the shared base are Push and Push & deploy buttons, and a press posts its how to the landing road", () => {
+  const s = { own: false, shared: true, base: "master", commits: 1, changed: 5, plus: 116, minus: 9, ask: true,
+    push: { tip: "3a1b9a81c0ffee", ahead: 1, to: "master", deploy: "deploy" },
+    answers: [{ how: "push", label: "Push" }, { how: "deploy", label: "Push & deploy" }] };
+  const w = landingWords(s);
+  assert.equal(w.question, "Push 1 commit to origin/master, up to 3a1b9a8, and deploy it to deploy?");
+  assert.equal(w.primary, "deploy", "the furthest the work can go, when the agent picked nothing");
+  assert.equal(landingWords({ ...s, proposal: { how: "push" } }).primary, "push");
+  assert.equal(landingWords({ ...s, push: { ...s.push, deploy: "" }, answers: s.answers.slice(0, 1) }).question, "Push 1 commit to origin/master, up to 3a1b9a8?");
+  assert.equal(landingWords({ own: true, ask: true, answers: [] }).question, "How should it land?");
+  const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
+  assert.match(body, /\{s\.ask && <>[\s\S]*\{w\.question\}[\s\S]*s\.answers\.map\(\(a\) => \([\s\S]*data-tq-land=\{a\.how\}[\s\S]*onClick=\{\(\) => answer\(a\.how\)\}/);
+  assert.match(body, /api\.post\(`\/api\/tasks\/\$\{taskId\}\/landing`, \{ how \}\)/, "Push and Push & deploy go down the landing road");
 });

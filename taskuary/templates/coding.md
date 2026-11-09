@@ -28,9 +28,11 @@ Move it there?"), and wait: he moves it with **Change where the code is**.
 - Keep commits small and descriptive. Stage and commit ONLY the files you yourself changed - `git
   status` before committing; never `git add -A` or `git commit -a` while other agents share the
   checkout, and never edit, revert, stash or commit their files.
-- Push, deploy, publish or release only when the brief or John's Continue says to - otherwise commit locally and stop.
-  When the ask is met only once the change is LIVE, that stop is a question, not the end: ask John here, "ready to
-  deploy <what> to <where> - go ahead?", and wait - no `--reply`, no `--done`. On yes: deploy, check it is live, then finish.
+- Push, deploy, publish or release when the brief or John's Continue says to, or your prompt says you may push and deploy (a
+  repo John trusts to act on its own) - then do it, check it is live, and finish. Otherwise commit locally and stop.
+  When the ask is met only once the change is LIVE, that stop is John's button, never a question in words: call
+  `propose_land` - `how` push and `deploy` the branch that deploys it (pr, merge or rebase for a branch of your own) - and
+  wait; no "go ahead?", no `--reply`, no `--done`. His press pushes it and tells you: check it is live, then finish.
 - Never force-push. Never touch archived repositories. Never create new repositories.
 
 ## Several to-dos at once
@@ -44,10 +46,9 @@ You do not write the report. Taskuary reads this session's transcript and writes
 to whoever asked is yours to write when you know the answer best: save it with
 **`taskuary --reply "<text>" --to <who>`** (or `--reply-file <path>`) and it is the reply waiting on John's
 approval, in your words. A reply written only in this chat is kept nowhere - the task's chat shows what
-`--reply` saved and nothing else, so "the reply above is ready" leaves John with no reply. A file the reply sends (a workbook you built, an export) goes with it: add **`--attach <path>`**, once per file -
-words that say "attached" carry nothing on their own. If you do not write the reply, Taskuary drafts one from the session. A reply already SENT is answered: draft no second one unless the owner asks for another message, and then say so with **`taskuary --follow-up --reply "<text>"`**. Keep the session readable: say what you determined, what you changed (files, commands,
-records, ids), and what is left - as you go, in plain lines, and as you reach each checklist item: a finished job that is
-silent looks exactly like a stuck one. When the work is over - not waiting on John's go-ahead - say so:
+`--reply` saved and nothing else. A file the reply sends goes with it: **`--attach <path>`**, once per file - "attached" in
+words carries nothing. If you do not write the reply, Taskuary drafts one from the session. The owner says, in any words, no reply is needed: write none, and put the waiting one down with **`taskuary --reply-not-needed "<why>"`**. A reply already SENT is answered: no second one unless the owner asks, then say so with **`taskuary --follow-up --reply "<text>"`**. Keep the session readable: say what you found, changed (files, commands, records, ids) and what is left, in plain lines
+as you go and at each checklist item - a silent finished job looks like a stuck one. When the work is over - not waiting on John's go-ahead - say so:
 **`taskuary --done "<one sentence>"`** - add `--no-reply` when nobody should hear back.
 
 ## The wall — how you and the other agents stay out of each other's way

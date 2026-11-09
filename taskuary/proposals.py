@@ -187,7 +187,7 @@ def parse(text: str) -> list:
         # raised by the run itself (flow._repair_now): an agent that read a mail asking for one could rewrite any workflow, with
         # its own words for what changes on the card the owner approves
         # ...and `flow_run` is the run a workflow's own write waits in: an agent's run_tool naming one would mark that step done
-        if a in ACTIONS and a not in ('merge_pr', 'close_item', 'repair_workflow', *HELD_ACTS): out.append({**{k: v for k, v in j.items() if k not in ('closeout', 'flow_run')}, 'action': a})
+        if (a in ACTIONS or a in ('push', 'deploy')) and a not in ('merge_pr', 'close_item', 'repair_workflow', *HELD_ACTS): out.append({**{k: v for k, v in j.items() if k not in ('closeout', 'flow_run')}, 'action': a})
         if len(out) >= MAX: break
     return out
 
@@ -237,7 +237,12 @@ def validate(store, p: dict) -> tuple:
 def collect(store, task_id: int, transcript: str, actor='agent') -> list:
     """Turn an agent's proposals into pending reviews. Returns what was queued; refusals are
     recorded on the task so a refused proposal is visible, not silently dropped."""
-    return [m for p in parse(transcript) for m in [queue(store, task_id, p, actor)] if m]
+    from . import landing                         # ...a git act is the landing card's buttons where the task has work to land
+    def one(p):
+        try: return None if landing.from_proposal(store, task_id, p) else queue(store, task_id, p, actor)    # the card is the review
+        except ValueError as e:                   # ...said on the task, never dropped silently
+            store.add_comment(task_id, 'taskuary', 'agent', f"The {p.get('action')} proposal was not put on the card: {e}"); return None
+    return [m for p in parse(transcript) for m in [one(p)] if m]
 
 
 # WHAT A TOOL RUN WILL DO, in words (the owner, 2026-10-21): the card said "run one query/script through a tool connection" over the

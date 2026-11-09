@@ -2,7 +2,7 @@
 import { plural as n } from "./timeWords.js";
 import { generated } from "./diffView.js";
 
-export const HOW = { rebase: "Rebase and fast-forward", merge: "Merge commit", pr: "Open a PR", discard: "Discard" };
+export const HOW = { rebase: "Rebase and fast-forward", merge: "Merge commit", pr: "Open a PR", discard: "Discard", push: "Push", deploy: "Push & deploy" };
 
 export function landingWords(s) {
   if (!s) return {};
@@ -11,9 +11,15 @@ export function landingWords(s) {
   const p = s.proposal;
   return {
     stat,
-    proposal: p?.how ? `The agent proposes ${HOW[p.how] || p.how}${p.why ? ` — ${p.why}` : ""}.` : "",
-    hint: s.own ? "A conflict lands nothing: the agent gets it to resolve. Open a PR pushes the branch and opens a draft." : "",
-    landed: s.landed ? `Landed · ${HOW[s.landed.how] || s.landed.how}` : "",
+    proposal: p?.how ? `The agent proposes ${HOW[p.how] || p.how}${p.deploy && p.how === "deploy" ? ` to ${p.deploy}` : ""}${p.why ? ` — ${p.why}` : ""}.` : "",
+    hint: s.push ? `Never forced: if origin/${s.base} moved, nothing is pushed and the card says why.` : s.own ? "A conflict lands nothing: the agent gets it to resolve. Open a PR pushes the branch and opens a draft." : "",
+    // WORK ON THE SHARED BASE IS A PUSH, ASKED WITH BUTTONS (the owner, 2026-11-09: "i thought actions should be cards/buttons??? why is this
+    // text??"): the commits origin has not got, up to which, and where Push & deploy sends them too
+    question: s.push ? `Push ${n(s.push.ahead || 0, "commit")} to origin/${s.base}, up to ${String(s.push.tip || "").slice(0, 7)}`
+      + (s.push.deploy ? `, and deploy it to ${s.push.deploy}?` : "?") : "How should it land?",
+    // the button the press most likely is: the agent's pick, else - on the shared base - the furthest the work can go
+    primary: p?.how && (s.answers || []).some((a) => a.how === p.how) ? p.how : s.push ? (s.answers || []).at(-1)?.how || "" : "",
+    landed: s.landed ? `Landed · ${HOW[s.landed.how] || s.landed.how}${s.landed.deploy ? ` to ${s.landed.deploy}` : ""}` : "",
     // ...ON A BRANCH EVERYONE COMMITS TO, said: what it counts is this task's own commits and edits, never the branch's whole history since
     shared: s.shared ? `${s.base} is shared with other agents and releases - this counts only this task's own commits and edits.` : "",
   };

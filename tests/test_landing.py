@@ -197,6 +197,69 @@ class LandingTests(unittest.TestCase):
         self.assertTrue(git(remote, 'rev-parse', 'fix-rounding'))
 
 
+    # ── WORK ON THE SHARED BASE IS A PUSH, ASKED WITH BUTTONS (the owner, 2026-11-09: "i thought actions should be cards/buttons??? why is this
+    # text??") - an agent committed straight on master, ended "Ready to push <sha> and deploy (master -> deploy) - go ahead?", and the card
+    # under it had no button, so the owner typed "yes"
+    def on_master_with_origin(self):
+        self.remote = tempfile.mkdtemp(); git(self.remote, 'init', '-q', '--bare')
+        git(self.cwd, 'remote', 'add', 'origin', self.remote); git(self.cwd, 'push', '-q', 'origin', 'master')
+        commit(self.cwd, 'ledger.py', 'one\nTWO\nthree\n')
+        landing.saw(self.s, self.tid, 'Bash', {'command': 'git commit -q -m "edit ledger.py"'})
+
+    def test_its_unpushed_commits_on_the_shared_base_are_a_push_button(self):
+        self.on_master_with_origin()
+        s = landing.state(self.s, self.tid)
+        self.assertTrue(s['ask']); self.assertFalse(s['own'])
+        self.assertEqual([a['how'] for a in s['answers']], ['push'], 'no deploy branch known yet: Push alone')
+        self.assertEqual((s['push']['tip'], s['push']['ahead']), (self.sha('master'), 1))
+        self.assertIn('Push it?', s['line'])
+
+    def test_two_commits_in_one_second_push_up_to_the_newer(self):
+        self.on_master_with_origin()
+        when = int(git(self.cwd, 'log', '-1', '--format=%ct'))
+        commit(self.cwd, 'rounding.py', 'x\n', env={'GIT_COMMITTER_DATE': f'{when} +0000'})
+        landing.saw(self.s, self.tid, 'Bash', {'command': 'git commit -q -m "edit rounding.py"'})
+        p = landing.state(self.s, self.tid)['push']
+        self.assertEqual((p['tip'], p['ahead']), (self.sha('master'), 2))
+
+    def test_the_agent_proposes_push_and_deploy_and_the_press_pushes_both(self):
+        self.on_master_with_origin(); tip = self.sha('master')
+        landing.propose(self.s, self.tid, 'push', 'the fix counts once it is live', deploy='deploy')
+        s = landing.state(self.s, self.tid)
+        self.assertEqual([a['how'] for a in s['answers']], ['push', 'deploy']); self.assertEqual(s['proposal']['how'], 'deploy')
+        self.assertFalse(git(self.remote, 'branch', '--list', 'deploy'), 'proposing pushes nothing')
+        with self.assertRaises(ValueError): landing.propose(self.s, self.tid, 'rebase')          # no branch of its own to rebase
+        with mock.patch('taskuary.waitroom.add') as told, mock.patch('taskuary.shellgate.repo_of', return_value='northwind/ledger'):
+            out = landing.land(self.s, self.tid, 'deploy')
+        self.assertTrue(out['ok']); self.assertIn('deployed it to deploy', out['says'])
+        self.assertEqual((git(self.remote, 'rev-parse', 'master'), git(self.remote, 'rev-parse', 'deploy')), (tip, tip))
+        self.assertIn('Check it is live', told.call_args[0][2], 'the press is the go-ahead the agent waited on')
+        s = landing.state(self.s, self.tid)
+        self.assertFalse(s['ask']); self.assertEqual(s['landed']['how'], 'deploy')
+        # ...and the next task in this repo is offered the same deploy branch without the agent naming it
+        self.assertEqual(landing._deploy_to(self.s, None, 'northwind/ledger'), 'deploy')
+
+    def test_a_push_proposed_through_propose_or_a_mark_is_the_cards_buttons_whatever_the_push_switch(self):
+        # with "Agents may push / deploy" off a `land` proposal was refused - the agent, left with no road, asked in words
+        from taskuary import proposals
+        self.on_master_with_origin()
+        self.assertIsNone(landing.from_proposal(self.s, self.tid, {'action': 'comment_issue', 'body': 'x'}))
+        self.assertTrue(landing.from_proposal(self.s, self.tid, {'action': 'push', 'deploy': 'deploy', 'why': 'live is the ask'})['ok'])
+        self.assertEqual([a['how'] for a in landing.state(self.s, self.tid)['answers']], ['push', 'deploy'])
+        t2 = Factory(self.s).task(title='Round the totals', kind='coding'); landing.mark_start(self.s, t2, self.cwd)
+        commit(self.cwd, 'totals.py', 'x\n'); landing.saw(self.s, t2, 'Bash', {'command': 'git commit -q -m totals'})
+        queued = proposals.collect(self.s, t2, 'Done. TASKUARY-PROPOSE {"action": "land", "why": "ship it"}', 'agent')
+        self.assertEqual(queued, [], 'no Approve review beside the card')
+        s = landing.state(self.s, t2); self.assertEqual((s['proposal']['how'], [a['how'] for a in s['answers']]), ('push', ['push']))
+
+    def test_a_push_origin_refuses_pushes_nothing_and_says_why(self):
+        self.on_master_with_origin()
+        other = tempfile.mkdtemp(); git(other, 'clone', '-q', self.remote, '.'); commit(other, 'portal.py', 'x\n'); git(other, 'push', '-q', 'origin', 'master')
+        with self.assertRaises(landing.Refused) as e: landing.land(self.s, self.tid, 'push')
+        self.assertIn('nothing was pushed', str(e.exception))
+        with self.assertRaises(ValueError): landing.land(self.s, self.tid, 'deploy')           # not offered: no deploy branch known
+
+
 class LandingDoorTests(unittest.TestCase):
     def test_landing_is_the_owners_and_proposing_is_the_agents(self):
         self.assertEqual(guard.classify('POST', '/api/tasks/7/landing')[0], 'deny')

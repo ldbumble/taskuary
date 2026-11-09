@@ -553,7 +553,10 @@ def judge_turn(store, tid: int, sid: str, said: str, brain=None, wait: bool = Fa
         if not q: return
         # ...and only while that turn is still the newest word: a prompt the owner submitted while the model read has
         # moved on past the question, and a request recorded after it would stand over the new turn
-        evs = ws.events(store, tid, sid)
+        # ...the same Stop's `background` line after it is no new word (TQ shape, 2026-11-09: a turn ended asking "should I rebase and push?"
+        # with the full suite still running in a shell; the judge came back to `background` as the newest event, recorded nothing, and the
+        # header said "agent working" over a turn that had ended on the owner's question - a request outranks running work, bb7df739)
+        evs = [e for e in ws.events(store, tid, sid) if e['Kind'] != 'background']
         if not evs or evs[-1]['Kind'] != 'turn_end' or evs[-1].get('Text') != said[:4000]: return
         ws.record(store, tid, sid, 'input_needed', request_id=ws.request_id_for(q), text=q, source='judge')
     if wait: return go()

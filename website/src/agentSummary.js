@@ -71,6 +71,21 @@ export const staleOn = (reviews, turnId) => (reviews || []).filter((r) => pendin
 export const cardTurn = (reviews, ids) => { const on = new Set((ids || []).map(String));
   const r = (reviews || []).filter((x) => pendingReply(x) && !staleDraft(x) && on.has(String(draftTurn(x)))).sort((a, b) => a.ReviewId - b.ReviewId).at(-1);
   return r ? String(draftTurn(r)) : null; };
+// ...AND ON A CODING TASK TOO (the owner, 2026-11-09: "it also disappeared once i asked next question. i thought actions stay on the past
+// prompt"): its chat is the CLI's sessions (codingchat.py), whose payload names no turn per draft, so every draft read "no shown turn wrote
+// one" and the card rode under whichever turn was newest. Its turn is the one at work when it was written: the newest agent turn started at
+// or before the draft's time (both stamps the server's own zone). Stale as general.draft_turns reads it: an owner's line came after it and no
+// turn has answered since. The same {review, turn, at, stale, before} the general chat's payload carries
+const stamp = (x) => String(x || "").replace("T", " ").slice(0, 19);
+export const codingDrafts = (reviews, messages) => {
+  const ms = (messages || []).filter((m) => m && m.createdAt), turns = ms.filter((m) => m.role === "assistant"), mine = ms.filter((m) => m.role === "user" && !m.brief);
+  return (reviews || []).filter(pendingReply).map((r) => {
+    const at = stamp(r.CreatedAt), turn = turns.filter((m) => stamp(m.createdAt) <= at).at(-1);
+    const later = mine.map((m) => stamp(m.createdAt)).filter((t) => t > at).sort()[0];
+    const stale = !!later && !turns.some((m) => stamp(m.createdAt) > later);
+    return { review: r.ReviewId, turn: turn ? String(turn.id) : null, at, stale, before: stale ? later : null };
+  });
+};
 // ...the payload's `drafts` (general.draft_turns: {review, turn, at, stale, before}) read onto the reviews they name
 export const withTurns = (reviews, drafts) => (drafts?.length ? (reviews || []).map((r) => { const d = drafts.find((x) => x?.review === r?.ReviewId);
   return d ? { ...r, turn: d.turn, stale: !!d.stale, drafted_at: d.at, before: d.before } : r; }) : reviews || []);

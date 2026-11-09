@@ -2050,7 +2050,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
                     'Do NOT create GitHub issues, PRs or other tracker items unless this message asks for one - '
                     'Taskuary IS the tracker and this task is the record. ')
                  + ('You may push and deploy as the work needs. ' if push_ok else
-                    'Do NOT push, deploy or release unless told to - commit and stop; must it go live? Ask and wait. ')
+                    'Do NOT push, deploy or release unless told to - commit and stop; must it go live? propose_land (how push, deploy <branch>) '
+                    'puts it on the owner\'s button - never ask it in words. ')
                  + 'Missing required detail? Change nothing: ask one concrete question here, say if the sender must '
                    'answer, and wait.')
     # how this session ENDS. Without it the only ending is a person clicking Done, so a task

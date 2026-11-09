@@ -20,11 +20,31 @@ CODING, AGENT = [(T / f'{n}.md').read_text(encoding='utf-8') for n in ('coding',
 class ShippedWordingTests(unittest.TestCase):
     def test_coding_md_asks_before_a_deploy_and_does_not_close(self):
         sec = CODING.split('## Editing, testing, committing', 1)[1].split('##', 1)[0]
-        for s in ('only once the change is LIVE', 'go ahead?', 'and wait - no `--reply`, no `--done`',
-                  'On yes: deploy, check it is live, then finish', "the brief or John's Continue says to"):
+        for s in ('only once the change is LIVE', 'no `--reply`, no `--done`', 'check it is live, then finish', "the brief or John's Continue says to"):
             self.assertIn(s, sec, s)
-        self.assertNotIn(store_mod._DEPLOY_WAS, CODING)
+        self.assertNotIn(store_mod._DEPLOY_WAS, CODING); self.assertNotIn(store_mod._DEPLOY_ASKED, CODING)
         self.assertIn("not waiting on John's go-ahead", CODING.split('## Closing out', 1)[1].split('##', 1)[0])
+
+    def test_the_stop_before_a_push_is_the_owners_button_never_a_question_in_words(self):
+        # the owner, 2026-11-09 (~20th time): "i thought actions should be cards/buttons??? why is this text??" - CODING.md had the agent
+        # ask "ready to deploy <what> to <where> - go ahead?" in prose, and the owner typed "yes"
+        sec = CODING.split('## Editing, testing, committing', 1)[1].split('##', 1)[0]
+        self.assertIn("that stop is John's button, never a question in words: call\n  `propose_land` - `how` push and `deploy`", sec)
+        self.assertIn('your prompt says you may push and deploy', sec, 'a trusted repo goes without stopping')
+        self.assertNotIn('ask John here, "ready to', sec)
+        from taskuary import agenttools
+        kind, words, schema, road = agenttools.TOOLS['propose_land']
+        self.assertEqual((kind, road), ('propose', ('POST', '/api/agent/propose-land')))
+        self.assertIn('push', schema['properties']['how']['enum']); self.assertIn('deploy', schema['properties'])
+        self.assertIn('never ask it in words', words)
+
+    def test_an_edited_copy_that_still_asks_in_words_is_moved_to_the_button(self):
+        path = Path(tempfile.mkdtemp()) / 'taskuary.db'
+        s = SQLiteStore(str(path)); s.save_doc('coding', 'MY RULE.\r\n' + store_mod._DEPLOY_ASKED.replace('\n', '\r\n') + '\r\nlast.', 'owner')
+        s.cx.execute("DELETE FROM setting WHERE Name='coding_proposes_push'"); s.cx.commit()
+        c = SQLiteStore(str(path)).get_doc('coding')
+        self.assertIn(store_mod._DEPLOY_NOW.replace('\n', '\r\n'), c); self.assertNotIn('go ahead?", and wait', c)
+        self.assertTrue(c.startswith('MY RULE.') and c.endswith('last.'))
 
     def test_agent_md_never_promises_a_later_step(self):
         sec = AGENT.split('## Progress and completion', 1)[1]
@@ -34,7 +54,7 @@ class ShippedWordingTests(unittest.TestCase):
 
     def test_the_seed_says_it_too_when_pushing_is_off(self):
         s = MemoryStore(); tid = s.create_task({'Title': 'Ship the export fix', 'Kind': 'coding', 'Status': 'open'}, 'o')
-        self.assertIn('commit and stop; must it go live? Ask and wait.', terminal.seed_text(s, tid))   # the whole rule is CODING.md's
+        self.assertIn("must it go live? propose_land (how push, deploy <branch>) puts it on the owner's button", terminal.seed_text(s, tid))
 
     def test_the_migration_says_what_the_templates_say(self):
         self.assertIn(store_mod._DEPLOY_NOW, CODING)

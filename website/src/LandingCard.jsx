@@ -97,13 +97,13 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
         </DialogContent>
       </Dialog>
       {s.ask && <>
-        <Typography variant="body2" sx={{ mt: 0.9, color: INK, fontWeight: 600 }}>How should it land?</Typography>
+        <Typography variant="body2" data-tq-landing-question="" sx={{ mt: 0.9, color: INK, fontWeight: 600 }}>{w.question}</Typography>
         {w.proposal && <Typography variant="caption" data-tq-landing-proposal="" sx={{ display: "block", color: DIM }}>{w.proposal}</Typography>}
         <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 0.7 }}>
           {s.answers.map((a) => (
             <Button key={a.how} size="small" disableElevation disabled={!!busy} data-tq-land={a.how}
-              variant={s.proposal?.how === a.how ? "contained" : "outlined"}
-              sx={{ ...btn, ...(a.how === "discard" ? { color: "#7a2f3c", borderColor: BORDER } : s.proposal?.how === a.how ? {} : { color: INK, borderColor: BORDER }) }}
+              variant={w.primary === a.how ? "contained" : "outlined"}
+              sx={{ ...btn, ...(a.how === "discard" ? { color: "#7a2f3c", borderColor: BORDER } : w.primary === a.how ? {} : { color: INK, borderColor: BORDER }) }}
               startIcon={busy === a.how ? <CircularProgress size={12} color="inherit" /> : null}
               onClick={() => answer(a.how)}>{a.how === "discard" && sure ? `Yes, discard ${plural(s.ahead, "commit")}` : a.label}</Button>))}
           {sure && <Button size="small" sx={{ ...btn, color: DIM }} onClick={() => setSure(false)}>Keep it</Button>}

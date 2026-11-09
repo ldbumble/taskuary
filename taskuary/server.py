@@ -5685,7 +5685,7 @@ def agent_repos(task_id: int, request: Request, query: str = ''):
     _owner_history(request, task_id)
     return {'data': repochoice.find(store, query), 'folders': repochoice.folders(store)}
 
-class AgentLandBody(BaseModel): task_id: int; how: str; why: str = ''
+class AgentLandBody(BaseModel): task_id: int; how: str; why: str = ''; deploy: str = ''
 
 @app.post('/api/agent/propose-land')
 def agent_propose_land(body: AgentLandBody, request: Request):
@@ -5693,7 +5693,7 @@ def agent_propose_land(body: AgentLandBody, request: Request):
     from . import landing
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    try: return landing.propose(store, body.task_id, body.how, body.why)
+    try: return landing.propose(store, body.task_id, body.how, body.why, deploy=body.deploy)
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.get('/api/tasks/{tid}/landing')
@@ -5814,6 +5814,11 @@ def agent_propose(body: AgentProposeBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     try: p = agenttools.proposal_of(body.model_dump())
     except ValueError as e: raise HTTPException(403, str(e))
+    # ...a push, a deploy, a land or a pull request on a task with work in a checkout: the landing card's buttons (landing.from_proposal)
+    from . import landing
+    try:
+        if (out := landing.from_proposal(store, body.task_id, p)): return {**out, 'queued': True}
+    except ValueError as e: raise HTTPException(422, str(e))
     q = proposals.queue(store, body.task_id, p, 'agent', refused=(miss := []))
     if not q: raise HTTPException(422, proposals.refusal_line(miss[0] if miss else ''))
     return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': "Waiting on the owner's press - nothing happens until they approve it."}

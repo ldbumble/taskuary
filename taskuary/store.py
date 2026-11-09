@@ -371,9 +371,17 @@ _CODING_WAS = "`coding` is for work INSIDE a system this install holds the code 
 # when it's live" - and the owner had to Continue it to deploy (2026-10-20). The stop is a question now, and AGENT.md says a
 # reply never promises a later step. Both go into a document the owner edited where the old text still reads as shipped.
 _DEPLOY_WAS = '- Do not push, deploy, publish or release unless the brief says you may: commit locally and stop.'
-_DEPLOY_NOW = ("- Push, deploy, publish or release only when the brief or John's Continue says to - otherwise commit locally and stop.\n"
-               '  When the ask is met only once the change is LIVE, that stop is a question, not the end: ask John here, "ready to\n'
-               '  deploy <what> to <where> - go ahead?", and wait - no `--reply`, no `--done`. On yes: deploy, check it is live, then finish.')
+_DEPLOY_ASKED = ("- Push, deploy, publish or release only when the brief or John's Continue says to - otherwise commit locally and stop.\n"
+                 '  When the ask is met only once the change is LIVE, that stop is a question, not the end: ask John here, "ready to\n'
+                 '  deploy <what> to <where> - go ahead?", and wait - no `--reply`, no `--done`. On yes: deploy, check it is live, then finish.')
+# ...and that question, asked in words, left the owner typing "yes" under a card with no button (2026-11-09, the ~20th time: "i thought
+# actions should be cards/buttons???"). The stop is propose_land now - the landing card's Push / Push & deploy (landing.py) - and a repo
+# trusted to act on its own is pushed and deployed without stopping at all.
+_DEPLOY_NOW = ("- Push, deploy, publish or release when the brief or John's Continue says to, or your prompt says you may push and deploy (a\n"
+               '  repo John trusts to act on its own) - then do it, check it is live, and finish. Otherwise commit locally and stop.\n'
+               "  When the ask is met only once the change is LIVE, that stop is John's button, never a question in words: call\n"
+               '  `propose_land` - `how` push and `deploy` the branch that deploys it (pr, merge or rebase for a branch of your own) - and\n'
+               '  wait; no "go ahead?", no `--reply`, no `--done`. His press pushes it and tells you: check it is live, then finish.')
 # A coding agent started in the wrong repository found the job was not there and closed the task "Nothing to do" (the owner,
 # 2026-10-27: "coding agent should be able to at least ask can I change repos"). CODING.md now says to ask; an edited copy takes
 # the section under the line it follows, where that line still reads as shipped (coding_asks_to_move).
@@ -1753,6 +1761,14 @@ class SQLiteStore:
                     if '\r\n' in body: now = now.replace('\n', '\r\n')
                     self.cx.execute('UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=?', (body.replace(was, now), _now(), name))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_asks_before_deploy', '1', 'migration')")
+            # ...and THAT STOP IS A BUTTON, NOT A QUESTION IN WORDS (_DEPLOY_ASKED -> _DEPLOY_NOW): where the asked text still reads as shipped, once
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_proposes_push'").fetchone():
+                row = self.cx.execute("SELECT Content FROM doc WHERE Name='coding'").fetchone()
+                body = (row['Content'] or '') if row else ''
+                nl = '\r\n' if '\r\n' in body else '\n'
+                was, now = _DEPLOY_ASKED.replace('\n', nl), _DEPLOY_NOW.replace('\n', nl)
+                if body.count(was) == 1: self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='coding'", (body.replace(was, now), _now()))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_proposes_push', '1', 'migration')")
             # ...and WORK IN ANOTHER REPOSITORY IS A QUESTION (_ELSEWHERE_NOW), into an edited CODING.md the same way, once
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_asks_to_move'").fetchone():
                 row = self.cx.execute("SELECT Content FROM doc WHERE Name='coding'").fetchone()

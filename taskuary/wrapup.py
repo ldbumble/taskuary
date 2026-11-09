@@ -279,6 +279,13 @@ def _sid_now(store, task_id):
     except Exception: return None
 
 
+def put_down(store, task_id: int, mid: int) -> str:
+    "The why of the task's newest reply put down as not needed AFTER message `mid` came in - '' when none was, or a newer mail since."
+    m = store.get_message(mid) or {}
+    rv = store._one("SELECT NotNeeded, DecidedAt FROM review WHERE TaskId=? AND Status='closed_unsent' AND IFNULL(NotNeeded,'')<>'' "
+                    "ORDER BY DecidedAt DESC, ReviewId DESC LIMIT 1", (task_id,))
+    return str(rv['NotNeeded']) if rv and str(rv.get('DecidedAt') or '') >= str(m.get('CreatedAt') or '') else ''
+
 def own_draft(store, task_id: int):
     """The pending reply the agent wrote itself, if there is one."""
     return next((r for r in (store.pending_review(task_id, 'draft_reply', live_only=False),
@@ -713,6 +720,11 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'age
     if mid and unanswered(store, task_id):
         store.add_comment(task_id, actor, 'agent', 'The session ended waiting on your answer - no reply drafted; what was left open '
                                                    'is in its result.')
+        mid = None
+    # ...nor when the agent PUT THE REPLY DOWN as not needed since that message came in (verdicts.not_needed - the owner said no reply is
+    # needed, a colleague answered): the session's end drafted a fresh one from its report in the place of the one just retired (2026-11-09)
+    if mid and not held and not own_draft(store, task_id) and (why := put_down(store, task_id, mid)):
+        store.add_comment(task_id, actor, 'agent', f"The reply was put down as not needed ({why.rstrip('.')}) - no reply drafted.")
         mid = None
     # a held draft is proof somebody IS waiting on an answer, so it is never quietly dropped here
     if mid and not held and not own_draft(store, task_id) and nobody_waiting(store, mid, rep):

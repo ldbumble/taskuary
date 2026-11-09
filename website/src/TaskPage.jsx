@@ -56,7 +56,7 @@ import BatchItems from "./BatchItems.jsx";
 import { progress as batchProgress } from "./batchItems.js";
 import CloseNote from "./CloseNote.jsx";
 import { onLive, touches } from "./live.js";
-import { pollWhileActive } from "./visible.js";
+import { pollCalming } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
 import { askLine, byLine, cameFromLabel, cameFromWhere, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isIdeaLine, isChat, madeLine, rowText, sortedLine, todoSources, toLine, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
@@ -439,6 +439,10 @@ const fitTabLines = (tab) => {
   if (cut >= 0) ls.slice(cut).forEach((l) => l.setAttribute("data-tq-unfit", ""));
 };
 // ONE CLOSED SECTION, AS ITS TAB (SECTION_TAB): the arrow points the way it opens, and a press opens it - the others close
+// A task read as the calming poll compares it: everything but the live screen's own lines and idle clock (the pane draws those itself)
+const detailSeen = (d) => JSON.stringify(d, (k, v) => (v && typeof v === "object" && !Array.isArray(v) && "sid" in v && "tail" in v
+  ? { ...v, tail: undefined, line: undefined, idle: undefined } : v));
+
 export function SectionTab({ sec, lines = [], foot = "", here = false, before = false, mini = false, icon = null, onOpen, task = false }) {
   const ref = useRef(null);
   useLayoutEffect(() => {
@@ -870,11 +874,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ONE READ OF A TASK AT A TIME (coalesce.js): the task-changed poke, the 3 s poll and every press each read it again, and behind
   // a stalled server one page held twenty of them open (2026-10-23). A call while one runs shares the one re-read after it.
   const detailReads = useRef(null);
+  // ...and whether a read brought anything new, for the poll below to calm on (pollCalming): the screen's own lines and idle clock
+  // are left out of it - the terminal pane draws those live over its own socket, and they move on every read while an agent prints
+  const detailLast = useRef(""), detailMoves = useRef(0);
   detailReads.current ||= coalesce(async (id, signal) => {
     try {
       const asked = Date.now();             // the read's age, against the rail's (taskDetail.noteRead)
       const { data } = await api.get(`/api/tasks/${id}`, { signal });
       if (stale(id)) return;
+      const seen = detailSeen(data);
+      if (seen !== detailLast.current) { detailLast.current = seen; detailMoves.current += 1; }
       setDetail(data); keepTask(id, data, undefined, asked);
       // ...and no waiting room after it: read on every 3 s poll, in series behind the task, into state nothing drew any more - half of
       // what a running agent's page asked for (the agents walk, 2026-10-26). The notes box reads its own (ui.jsx)
@@ -963,7 +972,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // Terminal bytes already travel over their own websocket. Turning each output frame into a
     // task + waitroom fetch made switching and typing wait behind the terminal's own repaints.
     // The surrounding lifecycle state only needs a calm check; the terminal remains fully live.
-    return pollWhileActive(active, () => loadDetail(selected), 3000);
+    // ...and it CALMS while nothing moves (2026-11-09): a running agent's page read the same task every 3 s, at up to 4 s a read on a
+    // busy home. Unchanged reads stretch the gap to 12 s; a changed one - or a task-changed poke, which reads at once - brings it back.
+    return pollCalming(active, async () => { const was = detailMoves.current; await loadDetail(selected); return detailMoves.current !== was; }, 3000, 12000);
   }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAlive, wrapping, writingUp]);
 
   // THE MENUS' CHANGES ARE THE TASK TOOLS (Stream B, the owner 2026-10-18: "every act leaves a receipt"): who does it, priority and

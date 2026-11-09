@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pollWhileActive, pollWhileVisible } from "../src/visible.js";
+import { pollCalming, pollWhileActive, pollWhileVisible } from "../src/visible.js";
 
 // Every interval here runs on node:test's fake clock: on real timers a loaded box starved the 20ms
 // poll to one tick inside 55ms, and a failed assertion skipped stop(), so the live interval kept the
@@ -89,4 +89,34 @@ test("a hidden document stops the interval and showing it again restarts it", (t
   assert.equal(listeners.visibilitychange, undefined);
   tick(100);
   assert.equal(n, 4, "stop() ends the interval");
+});
+
+test("a poll whose reads change nothing calms down, and snaps back on a change", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const flush = () => new Promise((r) => setImmediate(r));
+  const at = [], answers = [false, false, false, false, true, false];
+  let now = 0, i = 0;
+  const step = async (ms) => { for (let k = 0; k < ms; k += 500) { now += 500; t.mock.timers.tick(500); await flush(); } };
+  const stop = pollCalming(true, async () => { at.push(now); return answers[i++] ?? false; }, 1000, 4000);
+  t.after(stop);
+  await flush();
+  await step(20000);
+  const gaps = at.slice(1).map((x, k) => x - at[k]);
+  // read at once; each unchanged read doubles the gap (2s, 4s), held at 4s; the changed fifth read is followed 1s later
+  assert.deepEqual(gaps.slice(0, 6), [2000, 4000, 4000, 4000, 1000, 2000]);
+});
+
+test("a calming poll reads at once only when asked to, and stops when told", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const flush = () => new Promise((r) => setImmediate(r));
+  let n = 0;
+  const stop = pollCalming(true, async () => { n += 1; return false; }, 1000, 4000, false);
+  await flush();
+  assert.equal(n, 0);
+  t.mock.timers.tick(1000); await flush();
+  assert.equal(n, 1);
+  stop();
+  t.mock.timers.tick(10000); await flush();
+  assert.equal(n, 1);
+  assert.equal(pollCalming(false, () => {}, 1000), undefined);
 });

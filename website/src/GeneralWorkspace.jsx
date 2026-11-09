@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { pollCalming } from "./visible.js";
 import { createPortal } from "react-dom";
 import { says, subState } from "./laneSays.js";
 import {
@@ -1010,13 +1011,22 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 // waits on the owner for - read again while a CLI runs, when the task moves, and when the page's own session (`term`) changes
 function useCodingChat(tid, on, term) {
   const [got, setGot] = useState(null);
-  const load = useCallback(() => (on ? api.get(`/api/tasks/${tid}/coding-chat`).then(({ data: d }) => setGot(d?.data || null)).catch(() => {}) : Promise.resolve()), [tid, on]);
+  // ...each read that brought something new counted (`moves`), so the poll below calms while the chat stands still (pollCalming)
+  const last = useRef(""), moves = useRef(0);
+  const load = useCallback(() => (on ? api.get(`/api/tasks/${tid}/coding-chat`).then(({ data: d }) => {
+    const seen = JSON.stringify(d?.data || null);
+    if (seen !== last.current) { last.current = seen; moves.current += 1; }
+    setGot(d?.data || null);
+  }).catch(() => {}) : Promise.resolve()), [tid, on]);
   useEffect(() => { setGot(null); load(); }, [load]);
   // the page's own session is the first word that a CLI runs: the read follows it
   const pageLive = on && term?.alive && term.mode !== "assistant" && term.taskId === tid ? term : null;
   const live = got?.live || (pageLive ? { sid: pageLive.sid, cli: pageLive.cli, asking: false, working: !pageLive.waiting } : null);
   useEffect(() => { load(); }, [pageLive?.sid, pageLive?.alive, load]);
-  useEffect(() => { if (!live) return undefined; const t = setInterval(load, 2500); return () => clearInterval(t); }, [!!live, load]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...every 2.5 s while a CLI runs, stretching to 10 s while reads bring nothing new (2026-11-09: at up to 1.7 s a read on a busy home,
+  // the same answer nearly every time); a new step, or a task-changed poke (read at once below), brings it back to 2.5 s
+  useEffect(() => (live ? pollCalming(true, async () => { const was = moves.current; await load(); return moves.current !== was; }, 2500, 10000, false)
+    : undefined), [!!live, load]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => (on ? onLive("task-changed", (ev) => { if (touches(ev, tid)) load(); }) : undefined), [on, tid, load]);
   const rows = useMemo(() => (got ? chatRows(got) : []), [got]);
   return { got, live, rows, load };

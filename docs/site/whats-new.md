@@ -2,6 +2,13 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.21 - 2026-11-08
+
+- Triage guide: a bare greeting is fyi, and a question about something already reported joins that task
+- The task agent on a stream of chat lines: fewer false alarms, the owner's line re-read, the first ask gets an agent
+- Slim the general agent's prompt: say each rule once, disclose the rest on demand
+- A finished turn is read by the judge, never a word list; the stream line names the todos tool
+
 ## 0.3.11.20 - 2026-11-08
 
 - Work that waits on you elsewhere: shared inboxes, phones, forms and candidates as sources

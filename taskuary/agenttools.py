@@ -152,8 +152,10 @@ TOOLS = {
                       "keep their mail's subject with \"Re: \". It waits with a Send button for the owner - nothing is sent. `cc`: who else is copied (addresses). "
                       "`from`: the connected mailbox it leaves from (an address list_systems names) - leave it out and it goes from the "
                       "mailbox this task's mail came in on, else the first one; a mailbox is never a run_system tool. `replaces`: the review id (or recipient) of an unsent email, reply or post this one "
-                      "takes the place of - it is withdrawn in the same call.",
-                      _S({'to': _STR, 'subject': _STR, 'text': _STR, 'cc': {'type': 'array', 'items': _STR}, 'from': _STR, 'attach': _ATTACH, 'replaces': _STR},
+                      "takes the place of - it is withdrawn in the same call. `guessed`: any address on it you guessed (none on record) - the card says "
+                      "so, for the owner to check before Send.",
+                      _S({'to': _STR, 'subject': _STR, 'text': _STR, 'cc': {'type': 'array', 'items': _STR}, 'from': _STR, 'attach': _ATTACH, 'replaces': _STR,
+                          'guessed': {'type': 'array', 'items': _STR}},
                          ('to', 'subject', 'text')),
                       ('POST', '/api/agent/draft')),
     # THE FORM A MAIL BRINGS (the owner, 2026-11-04: a permission slip to sign for their kid - "the agent should sign it and say 'do you
@@ -337,7 +339,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'propose_email':
         was = verdicts.unsent(store, tid)
         out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(tid, a.get('attach')),
-                            a.get('cc') or (), str(a.get('from') or ''))
+                            a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}))
         return _j(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place"))
     if name == 'sign_form':
         out = doors['sign'](tid, a)

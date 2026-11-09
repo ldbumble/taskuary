@@ -5518,7 +5518,7 @@ def agent_reply(body: AgentReplyBody, request: Request):
     return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files), follow_up=body.follow_up, to=body.to,
                               answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to)
 
-class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []; mailbox: str = ''
+class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []; mailbox: str = ''; guessed: list[str] = []
 
 @app.post('/api/agent/draft')
 def agent_draft(body: AgentDraftBody, request: Request):
@@ -5528,7 +5528,7 @@ def agent_draft(body: AgentDraftBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     from . import wrapup
     files = _agent_files(body.files)
-    out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox)
+    out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed)
     return {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)} if out.get('ok') and files else out
 
 class AgentWaitBody(BaseModel): task_id: int; who: str; agent: str = 'agent'
@@ -5921,7 +5921,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'remind': lambda tid, until: agent_remind(AgentRemindBody(task_id=tid, until=until), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),
-             'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='': agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files), cc=list(cc), mailbox=mailbox), request),
+             'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='', guessed=(): agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files), cc=list(cc), mailbox=mailbox, guessed=list(guessed)), request),
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request),
              'answer_invite': lambda tid, a: agent_answer_invite(AgentInviteBody(**{**a, 'task_id': tid}), request),

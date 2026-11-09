@@ -135,12 +135,13 @@ def _chat_id(to) -> bool:
     return str(to or '').split(':')[0].strip().lower() in CHAT_CHANNELS
 
 def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent',
-          channel: str = 'email', name: str = '', cc=(), mailbox: str = '') -> dict:
+          channel: str = 'email', name: str = '', cc=(), mailbox: str = '', guessed=()) -> dict:
     """The agent that did the work writes one output itself - the slot named by id, else the open one to the same person,
     else a slot it adds (said on the task: the owner sees the list grow). Nothing is sent: the owner approves it. `cc`: who
     else is copied - kept on the envelope, so the card shows what the agent said it did (it said "Gail on cc" and dropped her).
     `mailbox`: the connected mailbox it leaves FROM - a + New task has no mail in to answer from, so "send it from my JOIN
-    Gmail" fell to the first Outlook card, and the agent, with no way to say it, tried the Gmail card as a tool (TQ-1354)."""
+    Gmail" fell to the first Outlook card, and the agent, with no way to say it, tried the Gmail card as a tool (TQ-1354).
+    `guessed`: the addresses on it the agent guessed (no address on record) - the card says so, and the owner's Send is the check."""
     text = str(text or '').strip()
     if not text: return {'ok': False, 'why': 'no email text'}
     mailbox = str(mailbox or '').strip()
@@ -185,8 +186,9 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     try: was = (json.loads(rv.get('Deliver') or '{}') or {}).get('mailbox') if rv and rv.get('Status') == 'pending' else None
     except (TypeError, ValueError): was = None
     box = (mailbox or was) if kind == 'email' else None
+    guessed = [a.lower() for a in (split(x)[1] for x in ([guessed] if isinstance(guessed, str) else guessed or [])) if a]
     deliver = json.dumps({'channel': kind, 'to': [o['to']], 'cc': cc, 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid),
-                          **({'mailbox': box} if box else {})})
+                          **({'mailbox': box} if box else {}), **({'guessed': guessed} if guessed else {})})
     if rv and rv.get('Status') == 'pending':
         rid = rv['ReviewId']
         if not store.set_review_deliver(rid, deliver): return {'ok': False, 'why': 'that email is already being sent'}
@@ -194,11 +196,21 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         rid = store.add_review({'TaskId': tid, 'Kind': KIND, 'Status': 'pending', 'Deliver': deliver,
                                 'Reason': 'your email - approve to send' if agent == 'owner' else f"{agent} wrote this email - approve to send"})       # who it goes to is on the card once
         mark(store, tid, hit['id'], rid=rid, actor=f'agent:{agent}')
+    was = str((store.get_review(rid) or {}).get('Reason') or '')
+    if agent != 'owner' and (guessed or GUESSED in was): store.update_review_reason(rid, with_guess(was, guessed))
     if agent != 'owner':                          # the agent's sign-off off, the saved block on once (signatures.agent_signed)
         from .signatures import agent_signed
         text = agent_signed(store, store.get_review(rid), text) or text
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added}
+
+
+# A GUESSED ADDRESS IS SAID ON THE CARD (the owner, 2026-11-09): with none on record one agent held its emails back and another put a
+# firstname@ guess on the draft - the guess is allowed, the card says it, and the owner's Send is the check
+GUESSED = ' - guessed, check before Send: '
+def with_guess(reason: str, guessed) -> str:
+    base = str(reason or '').partition(GUESSED)[0]
+    return f"{base}{GUESSED}{', '.join(guessed)}" if guessed else base
 
 
 def _reopen(store, tid: int, want: str, agent: str):
@@ -234,7 +246,10 @@ def readdress(store, rv: dict, to: list, actor: str = 'owner') -> dict:
     try: d = json.loads(rv.get('Deliver') or '{}') or {}
     except ValueError: d = {}
     d['to'] = to
+    # ...and an address the owner typed is no guess: only those still on it stay marked
+    if d.get('guessed'): d['guessed'] = [a for a in d['guessed'] if a in to + [str(c).lower() for c in d.get('cc') or []]]
     if not store.set_review_deliver(rv['ReviewId'], json.dumps(d)): raise ValueError('that email is already being sent')
+    if GUESSED in str(rv.get('Reason') or ''): store.update_review_reason(rv['ReviewId'], with_guess(rv['Reason'], d.get('guessed')))
     tid, sid = rv.get('TaskId'), d.get('slot') or of_review(rv)
     if tid and sid:
         items = store.task_checklist(tid)

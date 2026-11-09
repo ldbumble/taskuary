@@ -32,7 +32,7 @@ def two_outlooks():
 
 
 # a Graph token that says whose sign-in minted it: the refresh token is the card's own secret
-fake_token = lambda cfg, secret=None: f'tok:{secret}'
+fake_token = lambda cfg, secret=None, scope='': f'tok:{secret}'
 
 
 class R:

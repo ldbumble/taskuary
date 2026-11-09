@@ -5,7 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 # a user folder followed by a name that is not a stand-in (the invented people CLAUDE.md lists, a placeholder, or a word)
-STAND_INS = r'(?:owner|you|me|runner|example|username|configuration|features|alex|alexd|dana)\b'
+# ...and `by`: an API's own path is no user folder - X's /users/by/username/{username} (2026-11-08)
+STAND_INS = r'(?:owner|you|me|runner|example|username|configuration|features|alex|alexd|dana|by|\d+)\b'      # ...and an id: /users/42/mentions
 USER_DIR = re.compile(r'(?i)(?:[A-Z]:[\\/]+Users|/Users|/home)[\\/]+(?!' + STAND_INS + r'|<|\{|\$|%|\.\.\.)[A-Za-z0-9_.~-]{2,}[\\/]')
 SKIP = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.mp4', '.woff', '.woff2', '.ttf', '.pdf', '.xlsx', '.lock')
 

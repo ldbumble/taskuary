@@ -311,7 +311,7 @@ CASES += [
     Q('connectors', 'set up QuickBooks', None, c('connection.create', type='QuickBooks Online'), 'open:#connector=quickbooks', freq=3),
     Q('connectors', 'I want to hook up my second Outlook', None, c('connection.create', type='outlook'), 'open:#connector=outlook', freq=3),
     Q('connectors', 'conect gmial', None, c('connection.create', type='gmail'), 'open:#connector=gmail', freq=2, note='a misspelling: the model reads it'),
-    Q('connectors', 'connect Frobnitz', None, [c('connection.create', type='frobnitz'), 'There is no Frobnitz connector.'], 'words', freq=1,
+    Q('connectors', 'connect Quuxzig', None, [c('connection.create', type='quuxzig'), 'There is no Quuxzig connector.'], 'words', freq=1,
       note='an unknown one: the miss names the closest cards'),
 ]
 # THE PHONE (the owner, 2026-10-20): every act a desk row offers reachable from a phone chat too - the task page's writes at once, an act
@@ -384,8 +384,8 @@ POWERS = [
     Q('feedback', 'I wish taskuary could read my Teams calls', None,
       [c('issue.draft', kind='feature', trying='have Teams calls read', happened='there is no way to'), 'A feature request is drafted below for your Submit.'],
       'read:issue.draft', freq=2),
-    Q('feedback', 'you need a Frobnitz connector, can you request it', None,
-      [c('issue.draft', kind='feature', trying='connect Frobnitz', happened='there is no Frobnitz card'), 'A feature request is drafted below for your Submit.'],
+    Q('feedback', 'you need a Quuxzig connector, can you request it', None,
+      [c('issue.draft', kind='feature', trying='connect Quuxzig', happened='there is no Quuxzig card'), 'A feature request is drafted below for your Submit.'],
       'read:issue.draft', freq=2,
       note='a missing connection is a feature request on GitHub (the owner, 2026-11-01)'),
     # ── help, and what changed (the help pages ship with the app; What's new, 2026-11-01) ──
@@ -650,8 +650,8 @@ CONNGRID = {'area': 'connections', 'title': 'Connections', 'fields': [{'key': 's
             'buttons': [{'id': 'email', 'label': 'Email'}, {'id': 'messaging', 'label': 'Messaging'}, {'id': 'ai_agents_models', 'label': 'AI · agents & models'},
                         {'id': 'ai_voice', 'label': 'AI · voice'}, {'id': 'corporate_systems', 'label': 'Corporate systems'}, {'id': 'sync_now', 'label': 'Sync now'},
                         {'id': 'slack', 'label': 'Slack - channels and DMs through triage'}, {'id': 'gmail', 'label': 'Gmail - your Google mailbox'}]}
-NOHIT = {**CONNGRID, 'fields': [{'key': 'search_connectors', 'label': 'Search connectors', 'value': 'Frobnitz'}],
-         'buttons': CONNGRID['buttons'][:6] + [{'id': 'request_frobnitz', 'label': 'Request Frobnitz'}], 'text': 'Nothing matches Frobnitz in Connections.'}
+NOHIT = {**CONNGRID, 'fields': [{'key': 'search_connectors', 'label': 'Search connectors', 'value': 'Quuxzig'}],
+         'buttons': CONNGRID['buttons'][:6] + [{'id': 'request_quuxzig', 'label': 'Request Quuxzig'}], 'text': 'Nothing matches Quuxzig in Connections.'}
 SLACKCARD = {'area': 'connections', 'title': 'the Slack card (Connections)', 'item': {'kind': 'connector', 'id': 'slack', 'title': 'Slack'},
              'fields': [{'key': 'name', 'label': 'Name', 'value': 'Slack'}, {'key': 'Secret', 'label': 'Bot token (xoxb-…)', 'value': '', 'secret': True, 'state': 'empty'}],
              'buttons': [{'id': 'messaging', 'label': 'Messaging'}, {'id': 'save', 'label': 'Save'}, {'id': 'test', 'label': 'Test'}]}
@@ -706,10 +706,10 @@ AREA_CONNECTIONS = [
     Q('connections', 'is work mail syncing ok?', None, [c('app.health', name='Work mail'), 'Work mail synced a few minutes ago; nothing is failing.'],
       'read:app.health', view=WORKCARD, freq=3),
     # ── a system with no card: a request for one, the owner's to submit (the owner, 2026-11-01) ──
-    Q('connections', 'connect Frobnitz', None, [c('connection.create', type='frobnitz'),
-      c('issue.draft', kind='feature', trying='connect Frobnitz', happened='a card under Connections for Frobnitz'), 'There is no Frobnitz card - a request for one is drafted below for your Submit.'],
+    Q('connections', 'connect Quuxzig', None, [c('connection.create', type='quuxzig'),
+      c('issue.draft', kind='feature', trying='connect Quuxzig', happened='a card under Connections for Quuxzig'), 'There is no Quuxzig card - a request for one is drafted below for your Submit.'],
       'read:issue.draft', freq=2, note='the miss says a card the catalogue lacks is a feature request (concierge.call_turn, 2026-11-02)'),
-    Q('connections', 'nothing for frobnitz - can you ask for it?', None, [v(op='press', button='Request Frobnitz')], 'view:press:request_frobnitz',
+    Q('connections', 'nothing for quuxzig - can you ask for it?', None, [v(op='press', button='Request Quuxzig')], 'view:press:request_quuxzig',
       tools=('words',), view=NOHIT, freq=2, note="the grid's own Request button, pressed: it opens the drafted request, nothing is filed"),
     # ── data cards feed reports, never the rail ──
     Q('connections', 'will quickbooks put bills on my task list?', None, [c('docs.search', section='help/connections > Data and report sources'),

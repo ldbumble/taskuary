@@ -174,7 +174,7 @@ class EverydayAsks(unittest.TestCase):
         # the Connections audit, 2026-11-02: a road that grades right can still tell the model too little to answer well
         told = {r['q'].text: r['ideal']['told'] for r in self.rows if r['q'].cat == 'connections'}
         # a system with no card: the miss names the feature request, and never asks it to name closest cards there are none of
-        self.assertIn('issue.draft', told['connect Frobnitz']); self.assertNotIn('naming those', told['connect Frobnitz'])
+        self.assertIn('issue.draft', told['connect Quuxzig']); self.assertNotIn('naming those', told['connect Quuxzig'])
         # a catalogue card never set up is not set up - not "switched off", as if the owner had turned it off
         self.assertIn('Gmail / Google Workspace is not set up yet', told['gmial wont conect'])
         # ...and the help it reads says a data card is a report's, and what the voice cards do

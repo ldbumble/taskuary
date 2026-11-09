@@ -56,7 +56,9 @@ class OwnPhoneReplyTests(unittest.TestCase):
         self.assertEqual([(r['who'], r['own'], r['channel']) for r in rows], [('Ray Colton', False, 'whatsapp'), ('You', True, 'whatsapp'), ('You', True, 'whatsapp')])
         lb = general.latest_block(s, tid)
         self.assertIn('WHAT THE OWNER REPLIED ON THE THREAD THEMSELVES', lb)
-        self.assertIn('05:05 PM on WhatsApp: "Yes, booked it this morning.', lb); self.assertIn('05:20 PM on WhatsApp: "for Friday morning"', lb)
+        # ...by their time on the clock the turn uses, not a hard-coded hour: CI runs on UTC (2026-11-08)
+        a, b = lb.find('on WhatsApp: "Yes, booked it this morning.'), lb.find('on WhatsApp: "for Friday morning"')
+        self.assertTrue(0 <= a < b, lb)
         # ...and read again (a restarted bridge hands everything over) it is kept once, never heard twice
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed), mock.patch('taskuary.wabridge.ready', lambda *a: None), \
              mock.patch.object(voice, 'note_body', side_effect=AssertionError('heard twice')):

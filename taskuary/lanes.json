@@ -23,7 +23,7 @@
       "role": "working",
       "mark": "⏱",
       "section": "task", "on_you": true, "urgent": true,
-      "hint": "a meeting today or inside two hours (it turns urgent fifteen minutes before), or an urgent sender"
+      "hint": "a meeting fifteen minutes before it starts, with its notification and Prepare, or an urgent sender"
     },
     {
       "key": "approve",

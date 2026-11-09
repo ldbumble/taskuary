@@ -265,3 +265,17 @@ class AgendaNeverBlocksThePileTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+def test_a_meeting_reaches_the_rail_fifteen_minutes_before_never_hours():
+    """The owner, 2026-11-09: "a notification 15 minutes before the meeting, not two hours". A meeting later today or an hour out is
+    the digest strip's; the rail's row - urgent, with its Prepare - comes at fifteen minutes, as the notification does."""
+    from taskuary import funnel
+    now = datetime(2026, 11, 9, 14, 0)
+    at = lambda m: (now + timedelta(minutes=m)).strftime('%Y-%m-%d %H:%M')
+    evs = [{'start': at(m), 'end': at(m + 30), 'subject': s, 'who': ['Erin Blake']} for m, s in
+           ((10, 'Ops sync'), (15, 'Budget check'), (60, 'Vendor call'), (180, 'Late review'), (-3, 'Started'))]
+    with mock.patch.object(funnel, '_agenda', lambda _s, **kw: list(evs)):
+        got = {i['title']: i for i in funnel.from_calendar(MemoryStore(), now)}
+    assert set(got) == {'Ops sync', 'Budget check', 'Started'}
+    assert all(i['calendar_ready'] for i in got.values())

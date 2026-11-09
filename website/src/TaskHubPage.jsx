@@ -32,7 +32,9 @@ import { restartBridge } from "./waBridge.js";
 import { SetupChip, useSetup } from "./SetupWizard.jsx";
 import { DEMO } from "./demoApi.js";
 import { buildMove, isBusy, loadedAsset, markReloaded, reloadedFor, staleWhat } from "./staleBuild.js";
-import { useHandRaise, playSound, desktopNotify } from "./handraise.js";
+import { useHandRaise, useMeetingAlerts, playSound, desktopNotify } from "./handraise.js";
+import { prepBody } from "./meetingAlert.js";
+import { fmtTime12, tsMs } from "./dates.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask, pruneHandRaises } from "./handraiseState.js";
 import { askAssistant } from "./askAssistant.js";
 import { TaskuaryMark, asUtc, timeAgo, useAgents } from "./ui.jsx";
@@ -41,6 +43,7 @@ import { SEARCH_PICKED, SearchBar, openSearch } from "./SearchEverything.jsx";
 import ProfileButton from "./ProfileButton.jsx";
 import BugReportDialog from "./BugReportDialog.jsx";
 import { label as btnLabel } from "./buttons.js";
+import CloseIcon from "@mui/icons-material/Close";
 import { REPORT_EVENT, bellError, openBugReport } from "./bugReportOpen.js";
 import { plural } from "./timeWords.js";
 const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
@@ -424,6 +427,35 @@ export default function TaskHubPage() {
   }, []);
   const liveRows = useCallback((rows) => setRaisedQueue((q) => pruneHandRaises(q, rows)), []);
   useHandRaise(onRaise, 8000, liveRows);
+  // A MEETING FIFTEEN MINUTES OUT (meetingAlert.js, the owner 2026-11-09): the hand raise's sound and desktop popup, and a notice with
+  // Prepare that stands until it is pressed, closed or the meeting begins
+  const [meeting, setMeeting] = useState(null), [prepping, setPrepping] = useState(false);
+  const onMeeting = useCallback((e) => {
+    setMeeting(e);
+    (async () => {
+      let sound = "chime", desktop = true;
+      try {
+        const { data } = await api.get("/api/settings", { timeout: 2000 });
+        const v = (k, d) => { const row = (data.data || data || []).find?.((x) => x.Name === k); return row ? row.Value : d; };
+        sound = v("hand_sound", "chime"); desktop = v("hand_desktop", "1") === "1";
+      } catch { /* defaults */ }
+      playSound(sound);
+      if (desktop) desktopNotify(`${e.subject || "A meeting"} at ${fmtTime12(e.start)}`, `Starts in ${Math.max(1, Math.round((tsMs(e.start) - Date.now()) / 60000))} min - Prepare is in Taskuary`, () => {});
+    })();
+  }, []);
+  useMeetingAlerts(onMeeting);
+  useEffect(() => {
+    if (!meeting) return undefined;
+    const t = setTimeout(() => setMeeting((m) => (m === meeting ? null : m)), Math.max(0, tsMs(meeting.start) - Date.now()));
+    return () => clearTimeout(t);
+  }, [meeting]);
+  const prepare = async () => {
+    if (!meeting || prepping) return;
+    setPrepping(true);
+    try { const { data } = await api.post("/api/calendar/prepare", prepBody(meeting)); setMeeting(null); if (data?.taskId) openTask(data.taskId); }
+    catch { /* the notice stays: Prepare can be pressed again */ }
+    finally { setPrepping(false); }
+  };
   // SETUP IS THE ASSISTANT CANVAS (the owner, 2026-10-14: "Remove the popup things just use the assistant canvas"): the
   // chip takes you there, where FirstRun asks its three questions. No dialog opens itself over the app any more.
   const openSetup = () => { go("Assistant"); setTimeout(() => window.dispatchEvent(new Event("tq-first-run")), 60); };
@@ -555,6 +587,13 @@ export default function TaskHubPage() {
           sx={{ mb: 8 }}
           message={raised ? `${raised.ref} · ${raised.what}${raised.title ? ` — ${raised.title}` : ""}` : ""}
           action={raised && <Button size="small" sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600 }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
+        <Snackbar key={meeting ? `meeting-${meeting.start}-${meeting.subject}` : "no-meeting"} open={!!meeting} data-tq-meeting-alert=""
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }} sx={{ mb: raised && tab !== "Assistant" && !onBoard ? 16 : 8 }}
+          message={meeting ? `${meeting.subject || "A meeting"} at ${fmtTime12(meeting.start)} - starts in ${Math.max(1, Math.round((tsMs(meeting.start) - Date.now()) / 60000))} min` : ""}
+          action={meeting && <>
+            <Button size="small" sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600 }} disabled={prepping} onClick={prepare} data-tq-meeting-prepare="">
+              {btnLabel("prepare")}</Button>
+            <IconButton size="small" sx={{ color: "inherit" }} aria-label="Dismiss" onClick={() => setMeeting(null)}><CloseIcon fontSize="small" /></IconButton></>} />
         {/* ── slim top bar ───────────────────────────────────────────── */}
         {/* Full width, deliberately. Constraining this to the page column squeezed the tab strip
             until its overflowX put a horizontal SCROLLBAR under the nav - a slider you have to

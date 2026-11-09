@@ -10,6 +10,7 @@ import api from "./api";
 import { IDLE_WAITING } from "./ui.jsx";
 import { advanceHandRaises, claimHandRaise, loadHandRaiseState, nonOverlapping,
   saveHandRaiseState } from "./handraiseState.js";
+import { dueMeetings, meetingId, rememberRung, rungBefore } from "./meetingAlert.js";
 
 export const SOUNDS = ["off", "chime", "bell", "knock", "pop"];
 
@@ -81,4 +82,27 @@ export function useHandRaise(onRaise, every = 8000, onRows = null) {
     const id = setInterval(() => alive && poll(), every);
     return () => { alive = false; clearInterval(id); };
   }, [onRaise, every, onRows]);
+}
+
+// A MEETING FIFTEEN MINUTES OUT (meetingAlert.js): the calendar read every minute, onDue(event) once per meeting
+export function useMeetingAlerts(onDue, every = 60000) {
+  const cb = useRef(onDue);
+  cb.current = onDue;
+  useEffect(() => {
+    let alive = true, st = null;
+    try { st = window.localStorage; } catch { /* private mode */ }
+    const poll = nonOverlapping(async () => {
+      try {
+        const { data } = await api.get("/api/calendar/upcoming", { params: { hours: 1 } });
+        if (!alive) return;
+        const due = dueMeetings(data?.events, Date.now(), rungBefore(st));
+        if (!due.length) return;
+        rememberRung(st, due.map(meetingId), Date.now());
+        due.forEach((e) => cb.current?.(e));
+      } catch { /* the server is asleep or the calendar unread: try again next minute */ }
+    });
+    poll();
+    const id = setInterval(() => alive && poll(), every);
+    return () => { alive = false; clearInterval(id); };
+  }, [every]);
 }

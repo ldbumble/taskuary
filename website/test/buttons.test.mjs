@@ -113,7 +113,8 @@ test("no removed or second name for a button is left where a person can read it"
     if (gone.includes(s.trim()) && !(heading[f] || []).includes(s.trim())) hits.push(`${f}: "${s.trim()}"`);
   assert.deepEqual(hits, []);
   const code = files.map((f) => strip(fs.readFileSync(path.join(SRC, f), "utf8"))).join("\n");
-  assert.doesNotMatch(code, /verb === "prep"|\/api\/calendar\/prep/, "Prep me is gone, its road too");
+  // ...the old road only: /api/calendar/prepare is Prepare's own, which the meeting notification posts (meetingAlert.js, TQ-1370)
+  assert.doesNotMatch(code, /verb === "prep"|\/api\/calendar\/prep\b/, "Prep me is gone, its road too");
   assert.doesNotMatch(code, /\bshortLabel\b/, "no second, shorter name for the bar");
 });
 

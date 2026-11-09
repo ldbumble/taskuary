@@ -192,7 +192,11 @@ def addressee(store, task_id: int, to: str):
         hits = [r for r in rows if words and set(words) <= set(re.findall(r'\w+', f'{r[1]} {r[0].split("@")[0]}'.lower()))]
     if len(hits) == 1: return hits[0][2], None
     names = ', '.join(people_named(store, task_id)) or 'nobody'
-    return None, (f'"{to}" fits more than one person on this task ({", ".join(r[1] or r[0] for r in hits)}) - give their address with --to' if hits
+    # ...each by the address AND channel it came on: one person on email and WhatsApp is two of these, and the agent asked to answer on
+    # WhatsApp could only find the email's address (the night run, 2026-11-09)
+    ch = lambda r: r[2].get('Channel') or ''
+    return None, (f'"{to}" fits more than one sender on this task ({", ".join(f"{r[1] or r[0]} - {r[0]} on {ch(r)}" for r in hits)}) - '
+                  'give the one to answer as `to`' if hits
                   else f'nobody called "{to}" wrote on this task - the people on it: {names}. To write to someone else, use --draft with --to')
 
 

@@ -187,3 +187,15 @@ def test_a_question_still_waiting_is_in_the_turns_context_and_a_wake_does_not_cl
         assert 'Who runs the portal' in general.latest_block(s, tid, resumed=True)
         ws.record(s, tid, 's1', 'working', source='api')                        # the owner speaks: it is overtaken
         assert 'YOUR QUESTION STILL WAITING' not in general.latest_block(s, tid, resumed=True)
+
+
+def test_one_person_on_two_channels_is_named_by_address_and_channel():
+    # the night run, 2026-11-09: asked to answer Gail on WhatsApp, the agent's "to: Gail Moreno" fitted her email and her chat line, and
+    # the refusal named no address but the email's - so the reply went by email
+    s = MemoryStore(); tid = s.create_task({'Title': 'October accrual', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    for ext, ch, frm in (('e1', 'email', 'gail@northwind.example'), ('w1', 'whatsapp', 'whatsapp:15550004444')):
+        mid = s.add_message({'ExternalId': ext, 'ConversationId': ext, 'Channel': ch, 'FromName': 'Gail Moreno', 'FromEmail': frm,
+                             'SentAt': '2026-11-09 02:00:00', 'BodyText': 'accrual?', 'Status': 'routed'}); s.attach_message(mid, tid)
+    hit, why = wrapup.addressee(s, tid, 'Gail Moreno')
+    assert hit is None and 'whatsapp:15550004444 on whatsapp' in why and 'gail@northwind.example on email' in why, why
+    assert wrapup.addressee(s, tid, 'whatsapp:15550004444')[0]

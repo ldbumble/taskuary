@@ -192,6 +192,9 @@ def test_a_chat_id_is_no_mailbox(s):
     tid = typed(s, FOUR[:1])
     out = slots.draft(s, tid, 'Your Q3 figures, please.', to='whatsapp:15550004444', subject='Q3 figures')
     assert not out['ok'] and 'is a chat, not a mailbox' in out['why']
+    sid = slots.add(s, tid, [{'to': 'whatsapp:15550003333', 'about': 'status', 'kind': 'email'}], 'triage')[0]['id']    # ...or triage's slot named it
+    out = slots.draft(s, tid, 'Where it stands.', slot=sid)
+    assert not out['ok'] and 'whatsapp:15550003333 is a chat' in out['why']
 
 
 def test_an_unmatched_recipient_adds_a_slot_and_says_so(s):

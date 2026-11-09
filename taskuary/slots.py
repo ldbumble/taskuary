@@ -128,6 +128,12 @@ def seen(store, tid: int):
     return (store.last_material_inbound_on_task(tid) or {}).get('MessageId')
 
 
+# A CHAT ID IS NO MAILBOX, whoever named it - the agent or triage's slot (the night run, 2026-11-09: "emails" went to whatsapp:1555...)
+_NO_MAILBOX = "{to} is a chat, not a mailbox - answer them in that chat (propose_reply, `answers` their line) or give their email address as `to`"
+def _chat_id(to) -> bool:
+    from .ingest import CHAT_CHANNELS
+    return str(to or '').split(':')[0].strip().lower() in CHAT_CHANNELS
+
 def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent',
           channel: str = 'email', name: str = '', cc=(), mailbox: str = '') -> dict:
     """The agent that did the work writes one output itself - the slot named by id, else the open one to the same person,
@@ -152,10 +158,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     cc = [a.lower() for a in cc]
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {'ok': False, 'why': 'that task is closed'}
     to = split(to)[1] if channel == 'email' else ' '.join(str(to or '').split())
-    # ...a chat id is no mailbox (the night run, 2026-11-09: two "emails" went to whatsapp:1555... - the person was only known by their chat)
-    from .ingest import CHAT_CHANNELS
-    if channel == 'email' and str(to).split(':')[0].lower() in CHAT_CHANNELS:
-        return {'ok': False, 'why': f"{to} is a chat, not a mailbox - answer them in that chat (propose_reply, `answers` their line) or find their email address"}
+    if channel == 'email' and _chat_id(to): return {'ok': False, 'why': _NO_MAILBOX.format(to=to)}
     want = ' '.join(str(to or '').split()).casefold()
     hit = next((i for i in all_(store, tid) if slot and i['id'] == slot), None) or \
           next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want), None) or \
@@ -175,6 +178,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         hit, added = made[0], True
         store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what this task owes.')
     o = hit['out']; kind = o.get('kind') or 'email'
+    if kind == 'email' and _chat_id(o.get('to')): return {'ok': False, 'why': _NO_MAILBOX.format(to=o.get('to'))}
     subj = subject_of(store, tid, hit, subject) if kind == 'email' else ''
     rv = store.get_review(hit['rid']) if hit.get('rid') else None
     # a rewrite that names no From keeps the one already picked - the owner's, or the agent's first draft's

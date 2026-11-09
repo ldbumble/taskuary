@@ -126,6 +126,19 @@ Conditional Access policy.
 
 **What Microsoft's errors mean:**
 
+- **"Need admin approval"**, **AADSTS65001**, **AADSTS90094**, **AADSTS900971** ("No reply address
+  provided"), **AADSTS50105** (the app is limited to people IT assigned) or **AADSTS53003** (a
+  Conditional Access policy): admin consent has not been granted yet. After a minute and a half
+  the card says so and shows an approval link. Your IT admin opens it once, signs in and clicks
+  Accept - the same as *Grant admin consent* on the app's API permissions page. After Accept their
+  browser goes to `http://localhost/api/ms/callback`: if the page says it can't connect, that is
+  expected - the approval is done. Then press Sign in with Microsoft again.
+
+**A card that signed in before Taskuary stopped shipping a Microsoft app** keeps its sign-in on
+record but reads nothing until its company's app is on it: the card says so, shows the steps, and
+signing in again with its own app's ID picks up where it left off. Nothing already in Taskuary is lost.
+
+:::note For an IT admin
 - **AADSTS50011** (the redirect URI does not match): the app does not list
   `http://localhost/api/ms/callback` under *Mobile and desktop applications* yet. Microsoft stops
   on its own page and never comes back; the card says so while it waits.
@@ -144,19 +157,6 @@ Conditional Access policy.
 - **AADSTS7000218** (a client secret is required) or **AADSTS70002** ("must be marked as
   'mobile'"): public client flows are off, or the redirect is on the *Web* platform instead of
   *Mobile and desktop applications*. Set *Allow public client flows* to Yes and Save.
-- **"Need admin approval"**, **AADSTS65001**, **AADSTS90094**, **AADSTS900971** ("No reply address
-  provided"), **AADSTS50105** (the app is limited to people IT assigned) or **AADSTS53003** (a
-  Conditional Access policy): admin consent has not been granted yet. After a minute and a half
-  the card says so and shows an approval link. Your IT admin opens it once, signs in and clicks
-  Accept - the same as *Grant admin consent* on the app's API permissions page. After Accept their
-  browser goes to `http://localhost/api/ms/callback`: if the page says it can't connect, that is
-  expected - the approval is done. Then press Sign in with Microsoft again.
-
-**A card that signed in before Taskuary stopped shipping a Microsoft app** keeps its sign-in on
-record but reads nothing until its company's app is on it: the card says so, shows the steps, and
-signing in again with its own app's ID picks up where it left off. Nothing already in Taskuary is lost.
-
-:::note For an IT admin
 - **No device-code flow by default.** Sign-in is the authorization-code flow with PKCE in the
   system browser, so a Conditional Access policy that blocks device-code authentication does not
   block Taskuary. Only a user who chooses *Sign in with a code instead* uses the device-code flow.

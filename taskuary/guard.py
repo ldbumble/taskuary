@@ -220,7 +220,7 @@ OWNER_ONLY = (
     (r'POST', r'^/api/roles/[a-z0-9_-]+$', "a role adds a worker and a workflow and narrows a ledger's authority"),
     (r'POST', r'^/api/platform/macos/(open-settings|probe)$', "operating-system permission prompts are the owner's"),
     (r'POST', r'^/api/deleted/\d+/restore$', "Undo and Restore put back what the owner removed - a report, a rule, a profile, a sign-in (recentlydeleted)"),
-    (r'POST|PUT', r'^/api/voice/(transcribe|vocabulary|speech-on|listen(/[0-9a-f]+/stop)?)$', "the owner's microphone and vocabulary"),
+    (r'POST|PUT', r'^/api/voice/(transcribe|vocabulary|speech-on|open-settings|listen(/[0-9a-f]+/stop)?)$', "the owner's microphone and vocabulary"),
     (r'POST', r'^/api/terminals/[^/]+/(browser/(open|snapshot|viewport)|image|pause|wrap)$', 'the pane the owner is watching'),
 )
 _c = lambda t: tuple((re.compile(f'^({m})$', re.I), re.compile(p), why) for m, p, why in t)

@@ -7845,8 +7845,8 @@ def voice_open_settings(request: Request, which: str = 'speech'):
     if which not in _SETTINGS: raise HTTPException(422, 'speech or microphone')
     if sys.platform != 'win32' or not _is_loopback(request.client.host if request.client else ''):
         raise HTTPException(409, "Windows' settings open only on the computer Taskuary runs on")
-    import os
-    try: os.startfile(_SETTINGS[which])
+    from . import spawn
+    try: spawn.bare(['explorer.exe', _SETTINGS[which]])     # explorer opens an ms-settings: page; every process goes through spawn
     except OSError as e: raise HTTPException(409, f'Windows would not open its settings: {str(e)[:120]}')
     store.audit('setting', 0, 'voice_open_settings', ACTOR, detail={'which': which})
     return {'opened': which}

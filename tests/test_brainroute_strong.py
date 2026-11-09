@@ -20,8 +20,9 @@ def _cli_store(**gears):
 
 
 def _ran(s, gear, model=None):
-    brain = llm.make_cli_llm(s, 'claude', model, gear=gear)
-    with mock.patch.object(agents, 'run_cli', return_value=('ok', 'sid', '')) as run: brain('sys', 'user')
+    with mock.patch.object(config, 'load', return_value={}): brain = llm.make_cli_llm(s, 'claude', model, gear=gear)
+    # the config is pinned: a CLI connection another test left in the loaded config outranked this store's gears in a shared run
+    with mock.patch.object(agents, 'run_cli', return_value=('ok', 'sid', '')) as run, mock.patch.object(config, 'load', return_value={}): brain('sys', 'user')
     return run.call_args.args[0].get('model')
 
 

@@ -178,7 +178,7 @@ class TheLoopStaysFree(unittest.TestCase):
 
     def test_a_transcription_never_holds_the_loop(self):
         from taskuary import voice
-        def slow(store, data, mime, name, mic=False): time.sleep(1.0); return {'text': 'call Erin back'}
+        def slow(store, data, mime, name, mic=False, **kw): time.sleep(1.0); return {'text': 'call Erin back'}
         with mock.patch.object(voice, 'transcribe', slow):
             r, in_flight, took, health = self.beside('POST', '/api/voice/transcribe', content=b'audio', headers={'content-type': 'audio/webm'})
         self.assertLess(took, 0.6, 'the loop answered while the service was still talking')

@@ -735,18 +735,34 @@ def browser_settings(sid: str) -> str:
     """Claude's --settings for ONE general chat with a browser: the browser hook, naming this session (`?sid=`), whatever user_wide()
     says. The user-wide hook can't tell a headless chat from the owner's own Claude, and on a second home there is none at all - so
     the hold rides with the session (2026-10-25). Claude ADDS these to the user's hooks; the strictest answer wins."""
-    from . import config
+    return _session_file(f'browser-{sid}', {'hooks': {'PreToolUse': [_browser_hold(sid)]}})
+
+
+def _browser_hold(sid: str) -> dict:
     from urllib.parse import quote
-    base, token = base_url(), agent_token()
-    cmd = browser_command(base, token).replace(BROWSER_MARK, f'{BROWSER_MARK}?sid={quote(str(sid))}', 1)
-    d = {'hooks': {'PreToolUse': [{'matcher': BROWSER_MATCH, 'hooks': [{'type': 'command', 'command': cmd, 'timeout': BROWSER_WAIT + 10}]}]}}
+    cmd = browser_command(base_url(), agent_token()).replace(BROWSER_MARK, f'{BROWSER_MARK}?sid={quote(str(sid))}', 1)
+    return {'matcher': BROWSER_MATCH, 'hooks': [{'type': 'command', 'command': cmd, 'timeout': BROWSER_WAIT + 10}]}
+
+
+def _session_file(name: str, d: dict) -> str:
+    from . import config
     p = config.home() / 'sessions'; p.mkdir(parents=True, exist_ok=True)
-    f = p / f'browser-{sid}.json'
-    want = json.dumps(d, indent=1)
+    f, want = p / f'{name}.json', json.dumps(d, indent=1)
     try:
         if not f.exists() or f.read_text(encoding='utf-8') != want: f.write_text(want, encoding='utf-8')
-    except OSError as e: logger.warning(f'browser hold not attached to {sid}: {e}'); return ''
+    except OSError as e: logger.warning(f'session settings {name} not written: {e}'); return ''
     return str(f)
+
+
+def general_settings(task_id, sid: str = '') -> str:
+    """Claude's ONE --settings for a general task's session, which reads none of the owner's own Claude setup (the owner, 2026-11-09:
+    a WhatsApp task's agent read their coding-style guide, their plugins' skills, and searched mail through their claude.ai connector).
+    --setting-sources leaves out their user settings - and with them the user-wide hooks this app reports through - so Taskuary's
+    own hooks ride here, with the browser hold naming its chat; their own CLAUDE.md, which no setting source reaches, is excluded.
+    Claude keeps only the last --settings it is given, so this is the whole file."""
+    d = {'hooks': session_hooks(), 'claudeMdExcludes': [f'{Path.home().as_posix()}/.claude/CLAUDE.md', f'{Path.home().as_posix()}/.claude/**']}
+    if sid: d['hooks']['PreToolUse'].append(_browser_hold(sid))
+    return _session_file(f'general-{task_id}' + (f'-{sid}' if sid else ''), d)
 
 
 def ask(payload: dict, wait: float = None) -> dict:

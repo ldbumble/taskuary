@@ -232,6 +232,11 @@ ONE_SHOT = 1500        # seconds a one-shot look-up through a CLI may run (make_
 # the CLIs whose PreToolUse hook can REFUSE a shell call, so a browser act can be held (browsergate.py's header says why the rest can't)
 HOLDS_CLI = frozenset({'claude'})
 
+def _general(store, task_id) -> bool:
+    try: return str((store.get_task(int(task_id)) or {}).get('Kind') or '') != 'coding'
+    except (TypeError, ValueError): return False
+
+
 def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None,
                  resume=None, cli_tools: bool = False, extra_env: dict = None, read_only: bool = None,
                  research: bool = False, gear: str = 'light', keep: str = None, extra_args: list = None, task_id=None,
@@ -316,7 +321,15 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         prof['args'] = agenttools.insert(['', *args], agenttools.session_args(store, hub_agents.cli_of(prof, agent_name), task_id, args))[1:]
     # ...and a general chat with a browser gets the browser hold as its own hook (hooks.browser_settings): only Claude's hook can refuse
     # a call (browsergate.HOLDS), and a stranger's run already carries its one --settings file
-    if hold_sid and not no_hands and stranger_mode not in ('auto', 'look') and hub_agents.cli_of(prof, agent_name) in HOLDS_CLI:
+    # ...and A GENERAL TASK'S CLAUDE READS NONE OF THE OWNER'S OWN SETUP (hooks.general_settings): no user settings, plugins or MCP
+    # servers but Taskuary's, their own CLAUDE.md left out. A coding task keeps it all - it works in their code, as they would
+    trusted = task_id and not no_hands and stranger_mode not in ('auto', 'look')
+    cli = hub_agents.cli_of(prof, agent_name)
+    if trusted and cli == 'claude' and _general(store, task_id) and hub_agents.cli_has_flag(prof['cmd'], '--setting-sources'):
+        from . import hooks
+        if (f := hooks.general_settings(task_id, hold_sid or '')):
+            prof['args'] = list(prof.get('args') or []) + ['--setting-sources', 'project,local', '--strict-mcp-config', '--settings', f]
+    elif hold_sid and trusted and cli in HOLDS_CLI:
         from . import hooks
         if (f := hooks.browser_settings(hold_sid)): prof['args'] = list(prof.get('args') or []) + ['--settings', f]
     # WHICH GEAR this job rides. Session work - coding and general alike - takes the MAIN model;

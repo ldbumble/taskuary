@@ -83,7 +83,8 @@ class TheGeneralAgentsBrowserIsHeld(unittest.TestCase):
         connect_cli(self, claude={'cmd': 'claude', 'args': ['-p']}, codex={'cmd': 'codex', 'args': ['exec']})
         got = {}
         def run_cli(prof, prompt, trace, **kw): got[prof['cmd']] = list(prof.get('args') or []); return ('ok', 's1', None)
-        with mock.patch.object(agents, 'run_cli', run_cli):
+        # a claude without --setting-sources: the hold alone (test_general_own_setup has the claude that has it)
+        with mock.patch.object(agents, 'run_cli', run_cli), mock.patch.object(agents, 'cli_has_flag', return_value=False):
             for cli in ('claude', 'codex'):
                 llm.make_cli_llm(self.s, cli, cli_tools=True, hold_sid='abc', task_id=self.tid)('sys', 'user')
         self.assertIn('--settings', got['claude']); self.assertTrue(got['claude'][got['claude'].index('--settings') + 1].endswith('browser-abc.json'))

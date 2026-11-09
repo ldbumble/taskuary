@@ -62,8 +62,7 @@ _HAND = {}
 
 def _mark(store):
     """Everything that moves the rail: a write anywhere (the store's dirty-row top) and the live workers (funnel.pile's own two checks)."""
-    from . import terminal
-    try: workers = funnel.workers_signature(terminal.live_sessions(tail=6))
+    try: workers = funnel.workers_signature(funnel.observe())
     except Exception: workers = None
     top = funnel._rail_top(store)
     return None if top is None or workers is None else (top, workers)

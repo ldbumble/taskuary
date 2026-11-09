@@ -1520,15 +1520,42 @@ def _rail_top(store):
     return top() if callable(top) else None
 
 
-def workers_signature(live_state) -> str | None:
-    """What the pile reads from the live sessions, hashed the way the store's snapshot hashes it - so a
-    worker that stopped, asked or finished since the cache was built is a different pile. None when
-    the sessions cannot be observed right now."""
+# A WORKING AGENT'S SCREEN IS NOT A NEW PILE (2026-11-09). The signature hashed every field of every session, its last six screen
+# lines too, and a working agent prints every second: hardly a read of the pile while one worked came back warm (81 of 102 that
+# morning took over a second, the worst 33 s), and the Advisor, the walk and every open tab each rebuilt it in turn behind one lock -
+# a Not for me sat ~45 s. A working row only SHOWS its tail (laid on fresh as the pile is served: _fresh_tails); a parked one is read
+# off it (from_agents), so its tail stays in. The git-dirty files, the witness's work and the browser are on no card at all.
+SCREEN_ONLY = ('files', 'work', 'browser')
+
+
+def _attention(t) -> dict:
     from .processing_projection import _worker_attention
+    row = {k: v for k, v in _worker_attention(t).items() if k not in SCREEN_ONLY}
+    if not row['waiting']: row.pop('tail', None)
+    return row
+
+
+def workers_signature(live_state) -> str | None:
+    """What the pile reads from the live sessions, hashed - so a worker that stopped, asked or finished since the cache was built is a
+    different pile, and one that only printed another line is not. None when the sessions cannot be observed right now."""
     if live_state is None: return None
-    rows = sorted(json.dumps(_worker_attention(t), ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
-                  for t in live_state)
+    rows = sorted(json.dumps(_attention(t), ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False) for t in live_state)
     return hashlib.sha256('\n'.join(rows).encode()).hexdigest()
+
+
+def observe():
+    """The live sessions as the pile's checks read them: the light road - no `git status` per session, no witness (SCREEN_ONLY)."""
+    from . import terminal as term
+    try: return term.live_sessions(tail=6, details=False)
+    except TypeError: return term.live_sessions(tail=6)          # a stand-in that predates `details`
+
+
+def _fresh_tails(p: dict, observed) -> dict:
+    """A cached pile served with each working row's screen as it is NOW - the one thing the signature lets move under it."""
+    tails = {t['sid']: t['tail'] for t in observed or () if t.get('sid') and t.get('tail') is not None}
+    for i in p.get('items') or ():
+        if i.get('lane') == 'working' and i.get('sid') in tails: i['tail'] = tails[i['sid']]
+    return p
 
 
 _OBSERVE = object()
@@ -1545,8 +1572,7 @@ def _moved(store, workers) -> bool:
 
 def warm(store) -> bool:
     """A read of the pile now is served from the cache: built for this store, in its time, and nothing written or moved since."""
-    from . import terminal as term
-    try: workers = workers_signature(term.live_sessions(tail=6))
+    try: workers = workers_signature(observe())
     except Exception: return False
     with _LOCK:
         return (_CACHE.get('store') is store and bool(_CACHE.get('pile')) and time.time() - _CACHE.get('at', 0) < PILE_EVERY
@@ -1562,14 +1588,14 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
     the sessions as seen now - taken here when not handed in). So a turn can take its selection from
     here instead of building the rail a second time (design B, 2026-09-17). `quiet` skips the
     watcher: a Next that turns out stale must reach no write, and announce() writes notices."""
-    from . import live, terminal as term
+    from . import live
     seen_generation = _CACHE.get('generation', 0)
     # the newest write stamp a build begun now has seen (live.seq: the page's reload check) - taken before the workers are, whose
     # moves are stamped too; a caller that observed them itself says when (`seen`), or the build claims no stamp at all
     own = seen is None and observed is _OBSERVE
     if own: seen = live.seq()
     if observed is _OBSERVE:
-        try: observed = term.live_sessions(tail=6)
+        try: observed = observe()
         except Exception: observed = None            # unobservable: never compare, always rebuild (the build says why)
     workers = workers_signature(observed)
     with _LOCK:
@@ -1591,13 +1617,13 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
         refreshed_while_waiting = (same_store and force and _CACHE['pile']
                                    and _CACHE.get('generation', 0) != seen_generation and not moved())
         if same_store and _CACHE['pile'] and (refreshed_while_waiting or (not force and time.time() - _CACHE['at'] < PILE_EVERY)):
-            return _CACHE['pile']
+            return _fresh_tails(_CACHE['pile'], observed)
         # ...the stamp and the workers as the BUILD begins, not as the wait for the lock did: a read that waited out another build
         # was built with a press's write that landed meanwhile and still claimed the older stamp - the page read the rail again for a
         # write it held (CI's slower runners, reads-once). Same order as above: stamp, then workers, then the dirty-row mark.
         if own:
             seen = live.seq()
-            try: observed = term.live_sessions(tail=6)
+            try: observed = observe()
             except Exception: observed = None
             workers = workers_signature(observed)
         mark = _rail_top(store)                        # taken BEFORE the build: a write during it counts as after

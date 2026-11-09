@@ -42,3 +42,12 @@ test("chat paragraphs and bubbles take their direction from their own words", ()
 test("a brief carrying only the owner's own reply is not drawn as a trigger", () => {
   assert.match(read("GeneralWorkspace.jsx"), /: !mail\?\.length && words && words\.length <= 140 \? <MessagePrimitive\.Root/);
 });
+
+// A FOLD IS AN INPUT (the owner, 2026-11-09): "Folded in TQ-12: <title>" on the right, the mail it brought under it (general.shown_history `fold`)
+test("a folded-in task's turn draws as an input with the mail it brought", () => {
+  const ws = read("GeneralWorkspace.jsx"), um = ws.slice(ws.indexOf("const UserMessage = "), ws.indexOf("const ShownCtx"));
+  assert.match(ws, /\.\.\.\(m\.fold \? \{ fold: m\.fold \} : \{\}\)/);
+  assert.ok(um.indexOf("const fold = useAuiState") > 0 && um.indexOf("const fold = useAuiState") < um.indexOf("return"));
+  assert.match(um, /if \(brief && chat && fold\) return <MessagePrimitive\.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="fold">/);
+  assert.match(um, /\{!!mail\?\.length && <Arrived mail=\{mail\} \/>\}/);
+});

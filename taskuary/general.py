@@ -24,6 +24,8 @@ RUN_TYPE = 'assistant_run'
 # WHERE THE OWNER STANDS after a turn (selfclose.summary_marker, Task 3.5): its {about, did, on_you, nothing_left} as JSON, filed after the
 # answer it ends - never a chat turn itself; shown_history puts it on that answer
 SUMMARY_TYPE = 'assistant_summary'
+# A FOLD'S TURN opens with this, then "TQ-12: <title>" (ingest.fold_turn) - shown_history draws it as the input it is
+FOLD_HEAD = 'FOLDED IN '
 # TASKUARY'S INSTRUCTIONS ARE NOT THE OWNER'S WORDS (the owner, 2026-10-30): an agent that starts by itself is handed its brief - "THIS
 # TASK IS A REPLY OWED...", "A QUICK LOOK CAME FIRST..." - as the conversation's first user turn, and the pane drew it under YOU as though
 # the owner had typed it. It is still that turn (the next turn continues the conversation it opened), but filed by Taskuary, and the
@@ -722,6 +724,9 @@ def shown_history(store, tid: int) -> list:
         if not m.get('brief'): continue
         got = [x for x in mail if (not i or str(rows[i - 1].get('CreatedAt')) < str(x['JoinedAt'])) and str(x['JoinedAt']) <= str(c.get('CreatedAt'))]
         if got: m['mail'] = shown(got); placed.update(x['MessageId'] for x in got)
+        # ...a FOLD's turn (ingest.fold_turn) says so over the mail it brought: "Folded in TQ-12: <title>", an input on the right
+        said = ''.join(p.get('text') or '' for p in m.get('content') or [] if isinstance(p, dict))
+        if said.startswith(FOLD_HEAD): m['fold'] = 'Folded in ' + said[len(FOLD_HEAD):].split('\n', 1)[0]
     # ...and NONE IS LOST (the owner, 2026-11-05: "There was one at 12:58pm but then another one at 12:58 as well. i only see one input"): a
     # mail that came in while the agent was at work falls between a brief and its answer - it joins the next brief, or stands at the foot as
     # an input of its own until a turn answers it

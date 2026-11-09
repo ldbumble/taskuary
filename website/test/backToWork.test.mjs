@@ -9,10 +9,11 @@ const item = { key: "task:12", tid: 12, ref: "TQ-0012", title: "Renew the vendor
 
 // the owner, 2026-11-09: "there should always be a button on top corner when you are in settings or reports to go back to the main task
 // you were working on, or clear it with the pencil for new chat?"
-test("the task in view is the one being worked on; one opened by name is a look elsewhere", () => {
+// ...and 2026-11-09 again: "any task you are on then switch to settings is [the] task" - a link, the Board or an answer's Open as much as the walk
+test("the task in view is the one being worked on, however it was opened", () => {
   const onIt = tableOf({ current: "task:12" });
   assert.deepEqual(workedOn(onIt, item), { key: "task:12", tid: 12, ref: "TQ-0012", title: item.title });
-  assert.equal(workedOn(onIt, item, 12), null);                                              // opened by its link / the Board
+  assert.equal(workedOn.length, 2);                                                          // no by-name exclusion to pass
   assert.equal(workedOn(tableOf({ current: "task:12", browsing: "b1" }), item), null);       // a page over it
   assert.equal(workedOn(tableOf({ current: "task:12", foldedKey: "task:12" }), item), null); // put away by its X
   assert.equal(workedOn(tableOf({ current: "fyi:3" }), { key: "fyi:3" }), null);             // an FYI is no task
@@ -31,11 +32,15 @@ test("a browse page over a remembered task shows Back + the pencil; the task its
   assert.equal(workWords({ ref: "TQ-0007", title: "" }), "Back to TQ-0007");
 });
 
-test("the head draws Back and the existing New chat handler in its corner, and the rail's own press is a change of work", () => {
+// the owner, 2026-11-09: "drop pencil if it's a duplicate" - one pencil on screen: the head's corner or the pill's, never both
+test("the head draws Back and New chat in its corner, the pill drops its own pencil then, and no way of opening a task is singled out", () => {
   assert.match(view, /\{backWork && <Tooltip[^]*?data-tq-back-work=\{worked\.tid\} onClick=\{toWork\}/);
-  assert.match(view, /\{iconsInPill && !firstRun && !old && newChatIcon\("data-tq-new-chat-head"\)\}\n\s*\{!iconsInPill && ownIcons\}/);
+  assert.match(view, /const headPencil = iconsInPill && !firstRun && !old;/);
+  assert.match(view, /\{headPencil && newChatIcon\("data-tq-new-chat-head"\)\}\s*\{!iconsInPill && ownIcons\}/);
+  assert.match(view, /\{!headPencil && newChatIcon\("data-tq-new-chat"\)\}<\/>;/);
+  assert.equal(view.match(/newChatIcon\("/g).length, 2);
   assert.match(view, /const newChatIcon = \(attr\) => <Tooltip title="New chat — archives this one"><IconButton size="small" \{\.\.\.\{ \[attr\]: "" \}\} onClick=\{newChat\}/);
   assert.match(view, /if \(table\.place && table\.key === worked\.key\) unfoldTable\(\); else pull\(`task:\$\{worked\.tid\}`, null\);/);
-  assert.match(view, /openTaskRef\.current = \(req\) => \{ byNameTid\.current = Number\(req\?\.tid\) \|\| 0; openTaskCard\(req\); \};/);
-  assert.match(view, /onPull=\{\(key, asUser\) => \{ byNameTid\.current = 0;/);
+  assert.doesNotMatch(view, /byNameTid/);
+  assert.match(view, /openTaskRef\.current = openTaskCard;/);
 });

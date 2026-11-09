@@ -1391,7 +1391,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [foldedKey, setFoldedKey] = useState(null);
   // the card browsed open, in words - what "this" means to the next turn (concierge.say open_card)
   const openCardRef = useRef(null);
-  const browseRef = useRef(null), openTaskRef = useRef(null), byNameTid = useRef(0), openMsgRef = useRef(null), browseDownRef = useRef(null), browsingRef = useRef(null);
+  const browseRef = useRef(null), openTaskRef = useRef(null), openMsgRef = useRef(null), browseDownRef = useRef(null), browsingRef = useRef(null);
   const openCard = useCallback((label) => { openCardRef.current = label || null; }, []);
   // the table changed: the next item opens un-expanded and unfolded - a NEW item only. A close once emptied the table on the way to
   // the next one, and resetting the fold then drew the task just closed again until the next landed (the owner, 2026-10-05:
@@ -3085,8 +3085,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     openLater.current = req;
   };
-  browseRef.current = browse; openTaskRef.current = (req) => { byNameTid.current = Number(req?.tid) || 0; openTaskCard(req); };   // by name: a look elsewhere (workedOn)
-  browseDownRef.current = browseDown;
+  browseRef.current = browse; openTaskRef.current = openTaskCard; browseDownRef.current = browseDown;
   useEffect(() => {
     if (busy || resetting || !openLater.current) return;
     const req = openLater.current; openLater.current = null;
@@ -3273,7 +3272,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [worked, setWorked] = useState(null);
   const inView = !!table.key && !table.folded && !table.place;
   useEffect(() => {
-    const w = inView ? workedOn(table, { ...currentItem, tid: litTable.tid }, byNameTid.current) : null;
+    const w = inView ? workedOn(table, { ...currentItem, tid: litTable.tid }) : null;
     if (w) setWorked((was) => (was?.key === w.key && was.title === w.title ? was : w));
   }, [table.key, inView, litTable.tid, currentItem?.title]);   // eslint-disable-line react-hooks/exhaustive-deps
   // the day typed with Remind me ("remind me Monday"): the walk's picker leads with it (assistantLight's light.day)
@@ -3639,13 +3638,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const growOut = () => { clearTimeout(hoverT.current); hoverT.current = setTimeout(() => setHover(false), 350); };
   const iconsInPill = chatApart && overChat(table);
   const newChatIcon = (attr) => <Tooltip title="New chat — archives this one"><IconButton size="small" {...{ [attr]: "" }} onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>;
+  // ...ONE PENCIL ON SCREEN (the owner, 2026-11-09: "drop pencil if it's a duplicate"): while the head's corner holds New chat, the pill's goes
+  const headPencil = iconsInPill && !firstRun && !old;
   const backWork = !firstRun && !old && !walk && backToWork(table, worked, litTable.tid);
   // ...the page put down over its own task, else that task pulled back by number (any task, on the rail or not)
   const toWork = () => { if (!worked) return; if (table.place && table.key === worked.key) unfoldTable(); else pull(`task:${worked.tid}`, null); };   // ...never both: in the pill only while a task or page is open over the chat
   const ownIcons = <>
     <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" data-tq-speak="" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
     <Tooltip title="Past chats"><IconButton size="small" data-tq-past-chats="" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
-    {newChatIcon("data-tq-new-chat")}</>;
+    {!headPencil && newChatIcon("data-tq-new-chat")}</>;
   const composeBox = (
     <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
     data-tq-continue={!boxWide && isMini && winLines.length ? "" : undefined} data-tq-grow={grow ? "" : undefined}
@@ -3715,7 +3716,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         {backWork && <Tooltip title={`Back to ${worked.ref}${worked.title ? ` - ${worked.title}` : ""}`}>
           <button type="button" className="tq-chip tq-back-work" data-tq-back-work={worked.tid} onClick={toWork}>
             <ArrowBackIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: "-2px" }} />{workWords(worked)}</button></Tooltip>}
-        {iconsInPill && !firstRun && !old && newChatIcon("data-tq-new-chat-head")}
+        {headPencil && newChatIcon("data-tq-new-chat-head")}
         {!iconsInPill && ownIcons}
       </div>
       {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} said={remindOn.said} onClose={() => setRemindOn(null)}
@@ -3973,7 +3974,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         current={old ? null : readGone?.keys.includes(currentItem?.key) ? (readGone.coming ? { key: readGone.coming, kind: "fyis", members: readGone.coming.slice(5).split(",") } : null)
           : (table.folded && !flight?.from) || (leavingTid && currentItem?.tid === leavingTid) || table.place || (opening && opening !== currentItem?.key) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
-        onPull={(key, asUser) => { byNameTid.current = 0; if (asUser) pull(key, asUser); else railPress(key); }}
+        onPull={(key, asUser) => { if (asUser) pull(key, asUser); else railPress(key); }}
         onSection={walkSection} onMoreFyi={moreFyi} onCurrent={() => backToTable()} moved={movedTo} /></>}
       stage={chat}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}

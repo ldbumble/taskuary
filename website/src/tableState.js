@@ -51,11 +51,11 @@ export function sameTarget(ev, cur) {
 }
 
 // THE TASK YOU WERE WORKING ON (the owner, 2026-11-09: "there should always be a button on top corner when you are in settings or reports to
-// go back to the main task you were working on"): the last task in view that the walk or the rail brought - a task opened BY NAME (a link,
-// the Board, an answer's "Open TQ-0005") is a look elsewhere, not a change of work, until the table moves on from it
-export const workedOn = (table, item, byNameTid = 0) => {
+// go back to the main task you were working on"): the last task in view, however it came - the walk, the rail, a link, the Board or an
+// answer's "Open TQ-0005" (the owner, 2026-11-09: "any task you are on then switch to settings is [the] task")
+export const workedOn = (table, item) => {
   const tid = Number(item?.tid) || 0;
-  if (!table?.key || table.folded || table.place || !tid || tid === Number(byNameTid)) return null;
+  if (!table?.key || table.folded || table.place || !tid) return null;
   return { key: table.key, tid, ref: item.ref || `TQ-${String(tid).padStart(4, "0")}`, title: item.title || "" };
 };
 // ...and the corner offers the way back while something else is in front of it: a page, or another task. On that task itself, no Back

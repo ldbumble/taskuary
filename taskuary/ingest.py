@@ -977,7 +977,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             said = (f"{follow.get('intent')} on {task_ref(tid)}, which is closed - nothing new to do on it, so it stays closed" if kept
                     else f"{route_head('watch') if follow['intent'] == 'watch' else 'fyi'} - {follow.get('why') or 'nothing to do'} · kept on {task_ref(tid)} for the chain")
             store.add_route(mid, tid, 'attach', r.get('score'), f"triage: {said}", [], 'triage', verdict=_stored_verdict(follow))
-            store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''} - "
+            store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {_note_of(msg)} - "
                               + ('no new work, it stays closed' if kept else 'fyi, nothing to do'))
             logger.info(f"ingest: filed onto {task_ref(tid)} as {'a reply on a closed task' if kept else 'fyi'} - {msg.get('subject') or ''}")
             # ...and a WATCHED task's thread moved: maybe nothing for the owner to do, but the watch is over - it is back on the walk, and
@@ -1004,7 +1004,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if pol['action'] == 'escalate': _escalate(store, tid, pol, actor)
         elif (follow or {}).get('urgent') or (follow or {}).get('priority'): _mark_urgent(store, tid, follow, actor)
         if (follow or {}).get('due'): remind.set_due(store, tid, follow['due'], actor)
-        store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''}")
+        store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {_note_of(msg)}")
         # Remind me holds a quiet task: the sender writing again with something that is not fyi brings it back now,
         # not on the remind day (B2, the owner, 2026-10-11 - "the board needs it tomorrow" sat under For later for two weeks)
         if remind.waiting(store.get_task(tid) or {}) and str(msg.get('from_email') or '').lower() not in mine:
@@ -1566,7 +1566,10 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
         store.add_route(mid, tid, 'attach', 1.0, f"triage: {route_head(intent.get('intent'), t.get('Kind') or '')}, the same as {ref} - {intent.get('why') or 'nothing new'} · kept on it"
                         + (', which stays closed' if closed else '') + notes_note,
                         [], 'triage', verdict=_stored_verdict(intent))
-        store.add_comment(tid, actor, 'agent', f"Again from {msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''} - the same, nothing new")
+        store.add_comment(tid, actor, 'agent', f"{_note_of(msg)} - {intent.get('why') or 'the same, nothing new'}")
+        # ...and its agent re-plans, as on any line that joins its thread (the night run, 2026-11-09: "never mind, Omar sent it" on another
+        # channel was filed as "the same, nothing new" - nothing told the task it was settled)
+        if not closed: thread_moved(store, tid, msg, mid, intent, actor)
         logger.info(f"ingest: the same as {ref}, fyi - filed on it")
         return {'status': 'filed', 'task_id': tid, 'message_id': mid}
     mid = _land(store, msg, tid, 'routed')
@@ -1574,7 +1577,7 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
     store.add_route(mid, tid, 'attach', 1.0, f"triage: {route_head(intent['intent'], t.get('Kind') or '')} - the same as {ref}, joined to it"
                     + (' and reopened' if closed else '') + f" - {intent.get('why') or ''}" + notes_note, [], 'triage',
                     verdict=_stored_verdict(intent))
-    store.add_comment(tid, actor, 'agent', f"Again from {msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''} - the same ask, kept here")
+    store.add_comment(tid, actor, 'agent', f"{_note_of(msg)} - the same ask, kept here")
     _retitle(store, t, msg, intent, actor, closed)
     if intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage', src=mid)
     if intent.get('outputs'):
@@ -2089,6 +2092,8 @@ def agent_drafts(store, tid, went) -> bool:
 
 
 def _who_said(msg: dict) -> str: return msg.get('from_name') or msg.get('from_email') or 'They'
+# ...a task's note on a line names who sent it and what it is about - a chat line has no subject ("New whatsapp from whatsapp:155...: ")
+def _note_of(msg: dict) -> str: return f"{_who_said(msg)}: {msg.get('subject') or ' '.join(str(msg.get('body') or '').split())[:80]}"
 
 
 def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bool:

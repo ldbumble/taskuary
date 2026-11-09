@@ -74,15 +74,10 @@ TOOLS = {
                     'additionalProperties': True}, ('POST', '/api/tools/run')),
     # ...and a VIEW in its own chat (viewspec.py, after Vercel's json-render): changes nothing outside the chat, so its door is the task's own read
     'show': ('read', "Show the owner a small view in this chat when a table, chart or checklist would be clearer than text - plain text is "
-             "fine otherwise, and this is never required. Your words then say what the view means - never the same table or list again in text. `elements` maps an id to {type, props, children?}; `root` is the id drawn first, "
-             "each element's children under it. Every type takes title? and description?; each block draws as its own card. Types: grid {cols: 1-4} "
-             "(its children side by side, stacking on a phone), stats {items: [{label, value, format?, note?, trend?: {dir: up|down|neutral, text}}]}, "
-             "chart {kind: bar|line, format?, points: [{label, value, highlight?}]}, table {columns: [name | {label, format}], rows}, checklist "
-             "{items: [{text, done}]}, list {items}, steps {items}, text {text: markdown}, note {tone: info|success|warning, text}, badge {text, "
-             "variant?: default|secondary|outline|success|warning}, button {label, verb: a task-page button to light for the owner (close, defer, "
-             "reply, continue...) | open: an app link as BRINGING THINGS UP writes them - #task=12, #connector=quickbooks, #settings=updates, #report=new}. format is currency|number|percent (12.5 -> 12.5%); give numbers as numbers. "
-             "A button only lights or opens - it never sends, pays or closes. A bad spec comes back saying what to fix; the guide tool's "
-             "`show` topic has a worked example.",
+             "fine otherwise, and this is never required. Your words then say what the view means - never the same table or list again in text. "
+             "`elements` maps an id to {type, props, children?}; `root` is the id drawn first. Types: grid, stats, chart, table, checklist, list, "
+             "steps, text, note, badge, button - each one's props, and a worked example, are the guide tool's `show` topic: read it before your "
+             "first view. A button only lights or opens - it never sends, pays or closes. A bad spec comes back saying what to fix.",
              _S({'title': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': {'type': 'object'}}}, ('root', 'elements')),
              ('GET', '/api/tasks/1')),
     'tick': ('own', "Tick (done=true) or untick one of this task's to-dos by its id. Only what you actually finished.",
@@ -166,8 +161,7 @@ TOOLS = {
                   "`file` (a PDF in your task folder). `fields`: {field name: value} (a box: \"yes\"); `sign`: where it goes - {\"field\": "
                   "name}, {\"near\": \"Parent signature\"} (the words by a flat form's line) or {\"page\": 1, \"box\": [x, y, width, height]} "
                   "(points from the bottom left); `date`: true writes today's date beside it, or a field name to put it in. The signed copy "
-                  "lands in your folder and shows in the chat. When a mail brings a form to fill or sign, fill and sign it here, show it, "
-                  "and propose the reply with it in `attach` for the owner's Send - never send it yourself. With no signature saved it says "
+                  "lands in your folder and shows in the chat; the reply carries it in `attach` (ASSISTANT.md says when). With no signature saved it says "
                   "so: ask the owner to add one in " + words.name('replies') + " (Your signature); never make one up.",
                   _S({'attachment': _INT, 'file': _STR, 'fields': {'type': 'object', 'additionalProperties': True},
                       'sign': {'type': 'object', 'properties': {'field': _STR, 'near': _STR, 'page': _INT,

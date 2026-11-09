@@ -715,7 +715,8 @@ def mail_row(store, x: dict, n: int = 3000) -> dict:
 # it. Triage names it when it reads the message (its verdict's `wrapper`); a message read before that, or folded in unread, still opens with it.
 # So a lead paragraph that the newest mail of LEAD_SENDERS different senders also carries is the system's, not the sender's - counted in the
 # owner's own mail, never a phrase list (the owner, 2026-10-28: no hard-coded words). Only ever the lead, and never the whole of a message.
-LEAD_SENDERS, LEAD_SCAN, _LEADS, NL = 3, 3000, {}, chr(10)
+from .triage import LEAD_SENDERS
+LEAD_SCAN, _LEADS, NL = 3000, {}, chr(10)
 
 
 def _stamped(store, line: str) -> bool:
@@ -730,18 +731,9 @@ def _stamped(store, line: str) -> bool:
 
 
 def lead_wrapper(store, text: str) -> str:
-    """`text` less the lead paragraphs every line of which opens many senders' mail (_stamped) - a banner, perhaps over a title line of its own.
-    A paragraph is up to the first blank line, else the first line. Its long lines are what is judged - one short one ("CAUTION:") may ride
-    with them, but a paragraph that is only a short line ("Hi Alex,") never goes - and nothing is cut to nothing."""
-    t = str(text or '').strip()
-    for _ in range(3):
-        head, sep, rest = t.partition(NL * 2)
-        if not sep: head, _, rest = t.partition(NL)
-        lines = [l.strip() for l in head.splitlines() if l.strip()]
-        long = [l for l in lines if len(l) >= 24]
-        if not rest.strip() or len(head) > 1200 or not long or len(lines) - len(long) > 1 or not all(_stamped(store, l) for l in long): break
-        t = rest.strip()
-    return t
+    "`text` less the lead paragraphs every long line of which opens many senders' mail (_stamped; triage.drop_lead says what a lead is)."
+    from .triage import drop_lead
+    return drop_lead(text, lambda l: _stamped(store, l))
 
 
 def with_failure(store, tid: int, msgs: list) -> list:

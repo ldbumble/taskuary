@@ -21,21 +21,23 @@ from .kinds import SHOWN, shown as shown_agent
 from .processing_order import feed_band
 
 
-def _preview(body, n: int, wrapper=()) -> str:
-    """What the SENDER wrote, cut to n - not the wrapper it arrived in.
+def _preview(body, n: int, wrapper=(), own=None, leads=frozenset()) -> str:
+    """What the SENDER wrote this time, cut to n - not the wrapper it arrived in, nor the chain it quoted.
 
     Every mail from outside the company opens with a security banner, so the Timeline's Message step
     read "This email was sent from outside of Northwind. ** Do not click links..." on every one of them and
     never reached the message (2026-09-15). What is left out is what triage named the message's `wrapper`
-    (triage.strip_wrapper) - never a phrase list (the owner, 2026-10-28).
+    (triage.strip_wrapper) - never a phrase list (the owner, 2026-10-28) - and, read as the chat reads it (general.mail_row,
+    the owner 2026-11-09), the mailbox's own cut (`own`, message.OwnText) over the body, then any lead paragraph in `leads`: the lines
+    that open many senders' mail in this same snapshot (stamped_leads) - a banner on a message triage named nothing on.
 
     Only the head of the body is scanned, so running it over every full body does not put that work on every row of a feed.
 
-    Remembered: the answer is a pure function of the scanned head and n, and every rail build asked it again for
+    Remembered: the answer is a pure function of the scanned head, the cut and the leads, and every rail build asked it again for
     every row - the regexes were about half of the rebuild that rides along each Next (3,770 rows, 2026-10-20).
     """
-    text = str(body or '')
-    return _preview_of(text[:n * 4], n, tuple(wrapper)) if text else ''
+    text, own = str(body or ''), str(own or '').strip()
+    return _preview_of(text[:n * 4], n, tuple(wrapper), own[:n * 4], leads) if text or own else ''
 
 
 def _wrapper(routes) -> tuple:
@@ -48,9 +50,35 @@ def _wrapper(routes) -> tuple:
 
 
 @functools.lru_cache(maxsize=8192)
-def _preview_of(head: str, n: int, wrapper: tuple = ()) -> str:
-    from .triage import own_words, strip_wrapper
-    return (strip_wrapper(own_words(head), wrapper) or head)[:n]     # a preview is shown: the wrapper triage named goes
+def _preview_of(head: str, n: int, wrapper: tuple = (), own: str = '', leads: frozenset = frozenset()) -> str:
+    from .triage import drop_lead, read_text
+    t = read_text(head, own or None, wrapper) or head        # a preview is shown: the wrapper triage named goes
+    return (drop_lead(t, leads.__contains__) if leads else t)[:n]
+
+
+# The heads stamped_leads reads: what a banner would open, and what general._stamped searches (its line plus 600).
+LEAD_HEAD = 1200
+
+
+@functools.lru_cache(maxsize=8192)
+def _lead_lines(head: str) -> frozenset:
+    from .triage import LEAD_LONG
+    return frozenset(l for l in (l.strip() for l in head.splitlines()) if len(l) >= LEAD_LONG)
+
+
+def stamped_leads(items) -> frozenset:
+    """The lines that open the mail of LEAD_SENDERS different senders among the snapshot's messages - what a mail system stamps
+    over everyone's mail, counted where the rail can see it (general._stamped counts the same over the store). A pure function
+    of the snapshot, so a preview built from it changes when, and only when, the mail it was counted in does."""
+    from .triage import LEAD_SENDERS
+    seen, who = set(), {}
+    for item in items:
+        for m in (item.get('view') or {}).get('messages', []):
+            if m.get('MessageId') in seen or m.get('Direction') == 'out' or not m.get('BodyText'): continue
+            seen.add(m.get('MessageId'))
+            sender = str(m.get('FromEmail') or m.get('FromName') or '').lower()
+            for l in _lead_lines(str(m['BodyText'])[:LEAD_HEAD]): who.setdefault(l, set()).add(sender)
+    return frozenset(l for l, s in who.items() if len(s) >= LEAD_SENDERS)
 
 
 # THE MARK SAYS WHERE THE WORK CAME FROM (the owner, 2026-09-25), not which message is newest. A report run that joined
@@ -246,7 +274,7 @@ def _thread_index(items):
     return threads
 
 
-def message_row(message, item, threads, now, *, full=False):
+def message_row(message, item, threads, now, *, full=False, leads=frozenset()):
     """The existing All status presentation, from the same captured inventory.
 
     NeedsYou here remains the legacy display chip, not canonical eligibility/read
@@ -292,7 +320,8 @@ def message_row(message, item, threads, now, *, full=False):
         # what triage named it and what it read the words as trying to make an AI do (message.Danger): the rail and card say both -
         # a phishing mail triage caught wore its own subject and no warning (B3, 2026-10-29)
         'TriageTitle', 'Danger', 'DangerAim')}
-    row.update(IngestedAt=message.get('CreatedAt'), Preview=_preview(message.get('BodyText'), 4000 if full else 400, _wrapper(routes)),
+    row.update(IngestedAt=message.get('CreatedAt'), Preview=_preview(message.get('BodyText'), 4000 if full else 400, _wrapper(routes),
+                                                                 message.get('OwnText'), leads),
                MsgStatus=message.get('Status'), Title=task.get('Title'), TaskStatus=task.get('Status'), Assignee=task.get('Assignee'),
                Priority=task.get('Priority'), TaskKind=task.get('Kind'), TaskTags=task.get('Tags'),
                NeedsYou=int(needs), ChainSize=sum(m.get('Status') not in {'context', 'history'}
@@ -406,9 +435,10 @@ def _degraded(coverage, reconciliation) -> dict:
             'reconciled_generation': reconciliation.get('reconciled_generation')}
 
 
-def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=False, keep=None):
+def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=False, keep=None, leads=None):
     """`keep`: compact only the items it accepts. The thread index is still taken from EVERY item - a row
-    reads its conversation across roots - so a kept item's row is byte-for-byte what the whole pass gives it."""
+    reads its conversation across roots - so a kept item's row is byte-for-byte what the whole pass gives it.
+    `leads`: stamped_leads of the snapshot, when the caller already counted them (also from EVERY item)."""
     coverage = copy.deepcopy(snapshot['coverage'])
     reconciliation = coverage.get('processing_reconciliation') or {}
     if (reconciliation.get('pending', True) or reconciliation.get('status') == 'conflicted'
@@ -426,6 +456,7 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
         raise AllError('processing_query_invalid', 'Invalid snapshot time', 422)
     cutoff = now - timedelta(days=query['days'])
     threads = _thread_index(snapshot['items'])
+    leads = stamped_leads(snapshot['items']) if leads is None else leads
     rows, hidden, tombstones = [], 0, 0
     for item in snapshot['items']:
         if keep is not None and not keep(item): continue
@@ -443,13 +474,13 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
                       and (live or _in_history(m.get('CreatedAt'), cutoff))]
         if (view.get('processing_read') or {}).get('active') and not include_excluded:
             candidates = [m for m in candidates if not _muted_candidate(
-                item, message_row(m, item, threads, now.strftime('%Y-%m-%d %H:%M:%S')))]
+                item, message_row(m, item, threads, now.strftime('%Y-%m-%d %H:%M:%S'), leads=leads))]
         # an auto-reply never speaks for the item (autoreply.py) - one already filed on a task spoke for it, and the card
         # read "This is an out-of-office auto-reply" over an urgent ask (2026-09-25)
         from .autoreply import is_auto
         message = _newest([m for m in candidates if not is_auto(m)] or candidates, 'SentAt', 'MessageId')
         if message:
-            legacy = message_row(message, item, threads, now.strftime('%Y-%m-%d %H:%M:%S'))
+            legacy = message_row(message, item, threads, now.strftime('%Y-%m-%d %H:%M:%S'), leads=leads)
             target = {'kind': 'message', 'id': message['MessageId']}
             title = message.get('Subject') or legacy.get('Title') or 'Message'
             actor, stamp = message.get('FromName') or message.get('FromEmail') or '', message.get('SentAt') or message.get('CreatedAt')

@@ -463,6 +463,27 @@ def read_text(body: str, own: str = None, wrapper=()) -> str:
     return strip_wrapper(t, wrapper) or strip_wrapper(body or '', wrapper)
 
 
+# A MAIL SYSTEM'S STAMP opens the mail of LEAD_SENDERS different senders word for word (an external-sender banner); counted in the owner's
+# own mail by whoever asks - the chat over the store (general.lead_wrapper), the rail over its snapshot (processing_all.stamped_leads) -
+# never a phrase list (the owner, 2026-10-28: no hard-coded words). LEAD_LONG: a line that short ("CAUTION:", "Hi Alex,") is never judged.
+LEAD_SENDERS, LEAD_LONG = 3, 24
+
+
+def drop_lead(text: str, stamped) -> str:
+    """`text` less the lead paragraphs every long line of which is `stamped` - a banner, perhaps over a title line of its own.
+    A paragraph is up to the first blank line, else the first line. One short line may ride with the long ones, but a paragraph
+    that is only a short line never goes - and nothing is cut to nothing."""
+    t = str(text or '').strip()
+    for _ in range(3):
+        head, sep, rest = t.partition(NL * 2)
+        if not sep: head, _, rest = t.partition(NL)
+        lines = [l.strip() for l in head.splitlines() if l.strip()]
+        long = [l for l in lines if len(l) >= LEAD_LONG]
+        if not rest.strip() or len(head) > 1200 or not long or len(lines) - len(long) > 1 or not all(stamped(l) for l in long): break
+        t = rest.strip()
+    return t
+
+
 # What an AGENT is told a sender wrote: their words, never how to reach them. An agent with a shell and a mail tool has no use
 # for a sender's address or number, and the signature's copy of both rode into its prompt on every passed-in line. Shapes, not
 # words: an address is its @, a phone number is 7+ digits grouped by separators - a bare run of digits (an order number, a

@@ -8125,6 +8125,7 @@ def ms_signin(cid: int, body: MsSignInBody | None = None):
     try: d = msauth.device_start(cfg_, scope)
     except RuntimeError as e: raise HTTPException(409, str(e))
     except requests.RequestException as e: raise HTTPException(502, f'could not reach login.microsoftonline.com: {str(e)[:160]}')
+    if d.pop('tenant', None): _ms_consumers(cid, f)        # an app for personal accounts only: this round and the card move to /consumers
     _MSFLOWS[flow] = {**f, 'device_code': d.pop('device_code'), 'scope': scope}
     return {'flow': flow, 'mode': 'code', **d}
 
@@ -8137,6 +8138,13 @@ def _ms_retry_base(f):
     if not msauth.has_optional(f.get('scope') or ''): return None
     f['cfg']['people_refused'] = True
     return msauth.scopes_for(f.get('kind'), bool(f['cfg'].get('allow_files')), people=False)
+
+def _ms_consumers(cid, f):
+    """Microsoft said the app takes personal accounts only (msauth.personal_door): the round asks /consumers from here on, and so
+    does the card - unless the round runs on the Outlook card's borrowed app, whose own card learns it when it signs in."""
+    f['cfg']['tenant_id'] = 'consumers'
+    if str(json.loads((store.get_connector(cid) or {}).get('ConfigJson') or '{}').get('client_id') or '').strip():
+        store.merge_connector_config(cid, {'tenant_id': 'consumers'})
 
 def _reads(cid):
     c = store.get_connector(cid) if cid else None
@@ -8219,6 +8227,13 @@ def ms_callback(request: Request, code: str = None, state: str = '', error: str 
     if not f or f.get('claimed') or time.time() - f['at'] > MS_TTL:
         return _oauth_tab(False, 'This sign-in was not started here, was already used, or is too old - press Sign in with Microsoft on the card again.')
     f['claimed'] = True                  # a state answers once, whatever happens next
+    # an app for personal accounts only, asked through /common (AADSTS9002331): the same round again through /consumers, in this tab
+    if error and msauth.personal_door(f['cfg'], error_description or ''):
+        _ms_consumers(f['cid'], f)
+        b = msauth.browser_start(f['cfg'], f['scope'], f['redirect'])
+        f.update(state=b['state'], verifier=b['verifier'], at=time.time(), claimed=False)
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(b['url'], status_code=302)
     try:
         if error: raise msauth.callback_error(error, error_description or '')
         if not code: raise RuntimeError('Microsoft sent no code back')

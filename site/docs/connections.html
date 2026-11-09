@@ -182,30 +182,59 @@ usually <code>report</code> and <code>tool</code>.</p>
 </tr>
 </tbody></table>
 <h3 id="how-microsoft-sign-in-works">How Microsoft sign-in works<a class="anchor" href="#how-microsoft-sign-in-works" aria-label="Link to this section">#</a></h3>
-<p><strong>Outlook and Teams sign in through your company&#39;s own Microsoft app.</strong> Taskuary ships no
-Microsoft app of its own, so nothing goes through anybody else&#39;s Azure: your IT registers one app
-in your own Microsoft Entra ID, once, and every Outlook and Teams card in your company uses it. The
-card shows these steps until its two IDs are filled in:</p>
+<p><strong>Outlook and Teams sign in through your own Microsoft app.</strong> Taskuary ships no Microsoft app of
+its own, so nothing goes through anybody else&#39;s Azure. At a company, your IT registers one app in
+your Microsoft Entra ID, once, and every Outlook and Teams card in the company uses it. With an
+Outlook.com, Hotmail or Live account you register your own, free, in about five minutes. The card
+shows these steps until its Application (client) ID is filled in:</p>
 <ol>
-<li>Microsoft Entra ID → <strong>App registrations</strong> → <strong>New registration</strong> → name it Taskuary, accounts
-in this organizational directory only (single tenant) → Register.</li>
-<li><strong>Authentication</strong> → <strong>Add a platform</strong> → <strong>Mobile and desktop applications</strong> → redirect URI
+<li><p><strong>Outlook.com or Hotmail account: get a directory first.</strong> Since June 2024 Microsoft registers
+new apps only inside a directory (a Microsoft Entra tenant); a personal account on its own no
+longer can. Sign up for a <a href="https://azure.microsoft.com/free">free Azure account</a> with the same
+Microsoft account - it comes with a <em>Default Directory</em> you administer. Microsoft asks for a
+phone number and a credit or debit card (not prepaid) to check you are a person. It charges
+nothing at sign-up (a temporary $1 hold may show) and nothing later unless you choose
+pay-as-you-go; registering an app costs nothing. A work account skips this step: your company
+already has a directory.</p>
+</li>
+<li><p>Microsoft Entra (<a href="https://entra.microsoft.com">entra.microsoft.com</a>) → <strong>App registrations</strong> →
+<strong>New registration</strong> → name it Taskuary. <strong>Supported account types</strong>:</p>
+<ul>
+<li>Outlook.com / Hotmail: <strong>Any Entra ID Tenant + Personal Microsoft accounts</strong>. (<em>Personal
+accounts only</em> works too - the card finds that out on the first sign-in and moves to
+Microsoft&#39;s personal-account sign-in by itself.)</li>
+<li>A company app: <strong>Single tenant only</strong>.</li>
+</ul>
+<p>→ Register.</p>
+</li>
+<li><p><strong>Authentication</strong> → <strong>Add a platform</strong> → <strong>Mobile and desktop applications</strong> → redirect URI
 <code>http://localhost/api/ms/callback</code>. Entra ignores the port of a <code>localhost</code> redirect for a
 public client, so this one entry covers whatever port Taskuary listens on; the card also shows
 this install&#39;s own, <code>http://localhost:&lt;port&gt;/api/ms/callback</code> (7787 unless changed), if
-Microsoft asks for it.</li>
-<li><strong>Authentication</strong> → <strong>Allow public client flows: Yes</strong> → Save.</li>
-<li><strong>API permissions</strong> → Add a permission → Microsoft Graph → <strong>Delegated</strong>, then <strong>Grant admin
-consent</strong>:<ul>
+Microsoft asks for it.</p>
+</li>
+<li><p><strong>Authentication</strong> → <strong>Allow public client flows: Yes</strong> → Save. The code sign-in needs it.</p>
+</li>
+<li><p><strong>API permissions</strong> → Add a permission → Microsoft Graph → <strong>Delegated</strong>; for a company app,
+then <strong>Grant admin consent</strong> (an Outlook.com account approves them on the sign-in page):</p>
+<ul>
 <li>Outlook: <code>offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite People.Read Contacts.Read</code></li>
 <li>Teams: <code>offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send People.Read</code></li>
 <li>Plus <code>Files.ReadWrite</code> only on a card where the owner turns on <em>Allow saving files</em>.
 One app can serve both cards: list both sets.</li>
 </ul>
 </li>
-<li>From the app&#39;s <strong>Overview</strong>, copy the <strong>Application (client) ID</strong> and the <strong>Directory (tenant)
-ID</strong> into the card. Then sign in, in the browser or with a code.</li>
+<li><p>From the app&#39;s <strong>Overview</strong>, copy the <strong>Application (client) ID</strong> into the card. Leave the
+<strong>Directory (tenant) ID</strong> blank for an Outlook.com account or an app open to any account; a
+single-tenant company app needs it too, from the same page.</p>
+</li>
+<li><p>Sign in, in the browser or with a code.</p>
+</li>
 </ol>
+<p>With a blank Directory (tenant) ID the card signs in through Microsoft&#39;s <code>common</code> endpoint, which
+takes work and personal accounts alike; an app registered for personal accounts only is moved to
+<code>consumers</code> on its first sign-in and the card keeps that. There is no account-type switch to set.
+(Teams chats are a work feature: a personal account signs in for Outlook mail and calendar.)</p>
 <p>No client secret: a sign-in app is public by design. Someone running their own Taskuary for
 several people can name one app for the whole install with the <code>TASKUARY_MS_CLIENT_ID</code> environment
 variable instead; a card&#39;s own IDs still win.</p>
@@ -230,10 +259,20 @@ Conditional Access policy.</p>
 <code>http://localhost/api/ms/callback</code> under <em>Mobile and desktop applications</em> yet. Microsoft stops
 on its own page and never comes back; the card says so while it waits.</li>
 <li><strong>AADSTS700016</strong> (no such app in the directory): the Application (client) ID or the Directory
-(tenant) ID on the card is wrong. Copy both again from the app&#39;s Overview page.</li>
-<li><strong>AADSTS50194</strong>: the app is single-tenant and the card has no Directory (tenant) ID.</li>
-<li><strong>AADSTS7000218</strong> (a client secret is required): the redirect is on the <em>Web</em> platform instead
-of <em>Mobile and desktop applications</em>, or public client flows are off.</li>
+(tenant) ID on the card is wrong, or - for an Outlook.com account - the app&#39;s Supported account
+types leave out personal Microsoft accounts. Copy the ID again from the app&#39;s Overview page.</li>
+<li><strong>AADSTS50194</strong> (not a multi-tenant app) or <strong>AADSTS50020</strong> (the account does not exist in the
+tenant): the app takes accounts from its own directory only. A work account: put the Directory
+(tenant) ID on the card. An Outlook.com account: register the app again with <em>Any Entra ID
+Tenant + Personal Microsoft accounts</em>, put the new Application (client) ID on the card and leave
+the tenant blank. (Changing an existing app&#39;s account types afterwards is often refused by the
+portal; a new registration is the quick road.)</li>
+<li><strong>AADSTS9002332</strong>, or <strong>AADSTS70002</strong> &quot;not enabled for consumers&quot;: the app takes work or school
+accounts only and the card asked as a personal account - clear the card&#39;s Directory (tenant) ID,
+or register the app again for personal accounts too.</li>
+<li><strong>AADSTS7000218</strong> (a client secret is required) or <strong>AADSTS70002</strong> (&quot;must be marked as
+&#39;mobile&#39;&quot;): public client flows are off, or the redirect is on the <em>Web</em> platform instead of
+<em>Mobile and desktop applications</em>. Set <em>Allow public client flows</em> to Yes and Save.</li>
 <li><strong>&quot;Need admin approval&quot;</strong>, <strong>AADSTS65001</strong>, <strong>AADSTS90094</strong>, <strong>AADSTS900971</strong> (&quot;No reply address
 provided&quot;), <strong>AADSTS50105</strong> (the app is limited to people IT assigned) or <strong>AADSTS53003</strong> (a
 Conditional Access policy): admin consent has not been granted yet. After a minute and a half
@@ -244,7 +283,7 @@ expected - the approval is done. Then press Sign in with Microsoft again.</li>
 </ul>
 <p><strong>A card that signed in before Taskuary stopped shipping a Microsoft app</strong> keeps its sign-in on
 record but reads nothing until its company&#39;s app is on it: the card says so, shows the steps, and
-signing in again with the two IDs picks up where it left off. Nothing already in Taskuary is lost.</p>
+signing in again with its own app&#39;s ID picks up where it left off. Nothing already in Taskuary is lost.</p>
 <div class="callout note"><p class="eyebrow">For an IT admin</p><ul>
 <li><strong>No device-code flow by default.</strong> Sign-in is the authorization-code flow with PKCE in the
 system browser, so a Conditional Access policy that blocks device-code authentication does not

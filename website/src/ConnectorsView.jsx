@@ -124,16 +124,16 @@ const META = {
   outlook: { group: "Messaging", channel: "email", srcLabel: "Mailboxes", srcPh: "someone@yourdomain.com",
     fields: [["Directory (tenant) ID", "tenant_id"], ["Application (client) ID", "client_id"]],
     secretLabel: "client secret (tenant app only)",
-    desc: "Your Microsoft mailbox, read and sorted for you, through your company's own Microsoft app - its IT registers it once, then you sign in.",
-    howto: ["Your company's own Microsoft app: Taskuary ships none, so nothing goes through anyone else's Azure. The card shows the steps for your IT - Microsoft Entra ID → App registrations → New registration (single tenant); Authentication → Add a platform → Mobile and desktop applications → redirect URI http://localhost/api/ms/callback (Entra ignores the port of a localhost redirect, so it covers whatever port Taskuary runs on); Allow public client flows: Yes; API permissions → Microsoft Graph → Delegated: the permissions the card lists → Grant admin consent. No client secret - a sign-in app is public by design.",
-      "Copy the app's Application (client) ID and Directory (tenant) ID into the card, then sign in - either in the browser (Sign in with Microsoft: Microsoft's page opens, you sign in with your own account and the tab hands you back to Taskuary) or with a code (Sign in with a code instead: a code for microsoft.com/devicelogin, for a Taskuary the browser cannot reach on localhost - some organisations block that one). Both use the same app. That is mail, sending and calendar for your mailbox.",
-      "AADSTS50011 on Microsoft's page: the app does not list http://localhost/api/ms/callback under Mobile and desktop applications yet. AADSTS700016: the client or tenant ID on the card is wrong. \"Need admin approval\": IT has not granted admin consent yet - the card's approval link does it too, once for everyone.",
+    desc: "Your Microsoft mailbox - work or Outlook.com - read and sorted for you, through your own Microsoft app: register it once (about five minutes), then you sign in.",
+    howto: ["Your own Microsoft app: Taskuary ships none, so nothing goes through anyone else's Azure. An Outlook.com or Hotmail account first signs up for a free Azure account with that same account (Microsoft registers apps only inside a directory since June 2024; it asks for a phone and a credit or debit card to verify you, and charges nothing). Then Microsoft Entra → App registrations → New registration - Supported account types \"Any Entra ID Tenant + Personal Microsoft accounts\" for an Outlook.com account, single tenant for a company app; Authentication → Add a platform → Mobile and desktop applications → redirect URI http://localhost/api/ms/callback (Entra ignores the port of a localhost redirect, so it covers whatever port Taskuary runs on); Allow public client flows: Yes; API permissions → Microsoft Graph → Delegated: the permissions the card lists → Grant admin consent (a company app; an Outlook.com account approves them on the sign-in page instead). No client secret - a sign-in app is public by design.",
+      "Copy the app's Application (client) ID into the card (the Directory (tenant) ID too for a single-tenant company app; blank otherwise), then sign in - either in the browser (Sign in with Microsoft: Microsoft's page opens, you sign in with your own account and the tab hands you back to Taskuary) or with a code (Sign in with a code instead: a code for microsoft.com/devicelogin, for a Taskuary the browser cannot reach on localhost - some organisations block that one). Both use the same app. That is mail, sending and calendar for your mailbox.",
+      "AADSTS50011 on Microsoft's page: the app does not list http://localhost/api/ms/callback under Mobile and desktop applications yet. AADSTS700016: the client or tenant ID on the card is wrong. AADSTS50020 / AADSTS50194 with an Outlook.com account: the app was registered for one directory only - register it again for personal accounts too. AADSTS7000218: Allow public client flows is off. \"Need admin approval\": IT has not granted admin consent yet - the card's approval link does it too, once for everyone.",
       "Tenant app (admins - for Teams chat reading and for mailboxes other than your own): the same App registrations → New registration, then API permissions → APPLICATION permissions Mail.Read (Mail.ReadWrite for Outlook drafts on approve or 'Handled mail, at the source') and Calendars.Read (Calendars.ReadWrite to answer invites and book meetings from Taskuary) → Grant admin consent; Certificates & secrets → New client secret. Enter the two IDs and paste the secret under Admin?; blank = the server's AZURE_* env vars.",
       "Mailboxes: signing in adds your own automatically. A tenant app reads every mailbox you add as a UPN under Sources.",
       "Test acquires a real Graph token and reports exactly what failed if anything - and whether the calendar can be read. Enable, and mail flows through the same triage funnel as everything else."],
     // written FOR the agent: it starts the browser sign-in through the API and hands the owner the link (a code only if they ask)
-    agent: ["The card needs the company's own Microsoft app: Taskuary ships none. GET {base}/api/connectors{hdr}: this card's MsApp is 'card' or 'install' when an app is set, '' when not. If not, the registration is the company IT's to do in its own Entra ID (the steps are on the card) - ask the owner for the Application (client) ID and Directory (tenant) ID; never invent one.",
-      "Start the sign-in: POST {base}/api/connectors/{cid}/ms/signin{hdr} with JSON {\"client_id\": \"<id>\", \"tenant_id\": \"<id>\"} (the card keeps them). It returns url and a flow id. Tell the owner: open <url> in the browser on this computer, sign in with their own Microsoft account and Accept - the tab comes back to Taskuary by itself. Only if the owner's browser cannot reach this Taskuary on localhost: add \"code\": true - it returns user_code and verification_uri; tell them to open <verification_uri> and enter <user_code>.",
+    agent: ["The card needs the company's own Microsoft app: Taskuary ships none. GET {base}/api/connectors{hdr}: this card's MsApp is 'card' or 'install' when an app is set, '' when not. If not, the registration is the owner's (or their company IT's) to do - the steps are on the card, including the free Azure account an Outlook.com account needs first - ask the owner for the Application (client) ID (and the Directory (tenant) ID only for a single-tenant company app); never invent one.",
+      "Start the sign-in: POST {base}/api/connectors/{cid}/ms/signin{hdr} with JSON {\"client_id\": \"<id>\"} plus \"tenant_id\" for a single-tenant company app (the card keeps them). It returns url and a flow id. Tell the owner: open <url> in the browser on this computer, sign in with their own Microsoft account and Accept - the tab comes back to Taskuary by itself. Only if the owner's browser cannot reach this Taskuary on localhost: add \"code\": true - it returns user_code and verification_uri; tell them to open <verification_uri> and enter <user_code>.",
       "Poll POST {base}/api/connectors/{cid}/ms/poll{hdr} with JSON {\"flow\": \"<flow>\"} every 5 seconds. status pending = keep waiting; status ok = the card is connected as them and their mailbox was added as a source; status error = read detail (it names what to fix in the app). If the error carries admin_consent_url, give the owner that link to forward to their Microsoft 365 admin, and start again once the admin has approved.",
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on (POST {base}/api/connectors{hdr} with {\"ConnectorId\": {cid}, \"Active\": true}) and say SETUP DONE."] },
   teams: { group: "Messaging", channel: "teams", srcLabel: "Users / chat ids", srcPh: "user UPN, e.g. jsmith@yourcompany.com",
@@ -4588,12 +4588,17 @@ const NO_REPLY = /AADSTS900971/;
 export const msSays = (d) => NO_REPLY.test(d || "") ? "Microsoft stopped at your organisation's approval step (error AADSTS900971, \"No reply address provided\") - "
   + "your IT admin approves Taskuary once with the link below, then sign in again." : d;
 const STALL_MS = 90 * 1000;
-// THE COMPANY'S OWN MICROSOFT APP (the owner, 2026-11-05: "i don't want it to go through my azure ... they can create their own app"):
-// Taskuary ships no Microsoft app id (msauth.py), so the card asks for the company's - the two ids, and the steps IT follows to make it.
+// THE PERSON'S OWN MICROSOFT APP (the owner, 2026-11-05: "i don't want it to go through my azure ... they can create their own app";
+// 2026-11-09: a regular Outlook.com / Hotmail person too): Taskuary ships no Microsoft app id (msauth.py), so the card asks for theirs -
+// the steps to register one in about five minutes, and its Application (client) ID. The tenant is a company's single-tenant app's only:
+// blank signs in through /common, and an app for personal accounts only moves the card to /consumers by itself (msauth.personal_door).
 // The ids ride the Sign in press (server ms_signin keeps them on the card); both roads - the browser and the code - use the same app.
 export const MS_REDIRECT = "http://localhost/api/ms/callback";
 // ...a Teams card with no app of its own uses the Outlook card's ('outlook'): its sign-in is ready at once (the owner, 2026-11-05)
-export const msNeedsApp = (conn, cfg) => !["install", "outlook"].includes(conn.MsApp) && !(String(cfg.client_id || "").trim() && String(cfg.tenant_id || "").trim());
+export const msNeedsApp = (conn, cfg) => !["install", "outlook"].includes(conn.MsApp) && !String(cfg.client_id || "").trim();
+export const MS_REGISTER = "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade";
+export const MS_AZURE_FREE = "https://azure.microsoft.com/free";
+export const MS_AUDIENCE = "Any Entra ID Tenant + Personal Microsoft accounts";
 const MsOwnApp = ({ conn, cfg, setCfg, copy }) => {
   const install = conn.MsApp === "install" || conn.MsApp === "outlook", steps = !["card", "install", "outlook"].includes(conn.MsApp);
   const box = { "& .MuiInputBase-root": { bgcolor: "#fff" }, "& .MuiFormHelperText-root": { mx: 0 } };   // white is the box's, not its hint's
@@ -4602,24 +4607,29 @@ const MsOwnApp = ({ conn, cfg, setCfg, copy }) => {
     <Box data-tq-ms-own-app="" sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
       {steps && (
         <Box component="ol" data-tq-ms-steps="" sx={{ m: 0, pl: 2.5, color: DIM, fontSize: 12.5, lineHeight: 1.6, "& li": { mb: 0.25 } }}>
-          <li>Your IT registers the app once: Microsoft Entra ID → App registrations → New registration → name it Taskuary, accounts in this
-            organizational directory only (single tenant) → Register.</li>
+          <li><b>Outlook.com or Hotmail account?</b> Microsoft only lets you register an app inside a directory, so first sign up
+            for a <a href={MS_AZURE_FREE} target="_blank" rel="noreferrer">free Azure account</a> with that same account. Microsoft asks
+            for a phone number and a credit or debit card to check you are a person - it charges nothing (a temporary $1 hold may show),
+            and the app stays free. A work account: your company already has a directory - your IT may do these steps for you.</li>
+          <li>Open <a href={MS_REGISTER} target="_blank" rel="noreferrer">App registrations → New registration</a>, name it Taskuary.
+            Supported account types: <b>{MS_AUDIENCE}</b> for an Outlook.com account, or single tenant for a company app → Register.</li>
           <li>Authentication → Add a platform → <b>Mobile and desktop applications</b> → redirect URI {code(MS_REDIRECT)}
             <IconButton size="small" onClick={() => copy(MS_REDIRECT)} title="copy the redirect URI" aria-label="copy the redirect URI" sx={{ p: 0.25, ml: 0.25 }}>
               <ContentCopyIcon sx={{ fontSize: 13 }} /></IconButton>
             {conn.MsRedirect && conn.MsRedirect !== MS_REDIRECT && <> (if Microsoft asks for this install's port, add {code(conn.MsRedirect)} too)</>}</li>
           <li>Authentication → Allow public client flows: <b>Yes</b> → Save.</li>
-          <li>API permissions → Add a permission → Microsoft Graph → Delegated: {code(conn.MsScopes || "")} → Add, then <b>Grant admin consent</b>.</li>
-          <li>From the app's Overview, copy the Application (client) ID and the Directory (tenant) ID into the boxes below. Then sign in -
-            in the browser, or with a code.</li>
+          <li>API permissions → Add a permission → Microsoft Graph → Delegated: {code(conn.MsScopes || "")} → Add. A company app:
+            then <b>Grant admin consent</b>. An Outlook.com account approves them on the sign-in page.</li>
+          <li>From the app's Overview, copy the Application (client) ID into the box below. Leave the Directory (tenant) ID blank,
+            unless it is a single-tenant company app. Then sign in - in the browser, or with a code.</li>
         </Box>
       )}
       <TextField size="small" label="Application (client) ID" value={cfg.client_id || ""} sx={box} required={!install}
         inputProps={{ spellCheck: false, autoComplete: "off" }} onChange={(e) => setCfg({ ...cfg, client_id: e.target.value.trim() })}
-        helperText={conn.MsApp === "outlook" ? "Blank uses your Outlook card's app - the same sign-in." : install ? "Blank uses the app this install was set up with." : "Your company's app, from its Overview page in Entra ID."} />
-      <TextField size="small" label="Directory (tenant) ID" value={cfg.tenant_id || ""} sx={box} required={!install}
+        helperText={conn.MsApp === "outlook" ? "Blank uses your Outlook card's app - the same sign-in." : install ? "Blank uses the app this install was set up with." : "Your app, from its Overview page in Entra ID."} />
+      <TextField size="small" label="Directory (tenant) ID" value={cfg.tenant_id || ""} sx={box}
         inputProps={{ spellCheck: false, autoComplete: "off" }} onChange={(e) => setCfg({ ...cfg, tenant_id: e.target.value.trim() })}
-        helperText="The same Overview page. A work account needs it." />
+        helperText="Blank for an Outlook.com account or an app open to any account. A single-tenant company app: the same Overview page." />
     </Box>
   );
 };   // a browser sign-in this long without coming back: say what a tenant's admin approval looks like
@@ -4724,7 +4734,7 @@ export const MsSignIn = ({ conn, cfg, setCfg, reload, onSignedIn, plain = false 
         {plain ? "Press the button and sign in on Microsoft's page as usual. This page finishes by itself."
           : chats ? <>Your own work account, your own chats — read here and answered as you, through your company's own Microsoft app.
         Each Teams card signs in its own account, so a second organisation is a second card.</>
-          : <>Your own account, your own mailbox — mail, sending and calendar — through your company's own Microsoft app. No secret.</>}
+          : <>Your own account, your own mailbox — mail, sending and calendar — through your own Microsoft app (your company's, or the one you registered). No secret.</>}
       </Typography>
       {!flow && signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
@@ -4776,8 +4786,8 @@ export const MsSignIn = ({ conn, cfg, setCfg, reload, onSignedIn, plain = false 
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
           {legacy && (
             <Typography variant="body2" data-tq-ms-legacy="" sx={{ color: INK, fontWeight: 600, flexBasis: "100%" }}>
-              This card signed in through the Microsoft app Taskuary used to ship, and Taskuary ships none now. Put your company's own app
-              on it below and sign in again - nothing is lost.
+              This card signed in through the Microsoft app Taskuary used to ship, and Taskuary ships none now. Put your own app (your
+              company's, or one you register for free) on it below and sign in again - nothing is lost.
             </Typography>
           )}
           {setCfg && (needsApp || legacy || !signedOut) && <Box sx={{ flexBasis: "100%" }}><MsOwnApp conn={conn} cfg={cfg} setCfg={setCfg} copy={copy} /></Box>}
@@ -4788,7 +4798,7 @@ export const MsSignIn = ({ conn, cfg, setCfg, reload, onSignedIn, plain = false 
             </Typography>
           )}
           <Button variant="contained" disableElevation disabled={busy || needsApp} onClick={() => start()}
-            title={needsApp ? "Enter your company's Application (client) ID and Directory (tenant) ID first" : undefined}>
+            title={needsApp ? "Enter your app's Application (client) ID first - the steps are above" : undefined}>
             {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : signedOut || legacy ? "Sign in again" : "Sign in with Microsoft"}</Button>
           {/* the device code is the second road, never the default: Conditional Access blocks it in many organisations */}
           <Button size="small" disabled={busy || needsApp} onClick={() => start(files, true)} sx={{ fontSize: 11.5, color: DIM }}

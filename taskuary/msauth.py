@@ -6,11 +6,15 @@ that the person signs in to in the system browser - the OAuth authorization-code
 server on a loopback redirect (REDIRECT_PATH) - their own account, consent to THEIR OWN mailbox. We keep the refresh token
 as the card's secret and mint access tokens from it silently from then on.
 
-THE APP IS THE COMPANY'S (the owner, 2026-11-05: "i want companies to be able to access their own taskuary and connect
-themselves. they can create their own app"). Taskuary ships no Microsoft app id: a company's IT registers one in its own
-Entra ID (single tenant, "Mobile and desktop applications" redirect http://localhost/api/ms/callback, public client flows
-on, the delegated scopes below) and the card carries its client_id and tenant_id. A self-hoster may set one for the whole
-install with TASKUARY_MS_CLIENT_ID. Nothing set: the card says what to enter (NO_APP) - that is setup, not a fault.
+THE APP IS THE PERSON'S OWN (the owner, 2026-11-05: "i want companies to be able to access their own taskuary and connect
+themselves. they can create their own app"; 2026-11-09: the same for a regular Outlook.com / Hotmail person). Taskuary ships no
+Microsoft app id: a company's IT registers one in its own Entra ID (single tenant), a person with a personal Microsoft account
+registers one in the free directory an Azure free account gives them (Microsoft stopped registering apps outside a directory in
+June 2024), open to "Any Entra ID Tenant + Personal Microsoft accounts". Either way: "Mobile and desktop applications" redirect
+http://localhost/api/ms/callback, public client flows on, the delegated scopes below; the card carries its client_id and - for a
+single-tenant company app only - its tenant_id. A blank tenant is /common; an app open to personal accounts ONLY refuses /common
+(AADSTS9002331), so that refusal moves the card to /consumers by itself (personal_door) - no account-type choice on the card.
+A self-hoster may set one app for the whole install with TASKUARY_MS_CLIENT_ID. Nothing set: the card shows the steps (NO_APP).
 
 DEVICE CODE IS THE FALLBACK, never the default (an enterprise IT, 2026-10-27: Conditional Access blocks the device-code
 flow as a known phishing vector). It stays for a Taskuary the browser cannot reach on localhost - another machine, a
@@ -73,8 +77,8 @@ def card_of(cfg) -> str: return 'Teams' if (cfg or {}).get('_kind') == 'teams' e
 # one for the whole install. A card that signed in before this through the app Taskuary used to ship keeps its token, but its
 # refresh now asks for the company's own app (NO_APP) - a line on the card, never a crash.
 PUBLIC_CLIENT_ID = os.getenv('TASKUARY_MS_CLIENT_ID', '').strip()
-NO_APP = ("the {card} card needs your company's own Microsoft app - enter its Application (client) ID and Directory (tenant) ID "
-          "on the card (the steps are there), then sign in with Microsoft")
+NO_APP = ("the {card} card needs your own Microsoft app (your company's, or one you register for free for an Outlook.com account) - "
+          "enter its Application (client) ID on the card (the steps are there), then sign in with Microsoft")
 GUID = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
 TENANT = re.compile(r'^(common|organizations|consumers|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
                     r'|[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+)$', re.I)
@@ -84,7 +88,7 @@ on_rotate = None                          # set by the server: (connector id, ne
 
 
 def client_id(cfg: dict) -> str: return (cfg.get('client_id') or PUBLIC_CLIENT_ID or '').strip()
-def tenant(cfg: dict) -> str: return (cfg.get('tenant_id') or 'common').strip()   # common = work + personal
+def tenant(cfg: dict) -> str: return (cfg.get('tenant_id') or '').strip() or 'common'   # common = work + personal
 def is_user(cfg: dict) -> bool: return (cfg or {}).get('auth') == 'user'
 
 
@@ -147,7 +151,9 @@ def _need_client(cfg):
 def check_app(client: str, tenant_id: str) -> str:
     "What is wrong with the ids typed on the card, in a line - '' when both read right. Microsoft's own check comes at sign-in."
     if not GUID.match(client or ''): return "the Application (client) ID is the GUID on the app's Overview page in Entra ID, like 1b2c3d4e-0000-0000-0000-000000000000"
-    if not TENANT.match(tenant_id or ''): return "the Directory (tenant) ID is the GUID on the same Overview page (or your domain, like northwind.example)"
+    # blank is /common: an app open to personal accounts (Outlook.com, Hotmail) needs none, and Microsoft names a missing one (AADSTS50194)
+    if (tenant_id or '').strip() and not TENANT.match(tenant_id.strip()):
+        return "the Directory (tenant) ID is the GUID on the same Overview page (or your domain, like northwind.example) - or leave it blank for an Outlook.com account"
     return ''
 
 
@@ -181,11 +187,23 @@ def callback_error(error: str, desc: str = '') -> Exception:
     return _refusal(d)
 
 
+# AN APP FOR PERSONAL ACCOUNTS ONLY answers /common with AADSTS9002331 "use the /consumers endpoint": the card's blank tenant
+# meant "whatever the app takes", so that answer IS the inference - the sign-in moves to /consumers and the card keeps it
+PERSONAL_ONLY = 'AADSTS9002331'
+def personal_door(cfg: dict, desc: str):
+    "The card's config moved to /consumers when Microsoft said the app takes personal accounts only and the card asked /common; else None."
+    return {**cfg, 'tenant_id': 'consumers'} if PERSONAL_ONLY in (desc or '') and tenant(cfg).lower() == 'common' else None
+
+
 def device_start(cfg: dict, scope: str = SCOPES) -> dict:
-    """Begin the device-code flow: what to show the user (code + URL) and what to poll with."""
+    """Begin the device-code flow: what to show the user (code + URL) and what to poll with. 'tenant' rides along when the
+    sign-in had to move to /consumers (personal_door) - the server keeps it on the card."""
     r = requests.post(f'{AUTH}/{tenant(cfg)}/oauth2/v2.0/devicecode', timeout=20,
                       data={'client_id': _need_client(cfg), 'scope': scope})
-    if r.status_code != 200: raise RuntimeError(f'Microsoft refused to start sign-in ({r.status_code}): {_err(r)}')
+    if r.status_code != 200:
+        moved = personal_door(cfg, _err(r))
+        if moved: return {**device_start(moved, scope), 'tenant': 'consumers'}
+        raise RuntimeError(f'Microsoft refused to start sign-in ({r.status_code}): {_friendly(_err(r))}')
     j = r.json()
     return {'device_code': j['device_code'], 'user_code': j['user_code'], 'verification_uri': j['verification_uri'],
             'expires_in': int(j.get('expires_in') or 900), 'interval': int(j.get('interval') or 5), 'message': j.get('message', '')}
@@ -314,13 +332,26 @@ def _friendly(desc: str) -> str:
                 + (f" (this sign-in sent {sent.group(1)})" if sent and sent.group(1) != ADMIN_REDIRECT else '') + ', then sign in again')
     if 'AADSTS700016' in d or 'AADSTS90002' in d:
         return ("Microsoft finds no such app in that directory (AADSTS700016) - the Application (client) ID or the Directory (tenant) ID "
-                "on the card is wrong. Copy both again from the app's Overview page in Entra ID")
+                "on the card is wrong. Copy the Application (client) ID again from the app's Overview page in Entra ID; for an Outlook.com "
+                "account leave the Directory (tenant) ID blank, and check the app's Supported account types include personal Microsoft accounts")
     if 'AADSTS50194' in d:            # a single-tenant app asked through /common
-        return ("your company's app is single-tenant, so the card needs its Directory (tenant) ID (AADSTS50194) - copy it from the "
-                "app's Overview page in Entra ID")
-    if 'AADSTS7000218' in d:          # the redirect is on the Web platform, or public client flows are off: Microsoft wants a secret
-        return ("Microsoft wants a client secret from this app (AADSTS7000218) - in your company's app, put the redirect under "
-                "Mobile and desktop applications (not Web) and set Allow public client flows to Yes")
+        return ("your app takes accounts from its own directory only (AADSTS50194). A work account: enter the Directory (tenant) ID from "
+                "the app's Overview page. An Outlook.com or Hotmail account: register the app again with Supported account types "
+                "\"Any Entra ID Tenant + Personal Microsoft accounts\" and put its new Application (client) ID on the card")
+    if 'AADSTS50020' in d:            # a personal account signing in to a single-tenant app (or one from another directory)
+        return ("this app does not take that kind of account (AADSTS50020). For an Outlook.com or Hotmail account, register the app again "
+                "with Supported account types \"Any Entra ID Tenant + Personal Microsoft accounts\", put its new Application (client) ID "
+                "on the card and leave the Directory (tenant) ID blank")
+    # ...the same app asked through /consumers: AADSTS9002332, or AADSTS70002 "The client does not exist or is not enabled for consumers"
+    if 'AADSTS9002332' in d or re.search(r'AADSTS70002\b', d) and 'consumers' in d.lower():
+        return ("your app takes work or school accounts only (AADSTS9002332) - clear the Directory (tenant) ID on the card, or, for an "
+                "Outlook.com account, register the app again with \"Any Entra ID Tenant + Personal Microsoft accounts\"")
+    if PERSONAL_ONLY in d:
+        return ("your app takes personal Microsoft accounts only (AADSTS9002331) - leave the card's Directory (tenant) ID blank "
+                "(or type consumers) and sign in again")
+    if 'AADSTS7000218' in d or re.search(r'AADSTS70002\b', d):   # the redirect is on the Web platform, or public client flows are off
+        return ("Microsoft wants a client secret from this app (AADSTS7000218) - in your app's Authentication page, put the redirect "
+                "under Mobile and desktop applications (not Web) and set Allow public client flows to Yes, then Save")
     if 'AADSTS50076' in d or 'AADSTS50079' in d: return 'your organisation needs multi-factor sign-in - complete it in the browser and try again'
     if _policy(d):
         return ('your company\'s policy stops this sign-in until your IT admin allows Taskuary - your IT admin approves Taskuary once with the '

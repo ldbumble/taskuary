@@ -31,10 +31,11 @@ class DeviceFlowTests(unittest.TestCase):
     def test_no_app_id_is_said_plainly(self):
         with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', ''):
             with self.assertRaises(RuntimeError) as e: msauth.device_start({})
-            self.assertIn("your company's own Microsoft app", str(e.exception)); self.assertIn('Outlook card', str(e.exception))
+            self.assertIn("your own Microsoft app", str(e.exception)); self.assertIn('Outlook card', str(e.exception))
+            self.assertIn('Outlook.com', str(e.exception)); self.assertNotIn('Directory (tenant) ID', str(e.exception))
             # a card signed in through an app Taskuary used to ship: its refresh says the same, before any call to Microsoft
             with mock.patch('requests.post') as p, self.assertRaises(RuntimeError) as e: msauth.refresh({'auth': 'user', '_kind': 'teams'}, 'RT')
-            p.assert_not_called(); self.assertIn('Teams card needs your company', str(e.exception))
+            p.assert_not_called(); self.assertIn('Teams card needs your own', str(e.exception))
 
     def test_no_microsoft_app_ships_with_taskuary(self):
         """The owner, 2026-11-05: a company signs in through its own app, never one in somebody else's Azure."""
@@ -49,7 +50,47 @@ class DeviceFlowTests(unittest.TestCase):
         ok = '1b2c3d4e-0000-0000-0000-000000000000'
         self.assertEqual(msauth.check_app(ok, ok), ''); self.assertEqual(msauth.check_app(ok, 'northwind.example'), '')
         self.assertIn('Application (client) ID', msauth.check_app('app-1', ok))
-        self.assertIn('Directory (tenant) ID', msauth.check_app(ok, ''))
+        self.assertIn('Directory (tenant) ID', msauth.check_app(ok, 'not a tenant!'))
+        # an Outlook.com person's app is open to personal accounts: no tenant to type, blank is /common
+        self.assertEqual(msauth.check_app(ok, ''), ''); self.assertEqual(msauth.check_app(ok, None), ''); self.assertEqual(msauth.check_app(ok, 'consumers'), '')
+
+    def test_a_blank_tenant_is_common_and_an_app_for_personal_accounts_only_moves_to_consumers(self):
+        """A regular Outlook.com person (the owner, 2026-11-09: "sign in with device in outlook does not work any more ... for regular
+        users"): no account-type choice on the card - a blank tenant asks /common, and Microsoft's own answer for an app registered
+        for personal accounts only (AADSTS9002331) moves the sign-in to /consumers."""
+        self.assertEqual(msauth.tenant(CFG), 'common'); self.assertEqual(msauth.tenant({**CFG, 'tenant_id': ' '}), 'common')
+        only = R(400, {'error': 'invalid_request', 'error_description': 'AADSTS9002331: Application is configured for use by Microsoft Account users only. Please use the /consumers endpoint to serve this request.'})
+        ok = R(200, {'device_code': 'D', 'user_code': 'ABCD-1234', 'verification_uri': 'https://microsoft.com/devicelogin'})
+        with mock.patch('requests.post', side_effect=[only, ok]) as p: d = msauth.device_start(CFG)
+        self.assertEqual((d['user_code'], d['tenant']), ('ABCD-1234', 'consumers'))
+        self.assertEqual([('/common/' in a[0][0], '/consumers/' in a[0][0]) for a in p.call_args_list], [(True, False), (False, True)])
+        self.assertEqual(msauth.personal_door({**CFG, 'tenant_id': 'consumers'}, 'AADSTS9002331'), None, 'asked once, never a loop')
+        # a tenant the card names is the company's choice: told, never moved
+        g = '1b2c3d4e-0000-0000-0000-00000000000b'
+        with mock.patch('requests.post', return_value=only) as p, self.assertRaises(RuntimeError) as e: msauth.device_start({**CFG, 'tenant_id': g})
+        self.assertEqual(p.call_count, 1); self.assertIn('personal Microsoft accounts only', str(e.exception)); self.assertIn('blank', str(e.exception))
+
+    def test_microsoft_errors_about_a_personal_accounts_app_say_what_to_fix(self):
+        """The refusals an Outlook.com person meets on their own app, said as the fix in that app - never the bare AADSTS line."""
+        f = msauth._friendly
+        # public client flows off: the device code asks for a secret, or says the app is not 'mobile'
+        for d in ('AADSTS7000218: The request body must contain the following parameter: client_assertion or client_secret.',
+                  "AADSTS70002: The provided client is not supported for this feature. The client application must be marked as 'mobile.'"):
+            self.assertIn('Allow public client flows to Yes', f(d), d)
+        # a wrong id, or an app that does not take personal accounts at /consumers
+        self.assertIn('Supported account types include personal Microsoft accounts', f("AADSTS700016: Application with identifier 'x' was not found in the directory 'Microsoft Accounts'."))
+        # a personal account on a single-tenant app: register it again, open to personal accounts, tenant blank
+        for d in ("AADSTS50020: User account 'erin@northwind.example' from identity provider 'live.com' does not exist in tenant 'Default Directory'",
+                  'AADSTS50194: Application is not configured as a multi-tenant application.'):
+            self.assertIn('Any Entra ID Tenant + Personal Microsoft accounts', f(d), d); self.assertIn('Outlook.com', f(d), d)
+        self.assertIn('leave the Directory (tenant) ID blank', f("AADSTS50020: User account from identity provider 'live.com' does not exist in tenant"))
+        for d in ('AADSTS9002332: Application is configured for use by Microsoft Entra users only. Please do not use the /consumers endpoint.',
+                  'AADSTS70002: The client does not exist or is not enabled for consumers.'):
+            self.assertIn('work or school accounts only', f(d), d)
+        # ...and a refused device-code start says it too, not Microsoft's prose alone
+        with mock.patch('requests.post', return_value=R(400, {'error': 'unauthorized_client', 'error_description': 'AADSTS7000218: The request body must contain client_secret'})):
+            with self.assertRaises(RuntimeError) as e: msauth.device_start(CFG)
+        self.assertIn('Allow public client flows', str(e.exception))
 
     def test_microsoft_errors_about_the_companys_app_say_what_to_fix(self):
         d = msauth._friendly("invalid_request: AADSTS50011: The redirect URI 'http://localhost:7787/api/ms/callback' specified in the request "
@@ -216,6 +257,40 @@ class BrowserSignInTests(unittest.TestCase):
             self.assertEqual(row['MsApp'], 'card'); self.assertTrue(row['MsRedirect'].endswith('/api/ms/callback'))
             bare = self._card(); row = next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == bare)
             self.assertEqual(row['MsApp'], '')
+
+    def test_an_outlook_com_app_needs_only_its_client_id_and_finds_its_own_door(self):
+        """A personal-accounts app on the card with no tenant: the sign-in starts through /common; Microsoft's AADSTS9002331 sends
+        this same tab on through /consumers, and the card keeps consumers - on both roads."""
+        cid, app = self._card(), '1b2c3d4e-0000-0000-0000-00000000000c'
+        self.addCleanup(server.store.set_connector_config, cid, {})      # a card holding an app lends it to every bare Teams card after
+        with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', ''):
+            d = c.post(f'/api/connectors/{cid}/ms/signin', json={'client_id': app}).json()
+            self.assertTrue(d['url'].startswith('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?'), 'no tenant typed: 409 no more')
+            q = parse_qs(urlsplit(d['url']).query)
+            r = self.LOCAL.get('/api/ms/callback', params={'state': q['state'][0], 'error': 'invalid_request', 'error_description':
+                               'AADSTS9002331: Application is configured for use by Microsoft Account users only. Please use the /consumers endpoint.'}, follow_redirects=False)
+            self.assertEqual(r.status_code, 302); self.assertTrue(r.headers['location'].startswith('https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?'))
+            q2 = parse_qs(urlsplit(r.headers['location']).query)
+            self.assertNotEqual(q2['state'], q['state']); self.assertEqual(q2['client_id'][0], app)
+            self.assertEqual(json.loads(server.store.get_connector(cid)['ConfigJson'])['tenant_id'], 'consumers')
+            tok = R(200, {'access_token': 'A', 'refresh_token': 'RT-p', 'expires_in': 3600, 'scope': q2['scope'][0]})
+            with mock.patch('taskuary.msauth.requests.post', return_value=tok) as p, mock.patch.object(msauth, 'me', return_value={'account': self.who, 'name': 'Erin Blake'}), \
+                 mock.patch.object(server, '_poll_reports'):
+                self.assertIn('Signed in', self._back(q2).text)
+            self.assertIn('/consumers/oauth2/v2.0/token', p.call_args[0][0], 'the code is redeemed where it was issued')
+            cfg = json.loads(server.store.get_connector(cid)['ConfigJson'])
+            self.assertEqual((cfg['auth'], cfg['tenant_id']), ('user', 'consumers'), 'signed in, and its refreshes ask /consumers too')
+            # the device code on a fresh card: the same inference, kept on the card
+            cid2 = self._card()
+            self.addCleanup(server.store.set_connector_config, cid2, {})
+            only = R(400, {'error': 'invalid_request', 'error_description': 'AADSTS9002331: Please use the /consumers endpoint.'})
+            with mock.patch('taskuary.msauth.requests.post', side_effect=[only, R(200, {'device_code': 'D', 'user_code': 'WXYZ-1', 'verification_uri': 'u'})]):
+                d2 = c.post(f'/api/connectors/{cid2}/ms/signin', json={'client_id': app, 'code': True}).json()
+            self.assertEqual(d2['user_code'], 'WXYZ-1'); self.assertNotIn('tenant', d2)
+            self.assertEqual(json.loads(server.store.get_connector(cid2)['ConfigJson'])['tenant_id'], 'consumers')
+            with mock.patch('taskuary.msauth.requests.post', return_value=R(400, {'error': 'authorization_pending'})) as p:
+                self.assertEqual(c.post(f'/api/connectors/{cid2}/ms/poll', json={'flow': d2['flow']}).json()['status'], 'pending')
+            self.assertIn('/consumers/oauth2/v2.0/token', p.call_args[0][0])
 
     def test_the_authorize_url_asks_with_pkce_s256_the_cards_scopes_and_a_loopback_return(self):
         d, q = self._start(self._card())

@@ -58,27 +58,49 @@ usually `report` and `tool`.
 
 ### How Microsoft sign-in works
 
-**Outlook and Teams sign in through your company's own Microsoft app.** Taskuary ships no
-Microsoft app of its own, so nothing goes through anybody else's Azure: your IT registers one app
-in your own Microsoft Entra ID, once, and every Outlook and Teams card in your company uses it. The
-card shows these steps until its two IDs are filled in:
+**Outlook and Teams sign in through your own Microsoft app.** Taskuary ships no Microsoft app of
+its own, so nothing goes through anybody else's Azure. At a company, your IT registers one app in
+your Microsoft Entra ID, once, and every Outlook and Teams card in the company uses it. With an
+Outlook.com, Hotmail or Live account you register your own, free, in about five minutes. The card
+shows these steps until its Application (client) ID is filled in:
 
-1. Microsoft Entra ID → **App registrations** → **New registration** → name it Taskuary, accounts
-   in this organizational directory only (single tenant) → Register.
-2. **Authentication** → **Add a platform** → **Mobile and desktop applications** → redirect URI
+1. **Outlook.com or Hotmail account: get a directory first.** Since June 2024 Microsoft registers
+   new apps only inside a directory (a Microsoft Entra tenant); a personal account on its own no
+   longer can. Sign up for a [free Azure account](https://azure.microsoft.com/free) with the same
+   Microsoft account - it comes with a *Default Directory* you administer. Microsoft asks for a
+   phone number and a credit or debit card (not prepaid) to check you are a person. It charges
+   nothing at sign-up (a temporary $1 hold may show) and nothing later unless you choose
+   pay-as-you-go; registering an app costs nothing. A work account skips this step: your company
+   already has a directory.
+2. Microsoft Entra ([entra.microsoft.com](https://entra.microsoft.com)) → **App registrations** →
+   **New registration** → name it Taskuary. **Supported account types**:
+   - Outlook.com / Hotmail: **Any Entra ID Tenant + Personal Microsoft accounts**. (*Personal
+     accounts only* works too - the card finds that out on the first sign-in and moves to
+     Microsoft's personal-account sign-in by itself.)
+   - A company app: **Single tenant only**.
+
+   → Register.
+3. **Authentication** → **Add a platform** → **Mobile and desktop applications** → redirect URI
    `http://localhost/api/ms/callback`. Entra ignores the port of a `localhost` redirect for a
    public client, so this one entry covers whatever port Taskuary listens on; the card also shows
    this install's own, `http://localhost:<port>/api/ms/callback` (7787 unless changed), if
    Microsoft asks for it.
-3. **Authentication** → **Allow public client flows: Yes** → Save.
-4. **API permissions** → Add a permission → Microsoft Graph → **Delegated**, then **Grant admin
-   consent**:
+4. **Authentication** → **Allow public client flows: Yes** → Save. The code sign-in needs it.
+5. **API permissions** → Add a permission → Microsoft Graph → **Delegated**; for a company app,
+   then **Grant admin consent** (an Outlook.com account approves them on the sign-in page):
    - Outlook: `offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite People.Read Contacts.Read`
    - Teams: `offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send People.Read`
    - Plus `Files.ReadWrite` only on a card where the owner turns on *Allow saving files*.
    One app can serve both cards: list both sets.
-5. From the app's **Overview**, copy the **Application (client) ID** and the **Directory (tenant)
-   ID** into the card. Then sign in, in the browser or with a code.
+6. From the app's **Overview**, copy the **Application (client) ID** into the card. Leave the
+   **Directory (tenant) ID** blank for an Outlook.com account or an app open to any account; a
+   single-tenant company app needs it too, from the same page.
+7. Sign in, in the browser or with a code.
+
+With a blank Directory (tenant) ID the card signs in through Microsoft's `common` endpoint, which
+takes work and personal accounts alike; an app registered for personal accounts only is moved to
+`consumers` on its first sign-in and the card keeps that. There is no account-type switch to set.
+(Teams chats are a work feature: a personal account signs in for Outlook mail and calendar.)
 
 No client secret: a sign-in app is public by design. Someone running their own Taskuary for
 several people can name one app for the whole install with the `TASKUARY_MS_CLIENT_ID` environment
@@ -108,10 +130,20 @@ Conditional Access policy.
   `http://localhost/api/ms/callback` under *Mobile and desktop applications* yet. Microsoft stops
   on its own page and never comes back; the card says so while it waits.
 - **AADSTS700016** (no such app in the directory): the Application (client) ID or the Directory
-  (tenant) ID on the card is wrong. Copy both again from the app's Overview page.
-- **AADSTS50194**: the app is single-tenant and the card has no Directory (tenant) ID.
-- **AADSTS7000218** (a client secret is required): the redirect is on the *Web* platform instead
-  of *Mobile and desktop applications*, or public client flows are off.
+  (tenant) ID on the card is wrong, or - for an Outlook.com account - the app's Supported account
+  types leave out personal Microsoft accounts. Copy the ID again from the app's Overview page.
+- **AADSTS50194** (not a multi-tenant app) or **AADSTS50020** (the account does not exist in the
+  tenant): the app takes accounts from its own directory only. A work account: put the Directory
+  (tenant) ID on the card. An Outlook.com account: register the app again with *Any Entra ID
+  Tenant + Personal Microsoft accounts*, put the new Application (client) ID on the card and leave
+  the tenant blank. (Changing an existing app's account types afterwards is often refused by the
+  portal; a new registration is the quick road.)
+- **AADSTS9002332**, or **AADSTS70002** "not enabled for consumers": the app takes work or school
+  accounts only and the card asked as a personal account - clear the card's Directory (tenant) ID,
+  or register the app again for personal accounts too.
+- **AADSTS7000218** (a client secret is required) or **AADSTS70002** ("must be marked as
+  'mobile'"): public client flows are off, or the redirect is on the *Web* platform instead of
+  *Mobile and desktop applications*. Set *Allow public client flows* to Yes and Save.
 - **"Need admin approval"**, **AADSTS65001**, **AADSTS90094**, **AADSTS900971** ("No reply address
   provided"), **AADSTS50105** (the app is limited to people IT assigned) or **AADSTS53003** (a
   Conditional Access policy): admin consent has not been granted yet. After a minute and a half
@@ -122,7 +154,7 @@ Conditional Access policy.
 
 **A card that signed in before Taskuary stopped shipping a Microsoft app** keeps its sign-in on
 record but reads nothing until its company's app is on it: the card says so, shows the steps, and
-signing in again with the two IDs picks up where it left off. Nothing already in Taskuary is lost.
+signing in again with its own app's ID picks up where it left off. Nothing already in Taskuary is lost.
 
 :::note For an IT admin
 - **No device-code flow by default.** Sign-in is the authorization-code flow with PKCE in the

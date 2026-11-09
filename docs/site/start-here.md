@@ -67,8 +67,9 @@ top always says what to do next, and so do the Work list and the **Setup** chip 
    AI on this computer and every API provider, for when you would rather paste a key.
 2. **Where does your work come in?** Connect your main source: your email, a chat or a task
    system. Email is the usual one and comes first. Microsoft 365 or Outlook signs in through your
-   company's own Microsoft app: your IT registers it once (the card shows the steps), you paste its
-   two IDs and sign in. Gmail needs an App Password, which Google makes at
+   own Microsoft app: at a company your IT registers it once; with an Outlook.com or Hotmail
+   account you register one yourself, free, in about five minutes (the card shows the steps). You
+   paste its Application (client) ID and sign in. Gmail needs an App Password, which Google makes at
    [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) once 2-Step
    Verification is on. Any other mailbox takes its address, server and password. If your work
    arrives somewhere else, **More chat and task options** has Teams, Slack, WhatsApp, Discord,

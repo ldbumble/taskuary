@@ -7,6 +7,7 @@ import {
 } from "@assistant-ui/react";
 import { Alert, Box, Button, CircularProgress, IconButton, MenuItem, Select, TextField, Typography } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import CallMergeIcon from "@mui/icons-material/CallMerge";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
@@ -295,10 +296,15 @@ const UserMessage = () => {
       {result?.url && <> · <a href={result.url} target="_blank" rel="noreferrer" data-tq-press-link="">{linkWords(result.url)}</a></>}
       {result?.command && <details className="tq-aui-press-cmd"><summary>Show the command</summary><code>{result.command}</code></details>}</div>
   </MessagePrimitive.Root>;
-  // ...and what TASKUARY says woke the agent - a sign-in, a check-back come due, a fold - is an event too, never an input: an input is only what
-  // the owner typed or what came in on the task's thread (the owner, 2026-11-09). The mail a fold brought is the input under its line
+  // ...a FOLD is an INPUT (the owner, 2026-11-09: "merging in a task is a new input of course"): "Folded in TQ-12: <title>" on the right, the
+  // mail it brought under it - another task's work arriving on this one, like a message on its thread
+  if (brief && chat && fold) return <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="fold">
+    <span className="tq-aui-arrived-head"><CallMergeIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{[fold, at && when(new Date(at))].filter(Boolean).join(" · ")}</span></div>
+    {!!mail?.length && <Arrived mail={mail} />}</MessagePrimitive.Root>;
+  // ...and what TASKUARY says woke the agent - a sign-in, a check-back come due - is an event, never an input: an input is what the owner typed,
+  // what came in on the task's thread, or a task folded in (the owner, 2026-11-09)
   const event = brief && chat ? eventOf(words, fold, mail) : "";
-  if (event) return <MessagePrimitive.Root className="tq-aui-message tq-aui-press" data-tq-chat-press="" data-tq-chat-trigger={fold ? "fold" : checkBackDue(words) ? "check-back" : ""}>
+  if (event) return <MessagePrimitive.Root className="tq-aui-message tq-aui-press" data-tq-chat-press="" data-tq-chat-trigger={checkBackDue(words) ? "check-back" : ""}>
     <div className="tq-aui-press-line">{pressLine(event, stampOf)}</div>{!!mail?.length && <Arrived mail={mail} />}</MessagePrimitive.Root>;
   if (brief && chat) return mail?.length ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root> : null;
   // ...and what the owner types is theirs on the right, under their mark and the time ("if user interjects it will show user logo")

@@ -10,7 +10,7 @@ const NOTE = "The owner approved it and Taskuary ran `gh pr comment 12 --body-fi
 
 // THE OWNER'S RULE OF INPUTS (2026-11-09): "inputs are messages in the prompt box or from the input channel" - nothing else is a bubble
 test("only what the owner typed or what came in on the thread is an input", () => {
-  assert.deepEqual(INPUT_ORIGINS, ["typed", "thread"]);
+  assert.deepEqual(INPUT_ORIGINS, ["typed", "thread", "fold"]);      // a task folded in is new work arriving: an input
   const cases = [
     [{ role: "user", content: [{ type: "text", text: "try now" }] }, "typed", true],
     [{ role: "user", brief: true, mail: [{ words: "Any news?" }] }, "thread", true],
@@ -74,7 +74,8 @@ test("an approved step's event line carries its result, Taskuary's triggers are 
   assert.match(um, /data-tq-press-link=""/); assert.match(um, /Show the command/);
   assert.equal(linkWords(URL_), "PR #12");
   assert.equal(eventOf("Signed in to portal.example."), "Signed in to portal.example.");
-  assert.equal(eventOf("Folded in TQ-12: the invoice", "Folded in TQ-12: the invoice", [{ words: "x" }]), "Folded in TQ-12: the invoice");
+  assert.equal(eventOf("Folded in TQ-12: the invoice", "Folded in TQ-12: the invoice", [{ words: "x" }]), "", "a fold is an input, never an event line");
+  assert.equal(originOf({ role: "user", metadata: { custom: { brief: true, fold: "Folded in TQ-12: the invoice" } } }), "fold");
   assert.equal(eventOf("x".repeat(400)), "", "Taskuary's long instructions are never drawn");
   assert.ok(!/tq-aui-arrived" data-tq-chat-trigger=""/.test(um), "no trigger card on the right");
 });

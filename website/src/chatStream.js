@@ -221,13 +221,15 @@ export const chatSource = (task, term) => (task?.Kind === "coding" || liveTermin
 // themselves or someone else responds on the thread"): a bubble is what the owner TYPED, or what came in on the task's THREAD (a mail, a
 // teammate's line, the owner's own reply from their phone). A press, an approval, a send, Taskuary's note to the agent, a wake, a fold, a
 // check-back, an error - each is an event line or its card's result, never a bubble ──
-export const INPUT_ORIGINS = ["typed", "thread"];
+// a FOLD is an input too: another task's work merged in is new work arriving on this one (the owner, 2026-11-09: "merging in a task is a new input of course")
+export const INPUT_ORIGINS = ["typed", "thread", "fold"];
 export const originOf = (m) => (m?.role !== "user" ? "agent" : (m.press || m.metadata?.custom?.press) ? "press"
-  : (m.mail?.length || m.metadata?.custom?.mail?.length) ? "thread" : (m.brief || m.metadata?.custom?.brief) ? "taskuary" : "typed");
+  : (m.fold || m.metadata?.custom?.fold) ? "fold" : (m.mail?.length || m.metadata?.custom?.mail?.length) ? "thread"
+  : (m.brief || m.metadata?.custom?.brief) ? "taskuary" : "typed");
 export const isInput = (m) => INPUT_ORIGINS.includes(originOf(m));
 // what TASKUARY's own short line that woke a turn says, as an event line ('' for its long instructions, which are never drawn)
 export const eventOf = (words, fold = "", mail = []) => { const due = checkBackDue(words);
-  return fold ? fold : due ? `Check-back due: ${due}` : !mail?.length && words && words.length <= 140 ? words : ""; };
+  return fold ? "" : due ? `Check-back due: ${due}` : !mail?.length && words && words.length <= 140 ? words : ""; };
 export const linkWords = (u) => { const m = /github\.com\/[^/]+\/[^/]+\/(pull|issues)\/(\d+)/.exec(u); return m ? `${m[1] === "pull" ? "PR" : "issue"} #${m[2]}` : u.replace(/^https?:\/\//, "").slice(0, 60); };
 export const checkBackDue = (w) => (/^TASKUARY: the check-back you set on this task is due - ([\s\S]*?)\. Check it now/.exec(String(w || "").trim()) || [])[1] || "";
 // ...and in the general chat a turn after a press is the same turn going on: no new head, unless an input came between (isInput)

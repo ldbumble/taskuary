@@ -44,12 +44,12 @@ test("a brief carrying only the owner's own reply is not drawn as a trigger", ()
   assert.match(read("chatStream.js"), /: !mail\?\.length && words && words\.length <= 140 \? words : ""/);
 });
 
-// A FOLD'S LINE IS AN EVENT, the mail it brought the input under it (general.shown_history `fold`; the owner's rule of inputs, 2026-11-09)
-test("a folded-in task's turn draws its line as an event with the mail it brought", () => {
+// A FOLD IS AN INPUT (the owner, 2026-11-09: "merging in a task is a new input of course"): its line on the right, the mail it brought under it
+test("a folded-in task's turn draws its line as an input with the mail it brought", () => {
   const ws = read("GeneralWorkspace.jsx"), um = ws.slice(ws.indexOf("const UserMessage = "), ws.indexOf("const ShownCtx"));
   assert.match(ws, /\.\.\.\(m\.fold \? \{ fold: m\.fold \} : \{\}\)/);
   assert.ok(um.indexOf("const fold = useAuiState") > 0 && um.indexOf("const fold = useAuiState") < um.indexOf("return"));
-  assert.match(um, /const event = brief && chat \? eventOf\(words, fold, mail\) : "";/);
-  assert.match(um, /data-tq-chat-trigger=\{fold \? "fold"/);
+  assert.match(um, /if \(brief && chat && fold\) return <MessagePrimitive\.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="fold">/);
+  assert.ok(um.indexOf("if (brief && chat && fold)") < um.indexOf("const event = "), "the fold is drawn as an input before any event line");
   assert.match(um, /\{!!mail\?\.length && <Arrived mail=\{mail\} \/>\}/);
 });

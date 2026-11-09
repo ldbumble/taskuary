@@ -128,9 +128,10 @@ TOOLS = {
                      "pick marked and answers it - nothing lands, merges or pushes until they do.",
                      _S({'how': {'type': 'string', 'enum': ['rebase', 'merge', 'pr', 'discard']}, 'why': _STR}, ('how',)),
                      ('POST', '/api/agent/propose-land')),
-    'propose_reply': ('propose', "Write the reply to a person on this task - `to` names them (a name or address), else it answers the newest "
-                      "mail. `answers`: the number of the mail it replies to, when that is an earlier one than the newest (THE MAIL ON THIS "
-                      "TASK in your brief). Who hears it is yours to decide: `only: true` sends it to that mail's sender alone (something "
+    'propose_reply': ('propose', "Write the reply to a person on this task. It goes back on the channel of the message it answers - email, "
+                      "WhatsApp, Teams... - so a chat line is answered in that chat. `to` names them (a name or address), else it answers the "
+                      "newest message. `answers`: the number of the message it replies to (THE MAIL ON THIS TASK in your brief) - an earlier "
+                      "ask, or the one on the channel the reply should go back on. Who hears it is yours to decide: `only: true` sends it to that mail's sender alone (something "
                       "sensitive), `cc` lists who else is copied instead of the thread's own, and `why_to` says in one line why it goes to "
                       "whom it goes. It becomes a pending reply with a Send button for the owner - nothing is sent. A new reply takes "
                       "the old reply's place by itself.",

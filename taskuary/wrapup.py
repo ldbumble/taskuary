@@ -444,7 +444,9 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     if sid and held and stale_draft(store, held, sid): supersede(store, held, agent); held = {}
     live = None if held else (store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False))
     # ...and a reply pending to SOMEONE ELSE is theirs: rewriting it into this letter took the one to them off the table (2026-11-02)
-    if live and live.get('MessageId') and _person(store, live['MessageId']) != _person(store, mid): live = None
+    # ...measured by whom it ANSWERS: a later line from someone else re-pins its MessageId to the newest message, and the night run (2026-11-09)
+    # left two "3pm works for me" drafts to Ray because Omar's "3?" had moved the first one's pin
+    if live and (to_mid := live.get('AnswersMid') or live.get('MessageId')) and _person(store, to_mid) != _person(store, mid): live = None
     if sid and live and stale_draft(store, live, sid): supersede(store, live, agent); live = None
     # ...and one an EARLIER TURN left is that turn's answer: a different letter now is this turn's own draft, the old one superseded
     if live and an_earlier_turns(store, live) and _words(live.get('DraftText')) != _words(text):
@@ -493,7 +495,13 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...and the session is told whom it went to - and, when it did not say and the task has more than one person on it, who they are
     many = [] if str(to or '').strip() else people_named(store, task_id)
     env = store.review_envelope(rid)
+    # ...and what the owner wrote on the thread THEMSELVES while this turn worked (the night run, 2026-11-09: "yes 3pm, same room" came from
+    # the phone a second into the turn, and the turn drafted the same yes again) - theirs to weigh: keep, cut or withdraw the draft
+    from .general import own_replies, USER_TYPE
+    turn = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (task_id, USER_TYPE)) or {}).get('at')
+    meanwhile = [' '.join(str(x.get('OwnText') or x.get('BodyText') or '').split())[:300] for x in own_replies(store, task_id, turn)] if turn else []
     return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '',
+            **({'owner_wrote_on_the_thread_while_you_worked': meanwhile} if meanwhile else {}),
             **({'recipients': {'to': env.get('to') or [], 'cc': env.get('cc') or []}} if env else {}),
             **({'new_on_thread': new} if new else {}),
             **({'people': many} if len(many) > 1 else {}), **_told(store, rid, attach_files(store, rid, files, agent))}

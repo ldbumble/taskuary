@@ -58,8 +58,22 @@ class TwoTasksOneRoom(unittest.TestCase):
         with mock.patch.object(ingest, 'thread_moved', lambda store, tid, *a, **k: woke.append((tid, k.get('own')))):
             self.assertEqual(_own(self.s, 'o5', '2026-10-29 11:43:00', 'interesting one..'), self.b)
         self.assertEqual(woke, [])
-        # ...each task hears it, and the one it was not filed on is told where it was (2026-11-09: a promise on one task read as another's answer)
-        for t in (self.a, self.b): self.assertRegex(general.latest_block(self.s, t), r'on WhatsApp( \(filed on [^)]*\))?: "interesting one\.\."')
+        self.assertIn('on WhatsApp: "interesting one.."', general.latest_block(self.s, self.b))
+        # ...and the other task's agent is told which task it was filed on, to judge whether it is about its own (the night run, 2026-11-09)
+        self.assertIn(f'on WhatsApp (filed on TQ-{self.b:04d}, "Portal login error" - judge whether it is about this task): "interesting one.."',
+                      general.latest_block(self.s, self.a))
+
+    def test_a_line_sent_while_a_turn_worked_reaches_the_next_turn(self):
+        """The night run, 2026-11-09: the owner's phone line landed a second into the agent's turn - older than that turn's answer, so
+        counted from the answer no later turn ever heard it. It is counted from when the answered turn began."""
+        from taskuary import general
+        s, t = self.s, self.a
+        s.add_comment(t, 'taskuary', general.USER_TYPE, 'THE THREAD CHANGED ...'); s.add_comment(t, 'assistant', general.ASSISTANT_TYPE, 'Drafted.')
+        s._exec("UPDATE comment SET CreatedAt=CASE ActorType WHEN ? THEN '2026-10-29 11:40:00' ELSE '2026-10-29 11:50:00' END WHERE TaskId=?",
+                (general.USER_TYPE, t))
+        _own(s, 'o6', '2026-10-29 11:41:00', 'yes 3pm, same room')
+        s._exec("UPDATE message SET CreatedAt='2026-10-29 11:41:00' WHERE ExternalId='o6'")
+        self.assertIn('yes 3pm, same room', general.latest_block(s, t))
 
     def test_a_room_with_one_task_keeps_it(self):
         s = MemoryStore()

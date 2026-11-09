@@ -544,12 +544,16 @@ def follow_up(store, tid, press: str, actor: str = 'owner') -> bool:
     return True
 # WHAT THE OWNER SAID ON THE THREAD THEMSELVES (the owner, 2026-11-08: replies from their phone between the other side's lines): a line of theirs
 # in a chat is never a turn of its own (channels.ingest_own_message), so the next turn hears each one since the agent last answered
-def own_replies(store, tid: int) -> list:
-    """The owner's own lines on task `tid`'s thread since its agent last answered, oldest first - [] before any answer, and never one Taskuary
-    sent. The THREAD, not the task: in a room holding two tasks the line lands on the one it answers, and the other's agent hears it too (the
-    stress run, 2026-11-05: an answer filed on the newer task left the first's draft waiting as if nobody had answered)."""
-    since = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE)) or {}).get('at')
-    if not since: return []
+def own_replies(store, tid: int, since: str = None) -> list:
+    """The owner's own lines on task `tid`'s thread since the turn its agent last answered BEGAN (or `since`), oldest first - [] before any
+    answer, and never one Taskuary sent. The THREAD, not the task: in a room holding two tasks the line lands on the one it answers, and the
+    other's agent hears it too (the stress run, 2026-11-05). From the turn's start, not its answer (the night run, 2026-11-09): a line the
+    owner sent while the turn worked was older than the answer, and no turn ever heard it."""
+    if since is None:
+        at = lambda kind, upto='9999': (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=? AND CreatedAt<=?',
+                                                   (tid, kind, upto)) or {}).get('at')
+        if not (last := at(ASSISTANT_TYPE)): return []
+        since = at(USER_TYPE, last) or last
     from .channels import _same_words
     sent = [str(x.get('text') or '') for x in wrapup.sent_replies(store, tid)]
     rows = store._rows("SELECT * FROM message WHERE (IFNULL(Direction,'in')='out' OR Status='context') AND CreatedAt>? AND Status NOT IN ('history','skipped') "

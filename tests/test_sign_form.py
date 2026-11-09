@@ -181,7 +181,8 @@ class TheSignatureIsTheOwners(Base):
         stranger = {'X-Taskuary-Token': guard.stranger_token(SRV, self.tid)}
         r = c.post(f'/api/mcp?task={self.tid}', headers=stranger,
                    json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'sign_form', 'arguments': {'attachment': self.att}}})
-        self.assertEqual(r.status_code, 403)
+        # its own task's tools server answers it now (remind and check_back alone, 2026-11-09) - and sign_form is no tool of its
+        self.assertIn('unknown tool', r.json()['error']['message'])
         r = c.post('/api/agent/sign-form', headers=stranger, json={'task_id': self.tid, 'attachment': self.att, 'sign': {'field': 'parent_signature'}})
         self.assertEqual(r.status_code, 403)
         self.assertEqual(list(self.home.rglob('*-signed.pdf')), [])

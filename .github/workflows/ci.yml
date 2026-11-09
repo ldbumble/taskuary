@@ -51,8 +51,11 @@ jobs:
       - run: pip install pyodbc
         if: runner.os == 'Windows'
       # a test past two minutes prints every thread's stack - the hang names itself in the log
+      # bash on every OS: Windows' default PowerShell reads `@shard.txt` as splatting and writes `>` as UTF-16 (2026-11-09)
       - run: python tools/test_shard.py ${{ matrix.part }} 2 > shard.txt
+        shell: bash
       - run: python -m pytest -q -o faulthandler_timeout=120 @shard.txt
+        shell: bash
       - name: Desk and load CLI
         if: matrix.part == 1
         env:

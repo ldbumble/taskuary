@@ -281,3 +281,59 @@ def test_hipaa_ai_takes_effort_and_drops_it_quietly_when_its_gateway_refuses():
     s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
     s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1, 'ConfigJson': json.dumps({'model': 'hipaa-ai'})}, 'owner')
     assert brainroute.lift(s, f'connector:{cid}', 'strong', cfg={}) == 'hipaa-ai@high'
+
+
+def _jpeg(channels: int, adobe: bool) -> bytes:
+    "A JPEG's header as a decoder walks it: Adobe's APP14 when asked, a frame of `channels`, a scan."
+    seg = lambda m, body: bytes([0xFF, m]) + (len(body) + 2).to_bytes(2, 'big') + body
+    sof = seg(0xC0, b'\x08\x00\x10\x00\x10' + bytes([channels]) + b''.join(bytes([i + 1, 0x11, 0]) for i in range(channels)))
+    return b'\xff\xd8' + (seg(0xEE, b'Adobe\x00\x64\x00\x00\x00\x00\x00') if adobe else b'') + sof + seg(0xDA, b'\x01\x01\x00\x00\x3f\x00') + b'\x12\x34\xff\xd9'
+
+
+def test_a_grayscale_jpeg_goes_without_the_adobe_marker_google_refuses():
+    """2026-11-09: a signature logo - a one-channel JPEG saved from Photoshop - on every mail of a thread made Vertex answer "The provided
+    file is malformed or corrupted and could not be decoded" (400), so a HIPAA AI agent could never start on it. APP14 means nothing on one
+    channel and is dropped; a colour JPEG, which needs it, and any other picture go as they came."""
+    import base64
+    b64 = lambda b: base64.b64encode(b).decode()
+    got = base64.b64decode(llm.vision_safe('image/jpeg', b64(_jpeg(1, True))))
+    assert got == _jpeg(1, False) and b'Adobe' not in got
+    for ct, b in (('image/jpeg', _jpeg(3, True)), ('image/jpeg', _jpeg(1, False)), ('image/png', _jpeg(1, True)), ('image/jpeg', b'not a jpeg')):
+        assert llm.vision_safe(ct, b64(b)) == b64(b)
+    assert llm.vision_safe('image/jpeg', '%%%') == '%%%'
+
+
+def _refusing_pictures(sent):
+    "A gateway that cannot decode any picture it is sent - and answers the same question without one."
+    def post(url, headers=None, json=None, timeout=None):
+        sent.append(json); r = mock.Mock()
+        if any(isinstance(m['content'], list) for m in json['messages']):
+            r.status_code, r.text = 400, ('{"error":{"message":"litellm.BadRequestError: Vertex_aiException - The provided file is malformed '
+                                          'or corrupted and could not be decoded."}}')
+        else: r.status_code, r.text = 200, ''; r.json.return_value = {'choices': [{'message': {'content': 'done'}}]}
+        return r
+    return post
+
+
+def test_a_picture_the_model_cannot_open_costs_the_picture_never_the_turn():
+    "Any picture the gateway still cannot decode is asked about again without it, saying so - the agent's turn goes on."
+    sent, fn = [], llm.make_llm('hipaa_ai', {'base_url': 'https://gateway.example/v1'}, 'hai-code-123')
+    with mock.patch('taskuary.llm.requests.post', side_effect=_refusing_pictures(sent)):
+        assert fn('s', 'what is in it?', images=[('image/jpeg', 'AAAA')]) == 'done'
+    assert sent[-1]['messages'][-1]['content'].startswith('what is in it?\n\n(1 attached image(s) could not be opened')
+
+
+def test_a_refused_turn_is_said_in_words_with_no_address_and_no_json():
+    """The agent's line was "hipaa_ai error 400 at https://<gateway>/v1/chat/completions: {"error":{"message":"litellm.BadRequestError: ..."
+    (2026-11-09). It names the AI and its reason; the address and the JSON stay in the log."""
+    from taskuary import failures, general
+    e = RuntimeError('hipaa_ai error 400 at https://gateway.example/v1/chat/completions: {"error":{"message":"litellm.BadRequestError: '
+                     'Vertex_aiException BadRequestError - {\\n  \\"error\\": {\\n    \\"code\\": 400,\\n    \\"message\\": \\"The provided file is '
+                     'malformed or corrupted and could not be decoded.\\",\\n')
+    assert general.refused_line(e, 'HIPAA AI (API)') == ('HIPAA AI refused the request - it said: The provided file is malformed or corrupted '
+                                                         'and could not be decoded. Type to try again, or pick another AI in Settings.')
+    said = failures.classify(e)['sentence']
+    assert said.startswith('HIPAA AI refused the request') and 'gateway.example' not in said and '{' not in said
+    assert general.refused_line(RuntimeError('openai error 400 at https://api.example.com/v1/chat/completions: nope')) == \
+        'openai refused the request. Type to try again, or pick another AI in Settings.'
+    assert general.refused_line(RuntimeError('something else broke')) == ''

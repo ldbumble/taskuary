@@ -53,6 +53,11 @@ def unreached_line(e, who: str = '') -> str:
     if isinstance(e, requests.Timeout): return f"{who} didn't answer in time - it may be down or busy. Type to try again, or pick another AI in Settings."
     if isinstance(e, requests.ConnectionError): return f"Couldn't reach {who} - check this computer is online, then type to try again, or pick another AI in Settings."
     return ''
+def refused_line(e, who: str = '') -> str:
+    "An API brain that turned the turn down (a 400), in words: the AI and its reason, never the gateway's address or its JSON (2026-11-09)."
+    from .failures import refused
+    said = refused(e, who)
+    return f"{said}. Type to try again, or pick another AI in Settings." if said else ''
 # ON A CHAT TASK TYPING IS THE WAY ON (the owner, 2026-11-07; the chat rulings of 2026-11-05): it has no Continue button, so nothing said
 # on one names it. A coding task keeps its Continue
 CARRY_ON = 'type to carry on'
@@ -2262,7 +2267,7 @@ class GeneralSession:
             stopped = cancel.is_set() or getattr(self, 'closing', False)
             timed = None if stopped else _timed_out(e)
             # ...a turn that ran out of time says so in words, not as "Codex exit 1: timed out after 1500s." (2026-11-04)
-            said = timed_out_line(e) if timed is not None else (unreached_line(e, self.provider) or str(e))
+            said = timed_out_line(e) if timed is not None else (unreached_line(e, self.provider) or refused_line(e, self.provider) or str(e))
             self._remember_trace('error', 'assistant', {'result': said, 'is_error': True})
             self._emit(f'\x1b[1;31merror>\x1b[0m {said}\r\n\r\n')
             self._unusable(e)

@@ -17,6 +17,19 @@ _NO_AI = re.compile(r'no AI connector|no AI is (set up|connected)|no brain', re.
 # a web call that never answered, as requests words it - its host, port and seconds are no reason anyone can act on (2026-11-09)
 _UNREACHED = re.compile(r'HTTPS?ConnectionPool\(|Max retries exceeded|Failed to establish a new connection', re.I)
 _SLOW = re.compile(r'timed? ?out|ReadTimeout|ConnectTimeout', re.I)
+# ...and an API brain that TURNED THE REQUEST DOWN, as llm.make_llm raises it: "hipaa_ai error 400 at https://<gateway>/v1/chat/completions:
+# {"error": ...}" reached the agent pane whole - the gateway's address and a page of JSON (2026-11-09). The AI, and its own reason when it gave one
+_REFUSED = re.compile(r'\b(\w+) error (400|422) at \S+?(?: after \d+ tries)?: ?(.*)', re.S)
+_REASON = re.compile(r'"message\\*"\s*:\s*\\*"([^"\\]{8,})')
+
+
+def refused(e, who: str = '') -> str:
+    "A provider's 400 in words - '' for any other failure."
+    m = _REFUSED.search(str(e or ''))
+    if not m: return ''
+    who = str(who or '').replace(' (API)', '').strip() or ('HIPAA AI' if m[1] == 'hipaa_ai' else m[1].replace('_', ' '))
+    why = [w for w in _REASON.findall(m[3]) if not w.lower().startswith('litellm')]
+    return f"{who} refused the request" + (f" - it said: {why[-1].strip().rstrip('.')}" if why else '')
 
 
 def _fix(label: str, pid: str) -> dict: return {'label': label, 'href': words.href(pid)}
@@ -61,6 +74,7 @@ def classify(e, *, act: str = None, tid=None) -> dict:
     elif _NO_FOLDER.search(text):
         fix = fix or ({'label': 'Choose where it works', 'href': pick_repo_href(tid)} if tid else _fix('Choose where it works', 'coding'))
     elif _NO_AI.search(text): fix = fix or _fix('Connect an AI', 'ai')
+    elif refused(text): sentence = refused(text)
     elif _UNREACHED.search(text):
         sentence = ('The service did not answer in time - it may be down or busy. Try again in a minute' if _SLOW.search(text)
                     else 'The service could not be reached - check this computer is online, then try again')

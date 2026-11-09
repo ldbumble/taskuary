@@ -548,7 +548,9 @@ def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, no
         _write(store, st)
         _hold(store, rows)                            # ...and Next below goes on from that same rail, never a second build of it
         # ...with what the act said (a removed task's Undo line, a reminder's warning) riding along for the page to draw
-        return _remember(press, {**next(store, key, actor, effect=False), **({'left': done['outcome']} if done.get('outcome') else {})})
+        # ...and `read` is what THIS press took off - the row and a batch's members. Next's own (none: effect=False) read as "nothing was read",
+        # and the page gave an FYI batch's "All read, next" rows back until the next rail read (the owner, 2026-11-09: "then puts them back up")
+        return _remember(press, {**next(store, key, actor, effect=False), 'read': sorted(gone), **({'left': done['outcome']} if done.get('outcome') else {})})
 
 
 def peek(store, actor: str = 'owner') -> dict:

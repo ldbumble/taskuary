@@ -212,6 +212,29 @@ def test_a_steer_the_adapter_echoes_back_is_one_line_not_two(world, monkeypatch)
     assert ups.count('merge and deploy') == 1 and not t._echoes
 
 
+@pytest.mark.parametrize('steer', [True, False], ids=['steered', 'queued'])
+def test_a_note_two_deliveries_race_for_is_handed_over_once(world, monkeypatch, steer):
+    """The owner typed one line while the agent worked and the chat drew it twice: their POST's deliver steered it in, and before that
+    deliver marked it handed over (a slow store, 4 s on the live app) the turn ended and the clock's deliver (waitroom.later) read it as
+    still waiting and handed it over again - one note, two prompts. Steered into the turn, or queued for a session at rest: once."""
+    s, tid, repo = world
+    for k in ('FAKE_ACP_HANG', 'FAKE_ACP_STEER') if steer else (): monkeypatch.setenv(k, '1')
+    t = open_(s, tid, repo, seed='look at the totals')
+    assert until(lambda: t.in_turn) if steer else idle(t)
+    real, first = s.deliver_waiting, threading.Event()
+    def slow(wids, how):
+        if not first.is_set(): first.set(); time.sleep(1.5)
+        real(wids, how)
+    monkeypatch.setattr(s, 'deliver_waiting', slow)
+    th = threading.Thread(target=lambda: waitroom.add(s, tid, 'are both fixes pushed?', 'owner')); th.start()
+    assert first.wait(10)
+    waitroom.deliver(s, tid)                                               # the clock's look, while the POST's is still marking
+    th.join(10)
+    assert until(lambda: not t.busy, 10)
+    ups = [u['content']['text'] for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'user_message_chunk' and '_meta' not in u]
+    assert ups.count('are both fixes pushed?') == 1, ups
+
+
 def test_a_coding_session_idle_past_its_period_closes_quietly_and_the_next_input_brings_it_back(world, monkeypatch):
     """QUIET WHEN IDLE, as the general agent (general.idle_out, its period clipool.IDLE_SECONDS): nothing said in the chat, the chat the
     same, and the next input reopens the same run (its sid) on the agent's own conversation - session/resume."""

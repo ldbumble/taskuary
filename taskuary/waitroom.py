@@ -174,9 +174,19 @@ def full_on_stranger(store, tid: int, t) -> bool:
     except Exception: return True
 
 
+_DELIVERING, _DLOCK = {}, threading.Lock()
+
+
 def deliver(store, tid: int) -> dict:
     """Hand this task's waiting notes over IF the agent has stopped. {'delivered': n, 'state': ...}
     - 'held' states are the ones where nothing moved: working, asking, closed, full, owner_typing."""
+    # ONE NOTE, ONE HANDOVER (2026-11-09): the owner's POST steered a line in, and before it marked the line handed over (a slow store:
+    # 4 s) the turn ended and the clock's deliver read it as still waiting - the chat drew it twice. A task's deliveries take turns.
+    with _DLOCK: lk = _DELIVERING.setdefault(tid, threading.RLock())
+    with lk: return _deliver(store, tid)
+
+
+def _deliver(store, tid: int) -> dict:
     from . import terminal as term, peers
     from .ingest import has_room
     pending = store.waiting_notes(tid)

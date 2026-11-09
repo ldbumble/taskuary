@@ -383,12 +383,16 @@ export const asPressed = (items, { leaving = null, continuing = null, read = nul
 // keeps it under Watching (`watching`, watch.py)
 // ...put away BY THE PRESS, against `was`, the row as it stood when pressed (the owner, 2026-11-04): Mark done on a row already under
 // Watching read the pile it was pressed on as landed - the row was drawn on the rail again until the server's answer took it off
-export const putDownLanded = (items, tid, was = null) => { const r = (items || []).find((i) => i.tid === tid);
+export const putDownLanded = (items, tid, was = null, keys = null) => {
+  if (keys) return !(items || []).some((i) => keys.some((k) => answersTo(i, k)));      // ...rows a press READ (keys): landed when none is drawn
+  const r = (items || []).find((i) => i.tid === tid);
   return !r || (!!r.deferred && !was?.deferred) || (!!r.watching && !was?.watching); };
 // ...and of every row put down, the ones still held off the rail by `pile`: not landed, and no read of it begun after that close's answer
 // came back (`at`, the page's clock; `generated_at`, when the read began) - a rail read after the close that still has the row is the server's
 // word (a message reopened it), never hidden on the page's (the owner, 2026-11-09: a second Mark done drew the first one's task back)
-export const stillLeaving = (leaving, pile) => (leaving || []).filter((x) => !putDownLanded(pile?.items, x.tid, x.was)
+// ...ONE HOLD FOR EVERY ROW PUT DOWN (2026-11-09): a task closed (`tid`) and the rows a press read (`keys`: "All read, next", Next on a
+// report) are held by the same rule - an FYI batch read came back for the seconds between its answer and the next rail read
+export const stillLeaving = (leaving, pile) => (leaving || []).filter((x) => !putDownLanded(pile?.items, x.tid, x.was, x.keys)
   && !(x.at && Number(pile?.generated_at) > x.at));
 // when a For later row comes back: its Remind me date (an open task walked past has no clock - it is back with the next walk)
 export const backAt = (item) => item?.back_at || item?.defer_until || null;

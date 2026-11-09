@@ -1642,6 +1642,12 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
             p = {**full, 'items': items, 'lanes': [{**l, 'n': sum(i['lane'] == l['lane'] for i in items)} for l in full['lanes']],
                  'counts': {**full['counts'], 'unread': len(items), 'actionable': sum(i['actionable'] for i in items)}}
         else: p = build(store)
+        # A CLOSE ON ITS WAY IS CLOSED (the owner, 2026-11-09: "i marked task done, the one before came back and then disappeared again"):
+        # Mark done on an agent's task writes it up first and closes after (writeup.closing); a read meanwhile drew it again for a read or two
+        from . import writeup
+        if (gone := {i['tid'] for i in p['items'] if i.get('tid') and writeup.closing(i['tid'])}):
+            items = [i for i in p['items'] if i.get('tid') not in gone]
+            p = {**p, 'items': items, 'lanes': [{**l, 'n': sum(i['lane'] == l['lane'] for i in items)} for l in p.get('lanes') or []]}
         for i in p['items']: _attach(i)                  # how each row reads, once, for the rail and the phone alike
         _label_workstreams(store, p['items'])            # ...and which workstream each task row is under, for its small label
         p['alerts'] = alerts(store, p['items'])

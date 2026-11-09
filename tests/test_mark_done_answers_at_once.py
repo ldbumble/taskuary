@@ -92,3 +92,37 @@ def test_a_warm_check_never_waits_behind_a_build():
         t = time.perf_counter(); warm = funnel.warm(s); took = time.perf_counter() - t
         free.set(); th.join()
     assert warm is False and took < 0.5
+
+
+# ...AND WHILE ITS CLOSE IS ON ITS WAY (the owner, 2026-11-09, on the build with the hold above: "i marked task done, the one before came back
+# and then disappeared again"): Mark done on an agent's task writes it up first and closes after (writeup.py). The page holds the row off
+# until a rail read begun after the press's answer - and that read, built while the write-up ran, still had the task open: drawn again, and
+# gone a read later when the close landed. A close under way is as good as closed (railwalk._act says so for the walk); the rail too
+def test_a_task_whose_close_is_on_its_way_is_not_on_the_rail(world):
+    import threading
+    from taskuary import funnel, writeup
+    s, src = world
+    tid = src['T1']['tid']
+    assert on_rail(s, tid)
+    job = writeup._begin(tid, 'reading', True)
+    with writeup._LOCK: writeup._JOBS[tid] = threading.Event()
+    try:
+        funnel.invalidate()
+        assert not on_rail(s, tid), 'a rail read while the write-up runs has the task marked done'
+    finally:
+        writeup._JOBS[tid].set(); writeup._set(tid, job, running=False); writeup._JOBS.pop(tid, None); writeup._STATE.pop(tid, None)
+    funnel.invalidate()
+    assert on_rail(s, tid), 'a write-up that ended without the close leaves the task open, on the rail'
+
+
+def test_an_fyi_batch_read_says_what_it_read(world):
+    "The settle's answer names the rows it read: the page gave back every row an answer did not name, and the batch came back up."
+    from taskuary import railwalk
+    s, src = world
+    rows = railwalk._rows(s)
+    fyis = [r['key'] for r in rows if r.get('lane') == 'fyi'][:3]
+    assert fyis
+    key = 'fyis:' + ','.join(fyis)
+    railwalk.open(s, key)
+    out = railwalk.leave(s, key, 'settle')
+    assert set(fyis) <= set(out.get('read') or []), out.get('read')

@@ -2,6 +2,13 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.30 - 2026-11-09
+
+- An Undo after a Remove lasts ten seconds and never comes back
+- An approve is a press, not a prompt: its card shows the result and the agent carries on in the same turn
+- A task folded in is an input again: its line on the right with the mail it brought
+- An agent on an API card runs under a Claude Code session's own permissions, in its folder, with its own search
+
 ## 0.3.11.29 - 2026-11-09
 
 - An agent on an API card reads and writes its files, reads the web, and asks to run a command

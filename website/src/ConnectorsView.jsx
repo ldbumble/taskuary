@@ -2574,7 +2574,7 @@ function CardPlaybooks({ type }) {
 // REMOVE IS ONE PRESS AND ONE QUESTION (the owner, 2026-11-05: "going through each step of a connection to remove it and it should go
 // away"): the question says what stays, what goes and what stops working with it (#238); on yes the card is gone - an added one off the
 // list, the last of its kind wiped back to the catalogue's blank card (recentlydeleted.remove_connection) - and the page is back on the
-// list, where "Removed <it> - Undo" stands for the Undo line's minutes. Before 2026-11-05 it removed on the press, without asking.
+// list, where "Removed <it> - Undo" stands for the Undo line's seconds. Before 2026-11-05 it removed on the press, without asking.
 // ...the question and the press, shared by the detail page and the card's face (CardRemove): `read` - what leans on it, read now (#238)
 function useRemove(conn, channel, reload, after, read = true) {
   const [asking, setAsking] = useState(false), [uses, setUses] = useState(null);

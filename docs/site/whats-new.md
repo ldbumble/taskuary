@@ -2,6 +2,15 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.28 - 2026-11-09
+
+- Outlook signs in with the person's own app, work or personal: a blank tenant goes through common, a personal-only app through consumers, and the card walks an Outlook.com user through registering one
+- New offers no Chat with Taskuary tab; an edited PR or issue shows only what it added
+- Voice works through HIPAA AI and says why when it can't; WhatsApp sets itself up on a plain Windows PC (#278)
+- About your work: one tick per line - Taskuary uses it or leaves it out
+- Over a page or another task, the header's corner goes back to the task you were working on, beside the new-chat pencil; FYI fills the rail's free height
+- The AGENT row and its clock show on the press, and the server's turn takes its place
+
 ## 0.3.11.27 - 2026-11-09
 
 - An email card's To is always an address, or empty and asking for one

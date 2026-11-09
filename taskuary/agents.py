@@ -595,6 +595,8 @@ def resolve_brain(store, kind: str = 'general', cli_only: bool = False) -> str:
     if v.startswith('connector:') and not cli_only: return v
     k = next(iter(ready_brains(store)), '')
     if k: return f'cli:{k}'
+    # no CLI here: a job with no pick of its own runs on the AI card the general agent is SET to (a gateway-only home's coding task)
+    if not cli_only and name != 'assistant_ai' and (g := str(store.get_setting('assistant_ai') or '').strip()).startswith('connector:'): return g
     c = None if cli_only else ready_connector(store)
     return f"connector:{c['ConnectorId']}" if c else ''
 
@@ -863,11 +865,14 @@ def brain_ready(store, key: str) -> bool:
     return bool(conn) and runs_here(conn)
 
 
+# a gateway card answers only a job set to it in Settings (the owner, 2026-11-09: "it should not be used unless set in settings") -
+# a blank slot fell to it whenever no CLI was ready; a gateway-only install still gets every job named by first-run setup
+PICKED_ONLY = ('hipaa_ai',)
 def ready_connector(store) -> dict | None:
-    """The first AI connector that can answer right now - what llm._build_llm runs for an empty pick."""
+    """The first AI connector that can answer right now - what llm._build_llm runs for an empty pick. Never a PICKED_ONLY card."""
     from .llm import AI_TYPES
-    return next((c for c in store.list_connectors()
-                 if c['Type'] in AI_TYPES and c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama')), None)
+    return next((c for c in store.list_connectors() if c['Type'] in AI_TYPES and c['Type'] not in PICKED_ONLY
+                 and c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama')), None)
 
 
 def default_pick(store) -> str:

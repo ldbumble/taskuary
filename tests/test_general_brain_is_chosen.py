@@ -25,6 +25,9 @@ def _home(conns=(), tests=None, settings=None, connector=None):
     if connector:
         cid = s.get_connector_by_type(connector)['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'Secret': 'sk-test-0123456789', 'Active': 1}, 'owner')
+        # a gateway answers only the jobs set to it (agents.PICKED_ONLY) - first-run setup names them all, as here
+        if connector in agents.PICKED_ONLY:
+            for k in ('triage_ai', 'concierge_ai', 'assistant_ai'): s.set_setting(k, f'connector:{cid}', 'owner')
     return s, cfg
 
 

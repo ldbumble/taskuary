@@ -642,10 +642,11 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
                 return None
         want = candidate[10:] if candidate.startswith('connector:') else None
         want_id = int(want) if want and want.isdigit() else None
+        from .agents import PICKED_ONLY
         for c in store.list_connectors():
             # a local model server (ollama) is the one brain that needs no key to be real
             ready = c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama')
-            selected = not want or (c['ConnectorId'] == want_id if want_id is not None else c['Type'] == want)
+            selected = (c['Type'] not in PICKED_ONLY) if not want else (c['ConnectorId'] == want_id if want_id is not None else c['Type'] == want)
             if c['Type'] in AI_TYPES and ready and selected:
                 full = store.get_connector(c['ConnectorId'], with_secret=True)
                 config = {**json.loads(full.get('ConfigJson') or '{}'), '_cid': full['ConnectorId']}   # a rotated sign-in token is saved back to its card

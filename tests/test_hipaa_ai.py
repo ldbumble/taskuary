@@ -337,3 +337,14 @@ def test_a_refused_turn_is_said_in_words_with_no_address_and_no_json():
     assert general.refused_line(RuntimeError('openai error 400 at https://api.example.com/v1/chat/completions: nope')) == \
         'openai refused the request. Type to try again, or pick another AI in Settings.'
     assert general.refused_line(RuntimeError('something else broke')) == ''
+
+
+def test_a_blank_job_never_falls_to_hipaa_ai_only_a_job_set_to_it_runs_there():
+    # the owner, 2026-11-09: "it should not be used unless set in settings" - no CLI ready and nothing picked is no brain, not the gateway
+    from taskuary import agents
+    s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+    s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1,
+                      'ConfigJson': json.dumps({'base_url': 'https://ai.northwind.example/v1'})}, 'owner')
+    assert agents.ready_connector(s) is None and llm.brain_status(s, '')['ready'] is False
+    s.set_setting('assistant_ai', f'connector:{cid}', 'owner')
+    assert llm.brain_status(s, f'connector:{cid}')['ready'] is True

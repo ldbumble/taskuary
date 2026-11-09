@@ -1,0 +1,4 @@
+# tests/ never ships: setuptools puts tests/test*.py in every sdist by default, and they are fixtures for this repo, not
+# something an install runs (2026-11-09: the sdists of 0.3.11.18-.23 carried them and were withdrawn from PyPI)
+prune tests
+global-exclude *.test.mjs *.log

@@ -158,5 +158,30 @@ class ADifferentAskGetsItsOwnAgent(unittest.TestCase):
         self.assertTrue(any('1 other agent(s) working in the same checkout' in c['Body'] for c in self.s.list_comments(new)))
 
 
+
+class AContinuationJoinsTheAgentsTask(unittest.TestCase):
+    """The owner, 2026-11-09: "second request is a continuation of the first why was this not combined". A sender asked for two cost
+    centers in a site's staffing grid, a coding agent took it, and her next mail on the thread - add them to the draft forecast too -
+    opened a task of its own: the guide's agent caution read "another change, same person, same thread" as a different request. A
+    continuation of the agent's own job is that job; the guide says so, and the line reaches the agent as its next turn."""
+    def test_the_guide_says_a_continuation_is_the_agents_own_work(self):
+        g = triage.SHIPPED
+        self.assertIn('A CONTINUATION IS THAT VERY WORK', g); self.assertIn('joins at every level, and the agent hears it as its next turn', g)
+        self.assertIn("a continuation of the agent's own job by the one who asked for it is not torn: it joins", g)
+        self.assertIn('A CONTINUATION IS THAT VERY WORK', triage.FIELDS['agent_on_it'], 'an owner-written guide is told it too')
+
+    def test_add_them_to_the_forecast_too_joins_and_reaches_the_agent(self):
+        s, seen, spawn = MemoryStore(), [], mock.Mock()
+        tid = mail(s, 'a', 'Alex, please add cost centers 410 and 412 to the Riverbend staffing grid.', brain([], title='Add Riverbend cost centers'),
+                   conv='AAQk-riverbend')['task_id']
+        with working(tid), mock.patch.object(ingest, 'pass_in_why', return_value=''):
+            b = mail(s, 'b', 'Thanks - can you also add those two cost centers to the Riverbend draft forecast?',
+                     brain(seen, new_job=None, checklist=['Add cost centers 410 and 412 to the draft forecast']),
+                     at='2026-11-02 10:00:00', conv='AAQk-riverbend', spawn=spawn)
+        self.assertEqual(seen[0][1]['thread_task']['agent_on_it']['state'], 'working', 'triage saw the agent on the thread task')
+        self.assertEqual(b['task_id'], tid); self.assertEqual(len(s.list_tasks()), 1)
+        self.assertIn('_pass_coding', [c.args[0].__name__ for c in spawn.call_args_list], "the joined line is the agent's next turn")
+
+
 if __name__ == '__main__':
     unittest.main()

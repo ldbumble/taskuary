@@ -2,6 +2,18 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.27 - 2026-11-09
+
+- An email card's To is always an address, or empty and asking for one
+- A fold hands what came over to the survivor's agent as its next turn
+- A task's saved session never keeps it on HIPAA AI once no job is set to it
+- The owner's own reply is an input on the chat; a reply nobody owes is gone
+- A setting rewritten with the value it holds leaves the pile warm
+- A running agent's page calms its polls while nothing changes
+- The chat's arrival card previews the sender's new words; a folded page is a walk row
+- The rail's preview line starts at the sender's new words, as the chat card does
+- A mic that heard nothing says why, and the window's own page gets the microphone
+
 ## 0.3.11.26 - 2026-11-09
 
 - New stays up, its button spinning, until the task it made is on the table

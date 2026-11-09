@@ -1570,10 +1570,16 @@ def spawn_env(profile: dict, extra_env: dict = None) -> dict:
     return child_env({**base, **(extra_env or {})})
 
 
-def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None, store=None):
+def sees_images(family: str, args) -> bool:
+    "Does a one-shot run of this CLI take pictures in its input: claude printing stream-json, whose stream-json input carries image blocks."
+    return family == 'claude' and ('-p' in args or '--print' in args) and 'stream-json' in args and '--input-format' not in args
+
+
+def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None, store=None, images=None):
     """One headless invocation of the configured CLI, output STREAMED line by line into
     the run trace so the Board shows the agent working live. claude's stream-json events
     render as readable tool/text lines; any other CLI's plain stdout streams as-is.
+    `images` [(media type, base64)]: shown to a one-shot claude as image blocks (sees_images); dropped elsewhere.
     Returns (result, session_id, diff)."""
     # Whatever built this prompt, a credential in it would go to the CLI's provider and be filed
     # in the run's own trace two lines below. task_context() writes each message's BodyText in
@@ -1607,6 +1613,10 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     keep = profile.get('keep_alive')
     if _keeps(profile, family, args):
         return _run_live(profile, name, cmd, prompt, trace, keep, resume, cancel, extra_env)
+    # A PICTURE IS SHOWN, NOT NAMED (2026-11-09): triage on claude has no tools to open a file, so a screenshot-only chat line was judged
+    # blind and became its own task beside the one it was about. Claude's stream-json input takes image blocks, as the API does
+    pics = sees_images(family, args) and list(images or [])
+    if pics: cmd += ['--input-format', 'stream-json']
     # Keep exec's existing sandbox/config flags, and resume the exact thread.
     if resume: cmd += resume_argv(profile, resume) + (['--json', '-'] if is_codex else [])
     # Kimi's current CLI does not read its prompt from stdin. --prompt is print mode
@@ -1661,7 +1671,9 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # emitting output can deadlock both pipes otherwise
     def _feed():
         try:
-            if family != 'kimi' and not prompt_file: p.stdin.write(prompt)
+            if pics: p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': [
+                *({'type': 'image', 'source': {'type': 'base64', 'media_type': ct, 'data': b64}} for ct, b64 in pics), {'type': 'text', 'text': prompt}]}}) + '\n')
+            elif family != 'kimi' and not prompt_file: p.stdin.write(prompt)
             p.stdin.close()
         except Exception: pass
     threading.Thread(target=_feed, daemon=True).start()

@@ -374,8 +374,8 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     else: prof['timeout'] = int(prof.get('timeout') or ONE_SHOT)     # a look-up is one-shot: it keeps a leash
     def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None):
         """max_tokens is advisory here - a CLI has no such flag; the system prompt already says
-        how long the answer should be. `images` is accepted and dropped: a CLI reads files off
-        disk itself, and the prompt already names their paths. `want` is accepted and dropped
+        how long the answer should be. `images` go to a one-shot claude as image blocks (agents.sees_images: triage has no tools to
+        open a file, 2026-11-09); any other CLI drops them and reads files off disk itself, by the paths the prompt names. `want` is accepted and dropped
         too, and takes_want is never set: there is no wire to put a schema on, so the prompt and
         the caller's recheck (ask_json) are the whole contract here."""
         from .agents import run_cli, run_context
@@ -390,7 +390,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         # ...and the store and task the ACP road's permission answers read (acpgate: the send filter, a step held on THIS task)
         with run_context(store, task_id if not no_hands else None):
             out, sid, _diff = run_cli(run_prof, prompt, trace or (lambda *a: None),
-                                      resume=llm.session_id if keep else resume, **kwargs)
+                                      resume=llm.session_id if keep else resume, **({'images': images} if images else {}), **kwargs)
         # what the caller needs to CONTINUE this conversation instead of starting another one
         llm.session_id = sid or resume
         if stranger_mode in ('auto', 'look') and sid: store.set_setting(f'stranger_sid:{task_id}', sid, 'router')   # born in the stranger's folder

@@ -5395,7 +5395,7 @@ def own_note(body: OwnNoteBody):
     try: return ownwork.note(store, body.title, body.body, body.when, ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
 
-class ReleaseBody(BaseModel): agent: str | None = None; model: str | None = None
+class ReleaseBody(BaseModel): agent: str | None = None; model: str | None = None; trust: bool = True
 
 @app.post('/api/tasks/{task_id}/release')
 def release_task(task_id: int, body: ReleaseBody, background: BackgroundTasks):
@@ -5410,12 +5410,16 @@ def release_task(task_id: int, body: ReleaseBody, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     if not store.task_has_tag(task_id, HOLD_TAG): raise HTTPException(422, 'this task is not being held')
     store.tag_task(task_id, HOLD_TAG, on=False, actor=ACTOR)
-    store.add_comment(task_id, ACTOR, 'human', 'Released to the agent - you vouched for this sender.')
-    m = next((m for m in store.list_messages(task_id) if m.get('Channel') == 'email' and m.get('Direction') != 'out'), None)
-    if m: store.remember_trust(m.get('SourceName'), m.get('FromEmail'), 'released by the owner')
-    from . import senders
-    senders.vouch(store, store.list_messages(task_id))
-    store.audit('task', task_id, 'release', ACTOR)
+    # TWO WAYS ON (the owner, 2026-11-09): Run anyway starts this one task and the sender stays unknown - an automated sender's next
+    # alert waits again, and the agent runs as it does on any stranger's words (origin.launch_mode); Trust sender vouches as well
+    if body.trust:
+        store.add_comment(task_id, ACTOR, 'human', 'Released to the agent - you vouched for this sender.')
+        m = next((m for m in store.list_messages(task_id) if m.get('Channel') == 'email' and m.get('Direction') != 'out'), None)
+        if m: store.remember_trust(m.get('SourceName'), m.get('FromEmail'), 'released by the owner')
+        from . import senders
+        senders.vouch(store, store.list_messages(task_id))
+    else: store.add_comment(task_id, ACTOR, 'human', 'Run this once - the sender is still unknown, so their next message waits for you again.')
+    store.audit('task', task_id, 'release' if body.trust else 'release_once', ACTOR)
     from . import general, ingest as _ing
     if general.handles(store.get_task(task_id)):
         _ing._spawn(_ing._auto_general, store, task_id)     # the assistant's session, not a CLI (PW-069)

@@ -89,6 +89,19 @@ def test_release_vouches_for_the_chat_sender(monkeypatch):
     assert server.store.trusted_sender('slack', 'omar keller')
     assert senders.known(server.store, _msg('Omar Keller'))[0]
 
+def test_run_anyway_starts_it_once_and_the_sender_stays_unknown(monkeypatch):
+    # the owner, 2026-11-09: Run anyway (this once) and Trust sender are two buttons; an automated sender's next alert waits again
+    monkeypatch.setattr(server, 'start_session', lambda *a, **k: 'sid')
+    t = _held_chat_task('Ray Colton')
+    assert c.post(f'/api/tasks/{t}/release', json={'trust': False}).json()['released']
+    assert not server.store.task_has_tag(t, ingest_hold())
+    assert not server.store.trusted_sender('slack', 'ray colton') and not senders.known(server.store, _msg('Ray Colton'))[0]
+    assert origin.of_task(server.store, t)[0] == 'stranger'          # the agent runs on a stranger's words, as before
+
+def ingest_hold():
+    from taskuary import ingest
+    return ingest.HOLD_TAG
+
 def test_trust_this_task_vouches_for_the_chat_sender():
     t = _held_chat_task('Paula Vance')
     assert origin.of_task(server.store, t)[0] == 'stranger'

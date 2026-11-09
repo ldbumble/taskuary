@@ -14,10 +14,11 @@ test("the held line is said only for a new sender's hold, and only while no agen
   assert.equal(heldStartOf({ story: { ...story, kind: "idle" }, tags: "hold:new-sender" }), "");
 });
 
-test("the chat draws it with Run anyway, which releases the hold", () => {
+test("the chat draws Run anyway (this once) and Trust sender (vouches too), both through the hold's release", () => {
   const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
-  assert.match(src("HeldStart.jsx"), /api\.post\(`\/api\/tasks\/\$\{taskId\}\/release`, \{\}\)/);
-  assert.match(src("HeldStart.jsx"), /\{busy \? "Starting…" : "Run anyway"\}/);
+  assert.match(src("HeldStart.jsx"), /api\.post\(`\/api\/tasks\/\$\{taskId\}\/release`, \{ trust \}\)/);
+  assert.match(src("HeldStart.jsx"), /btn\(false, "Run anyway"/);
+  assert.match(src("HeldStart.jsx"), /btn\(true, "Trust sender"/);
   assert.match(src("GeneralWorkspace.jsx"), /\{!dock && heldStart\}/);
   assert.match(src("TaskPage.jsx"), /heldStart=\{chatPane && heldStart \? <HeldStart taskId=\{t\.TaskId\} line=\{heldStart\}/);
 });

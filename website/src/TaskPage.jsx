@@ -1139,7 +1139,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // disappears"): the draft read-only, marked, and the line that says it went and the task is closing - until the task leaves the view
   const [sentHere, setSentHere] = useState(null);
   useEffect(() => { setSentHere(null); }, [selected]);
-  useEffect(() => { setHandoff(false); setHandSaid(null); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setShowAll(false); setOpenMsg(undefined); setPick(null); setReportOpen(false); setPeek(false); }, [selected]);
+  useEffect(() => { setHandoff(false); setHandSaid(null); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setDiff(null); setShowAll(false); setOpenMsg(undefined); setPick(null); setReportOpen(false); setPeek(false); }, [selected]);
   useEffect(() => { if (saidHand?.to) { setHandSaid({ to: saidHand.to, note: saidHand.note || "" }); setHandoff(true); } }, [saidHand?.to, saidHand?.note]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
   // spend a subprocess a second on an answer nobody is looking at
@@ -3628,7 +3628,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
             {diff?.scope === "pr" ? "show the agent's checkout instead" : diffScope === "task" ? `show the whole checkout${diff?.checkout_files ? ` (${plural(diff.checkout_files, "file")})` : ""}` : (diff?.pr ? "back to the pull request's diff" : "back to this task's changes")}
           </Box>
         </Typography>
-        {!diff ? <CircularProgress size={20} sx={{ m: 2 }} />
+        {/* ...open at the press, saying what it waits for (the owner, 2026-11-09: a diff window that waits for its read feels dead) */}
+        {!diff ? <Typography variant="body2" data-tq-diff-loading="" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, m: 2 }}>
+          <CircularProgress size={14} color="inherit" />Loading the changes…</Typography>
           : diff.why ? <Empty>{diff.why}</Empty>
             : diff.note && !diff.files?.length ? <Empty>{diff.note}</Empty>
             : <DiffFiles files={diff.files} cwd={diff.cwd} branch={diff.branch} />}

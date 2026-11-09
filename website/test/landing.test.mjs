@@ -45,5 +45,13 @@ test("the card's list folds the generated files and says how many more, apart fr
   assert.equal(gen.length, 2);
   const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
   assert.match(body, /sx=\{\{ display: "block", color: FAINT \}\}>and \{src\.length - SHOWN\} more<\/Typography>/, "its own line: never \"510 moreSee the diff\"");
-  assert.match(body, /<Dialog open=\{diff !== null\}.*fullWidth maxWidth=\{false\}/, "the whole diff opens the window wide");
+  assert.match(body, /<Dialog open=\{open\}.*fullWidth maxWidth=\{false\}/, "the whole diff opens the window wide");
+});
+
+// the owner, 2026-11-09: See the diff waited for the read before anything opened - it felt dead for a second
+test("See the diff opens its window at the press, reading the changes in it, and says so if they cannot be read", () => {
+  const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
+  assert.match(body, /const seeDiff = \(\) => \{ if \(open\) return setOpen\(false\); setOpen\(true\); setDiff\(null\); readDiff\(\); \};/);
+  assert.match(body, /<CircularProgress size=\{14\} color="inherit" \/>Loading the changes…<\/Typography>/);
+  assert.match(body, /\{diffErr && <Typography variant="body2" data-tq-diff-error=""/);
 });

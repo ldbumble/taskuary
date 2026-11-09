@@ -178,6 +178,29 @@ def test_a_coding_seed_is_a_brief_and_a_line_typed_after_it_is_the_owners(home):
     assert [x['k'] for x in sessionrecord.save(s, tid, 'pane-9', 'claude', 'c9')['steps']] == ['brief', 'said', 'you']
 
 
+def test_the_owners_words_in_a_resume_seed_are_their_line_and_the_rest_is_ours(home):
+    """2026-11-09: a resumed stranger's task, typed into its pane, landed "FROM THE OWNER: trynow The owner chose Resume..." - a space
+    lost from the seed it was kept as, so no kept seed matched, and the chat drew the whole wrapper as the owner's line."""
+    from taskuary.continuity import RESUME_PROMPT
+    from taskuary import codingchat
+    s = MemoryStore(); tid = Factory(s).task(title='Export failed')
+    sessionrecord.keep_seed(tid, f'FROM THE OWNER: try now\n\n{RESUME_PROMPT}')
+    jsonl(home / '.claude' / 'projects' / 'C--work-ledger' / 'r1.jsonl', [
+        {'type': 'user', 'message': {'content': ' '.join(f'FROM THE OWNER: trynow {RESUME_PROMPT}'.split())}},
+        {'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'Reachable now.'}]}}])
+    s.add_transcript(tid, 'pane-1', 'screen', 'coding', 'C:/work/ledger', 'r1', brain='claude')
+    want = [('you', 'trynow'), ('brief', RESUME_PROMPT), ('said', 'Reachable now.')]
+    [rec] = sessionrecord.record(s, tid)['sessions']
+    assert [(x['k'], x['text']) for x in rec['steps']] == want
+    saved = sessionrecord.save(s, tid, 'pane-1', 'claude', 'r1')['steps']
+    assert [(x['k'], x['text']) for x in saved] == want
+    # ...and a record saved the old way, the wrapper as a `you` step, is drawn right as it is read
+    old = sessionrecord._saved_path(tid, 'pane-1')
+    old.write_text(json.dumps({'steps': [{'k': 'you', 'text': f'FROM THE OWNER: trynow {RESUME_PROMPT}'}]}), encoding='utf-8')
+    [ses] = [x for x in codingchat.sessions(s, tid)]
+    assert [(x['k'], x['text']) for x in ses['steps']] == [('you', 'trynow'), ('brief', RESUME_PROMPT)]
+
+
 def test_sessions_come_newest_first_each_with_its_own_report(home):
     s = MemoryStore(); tid = Factory(s).task(title='Two runs')
     s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)",

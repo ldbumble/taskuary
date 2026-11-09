@@ -110,7 +110,8 @@ def _session(tid: int, sid: str, cli: str, ext: str, at: str, live: bool = False
     saved = sessionrecord._saved_path(tid, sid)
     # a live session's log is read fresh - its saved copy, if any, is from an earlier save of the same pane
     if not live and saved.is_file():
-        try: return {**s, 'source': 'saved', 'steps': _local((json.loads(saved.read_text(encoding='utf-8')) or {}).get('steps') or [])}
+        # ...marked again as it is read: a record saved before 2026-11-09 holds the owner's words inside Taskuary's wrapper (mark_briefs)
+        try: return {**s, 'source': 'saved', 'steps': _local(sessionrecord.mark_briefs(tid, (json.loads(saved.read_text(encoding='utf-8')) or {}).get('steps') or []))}
         except (OSError, ValueError): pass
     steps, src = sessionrecord.cli_steps(cli, ext)
     return {**s, 'source': src or 'none', 'steps': _local(sessionrecord.mark_briefs(tid, steps)) if steps else []}

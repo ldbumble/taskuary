@@ -450,7 +450,9 @@ class Term:
             while self.alive and not self.n and time.time() - start < SEED_WAIT: time.sleep(.1)
             if not self.settle(3): return                 # a breath after first output - the toe probes the rest
             self.seeded = fit_typed(text)
-            toe, rest = self.seeded[:20], self.seeded[20:]
+            # ...the toe never ends on a space: a TUI's box trims it, and "FROM THE OWNER: try now" landed "trynow" (2026-11-09)
+            cut = next((i for i in range(20, len(self.seeded)) if not self.seeded[i - 1].isspace()), len(self.seeded))
+            toe, rest = self.seeded[:cut], self.seeded[cut:]
             for attempt in range(SEED_RETRIES):
                 self.write(toe)                           # attempt > 0 = retyped: the first toe was eaten
                 end = time.time() + 12                    # generous: a loaded CI runner echoes LATE, and a
@@ -1931,7 +1933,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     if not stranger and (heard := peers.take(store, tid)): parts.append(heard)
     # the owner's own words stay in the prompt (the reviewer should read them as the owner's); text a caller built from a message does not
     if instruction and instruction.strip():
-        if stranger and not instruction_theirs: parts.append(f'FROM THE OWNER: {instruction.strip()}')
+        if stranger and not instruction_theirs:
+            from .outcomes import OWNER_HEAD      # ...once: Continue's fresh road hands it already headed (server.continue_work)
+            parts.append(instruction.strip() if instruction.strip().upper().startswith(OWNER_HEAD) else f'{OWNER_HEAD} {instruction.strip()}')
         else: say(f'ASK: {fence(instruction.strip()) if instruction_theirs else instruction.strip()}', theirs_too=True)
     # A finished session can be continued with a new ask. Its PTY is gone, but its result is
     # durable task context: hand that result to the next terminal so "now make the changes" does

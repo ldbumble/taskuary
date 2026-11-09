@@ -742,6 +742,23 @@ class TerminalTests(unittest.TestCase):
         finally:
             terminal.close(t.sid)
 
+    def test_the_toe_never_ends_on_a_space(self):
+        """2026-11-09: "FROM THE OWNER: try now" put "FROM THE OWNER: try " in alone, and its space never reached the CLI: "trynow"."""
+        t = terminal.Term([sys.executable, '-c', 'import time; time.sleep(3)'], os.getcwd(), 'test')
+        terminal.SESSIONS[t.sid] = t
+        wrote = []
+        def fake_write(x): wrote.append(x); t._append(x)
+        try:
+            with mock.patch.object(t, 'write', side_effect=fake_write):
+                with mock.patch.object(terminal, 'SEED_QUIET', 0), mock.patch.object(terminal, 'SEED_ENTER', .05):
+                    t.n = 1
+                    t.seed('FROM THE OWNER: try now, please')
+                    self.assertTrue(_wait(lambda: '\r' in wrote))
+            self.assertEqual(wrote[0], 'FROM THE OWNER: try n')
+            self.assertEqual(''.join(wrote[:wrote.index(chr(13))]), 'FROM THE OWNER: try now, please')
+        finally:
+            terminal.close(t.sid)
+
     def test_an_unechoed_prompt_is_never_submitted_blind(self):
         """codex boots into "do you trust this directory?" - a dialog that eats typed text and
         treats Enter as its ANSWER. If the text never echoes, no Enter may be pressed: trusting

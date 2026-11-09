@@ -421,15 +421,24 @@ def keep_seed(tid: int, seed: str):
 
 
 def mark_briefs(tid: int, steps: list) -> list:
-    "The told steps that are a seed Taskuary sent, as `brief`."
-    p = _seeds_path(tid)
-    if not p.is_file(): return steps
-    seeds = set()
-    for line in p.read_text(encoding='utf-8', errors='replace').splitlines():
-        try: seeds.add(json.loads(line).get('seed') or '')
-        except ValueError: continue
-    def ours(x): a = _flat(x.get('text'))[:SEED_N]; return any(s and a and (s.startswith(a) or a.startswith(s)) and min(len(a), len(s)) >= 20 for s in seeds)
-    return [{**x, 'k': 'brief'} if x.get('k') == 'you' and ours(x) else x for x in steps]
+    """The told steps that are a seed Taskuary sent, as `brief` - and the owner's words a seed carries ("FROM THE OWNER: ..."), as their own
+    `you` line just before it (outcomes.owner_split). A told step headed with those words is ours too, kept seed or not: only Taskuary writes
+    them (2026-11-09: a typed resume lost a space - "try now" landed "trynow" - matched no kept seed, and the chat drew the whole wrapper,
+    Resume's handover and all, as the owner's line). Compared without spacing, which a typed seed does not keep."""
+    from .outcomes import owner_split
+    p, seeds = _seeds_path(tid), set()
+    if p.is_file():
+        for line in p.read_text(encoding='utf-8', errors='replace').splitlines():
+            try: seeds.add(''.join(str(json.loads(line).get('seed') or '').split()).removesuffix('…'))
+            except ValueError: continue
+    def ours(x):
+        a = ''.join(_flat(x.get('text')).split())[:SEED_N]
+        return any(s and a and (s.startswith(a) or a.startswith(s)) and min(len(a), len(s)) >= 20 for s in seeds)
+    def mark(x):
+        if x.get('k') not in ('you', 'brief') or (x['k'] == 'you' and not ours(x) and not owner_split(x.get('text'))[0]): return [x]
+        w, rest = owner_split(x.get('text'))
+        return ([{**x, 'k': 'you', 'text': w}] if w else []) + ([{**x, 'k': 'brief', 'text': rest}] if rest.strip() else [])
+    return [y for x in steps for y in mark(x)]
 
 
 def general_steps(store, tid: int) -> list:
@@ -583,7 +592,7 @@ def record(store, tid: int) -> dict:
             steps = mark_briefs(tid, steps)
             rec = {'steps': _bound(steps), 'source': source} if steps else {'steps': screen_steps(r.get('Text')), 'source': 'screen'}
         sessions.append({'sid': r.get('Sid'), 'by': r.get('Agent') or 'agent', 'cli': r.get('Brain') or '', 'cwd': r.get('Cwd') or '',
-                         'at': _when(r.get('CreatedAt')), 'source': rec.get('source') or '', 'steps': rec.get('steps') or [],
+                         'at': _when(r.get('CreatedAt')), 'source': rec.get('source') or '', 'steps': mark_briefs(tid, rec.get('steps') or []),
                          **{k: rec[k] for k in ('took', 'usage') if rec.get(k) is not None}})
     chat = general.chat_rows(store, tid)
     if chat and any(c.get('ActorType') == general.ASSISTANT_TYPE for c in chat):

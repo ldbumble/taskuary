@@ -271,3 +271,15 @@ class OwnerWordsTests(unittest.TestCase):
         self.assertEqual(owner_words(f'FROM THE OWNER: merge it if the tests pass {RESUME_PROMPT}'), 'merge it if the tests pass')
         self.assertEqual(owner_words(RESUME_PROMPT), '')
         self.assertEqual(owner_words('just keep going'), 'just keep going')
+
+    def test_the_owners_words_come_out_of_every_wrapping_of_ours(self):
+        from taskuary.continuity import RESUME_PROMPT
+        from taskuary.general import RELAY
+        from taskuary.outcomes import owner_split
+        flat = ' '.join(f'FROM THE OWNER: try now {RESUME_PROMPT}'.split())                  # a typed seed, one line
+        self.assertEqual(owner_split(flat), ('try now', RESUME_PROMPT))
+        para = '\n\n'
+        self.assertEqual(owner_split(para.join(["NEW MAIL: Erin wrote again.", "FROM THE OWNER: book it", f"{RELAY} the 3-year one", RESUME_PROMPT])),
+                         ("book it", para.join(["NEW MAIL: Erin wrote again.", f"{RELAY} the 3-year one", RESUME_PROMPT])))
+        self.assertEqual(owner_split(para.join(["TASK TQ-0001.", "FROM THE OWNER: FROM THE OWNER: go on", RESUME_PROMPT]))[0], "go on")
+        self.assertEqual(owner_split('TASK TQ-0001 - fix it.'), ('', 'TASK TQ-0001 - fix it.'))

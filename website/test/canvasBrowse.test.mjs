@@ -36,7 +36,7 @@ test("the sidebar posts a browse card; only the newest is live, so one detail is
   // ...and the area already open moves its own card rather than posting a second
   assert.match(view, /if \(live\?\.role === "browse" && live\.area === area\) return m\.map\(\(x\) => \(x\.id === live\.id \? \{ \.\.\.x, state, down: false \} : x\)\);/);
   assert.match(view, /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.down \? null : shown\[i\]\.id;/);
-  assert.match(src("CanvasBrowse.jsx"), /if \(!live\) return frame\(\{ title: AREA_TITLES\[area\] \}\);/);
+  assert.match(src("CanvasBrowse.jsx"), /if \(!live\) return frame\(\{ title: AREA_TITLES\[area\], area \}\);/);
   // ...and the item on the table folds to its line while a browse card is open below it
   assert.match(view, /const foldedNow = !!canvas && live && !!m\.card && \(foldsAs\(canvas\.folded, m\.card\.key\) \|\| !!canvas\.browsing\);/);
 });
@@ -88,4 +88,16 @@ test("Reports opened with no shelf named shows the reports", () => {
   const s = src("ReportsView.jsx");
   assert.match(s, /: browseState\.section \?\? "reports";/);
   assert.doesNotMatch(s, /browseState\.section \?\? null/);
+});
+
+// A PAGE PUT DOWN IS A ROW OF THE WALK (the owner's screenshot, 2026-11-09): a folded Settings ran edge to edge as a bare bar, wider than every
+// folded task around it and with no icon. It is drawn in the same .tq-msg column, mark gutter and .tq-fold card as a folded task, with its page's mark.
+test("a folded browse card wears the folded task row's classes and its page's mark", () => {
+  const view = src("AssistantView.jsx"), frame = src("CanvasBrowse.jsx");
+  assert.match(view, /if \(m\.role === "browse" && canvas\?\.browsing !== m\.id\) return \(\n\s*<div className="tq-msg tq-browse-fold" data-tq-browse-line=\{m\.area\}><div className="avatar"><AssistantMark \/><\/div><div className="body">/);
+  assert.match(view, /<div className="tq-fold" data-tq-folded=\{m\.card\.key\}/);   // the same card a folded task draws
+  assert.match(frame, /return <div className="tq-fold" data-tq-browse-fold=\{area \|\| ""\}><Mark aria-hidden/);
+  for (const a of ["new", "connections", "reports", "settings", "about", "hub"]) assert.match(frame, new RegExp(`${a}: \\w+Icon`), a);
+  // ...and only a LIVE browse card spans the canvas's width
+  assert.match(view, /<div className="tq-browse-line tq-canvas-live" data-tq-browse-line=\{m\.area\}>/);
 });

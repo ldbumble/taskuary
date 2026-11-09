@@ -959,8 +959,14 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
   // the day's opener draws the welcome, once - an earlier day's sits under it as nothing (actions.welcome)
   if (m.card?.kind === "brief") return lastBrief ? actions.welcome(m) : null;
   // BROWSING (the canvas redesign, 2026-09-29): Connections, Settings, Reports or Hub, walked by clicks on this line
+  // ...and one put down is a ROW of the walk like a folded task: the same .tq-msg column, mark gutter and .tq-fold card - as a full-width
+  // browse line it ran edge to edge, wider than every task row around it, with no icon (the owner's screenshot, 2026-11-09)
+  if (m.role === "browse" && canvas?.browsing !== m.id) return (
+    <div className="tq-msg tq-browse-fold" data-tq-browse-line={m.area}><div className="avatar"><AssistantMark /></div><div className="body">
+      <CanvasBrowse area={m.area} state={m.state || {}} live={false} onReopen={() => actions.browse(m.area, m.state)} /></div></div>
+  );
   if (m.role === "browse") return (
-    <div className={`tq-browse-line${canvas?.browsing === m.id ? " tq-canvas-live" : ""}`} data-tq-browse-line={m.area}>
+    <div className="tq-browse-line tq-canvas-live" data-tq-browse-line={m.area}>
       <CanvasBrowse area={m.area} state={m.state || {}} live={canvas?.browsing === m.id}
         onState={(state) => actions.browseState(m.id, state)} onOpenCard={actions.openCard} onReopen={() => actions.browse(m.area, m.state)}
         onNavigate={actions.navigate} onOpenTask={actions.openTask} onClose={() => actions.browseClose(m.id)} onSaid={actions.said} />

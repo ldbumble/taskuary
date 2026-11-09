@@ -2,6 +2,15 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.23 - 2026-11-09
+
+- Night scenarios, round 4: the owner's phone line during a turn is heard, and one draft per person
+- Tool list: the show types are read in their guide, and sign_form leaves its rule to ASSISTANT.md
+- Night scenarios, round 5: a question stays asked, a failed first turn is retried with its ask, a colleague's answer reaches the draft
+- propose_reply says it answers on the message's own channel
+- Night scenarios, round 7: a one-to-one nudge joins the task triage named, no email to a chat id, unreachable systems stay general
+- Night scenarios, round 8: one person on two channels is named by channel, and a slot's chat id is no mailbox either
+
 ## 0.3.11.22 - 2026-11-09
 
 - Night scenarios, round 1: what a quick call, a shared chat and a yes/no question got wrong

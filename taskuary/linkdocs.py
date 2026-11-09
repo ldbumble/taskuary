@@ -426,7 +426,7 @@ def _web(store, d, full, offset, limit):
         from .channels import _clean
         html = data.decode(r.encoding or 'utf-8', errors='replace')
         title = (re.search(r'(?is)<title[^>]*>(.*?)</title>', html) or [None, ''])[1].strip()[:120]
-        text = _clean(html)
+        text = _clean(html, every=False)              # a page's own navigation is not what it says
         return {'title': title or d['name'], 'text': text, 'chars': len(text)}
     return _file(d.get('name') or 'file', data, offset, limit)
 

@@ -891,7 +891,7 @@ def _reconcile_graph(store, box, body, since=None, conv=None, to=None, cc=None, 
             raw = (m.get('body') or {}).get('content') or ''
             if str((m.get('body') or {}).get('contentType') or '').lower() == 'html':
                 from .channels import _clean
-                raw = _clean(raw)
+                raw = _clean(raw, every=False)        # compared with the words sent, never lengthened by a link's address
             text = ' '.join(str(raw).split())
             # Replies may carry the quoted original, but the WHOLE attempted text
             # must lead the message. A shared greeting is not a delivery receipt.

@@ -178,8 +178,23 @@ def test_an_html_mail_keeps_the_address_of_its_open_button():
     html = (f'<p>Alex, the bills are ready.</p><a href="{SHEET.replace("&", "&amp;")}">Open</a> '
             '<a href="https://track.vendor.example/u?id=1">unsubscribe</a>')
     text = channels._clean(html)
-    assert f'Open ({SHEET})' in text and 'track.vendor.example' not in text
-    assert [d['url'] for d in linkdocs.find(text)] == [SHEET]
+    assert f'Open ({SHEET})' in text and 'unsubscribe (https://track.vendor.example/u?id=1)' in text   # every link (TQ-1370)
+    assert [d['url'] for d in linkdocs.find(text)][0] == SHEET
+    assert 'track.vendor.example' not in channels._clean(html, every=False)       # a fetched page / a sent copy: documents only
+
+
+def test_every_link_in_a_mail_reaches_its_readers_with_its_real_address():
+    """TQ-1370: a reply asked the sender to "resend the liabilities list as a direct URL" - the link to a Google page was in her mail,
+    behind words, and only the words reached the drafter. Every link keeps its address; a Safe Links wrapper gives up the real one."""
+    page = 'https://sites.google.com/view/mfa-ap/liabilities'
+    wrapped = 'https://nam12.safelinks.protection.outlook.com/?url=' + page.replace(':', '%3A').replace('/', '%2F') + '&amp;data=x'
+    html = (f'<p>Hi, see the <a href="{wrapped}">liabilities list</a> with due dates.</p><a href="mailto:ap@mfa.example">Write AP</a>'
+            f'<a href="#top">Top</a> <a href="{page}">{page}</a>')
+    text = channels._clean(html)
+    assert f'liabilities list ({page})' in text and 'safelinks' not in text and 'Write AP (mailto:ap@mfa.example)' in text
+    assert '(#top)' not in text and text.count(page) == 2                          # an anchor is no link; a bare address is not doubled
+    d = next(d for d in linkdocs.find(text) if d['url'] == page)
+    assert d['kind'] == 'page'                                                     # listed as a page - read only on request
 
 
 def test_a_quickbooks_invoice_mail_keeps_its_view_invoice_button():
@@ -189,8 +204,8 @@ def test_a_quickbooks_invoice_mail_keeps_its_view_invoice_button():
     html = (f'<p>Dear Alex, here is invoice 1042 from Payworth.</p><a href="{inv.replace("&", "&amp;")}">View invoice</a>'
             '<a href="https://www.intuit.com/privacy/">Privacy</a> <a href="https://quickbooks.intuit.com/">QuickBooks</a>')
     text = channels._clean(html)
-    assert f'View invoice ({inv})' in text and 'intuit.com/privacy' not in text
-    d, = linkdocs.find(text)
+    assert f'View invoice ({inv})' in text and 'Privacy (https://www.intuit.com/privacy/)' in text   # every link (TQ-1370)
+    d = next(d for d in linkdocs.find(text) if d['url'] == inv)
     assert (d['url'], d['kind'], d['label'], d['source']) == (inv, 'invoice', 'QuickBooks invoice', None)   # listed, opened where it lives
     pay = 'https://ipn.intuit.com/app/payment?id=abc123'
     assert linkdocs.classify(pay)['label'] == 'QuickBooks invoice' and linkdocs.classify('https://www.intuit.com/privacy/')['kind'] == 'page'

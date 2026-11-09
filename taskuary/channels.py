@@ -576,22 +576,30 @@ _DROP = re.compile(r'(?is)<(script|style|head)[^>]*>.*?</\1>')
 _BLOCK = re.compile(r'(?i)<br\s*/?>|</(p|div|tr|li|h[1-6]|blockquote|table)>')
 
 # A shared document arrives as a BUTTON: "Open" whose href is the sheet. Stripping the tag kept the word and lost the sheet,
-# so a link to a document (linkdocs.is_doc_link - a known host or a file, never a plain page or a tracker) keeps its address
-# beside its words: "Outstanding bills (https://docs.google.com/...)" - in brackets the tag strip below leaves alone.
+# so a link keeps its address beside its words: "Outstanding bills (https://docs.google.com/...)" - in brackets the tag strip below
+# leaves alone. EVERY LINK, not only a known document's (the owner, 2026-11-09, TQ-1370: "every link in every email of course" - a
+# reply asked the sender to resend a link to a Google page that was in her mail all along, because only its words reached the drafter).
+# A Safe Links or google.com/url wrapper is unwrapped to the real address. A web page is still read only on request (linkdocs), so an
+# address in the text is never a click. `every=False`: a document's address only - a fetched web page's own text, a sent copy compared.
 _A = re.compile(r'''(?is)<a\b[^>]*?\bhref\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>''')
+_HREF = re.compile(r'(?i)(https?://|mailto:)')
 
-def _keep_doc_link(m):
+def _keep_link(m, every=True, pics=False):
     from html import unescape
-    from .linkdocs import is_doc_link
+    from .linkdocs import is_doc_link, _unwrap
     href, inner = unescape(m.group(1)).strip(), m.group(2)
-    return f' {inner} ({href}) ' if href not in unescape(inner) and is_doc_link(href) else f' {inner} '   # spaced, as the tag strip spaced it
+    words, real = unescape(inner), _unwrap(href)
+    # ...a link around nothing but a picture names nothing - until the pictures are read as stand-ins ("[image: ...] (address)")
+    said = bool(re.sub(r'<[^>]+>', '', words).strip()) or (pics and bool(_IMG.search(inner)))
+    keep = href not in words and real not in words and len(href) <= 2048 and (is_doc_link(href) or (every and said and bool(_HREF.match(real))))
+    return f' {inner} ({real if every else href}) ' if keep else f' {inner} '   # spaced, as the tag strip spaced it
 
 
 def mail_links(html, cap: int = 40) -> list:
     """[[words, address]] for the links a mail's HTML puts behind words ("View report"), kept in MailMetaJson `links` for the screens to
-    make those words a link again (the owner, 2026-11-03: "hyper links in fyi email like view report are not coming thru"). Never in the
-    body's text: what the text names, linkdocs reads for triage, and a GET on a tracker or an unsubscribe address is a click on it
-    (test_an_html_mail_keeps_the_address_of_its_open_button). Web and mail addresses only; a document's is already in the text."""
+    make those words a link again (the owner, 2026-11-03: "hyper links in fyi email like view report are not coming thru"). Since TQ-1370
+    the address is in the body's text as well (_keep_link) - linkdocs lists a plain page and reads it only on request, so naming one is
+    never a GET on a tracker. Web and mail addresses only; a document's is in the text and not repeated here."""
     from .linkdocs import is_doc_link
     out = []
     for m in _A.finditer(_DROP.sub(' ', html or '')):
@@ -634,20 +642,21 @@ def _picture(m) -> str:
     return f' [{kind}: {name}] ' if name else f' [{kind}] '
 
 
-def _clean(html, pics=False):
+def _clean(html, pics=False, every=True):
     """HTML mail -> readable text. Block ends become NEWLINES: collapsing every whitespace
     run (the old behaviour) mashed the reply and the quoted 'From:/Sent:/To:' history into
     one wall of text, which no reader - human or model - could take apart.
-    `pics`: its pictures as stand-ins (_picture) - taken only when the words alone come to nothing."""
+    `pics`: its pictures as stand-ins (_picture) - taken only when the words alone come to nothing.
+    `every`: every link's address beside its words (_keep_link) - False keeps only a document's."""
     from html import unescape
     src = _DROP.sub(' ', html or '')
-    txt = _A.sub(_keep_doc_link, src)
+    txt = _A.sub(lambda m: _keep_link(m, every, pics), src)
     if pics: txt = _IMG.sub(_picture, txt)
     txt = _BLOCK.sub('\n', txt)
     txt = unescape(re.sub(r'<[^>]+>', ' ', txt))
     txt = re.sub(r'[^\S\n]+', ' ', txt.replace('\xa0', ' '))
     txt = re.sub(r'\n{3,}', '\n\n', re.sub(r' ?\n ?', '\n', txt)).strip()
-    return txt if txt or pics or not _IMG.search(src) else _clean(html, True)
+    return txt if txt or pics or not _IMG.search(src) else _clean(html, True, every)
 
 def _header_marks(m: dict) -> dict:
     """What a Graph message's own headers say: an auto-reply (never triaged) and who sent it before a model has read it."""

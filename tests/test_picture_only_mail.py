@@ -36,7 +36,7 @@ WITH_LINKS = (f'<p>Your October report is ready.</p><a href="{REPORT.replace("&"
 
 
 def test_a_picture_only_mail_reads_as_its_pictures_and_a_pixel_is_none():
-    assert channels._clean(PICTURE_ONLY) == '[image: October numbers]'
+    assert channels._clean(PICTURE_ONLY) == '[image: October numbers] (https://reports.vendor.example/r/9)'   # the link around it too (TQ-1370)
     assert channels._clean('<p><img src="https://cdn.vendor.example/a/banner.png?x=1"></p>') == '[remote image: banner.png]'
     assert channels._clean('<img src="cid:image002.jpg@01DB">') == '[image: image002.jpg]'
     assert channels._clean('<img src="https://t.vendor.example/p.gif" width=1 height="1px">') == ''
@@ -44,9 +44,11 @@ def test_a_picture_only_mail_reads_as_its_pictures_and_a_pixel_is_none():
     assert channels._clean('<p>Thanks, Alex.</p><img src="cid:logo.png" alt="Vendor logo">') == 'Thanks, Alex.'
 
 
-def test_the_links_behind_words_are_kept_beside_the_text_never_in_it():
+def test_the_links_behind_words_are_kept_beside_the_text_and_in_it():
     text = channels._clean(WITH_LINKS)
-    assert 'View report' in text and 'reports.vendor.example' not in text          # linkdocs never reads (and so never GETs) it
+    # ...in the text too since TQ-1370 (the owner: "every link in every email of course") - linkdocs lists a page, reads it only on request
+    assert f'View report ({REPORT})' in text and 'Write to us (mailto:help@vendor.example)' in text and 'javascript' not in text
+    assert 'reports.vendor.example' not in channels._clean(WITH_LINKS, every=False)
     assert channels.mail_links(WITH_LINKS) == [['View report', REPORT], ['Write to us', 'mailto:help@vendor.example']]
     assert channels.mail_links('<a href="https://x.vendor.example/a">https://x.vendor.example/a</a><a href="#top">Top</a>') == []
 
@@ -88,14 +90,15 @@ def test_a_pasted_picture_reaches_triage_by_its_words_and_the_screen_by_its_byte
     att = {'id': 'a1', 'name': 'image001.png', 'contentType': 'image/png', 'size': len(png()), 'isInline': True,
            'contentId': 'image001.png@01DB0000', 'contentBytes': base64.b64encode(png()).decode()}
     seen, mid = _poll(s, PICTURE_ONLY, [att])
-    assert seen['body'] == '[image: October numbers]'                              # triage read the picture's alt, not nothing
+    assert seen['body'] == '[image: October numbers] (https://reports.vendor.example/r/9)'                              # triage read the picture's alt, not nothing
     assert [ct for ct, _ in seen.get('images') or []] == ['image/png']             # ...and saw the picture itself
     with mock.patch.object(server, 'store', s):
         c = TestClient(server.app)
         got = c.get(f'/api/messages/{mid}').json()
         files = c.get(f'/api/messages/{mid}/attachments').json()['data']
-    assert got['BodyText'] == '[image: October numbers]' and got['Links'] == []
-    assert [(f['name'], f['inline'], f['is_image'], bool(f['url'])) for f in files] == [('image001.png', True, True, True)]
+    assert got['BodyText'] == '[image: October numbers] (https://reports.vendor.example/r/9)' and got['Links'] == []
+    assert [(f['name'], f['inline'], f['is_image'], bool(f['url'])) for f in files] == [('image001.png', True, True, True),
+        ('reports.vendor.example/r/9 (Web page)', False, False, False)]          # ...and the page it links to, listed (TQ-1370)
 
 
 def test_the_view_report_link_comes_with_the_message():
@@ -104,7 +107,7 @@ def test_the_view_report_link_comes_with_the_message():
     with mock.patch.object(server, 'store', s):
         got = TestClient(server.app).get(f'/api/messages/{mid}').json()
     assert got['Links'] == [['View report', REPORT], ['Write to us', 'mailto:help@vendor.example']]
-    assert 'reports.vendor.example' not in got['BodyText']
+    assert f'View report ({REPORT})' in got['BodyText']                              # every link (TQ-1370)
     # ...and only a web or mail address is ever handed to a screen as a link, whatever the row holds
     s.cx.execute('UPDATE message SET MailMetaJson=? WHERE MessageId=?',
                  (json.dumps({'links': [['Run me', 'javascript:alert(1)'], ['View report', REPORT], 'junk']}), mid))

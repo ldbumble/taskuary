@@ -1275,7 +1275,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
           await new Promise((r) => setTimeout(r, 1500));
           const { data } = await api.get(`/api/connectors/${cid}/wa/status`).catch(() => ({ data: null }));
           const phase = data?.manager?.phase;
-          if (phase === "installing") setNote("Installing the bridge's dependency - a few minutes the first time…");
+          if (phase === "installing") setNote(/Node\.js/.test(data.manager.detail || "") ? data.manager.detail : "Installing the bridge's dependency - a few minutes the first time…");
           if (phase === "failed") { setBusy(""); setNote(""); setStuck(true); setErr(`The bridge did not start: ${data.manager.detail || "no reason given"}`); return; }
           if (data?.bridge || phase === "running") break;
         }

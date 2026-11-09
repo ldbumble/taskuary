@@ -58,7 +58,7 @@ import { openAppLink } from "./appLinks.js";
 import { LIT, lightField, lightStep } from "./connectorStep.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { validEmail } from "./recipientOptions.js";
-import { waLabel, waMatches, waPhone, waSaid } from "./waChats.js";
+import { chatsError, readChats, waLabel, waMatches, waPhone, waSaid } from "./waChats.js";
 import { PEOPLE_MISSING } from "./peopleSearch.js";
 import ReasonPanel from "./ReasonNetwork.jsx";
 import { DESKTOP_HOW } from "./newTask.js";
@@ -4230,7 +4230,8 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
         wasConnected = !!data.connected;
         // Node is there and the bridge is not: start it, once per visit - the owner opened this card to pair. Not one stopped on purpose
         // (manager.held): a Remove stopped it, and starting it here put the card straight back up (TQ-1320) - Start bridge is the way back
-        if (data.bridge === false && data.node && !data.manager?.held && !kicked.current && !["installing", "starting", "failed"].includes(data.manager?.phase)) { kicked.current = true; startBridge(); }
+        // ...Node or not: Start sets up Taskuary's own Node first (#278 - "just install in background and get it to work")
+        if (data.bridge === false && !data.manager?.held && !kicked.current && !["installing", "starting", "failed"].includes(data.manager?.phase)) { kicked.current = true; startBridge(); }
         setTimeout(tick, data.connected ? 30000 : data.bridge === false ? (data.node ? 3000 : 6000) : 4000);
       // A STATUS WE COULD NOT READ IS NOT "NODE IS MISSING". Faking {bridge:false} here sent the owner
       // off to install Node they already had, because the app was restarting or busy for a moment.
@@ -4276,7 +4277,7 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
         <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Pair with your phone</Typography>
         {!st.connected && (
           <Box sx={{ mb: 1 }}>
-            <StepLine n={1} label="Node 18+ on this machine" state={stateOf(1)} />
+            <StepLine n={1} label={phase === "installing" && !st.node ? (st.manager?.detail || "Setting up Node.js") : "Node.js on this computer (Taskuary sets it up)"} state={stateOf(1)} />
             <StepLine n={2} label={phase === "installing" ? "Fetching the bridge (a minute or two, first time only)" : "The bridge is running"} state={stateOf(2)} />
             <StepLine n={3} label="Scan the QR from your phone" state={stateOf(3)} />
           </Box>
@@ -4291,7 +4292,7 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
             onClick={async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/restart`); } catch { /* status polling shows the outcome */ } }}>
             Restart bridge
           </Button>
-          {st.bridge === false && st.node && !busy && phase !== "failed" && (
+          {st.bridge === false && !busy && phase !== "failed" && (
             <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>Start bridge</Button>
           )}
           {/* connected or logged out: the card's own status line (Restart bridge is already beside it, so only Pair again) */}
@@ -4309,16 +4310,11 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
           <Box sx={{ mt: 0.5 }}>
             <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Paired{st.me ? ` as ${st.me}` : ""}{st.phone ? ` · ${st.phone}` : ""} — the bridge is connected. Test, then enable.</Typography>
           </Box>
-        ) : st.bridge === false && !st.node ? (
-          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.6, display: "block" }}>
-            Node is not installed here, and it is the one thing Taskuary cannot install for you. In a terminal:
-            <Box component="code" sx={{ ...mono, display: "block", my: 0.5, p: 0.75, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1, fontSize: 12 }}>winget install OpenJS.NodeJS.LTS</Box>
-            (or download the LTS from nodejs.org and run the installer). This box re-checks every few seconds and moves on by itself once Node is there.
-          </Typography>
         ) : st.bridge === false ? (
           <Box>
             <Typography variant="caption" sx={{ color: phase === "failed" ? "#a33" : DIM, lineHeight: 1.5, display: "block", mb: 0.75 }}>
-              {phase === "installing" ? "Fetching the bridge's dependency (Baileys, not bundled on purpose). The QR appears here the moment the bridge is up."
+              {phase === "installing" ? (st.node ? "Fetching the bridge's dependency (Baileys, not bundled on purpose). The QR appears here the moment the bridge is up."
+                : `${st.manager?.detail || "Setting up Node.js"} - the bridge starts by itself once it is done.`)
                 : phase === "failed" ? `The bridge could not start: ${st.manager.detail}`
                 : st.manager?.held ? "The bridge is stopped and this computer is unpaired. Start bridge to pair a phone again."
                 : "Starting the bridge…"}
@@ -4376,9 +4372,9 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
   const SHOWN = 8;
   const guideJid = String(parse(conn.ConfigJson).assistant_chat || parse(conn.ConfigJson).notify_chat || "");
   const load = useCallback(async () => {
-    try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/chats`); setRows(data.data); setErr("");
-      onRoster?.(new Set((data.data || []).map((r) => r.jid))); }
-    catch (e) { setRows([]); setErr(e?.response?.data?.detail || "could not reach the bridge"); }
+    try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/chats`), got = readChats(data); setRows(got.rows); setErr(got.err);
+      if (!got.err) onRoster?.(new Set(got.rows.map((r) => r.jid))); }
+    catch (e) { setRows([]); setErr(chatsError(e)); }
   }, [conn.ConnectorId, onRoster]);
   useEffect(() => { load(); }, [load]);
   const loadStanding = useCallback(async () => {

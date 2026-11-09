@@ -13,7 +13,7 @@ const mic = ui.slice(ui.indexOf("export const MicButton"), ui.indexOf("export co
 test("with no voice AI and no voice found the mic is crossed out, and its press asks instead of recording", () => {
   assert.match(mic, /const off = !!\(voice && route !== "connector" && !viaBrowser && !viaBuiltin\)/);
   assert.match(mic, /off \? <MicOffIcon/);
-  assert.match(mic, /const press = \(e\) => \{ if \(!off && !\(viaBuiltin && speechAsk\)\) return start\(\); setAsk\(e\.currentTarget\)/);
+  assert.match(mic, /const press = \(e\) => \{ setErr\(""\); if \(!off && !\(viaBuiltin && speechAsk\)\) return start\(\); setAsk\(e\.currentTarget\)/);
 });
 
 test("a browser recogniser or the computer's own is used at once, with no opt-in to press", () => {
@@ -79,4 +79,29 @@ test("a refused microphone in the Taskuary window points at Windows' setting, no
   assert.match(mic, /catch \(e\) \{ flash\(micRefused\(e\?\.name\)\); \}/);
   const fn = ui.slice(ui.indexOf("export const micRefused"), ui.indexOf("// One mic. Press to record"));
   assert.match(fn, /inWindow \? "Windows kept the microphone from this window - turn on \\"Let desktop apps access your microphone\\"/);
+});
+
+// Silence is not sent to be made up (the owner, 2026-11-09): the recording measures itself and the server gates a silent clip
+test("a recording sends its own loudness and length, and a meter that never ran sends no level", async () => {
+  assert.match(mic, /const chunks = \[\], meter = levelMeter\(stream\)/);
+  assert.match(mic, /headers: \{ "Content-Type": blob\.type \|\| "audio\/webm", \.\.\.measured \}/);
+  const { levelMeter } = await import("data:text/javascript," + encodeURIComponent(ui.slice(ui.indexOf("export const levelMeter"), ui.indexOf("// One mic."))));
+  const fake = (state, v) => class { constructor() { this.state = state; }
+    createAnalyser() { return { fftSize: 0, getFloatTimeDomainData: (b) => b.fill(v) }; }
+    createMediaStreamSource() { return { connect() {} }; } close() {} };
+  const run = async (AC) => { const m = levelMeter({}, AC); await new Promise((r) => setTimeout(r, 80)); return m.stop(); };
+  const loud = await run(fake("running", 0.25));
+  assert.equal(loud["X-Voice-Level"], "0.2500"); assert.ok(+loud["X-Voice-Seconds"] > 0);
+  assert.equal((await run(fake("suspended", 0.25)))["X-Voice-Level"], undefined, "a suspended context never calls speech silence");
+  assert.equal((await run(undefined))["X-Voice-Level"], undefined, "no AudioContext, no level");
+});
+
+test("a mic failure stays said beside the mic with its fix as a button, never only a fading tooltip", () => {
+  assert.doesNotMatch(mic, /setTimeout\(\(\) => setErr\(""\)/, "no 8 s fade");
+  assert.match(mic, /<Popper open=\{!!err && !ask/);
+  assert.match(mic, /data-tq-mic-err="" role="alert"/);
+  assert.match(mic, /fix\.settings \? openSettings\(fix\.settings\)/);
+  assert.match(mic, /api\.post\("\/api\/voice\/open-settings", null, \{ params: \{ which \} \}\)/);
+  assert.match(mic, /window\.addEventListener\("focus", back\)/, "back from Windows' settings, the mic checks again");
+  assert.match(mic, /data-tq-speech-settings=""/, "the speech ask also opens Windows' own page");
 });

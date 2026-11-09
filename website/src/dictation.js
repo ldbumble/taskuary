@@ -9,8 +9,22 @@
    The desktop window is Edge's WebView2: it carries Chromium's SpeechRecognition class but no speech service behind it, so every
    session ends at once with "network", online or not. There the browser's own voice is no choice at all - the computer's own takes it
    (voice.py builtin: Windows' dictation), and only with none does the mic ask for a voice AI. */
+// ...and the window is known at its first draw (the owner, 2026-11-09: "Browser voice needs an internet connection" inside the window):
+// pywebview puts window.pywebview on only after the page has loaded, so a mic drawn before then took the window for a tab and offered
+// the browser's voice. WebView2 carries window.chrome.webview from the start.
+export const inAppWindow = (w = typeof window === "undefined" ? null : window) => !!(w && (w.pywebview || w.chrome?.webview));
 export const browserRecogniser = (w = typeof window === "undefined" ? null : window) =>
-  w && !w.pywebview ? (w.SpeechRecognition || w.webkitSpeechRecognition || null) : null;
+  w && !inAppWindow(w) ? (w.SpeechRecognition || w.webkitSpeechRecognition || null) : null;
+
+// A MIC FAILURE NAMES ITS FIX AS A BUTTON (the owner, 2026-11-09: "it's broken you need to show the issue?? ... just request the permission
+// like a normal app and they can hit approve"): the Windows setting a line points at opens with one press, the voice shelf for the rest.
+export const micFix = (line) => {
+  const s = String(line || "");
+  if (/microphone privacy|desktop apps access your microphone|MicrophoneUnavailable|No microphone Windows/i.test(s)) return { label: "Open microphone settings", settings: "microphone" };
+  if (/Online speech recognition|speech privacy|speech service did not answer|speech recognition is off/i.test(s)) return { label: "Open speech settings", settings: "speech" };
+  if (/voice AI/i.test(s)) return { label: "Set up voice AI", voice: true };
+  return null;
+};
 
 // what the owner reads when the browser will not listen - null: not the owner's to fix, the mic just goes on
 export const dictationError = (code) => ({

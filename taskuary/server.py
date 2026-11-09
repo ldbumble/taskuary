@@ -7831,6 +7831,21 @@ def voice_speech_on(request: Request):
     store.audit('setting', 0, 'voice_online_speech', ACTOR, detail={'on': True})
     return voice.ready(store)
 
+# THE FIX IS A BUTTON (the owner, 2026-11-09: "just request the permission like a normal app and they can hit approve"): a mic that
+# Windows' privacy settings keep from hearing opens the very page, on this computer only - a page on another device has no Windows here
+_SETTINGS = {'speech': 'ms-settings:privacy-speech', 'microphone': 'ms-settings:privacy-microphone'}
+
+@app.post('/api/voice/open-settings')
+def voice_open_settings(request: Request, which: str = 'speech'):
+    if which not in _SETTINGS: raise HTTPException(422, 'speech or microphone')
+    if sys.platform != 'win32' or not _is_loopback(request.client.host if request.client else ''):
+        raise HTTPException(409, "Windows' settings open only on the computer Taskuary runs on")
+    import os
+    try: os.startfile(_SETTINGS[which])
+    except OSError as e: raise HTTPException(409, f'Windows would not open its settings: {str(e)[:120]}')
+    store.audit('setting', 0, 'voice_open_settings', ACTOR, detail={'which': which})
+    return {'opened': which}
+
 @app.get('/api/voice/listen/{sid}')
 def voice_listen_poll(sid: str, request: Request, since: int = 0):
     out = _live_voice(request).listen_poll(sid, since)
@@ -7865,7 +7880,12 @@ async def voice_transcribe(request: Request):
     if not data: raise HTTPException(422, 'no audio in the request')
     mime = (request.headers.get('content-type') or 'audio/webm').split(';')[0].strip()
     # a call to the transcription service, seconds long: on the loop it froze every pane and request until it answered
-    try: return await run_in_threadpool(voice.transcribe, store, data, mime, f'clip.{voice.ext_for(mime)}', mic=True)
+    def num(h):
+        try: return float(request.headers.get(h))
+        except (TypeError, ValueError): return None
+    # the browser's measure of its own recording (MicButton): a silent clip is answered "nothing heard", never sent to be made up
+    try: return await run_in_threadpool(voice.transcribe, store, data, mime, f'clip.{voice.ext_for(mime)}', mic=True,
+                                        level=num('x-voice-level'), seconds=num('x-voice-seconds'))
     except RuntimeError as e: raise HTTPException(409, str(e))
     except requests.RequestException as e: raise HTTPException(502, f'could not reach the transcription service: {str(e)[:160]}')
 
@@ -7911,7 +7931,8 @@ def wa_bridge_start(cid: int, force_install: bool = False):
     c = store.get_connector(cid)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
     store.audit('connector', cid, 'wa_bridge_start', ACTOR)
-    return wabridge.start(force_install, filter_policy=wabridge.filter_policy(store, cid))
+    # a computer without Node gets Taskuary's own portable one here, downloaded in the background (#278, noderuntime.py)
+    return wabridge.start(force_install, filter_policy=wabridge.filter_policy(store, cid), fetch_node=True)
 
 @app.post('/api/connectors/{cid}/wa/bridge/stop')
 def wa_bridge_stop(cid: int):
@@ -7926,7 +7947,7 @@ def wa_bridge_restart(cid: int):
     c = store.get_connector(cid)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
     store.audit('connector', cid, 'wa_bridge_restart', ACTOR)
-    return wabridge.restart(filter_policy=wabridge.filter_policy(store, cid))
+    return wabridge.restart(filter_policy=wabridge.filter_policy(store, cid), fetch_node=True)
 
 @app.post('/api/connectors/{cid}/wa/bridge/pair-again')
 def wa_bridge_pair_again(cid: int):
@@ -7941,11 +7962,14 @@ def wa_bridge_pair_again(cid: int):
 @app.get('/api/connectors/{cid}/wa/chats')
 def wa_chats(cid: int):
     """Chats reachable through the paired WhatsApp account, for compose and inbound sources."""
-    from .messengers import wa_chats as _chats
+    from .messengers import wa_chats as _chats, BridgeDown
     c = store.get_connector(cid, with_secret=True)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
-    from . import remote_assistant
+    from . import remote_assistant, wabridge
+    # DOWN IS A STATE, NOT AN ERROR (#278): a 409 with "the WhatsApp bridge is not running at http://127.0.0.1:8977" was every page's
+    # last error, and the Assistant's bug report filed it. The list is empty and says, in one line, what to press
     try: rows = _chats(c, store, kept=True)
+    except BridgeDown: return {'data': [], 'down': True, 'detail': wabridge.down_line(c)}
     except RuntimeError as e: raise HTTPException(409, str(e))
     # The owner's own "Message yourself" thread wears a legacy GROUP jid, and so does every group
     # they created - the shape and the number prefix cannot tell those apart, so the count of people

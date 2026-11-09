@@ -124,7 +124,7 @@ test("the mic shows its error beside it and the chat box shows what is being hea
   const ui = readFileSync(fileURLToPath(new URL("../src/ui.jsx", import.meta.url)), "utf8");
   const av = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
   assert.match(ui, /data-tq-mic-err/);
-  assert.match(ui, /open=\{!ask && \(!!err/);
+  assert.match(ui, /<Popper open=\{!!err && !ask/);
   assert.match(av, /onInterim=\{setHeard\}/);
   assert.match(av, /micRef\.current\?\.cancel\(\)/);
 });
@@ -133,4 +133,23 @@ test("the Taskuary window has no browser voice: WebView2's recogniser has no ser
   assert.equal(browserRecogniser({ webkitSpeechRecognition: FakeSR, pywebview: {} }), null);
   assert.equal(browserRecogniser({ webkitSpeechRecognition: FakeSR }), FakeSR);
   assert.equal(browserRecogniser({}), null);
+});
+
+// the window is known at its first draw (2026-11-09): WebView2's chrome.webview is there before pywebview's bridge
+test("the Taskuary window is never offered the browser's voice, even before pywebview's bridge lands", async () => {
+  const { browserRecogniser, inAppWindow } = await import("../src/dictation.js");
+  const SR = function () {};
+  assert.equal(browserRecogniser({ webkitSpeechRecognition: SR }), SR, "a tab gets it");
+  assert.equal(browserRecogniser({ webkitSpeechRecognition: SR, chrome: { webview: {} } }), null, "WebView2 before the bridge");
+  assert.equal(browserRecogniser({ webkitSpeechRecognition: SR, pywebview: {} }), null);
+  assert.equal(inAppWindow({ chrome: {} }), false);
+});
+
+test("a mic failure names its fix: the Windows page it points at, else the voice shelf", async () => {
+  const { micFix } = await import("../src/dictation.js");
+  assert.equal(micFix("Windows kept the microphone from this window - turn on \"Let desktop apps access your microphone\" in Windows' microphone privacy settings").settings, "microphone");
+  assert.equal(micFix("Windows voice typing heard no words - Windows' speech service did not answer. Check that Online speech recognition is on").settings, "speech");
+  assert.equal(micFix("Taskuary needs Windows' online speech recognition for dictation, and it is off on this computer.").settings, "speech");
+  assert.equal(micFix("This browser cannot dictate here - set up a voice AI instead").voice, true);
+  assert.equal(micFix("transcription failed"), null);
 });

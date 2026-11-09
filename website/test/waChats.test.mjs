@@ -88,3 +88,16 @@ test("a switched-on chat's last message is one line under its name, an off one s
   // ...its age said by the one helper, never a hand-written "ago"
   assert.match(src("ConnectorsView.jsx"), /waSaid\(r\.said, !!src\[r\.jid\]\?\.Active, timeAgo\(r\.said\?\.at\)\)/);
 });
+
+// #278: the chat list asked a bridge that was down and drew - and the bug report filed - a raw 409
+test("chats while the bridge is down read as one plain line, never the raw error", async () => {
+  const { readChats, chatsError, DOWN } = await import("../src/waChats.js");
+  const down = readChats({ data: [], down: true, detail: "WhatsApp isn't running - press Start bridge on the WhatsApp card" });
+  assert.deepEqual(down.rows, []); assert.match(down.err, /^WhatsApp isn't running - press Start bridge/);
+  assert.equal(readChats({ data: [], down: true }).err, DOWN);
+  assert.deepEqual(readChats({ data: [{ jid: "a@g.us" }] }), { rows: [{ jid: "a@g.us" }], err: "" });
+  const old = { response: { status: 409, data: { detail: "the WhatsApp bridge is not running at http://127.0.0.1:8977 - Restart bridge starts it" } } };
+  assert.equal(chatsError(old), DOWN, "an older server's 409 is said plainly too");
+  assert.doesNotMatch(chatsError(old), /127\.0\.0\.1|409|AxiosError/);
+  assert.equal(chatsError({ response: { status: 409, data: { detail: "bridge /chats failed (500): boom" } } }), "bridge /chats failed (500): boom");
+});

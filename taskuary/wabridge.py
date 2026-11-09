@@ -104,7 +104,10 @@ def stage(carry: bool = True) -> Path:
     return run
 
 
-def _set(phase, detail='', pid=None): _STATE.update(phase=phase, detail=detail[:300], pid=pid, at=time.time())
+def _set(phase, detail='', pid=None):
+    # a failed start said so only on the card: the app log - the one a bug report carries - had nothing (#278)
+    if phase == 'failed': logger.warning(f'wa bridge could not start: {detail}')
+    _STATE.update(phase=phase, detail=detail[:400], pid=pid, at=time.time())
 
 
 def node() -> str:
@@ -116,7 +119,52 @@ def node() -> str:
               Path(os.getenv('LOCALAPPDATA', '')) / 'Programs' / 'nodejs' / 'node.exe',
               Path(os.getenv('APPDATA', '')) / 'nvm' / 'current' / 'node.exe', Path('/usr/local/bin/node'), Path('/opt/homebrew/bin/node')):
         if str(c) not in ('node.exe', 'nodejs') and c.exists(): return str(c)
-    return ''
+    from . import noderuntime
+    return noderuntime.find()                  # the portable one Taskuary set up itself (noderuntime.fetch), when there is no other
+
+
+def npm() -> str:
+    """The npm beside the node found, else PATH's. A node found in its install folder when PATH is older than the install (node())
+    left npm unfound, and the bare 'npm' run in its place failed as "[WinError 2] The system cannot find the file specified"."""
+    n = node()
+    if n and Path(n).is_absolute():
+        for x in ('npm.cmd', 'npm'):
+            if (Path(n).parent / x).is_file(): return str(Path(n).parent / x)
+    return shutil.which('npm') or shutil.which('npm.cmd') or ''
+
+
+def no_node() -> str:
+    "What the card says when this computer has no Node and nothing was asked to set it up (an automatic restart)."
+    return ('Node.js is not on this computer yet, and the WhatsApp bridge runs on it - press Start bridge and Taskuary sets it up '
+            '(a one-time download from nodejs.org, no administrator needed)')
+
+
+def _get_node() -> str:
+    "Set up Taskuary's own portable Node (noderuntime) with the card showing the download; '' when node answers after, else why not."
+    from . import noderuntime
+    _set('installing', 'Setting up WhatsApp - downloading Node.js')
+    try: noderuntime.fetch(say=lambda s: _set('installing', s))
+    except Exception as e: return f'Node.js could not be set up: {e}'
+    return '' if node() else f'Node.js was set up in {noderuntime.home()} but does not start - press Start bridge again'
+
+
+def npm_why(out: str, run: Path = None) -> str:
+    """npm's failure, in words that say what to do. Its last lines were shown as they were - on a client that was "An unknown git
+    error occurred" and the path of a debug log (#278): Baileys fetches libsignal from GitHub through git, which an ordinary
+    computer does not have (package.json now fetches that one as a plain download)."""
+    t = str(out or '')
+    if re.search(r'spawn git|unknown git error', t, re.I):
+        return ('npm needed Git to fetch part of the bridge, and this computer has no Git. Update Taskuary (the bridge no longer needs it), '
+                'or install Git from git-scm.com, then press Start bridge again')
+    if re.search(r'ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENETUNREACH|CERT_|SELF_SIGNED|UNABLE_TO_GET_ISSUER|\b407\b', t):
+        return ("could not download the bridge's dependency from registry.npmjs.org - check the internet connection, a VPN, or a company "
+                'proxy or firewall that blocks npm, then press Start bridge again')
+    if re.search(r'\b(EPERM|EACCES|EBUSY)\b', t):
+        return (f'Windows refused npm a file in {run or run_dir()} (often antivirus, or a file held open) - close what holds it, '
+                'then press Start bridge again')
+    said = [m.group(1).strip() for l in t.splitlines() if (m := re.match(r'\s*npm (?:ERR!|error)(.*)', l)) and m.group(1).strip()
+            and 'complete log' not in l]
+    return 'npm install failed: ' + (' / '.join(said[-3:]) or t.strip()[-300:])
 
 
 def _status() -> dict | None:
@@ -250,28 +298,36 @@ def start_configured(store) -> dict:
     return {**out, 'started': True, 'connectorId': c['ConnectorId']}
 
 
-def start(force_install: bool = False, wait: bool = False, filter_policy: dict = None, auto: bool = False) -> dict:
+def start(force_install: bool = False, wait: bool = False, filter_policy: dict = None, auto: bool = False, fetch_node: bool = True) -> dict:
     """Kick off install (if needed) + start on a worker thread and return at once; state() tells
     the rest. A second call while one runs is a no-op that reports the current phase. `wait` runs
     the work inline (tests, scripts) instead of on the thread. `auto`: the supervisor's own start, which
-    keeps its count of starts in a row; any other start is somebody asking, and begins the count again."""
+    keeps its count of starts in a row; any other start is somebody asking, and begins the count again.
+    `fetch_node`: a computer without Node gets Taskuary's own portable one first (noderuntime) - not on the supervisor's
+    automatic restarts, which would fetch it again after every failure."""
     if not _LOCK.acquire(blocking=False): return {**state(), 'note': 'already in progress'}
     if not auto:
         with _SUP_LOCK: _SUP.update(tries=0, gave_up='', held=False)
     def work():
         try:
-            if not node():
-                _set('failed', 'node is not installed - install Node 18+ (Windows: winget install OpenJS.NodeJS.LTS, or nodejs.org), '
-                               'restart Taskuary so it sees the new PATH, then Try again'); return
+            if not node() and fetch_node and not auto and (why := _get_node()): _set('failed', why); return
+            if not node(): _set('failed', no_node()); return
             if not DIR.exists():
                 _set('failed', f'the bridge folder is missing ({DIR})'); return
             run,lg = stage(carry=not force_install),log()
             if force_install or not (run / 'node_modules' / '@whiskeysockets').exists():
                 _set('installing', 'npm install - the bridge\'s dependency (Baileys) is a few minutes on a slow line')
-                npm = shutil.which('npm') or shutil.which('npm.cmd') or 'npm'
-                r = spawn.run([npm, 'install', '--no-audit', '--no-fund'], cwd=str(run), capture_output=True, text=True, timeout=900, shell=False)
+                if not (npm_ := npm()):
+                    _set('failed', f'npm is missing beside Node ({node()}) - the bridge installs its one dependency with it. Reinstall the '
+                                   'Node.js LTS from nodejs.org (it brings npm), then press Start bridge again'); return
+                # node's folder first on PATH: npm's install scripts call `node`, and a node found off PATH (node()) is not on it
+                env = {**os.environ, 'PATH': os.pathsep.join([str(Path(node()).parent), os.environ.get('PATH', '')])}
+                r = spawn.run([npm_, 'install', '--no-audit', '--no-fund'], cwd=str(run), capture_output=True, text=True, timeout=900, shell=False,
+                              env=env, encoding='utf-8', errors='replace')
                 if r.returncode != 0:
-                    _set('failed', f'npm install failed: {(r.stderr or r.stdout)[-300:]}'); return
+                    said = (r.stderr or '') + (r.stdout or '')
+                    logger.warning(f'wa bridge: npm install exited {r.returncode}: {said[-600:]}')
+                    _set('failed', npm_why(said, run)); return
             # WHO HOLDS THE PORT, before a launch (#269): a second copy only dies on EADDRINUSE - and it went on dying, Restart after
             # Restart, while an old bridge nobody recorded kept the port. Ours is replaced; a stranger is left alone and the bridge moves.
             held,note = pid_on_port(),''
@@ -495,11 +551,20 @@ def stop_if_unpacked() -> bool:
     stop(); return True
 
 
-def restart(wait: bool = False, filter_policy: dict = None) -> dict:
+def restart(wait: bool = False, filter_policy: dict = None, fetch_node: bool = True) -> dict:
     """Stop whatever holds the port and start the bridge from the code on disk - the way a bridge
     picks up a newer bridge.mjs (an old one kept answering /status without the paired number)."""
     stop()                                     # ...which waits for the port to be let go
-    return start(wait=wait, filter_policy=filter_policy)
+    return start(wait=wait, filter_policy=filter_policy, fetch_node=fetch_node)
+
+
+def down_line(c: dict) -> str:
+    """One plain line for whatever asked the bridge while it is down (the card's chat list, the Assistant): a raw
+    "409: the WhatsApp bridge is not running at http://127.0.0.1:8977" read as a bug, and was filed as one (#278)."""
+    if not managed(c): return "WhatsApp isn't running - its bridge does not answer where this card points; start it where it runs"
+    if _STATE['phase'] in ('installing', 'starting'): return 'WhatsApp is starting - its chats show here once the bridge is up'
+    why = _STATE['detail'] if _STATE['phase'] == 'failed' else ''
+    return "WhatsApp isn't running - press Start bridge on the WhatsApp card" + (f'. The last start failed: {why}' if why else '')
 
 
 def unpair(hold: bool = False) -> str:

@@ -17,7 +17,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
-import { browserRecogniser, dictate, dictationError } from "./dictation.js";
+import { browserRecogniser, dictate, dictationError, inAppWindow, micFix } from "./dictation.js";
 import { voiceChoice, micRoute } from "./voiceChoice.js";
 import { onLive, touches } from "./live.js";
 import { outcomeOf } from "./dispatchOutcome.js";
@@ -50,7 +50,8 @@ import StorageIcon from "@mui/icons-material/Storage";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import StopCircleIcon from "@mui/icons-material/StopCircle";
-import { IconButton as MuiIconButton, Popover, Tooltip as MuiTooltip } from "@mui/material";
+import { IconButton as MuiIconButton, Popover, Popper, Tooltip as MuiTooltip } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import { openAppLink } from "./appLinks.js";
 import { place, placeName } from "./words.js";
 import ConnectAi from "./ConnectAi.jsx";
@@ -506,10 +507,35 @@ export const useVoiceReady = () => {
 // recording or session named nothing, or "nothing audible" for a moment. Each says what heard nothing and what to check.
 export const heardNothing = (who) => `${who} heard no words - check the microphone is the right one and not muted in the computer's sound settings, then press the mic and talk`;
 // a refused microphone: the Taskuary window has no address bar to allow it in, so it points at Windows' own setting there
-export const micRefused = (name, inWindow = typeof window !== "undefined" && !!window.pywebview) => name === "NotAllowedError"
+export const micRefused = (name, inWindow = inAppWindow()) => name === "NotAllowedError"
   ? (inWindow ? "Windows kept the microphone from this window - turn on \"Let desktop apps access your microphone\" in Windows' microphone privacy settings" : dictationError("not-allowed"))
   : inWindow ? "No microphone Windows will lend this window - plug one in or pick it in Windows' Sound settings"
   : "No microphone this browser can use - plug one in or allow it in the address bar";
+
+// SILENCE IS NOT SENT TO BE MADE UP (the owner, 2026-11-09): a model handed a silent clip writes a sentence anyway, and the webm a
+// recording makes cannot be measured on the server - so the recording measures itself: the loudest ~20 ms window's RMS (0-1) and its
+// length ride along as X-Voice-Level / X-Voice-Seconds, and the server answers a silent one "nothing heard" (voice.silent). A meter that
+// never ran (no AudioContext, a suspended one) sends no level, so it can never call real speech silence.
+export const levelMeter = (stream, AC = typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext)) => {
+  const t0 = Date.now();
+  let peak = 0, n = 0, ctx = null, timer = null;
+  try {
+    ctx = new AC(); ctx.resume?.().catch(() => {});
+    const an = ctx.createAnalyser(); an.fftSize = 1024; ctx.createMediaStreamSource(stream).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    timer = setInterval(() => {
+      if (ctx.state !== "running") return;
+      an.getFloatTimeDomainData(buf); n += 1;
+      peak = Math.max(peak, Math.sqrt(buf.reduce((a, x) => a + x * x, 0) / buf.length));
+    }, 25);
+  } catch { ctx = null; }
+  return { stop: () => {
+    clearInterval(timer); try { ctx?.close?.(); } catch { /* closed already */ }
+    const h = { "X-Voice-Seconds": ((Date.now() - t0) / 1000).toFixed(2) };
+    if (n) h["X-Voice-Level"] = peak.toFixed(4);
+    return h;
+  } };
+};
 
 // One mic. Press to record, press again to stop; the clip goes to /api/voice/transcribe as its
 // raw bytes and the text lands through onText - into a prompt box, or straight into a session.
@@ -525,9 +551,19 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   const [err, setErr] = React.useState("");
   const [ask, setAsk] = React.useState(null), [srDown, setSrDown] = React.useState(false);
   // ...and a mic that stops SAYS WHY, beside it, not in a tooltip nobody hovers (the owner, 2026-10-28: "it just turns right off")
-  const errAt = React.useRef(0), recRef = React.useRef(null); recRef.current = rec;
-  const flash = (s) => { setErr(s); clearTimeout(errAt.current); errAt.current = setTimeout(() => setErr(""), 8000); };
-  React.useEffect(() => () => { clearTimeout(errAt.current); recRef.current?.cancel?.(); }, []);
+  // ...and IT STAYS SAID until the next press or its x (the owner, 2026-11-09: "this is not a error??" - an 8 s tooltip had faded before
+  // it was read): a line beside the mic, with the fix as a button. A Windows setting opened from it is checked again when the window
+  // comes back into focus, so the mic is live the moment the setting is
+  const recRef = React.useRef(null), anchor = React.useRef(null); recRef.current = rec;
+  const flash = (s) => setErr(s || "");
+  React.useEffect(() => () => { recRef.current?.cancel?.(); }, []);
+  const fix = micFix(err);
+  const openSettings = async (which) => {
+    try { await api.post("/api/voice/open-settings", null, { params: { which } }); }
+    catch (e) { flash(e?.response?.data?.detail || "Windows would not open its settings - open Settings > Privacy & security yourself"); return; }
+    const back = () => { window.removeEventListener("focus", back); setErr(""); voice?.recheck(); };
+    window.addEventListener("focus", back);
+  };
   const [hover, setHover] = React.useState(false);
   // NO VOICE AI, NO LIVE MIC (the owner, 2026-10-15: "if there is no voice provider the mic icon ... should be crossed out with popup
   // to configure voice ai before it will activate") - ...UNLESS A VOICE IS FOUND, AND THEN NO PRESS TO TURN IT ON (the owner, 2026-11-01:
@@ -546,7 +582,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   const viaBuiltin = !!(builtin && !viaBrowser && (route === "windows" || (route === "browser" && voice?.choice === "auto")));
   const viaLive = !!(viaBuiltin && builtin.live && !speechAsk);     // Windows voice typing hears the microphone itself: a session, not a clip
   const off = !!(voice && route !== "connector" && !viaBrowser && !viaBuiltin);
-  const press = (e) => { if (!off && !(viaBuiltin && speechAsk)) return start(); setAsk(e.currentTarget); voice.recheck(); };
+  const press = (e) => { setErr(""); if (!off && !(viaBuiltin && speechAsk)) return start(); setAsk(e.currentTarget); voice.recheck(); };
   const [turning, setTurning] = React.useState(false);
   const turnOn = async () => {
     setTurning(true);
@@ -585,15 +621,16 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const type = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : undefined;
       const mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
-      const chunks = [];
+      const chunks = [], meter = levelMeter(stream);
       mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       mr.onstop = async () => {
+        const measured = meter.stop();
         stream.getTracks().forEach((t) => t.stop());
         const clip = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
         setBusy(true);
         try {
           const blob = clip;
-          const { data } = await api.post("/api/voice/transcribe", blob, { headers: { "Content-Type": blob.type || "audio/webm" } });
+          const { data } = await api.post("/api/voice/transcribe", blob, { headers: { "Content-Type": blob.type || "audio/webm", ...measured } });
           // the latest handler (the box may have re-rendered while it transcribed), and an empty answer says why, never a bare "nothing"
           if (data.text) live.current.onText?.(data.text); else flash(heardNothing(voice?.label || "The voice AI"));
         } catch (e) { flash(e?.response?.data?.detail || "transcription failed"); }
@@ -640,14 +677,25 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
     : voice.choice !== "auto" ? "The selected built-in speech service is unavailable here — check Windows / browser voice in Connections"
     : "Voice is off — no voice AI is set up yet");
   return (<>
-    <MuiTooltip title={ask ? "" : err ? <span data-tq-mic-err="">{err}</span> : title} open={!ask && (!!err || (hover && !!title))}
-      onOpen={() => setHover(true)} onClose={() => setHover(false)}><span>
+    <MuiTooltip title={ask || err ? "" : title} open={!ask && !err && hover && !!title}
+      onOpen={() => setHover(true)} onClose={() => setHover(false)}><span ref={anchor}>
       <MuiIconButton size="small" onClick={rec ? stop : press} disabled={busy || !voice} sx={sx} data-tq-mic={off ? "off" : "on"}
         aria-label={rec ? "stop recording" : off ? "voice is off - set up a voice AI" : "dictate"}>
         {busy ? <CircularProgress size={size - 4} /> : rec ? <StopCircleIcon sx={{ fontSize: size, color: "#8a3646" }} />
           : off ? <MicOffIcon sx={{ fontSize: size, opacity: 0.7 }} /> : <MicIcon sx={{ fontSize: size }} />}
       </MuiIconButton>
     </span></MuiTooltip>
+    <Popper open={!!err && !ask && !!anchor.current} anchorEl={anchor.current} placement="top-start" sx={{ zIndex: 1500 }}>
+      <Box data-tq-mic-err="" role="alert" sx={{ display: "flex", alignItems: "flex-start", gap: 1, p: 1.25, mb: 0.75, maxWidth: 360, bgcolor: "#fff",
+        border: "1px solid #e3c9ce", borderRadius: 1.5, boxShadow: "0 4px 14px rgba(0,0,0,.08)" }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontSize: 12.5, color: INK, lineHeight: 1.45 }}>{err}</Typography>
+          {fix && <Button size="small" variant="contained" disableElevation data-tq-mic-fix={fix.settings || "voice"} sx={{ textTransform: "none", mt: 0.75 }}
+            onClick={() => fix.settings ? openSettings(fix.settings) : (setErr(""), openAppLink(place("voice").href))}>{fix.label}</Button>}
+        </Box>
+        <MuiIconButton size="small" aria-label="dismiss" onClick={() => setErr("")} sx={{ p: 0.25, mt: -0.25 }}><CloseIcon sx={{ fontSize: 15 }} /></MuiIconButton>
+      </Box>
+    </Popper>
     <Popover open={!!ask} anchorEl={ask} onClose={() => setAsk(null)} data-tq-voice-ask
       anchorOrigin={{ vertical: "top", horizontal: "center" }} transformOrigin={{ vertical: "bottom", horizontal: "center" }}
       slotProps={{ paper: { sx: { p: 1.75, maxWidth: 320, borderRadius: 2, mt: -0.75 } } }}>
@@ -675,6 +723,8 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
       <Box sx={{ display: "flex", gap: 1, mt: 1.5, flexWrap: "wrap" }}>
         {viaBuiltin && speechAsk && <Button size="small" variant="contained" disableElevation sx={{ textTransform: "none" }} disabled={turning}
           data-tq-speech-on="" onClick={turnOn}>{turning ? "Turning it on…" : "Turn it on"}</Button>}
+        {viaBuiltin && speechAsk && <Button size="small" variant="text" sx={{ textTransform: "none" }} data-tq-speech-settings=""
+          onClick={() => { setAsk(null); openSettings("speech"); }}>Open speech settings</Button>}
         <Button size="small" variant={viaBuiltin && speechAsk ? "text" : "contained"} disableElevation sx={{ textTransform: "none" }}
           onClick={() => { setAsk(null); openAppLink(place("voice").href); }}>{voice?.choice !== "auto" ? "Voice settings" : "Set up voice AI"}</Button>
       </Box>

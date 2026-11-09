@@ -544,3 +544,102 @@ class TelegramVoiceToTheAssistantTests(unittest.TestCase):
              mock.patch.object(remote_assistant, 'enabled', return_value=False):
             messengers.poll_telegram(s, c, s.list_sources())
         stt.assert_not_called()
+
+
+def _wav(amp=0, seconds=1.0, rate=16000):
+    import io, math, struct, wave
+    b = io.BytesIO()
+    with wave.open(b, 'wb') as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+        w.writeframes(b''.join(struct.pack('<h', int(amp * math.sin(i / 8))) for i in range(int(rate * seconds))))
+    return b.getvalue()
+
+
+def _gateway_store(cfg=None):
+    s = _voice_store('hipaa_ai', secret='code1')
+    s.save_connector({'ConnectorId': s.get_connector_by_type('hipaa_ai')['ConnectorId'],
+                      'ConfigJson': json.dumps(cfg or {'base_url': 'https://gw.example'})}, 'o')
+    return s
+
+
+class HipaaGatewayHears(unittest.TestCase):
+    """The owner, 2026-11-09: "the voice thing does still not work on windows????" - a client whose only AI is the HIPAA AI card got no
+    words from the mic. Its gateway lists only chat models; a Gemini behind it takes the clip as an input_audio part."""
+    def setUp(self): voice._GW_MODEL.clear()
+    def chat(self, text): return R(200, {'choices': [{'message': {'content': text}}]})
+
+    def test_the_card_is_the_voice_when_it_is_the_only_ai(self):
+        s = _gateway_store()
+        self.assertEqual(voice.pick(s)['Type'], 'hipaa_ai')
+        with mock.patch.object(voice, 'builtin', return_value=None): self.assertEqual((voice.ready(s)['ready'], voice.ready(s)['label']), (True, 'HIPAA AI'))
+        s.save_connector({'ConnectorId': s.get_connector_by_type('groq_stt')['ConnectorId'], 'Active': 1, 'Secret': 'k'}, 'o')
+        self.assertEqual(voice.pick(s)['Type'], 'groq_stt', 'a voice card set up on purpose still wins')
+
+    def test_a_card_without_its_code_is_not_offered(self):
+        s = MemoryStore(); s.save_connector({'ConnectorId': s.get_connector_by_type('hipaa_ai')['ConnectorId'], 'Active': 1}, 'o')
+        self.assertIsNone(voice.pick(s))
+
+    def test_the_clip_rides_one_chat_message_to_a_gemini_the_gateway_lists(self):
+        s = _gateway_store(); clip = b'\x1aE\xdf\xa3webm-bytes'
+        models = R(200, {'data': [{'id': 'claude-x'}, {'id': 'gemini-pro'}, {'id': 'gemini-flash'}, {'id': 'hipaa-ai'}]})
+        with mock.patch.object(voice.requests, 'get', return_value=models) as g, \
+             mock.patch.object(voice.requests, 'post', return_value=self.chat(' Send the invoice by Friday. ')) as p:
+            out = voice.transcribe(s, clip, 'audio/webm;codecs=opus', 'clip.webm', mic=True, level=.2, seconds=3)
+        self.assertEqual(out, {'text': 'Send the invoice by Friday.', 'provider': 'hipaa_ai', 'model': 'gemini-flash'})
+        self.assertEqual(g.call_args[0][0], 'https://gw.example/v1/models')
+        self.assertEqual(p.call_args[0][0], 'https://gw.example/v1/chat/completions', 'the audio goes to the card\'s own gateway only')
+        self.assertEqual(p.call_args[1]['headers'], {'Authorization': 'Bearer code1'})
+        body = p.call_args[1]['json']; parts = body['messages'][0]['content']
+        self.assertEqual((body['model'], body['temperature'], parts[0]['type']), ('gemini-flash', 0, 'text'))
+        self.assertIn(voice.NO_SPEECH, parts[0]['text'])
+        self.assertEqual(parts[1], {'type': 'input_audio', 'input_audio': {'data': base64.b64encode(clip).decode(), 'format': 'webm'}})
+
+    def test_a_named_voice_model_and_the_sentinel(self):
+        s = _gateway_store({'base_url': 'https://gw.example/v1', 'voice_model': 'g-voice'})
+        with mock.patch.object(voice.requests, 'get') as g, mock.patch.object(voice.requests, 'post', return_value=self.chat('[no speech]')) as p:
+            out = voice.transcribe(s, _wav(8000), 'audio/wav')
+        g.assert_not_called(); self.assertEqual((out['text'], out['model']), ('', 'g-voice'))
+        self.assertEqual(p.call_args[1]['json']['messages'][0]['content'][1]['input_audio']['format'], 'wav')
+
+    def test_a_refused_code_says_so(self):
+        s = _gateway_store({'base_url': 'https://gw.example', 'voice_model': 'g'})
+        with mock.patch.object(voice.requests, 'post', return_value=R(401, {'error': 'no'})):
+            with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'x', 'audio/webm', level=.2, seconds=2)
+        self.assertIn('HIPAA AI 401 - the key was refused', str(e.exception))
+
+
+class SilenceIsNotInventedIntoWords(unittest.TestCase):
+    "Groq said 'www.fema.org' and Gemini whole sentences for a silent clip: a silent clip is never sent."
+    def test_silent_short_or_quiet_clips_are_not_sent(self):
+        s = _voice_store('groq_stt')
+        with mock.patch.object(voice.requests, 'post') as p:
+            for data, mime, kw in ((_wav(0, 2), 'audio/wav', {}), (_wav(60, 2), 'audio/wav', {}), (_wav(8000, .2), 'audio/wav', {}),
+                                   (b'webm', 'audio/webm', {'level': .001, 'seconds': 4}), (b'webm', 'audio/webm', {'level': .3, 'seconds': .1})):
+                self.assertEqual(voice.transcribe(s, data, mime, mic=True, **kw), {'text': '', 'provider': 'groq_stt', 'model': None, 'silent': True})
+        p.assert_not_called()
+
+    def test_speech_goes_through_and_unmeasured_clips_are_not_blocked(self):
+        s = _voice_store('groq_stt')
+        with mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'hi'})) as p:
+            for data, mime, kw in ((_wav(8000, 1), 'audio/wav', {}), (b'webm', 'audio/webm', {'level': .05, 'seconds': 2}), (b'OggS', 'audio/ogg', {})):
+                self.assertEqual(voice.transcribe(s, data, mime, **kw)['text'], 'hi')
+        self.assertEqual(p.call_count, 3)
+
+    def test_the_route_passes_the_browsers_measure(self):
+        s = _voice_store('groq_stt')
+        with mock.patch.object(server, 'store', s), mock.patch.object(voice.requests, 'post') as p:
+            r = c_api.post('/api/voice/transcribe', content=b'webm', headers={'Content-Type': 'audio/webm', 'X-Voice-Level': '0.0005', 'X-Voice-Seconds': '3'})
+        self.assertEqual((r.status_code, r.json()['text'], r.json()['silent']), (200, '', True)); p.assert_not_called()
+
+
+class FixIsAButton(unittest.TestCase):
+    "The owner, 2026-11-09: 'just request the permission like a normal app' - the mic's fix opens Windows' own page, on this computer only."
+    def test_the_page_opens_here_and_never_for_another_device(self):
+        with mock.patch.object(server.sys, 'platform', 'win32'), mock.patch('os.startfile', create=True) as sf, \
+             mock.patch.object(server, '_is_loopback', return_value=True):
+            self.assertEqual(c_api.post('/api/voice/open-settings', params={'which': 'speech'}).json(), {'opened': 'speech'})
+            sf.assert_called_once_with('ms-settings:privacy-speech')
+            self.assertEqual(c_api.post('/api/voice/open-settings', params={'which': 'calc'}).status_code, 422)
+        with mock.patch.object(server.sys, 'platform', 'win32'), mock.patch('os.startfile', create=True) as sf, \
+             mock.patch.object(server, '_is_loopback', return_value=False):
+            self.assertEqual(c_api.post('/api/voice/open-settings', params={'which': 'microphone'}).status_code, 409); sf.assert_not_called()

@@ -141,14 +141,14 @@ class BridgeManagerTests(unittest.TestCase):
         # wait=True runs the worker inline: a threaded worker outlived its mocks on a slow CI box and
         # kept the lock, so the next test's start() was a no-op and both went red
         with mock.patch.object(wabridge, 'node', return_value=''):
-            self.assertEqual(wabridge.start(wait=True)['phase'], 'failed')
+            self.assertEqual(wabridge.start(wait=True, fetch_node=False)['phase'], 'failed')
         self.assertIn('nodejs.org', wabridge.state()['detail'])
 
     def test_install_then_start_detached_and_a_dying_bridge_is_reported(self):
         class P:
             pid = 4242
             def poll(self): return None
-        with mock.patch.object(wabridge, 'node', return_value='node'), mock.patch.object(wabridge, 'stage', return_value=wabridge.run_dir()) as stg, \
+        with mock.patch.object(wabridge, 'node', return_value='node'), mock.patch.object(wabridge, 'npm', return_value='npm'),              mock.patch.object(wabridge, 'stage', return_value=wabridge.run_dir()) as stg, \
              mock.patch.object(wabridge.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout='', stderr='')) as run, \
              mock.patch.object(wabridge.subprocess, 'Popen', return_value=P()) as pop, mock.patch.object(wabridge.time, 'sleep'), \
              mock.patch('builtins.open', mock.mock_open()), mock.patch.object(wabridge, 'pid_on_port', return_value=0), \
@@ -205,7 +205,7 @@ class BridgeManagerTests(unittest.TestCase):
         wa = next(x for x in server.store.list_connectors() if x['Type'] == 'whatsapp')
         with mock.patch.object(wabridge, 'start', return_value={'phase': 'installing', 'detail': 'npm install'}) as st:
             r = c_api.post(f"/api/connectors/{wa['ConnectorId']}/wa/bridge/start").json()
-        self.assertEqual(r['phase'], 'installing'); st.assert_called_once_with(False, filter_policy=mock.ANY)
+        self.assertEqual(r['phase'], 'installing'); st.assert_called_once_with(False, filter_policy=mock.ANY, fetch_node=True)
         slack = next(x for x in server.store.list_connectors() if x['Type'] == 'slack')
         self.assertEqual(c_api.post(f"/api/connectors/{slack['ConnectorId']}/wa/bridge/start").status_code, 404)
         from taskuary import messengers
@@ -497,7 +497,7 @@ class SupervisorTests(unittest.TestCase):
         said = wabridge.supervise(self.s, self.c, self.err, now=9000.0)
         self.assertIn(f'after {wabridge.GIVE_UP} starts in a row', said)
         self.assertIn('node is not installed', said); self.assertIn('Restart bridge', said)
-        with mock.patch.object(wabridge, 'node', return_value=''): wabridge.start(wait=True)     # the owner's Restart bridge
+        with mock.patch.object(wabridge, 'node', return_value=''): wabridge.start(wait=True, fetch_node=False)     # the owner's Restart bridge
         self.assertEqual((wabridge._SUP['tries'], wabridge._SUP['gave_up']), (0, ''), 'a start somebody asked for is a fresh count')
 
     def test_a_bridge_that_came_back_and_died_at_once_keeps_its_count(self):

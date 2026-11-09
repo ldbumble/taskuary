@@ -11,6 +11,7 @@ Both are CHAT: messages land with a conversation id per chat, replies go back in
 chat, and the responder already knows not to sign chat messages.
 """
 import base64, json, os, re, time
+from urllib.parse import urlparse
 from loguru import logger
 from . import net as requests     # pooled Session + (connect, read) timeouts, same call shape
 
@@ -254,6 +255,9 @@ class BridgeDown(RuntimeError):
 def _wa(c, path, body=None, timeout=20):
     from .wabridge import token
     url, hdr = wa_url(_cfg(c).get('bridge_url')), {'X-Bridge-Token': token()}
+    # A SHORT CONNECT ON THIS COMPUTER: Windows retries a refused loopback connect for ~2 s, so with the bridge down every /wa/status
+    # poll took 2.0 s, every 5 s (#278). A bridge that is up accepts in well under a millisecond; the read keeps the caller's time.
+    if urlparse(url).hostname in ('127.0.0.1', 'localhost', '::1') and not isinstance(timeout, tuple): timeout = (.5, timeout)
     try:
         r = requests.post(f'{url}{path}', json=body, timeout=timeout, headers=hdr) if body is not None \
             else requests.get(f'{url}{path}', timeout=timeout, headers=hdr)

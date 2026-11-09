@@ -29,7 +29,20 @@ LABELS = {'groq_stt': 'Groq (Whisper)', 'openai_stt': 'OpenAI transcription', 'd
           'elevenlabs_stt': 'ElevenLabs Scribe', 'stt_server': 'Any Whisper server (OpenAI-compatible)',
           'local_whisper': 'Local Whisper (on this machine)', 'gemini_stt': 'Google Gemini transcription',
           'assemblyai': 'AssemblyAI', 'speechmatics': 'Speechmatics', 'gladia': 'Gladia', 'azure_speech': 'Azure AI Speech',
-          'amazon_transcribe': 'Amazon Transcribe'}
+          'amazon_transcribe': 'Amazon Transcribe', 'hipaa_ai': 'HIPAA AI'}
+# THE HIPAA AI CARD HEARS TOO (the owner, 2026-11-09: "the voice thing does still not work on windows????"): a client whose only AI is
+# that card, on a managed machine with Windows' online speech off, had a mic that gave no words. Its gateway (LiteLLM, OpenAI-compatible)
+# lists only chat models - /audio/transcriptions answered 403 there - but a Gemini model behind it takes the clip as an input_audio part
+# of a chat message and writes back what was said (proven live, wav and the browser's webm/opus alike). The audio goes to that gateway
+# only - the one the organisation chose for its health data - and it is used when no voice card is set up.
+GATEWAY_TYPES = ('hipaa_ai',)
+NO_SPEECH = '[no speech]'
+HEAR = ('Transcribe the speech in this audio exactly as spoken, in its own language. Output only the words said - no notes, labels or '
+        f'quotes. If no person is clearly speaking words (silence, noise, a click, breathing), output exactly: {NO_SPEECH}')
+# SILENCE IS NOT INVENTED INTO WORDS: a model handed a silent clip writes a sentence anyway (Groq said "www.fema.org"; Gemini, asked
+# for the sentinel above, still wrote whole made-up sentences for digital silence, 2026-11-09). A clip quieter than this - the loudest
+# 20 ms window's RMS, full scale 1.0, about -44 dBFS - or shorter than MIN_SECONDS is not sent at all: it heard nothing.
+QUIET, MIN_SECONDS = 0.006, 0.4
 # (base url, default model) for the OpenAI-compatible three
 COMPAT = {'groq_stt': ('https://api.groq.com/openai/v1', 'whisper-large-v3-turbo'),
           'openai_stt': ('https://api.openai.com/v1', 'gpt-4o-mini-transcribe'),
@@ -78,11 +91,11 @@ def save_vocabulary(store, terms, actor: str = 'owner') -> list:
 
 
 def pick(store):
-    """The first active voice connector that can actually run - a key where one is needed."""
-    for c in store.list_connectors():
-        if c['Type'] in VOICE_TYPES and c['Active'] and (c['HasSecret'] or c['Type'] not in NEEDS_KEY):
-            return store.get_connector(c['ConnectorId'], with_secret=True)
-    return None
+    """The first active voice connector that can actually run - a key where one is needed - else a HIPAA AI card with its access code."""
+    cs = [c for c in store.list_connectors() if c['Active']]
+    c = next((c for c in cs if c['Type'] in VOICE_TYPES and (c['HasSecret'] or c['Type'] not in NEEDS_KEY)), None) \
+        or next((c for c in cs if c['Type'] in GATEWAY_TYPES and c['HasSecret']), None)
+    return store.get_connector(c['ConnectorId'], with_secret=True) if c else None
 
 
 def ready(store) -> dict:
@@ -91,14 +104,18 @@ def ready(store) -> dict:
             'vocabulary': vocabulary(store), 'builtin': None if c else builtin()}
 
 
-def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.ogg', c: dict = None, mic: bool = False) -> dict:
+def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.ogg', c: dict = None, mic: bool = False,
+               level: float = None, seconds: float = None, gate: bool = True) -> dict:
     """Bytes in, {text, provider, model} out. Raises RuntimeError with something the owner can act on.
-    `mic`: a clip from the prompt box's mic, which may fall to the computer's own recogniser when no card is set up."""
+    `mic`: a clip from the prompt box's mic, which may fall to the computer's own recogniser when no card is set up.
+    `level`/`seconds`: what the browser measured while it recorded (its webm cannot be read here); a silent clip is never sent."""
     c = c or pick(store)
     if not c: raise RuntimeError(NO_CONNECTOR)
     t, cfg, key, terms = c['Type'], _cfg(c), c.get('Secret') or '', vocabulary(store)
     mime = (mime or 'audio/ogg').split(';')[0].strip()
-    if t in COMPAT: text, model = _openai_compat(t, cfg, key, data, mime, name, terms)
+    if gate and silent(data, mime, level, seconds): return {'text': '', 'provider': t, 'model': None, 'silent': True}
+    if t in GATEWAY_TYPES: text, model = _gateway(cfg, key, data, mime, terms)
+    elif t in COMPAT: text, model = _openai_compat(t, cfg, key, data, mime, name, terms)
     elif t == 'gemini_stt': text, model = _gemini(cfg, key, data, mime, name, terms)
     elif t == 'deepgram': text, model = _deepgram(cfg, key, data, mime, terms)
     elif t == 'elevenlabs_stt': text, model = _elevenlabs(cfg, key, data, mime, name, terms)
@@ -109,6 +126,62 @@ def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.o
         text, model = {'assemblyai': _assemblyai, 'speechmatics': _speechmatics, 'gladia': _gladia, 'azure_speech': _azure}[t](cfg, key, data, mime, name, terms)
     else: raise RuntimeError(f'unknown voice connector type {t!r}')
     return {'text': (text or '').strip(), 'provider': t, 'model': model}
+
+
+def wav_level(data: bytes):
+    "(loudest 20 ms window's RMS on a 0-1 scale, seconds) of a 16-bit PCM wav; None when it is not one."
+    import array, math
+    try:
+        with wave.open(io.BytesIO(data)) as w:
+            if w.getsampwidth() != 2: return None
+            n, rate, a = w.getnchannels(), w.getframerate(), array.array('h', w.readframes(w.getnframes()))
+    except (wave.Error, EOFError, ValueError): return None
+    if sys.byteorder == 'big': a.byteswap()
+    step = max(1, rate * n // 50)
+    peak = max((math.sqrt(sum(x * x for x in a[i:i + step]) / len(a[i:i + step])) for i in range(0, len(a), step)), default=0)
+    return peak / 32768, len(a) / n / rate
+
+
+def silent(data: bytes, mime: str, level: float = None, seconds: float = None) -> bool:
+    "Heard nothing: too short, or too quiet - measured here for a wav, else by the browser that recorded it."
+    if (wl := wav_level(data) if mime in ('audio/wav', 'audio/x-wav', 'audio/wave') else None): level, seconds = wl
+    return (seconds is not None and seconds < MIN_SECONDS) or (level is not None and level < QUIET)
+
+
+_GW_MODEL = {}
+
+
+def _gateway_model(cfg, base, key):
+    "The card's voice_model, else a Gemini the gateway lists (the fast one first) - Gemini is what hears audio behind it."
+    if cfg.get('voice_model'): return cfg['voice_model']
+    if base not in _GW_MODEL:
+        try: ids = [m.get('id') or '' for m in requests.get(f'{base}/models', headers={'Authorization': f'Bearer {key}'}, timeout=(15, 90)).json().get('data', [])]
+        except (requests.RequestException, ValueError, AttributeError): ids = []
+        gem = [i for i in ids if 'gemini' in i.lower()]
+        _GW_MODEL[base] = next((i for i in gem if 'flash' in i.lower()), None) or (gem[0] if gem else None)
+    return _GW_MODEL[base] or cfg.get('model') or 'hipaa-ai'
+
+
+_FMT = {'m4a': 'mp4'}
+
+
+def _gateway(cfg, key, data, mime, terms=()):
+    "The HIPAA AI gateway: the clip as an input_audio part of one chat message to a Gemini model behind it."
+    from .llm import gateway_base
+    if not key: raise RuntimeError('HIPAA AI: no access code saved')
+    try: base = gateway_base(cfg)
+    except ValueError as e: raise RuntimeError(f'HIPAA AI: {e}')
+    if not base: raise RuntimeError('HIPAA AI: no gateway address on its card')
+    model, ext = _gateway_model(cfg, base, key), ext_for(mime)
+    ask = HEAR + (f" Words that may come up: {', '.join(terms)}." if terms else '')
+    body = {'model': model, 'temperature': 0, 'messages': [{'role': 'user', 'content': [
+        {'type': 'text', 'text': ask}, {'type': 'input_audio', 'input_audio': {'data': base64.b64encode(data).decode(), 'format': _FMT.get(ext, ext)}}]}]}
+    r = requests.post(f'{base}/chat/completions', headers={'Authorization': f'Bearer {key}'}, json=body, timeout=(15, 180))
+    if r.status_code >= 300: _fail(r, LABELS['hipaa_ai'])
+    msg = ((r.json().get('choices') or [{}])[0].get('message') or {}).get('content') or ''
+    if isinstance(msg, list): msg = ' '.join(p.get('text', '') for p in msg if isinstance(p, dict))
+    text = msg.strip().strip('"').strip()
+    return ('' if text.lower().rstrip('.') in (NO_SPEECH, NO_SPEECH.strip('[]')) else text), model
 
 
 def _fail(r, who):
@@ -292,7 +365,7 @@ started cannot be cancelled from PowerShell); a silence ends each listen after 3
 It hears this computer's own microphone, so it serves only a page on this computer (server: loopback). macOS has no such door for an
 unbundled process - Apple's Speech framework kills a caller whose app carries no usage description - so a Mac uses its Dictation key."""
 LIVE = {'engine': 'windows_voice_typing', 'label': 'Windows voice typing (on this computer)', 'live': True}
-SPEECH_ASK = ("Windows' speech recognition is off on this computer. Turn it on so the mic can hear you? "
+SPEECH_ASK = ("Taskuary needs Windows' online speech recognition for dictation, and it is off on this computer. Turn it on? "
               "(Windows sends what you say to Microsoft to turn it into text.)")
 
 # NOTHING THAT DOES NOT WORK (TQ-1283, the owner, 2026-11-03: "You can't use something that doesn't work ... ask them, trigger the
@@ -498,7 +571,7 @@ def silence_wav(seconds: float = 1.0) -> bytes:
 
 
 def test(store, c) -> str:
-    out = transcribe(store, silence_wav(), 'audio/wav', 'silence.wav', c=c)
+    out = transcribe(store, silence_wav(), 'audio/wav', 'silence.wav', c=c, gate=False)
     return f"{LABELS.get(c['Type'], c['Type'])} answered ({out['model']}) - transcription works"
 
 

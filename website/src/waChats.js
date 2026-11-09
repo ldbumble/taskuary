@@ -45,3 +45,16 @@ export function waMatches(q, jid, name = "") {
 // A switched-on chat's last saved message, one line under its name (the owner, 2026-11-02): "Gail Moreno: standup moved · 5m ago".
 // The server sends `said` only for a chat that is on (wanames.said); an off one shows nothing here either, the moment it is flipped.
 export const waSaid = (said, on, age = "") => (on && said?.text ? [said.from ? `${said.from}: ${said.text}` : said.text, age].filter(Boolean).join(" · ") : "");
+
+// /wa/chats while the bridge is down answers {down, detail} - one plain line, not a 409 whose raw text was filed as a bug (#278).
+// An older server's 409 still says it plainly here; anything else keeps the server's own words.
+export const DOWN = "WhatsApp isn't running - press Start bridge on the WhatsApp card";
+export function readChats(data) {
+  if (data?.down) return { rows: [], err: data.detail || DOWN };
+  return { rows: data?.data || [], err: "" };
+}
+export function chatsError(e) {
+  const d = e?.response?.data?.detail;
+  if (e?.response?.status === 409 && /bridge is not running/.test(String(d || ""))) return DOWN;
+  return typeof d === "string" && d ? d : "could not reach the bridge";
+}

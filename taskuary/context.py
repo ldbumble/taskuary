@@ -249,6 +249,10 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
     recips = store.task_recipients([t['TaskId'] for t in rows]) if to and sender else {}
     from .senders import own_addresses
     mine = own_addresses(store) if recips else set()
+    # ...and, for a chat line, a task whose lines sit in ANOTHER chat says so (the owner, 2026-11-09): one person's "lunch tomorrow?" in five
+    # groups joined the first group's task, where a reply goes only to that group. Whether it is shared work is triage's to judge
+    from .store import CHAT_CHANNELS
+    chat = conv and str(msg.get('channel') or '').lower() in CHAT_CHANNELS
     for t in rows:
         convs = {c for c in str(t.get('Convs') or '').split(',') if c}
         senders = {s for s in str(t.get('Senders') or '').split(',') if s}
@@ -265,7 +269,7 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
                     'from': OWN_TASK if t.get('OriginBase') == 'owner' else _who(sender, senders),
                     'why': hit[0], **({'about': _short(t.get('Summary'), 200)} if (meant or named or tied) and t.get('Summary') else {}),
-                    **_threads(convs), '_rank': hit[1]})
+                    **_threads(convs), **({'in_another_chat': True} if chat and convs and conv not in convs else {}), '_rank': hit[1]})
     out.sort(key=lambda r: -r['_rank'])
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
 

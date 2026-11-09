@@ -162,6 +162,25 @@ class TheLevelIsTheMeasure(unittest.TestCase):
         self.assertIn(tid, [c['task_id'] for c in u['same_day_lines']])
 
 
+class AnotherChatsTask(unittest.TestCase):
+    """One person's "lunch tomorrow?" in five groups joined the first group's task at every level, where the owner's reply goes only to that
+    group (the night run, 2026-11-09). Triage is told the task sits in another chat, and the guide says a join across chats is for shared work."""
+    def test_a_line_in_another_group_sees_the_first_groups_task_as_another_chats(self):
+        from taskuary import context
+        s = store(); ray = 'ray@northwind.example'
+        tid = s.create_task({'Title': 'Lunch tomorrow?', 'Kind': 'reply', 'Status': 'open'}, 'router')
+        s.add_message({'TaskId': tid, 'ExternalId': 'l1', 'ConversationId': ROOM, 'Channel': 'whatsapp', 'FromName': 'Ray Colton', 'FromEmail': ray,
+                       'SentAt': '2026-10-28 09:00:00', 'BodyText': 'lunch tomorrow?', 'Status': 'routed'})
+        line = lambda conv: {w['tid']: w for w in context.recent_open(s, {'conversation_id': conv, 'channel': 'whatsapp', 'from_email': ray,
+                                                                            'body': 'lunch tomorrow?'})}[tid]
+        self.assertTrue(line('whatsapp:120363-ops@g.us')['in_another_chat'])
+        self.assertNotIn('in_another_chat', line(ROOM))
+
+    def test_the_guide_keeps_a_chats_own_answer_in_that_chat(self):
+        self.assertIn('A JOIN ACROSS CHATS IS FOR SHARED WORK ONLY', triage.SHIPPED)
+        self.assertIn('in_another_chat', triage.FIELDS['open_work'])
+
+
 class AJoinWidensTheTitle(unittest.TestCase):
     """A line that joins at the combine level never renames the task to its own part: when the title no longer covers what is on the
     task, triage answers `task_title`, the common subject, and the task takes that (the owner, 2026-10-29)."""

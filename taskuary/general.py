@@ -285,6 +285,11 @@ def _browser_task(task: dict) -> bool:
     return browserview.wanted(task)
 
 
+def _origin_of(store, tid) -> str:
+    from . import origin
+    return origin.of_task(store, tid)[0]
+
+
 def browser_offered(store, tid: int, pick: str) -> bool:
     """Is Taskuary's browser OFFERED to this task's agent though nobody marked the task for one? Every task of the owner's own on a CLI
     with hands: whether a page is needed is the agent's to see in the work, never a word list's. Not the dock, and not a stranger's
@@ -1954,6 +1959,13 @@ class GeneralSession:
                     self.cli_sid = ''
                     self.resume_notice = 'Continuing from the saved conversation with the selected provider.'
                     self._remember_session()
+                # ...and A TASK WHOSE TRUST CHANGED starts its CLI again in the mode it has now (the owner, 2026-11-09: a colleague's line
+                # lifted a stranger's task, origin.lifted): a conversation born under the reviewer, in the stranger's folder, is not
+                # resumed with full tools - nor one born with them under the reviewer. The saved conversation is said again, once
+                elif self.trust_moved():
+                    self.cli_sid = ''
+                    self.resume_notice = 'Who this task runs for changed, so its agent starts again from the saved conversation.'
+                    self._remember_session()
             if echo and as_owner:
                 for w in lines: self._emit(f'\x1b[1;34m{"taskuary" if brief else "you"}>\x1b[0m {w}\r\n')
             # the owner's words are kept FIRST, and the run says it is working only once it has an AI: with none, the message was
@@ -2502,6 +2514,10 @@ class GeneralSession:
         why = (out or {}).get('why')
         if not (out or {}).get('closed') and why and why != selfclose.OWNER_ENDS:
             self.store.add_comment(self.task_id, 'assistant', 'agent', f'The agent said it was finished, but the task was not closed: {why}.')
+
+    def trust_moved(self) -> bool:
+        "Was this session's CLI conversation born in a mode the task no longer has - under the reviewer and now trusted, or the other way?"
+        return bool(self.cli_sid) and (self.cli_sid == self.store.get_setting(f'stranger_sid:{self.task_id}')) != (_origin_of(self.store, self.task_id) == 'stranger')
 
     def idle_why(self, now: float = None, locked: bool = False) -> str:
         "'' when this session may idle out now (idle_out), else why it stays: a turn on or waiting, an input on its way, the owner's part on its page."

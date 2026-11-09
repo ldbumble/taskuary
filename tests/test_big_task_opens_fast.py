@@ -69,7 +69,8 @@ def test_a_big_task_opens_in_a_beat(big):
     c = TestClient(server.app)
     took = time.perf_counter(); r = c.get(f'/api/tasks/{tid}'); took = time.perf_counter() - took
     assert r.status_code == 200 and len(r.json()['messages']) == LINES and len(r.json()['attachments']) == LINES // 5
-    assert r.json()['origin']['origin'] == 'stranger'
+    # ...Ray, whom the owner answers, wrote after the others: his line lifts the task (origin.lifted, 2026-11-09) - read from the newest line
+    assert r.json()['origin']['origin'] == 'trusted' and 'Ray Colton' in r.json()['origin']['why']
     assert took < OPEN, f'the task took {took:.1f}s to open'
 
 
@@ -101,7 +102,7 @@ def test_judging_a_long_group_per_person_says_what_judging_it_per_line_says():
     memo = {}
     assert {m['MessageId']: origin.of_message(s, m, memo) for m in s.list_messages(tid)} == per_line
     assert per_line[once][0] == 'stranger' and all(v[0] in ('trusted', 'owner') for k, v in per_line.items() if k != once)
-    assert origin.of_task(s, tid)[0] == 'stranger'
+    assert origin.lifted(s, s.list_messages(tid))[2] == 'Omar Keller'      # ...Omar, trusted, wrote after Paula's one line: it is lifted
     # ...and each person is asked once, however many lines they wrote: past Paula's one witness everyone is trusted, every line judged
     n = _counted(s); origin.of_task(s, tid, s.list_messages(tid)[1:])
     assert n[0] < 12, f'{n[0]} reads for 7 lines from 2 people'

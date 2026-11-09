@@ -1224,7 +1224,10 @@ def _shows(store, it: dict, b: str) -> bool:
         return not it.get('closed') and brainroute.strong_offered(store.get_task(t), brainroute.judged(store, t), workerstate.ended(store, t),
                                                                   _story(store, t))
     if b == 'continue': return bool(store.resumable_session(it['tid'])) and not _general(store, it)
-    if b in ('review_changes', 'run_another', 'share'): return _agent_holds(store, it) or bool(store.resumable_session(it['tid']))
+    # ...Run another agent only where one ever ran (the owner, 2026-11-09): a task held for a new sender is an agent's, and nothing ran on it
+    if b == 'run_another': return _agent_running(it['tid']) or bool(store.resumable_session(it['tid']) or store.last_transcript(it['tid'])
+                                                                      or store.list_runs(int(it['tid'])) or (_story(store, int(it['tid'])) or {}).get('kind') not in (None, 'held', 'idle', 'queued', 'none'))
+    if b in ('review_changes', 'share'): return _agent_holds(store, it) or bool(store.resumable_session(it['tid']))
     # Share stands on a task's row whenever no agent is at work on it (TaskPage: a Result to share, or a summary to email)
     if b == 'share_result': return not _agent_running(it['tid'])
     if b == 'attach': return bool(it.get('rid'))

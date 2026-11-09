@@ -25,14 +25,18 @@ export const SHOWN = 8;
 
 export default function LandingCard({ taskId, onChanged, onState, inChat = false }) {
   const [s, setS] = useState(null), [diff, setDiff] = useState(null), [busy, setBusy] = useState(""), [said, setSaid] = useState(""),
-    [err, setErr] = useState(""), [sure, setSure] = useState(false), [marks, setMarks] = useState({});
+    [err, setErr] = useState(""), [sure, setSure] = useState(false), [marks, setMarks] = useState({}), [open, setOpen] = useState(false),
+    [diffErr, setDiffErr] = useState("");
   const load = () => api.get(`/api/tasks/${taskId}/landing`).then(({ data }) => { setS(data?.data || null); onState?.(data?.data || null); })
     .catch(() => { setS(null); onState?.(null); });
-  useEffect(() => { setS(null); setDiff(null); setSaid(""); setErr(""); setSure(false); setMarks({}); load(); }, [taskId]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setS(null); setDiff(null); setOpen(false); setSaid(""); setErr(""); setSure(false); setMarks({}); load(); }, [taskId]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!s || (!s.ask && !s.landed && !s.changed)) return null;
   const w = landingWords(s);
-  const readDiff = () => api.get(`/api/tasks/${taskId}/landing`, { params: { full: true } }).then(({ data }) => setDiff(data?.data?.diff || "")).catch(() => setDiff(""));
-  const seeDiff = () => (diff !== null ? setDiff(null) : readDiff());
+  // THE DIFF OPENS AT THE PRESS (the owner, 2026-11-09: it waited for the read, and the button felt dead for a second): the window first, saying
+  // it is reading the changes, then the diff into it - or why it could not be read
+  const readDiff = () => { setDiffErr(""); return api.get(`/api/tasks/${taskId}/landing`, { params: { full: true } }).then(({ data }) => setDiff(data?.data?.diff || ""))
+    .catch((e) => { setDiff(null); setDiffErr(e?.response?.data?.detail || "The changes could not be read - close this and try again."); }); };
+  const seeDiff = () => { if (open) return setOpen(false); setOpen(true); setDiff(null); readDiff(); };
   const answer = async (how) => {
     if (how === "discard" && !sure) { setSure(true); return; }
     setBusy(how); setErr(""); setSure(false);
@@ -71,18 +75,21 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
           <Button size="small" sx={{ ...btn, minHeight: 0, p: 0, mt: 0.3, color: DIM, display: "flex" }} data-tq-landing-diff="" onClick={seeDiff}>
             {reviewing ? "See the diff · review it" : "See the diff"}</Button>
         </Box>)}
-      <Dialog open={diff !== null} onClose={() => setDiff(null)} fullWidth maxWidth={false} data-tq-landing-dialog=""
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth={false} data-tq-landing-dialog=""
         slotProps={{ paper: { sx: { width: "min(1400px, 96vw)", height: "90vh", m: 1 } } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
           <Typography variant="body2" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap>
             <Box component="span" sx={{ ...mono, fontWeight: 600 }}>{s.branch}</Box>
             {s.own ? <> into <Box component="span" sx={mono}>{s.base}</Box></> : null}
             <Box component="span" sx={{ color: DIM }}> · {w.stat}</Box></Typography>
-          <IconButton size="small" aria-label="Close the diff" onClick={() => setDiff(null)}><CloseIcon fontSize="small" /></IconButton>
+          <IconButton size="small" aria-label="Close the diff" onClick={() => setOpen(false)}><CloseIcon fontSize="small" /></IconButton>
         </Box>
         <DialogContent sx={{ p: 2 }}>
           {reviewing && <Typography variant="caption" sx={{ display: "block", color: FAINT, mb: 0.75 }}>
             Mark a part Revert to take it out of {s.branch} before it lands - one commit on the branch, nothing else touched.</Typography>}
+          {diff === null && !diffErr && <Typography variant="body2" data-tq-diff-loading="" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1 }}>
+            <CircularProgress size={14} color="inherit" />Loading the changes…</Typography>}
+          {diffErr && <Typography variant="body2" data-tq-diff-error="" sx={{ color: "#7a2f3c" }}>{diffErr}</Typography>}
           {diff !== null && <DiffView files={files} marks={reviewing ? marks : null} onMark={reviewing ? (k, m) => setMarks((x) => ({ ...x, [k]: m })) : null} />}
           {reviewing && !!picked.length && <Button size="small" variant="outlined" disabled={!!busy} data-tq-landing-revert="" sx={{ ...btn, mt: 0.75, color: "#7a2f3c", borderColor: BORDER }}
             startIcon={busy === "revert" ? <CircularProgress size={12} color="inherit" /> : null} onClick={revert}>

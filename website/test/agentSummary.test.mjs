@@ -157,3 +157,17 @@ test("a turn with words of its own draws them once, and the summary keeps only i
   assert.ok(cardsOnly.length > 0, "an answered turn returns before the prose");
   assert.doesNotMatch(cardsOnly, /about|What I did|OnYou|did\b/, "no About, What I did or On you beside the words");
 });
+
+// THE TO DO HOLDS ONLY WORK (the owner, 2026-11-09: one task reached 11 lines for 4 pieces of work): an email owed is its Send card, and the
+// steps left on the owner are one quiet "On you:" line under the list - never boxes
+test("the To do is the work alone, and what is left on the owner is one On you line", async () => {
+  const { onYouLine } = await import("../src/checklist.js");
+  const items = [{ id: "1", text: "Fix the export column order", done: false }, { id: "2", text: "Email Erin Blake - the new file", done: false, out: { to: "erin@vendor.example" } },
+    { id: "3", text: "Press Send on the draft.", done: false, on_you: true }, { id: "4", text: "Connect a calendar", done: false, on_you: true },
+    { id: "5", text: "Ticked already", done: true, on_you: true }];
+  assert.equal(onYouLine(items), "On you: Press Send on the draft; Connect a calendar.");
+  assert.equal(onYouLine(items.slice(0, 2)), "");
+  const page = (await import("node:fs")).readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(page, /const todo = checklist\.filter\(\(i\) => !i\.out && !i\.on_you\);/);
+  assert.match(page, /\{onYouLeft && <Typography data-tq-on-you-line="" sx=\{\{ \.\.\.ON_YOU_SX, mt: 0\.6 \}\}>\{onYouLeft\}<\/Typography>\}/);
+});

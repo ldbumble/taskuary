@@ -71,6 +71,14 @@ export const heldActsLine = (reviews = []) => {
   return `${reviews.length > 1 ? "These steps wait" : "This step waits"} for your yes. Approve runs exactly what is shown; Dismiss tells the agent it was not done.`;
 };
 
+// what a held step does, in words, and why it waits: the lead over its card, the command itself folded (`folded`)
+const upFirst = (x) => (x ? x[0].toUpperCase() + x.slice(1) : x);
+export const heldLead = (p) => {
+  const about = String(p?.about || "").trim(), what = String(p?.what || "").trim();
+  return { lead: upFirst(about || what) || "Run a command in the agent's shell",
+    leadWhy: `Held before it ran - ${p?.why || "it leaves this computer"}${about && what ? `: it would ${what}` : ""}.`, folded: !!p?.command };
+};
+
 export const proposalPresentation = (review) => {
   if (review?.Kind !== "action") return null;
   const proposal = proposalFrom(review);
@@ -159,10 +167,13 @@ export const proposalPresentation = (review) => {
   };
   // ...AND A HELD SHELL STEP (shellgate.py, the owner 2026-10-28): a push, a merge, a public post, a publish or a mail the agent tried to
   // run - Approve runs that exact command in the folder it was held in
+  // ...LEADING WITH WHAT IT DOES AND WHY, in words (the owner, 2026-11-09: a card that was only "Approve runs: <a long PowerShell line>"): the
+  // agent's own words for the call where it gave any, else what the gate read it as; the raw line folded under "Show the command"
   if (proposal?.action === "shell_act") return {
     kind: "action",
     title: "The agent's step waits for your yes",
     context: review.Reason || `Held before it ran · ${proposal.why || "it leaves this computer"}`,
+    ...heldLead(proposal),
     destinationLabel: "In",
     // a delete names the folder it aims at (shellgate.deletes): a general agent's own scratch folder told the owner nothing (2026-11-03)
     destination: proposal.where || proposal.cwd || "the agent's folder",

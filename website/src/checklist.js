@@ -45,3 +45,8 @@ export const settleTick = (ticks, id, done) => {
   const { [id]: _, ...rest } = ticks;
   return rest;
 };
+
+// THE STEPS LEFT ON THE OWNER, ONE QUIET LINE UNDER THE TO DO (the owner, 2026-11-09): an agent's "press Send on the draft" and a setup step
+// like "connect a calendar" (the checklist's `on_you` items, store.set_on_you) are not work to tick - "On you: a; b." or '' when none is left
+export const onYouLine = (items) => { const left = (items || []).filter((i) => i?.on_you && !i.done && i.text).map((i) => String(i.text).replace(/[.\s]+$/, ""));
+  return left.length ? `On you: ${left.join("; ")}.` : ""; };

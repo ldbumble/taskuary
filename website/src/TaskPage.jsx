@@ -10,6 +10,7 @@ import { usePromptImages, withImages } from "./promptImages.jsx";
 import { ASK_WHAT, RunForm } from "./RunForm.jsx";
 import CheckBackChip from "./CheckBackChip.jsx";
 import QueuedStart from "./QueuedStart.jsx";
+import HeldStart from "./HeldStart.jsx";
 import { dangerAimOf, dangerLine, dangerOf, strangerLine, trustInBox } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { canSend, cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
@@ -44,7 +45,7 @@ import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
-import { noteKey, noteOf, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
+import { noteKey, noteOf, onYouLine, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
 import { fmtDate, fmtTime } from "./dates.js";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
@@ -123,7 +124,7 @@ import { draftAnswers, otherPendingReplies } from "./pendingDrafts.js";
 import { replyRounds, roundReviews } from "./replyRounds.js";
 import { diffStat } from "./agentRecord.js";
 import AgentStory from "./AgentStory.jsx";
-import { startLabel, storyPlace, storyShown } from "./agentStory.js";
+import { heldStartOf, startLabel, storyPlace, storyShown } from "./agentStory.js";
 import { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 import { useShareParts } from "./Share.jsx";
@@ -282,6 +283,7 @@ export const STACK_BELOW = 760;
 export const DESK_W = 601, DESK_STACK_BELOW = 440, OPEN_MIN = 180;
 export const useStackBelow = (table = true) => (useMediaQuery(`(min-width:${DESK_W}px)`) && table ? DESK_STACK_BELOW : STACK_BELOW);
 const TODO_SHOWN = 6;   // open to-dos shown before "Show N more"
+const ON_YOU_SX = { display: "block", color: DIM, fontSize: 12.5, lineHeight: 1.5, overflowWrap: "anywhere" };   // the On you line: quiet, under the work
 const REOPEN_ROW_MS = 2500, REOPEN_MAX_MS = 15000;     // the longest the row says "Reopening…" past the server's yes, waiting on the re-read to draw from
 // ...the main view the whole width, as a live agent's is (the owner, 2026-10-26: "no main view should fill the screen. why waste space?" -
 // a 900px column had been tried), scrolling on its own
@@ -1139,7 +1141,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // disappears"): the draft read-only, marked, and the line that says it went and the task is closing - until the task leaves the view
   const [sentHere, setSentHere] = useState(null);
   useEffect(() => { setSentHere(null); }, [selected]);
-  useEffect(() => { setHandoff(false); setHandSaid(null); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setShowAll(false); setOpenMsg(undefined); setPick(null); setReportOpen(false); setPeek(false); }, [selected]);
+  useEffect(() => { setHandoff(false); setHandSaid(null); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setDiff(null); setShowAll(false); setOpenMsg(undefined); setPick(null); setReportOpen(false); setPeek(false); }, [selected]);
   useEffect(() => { if (saidHand?.to) { setHandSaid({ to: saidHand.to, note: saidHand.note || "" }); setHandoff(true); } }, [saidHand?.to, saidHand?.note]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
   // spend a subprocess a second on an answer nobody is looking at
@@ -1616,7 +1618,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   useEffect(() => { setTicks({}); }, [selected]);
   const checklist = withTicks(detail?.checklist, ticks);
   // what the To do list shows: the emails a task owes are the chat's cards, not boxes to tick here
-  const todo = checklist.filter((i) => !i.out);
+  // ...AND ONLY THE WORK (the owner, 2026-11-09: one task reached 11 lines for 4 pieces of work): triage's asks and the agent's own to-dos. The
+  // steps left on the owner - an agent's "press Send on the draft", a "connect a calendar" - are ONE quiet line under it, never boxes (`on_you`)
+  const todo = checklist.filter((i) => !i.out && !i.on_you);
+  const onYouLeft = onYouLine(checklist);
   const todoFrom = todoSources(todo, sources);
   // a to-do's "from" opens its message in Came from, the whole conversation drawn so the row is there to open
   const openSource = (mid) => {
@@ -2463,6 +2468,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession && !home;
   const startHere = !home && !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
   const ranBefore = !!(report || detail?.transcript);
+  // a start held for a new sender, said in the chat with its Run anyway (HeldStart) - only while no agent has ever run here
+  const heldStart = heldStartOf({ story: detail?.agentStory, tags: t?.Tags, ran: ranBefore || generalStarted || !!term || liveSession || !!queuedRow });
   // held on where the code is: before any run that is a start waiting, after one it is the agent asking to move the work (wrapup.asks_to_move)
   const heldWhy = ranBefore ? "The agent found the work is not in this code - choose where it is and it starts there"
     : "Not started: it needs to know where the code is - it starts once you choose";
@@ -2697,6 +2704,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // went out, the proposals - drawn once, in the agent's newest summary (AgentSummary's Next steps) or under the chat's thread
   // ...an act with its card (a post, a tracker comment) is drawn in the turn that set it up (GeneralWorkspace, ActionCard) - never here again
   const asks = proposals.filter((p) => !isCardReview(p));
+  const asksBelow = !!(pendingReview || moreDrafts.length || owesEmails || (handInPane && handoff) || calAsk?.invite);
   const chatBody = () => <>
       {/* HAND IT TO A PERSON, IN THE CHAT (the owner, 2026-10-29: "you click the button and the matching UI opens in its pane"): on
           the canvas the hand-off is a compose card here - who, the forward the AI drafts, and Send it - where the drawer stood;
@@ -2876,7 +2884,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {asks.length > 0 && (
             <Box sx={{ mt: 1.4, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
               <Typography sx={{ ...label, display: "block", mb: 0.5 }}>
-                {asks.length === 1 ? "Also waiting on you" : `Also waiting on you · ${asks.length}`}
+                {/* ..."Also" only under something else waiting above it (the owner, 2026-11-09: one stale ask read "Also" over nothing) */}
+                {`${asksBelow ? "Also waiting on you" : "Waiting on you"}${asks.length > 1 ? ` · ${asks.length}` : ""}`}
               </Typography>
               {asks.map((p) => (
                 <ReviewDecision key={p.ReviewId} review={p} toRow={inRow && !pendingReview && proposals.length === 1}
@@ -3097,6 +3106,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Part>}
                       {t?.DoneWhen && <Part label="Steps" data-tq-todo="" focus={focus === "list"}><GoalSteps task={t} onOpenTask={(tid) => (onOpenTask ? onOpenTask(tid) : onSelect?.(tid))}
                         onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Part>}
+                      {!t?.DoneWhen && !todo.length && onYouLeft && <Typography data-tq-on-you-line="" sx={ON_YOU_SX}>{onYouLeft}</Typography>}
                       {!t?.DoneWhen && todo.length > 0 && (
                         <Part label="To do" sub={`${todo.filter((i) => i.done).length} of ${todo.length}`} subTitle={progressLine(todo)} data-tq-todo="" focus={focus === "list"}>
                           {/* NEWEST FIRST, the open ones only - TODO_SHOWN of them, the rest behind "Show N more" (the owner, 2026-10-28: "hide the
@@ -3140,6 +3150,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {todo.some((i) => i.done) && <Link component="button" type="button" underline="hover" data-tq-todo-done-fold="" aria-expanded={doneOpen}
                             onClick={() => setDoneOpen((v) => !v)} sx={{ display: "block", fontSize: 12, color: FAINT, mt: 0.3, textAlign: "left" }}>
                             {todo.filter((i) => i.done).length} done {doneOpen ? "▾" : "▸"}</Link>}
+                          {onYouLeft && <Typography data-tq-on-you-line="" sx={{ ...ON_YOU_SX, mt: 0.6 }}>{onYouLeft}</Typography>}
                         </Part>
                       )}
                       {/* CAME FROM - the task's messages as the conversations they are: each one's first message and its latest two, with
@@ -3473,6 +3484,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           source (chatStream.chatSource) - a coding task's sessions, or the general agent's conversation - and the branch's landing
                           card joins it wherever the task works in a checkout */}
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
+                        heldStart={chatPane && heldStart ? <HeldStart taskId={t.TaskId} line={heldStart} onChanged={() => { loadTasks(); loadDetail(t.TaskId); findTerm(t.TaskId); onChanged?.(); }} /> : null}
                         queued={chatPane && !liveSession && queuedRow ? <QueuedStart taskId={t.TaskId} queued={queuedRow} line onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} /> : null}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null} next={chatCards}
@@ -3626,7 +3638,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
             {diff?.scope === "pr" ? "show the agent's checkout instead" : diffScope === "task" ? `show the whole checkout${diff?.checkout_files ? ` (${plural(diff.checkout_files, "file")})` : ""}` : (diff?.pr ? "back to the pull request's diff" : "back to this task's changes")}
           </Box>
         </Typography>
-        {!diff ? <CircularProgress size={20} sx={{ m: 2 }} />
+        {/* ...open at the press, saying what it waits for (the owner, 2026-11-09: a diff window that waits for its read feels dead) */}
+        {!diff ? <Typography variant="body2" data-tq-diff-loading="" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, m: 2 }}>
+          <CircularProgress size={14} color="inherit" />Loading the changes…</Typography>
           : diff.why ? <Empty>{diff.why}</Empty>
             : diff.note && !diff.files?.length ? <Empty>{diff.note}</Empty>
             : <DiffFiles files={diff.files} cwd={diff.cwd} branch={diff.branch} />}

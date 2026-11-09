@@ -158,7 +158,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const [bcc, setBccNow] = useState(() => heldOf(r)?.bcc ?? null), [subj, setSubjNow] = useState(() => heldOf(r)?.subject ?? null);
   const setBcc = (v) => { hold(r, { bcc: v ?? null }); setBccNow(v); };
   const setSubj = (v) => { hold(r, { subject: v ?? null }); setSubjNow(v); };
-  const [bccOpen, setBccOpen] = useState(false);
+  const [bccOpen, setBccOpen] = useState(false), [cmdOpen, setCmdOpen] = useState(false);
   const rNow = useRef(r); rNow.current = r;
   useEffect(() => { const f = (id) => { if (id !== rNow.current.ReviewId) return; const e = heldOf(rNow.current); setTextNow(e?.text ?? null); setCcNow(e?.cc ?? null);
     setBccNow(e?.bcc ?? null); setSubjNow(e?.subject ?? null); };
@@ -599,7 +599,11 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       {answered && !proposal && <Alert severity="warning" data-tq-already-answered="" sx={{ mb: 1, py: 0.25 }}>{answered}</Alert>}
       {proposal?.kind === "closeout" ? (
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{proposal.context}</Typography>
-      ) : r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
+      ) : proposal?.lead ? (<Box data-tq-held-lead="" sx={{ mb: 0.75 }}>
+        {/* a held step says what it does and why it waits, in words - its raw line is under Show the command (the owner, 2026-11-09) */}
+        <Typography variant="body2" sx={{ color: INK, fontWeight: 600, overflowWrap: "anywhere" }}>{proposal.lead}</Typography>
+        <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block" }}>{proposal.leadWhy}</Typography>
+      </Box>) : r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
         <Typography data-tq-review-reason="" variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
       )}
       {/* the agent re-planned on a change and found no reply needed (Task 4.5): said plainly, the draft and its Send kept - the owner decides */}
@@ -670,7 +674,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       </Box>}
       {/* ...named for the Assistant when the owner asks it about this draft (pageView.js): the reply's own box, filled through its onChange */}
       {/* ...and while the AI writes it, its spinner IN the box (the owner, 2026-10-30: "spin in the box of drafting") */}
-      <Box ref={draftRef} data-tq-draft-box="" data-tq-field="draft" data-tq-label="Reply draft" sx={{ position: "relative" }}>
+      {proposal?.folded && <Typography {...pressable(() => setCmdOpen((o) => !o))} data-tq-show-command="" aria-expanded={cmdOpen}
+        sx={{ ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, mb: cmdOpen ? 0.5 : 0,
+          "&:hover": { textDecoration: "underline" } }}>{cmdOpen ? "Hide the command" : "Show the command"}</Typography>}
+      <Box ref={draftRef} data-tq-draft-box="" data-tq-field="draft" data-tq-label="Reply draft" sx={{ position: "relative", ...(proposal?.folded && !cmdOpen ? { display: "none" } : {}) }}>
         {drafting && <CircularProgress size={14} data-tq-drafting-spin="" sx={{ position: "absolute", top: 12, right: 12, zIndex: 1, color: FAINT }} />}
         <DraftField value={value} onChange={(e) => setText(e.target.value)} marks={blanks}
         placeholder={proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}

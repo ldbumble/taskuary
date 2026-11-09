@@ -20,6 +20,7 @@ import { onLive, touches } from "./live.js";
 import { AttachChip, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
 import { heldLine, notShown, stillHeld, waitingShown } from "./heldLines.js";
 import { landingTurn } from "./landing.js";
+import { endTop, stickToEnd } from "./stickEnd.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
 import { baseName, isWork } from "./agentSteps.js";
@@ -206,7 +207,7 @@ const AssistantText = ({ text }) => {
   const { text: said, files } = at ? outputRefs(text, at.tid, at.listed) : { text, files: [] }, { isShown } = shownOnce(files, shown);
   const chat = React.useContext(ChatCtx);
   return <>
-    {!!said && <div ref={box} onClick={open}><LinkPopups><Md text={said} /></LinkPopups></div>}
+    {!!said && <div ref={box} onClick={open} data-tq-said=""><LinkPopups><Md text={said} /></LinkPopups></div>}
     {/* ...in a chat the turn draws the files it made itself, once, inline (TurnFiles) */}
     {!chat && files.map((f) => <PublishedPages key={f} pages={[outputRow(at.tid, f, at.listed)]} open={isShown(f)} />)}
     <FileDialog file={viewing} onClose={() => setViewing(null)} />
@@ -685,7 +686,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onAttachBack,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false, waiting = [], box = "",
-  onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, queued = null, hint = "", placeholder = "",
+  onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, queued = null, heldStart = null, hint = "", placeholder = "",
   empty = "", stopShown = false }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
@@ -798,27 +799,16 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   // ONE PLACE says what it is doing. Once its steps stream into the thread above, the band repeated the newest of them word for word
   // beneath (the owner, 2026-10-14: "no need while it's working to tell you what it's doing in 2 places") - so it keeps only the
   // dots that say it is alive. The band is for the wait with nothing on screen yet, where an API brain looked frozen (2026-09-07).
-  /* OPENED, it shows the newest answer from its first line. Pinned to the bottom, the cards under the answer (its question, the
-     report offer) and the input took the room, and a short view showed the answer's last paragraph only: "I can't see any of the
-     agent output without scrolling" (the owner, 2026-10-18). Only at rest and only once - a run that is writing keeps following. */
-  const viewport = useRef(null), placed = useRef(false), said = !!messages?.length;
+  /* OPENED, IT IS AT ITS END (stickEnd.js, the owner, 2026-11-09): held there while the transcript draws in, until the owner moves in it - and
+     at rest the newest answer shows from its first line when it is taller than the view (2026-10-18). Placed once at the newest turn's top,
+     a coding turn opened at the top of its steps, the middle of the transcript. */
+  const viewport = useRef(null), said = !!messages?.length, busyNow = useRef(false);
+  busyNow.current = !!serverBusy;
   useEffect(() => {
-    if (dock || placed.current || !said || serverBusy) return;
-    // the library pins to the bottom again whenever the answer lays out, and on a busy machine that lands after any one try - so it is
-    // placed a few times over the first seconds, and never again once the owner scrolls or types themselves
-    const v = viewport.current, mine = () => { placed.current = true; };
-    const place = (final) => {
-      const last = [...(v?.querySelectorAll(".tq-aui-agent") || [])].pop();
-      if (placed.current || !v || !last || runtime.thread.getState().isRunning) return;
-      const off = last.getBoundingClientRect().top - v.getBoundingClientRect().top - 8;
-      if (off < 0) v.scrollTop += off;
-      if (final) placed.current = true;
-    };
-    const ids = [350, 900, 1800].map((ms, i, all) => setTimeout(() => place(i === all.length - 1), ms));
-    const own = ["wheel", "touchstart", "keydown"];
-    own.forEach((e) => v?.addEventListener(e, mine, { passive: true }));
-    return () => { ids.forEach(clearTimeout); own.forEach((e) => v?.removeEventListener(e, mine)); };
-  }, [dock, said, serverBusy, runtime]);
+    if (dock || !said) return undefined;
+    const answer = (v) => [...([...v.querySelectorAll(".tq-aui-agent")].pop()?.querySelectorAll("[data-tq-said]") || [])].pop();
+    return stickToEnd(viewport.current, (v) => endTop(v, busyNow.current || runtime.thread.getState().isRunning ? null : answer(v)));
+  }, [dock, said, runtime]);
   // ...where the chat is home a closed task keeps its box: what is typed reopens it and carries on (server._refuse_closed_chat, 2026-11-05)
   const closedChat = !dock && !chat && ["done", "dropped"].includes(String(task?.Status || ""));
   /* WHILE A QUESTION IS OPEN THE COMPOSER ANSWERS IT (the owner, 2026-11-03: the card had a box of its own, and the answer was typed here
@@ -961,6 +951,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
           {/* ...the branch's landing, where the task works in a checkout (landing.has_checkout): in its turn (LandingCtx), here only before any */}
           {!dock && !landAt && landNode}
+          {/* ...A START HELD FOR A NEW SENDER says so under what came in, with its Run anyway (HeldStart, the owner, 2026-11-09) */}
+          {!dock && heldStart}
           {/* ...A START WAITING FOR A SLOT is the agent's own line in the chat, not a strip over it (the owner, 2026-11-08) */}
           {!dock && queued && <div className="tq-aui-message tq-aui-agent" data-tq-queued-turn="">
             <div className="tq-aui-role">{AGENT_TURN}</div><div className="tq-aui-agent-body">{queued}</div></div>}
@@ -1027,7 +1019,7 @@ const byTime = (ms) => ms.map((m, i) => [String(m.createdAt || "9999").replace("
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, mails = [], reviews = [],
-  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, queued = null, onChanged }) {
+  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, queued = null, heldStart = null, onChanged }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -1329,7 +1321,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting} waiting={(coding ? cc.got?.waiting : data?.waiting) || []} box={data?.box || ""}
         chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
-        came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""} queued={chat && !dock ? queued : null}
+        came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""} queued={chat && !dock ? queued : null} heldStart={chat && !dock ? heldStart : null}
         road={road} cards={codingCards} landing={chat && !dock ? landing : null} stopShown={coding && acp && !!cc.live?.working}
         placeholder={coding ? (closedTask ? "Write to pick it back up…" : cc.live ? MESSAGE : "Write to pick the session back up…") : ""}
         hint={!coding ? "" : acp ? (cc.live.working ? "Enter sends it when this turn ends · Shift+Enter adds a line" : "Enter sends it to the agent · Shift+Enter adds a line")

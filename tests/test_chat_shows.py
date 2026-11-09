@@ -22,7 +22,7 @@ class ShowMarkerTests(unittest.TestCase):
 
     def test_the_instruction_says_only_when_it_helps(self):
         self.assertIn('[[TASKUARY-SHOW:', selfclose.SHOW_LINE)
-        self.assertIn('Only when it truly helps', ' '.join(selfclose.SHOW_LINE.split()))
+        self.assertIn('A file only when it truly helps', ' '.join(selfclose.SHOW_LINE.split()))     # a view is drawn freely (2026-11-09)
         self.assertIn('`show` tool', selfclose.SHOW_LINE)       # a table or chart is drawn in the chat, not made as a file
 
 

@@ -319,7 +319,8 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
                                                           'properties': {'to': {'type': 'string'}, 'about': {'type': 'string'}}}}}
     if playbooks: p['playbook'] = {'type': ['string', 'null']}
     if workflows: p['workflow'] = {'type': ['string', 'null']}
-    # which of the owner's workstreams it belongs to (workstreams.py, the owner 2026-11-01: triage sorts by them), null when unsure
+    # which of the owner's workstreams it belongs to (workstreams.py, the owner 2026-11-01: triage sorts by them) - the best fit, null only when
+    # two fit equally or none does (the owner, 2026-11-09: "when unsure" left most tasks under no workstream)
     if workstreams: p['workstream'] = {'type': ['string', 'null']}
     if candidates is not None:
         p.update(relationship={'type': ['string', 'null'], 'enum': ['new', 'continues', 'answers', 'uncertain', None]},
@@ -853,8 +854,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # THE OWNER'S WORKSTREAMS (the owner, 2026-11-01): which body of work this belongs to sorts it - a side product's tester is not
             # a day-job colleague, and a personal chat is never the job's. Context for the sort; how each is weighed is the guide's to say
             if workstreams: system += ("\n\nTHE OWNER'S WORKSTREAMS - the separate bodies of work they run (a personal one is their own life, "
-                                       'never work); name in "workstream" the one this message belongs to, by its id before the colon, or '
-                                       'null when you are not sure:\n' + str(workstreams)[:2000])
+                                       'never work); name in "workstream" the one this message fits best, by its id before the colon - '
+                                       'null only when two fit it equally or none does:\n' + str(workstreams)[:2000])
             if workflows: system += "\n\nWORKFLOWS A MAIL STARTS - the owner's configured jobs, each with the arrival that starts it (when):\n" + str(workflows)[:3000]
             # a FACT about this install, not a rule of judgement: no coding tool is connected, so coding is not a kind it has
             if not coding: system += ('\n\nTHERE IS NO CODING AGENT on this install (no coding tool, or developer mode is off). Never choose '

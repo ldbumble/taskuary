@@ -10,8 +10,8 @@ workstream (`<!-- ws:<slug>:start -->` ... `<!-- ws:<slug>:end -->`), the owner'
 One workstream may be PERSONAL: it is never learned from and never raised (the owner, 2026-11-01: personal asks are FYI).
 
 Placing an item reads the strongest signal first: the thread it is on, then the mailbox or chat group (only one that serves a single
-workstream decides), the repository, the people on it, their domain - and else triage's model, which has the list and says which, or
-nothing when unsure."""
+workstream decides), the repository, the people on it, their domain - and else triage's model, which has the list and names the best
+fit - nothing only when two fit equally or none does (the owner, 2026-11-09)."""
 import json, re
 from collections import Counter
 

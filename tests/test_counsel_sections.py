@@ -25,7 +25,8 @@ class Sections(unittest.TestCase):
         for f in (counsel.for_discussion, counsel.for_worker):
             out = f(st)
             self.assertIn('Be plain', out); self.assertNotIn('I SURFACE', out); self.assertNotIn('Walk them through', out)
-            self.assertIn("I have Alex's back.", out, 'the intro travels with every role')
+        self.assertIn("I have Alex's back.", counsel.for_discussion(st), 'the desk keeps its intro')
+        self.assertNotIn("I have Alex's back.", counsel.for_worker(st), "a worker does the work: the desk's intro is not its own")
 
     def test_renamed_headings_fall_back_to_the_whole_document(self):
         st = MemoryStore(); st.save_doc('counsel', "# Mine\n\n## How I talk\n- Short.\n", 'owner')

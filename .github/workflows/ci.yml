@@ -38,8 +38,9 @@ jobs:
         # Windows and macOS on the newest Python only (the owner, 2026-10-29: the Linux runs held a release for no one using them)
         os: [windows-latest, macos-latest]
         python: ["3.12"]
-        # two halves in parallel (tools/test_shard.py): one Windows job took 20-24 of 35 minutes and a slow runner timed out (2026-11-09)
-        part: [1, 2]
+        # three parts in parallel (tools/test_shard.py): one Windows job took 20-24 of 35 minutes and a slow runner timed out; as halves
+        # the slower Windows half still took 16 min of pytest, the longest wait in a release (2026-11-09) - thirds bring it near 10
+        part: [1, 2, 3]
     runs-on: ${{ matrix.os }}
     # a hung test fails the job in minutes, with its logs, instead of holding a runner for six hours (2026-10-16)
     timeout-minutes: 35   # Windows runs 20-24 min of 25 (2026-11-05): a slow runner was cancelled, not failed
@@ -52,7 +53,7 @@ jobs:
         if: runner.os == 'Windows'
       # a test past two minutes prints every thread's stack - the hang names itself in the log
       # bash on every OS: Windows' default PowerShell reads `@shard.txt` as splatting and writes `>` as UTF-16 (2026-11-09)
-      - run: python tools/test_shard.py ${{ matrix.part }} 2 > shard.txt
+      - run: python tools/test_shard.py ${{ matrix.part }} 3 > shard.txt
         shell: bash
       - run: python -m pytest -q -o faulthandler_timeout=120 @shard.txt
         shell: bash

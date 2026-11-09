@@ -14,6 +14,8 @@ jobs:
   # A TAG WAITS FOR ITS OWN CI (2026-10-21): the release used to be push, sit through CI, then tag - about 40 minutes of watching.
   # Now the tag goes on right after the push and this job holds the upload until ci.yml has finished on the very same commit;
   # anything but success stops here, before PyPI, so nothing irreversible happens on a red commit. Delete the tag and fix forward.
+  # ...OR a green ci-targeted.yml on the same commit (2026-11-09): tools/release.sh --after <red run> --fixed reruns only what failed
+  # in the full run (plus the tests of what the fix touched) and tags on that; everything else already passed on the commit before.
   ci-green:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
@@ -24,6 +26,8 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}", SHA: "${{ github.sha }}", REPO: "${{ github.repository }}" }
         run: |
           for i in $(seq 1 140); do
+            ok=$(gh run list -R "$REPO" --workflow ci-targeted.yml --commit "$SHA" --json conclusion -q '[.[] | select(.conclusion=="success")] | length')
+            [ "${ok:-0}" -gt 0 ] && { echo "ci-targeted passed on $SHA"; exit 0; }
             row=$(gh run list -R "$REPO" --workflow ci.yml --commit "$SHA" --json status,conclusion -q '.[0] | "\(.status) \(.conclusion)"')
             echo "ci on $SHA: ${row:-not started}"
             case "$row" in

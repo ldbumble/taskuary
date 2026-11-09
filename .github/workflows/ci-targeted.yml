@@ -1,0 +1,77 @@
+name: ci-targeted
+# RERUN ONLY WHAT FAILED (the owner, 2026-11-09: "20 minute release max .. rerun just that test, everything else that passed is
+# good"). tools/release.sh --after <run> --fixed dispatches this on the fix commit with the failed tests of <run> plus the test
+# modules of what the fix touched; a green run here is that commit's gate in publish.yml. Same setup as ci.yml, nothing else.
+run-name: "targeted after ${{ inputs.after }}"
+on:
+  workflow_dispatch:
+    inputs:
+      tests: { description: "pytest node ids or files, space-separated", type: string, default: "" }
+      node_tests: { description: "website test files (test/x.test.mjs), space-separated, or 'all'", type: string, default: "" }
+      web: { description: "build the UI and docs and check the committed copies", type: boolean, default: false }
+      smoke: { description: "the browser smoke set", type: boolean, default: false }
+      after: { description: "the ci.yml run whose failures these are", type: string, default: "" }
+
+permissions: { contents: read }
+
+jobs:
+  test:
+    if: inputs.tests != ''
+    strategy:
+      fail-fast: false
+      matrix: { os: [windows-latest, macos-latest] }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with: { python-version: "3.12" }
+      - run: pip install -e .[dev]
+      - run: pip install pyodbc
+        if: runner.os == 'Windows'
+      # the ids come in through env, never pasted into the script: an input is text, not code
+      - run: python -m pytest -q -o faulthandler_timeout=120 $TESTS
+        shell: bash
+        env: { TESTS: "${{ inputs.tests }}" }
+
+  build-web:
+    if: inputs.web || inputs.node_tests != ''
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with: { node-version: "22" }
+      - run: npm ci
+        working-directory: website
+      - name: Node tests
+        if: inputs.node_tests != ''
+        working-directory: website
+        shell: bash
+        env: { NODE_TESTS: "${{ inputs.node_tests }}" }
+        run: if [ "$NODE_TESTS" = all ]; then npm test; else node --test $NODE_TESTS; fi
+      # a fix commit on top of a release commit ships its committed UI and docs: both must still match their source
+      - name: Build and check the committed UI and docs
+        working-directory: website
+        shell: bash
+        run: |
+          npm run build && npm run build:docs
+          cd .. && git diff --exit-code --stat -- taskuary/web site/docs
+          added=$(git ls-files --others --exclude-standard -- taskuary/web site/docs)
+          if [ -n "$added" ]; then echo "Build produced uncommitted files:"; echo "$added"; exit 1; fi
+
+  smoke:
+    if: inputs.smoke
+    name: browser smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with: { node-version: "22" }
+      - run: pip install -e .[dev]
+      - run: npm ci
+        working-directory: website
+      - run: node --test --test-concurrency=1 browser/loads-once.test.mjs browser/general-starting.test.mjs browser/continue-shows-turn.test.mjs browser/run-another-general.test.mjs
+        working-directory: website

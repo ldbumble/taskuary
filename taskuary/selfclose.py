@@ -509,7 +509,8 @@ _SHOW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?SHOW\s*:?\s*(.+?)\s*\]\][ \t
 SHOW_LINE = ('SHOWING YOUR ANSWER: a table, a chart, a few numbers or a checklist goes in the chat itself through the `show` tool, '
              'where your session has it - drawn in place, nothing to open. Make a file only for what show cannot draw: an image, a '
              'long page, a spreadsheet the owner keeps (.png .jpg .svg .html .md .csv .pdf in your working folder), and name it on its '
-             'own line: [[TASKUARY-SHOW: <full path>]] - it appears in the chat under this answer and stays on the task. A file only '
+             'own line: [[TASKUARY-SHOW: <full path>]] (or the `show` tool\'s `files`) - it appears in the chat under this answer and stays '
+             'on the task. Never open a viewer, a browser or an app on the computer to show it, and never say it is on the owner\'s screen. A file only '
              'when it truly helps - never your working files, test data or drafts. An .html page runs with no network: put its data and '
              'scripts in it.')
 

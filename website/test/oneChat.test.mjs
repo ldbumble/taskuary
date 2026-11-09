@@ -128,7 +128,7 @@ test("the levels draw: Summary folds every step behind one quiet line, Steps fol
   assert.match(tw, /if \(level === "summary"\) \{/);
   assert.match(tw, /<Fold k=\{`\$\{key\}:all`\} quiet label=\{stepsWord\(rest\)\}>/);
   // ...its words stay at Summary, and so does a view it showed (ViewSpec.jsx): never folded away
-  assert.match(tw, /const out = \(p\) => p\.type === "view" \|\| \(!ended && p\.type === "said"\)/);
+  assert.match(tw, /const out = \(p\) => p\.type === "view" \|\| p\.type === "files" \|\| \(!ended && p\.type === "said"\)/);
   assert.match(tw, /\{said\.map\(\(p, i\) => draw\(p, i, "everything"\)\)\}/, "its words stay at Summary");
   assert.match(tw, /p\.type === "view" \? <ViewSpec key=\{p\.id\} spec=\{p\.spec\} raw=\{p\.raw\} \/>/);
   assert.match(tw, /lvl === "everything" \? <AgentSteps key=\{p\.id\} data=\{\{ steps: p\.steps \}\} \/>/);

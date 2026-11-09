@@ -1819,9 +1819,10 @@ def with_fence_rule(rules: str) -> str:
     if not rules: return rules
     if FENCE_OPEN not in rules: rules = f'{rules} {FENCE_LINE}'
     if '--tick' not in rules: rules = f'{rules} {TICK_LINE}'
-    if 'Taskuary tools' not in rules:                   # the toolbox (2026-10-25): an owner's copy from before it still hears of it
-        from .agenttools import TOOLS_LINE
-        rules = f'{rules} {TOOLS_LINE}'
+    from .agenttools import SHOW_RULE, TOOLS_LINE, VERIFY_RULE
+    if 'Taskuary tools' not in rules: rules = f'{rules} {TOOLS_LINE}'      # the toolbox (2026-10-25): an owner's copy from before it still hears of it
+    if 'unless the show tool returned it' not in rules: rules = f'{rules} {SHOW_RULE}'      # ...and how a file reaches them (2026-11-09)
+    if 'effect you did not verify' not in rules: rules = f'{rules} {VERIFY_RULE}'
     if 'one final file' not in rules:                   # one file per thing asked (2026-10-28): an owner's copy from before it hears it too
         from .outputs import ONE_FILE
         rules = f'{rules} Files you make: {ONE_FILE}'

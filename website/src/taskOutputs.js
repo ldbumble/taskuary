@@ -47,6 +47,25 @@ const TYPES = { csv: "text/csv", md: "text/markdown", txt: "text/plain", json: "
   mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", ogg: "audio/ogg" };
 const ext = (name) => (/\.([a-z0-9]+)$/i.exec(name || "")?.[1] || "").toLowerCase();
 
+// A LOCAL PATH IN AN AGENT'S WORDS IS THE FILE, where the app may serve it (the owner, 2026-11-09: three bare screenshot paths in a coding turn -
+// "this should be link"): a whole path, Windows or POSIX, into THIS task's outputs folder is {rel, name, url, image} - a picture drawn small
+// (md.jsx LocalPath), anything else a link through /api/task-outputs. Any other path - a CLI's temp scratchpad, another task's folder, a
+// key file - is null and stays plain text: the agent's `show` tool copies a file from its own scratch onto the task instead
+const IMAGE = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
+const WHOLE = /^(?:file:\/+)?(?:[A-Za-z]:[\\/]|\\\\|\/)\S/;
+export const localFile = (raw, tid) => {
+  const s = String(raw || "").trim();
+  if (!WHOLE.test(s) || /[\n\x60]/.test(s)) return null;
+  const rel = outputOf(s, tid);
+  return rel ? { rel, name: baseName(rel), url: outputUrl(tid, rel), image: IMAGE.has(ext(rel)) } : null;
+};
+// ...and one named bare in the words is put in a code span, for that span to be drawn as the file (outside code spans only)
+const LOCAL = new RegExp(`(?:file:/+)?(?:[A-Za-z]:[\\\\/]|/)${STOP}*?[\\\\/]scratch[\\\\/]outputs[\\\\/]TQ-\\d+[\\\\/]${STOP}+`, "gi");
+export const codeLocalPaths = (text, tid) => outsideCode(String(text ?? ""), (bit) => bit.replace(LOCAL, (all) => {
+  const tail = /[.,;:!?*_]+$/.exec(all)?.[0] || "", path = all.slice(0, all.length - tail.length);
+  return localFile(path, tid) ? `\x60${path}\x60${tail}` : all;
+}));
+
 // the row the page draws for a file an answer named: the server's own row when the task's listing has it (outputs.row), else one
 // built from the name, marked `missing` once the listing is known and the file is not in it
 export function outputRow(tid, rel, listed) {

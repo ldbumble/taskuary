@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { answersTo, asPressed, levelOf, putDownLanded, rowKeys, sameKey } from "../src/funnelPile.js";
+import { answersTo, asPressed, levelOf, putDownLanded, rowKeys, sameKey, stillLeaving } from "../src/funnelPile.js";
 
 const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
 const rows = [
@@ -36,7 +36,7 @@ test("the walk's Continue moves the row at the press, holds it until the pile ag
   const view = read("AssistantView.jsx");
   assert.match(view, /onPress=\{\(\) => setContinuingTid\(continueOn\.task\.TaskId\)\}/);
   assert.match(view, /onFail=\{\(\) => setContinuingTid\(null\)\}/);
-  assert.match(view, /asPressed\(pile\.items, \{ leaving: leavingTid, continuing: continuingTid, read: readGone\?\.keys \}\)/);
+  assert.match(view, /asPressed\(pile\.items, \{ leaving: leaving\.map\(\(x\) => x\.tid\), continuing: continuingTid, read: readGone\?\.keys \}\)/);
   assert.match(view, /row\.lane === "working"\)\) setContinuingTid\(null\)/, "held until the server's pile has it working");
 });
 
@@ -46,7 +46,7 @@ test("a put-down lands when its row leaves the pile or comes back For later, and
   assert.equal(putDownLanded(rows, 4), false, "still an ordinary row: the server has not answered yet");
   assert.equal(putDownLanded(rows, 99), true, "closed: gone from the pile");
   assert.equal(putDownLanded([{ ...rows[1], deferred: true, back_at: "2026-10-23 09:00:00" }], 4), true, "reminded: For later");
-  assert.match(read("AssistantView.jsx"), /putDownLanded\(pile\.items, leavingTid, leavingWas\.current\)\) setLeavingTid\(null\)/);
+  assert.match(read("AssistantView.jsx"), /stillLeaving\(l, pile\)/);
 });
 
 // MARK DONE ON A WATCHED ROW (the owner, 2026-11-04): the row was under Watching when pressed, so the pile it was pressed on read as landed and
@@ -69,4 +69,19 @@ test("a press reads a re-run row by key or alias, and sameKey sees one row", () 
   assert.ok(sameKey([], "processing:old", "processing:new", { key: "processing:new", aliases: ["processing:old"] }), "the card's own aliases join them");
   assert.deepEqual(rowKeys(rr, ["processing:old"]).sort(), ["processing:new", "processing:old"]);
   assert.deepEqual(asPressed(rr, { read: ["processing:old"] }).map((r) => r.key), ["processing:other"]);
+});
+
+// TWO MARK DONES IN A ROW (the owner, 2026-11-09: a task marked done was back on the rail once the next one was marked done too):
+// one slot held the row put down, so the second press un-hid the first while the rail on screen was still one built before its close.
+test("every row put down stays off the rail until its own close has landed, a second press included", () => {
+  const two = [{ tid: 4, key: "processing:b", was: rows[1], at: 1000 }, { tid: 19, key: "processing:a", was: rows[0], at: null }];
+  assert.deepEqual(asPressed(rows, { leaving: two.map((x) => x.tid) }).map((i) => i.key), ["processing:c"], "both off, not only the newest");
+  const stale = { items: rows, generated_at: 900 };
+  assert.deepEqual(stillLeaving(two, stale).map((x) => x.tid), [4, 19], "a rail read begun before the close answered hides both");
+  assert.deepEqual(stillLeaving(two, { items: rows.slice(1), generated_at: 900 }).map((x) => x.tid), [4], "the one the pile let go is let go");
+  assert.deepEqual(stillLeaving(two, { items: rows, generated_at: 2000 }).map((x) => x.tid), [19],
+    "read after its close answered and still there: reopened by the server - shown, never hidden on the page's word");
+  const view = read("AssistantView.jsx");
+  assert.doesNotMatch(view, /setLeavingTid/, "no single slot left");
+  assert.match(view, /!putDownRef\.current\.some\(\(x\) => x\.tid && x\.tid === i\.tid\)/, "nor drawn ahead as the row below");
 });

@@ -8,7 +8,7 @@
 import { baseName, describeCall, isWork, stepsOf } from "./agentSteps.js";
 import { editHunks, stat } from "./diffView.js";
 import { liveTerminal } from "./taskLayout.js";
-import { viewOf } from "./viewSpec.js";
+import { filesOf, viewOf } from "./viewSpec.js";
 
 // ── ACP's session/update -> the log's step shape ─────────────────────────────────────────────────
 // an ACP tool call names its KIND (read, edit, execute...), not a tool: the name a log would carry for it, so describeCall reads both alike
@@ -141,8 +141,9 @@ export function turnParts(events, { answer = "", keepStart = false } = {}) {
   for (const e of evs) {
     if (e.type === "tool_result") continue;
     // ...and a VIEW the agent showed (agenttools `show`) is its own part, drawn as the UI it describes (ViewSpec.jsx)
-    const p = editOf(e) || planOf(e) || viewOf(e, results.get(e.detail?.tool_call_id));
-    if (p) { flush(); special.add(e.detail?.tool_call_id); parts.push(p); } else run.push(e);
+    // ...and the FILES it showed with it (viewSpec.filesOf): the pictures themselves, over any view the same call drew
+    const res = results.get(e.detail?.tool_call_id), ps = [filesOf(e, res), editOf(e) || planOf(e) || viewOf(e, res)].filter(Boolean);
+    if (ps.length) { flush(); special.add(e.detail?.tool_call_id); parts.push(...ps); } else run.push(e);
   }
   flush();
   const lastPlan = parts.map((p) => p.type).lastIndexOf("plan");

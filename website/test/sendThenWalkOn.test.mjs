@@ -48,7 +48,7 @@ test("a reply sent from Close out closes the task once the send succeeded; a fai
   assert.match(dec, /stays = `the task stays open until you \$\{btn\("close"\)\}`;/);
   assert.match(page, /const liveWork = liveSession \|\| liveRun \? "the agent is working" : "";/);
   // ...and a close the walk kept open is back on the rail too, not only the table (AssistantView surface)
-  assert.match(read("AssistantView.jsx"), /if \(how === "leave" && data\?\.kept\) \{ leftKey\.current = null; setLeavingTid\(null\); \}/);
+  assert.match(read("AssistantView.jsx"), /if \(how === "leave" && data\?\.kept\) \{ leftKey\.current = null; dropLeaving\(fromKey\); \}/);
 });
 
 test("an fyi batch offers its own All read, next and no second Next", () => {

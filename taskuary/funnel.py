@@ -1574,9 +1574,12 @@ def warm(store) -> bool:
     """A read of the pile now is served from the cache: built for this store, in its time, and nothing written or moved since."""
     try: workers = workers_signature(observe())
     except Exception: return False
-    with _LOCK:
+    # ...and a build running now is no warm rail: asked behind it, a walk press waited out the whole build only to be told no (2026-11-09)
+    if not _LOCK.acquire(blocking=False): return False
+    try:
         return (_CACHE.get('store') is store and bool(_CACHE.get('pile')) and time.time() - _CACHE.get('at', 0) < PILE_EVERY
                 and not _moved(store, workers))
+    finally: _LOCK.release()
 
 
 def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, seen=None) -> dict:
@@ -1755,6 +1758,7 @@ def rail_item(store, key: str) -> dict | None:
 def cached_pile(store) -> dict | None:
     """The rail as last built, or None - never a build (the Tasks list asks, and must not pay for one)."""
     return _CACHE['pile'] if _CACHE.get('store') is store else None
+def cached_at(store) -> float: return _CACHE.get('at', 0.0) if _CACHE.get('store') is store else 0.0
 
 
 def invalidate(): _CACHE.update(at=0.0, pile=None, store=None, full=None, mark=None, workers=None); _SOURCES.update(at=0.0, by={})

@@ -10,7 +10,7 @@ import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
 
 import { linkRefs, looksMd, refParts } from "./mdText.js";
 import { appLink, linkRoad, openAppLink, ownPath } from "./appLinks.js";
-import { plainCitations } from "./taskOutputs.js";
+import { codeLocalPaths, localFile, plainCitations } from "./taskOutputs.js";
 import CopyCorner from "./CopyCorner.jsx";
 import { attUrl, isPdf, PdfView, saveFile } from "./Attachments.jsx";
 export { looksMd };
@@ -111,6 +111,34 @@ const sx = {
 // request to whatever server they named (the page's CSP refuses it too). It stays a link the owner can choose to open.
 const Img = ({ src, alt }) => <A href={src}>{`[image${alt ? `: ${alt}` : ""}]`}</A>;
 
+// A LOCAL PATH IS THE FILE (the owner, 2026-11-09: "this should be link"): inside a LocalFiles - a task's chat, {tid} - a whole path into that
+// task's outputs folder (taskOutputs.localFile), in a code span or bare, is a link that opens it, and a picture is drawn small under it - a
+// press opens it whole. Any other path stays the words it was: the server serves that folder alone (outputs.resolve)
+export const LocalFiles = React.createContext(null);
+const LocalPath = ({ f, children }) => {
+  const [big, setBig] = React.useState(false), src = attUrl({ url: f.url });
+  return (<>
+    {/* ...a picture opens over the chat; any other file as a link to a file does (A: saved, a PDF read under it) */}
+    {f.image ? <a href={src} data-tq-file-link="" onClick={(e) => { e.preventDefault(); setBig(true); }} style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}>
+      <code data-tq-local-path={f.rel}>{children}</code></a>
+      : <A href={f.url}><code data-tq-local-path={f.rel}>{children}</code></A>}
+    {f.image && <span data-tq-local-picture="" style={{ display: "block", margin: "4px 0 6px" }}>
+      <img src={src} alt={f.name} onClick={() => setBig(true)} title="Open it whole"
+        style={{ maxWidth: "100%", maxHeight: 220, objectFit: "contain", cursor: "zoom-in", border: `1px solid ${BORDER}`, borderRadius: 4, background: "#fff" }} /></span>}
+    {big && <Dialog open onClose={() => setBig(false)} maxWidth="lg" data-tq-local-picture-big="">
+      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, py: 1, fontSize: 14 }}>
+        <span style={{ flex: 1, fontWeight: 600 }}>{f.name}</span>
+        <IconButton size="small" aria-label="Close" onClick={() => setBig(false)}><CloseIcon fontSize="small" /></IconButton></DialogTitle>
+      <DialogContent dividers sx={{ p: 1 }}><img src={src} alt={f.name} style={{ maxWidth: "100%", display: "block", margin: "0 auto" }} /></DialogContent>
+    </Dialog>}
+  </>);
+};
+const Code = ({ children, node, ...rest }) => {
+  const at = React.useContext(LocalFiles), kids = React.Children.toArray(children);
+  const f = at && kids.length === 1 && typeof kids[0] === "string" ? localFile(kids[0], at.tid) : null;
+  return f ? <LocalPath f={f}>{children}</LocalPath> : <code {...rest}>{children}</code>;
+};
+
 const keepRefs = (kids) => React.Children.map(kids, (k) => typeof k !== "string" ? k
   : refParts(k).map((p, i) => i % 2 ? <span key={i} className="ref">{p}</span> : p));
 const Td = ({ children, node, ...rest }) => <td {...rest}>{keepRefs(children)}</td>;
@@ -123,13 +151,16 @@ const Pre = ({ children, node, ...rest }) => { const box = React.useRef(null);
 export const MdLine = ({ text }) => (
   <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: A, img: Img, p: ({ children }) => <>{children}</> }}>{plainCitations(text || "")}</ReactMarkdown>
 );
-export const Md = ({ text, onTask = null }) => (
+export const Md = ({ text, onTask = null }) => {
+  const at = React.useContext(LocalFiles), words = at ? codeLocalPaths(plainCitations(text || ""), at.tid) : plainCitations(text || "");
+  return (
   <Box sx={sx}>
     <ReactMarkdown remarkPlugins={[remarkGfm]}
-      components={{ a: onTask ? (p) => <A {...p} onTask={onTask} /> : A, img: Img, td: Td, pre: Pre, table: ({ children }) => <div className="tbl"><table>{children}</table></div> }}>
+      components={{ a: onTask ? (p) => <A {...p} onTask={onTask} /> : A, img: Img, td: Td, pre: Pre, code: Code, table: ({ children }) => <div className="tbl"><table>{children}</table></div> }}>
       {/* a Codex citation marker reads as the file's name wherever an answer is shown; the chat makes it a file (taskOutputs.js) */}
-      {/* ...and in the chat a task it names is a link that opens it (linkRefs) */}
-      {onTask ? linkRefs(plainCitations(text || "")) : plainCitations(text || "")}
+      {/* ...and in the chat a task it names is a link that opens it (linkRefs); a path into the task's own folder, the file (Code) */}
+      {onTask ? linkRefs(words) : words}
     </ReactMarkdown>
   </Box>
-);
+  );
+};

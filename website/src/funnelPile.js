@@ -372,10 +372,12 @@ export const rowKeys = (items, keys, card = null) => {
 // ring spinning, where it is under Tasks - not two seconds later with the next pile (press audit B23b, 2026-10-01).
 // `read`: the keys a walk press reads (rule 4) - they leave with the press, as the server's answer will have them - a row answering to one
 // as an alias with them (answersTo)
-export const asPressed = (items, { leaving = null, continuing = null, read = null } = {}) => (!leaving && !continuing && !read?.length ? items
-  : items.filter((i) => (!leaving || i.tid !== leaving) && !read?.some((k) => answersTo(i, k)))
+// `leaving`: the task, or every task, a press is putting down (AssistantView's `leaving` holds them all)
+export const asPressed = (items, { leaving = null, continuing = null, read = null } = {}) => { const gone = [].concat(leaving ?? []).filter(Boolean);
+  return !gone.length && !continuing && !read?.length ? items
+  : items.filter((i) => !gone.includes(i.tid) && !read?.some((k) => answersTo(i, k)))
     .map((i) => (continuing && i.tid === continuing
-      ? { ...i, lane: "working", order_band: 2, surfaced: false, put_down: false, deferred: false, watching: false, working: i.working || i.agent || "agent" } : i)));
+      ? { ...i, lane: "working", order_band: 2, surfaced: false, put_down: false, deferred: false, watching: false, working: i.working || i.agent || "agent" } : i)); };
 // ...and a put-down has LANDED when the server's pile no longer has the row - or has it put away: Remind me keeps the task on the
 // rail under For later (`deferred`), so waiting for it to vanish hid a reminded task until a reload (UX walk, 2026-10-22) - and Watch it
 // keeps it under Watching (`watching`, watch.py)
@@ -383,6 +385,11 @@ export const asPressed = (items, { leaving = null, continuing = null, read = nul
 // Watching read the pile it was pressed on as landed - the row was drawn on the rail again until the server's answer took it off
 export const putDownLanded = (items, tid, was = null) => { const r = (items || []).find((i) => i.tid === tid);
   return !r || (!!r.deferred && !was?.deferred) || (!!r.watching && !was?.watching); };
+// ...and of every row put down, the ones still held off the rail by `pile`: not landed, and no read of it begun after that close's answer
+// came back (`at`, the page's clock; `generated_at`, when the read began) - a rail read after the close that still has the row is the server's
+// word (a message reopened it), never hidden on the page's (the owner, 2026-11-09: a second Mark done drew the first one's task back)
+export const stillLeaving = (leaving, pile) => (leaving || []).filter((x) => !putDownLanded(pile?.items, x.tid, x.was)
+  && !(x.at && Number(pile?.generated_at) > x.at));
 // when a For later row comes back: its Remind me date (an open task walked past has no clock - it is back with the next walk)
 export const backAt = (item) => item?.back_at || item?.defer_until || null;
 // ...said by timeWords.bandUntil, and every other gutter age by timeWords.band - one rule for how a time reads

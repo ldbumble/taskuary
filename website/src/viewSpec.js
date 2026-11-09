@@ -112,6 +112,21 @@ const SHOW = /^(mcp__taskuary__)?show$/;
 // its answer's spec, after MARK: the server's own check of it. A call with no answer yet (live) or none kept (a log) draws its arguments
 export const specIn = (out) => { const s = String(out || ""), i = s.indexOf(MARK); if (i < 0) return undefined;
   try { return JSON.parse(s.slice(i + MARK.length).replace(/ ⏎ /g, "\n").trim()); } catch { return null; } };
+// ...and the FILES it showed (agenttools.show_files, 2026-11-09): copies kept on the task, their rows after FILES_MARK and before any view's
+// mark - drawn in the turn as the pictures and pages they are. Only rows the server wrote: a task artifact's own address, nothing else
+export const FILES_MARK = "TASKUARY-FILES ";
+const ARTIFACT = /^\/api\/task-artifacts\/\d+$/;
+export function filesOf(e, result) {
+  if (e?.type !== "tool_call" || !SHOW.test(String(e.name || "")) || result?.detail?.is_error) return null;
+  const s = String(result?.detail?.result ?? e.detail?.output ?? ""), i = s.indexOf(FILES_MARK);
+  if (i < 0) return null;
+  // ...its rows end at their own last "]": a view's words and mark may follow them in the same answer
+  const j = s.indexOf(MARK, i), upto = s.slice(i + FILES_MARK.length, j < 0 ? undefined : j), raw = upto.slice(0, upto.lastIndexOf("]") + 1).replace(/ ⏎ /g, "\n");
+  let rows; try { rows = JSON.parse(raw); } catch { return null; }
+  const files = (Array.isArray(rows) ? rows : []).filter((r) => isObj(r) && ARTIFACT.test(String(r.url || "")) && text(r.name))
+    .map((r) => ({ id: r.id, name: text(r.name), path: `shown:${r.id}`, kind: "shown", content_type: String(r.content_type || ""), size: Number(r.size) || 0, url: r.url }));
+  return files.length ? { type: "files", files } : null;
+}
 export function viewOf(e, result) {
   if (e?.type !== "tool_call" || !SHOW.test(String(e.name || ""))) return null;
   const d = result?.detail;

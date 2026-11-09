@@ -198,15 +198,15 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   assert.match(finish, /onStay\?\.\(msg\)/);
   assert.ok(remind.indexOf("onLeave?.()") < remind.indexOf("await act(until)"), "the reminder too");
   assert.match(remind, /if \(leaving\) onStay\?\.\(msg\)/);
-  assert.match(view, /putDown: \(key, tid = null\) => \{ leftKey\.current = key; setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\);\s+leavingWas\.current = [^\n]*setLeavingTid\(tid\); \}/, "folded, the dots under it");
+  assert.match(view, /putDown: \(key, tid = null\) => \{ leftKey\.current = key; setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\);[^}]*setLeaving\(\(l\) => \[\.\.\.l\.filter\(\(x\) => x\.tid !== tid\), \{ tid, key, was, at: null \}\]\)/, "folded, the dots under it - beside any put down before it");
   // ...and off the RAIL at the press as well, a live session's Mark done included: it waited on an 18-second write-up
   // first, sitting under For later the whole time (the owner, 2026-10-01: "it first went to Later ... did not disappear")
   const stop = task.slice(task.indexOf("const stopAndFinish = async"), task.indexOf("const markDoneHint"));
   assert.ok(stop.indexOf("onLeave?.()") > -1 && stop.indexOf("onLeave?.()") < stop.indexOf("writeUpThenClose("), "put down before the write-up");
   assert.match(view, /onLeave=\{\(\) => canvas\.putDown\(c\.key, c\.tid\)\}/);
-  assert.match(view, /items: asPressed\(pile\.items, \{ leaving: leavingTid/, "the rail drops it (funnelPile.asPressed)");
-  assert.match(view, /putDownLanded\(pile\.items, leavingTid, leavingWas\.current\)\) setLeavingTid\(null\)/, "until the server's pile has let it go - or put it For later - a reopened task is never hidden");
-  assert.match(view, /pickUp: \(key, why\) => \{[^\n]*setLeavingTid\(null\)/, "a failed close puts it back on the rail too");
+  assert.match(view, /items: asPressed\(pile\.items, \{ leaving: leaving\.map\(\(x\) => x\.tid\)/, "the rail drops it (funnelPile.asPressed)");
+  assert.match(view, /stillLeaving\(l, pile\)/, "until the server's pile has let it go - or put it For later - a reopened task is never hidden");
+  assert.match(view, /pickUp: \(key, why\) => \{[^\n]*dropLeaving\(key\)/, "a failed close puts it back on the rail too");
   assert.match(view, /onWalkLeave=\{\(how, x\) => actions\.leave\(c\.key, how, x\)\}/, "the close and the next one are one walk move");
 });
 

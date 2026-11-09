@@ -58,6 +58,18 @@ def _rows(store) -> list:
 
 
 _HAND = {}
+KNOWN_FOR = 300                                       # how old a held line a close may still answer off (_known); past it, the rail is built
+
+
+def _known(store) -> list:
+    """The rail as this process last knew it, never a build while it knows one: the line a move held (_hold) or the pile's cached build,
+    the newer of the two, however much has been written since. A close answers off it (leave) - the row it closed taken out - and the
+    page reads the rail behind the answer (MARK DONE TOOK ~45 S, the owner, 2026-11-09: a press built the whole rail twice, before
+    and after its own close, each one 20-60 s on a busy home - the next task drew a minute after the press)."""
+    hand = list(_HAND['rows']) if _HAND.get('store') is store and time.time() - _HAND['at'] < KNOWN_FOR else None
+    cached, at = funnel.cached_pile(store), funnel.cached_at(store)
+    if cached and (hand is None or at >= _HAND['at']): return list(cached['items'])
+    return hand if hand is not None else _rows(store)
 
 
 def _mark(store):
@@ -474,7 +486,10 @@ def _act(store, item: dict, how: str, actor: str, note: str = None, until: str =
     # task was still on the line, the walk re-presented it, and the page went back to the task just closed
     if how == 'left':
         from . import writeup
-        return {'closed': not find(line(_rows(store)), item['key']) or (bool(item.get('tid')) and writeup.closing(int(item['tid'])))}
+        # ...a task closed, or closing, is known from the task itself: the line was built again only to see it gone (2026-11-09)
+        if (tid := item.get('tid')) and (writeup.closing(int(tid)) or (store.get_task(int(tid)) or {}).get('Status') in ('done', 'dropped')):
+            return {'closed': True}
+        return {'closed': not find(line(_rows(store)), item['key'])}
     # ...a card's own Done (an FYI batch's All read, a reply sent from its card): the row settled, nothing behind it closed
     if how == 'settle': _settle_unmoved(store, item, actor); return {'closed': True}
     # ...Remind me through the picker's own road (remind.set_reminder): its agent-open refusal and its receipt stay the same
@@ -507,16 +522,19 @@ def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, no
     row on screen, re-presented. Put it on my list keeps the new task on the table; Next and Back still measure from the report's place."""
     with _LOCK:
         if (hit := _again(press)): return hit
-        st, rows = state(store), _rows(store)
+        if how in ('all_read', 'next'): return _remember(press, next(store, key, actor))
+        # THE PRESS ANSWERS OFF THE RAIL ALREADY KNOWN (2026-11-09): the row, its place and the row below it come from the line in hand
+        # (_known), and the rail is built again behind the answer - by the page's own read - never inside it
+        st, rows = state(store), _known(store)
         item = find(rows, key)
         item = as_item(store, [item]) if item is not None else _lookup(store, key)
         if not item: raise LookupError(f'nothing to leave: {key}')
         place = place_of(store, key, st, rows)
-        if how in ('all_read', 'next'): return _remember(press, next(store, key, actor))
         done = _act(store, item, how, actor, note, until)
-        # ...the rail as the act left it, built once: an act that ran elsewhere ('left') was read on its own rows already
         if how != 'left': funnel.invalidate()
-        rows = _rows(store)
+        # ...the line as the close left it: the rows in hand without the row closed (and a batch's members), a kept-open row looked up again
+        gone = {key, *members_of(key), *(item.get('aliases') or ())}
+        rows = [r for r in rows if not any(_is(r, k) for k in gone)] if done.get('closed') and how != 'put_on_list' else _rows(store)
         if how == 'put_on_list' and done.get('made'):
             made = _lookup(store, f"task:{int(done['made'])}")
             if made:

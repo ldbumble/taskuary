@@ -1828,7 +1828,8 @@ _FLAGS: dict = {}
 
 def cli_has_flag(name: str, flag: str) -> bool:
     """Does this CLI's --help name `flag`? Asked once per executable and remembered; a CLI that cannot say is taken as not having it."""
-    exe = tuple(_resolve_cmd(name))
+    try: exe = tuple(_resolve_cmd(name))
+    except Exception: return False          # not installed (CI's runners): nothing to ask, and the caller runs without the flag
     if (exe, flag) not in _FLAGS:
         try:
             r = spawn.run([*exe, '--help'], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30,

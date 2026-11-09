@@ -147,14 +147,6 @@ class TheSessionTests(unittest.TestCase):
         self.assertIn('THIS AI CANNOT DRIVE A BROWSER', seen[0])
         self.assertNotIn(apiagent.BRIEF, seen[0])
 
-    def test_no_agent_browser_on_the_computer_says_set_it_up(self):
-        seen = []
-        class Brain:
-            def __call__(self, system, user, **kw): seen.append(system); return 'The browser is not set up.'
-            def chat(self, *a, **kw): raise AssertionError('no browser: no loop')
-        self._turn(Brain(), installed=False)
-        self.assertIn('NO BROWSER FOR AGENTS YET', seen[0])
-
 
 class TheToolboxTests(unittest.TestCase):
     """Taskuary's own tools reach an API brain through the SAME server a CLI session's MCP does - its token and task proof, its gates."""
@@ -199,6 +191,68 @@ class TheToolboxTests(unittest.TestCase):
         self.assertNotIn('browser_open', names)
         with self.assertRaises(ValueError): apiagent.run_tool(MemoryStore(), 11, 's', 'browser_open', {'url': 'portal.example'})
         apiagent.STRANGERS.discard((11, 's')); apiagent.TOOLBOX.pop((11, 's'), None)
+
+
+class TheHandsTests(unittest.TestCase):
+    """Phase 2: files in the task's outputs folder, the web, and a command that only ever waits for the owner's Approve."""
+
+    def setUp(self):
+        self.s = MemoryStore()
+        self.tid = self.s.create_task({'Title': 'Compare two quotes', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+
+    def run_(self, tool, **a): return apiagent.run_tool(self.s, self.tid, 'sid-h', tool, a)
+
+    def test_a_file_is_written_listed_and_read_back_inside_the_outputs_folder_only(self):
+        said = self.run_('file_write', name='notes/quotes.csv', text='vendor,price\nPayworth,4200\n')
+        self.assertIn('notes/quotes.csv', said)
+        self.assertIn('notes/quotes.csv', self.run_('files_list'))
+        self.assertIn('Payworth,4200', self.run_('file_read', name='notes/quotes.csv'))
+        for bad in ('../escape.txt', 'C:/Windows/x.txt', '/etc/x', 'a:stream.txt'):
+            with self.assertRaises(ValueError, msg=bad): self.run_('file_write', name=bad, text='x')
+        with self.assertRaises(ValueError): self.run_('file_read', name='../../config.toml')
+
+    def test_a_page_is_fetched_through_the_address_guard_and_read_as_text(self):
+        class R:
+            status_code, headers = 200, {'content-type': 'text/html; charset=utf-8'}
+            class raw:
+                @staticmethod
+                def read(n, decode_content=True): return b'<html><script>x()</script><h1>Rates</h1><p>Plan A is $12.</p></html>'
+            def close(self): pass
+        with mock.patch('taskuary.webguard.get', return_value=R()) as got:
+            said = self.run_('web_fetch', url='rates.example/plans')
+        self.assertEqual(got.call_args[0][0], 'https://rates.example/plans')
+        self.assertIn('Plan A is $12.', said); self.assertNotIn('x()', said)
+        with self.assertRaises(ValueError): self.run_('web_fetch', url='file:///C:/secrets.txt')
+
+    def test_a_search_runs_on_the_owners_search_card_through_run_system(self):
+        with self.assertRaises(ValueError) as e: self.run_('web_search', query='payroll vendors')
+        self.assertIn('no web search is connected', str(e.exception))
+        cards = [{'Type': 'brave_search', 'Active': 1, 'HasSecret': 1, 'ConnectorId': 4}]
+        with mock.patch.object(self.s, 'list_connectors', return_value=cards), \
+             mock.patch.object(apiagent, 'call_taskuary', return_value='[1] Payworth') as ran:
+            self.assertEqual(self.run_('web_search', query='payroll vendors'), '[1] Payworth')
+        self.assertEqual(ran.call_args[0][2:4], ('run_system', {'type': 'brave_search', 'connector_id': 4, 'query': 'payroll vendors'}))
+
+    def test_a_command_never_runs_it_waits_on_the_owners_approve_card_once(self):
+        with mock.patch('taskuary.shellgate.perform') as ran, mock.patch('taskuary.spawn.run') as spawned:
+            said = self.run_('run_command', command='python make_chart.py', why='draw the price chart')
+            self.run_('run_command', command='python make_chart.py', why='draw the price chart')
+        ran.assert_not_called(); spawned.assert_not_called()
+        self.assertIn('held this for the owner', said)
+        held = [r for r in self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (self.tid,))]
+        self.assertEqual(len(held), 1, 'the same command asked twice is one card')
+        p = json.loads(held[0]['DraftText'])
+        self.assertEqual((p['action'], p['command'], p['what']), ('shell_act', 'python make_chart.py', 'draw the price chart'))
+
+    def test_look_only_offers_no_write_and_no_command_and_what_is_not_offered_does_not_run(self):
+        with mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
+            names = {t['function']['name'] for t in apiagent.tools_for(self.tid, 'sid-h', browser=False, hands=False)}
+        try:
+            self.assertTrue({'files_list', 'file_read', 'web_fetch', 'web_search'} <= names)
+            self.assertFalse({'file_write', 'run_command', 'browser_open'} & names)
+            with self.assertRaises(ValueError): self.run_('run_command', command='dir', why='list')
+            with self.assertRaises(ValueError): self.run_('file_write', name='a.txt', text='x')
+        finally: apiagent.OFFERED.pop((self.tid, 'sid-h'), None); apiagent.TOOLBOX.pop((self.tid, 'sid-h'), None)
 
 
 if __name__ == '__main__': unittest.main()

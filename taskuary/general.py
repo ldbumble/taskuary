@@ -2271,9 +2271,9 @@ class GeneralSession:
                 looped = apiagent.can(brain)
                 browser = looped and not stranger and browserview.installed()
                 if looped:
-                    api_tools = apiagent.tools_for(self.task_id, self.sid, browser, stranger)
-                    # ...nothing to do with them (the toolbox unreachable, no browser): the plain way, as before
-                    looped = bool(browser or apiagent.TOOLBOX.get((self.task_id, self.sid)))
+                    api_tools = apiagent.tools_for(self.task_id, self.sid, browser, stranger, hands=full_hands(self.store))
+                    # ...nothing to do with them (a stranger's task whose toolbox did not answer): the plain way, as before
+                    looped = any(t['function']['name'] != 'show' for t in api_tools)
                 if looped:
                     system = f'{system}\n\n{apiagent.TOOLS_BRIEF}'
                     # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose_reply, not the marker line beside it

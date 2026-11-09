@@ -62,9 +62,7 @@ const KINDS = [
   // ...and the third thing Reports keeps (the owner, 2026-10-22: "this is not playbook ui?" - asked for one, the Assistant handed it to a
   // general agent as its job). Its words go to the shelf's own New playbook, which sets it up with AI there (playbookOpen.askPlaybook)
   { key: "playbook", mark: "📖", label: "Playbook", hint: "how one kind of request is handled from now on — triage matches new mail to it, and its steps are followed your way" },
-  // ...and the door for what fits none of them (Gabi, TQ-1358: "some things dont fit into these categories"): the words go to the Assistant's
-  // chat as a line typed there (askAssistant.js), and it works out what it is - nothing is filed here
-  { key: "chat", mark: "💬", label: "Chat with Taskuary", hint: "anything that fits none of these — say it and the Assistant takes it from there" },
+  // no "Chat with Taskuary" tab (the owner, 2026-11-09: "remove it. it looks crazy") - what fits none of these is typed to the Assistant's own box
 ];
 const REPEATS = ["report", "dashboard", "workflow"];
 

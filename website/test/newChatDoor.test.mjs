@@ -1,5 +1,4 @@
-// A DOOR FOR WHAT FITS NO TAB (Gabi, TQ-1358: "we should have a 'chat with Taskuary' option. some things dont fit into these categories"):
-// New's last tab hands its words to the Assistant's chat as a line typed there - and is not offered on the Board, where no chat is on screen.
+// THE CHAT DOOR WENT (the owner, 2026-11-09): New offers no Chat with Taskuary tab; askAssistant still hands words to the chat.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -7,16 +6,9 @@ import { askAssistant, takeAsk } from "../src/askAssistant.js";
 
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
-test("New has a Chat with Taskuary tab, last, whose press says the words in the chat and closes the sheet", () => {
-  const src = read("NewSheet.jsx");
-  assert.ok(src.indexOf('key: "playbook"') < src.indexOf('key: "chat", mark: "💬", label: "Chat with Taskuary"'));
-  assert.match(src, /kind === "chat"\) \{[\s\S]{0,200}askAssistant\(about\);[^\n]*onClose\?\.\(\);/);
-  assert.match(src, /kind === "chat" \? "Ask Taskuary"/);
-  assert.match(src, /KINDS\.filter\(\(k\) => chat \|\| k\.key !== "chat"\)/);
-});
-
-test("the Board's sheet leaves the chat door out", () => {
-  assert.match(read("BoardView.jsx"), /<NewSheet open=\{newOpen\}[^\n]*initialKind="agent" chat=\{false\}/);
+test("New has no Chat with Taskuary tab (the owner, 2026-11-09: it looks crazy) - the Assistant's own box takes what fits no tab", () => {
+  assert.doesNotMatch(read("NewSheet.jsx"), /key: "chat"/);
+  assert.doesNotMatch(read("NewSheet.jsx"), /label: "Chat with Taskuary"/);
 });
 
 test("the words wait for the Assistant and are taken once", () => {

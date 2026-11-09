@@ -14,7 +14,7 @@ from . import msauth, net, remotemcp, spawn
 from .timewords import plural
 requests = net      # pooled Session + (connect, read) timeouts; the name keeps patches of channels.requests.get biting
 from .github import _h as gh_headers, list_accessible_repos
-from .ingest import ingest_message, rev_id, seen_before
+from .ingest import edited_words, ingest_message, rev_id, seen_before
 from .counsel import is_invite
 from .llm import AI_TYPES        # every brain picker and every brain Test read the one list
 from .inboxes import TYPES as INBOXES      # helpdesks and the newer project tools: one road (inboxes.py)
@@ -1876,7 +1876,9 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
         # what somebody meant to say the day they filed it
         n += _gh_comments(store, src, tok, repo, i, base, llm, mode == 'feed')
         if seen_before(store, base, subject, body): continue
+        own = edited_words(store, base, body)       # an edit shows what it added, not the whole PR again
         out = ingest_message(store, {
+            **({'own_text': own} if own else {}),
             'external_id': rev_id(base, subject, body), 'channel': 'github',
             'subject': subject, 'body': body,
             'from_name': who, 'from_email': f'{who}@users.noreply.github.com',

@@ -2819,6 +2819,9 @@ class SQLiteStore:
     def get_message(self, mid): return self._one('SELECT * FROM message WHERE MessageId=?', (mid,))
     def message_by_external(self, external_id):
         return self._one('SELECT * FROM message WHERE ExternalId=? ORDER BY MessageId DESC LIMIT 1', (external_id,))
+    def last_version(self, base):
+        "The newest stored version of tracker item `base` (gh:o/r#42, jira:OPS-12): its bare id or a rev_id of it - never a comment on it."
+        return self._one("SELECT * FROM message WHERE ExternalId=? OR ExternalId LIKE ? ORDER BY MessageId DESC LIMIT 1", (base, base + '@%'))
     # ── what the hub knows about a sender / a topic (counsel.dossier, responder) ─────────────
     def messages_from(self, email, since, limit=8):
         return self._rows("SELECT * FROM message WHERE lower(FromEmail)=? AND Status NOT IN ('context','history','skipped') AND SentAt>=? "

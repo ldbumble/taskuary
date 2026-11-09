@@ -780,6 +780,17 @@ def seen_before(store, base: str, subject: str, body: str) -> bool:
     return bool(row) and rev_id(base, row.get('Subject') or '', row.get('BodyText') or '') == rid
 
 
+def edited_words(store, base: str, body: str) -> str:
+    """What a later version of tracker item `base` SAYS ANEW, for the chat to show: the lines its body gained over the last version
+    stored. The whole item came in again on every edit, so a PR whose description changed showed twice in full (the owner,
+    2026-11-09: "see the input twice why?"). '' for a first version - it is shown whole. Triage and agents still read the full body."""
+    prev = store.last_version(base)
+    if not prev: return ''
+    was = {l.strip() for l in str(prev.get('BodyText') or '').splitlines() if l.strip()}
+    new = [l for l in str(body or '').splitlines() if l.strip() and l.strip() not in was]
+    return ('Edited - it now also says:\n' + '\n'.join(new[:60])) if new else 'Edited - lines were taken out; nothing new was added.'
+
+
 def ingest_tracker(store, msg: dict, llm=None, file_only: bool = False) -> int:
     """One tracker item, keyed on its WORDS. Returns 1 when something landed, so a poll can
     still count arrivals the way it always did.
@@ -790,7 +801,8 @@ def ingest_tracker(store, msg: dict, llm=None, file_only: bool = False) -> int:
     and rewrite a draft that is now behind the thread."""
     base, subject, body = msg['external_id'], msg.get('subject') or '', msg.get('body') or ''
     if seen_before(store, base, subject, body): return 0
-    out = ingest_message(store, {**msg, 'external_id': rev_id(base, subject, body)}, llm=llm, file_only=file_only)
+    own = edited_words(store, base, body)
+    out = ingest_message(store, {**msg, 'external_id': rev_id(base, subject, body), **({'own_text': own} if own else {})}, llm=llm, file_only=file_only)
     return out['status'] != 'duplicate'
 
 

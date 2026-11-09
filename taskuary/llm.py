@@ -153,6 +153,35 @@ VISION_TYPES = ('image/png', 'image/jpeg', 'image/gif', 'image/webp')
 VISION_MAX, VISION_BYTES = 4, 5 * 1024 * 1024      # per call: how many images, and how big each
 
 
+def _jpeg_parts(b: bytes):
+    "A JPEG's header segments [(marker, bytes)] and the rest from its first scan on, or None when it is not one we can walk."
+    if b[:2] != b'\xff\xd8': return None
+    out, i = [], 2
+    while i + 4 <= len(b) and b[i] == 0xFF:
+        m, n = b[i + 1], int.from_bytes(b[i + 2:i + 4], 'big')
+        if m == 0xDA: return out, b[i:]
+        out.append((m, b[i:i + 2 + n])); i += 2 + n
+    return None
+
+
+def vision_safe(ct: str, b64: str) -> str:
+    """A GRAYSCALE JPEG WITH AN ADOBE MARKER IS REFUSED BY GOOGLE: Vertex answers "The provided file is malformed or corrupted and could
+    not be decoded" (400) for a one-channel JPEG carrying Photoshop's APP14 segment - a signature logo saved from Photoshop, on every mail
+    of a thread, so a HIPAA AI agent could never start on it (2026-11-09). APP14 only says how to read 3- or 4-channel colour; on one channel
+    it means nothing, so it is dropped and every decoder reads the same picture. Anything else goes as it came."""
+    if ct != 'image/jpeg': return b64
+    try: b = base64.b64decode(b64)
+    except ValueError: return b64
+    got = _jpeg_parts(b)
+    if not got: return b64
+    segs, rest = got
+    sof = next((s for m, s in segs if m in (0xC0, 0xC1, 0xC2)), None)
+    if not sof or len(sof) < 10 or sof[9] != 1 or not any(m == 0xEE for m, _ in segs): return b64
+    return base64.b64encode(b'\xff\xd8' + b''.join(s for m, s in segs if m != 0xEE) + rest).decode()
+# ...and a picture the model still cannot open costs the image, never the turn: the question is asked again without it (llm._build)
+_IMAGE_REFUSED = re.compile(r'could not be decoded|malformed or corrupted|invalid image|unable to process (input )?image|image.{0,30}(not supported|unsupported)', re.I)
+
+
 def readable_images(store, message_ids, cap: int = VISION_MAX) -> list:
     """[(media_type, base64)] for the images on these messages, or [] when the owner has vision
     switched off. SVG and PDF are skipped: no provider takes them as image input."""
@@ -188,6 +217,9 @@ PROVIDER_DEFAULT = {'anthropic': 'claude-opus-5', 'openai': 'gpt-4o-mini', 'open
 # thinking before it writes, so a 400-token triage came back with no message at all - read as a refused format, then as an error with
 # no reason, and a connected Vertex AI sorted no mail (2026-10-15). Once more with this much room; empty after that says so.
 ROOM = 8000
+
+
+class _ImageRefused(Exception): "A 400 that is the picture, not the question (_IMAGE_REFUSED)."
 
 
 class _Empty(Exception):
@@ -1032,7 +1064,7 @@ def make_llm(t, cfg: dict, key: str):
         # max_completion_tokens"), older Azure api-versions reject max_completion_tokens,
         # older Azure resources 404 the v1 url - and not every model behind this one schema can
         # be handed a response_format. Walk the grid until one works.
-        content = ([{'type': 'image_url', 'image_url': {'url': f'data:{ct};base64,{b64}'}}
+        content = ([{'type': 'image_url', 'image_url': {'url': f'data:{ct};base64,{vision_safe(ct, b64)}'}}
                     for ct, b64 in (images or [])] + [{'type': 'text', 'text': user}]) if images else user
         # AN EMPTY TURN IS NO TURN: Gemini and Claude behind a gateway both refuse one ("contents.parts must not be empty", "text content
         # blocks must be non-empty") where OpenAI let it by - a blank system is left out, and a blank ask is the system's words
@@ -1066,6 +1098,7 @@ def make_llm(t, cfg: dict, key: str):
                         raise _Empty(ch.get('finish_reason') or 'none given')
                     last = r
                     if r.status_code == 404: break                      # wrong surface -> next url
+                    if r.status_code == 400 and images and _IMAGE_REFUSED.search(r.text): raise _ImageRefused(r.text[:300])
                     if r.status_code == 400 and 'max_completion_tokens' in r.text: continue
                     if fmt and refused_format(r): return None           # cannot carry this format -> ask with the next one
                     raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
@@ -1079,6 +1112,11 @@ def make_llm(t, cfg: dict, key: str):
         fmts = [{'type': 'json_schema', 'json_schema': {**want, 'strict': True}}, {'type': 'json_object'}] if want else []
         where = (urls[0], model)
         def ask():
+            try: return asked()
+            except _ImageRefused:
+                msgs[-1]['content'] = f'{user}\n\n({len(images)} attached image(s) could not be opened by this AI and were left out.)'
+                return asked()
+        def asked():
             for i, fmt in enumerate(fmts + [None]):
                 if fmt and i < _FORMAT_FROM.get(where, 0): continue
                 out = once(fmt)

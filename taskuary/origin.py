@@ -97,15 +97,32 @@ def _judge(store, tid: int, msgs, memo: dict, seen: dict) -> tuple:
 # Only someone senders.known trusts lifts it: never the owner's own reply on the thread (an answer to a stranger is no say-so - Trust them is),
 # never Taskuary's own lines or a repository's (an outsider's pull request stays theirs), and never past a line triage read as an attempt on
 # the agent or the owner (message.Danger). The stranger's words stay theirs in every prompt - someone else's, never the owner's - and a
-# stranger who writes after it lowers the task again, as before.
+# stranger who writes after it lowers the task again, as before. IN A GROUP, only a line triage joined to the task as THIS work (same_problem
+# true, ingest.chat_route) lifts it (the owner, 2026-11-09): a colleague just posting in the same group vouches for nothing. Mail: any trusted
+# person on the thread.
 NO_LIFT = (*OURS, 'github')
+def _dm(m) -> bool:
+    try: return bool((json.loads(m.get('MailMetaJson') or '{}') or {}).get('dm'))
+    except (ValueError, TypeError, AttributeError): return False
+def _group_line(m) -> bool:
+    from .store import CHAT_CHANNELS
+    return str(m.get('Channel') or '').lower() in CHAT_CHANNELS and not _dm(m)
+def _joined_as_work(store, msgs) -> set:
+    "The task's lines triage joined as its own work (same_problem true) - one read for the whole task, newest verdict per line."
+    tid, v = next((m.get('TaskId') for m in msgs if m.get('TaskId')), None), {}
+    for r in store._rows('SELECT r.MessageId, r.VerdictJson FROM route r JOIN message m ON m.MessageId=r.MessageId WHERE m.TaskId=? '
+                         'AND r.VerdictJson IS NOT NULL ORDER BY r.RouteId', (tid,)) if tid else []:
+        try: v[r['MessageId']] = (json.loads(r['VerdictJson']) or {}).get('same_problem') is True
+        except (ValueError, TypeError, AttributeError): v[r['MessageId']] = False
+    return {k for k, ok in v.items() if ok}
 def lifted(store, msgs, through: int = 0, memo: dict = None, seen: dict = None):
     "(message id, why, who) of the newest line on the task past `through` from someone trusted, with no Danger on any line up to it - else None."
-    later = [m for m in msgs if m['MessageId'] > through]
+    later, work = [m for m in msgs if m['MessageId'] > through], None
     for i in range(len(later) - 1, -1, -1):
         m = later[i]
         if _own(m) or (m.get('Channel') or '') in NO_LIFT: continue
         if (r := of_message(store, m, memo, seen)) and r[0] == 'trusted':
+            if _group_line(m) and m['MessageId'] not in (work := _joined_as_work(store, msgs) if work is None else work): continue
             if any(x.get('Danger') for x in later[:i + 1]): return None
             if not any((r := of_message(store, x, memo, seen)) and r[0] == 'stranger' for x in later[:i]): return None    # nobody to lift
             who = m.get('FromName') or m.get('FromEmail') or 'Someone you trust'

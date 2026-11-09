@@ -67,3 +67,26 @@ def test_a_live_general_session_starts_its_cli_again_in_the_new_mode():
     assert sess.trust_moved(), 'lifted: it starts again, in full mode'
     sess.cli_sid = 'sid-born-trusted'
     assert not sess.trust_moved()
+
+
+# ── in a group, only a line joined as this work lifts it; (the owner, 2026-11-09) ─────────────────
+from unittest import mock
+
+GROUP = 'whatsapp:120363-site@g.us'
+def _said(s, t, who, verdict=None):
+    mid = s.add_message({'TaskId': t, 'Channel': 'whatsapp', 'ConversationId': GROUP, 'FromName': who, 'BodyText': 'y', 'Status': 'routed'})
+    if verdict is not None: s.add_route(mid, t, 'attach', 1.0, 'same chat', [], 'triage', verdict=verdict)
+    return mid
+
+def _people(s, m, memo=None, seen=None): return ('trusted', 'you talk with them') if m.get('FromName') == 'Erin Blake' else ('stranger', 'new here')
+
+
+def test_in_a_group_only_a_line_joined_as_this_work_lifts_it():
+    s = _store(); t = s.create_task({'Title': 'Cooler alarm', 'Kind': 'general', 'Source': 'whatsapp'}, 'router')
+    with mock.patch.object(origin, 'of_message', _people):
+        _said(s, t, 'Kai Stranger', {'intent': 'task'})
+        _said(s, t, 'Erin Blake', {'intent': 'fyi', 'same_problem': False})         # just posting in the group
+        assert origin.of_task(s, t)[0] == 'stranger'
+        _said(s, t, 'Erin Blake', {'intent': 'task', 'same_problem': True})         # asks about that very work
+        assert origin.of_task(s, t)[0] == 'trusted'
+

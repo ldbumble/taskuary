@@ -2,6 +2,11 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.22 - 2026-11-09
+
+- Night scenarios, round 1: what a quick call, a shared chat and a yes/no question got wrong
+- Night scenarios, round 3: a line that settles a task across channels reaches it, and says so
+
 ## 0.3.11.21 - 2026-11-08
 
 - Triage guide: a bare greeting is fyi, and a question about something already reported joins that task

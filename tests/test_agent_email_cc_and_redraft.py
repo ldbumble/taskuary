@@ -64,3 +64,18 @@ def test_the_agents_email_fills_the_slot_it_names_rather_than_adding_another():
     assert deliver(s, out['review_id'])['to'] == ['ray.colton@northwind.example'] and waiting(s, tid) == [('slot', out['review_id'])]
     from taskuary import agenttools
     assert 'slot' in agenttools.TOOLS['propose_email'][2]['properties'] and 'slot' not in agenttools.TOOLS['propose_email'][2]['required']
+
+
+def test_an_email_the_agent_rewrites_after_the_owner_prompted_is_a_new_card_the_old_one_its_record():
+    # the owner, 2026-11-10: "The second you write ptompt on email action it should go gray and then it should generate new email action box
+    # under it with new email.." - an email card the agent wrote again after his line was rewritten into the waiting review, in place
+    from taskuary import general, wrapup
+    s = MemoryStore(); tid = own_task(s, 'general')
+    old = slots.draft(s, tid, 'Hi Paula - the long version of the Q4 review.', to=PAULA, subject='Q4')['review_id']
+    s._exec("UPDATE review SET CreatedAt='2026-11-10 08:01:00' WHERE ReviewId=?", (old,))
+    s._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', ('2026-11-10 09:00:00', s.add_comment(tid, 'owner', general.USER_TYPE, 'make it shorter')))
+    new = slots.draft(s, tid, 'Hi Paula - short: Q4 is on track.', to=PAULA, subject='Q4')['review_id']
+    assert new != old
+    assert s.get_review(old)['Status'] == 'closed_unsent' and s.get_review(old)['DecideNote'] == wrapup.REPLACED
+    assert 'long version' in s.get_review(old)['DraftText'], 'the old card keeps its words'
+    assert slots.draft(s, tid, 'Hi Paula - short: Q4 is on track, numbers attached.', to=PAULA)['review_id'] == new, 'saved twice in its turn: in place'

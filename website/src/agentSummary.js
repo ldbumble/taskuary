@@ -103,7 +103,9 @@ export const placeCards = (cards, messages, turns) => { const ids = new Set((mes
 export const rowOf = (messages, at) => { const t = msOf(at); let was = -Infinity, id = null;
   for (const m of messages || []) { if (!m?.id) continue; was = m.createdAt ? msOf(m.createdAt) : was; if (was <= t) id = m.id; }
   return id; };
-const waitingDraft = (reviews) => (reviews || []).filter(pendingReply).sort((a, b) => a.ReviewId - b.ReviewId).at(-1) || null;
+// ...a reply, or an email the task owes (a slot's card, slots.draft) - both are the draft card the owner rewrites by prompting
+const letter = (r) => r?.Status === "pending" && r.Kind !== "action" && String(r.DraftText || "").trim();
+const waitingDraft = (reviews) => (reviews || []).filter(letter).sort((a, b) => a.ReviewId - b.ReviewId).at(-1) || null;
 // ...the waiting draft's place: the turn that wrote it where the chat draws that turn, else its row by time
 export const draftHome = (reviews, messages) => {
   const r = waitingDraft(reviews), t = r && draftTurn(r);

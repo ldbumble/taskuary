@@ -33,6 +33,8 @@ test("the draft is passed from the paint his line is drawn in - his own line in 
   assert.equal(draftPassed([{ ...draft, stale: true }], [mail]), true, "the server says a line came after it");
   // ...Taskuary's own lines are not his: a brief, a press, the mail that came in
   assert.equal(draftPassed([draft], [mail, { ...line, metadata: { custom: { brief: true } } }, { ...line, id: "p", metadata: { custom: { press: true } } }]), false);
+  // ...an email the task owes (a slot's card) the same as a reply
+  assert.equal(draftPassed([{ ...draft, Kind: "slot" }], [mail, line]), true);
   // ...and the NEW draft, written after his line, is live
   assert.equal(draftPassed([{ ...draft, ReviewId: 2, CreatedAt: new Date(Date.now() + 5000).toISOString() }], [mail, line]), false);
 });

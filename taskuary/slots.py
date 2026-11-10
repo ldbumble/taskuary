@@ -200,6 +200,12 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     # ...an email's To holds addresses only: none found is an EMPTY To the card asks the owner to fill, never the name
     deliver = json.dumps({'channel': kind, 'to': [] if missing else [o['to']], 'cc': cc, 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid),
                           **({'mailbox': box} if box else {}), **({'guessed': guessed} if guessed else {}), **({'needs': missing} if missing else {})})
+    # ...and one the owner has prompted past is old news (the owner, 2026-11-10: "The second you write ptompt on email action it should go gray and
+    # then it should generate new email action box under it with new email.."): the agent's letter is a new card in its turn, the old one its
+    # record, as a reply's is (wrapup.agent_reply); saved twice in its own turn it is rewritten in place
+    if rv and rv.get('Status') == 'pending' and agent != 'owner':
+        from . import wrapup
+        if wrapup._turn_after(store, tid, rv): store.decide_review(rv['ReviewId'], 'closed_unsent', None, agent, note=wrapup.REPLACED); rv = None
     if rv and rv.get('Status') == 'pending':
         rid = rv['ReviewId']
         if not store.set_review_deliver(rid, deliver): return {'ok': False, 'why': 'that email is already being sent'}

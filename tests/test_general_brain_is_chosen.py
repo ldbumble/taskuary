@@ -299,10 +299,30 @@ class _Now:
     def start(self): self.go()
 
 
-def test_a_connector_only_home_runs_a_coding_task_as_the_general_agent_on_the_connector(world):
+def test_a_connector_only_home_runs_a_coding_task_on_the_connector_as_the_coding_task_it_is(world):
+    "By the roads that start a terminal too (a carry-on, a queue drain): its card's session, as the Send button starts it (general.on_card)."
+    from taskuary import general, terminal
+    s, cfg = _home(connector='hipaa_ai')
+    tid = s.create_task({'Title': 'Fix the invoice export', 'Kind': 'coding', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+    with mock.patch.object(config, 'load', lambda: cfg), mock.patch.object(terminal, 'threading', mock.Mock(Thread=_Now)), \
+         mock.patch.dict(terminal.SESSIONS, {}, clear=True):          # the session it opens is this test's
+        clic.sync(cfg, s)
+        try: out = terminal.start_on_task(s, tid)
+        finally: general.ON_CARD.discard(tid)
+    assert out['general'] and s.get_task(tid)['Kind'] == 'coding'
+    assert world['ran'] == [] and world['api'] == ['hipaa_ai']
+    assert not any('general agent works this' in str(c.get('Body') or '') for c in s.list_comments(tid))
+
+
+def test_a_connector_only_home_with_developer_mode_off_runs_a_coding_task_as_the_general_agent(world):
     from taskuary import terminal
     s, cfg = _home(connector='hipaa_ai')
     tid = s.create_task({'Title': 'Fix the invoice export', 'Kind': 'coding', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+    with mock.patch.object(agents, 'developer_mode', agents.developer_mode.real): _as_the_general_agent(world, s, cfg, tid)
+
+
+def _as_the_general_agent(world, s, cfg, tid):
+    from taskuary import terminal
     with mock.patch.object(config, 'load', lambda: cfg), mock.patch.object(terminal, 'threading', mock.Mock(Thread=_Now)),          mock.patch.dict(terminal.SESSIONS, {}, clear=True):          # the session it opens is this test's, never the next one's
         clic.sync(cfg, s)
         out = terminal.start_on_task(s, tid)

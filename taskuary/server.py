@@ -196,6 +196,9 @@ async def _lifespan(_app):
     from . import general as _general
     try: _general.keep_cut_turns(store)
     except Exception as e: logger.warning(f'turns cut by the restart not kept: {e}')
+    # ...and which coding tasks run on an AI card is known again before anything reads a task (general.recall_cards)
+    try: _general.recall_cards(store)
+    except Exception as e: logger.warning(f'coding tasks on an AI card not recalled: {e}')
     # ...and an agent the restart cut off while it asked the owner is back at its question (resume_asking) - off the window's path
     threading.Thread(target=resume_asking, daemon=True, name='resume-asking').start()
     # ...and the browsers this folder's last run left open are its own to close (instance.claim made it the one live run) - off the

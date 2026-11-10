@@ -2327,6 +2327,19 @@ def _ask_quietly(session, ask: str, tid: int, brief: bool = False):
     except Exception as e: logger.warning(f'task {tid}: the general agent could not take the work - {e}')     # said on the task by the turn
 
 
+def _on_card(store, tid: int, card: str, model: str = None, instruction: str = None, actor: str = 'owner') -> dict:
+    """A coding task whose AI is a card (general.on_card), reached by a road that opens terminals - new mail's carry-on, a queue drain, the
+    waiting room: its card's session, in the checkout its CLI would have, as the Send button starts it. It stays a coding task."""
+    from . import general
+    t = store.get_task(tid) or {}
+    general.place_coding(store, tid)
+    session = general.start_session(store, tid, model=model, pick=card, actor=actor)
+    ask = str(instruction or ('' if general.history(store, tid) else t.get('Summary') or t.get('Title') or '')).strip()
+    brief = not (instruction and actor == 'owner')       # Taskuary's brief (general.BRIEF_ACTOR), never put under YOU
+    if ask: threading.Thread(target=_ask_quietly, args=(session, ask, tid, brief), daemon=True, name=f'general-{tid}').start()
+    return {**session.info(), 'taskId': tid, 'existing': False, 'general': True}
+
+
 NO_CODING_TOOL = 'Pick a coding tool first - connect one under Connections, then start the coding agent again'
 
 
@@ -2357,6 +2370,13 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     if model is None and brain is None and not resume and not _chain:
         b = workflows.brain_of_task(store, t)
         if b and b['key']: model, brain = b['model'] or None, b['key']
+    # A CODING TASK WHOSE AI IS A CARD STARTS ON ITS CARD BY EVERY ROAD (general.on_card; the spine audit, 2026-11-09): only the Send button
+    # asked, so new mail on it, a queue drain or the waiting room after a restart opened a CLI's pane on a task set to a card - or, with
+    # no CLI here, made it general work (_as_general) and it lost its checkout and its coding rules. A brain or a conversation named here
+    # keeps its own; and with developer mode off only a task its card has already worked (the switch takes nothing from work under way)
+    from . import general as _g
+    if not resume and not _chain and (hub_agents.developer_mode(store) or _g.history(store, tid)) and (card := _g.on_card(store, t, brain=brain)):
+        return _on_card(store, tid, card, model, instruction, actor)
     # ...and in Auto mode, hard work opens on the CLI's strong gear (brainroute, 2026-10-25); a model or a resume named here keeps its own
     from . import brainroute, general
     # ...where a model is the owner's pick: the CLI's own default, sent back by a picker that shows it, is none (general.chosen_model)

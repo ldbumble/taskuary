@@ -233,12 +233,23 @@ def handles(task: dict | None) -> bool:
 # module's session through apiagent's loop: in its checkout (apiagent.workdir), its commands under hooks.command_gate as a CLI's are,
 # git by run_command, the push as propose_land's card, and CODING.md for its rules. A CLI chosen for coding still runs it in a terminal.
 ON_CARD = set()                # task ids of coding tasks running on an AI card - handles() is a pure read of the task, so it is told here
+# ...and TOLD AGAIN AT A RESTART (the spine audit, 2026-11-09): the set was empty until a page looked at each task, so new mail on a coding
+# task that ran on a card read "not this agent's" and went to a CLI's pane - or, with no CLI here, was made general work (terminal._as_general)
+def recall_cards(store) -> set:
+    "With developer mode off, only a task its card has worked - new coding work is general work there (terminal.start_on_task)."
+    from . import agents
+    dev = agents.developer_mode(store)
+    for t in store.list_tasks(active_only=True):
+        if str(t.get('Kind') or '').lower() in agents.CODING_KINDS and (dev or history(store, t['TaskId'])): on_card(store, t)
+    return ON_CARD
 
 
 def on_card(store, task: dict | None, pick=None, brain=None) -> str:
     "The `connector:<id>` a coding task runs on, '' where a CLI runs it - remembered for handles() once said."
     from . import agents
-    if not task or str(task.get('Kind') or '').lower() not in agents.CODING_KINDS or brain: return ''
+    if not task or str(task.get('Kind') or '').lower() not in agents.CODING_KINDS: return ''
+    # ...a CLI named for it takes it off its card: still marked, the start went the chat's road and ran on the card the owner had just left
+    if brain: ON_CARD.discard(task['TaskId']); return ''
     saved = '' if pick else str((store.saved_session(task['TaskId']) or {}).get('Pick') or '')
     p = str(pick or '') or (saved if saved.startswith('connector:') or task['TaskId'] in ON_CARD else '') or agents.resolve_brain(store, 'coding')
     (ON_CARD.add if p.startswith('connector:') else ON_CARD.discard)(task['TaskId'])

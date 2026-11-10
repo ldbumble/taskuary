@@ -460,6 +460,55 @@ class CodingOnACardTests(unittest.TestCase):
         t = self.s.get_task(self.s.create_task({'Title': 'q', 'Summary': 'q', 'Kind': 'general', 'Status': 'open'}, 'owner'))
         self.assertEqual(self.g.on_card(self.s, t, pick=f'connector:{self.cid}'), '')
 
+    def test_a_restart_knows_it_again_before_any_page_looks(self):
+        self.s.save_session(self.tid, f'connector:{self.cid}', '', '', 'k')
+        self.g.ON_CARD.discard(self.tid)                           # the restart: the mark was this process's own
+        self.assertFalse(self.g.handles(self.task))
+        self.assertIn(self.tid, self.g.recall_cards(self.s))
+        self.assertTrue(self.g.handles(self.task))
+
+    def test_a_restart_with_developer_mode_off_recalls_only_what_its_card_worked(self):
+        self.s.set_setting('default_brain', f'connector:{self.cid}', 'owner')
+        with mock.patch('taskuary.agents.developer_mode', return_value=False):
+            self.assertNotIn(self.tid, self.g.recall_cards(self.s))
+            self.s.add_comment(self.tid, 'owner', self.g.USER_TYPE, 'fix it')
+            self.assertIn(self.tid, self.g.recall_cards(self.s))
+
+    def test_a_cli_named_for_it_takes_it_off_its_card(self):
+        self.g.on_card(self.s, self.task, pick=f'connector:{self.cid}')
+        self.assertTrue(self.g.handles(self.task))
+        self.assertEqual(self.g.on_card(self.s, self.task, brain='claude'), '')
+        self.assertFalse(self.g.handles(self.task))
+
+    def test_every_road_that_starts_it_starts_it_on_its_card(self):
+        "New mail's carry-on, a queue drain, the waiting room: terminal.start_on_task - it opened a CLI's pane, or made the task general work."
+        from taskuary import terminal
+        self.s.set_setting('default_brain', f'connector:{self.cid}', 'owner')
+        self.s.set_setting('developer_mode', '1', 'owner')
+        ses = mock.Mock(); ses.info.return_value = {'sid': 's1'}
+        with mock.patch.object(self.g, 'place_coding') as placed, mock.patch.object(self.g, 'start_session', return_value=ses) as started, \
+             mock.patch.object(terminal, '_ask_quietly') as asked, mock.patch.object(terminal, 'open_session') as pane, \
+             mock.patch.object(terminal, '_as_general') as general_work, mock.patch('taskuary.agents.developer_mode', return_value=True):
+            out = terminal.start_on_task(self.s, self.tid, instruction='Gail wrote again: also fix sub()', actor='router')
+            for th in __import__('threading').enumerate():
+                if th.name == f'general-{self.tid}': th.join(5)
+        placed.assert_called_once(); pane.assert_not_called(); general_work.assert_not_called()
+        self.assertEqual(started.call_args.kwargs['pick'], f'connector:{self.cid}')
+        self.assertEqual(asked.call_args.args[1], 'Gail wrote again: also fix sub()')
+        self.assertTrue(out['general']); self.assertEqual(self.s.get_task(self.tid)['Kind'], 'coding')
+
+    def test_developer_mode_off_only_a_task_its_card_already_worked(self):
+        from taskuary import terminal
+        self.s.set_setting('default_brain', f'connector:{self.cid}', 'owner')
+        with mock.patch('taskuary.agents.developer_mode', return_value=False), mock.patch.object(terminal, '_on_card') as card, \
+             mock.patch.object(terminal, '_as_general', return_value={'general': True}) as general_work:
+            terminal.start_on_task(self.s, self.tid, actor='router')
+            card.assert_not_called(); general_work.assert_called_once()
+            self.s.add_comment(self.tid, 'owner', self.g.USER_TYPE, 'fix it')
+            self.s.update_task(self.tid, {'Kind': 'coding'}, 'owner')
+            terminal.start_on_task(self.s, self.tid, actor='router')
+            card.assert_called_once()
+
     def test_it_works_in_the_checkout_its_cli_would(self):
         import tempfile
         repo = tempfile.mkdtemp()

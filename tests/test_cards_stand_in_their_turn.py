@@ -55,7 +55,8 @@ def test_a_reply_stands_in_the_turn_that_last_left_it():
     kept = act(s, tid, '2026-11-05 09:01:00', 'Hi Gail - the folder is clear.', kind='draft_reply')
     s.snap_draft(int(kept), int(a2.split('-')[1]))                               # the second turn rewrote it
     got = turns(s, tid)
-    assert (got[triaged], got[kept]) == (a1, a2)
+    # ...a draft written before his first line is no card of the turn that line began (the owner, 2026-11-10): with no row before it, none
+    assert (got[triaged], got[kept]) == (None, a2)
     s.decide_review(int(kept), 'approved', 'Hi Gail - the folder is clear.', 'owner')
     assert turns(s, tid)[kept] == a2, 'sent, it is the card in that turn still'
 
@@ -80,3 +81,31 @@ def test_a_file_a_draft_carries_is_drawn_on_its_card_never_as_a_preview_of_its_o
         with mock.patch.object(server, 'store', s): got = server._assistant_payload(tid)
         assert [o['name'] for o in got['outputs']] == ['notes.txt']
     finally: shutil.rmtree(d, True)
+
+
+def test_a_draft_written_before_the_owner_s_line_is_no_card_of_the_turn_that_line_began():
+    # the owner, 2026-11-10: "i asked it to rewrite a email, it reqrote in place then put it under the prompt" - a reply drafted on arrival, before
+    # any turn: named with the first answer filed after it, its card (and once replaced, its record) stood in the turn his rewrite began
+    s = MemoryStore(); tid = s.create_task({'Title': 'Vendor review for Erin', 'Kind': 'general', 'Status': 'open'}, 't')
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                         'SentAt': '2026-11-10 08:00:00', 'BodyText': 'Your review of the tool?', 'Status': 'routed'})
+    old = act(s, tid, '2026-11-10 08:01:00', 'A long review of every flaw.', kind='draft_reply')
+    said(s, tid, general.USER_TYPE, 'make it shorter and attach the sheet', '2026-11-10 09:00:00')
+    a1 = said(s, tid, general.ASSISTANT_TYPE, 'Rewrote it short.', '2026-11-10 09:00:20')
+    new = act(s, tid, '2026-11-10 09:00:10', 'Short version, sheet attached.', kind='draft_reply')
+    got = turns(s, tid)
+    assert got[new] == f'comment-{a1}', 'the new letter is the turn\'s that wrote it'
+    assert got[old] != f'comment-{a1}', 'the old one is not: it stands where it stood, before his line'
+
+
+def test_the_mail_that_came_in_keeps_one_id_before_and_after_the_owner_s_first_line():
+    # the browser walk, 2026-11-10: the row of the mail that started a task was "came-in-<its message>" while nothing else was in the chat and
+    # "came-in-<the task>" once the owner had typed - two ids for one row, so a card placed under it found no row and was drawn nowhere for a beat
+    s = MemoryStore(); tid = s.create_task({'Title': 'Vendor review for Erin', 'Kind': 'general', 'Status': 'open'}, 't')
+    for i in range(3): s.add_message({'TaskId': None, 'ExternalId': f'x{i}', 'Channel': 'email', 'FromEmail': 'gail@northwind.example', 'BodyText': 'other', 'Status': 'routed'})
+    s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                   'SentAt': '2026-11-10 08:00:00', 'BodyText': 'Your review of the tool?', 'Status': 'routed'})
+    ids = lambda: [m['id'] for m in general.shown_history(s, tid) if m.get('brief') and m.get('mail')]
+    first = ids()
+    said(s, tid, general.USER_TYPE, 'make it shorter', '2099-11-10 09:00:00')
+    assert first and ids() == first, (first, ids())

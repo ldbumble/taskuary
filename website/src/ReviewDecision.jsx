@@ -12,6 +12,7 @@ import { filesPromised, filesShort } from "./replyFiles.js";
 import { proposalPresentation, resultOf, reviewText } from "./reviewProposal.js";
 import { cardOf } from "./actionCard.js";
 import ActionCard from "./ActionCard.jsx";
+import { PassedCtx } from "./passedCtx.js";
 import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
@@ -148,7 +149,7 @@ export default function ReviewDecision(props) {
   const act = cardOf(props.review);
   return act ? <ActionCard row={act} tid={props.review?.TaskId} onChanged={props.onChanged} /> : <Decision {...props} />;
 }
-function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "", replanning = false }) {
+function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "" }) {
   const [text, setTextNow] = useState(() => heldOf(r)?.text ?? null);   // the owner's edit; null means "the draft as filed"
   const setText = (v) => { hold(r, { text: v ?? null }); setTextNow(v); };
   const [cc, setCcNow] = useState(() => heldOf(r)?.cc ?? null);         // null means "the CC the draft was filed with"
@@ -299,8 +300,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const coRid = closeout?.ReviewId || (proposal?.kind === "closeout" ? r.ReviewId : null);
   const { gh, reload: reloadGh, act } = useCloseoutState(coRid);
   const blocked = !!gh && !gh.ok;
-  // ...and greyed while its agent's turn re-decides it after the owner's line (proposals.move_on): kept, replaced or withdrawn when the turn ends
-  const off = busy || drafting || replanning;
+  // ...and greyed once the owner has prompted past it (PassedCtx): old news, its words as they were - what the agent writes after is a new card
+  // in its own turn. It greyed only while that turn ran, and came back live under every turn after (the owner, 2026-11-10)
+  const passed = React.useContext(PassedCtx);
+  const off = busy || drafting || passed;
   useEffect(() => {
     if (job?.state === "done") onChanged?.();
     if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or Draft with AI again.`);
@@ -607,10 +610,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   </Box>;
   const ccInline = isEmail && !proposal && !isCal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" && !(busy || delivery.frozen) && !ccNow.length && !bccNow.length && !bccOpen;
   return (
-    <Box sx={{ mt: 0.5, ...(replanning ? { opacity: 0.6 } : {}) }} data-tq-replanning={replanning ? "" : undefined}>
+    <Box sx={{ mt: 0.5, ...(passed ? { opacity: 0.55 } : {}) }} data-tq-passed-draft={passed ? r.ReviewId : undefined} inert={passed ? "" : undefined}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1 }}>{err}</Alert>}
-      {replanning && <Typography role="status" data-tq-replanning-line="" sx={{ fontSize: 12, color: "var(--tq-dim, #5b6670)", mb: 0.5 }}>
-        The agent is reading your line - it keeps, changes or takes back this draft when its turn ends.</Typography>}
       {delivery.line && <Alert severity={delivery.state === "unknown" ? "warning" : "info"} sx={{ mb: 1 }}>{delivery.line}</Alert>}
       <ApprovalInterrupt it={interrupt} onResolve={(choice) => {
         // the click did not send; the owner's edit stays theirs, the refreshed draft is shown beside it

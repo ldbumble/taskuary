@@ -54,7 +54,7 @@ test("pressed, the card stays in the turn with the press it took and what came o
 
 test("a pressed card - held steps approved, a reply sent - is drawn in the turn that set it up, whatever came after", () => {
   const page = read("TaskPage.jsx"), chat = read("GeneralWorkspace.jsx");
-  assert.match(page, /const turnCards = \[\.\.\.passedCards, \.\.\.pressedHeld\.map\(\(g\) =>/);
+  assert.match(page, /const turnCards = \[\.\.\.passedCards, \.\.\.replacedCards, \.\.\.pressedHeld\.map\(\(g\) =>/);
   assert.match(page, /node: <SentCard id=\{r\.ReviewId\}/);
   assert.match(page, /turnCards=\{turnCards\}/);
   assert.match(chat, /const placed = React\.useMemo\(\(\) => placeCards\(turnCards, messages, turns\), \[turnCards, messages, turns\]\);/, "placed in the turn that raised it (agentSummary.placeCards)");

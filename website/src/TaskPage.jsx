@@ -105,7 +105,8 @@ import { completionFact, completionLine, waitingEmails, wentOut,
   AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { askNote, closeoutOf, heldGroups, splitHeld } from "./reviewProposal.js";
-import PassedCard, { isPassed } from "./PassedCard.jsx";
+import PassedCard, { isPassed, isReplaced } from "./PassedCard.jsx";
+import ReplacedDraft from "./ReplacedDraft.jsx";
 import SentCard from "./SentCard.jsx";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
@@ -2732,7 +2733,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // whichever turn was newest, and the last two stood again at the chat's foot with a second Approve. Each is drawn once, in the turn that
   // raised it (`rid`: the chat's payload names that turn). A to-do no agent has touched has no turns: its cards stay over its box (chatBody)
   const inTurns = !solo && !["done", "dropped"].includes(t?.Status), decided = () => { loadDetail(selected); loadTasks(); onChanged?.(); };
-  const turnCards = [...passedCards, ...pressedHeld.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
+  // ...AND A DRAFT THE AGENT REPLACED stays a dimmed record where it stood (the owner, 2026-11-10: "it should go gray and then it should generate
+  // new email action box under it"): by its time, as it stood while it waited (agentSummary.draftHome), the new card in the turn that wrote it
+  const replacedCards = allReviews.filter(isReplaced).map((r) => ({ key: `replaced:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, byRow: true, record: true,
+    node: <ReplacedDraft review={r} /> }));
+  const turnCards = [...passedCards, ...replacedCards, ...pressedHeld.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
       node: <HeldSteps reviews={g.reviews} onChanged={decided} /> })),
     ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),
       node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
@@ -2801,7 +2806,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
             <Box data-tq-review={pendingReview.ReviewId}>
             <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend liveWork={liveWork} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
               onEmailInstead={() => setEmailOpen(true)} why={rec?.state === "draft_ready" ? rec.why || "" : ""}
-              replanning={agentState === AGENT.working && !!pendingReview}
               onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box>   {/* the list's row moves too (T19) */}
             <MoreDrafts reviews={moreDrafts} messages={storedMessages} onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
           </>) : (

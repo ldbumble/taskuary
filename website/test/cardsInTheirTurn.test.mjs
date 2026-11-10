@@ -53,7 +53,7 @@ test("the task page hands every waiting ask to its turn, and draws it in its own
 test("the chat draws a waiting card once, in its turn - the foot's \"Waiting on you\" box is gone", () => {
   const gw = read("GeneralWorkspace.jsx");
   assert.match(gw, /mine = React\.useContext\(TurnCardsCtx\)\.filter\(\(c\) => c\.after === id\), pressed = mine\.filter\(\(c\) => !c\.waits\)/);
-  assert.match(gw, /<TurnAsks cards=\{mine\.filter\(\(c\) => c\.waits\)\} also=\{holds && !!work\?\.next && freshNext\(work\.reviews\) && mine\.some\(\(c\) => c\.also\)\} \/>/);
+  assert.match(gw, /<TurnAsks cards=\{mine\.filter\(\(c\) => c\.waits\)\} also=\{holds && !!next && mine\.some\(\(c\) => c\.also\)\} \/>/);
   assert.equal((gw.match(/<TurnAsks /g) || []).length, 1, "drawn in a turn only - no box of its own at the chat's foot");
   assert.match(gw, /\{!dock && placed\.filter\(\(c\) => !c\.after\)\.map\(/, "only a chat with no agent turn at all draws a card under it, as its one row");
   assert.match(gw, /\{!dock && !turnCards && !!drafts\?\.length && \(/); assert.match(gw, /\{!dock && !turnCards && !!acts\?\.length && \(/);

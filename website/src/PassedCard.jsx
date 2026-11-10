@@ -11,6 +11,9 @@ export const PASSED_NOTE = "set aside when you moved on";
 export const PASSED_LINE = "Set aside when you moved on - ask the agent to bring it back.";
 export const isPassed = (r) => r?.Status === "superseded" && r?.DecideNote === PASSED_NOTE;
 
+// A DRAFT THE AGENT REPLACED IN A LATER TURN (wrapup.REPLACED): its record where it stood - what it said, dimmed, nothing to press
+export const REPLACED_NOTE = "superseded - a later turn's reply took its place";
+export const isReplaced = (r) => r?.Status === "closed_unsent" && r?.DecideNote === REPLACED_NOTE && !!String(r?.DraftText || "").trim();
 export default function PassedCard({ reviews }) {
   const rs = [...(reviews || [])].sort((a, b) => a.ReviewId - b.ReviewId), r = rs[0] || {};
   const title = proposalPresentation(r)?.title || heldLead(proposalFrom(r) || {}).lead;

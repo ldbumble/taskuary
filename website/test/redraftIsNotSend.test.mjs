@@ -17,7 +17,7 @@ test("Redraft never sets the send's busy", () => {
 
 test("a redraft holds Send off without renaming it, and names itself", () => {
   assert.match(src, /const drafting = job\?\.state === "drafting" \|\| redrafting;/);
-  assert.match(src, /const off = busy \|\| drafting \|\| replanning;/);
+  assert.match(src, /const off = busy \|\| drafting \|\| passed;/);
   assert.match(src, /redrafting && r\.DraftText \? "Redrafting…"/);
   assert.doesNotMatch(src, /disabled(: |=\{)busy\b/, "every button is held by `off`, which a redraft sets");
 });

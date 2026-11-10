@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { nextSteps, cardTurn, freshNext } from "../src/agentSummary.js";
+import { nextSteps, draftHome, freshNext } from "../src/agentSummary.js";
 import { pendingReplyReview } from "../src/taskLifecycle.js";
 import * as ask from "../src/agentDraftAsk.js";
 
@@ -23,7 +23,7 @@ test("(a) a review marked not needed renders no Send and no banner", () => {
   // ...and the retired draft is no card anywhere: not the page's pending reply, not a Next step, not a turn's card
   assert.equal(pendingReplyReview([retired]), undefined);
   assert.deepEqual(nextSteps({ reviews: [retired] }).drafts, []);
-  assert.equal(cardTurn([retired], ["comment-2"]), null);
+  assert.equal(draftHome([retired], [{ id: "comment-2", role: "assistant", createdAt: "2026-11-10 09:00:00" }]), null);
 });
 
 test("(c) the re-evaluated turn shows one line and no card", () => {
@@ -36,7 +36,7 @@ test("(c) the re-evaluated turn shows one line and no card", () => {
 // tests/test_owner_input_on_canvas.py) as a brief whose mail is theirs; the page draws that brief in place, its own row on the left
 test("(b) the owner's outside reply renders as a left-side input entry, in the stream's order", () => {
   const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /if \(brief && chat\) return mail\?\.length \? <MessagePrimitive\.Root className="tq-aui-message tq-aui-brief"><Arrived mail=\{mail\} \/>/);
+  assert.match(ws, /if \(brief && chat\) return mail\?\.length \? <><MessagePrimitive\.Root className="tq-aui-message tq-aui-brief"><Arrived mail=\{mail\} \/>/);
   assert.match(ws, /data-tq-chat-arrived=\{x\.own \? "own" : ""\}/);
   assert.match(ws, /const headOf = \(x\) => x\.own \? \["You", ON_WORD/);
   assert.match(read("generalWorkspace.css"), /\.tq-aui-chat \.tq-aui-arrived-own \{ justify-self: start;/);

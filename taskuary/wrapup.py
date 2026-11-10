@@ -482,8 +482,10 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...and one an EARLIER TURN left is that turn's answer: a different letter now is this turn's own draft, the old one superseded
     # ...and so is one no turn of the agent's wrote (triage's, the quick drafter's): rewritten in place, the new letter's card stood at that old
     # draft's place far above and the turn that wrote it drew none (the owner, 2026-11-10: "why did this not create the draft email action card?")
-    if live and (an_earlier_turns(store, live) or (not agent_drafted(live) and _turn_after(store, task_id, live))) \
-            and _words(live.get('DraftText')) != _words(text):
+    # ...and once the owner has prompted past a draft it is old news, whoever wrote it and whatever the letter now says (the owner, 2026-11-10:
+    # "The second you write ptompt on email action it should go gray and then it should generate new email action box under it"): the page
+    # greys it for good, so a letter filed after his line - the same words kept, too - is this turn's new card, the old one its record
+    if live and (an_earlier_turns(store, live) and _words(live.get('DraftText')) != _words(text) or _turn_after(store, task_id, live)):
         store.decide_review(live['ReviewId'], 'closed_unsent', None, agent, note=REPLACED); live = None
     why = f'{agent} wrote this reply in its session - approve to send'
     if sent:

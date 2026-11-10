@@ -8,7 +8,7 @@ import test from "node:test";
 import { chatRows, chatSource, eventsOf, rowMessages, stepsFromAcp, turnParts, workCount } from "../src/chatStream.js";
 import { SHIPPED, defaultDetail, detailFor, keepOwnDetail, ownDetail } from "../src/chatDetail.js";
 import { notShown, stillHeld } from "../src/heldLines.js";
-import { cardTurn, codingDrafts, freshNext, staleOn, withTurns } from "../src/agentSummary.js";
+import { codingDrafts, draftHome, draftPassed, freshNext, withTurns } from "../src/agentSummary.js";
 
 const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const gw = read("GeneralWorkspace.jsx"), page = read("TaskPage.jsx");
@@ -266,14 +266,14 @@ test("a draft stays under its own turn; a stale one is never under the newest tu
   const fresh = { ReviewId: 1, Status: "pending", DraftText: "Thanks Erin, on it.", turn: "m1" };
   const stale = { ...fresh, ReviewId: 2, stale: true, drafted_at: "2026-11-06 14:48:00" };
   assert.equal(freshNext([fresh]), true); assert.equal(freshNext([stale]), false); assert.equal(freshNext([]), true);
-  assert.deepEqual(staleOn([fresh, stale], "m1").map((r) => r.ReviewId), [2]); assert.deepEqual(staleOn([stale], "m2"), []);
-  assert.deepEqual(staleOn([{ ...fresh }], "m1"), [], "a payload without the fields draws as before");
-  assert.match(gw, /next=\{\(home \? !holds : custom\.folded\) \|\| !freshNext\(work\.reviews\) \? null : work\.next\}/);
+  // ...a stale draft is drawn once, where it stands, greyed (draftPassed) - never a second read-only copy, never under the newest turn
+  assert.equal(draftPassed([stale], []), true); assert.equal(draftPassed([fresh], []), false);
+  assert.match(gw, /next=\{\(home \? !holds : custom\.folded\) \? null : next\}/);
   // ...read off the payload's `drafts` (general.draft_turns), under the message whose id is the draft's turn
   const got = withTurns([{ ReviewId: 7, Status: "pending", DraftText: "On it." }], [{ review: 7, turn: "comment-12", at: "2026-11-06 14:48:00", stale: true, before: "2026-11-06 15:00:00" }]);
-  assert.deepEqual(staleOn(got, "comment-12").map((r) => r.drafted_at), ["2026-11-06 14:48:00"]);
+  assert.equal(draftHome(got, [{ id: "comment-12", role: "assistant", createdAt: "2026-11-06 14:50:00" }]), "comment-12");
   assert.match(gw, /reviews: withTurns\(reviews, coding \? codingDrafts\(reviews, shownMessages\) : data\?\.drafts\)/);
-  assert.match(gw, /work\.next && freshNext\(work\.reviews\) && chat/);
+  assert.match(gw, /holds && next && chat/);
   assert.match(gw, /nextAt\?\.next && freshNext\(nextAt\.reviews\)/);
 });
 
@@ -282,19 +282,20 @@ test("a draft stays under its own turn; a stale one is never under the newest tu
 test("regression: a kept draft's card stays on the turn that wrote it while questions are asked under it", () => {
   const ids = ["mail-1", "comment-10", "q-1", "comment-11", "q-2", "comment-12"];
   const kept = { ReviewId: 4, Status: "pending", Kind: "draft_reply", DraftText: "Hi Erin - Thursday works.", turn: "comment-10", stale: false };
-  assert.equal(cardTurn([kept], ids), "comment-10", "two questions later, still the turn that drafted it");
-  // ...a later turn that rewrote it moves it there; a new letter (a newer review) replaces it
-  assert.equal(cardTurn([{ ...kept, turn: "comment-12" }], ids), "comment-12");
-  assert.equal(cardTurn([kept, { ...kept, ReviewId: 5, turn: "comment-11" }], ids), "comment-11");
-  // ...stale (read-only under its turn, StaleDrafts), sent, or no shown turn wrote it: no home, the newest answer holds the cards as before
-  assert.equal(cardTurn([{ ...kept, stale: true }], ids), null); assert.equal(cardTurn([{ ...kept, Status: "sent" }], ids), null);
-  assert.equal(cardTurn([{ ...kept, turn: "comment-9" }], ids), null); assert.equal(cardTurn([{ ...kept, turn: undefined }], ids), null);
-  assert.equal(cardTurn([{ ...kept, Kind: "action" }], ids), null);
+  const rows = ids.map((id, i) => ({ id, role: id.startsWith("comment") ? "assistant" : "user", createdAt: `2026-11-09 09:0${i}:00` }));
+  assert.equal(draftHome([kept], rows), "comment-10", "two questions later, still the turn that drafted it");
+  // ...a later turn's new letter (a newer review) stands in its own turn
+  assert.equal(draftHome([kept, { ...kept, ReviewId: 5, turn: "comment-11" }], rows), "comment-11");
+  // ...stale it stays in its turn too (greyed, draftPassed); sent or an act: no draft waits
+  assert.equal(draftHome([{ ...kept, stale: true }], rows), "comment-10"); assert.equal(draftHome([{ ...kept, Status: "sent" }], rows), null);
+  assert.equal(draftHome([{ ...kept, Kind: "action" }], rows), null);
+  // ...its turn not drawn: by its time
+  assert.equal(draftHome([{ ...kept, turn: "comment-9", CreatedAt: "2026-11-09 09:02:30" }], rows), "q-1");
   // ...wired: every road that draws `work.next` asks for the home first - a turn without a summary, a summed one (unfolded to hold it), the foot
   assert.match(gw, /holds = home \? home === id : newest/);
-  assert.match(gw, /!custom\?\.summary && holds && work\.next/);
+  assert.match(gw, /!custom\?\.summary && holds && next/);
   assert.match(gw, /folded=\{!!custom\.folded && !\(home && holds\)\}/);
-  assert.match(gw, /!working && !cardTurn\(nextAt\.reviews, /);
+  assert.match(gw, /!working && !draftHome\(nextAt\.reviews, messages\)/);
   assert.doesNotMatch(gw, /!custom\?\.summary && newest && work\.next/);
 });
 
@@ -314,7 +315,7 @@ test("regression: on a coding task the draft's card stays on the turn that wrote
   const draft = { ReviewId: 9, Status: "pending", Kind: "draft_reply", DraftText: "Hi Erin - found it, the fix is in.", CreatedAt: "2026-11-09 09:02:30" };
   const got = codingDrafts([draft], msgs);
   assert.deepEqual(got.map((d) => [d.turn, d.stale]), [[turns[0], false]], "the turn at work when it was written, two questions later");
-  assert.equal(cardTurn(withTurns([draft], got), msgs.map((m) => m.id)), turns[0]);
+  assert.equal(draftHome(withTurns([draft], got), msgs), turns[0]);
   // ...asked after it and not yet answered: stale under its own turn, never the newest turn's Next steps
   const asked = codingDrafts([draft], msgs.slice(0, 3));
   assert.equal(asked[0].stale, true); assert.equal(asked[0].before, "2026-11-09 09:30:00");

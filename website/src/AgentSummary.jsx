@@ -7,8 +7,7 @@ import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/mat
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
-import { draftAt, hasReply, nextSteps, oneLine, staleOn } from "./agentSummary.js";
-import { fmtTime12 } from "./dates.js";
+import { hasReply, nextSteps, oneLine } from "./agentSummary.js";
 import { isCardReview } from "./actionCard.js";
 import { Md } from "./md.jsx";
 import { MicButton } from "./ui.jsx";
@@ -59,17 +58,14 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
     const r = (reviews || []).find((x) => x.ReviewId === id), k = (kept || []).filter((x) => x?.review === id).at(-1);
     return k ? { ...(r || {}), ReviewId: id, DraftText: k.text, FromName: k.to || r?.FromName, FromEmail: r?.FromEmail } : r;
   }).filter((r) => r && String(r.DraftText || "").trim());
-  // ...a draft this turn wrote that the owner's newer message overtook: here, quietly, never under the newest turn (agentSummary.staleOn)
-  const stale = staleOn(reviews, turnId);
-  const Stale = () => <StaleDrafts reviews={reviews} turnId={turnId} />;
   const fate = (r) => r.Status === "sent" || r.DeliveryState === "sent" ? "sent" : r.Status === "pending" ? "" : "not sent";
   const Drafted = () => drafted.map((r) => <Box key={r.ReviewId} data-tq-drafted-then="" sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid var(--tq-border, #dcd6ca)", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
     <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>
       {["Drafted", who(r) && `to ${who(r)}`, fate(r)].filter(Boolean).join(" · ")}</Typography>
     <Box sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 220, overflow: "auto" }}>{r.DraftText}</Box></Box>);
-  if (answered) return made || lead || next || stale.length || (folded && drafted.length) ? (
+  if (answered) return made || lead || next || (folded && drafted.length) ? (
     <Box data-tq-summary="cards" className="tq-aui-summary">{made}{(lead || next) && <DraftHead />}{lead}
-      {next ? <Box sx={{ mt: 0.75 }}>{next}</Box> : null}{folded && <Drafted />}<Stale /></Box>) : null;
+      {next ? <Box sx={{ mt: 0.75 }}>{next}</Box> : null}{folded && <Drafted />}</Box>) : null;
   // ...a nothing-new turn is its one line, folded or not: no heads, no Next steps, and the draft stays on the turn that wrote it (oneLine)
   if (oneLine(summary)) return <>{<Box data-tq-summary="line" className="tq-aui-summary" sx={LINE}><Md text={did} /></Box>}{made}{lead}</>;
   if (folded) return did || drafted.length ? (<>
@@ -80,7 +76,7 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
       <Box sx={{ ...LINE, color: DIM }}><Md text={did} /></Box>
     </Box>}
     {made}{lead}
-    <Drafted /><Stale /></>) : made || lead || stale.length ? <>{made}{lead}<Stale /></> : null;
+    <Drafted /></>) : made || lead ? <>{made}{lead}</> : null;
   const { drafts, onYou, held: heldAll, nothing } = nextSteps({ summary, reviews, checklist, acts, cards });
   const held = heldAll.filter((r) => !isCardReview(r));        // an act with its card (a post) leads Next steps - never "a step waits, below"
   return (
@@ -96,19 +92,10 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
       {!next && drafts.map((r) => <Typography key={r.ReviewId} data-tq-summary-draft={r.ReviewId} sx={LINE}>
         {who(r) ? `A reply to ${who(r)} is drafted and waits for your Send.` : "A reply is drafted and waits for your Send."}</Typography>)}
       {next ? <Box sx={{ mt: 0.75 }}>{next}</Box> : null}
-      <Stale />
       {nothing && !lead && <Typography data-tq-nothing-left="" sx={{ ...LINE, color: DIM }}>Nothing left to do here.</Typography>}
     </Box>
   );
 }
-
-// A DRAFT THE OWNER'S NEWER MESSAGE OVERTOOK (general.draft_turns `stale`): under the turn that wrote it, "Drafted at 2:48 PM, before your last
-// message", read-only - never under the newest turn's Next steps
-export const StaleDrafts = ({ reviews, turnId }) => staleOn(reviews, turnId).map((r) => <Box key={r.ReviewId} data-tq-stale-draft={r.ReviewId}
-  sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid var(--tq-border, #dcd6ca)", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
-  <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>
-    {[draftAt(r) && `Drafted at ${fmtTime12(draftAt(r))}`, "before your last message"].filter(Boolean).join(", ")}</Typography>
-  <Box sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 220, overflow: "auto" }}>{r.DraftText}</Box></Box>);
 
 // A TO-DO NO AGENT HAS TOUCHED (the owner, 2026-11-06): under what came in - which says the ask and the To do already - the cards the chat would
 // hold (`cards`: a draft and its Send, an email owed), the drafter's why over them, and the one box. The box is Send to agent's road (the

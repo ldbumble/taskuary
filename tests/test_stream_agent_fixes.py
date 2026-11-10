@@ -278,3 +278,20 @@ def test_a_draft_rewritten_in_a_later_turn_is_that_turns_card_and_the_old_one_it
     assert s.snap_draft(new, turn)
     [d] = general.draft_turns(s, tid)
     assert (d['review'], d['turn']) == (new, f'comment-{turn}')
+
+
+def test_a_draft_the_agent_keeps_after_the_owner_prompted_is_raised_again_as_the_new_turn_s_card():
+    # the owner, 2026-11-10: "The second you write ptompt on email action it should go gray and then it should generate new email action box under
+    # it" - the page greys the old card for good once he has prompted past it, so a letter the agent files again unchanged (its own, from an
+    # earlier turn) is a new card in this turn - written into the old review it stayed grey, and no card was live
+    s = MemoryStore(); tid = s.create_task({'Title': 'Vendor review', 'Status': 'in_progress'}, 't')
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Channel': 'email', 'FromName': 'Paula Vance', 'FromEmail': 'paula@vendor.example',
+                         'SentAt': '2026-11-10 08:00:00', 'BodyText': 'Your review of the tool?', 'Status': 'routed'})
+    old = wrapup.agent_reply(s, tid, 'Two real flaws, details below.', 'assistant')['review_id']
+    s._exec("UPDATE review SET CreatedAt='2026-11-10 08:01:00' WHERE ReviewId=?", (old,))
+    s._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', ('2026-11-10 09:00:00', s.add_comment(tid, 'owner', general.USER_TYPE, 'is that the right tone?')))
+    new = wrapup.agent_reply(s, tid, 'Two real flaws, details below.', 'assistant')['review_id']
+    assert new != old and s.get_review(old)['Status'] == 'closed_unsent' and s.get_review(old)['DecideNote'] == wrapup.REPLACED
+    assert s.get_review(old)['DraftText'] == 'Two real flaws, details below.', 'the old card keeps its words'
+    # ...and saved twice in the turn that wrote it, it is one card, rewritten in place
+    assert wrapup.agent_reply(s, tid, 'Two real flaws - and one small one.', 'assistant')['review_id'] == new

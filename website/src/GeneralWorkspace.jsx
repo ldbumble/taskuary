@@ -73,8 +73,9 @@ import { withoutAsked } from "./askOnce.js";
 import ReviewDecision from "./ReviewDecision.jsx";
 import { askNote, heldActsLine, proposalFrom, reviewText } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
-import AgentSummary, { OneBox, StaleDrafts } from "./AgentSummary.jsx";
-import { cardTurn, codingDrafts, turnAnswered, foldedSummaries, freshNext, hasReply, lastAnswerSummed, placeCards, turnOf, withTurns } from "./agentSummary.js";
+import AgentSummary, { OneBox } from "./AgentSummary.jsx";
+import { PassedCtx } from "./passedCtx.js";
+import { codingDrafts, draftHome, draftPassed, turnAnswered, foldedSummaries, freshNext, hasReply, lastAnswerSummed, placeCards, turnOf, withTurns } from "./agentSummary.js";
 import { asUtc, dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
@@ -314,7 +315,7 @@ const UserMessage = () => {
   const event = brief && chat ? eventOf(words, fold, mail) : "";
   if (event) return <MessagePrimitive.Root className="tq-aui-message tq-aui-press" data-tq-chat-press="" data-tq-chat-trigger={checkBackDue(words) ? "check-back" : ""}>
     <div className="tq-aui-press-line">{pressLine(event, stampOf)}</div>{!!mail?.length && <Arrived mail={mail} />}</MessagePrimitive.Root>;
-  if (brief && chat) return mail?.length ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root> : null;
+  if (brief && chat) return mail?.length ? <><MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root><RowCards id={line} /></> : null;
   // ...and what the owner types is theirs on the right, under their mark and the time ("if user interjects it will show user logo")
   // ...three lines typed in a row read as one, as a sender's burst does (Arrived): the head once, then a new minute's time alone, a same minute nothing
   const stamp = at ? when(new Date(at)) : "";
@@ -323,12 +324,12 @@ const UserMessage = () => {
   if (mate) return <MessagePrimitive.Root className="tq-aui-message tq-aui-user" data-tq-teammate={mate.who}>
     <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{mate.who} (teammate) · {mate.via}{stamp ? ` · ${stamp}` : ""}</div>
     <div className="tq-aui-user-bubble" dir="auto">{mate.text}</div></MessagePrimitive.Root>;
-  if (chat) return (
+  if (chat) return (<>
     <MessagePrimitive.Root className={`tq-aui-message tq-aui-user${prev !== null ? " tq-aui-user-more" : ""}`} data-tq-chat-line={line}>
       {prev === null ? <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{stamp ? ` · ${stamp}` : ""}</div>
         : stamp && stamp !== prev ? <div className="tq-aui-user-head">{stamp}</div> : null}
       <div className="tq-aui-user-bubble" dir="auto"><MessagePrimitive.Parts /></div>
-    </MessagePrimitive.Root>);
+    </MessagePrimitive.Root><RowCards id={line} /></>);
   return brief ? (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-brief">
       <CameIn mail={mail || []} />
@@ -362,6 +363,30 @@ const TurnAsks = ({ cards, also = false, sx = null }) => !cards.length ? null : 
 // what a turn's Next steps count against (agentSummary.nextSteps): the task's reviews and checklist. Null in the dock, which has no turns
 // of an agent's to sum up and draws its steps as ever
 const WorkCtx = React.createContext(null);
+// ...when the owner last pressed a line on this page (ms): a line held while a turn works is in no thread yet, and the draft it passes greys at once
+const PressedCtx = React.createContext(0);
+// THE WAITING DRAFT'S PLACE AND STATE (agentSummary.draftHome, draftPassed; the owner, 2026-11-10: "The second you write ptompt on email action it
+// should go gray and then it should generate new email action box under it with new email.."): it stands where it was written - the turn that
+// wrote it, else the row it came after - and once he has prompted past it, it is greyed there, never carried down under his line
+const useDraft = () => {
+  const work = React.useContext(WorkCtx), pressed = React.useContext(PressedCtx);
+  const home = useAuiState((s) => (work ? draftHome(work.reviews, s.thread.messages) : null));
+  const passed = useAuiState((s) => (work ? draftPassed(work.reviews, s.thread.messages, pressed) : false));
+  return { work, home, next: work?.next ? (passed ? <PassedCtx.Provider value>{work.next}</PassedCtx.Provider> : work.next) : null };
+};
+// ...under a row that is not an answer - the mail come in, a line of his: the draft that stands there, and the cards placed there by time
+const RowCards = ({ id }) => {
+  const { work, home, next } = useDraft(), chat = React.useContext(ChatCtx), cards = React.useContext(TurnCardsCtx).filter((c) => c.after === id);
+  // ...a replaced draft's record under the same head the draft had (ReplacedDraft): replaced, nothing on the page moves
+  const here = chat && home === id && next, records = cards.filter((c) => c.record), rest = cards.filter((c) => !c.record);
+  if (!here && !cards.length) return null;
+  const head = (words) => <Typography component="span" sx={{ display: "block", color: "var(--tq-text, #292824)", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>{words}</Typography>;
+  return <div className="tq-aui-message tq-aui-agent" data-tq-row-cards={id}><div className="tq-aui-agent-body">
+    {(here || !!records.length) && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
+      {head(here && !hasReply(work.reviews) ? "Next steps" : "Suggested reply")}
+      {records.map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}{here && next}</Box>}
+    {rest.map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}</div></div>;
+};
 // a turn still running is ONE LINE, "Working on this…", its steps folded under it (the closeout-in-chat spec, 2026-11-04); a turn that
 // ended in its summary keeps them folded above it. A turn with no summary - older ones, a CLI that wrote none, one that died - as ever
 // (pendingTurn.live)
@@ -486,8 +511,8 @@ const AssistantMessage = () => {
   const newest = useAuiState((s) => s.thread.messages.at(-1)?.id === s.message.id && !live(s.message));
   // the newest turn that ANSWERED (a summary, not at work): its draft stays on it when something newer comes
   const lastAnswered = useAuiState((s) => [...s.thread.messages].reverse().find((m) => m.role === "assistant" && !live(m) && m.metadata?.custom?.summary)?.id === s.message.id);
-  // ...the live draft card sits on the turn that wrote it (agentSummary.cardTurn), never on whichever turn is newest; no such turn shown: the newest
-  const home = useAuiState((s) => work ? cardTurn(work.reviews, s.thread.messages.map((m) => m.id)) : null), holds = home ? home === id : newest;
+  // ...the draft card sits where it was written (useDraft), never on whichever turn is newest; no draft waiting: the newest holds the cards
+  const { home, next } = useDraft(), holds = home ? home === id : newest;
   // WHAT THIS TURN MADE AND SET UP, IN IT (the owner, 2026-11-05): in a chat, the files it made inline, and an act it proposed drawn as its
   // connector declares it (a post as the post, ActionCard) under its Next steps - live while it waits (a line typed after it left it "not sent", unsendable), read-only once answered
   const posts = work && chat ? (work.cards || []).filter((p) => p.after === id) : [];
@@ -524,13 +549,12 @@ const AssistantMessage = () => {
         {!custom?.summary && lead && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
           <Typography component="span" sx={{ display: "block", color: "var(--tq-text, #292824)", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{lead}</Box>}
         {/* ...and where the chat is the task's home, the newest one's Next steps holds the draft cards (`next`, Task 4.2) */}
-        {work && !custom?.summary && chat && <StaleDrafts reviews={work.reviews} turnId={id} />}
-        {work && !custom?.summary && holds && work.next && freshNext(work.reviews) && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
-          <Typography component="span" sx={{ display: "block", color: "var(--tq-text, #292824)", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{work.next}</Box>}
+        {work && !custom?.summary && holds && next && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
+          <Typography component="span" sx={{ display: "block", color: "var(--tq-text, #292824)", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{next}</Box>}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded && !(home && holds)} reviews={work.reviews} checklist={work.checklist}
-          acts={work.acts} next={(home ? !holds : custom.folded) || !freshNext(work.reviews) ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} turnId={id} answered={answered} />}
+          acts={work.acts} next={(home ? !holds : custom.folded) ? null : next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} turnId={id} answered={answered} />}
         {pressed.map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}
-        <TurnAsks cards={mine.filter((c) => c.waits)} also={holds && !!work?.next && freshNext(work.reviews) && mine.some((c) => c.also)} />
+        <TurnAsks cards={mine.filter((c) => c.waits)} also={holds && !!next && mine.some((c) => c.also)} />
         {landing?.after === id && landing.node}
       </div>
     </MessagePrimitive.Root>
@@ -986,17 +1010,18 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const landNode = landing ? React.cloneElement(landing, { onState: setLandState }) : null;
   const placed = React.useMemo(() => placeCards(turnCards, messages, turns), [turnCards, messages, turns]);
   // ...the chat's cards stand at the foot (no turn has summed it up, none holds the draft): what waits beside them there is "Also"
-  const footNext = !dock && nextAt?.next && freshNext(nextAt.reviews) && !summed && !working && !cardTurn(nextAt.reviews, (messages || []).map((m) => m.id)) && (!chat || messages?.at(-1)?.role !== "assistant");
+  const footNext = !dock && nextAt?.next && freshNext(nextAt.reviews) && !summed && !working && !draftHome(nextAt.reviews, messages) && (!chat || messages?.at(-1)?.role !== "assistant");
   const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : "Answer the agent's question…";
   const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} began={began} starting={starting} compacting={compacting} />;
   // ...a turn a press asked for counts from the press, and says it is starting until the agent is at work
   const sentWork = sent && !dock ? <AtWork name={name} provider={provider} work={work} since={sent.at} began={serverBusy ? began : null} compacting={compacting}
     starting={serverBusy ? starting : starting || startingLine(name, provider)} /> : atWork;
+  const pressedAt = Math.max(sent?.at || 0, ...held.map((l) => +String(l.id).split("-")[1] || 0));
   const footLines = [...waitingShown(waiting, held, mineDrawn, messages).map((w) => ({ id: `waiting-${w.id}`, text: w.text, at: w.at })), ...notShown(held, mineDrawn)];
   // ...the turn a line asked for stands UNDER that line, wherever the line is drawn - never over it (the owner, 2026-11-10)
   const atFoot = footLines.length > 0;
   return (
-    <AssistantRuntimeProvider runtime={runtime}><LandingCtx.Provider value={landAt && !dock ? { after: landAt, node: landNode } : null}><TurnCardsCtx.Provider value={dock ? [] : placed}><StopCtx.Provider value={dock ? null : onStop}>
+    <AssistantRuntimeProvider runtime={runtime}><LandingCtx.Provider value={landAt && !dock ? { after: landAt, node: landNode } : null}><TurnCardsCtx.Provider value={dock ? [] : placed}><StopCtx.Provider value={dock ? null : onStop}><PressedCtx.Provider value={pressedAt}>
       <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>
         <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport">
           {/* ...where the chat is home, the ask as triage read it is its first line (ChatCtx) */}
@@ -1130,7 +1155,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             <div className="tq-aui-hint">{hint || "Enter sends · Shift+Enter adds a line · paste, drop or attach a file"}</div></>}
           </div>
       </ThreadPrimitive.Root>
-    </StopCtx.Provider></TurnCardsCtx.Provider></LandingCtx.Provider></AssistantRuntimeProvider>
+    </PressedCtx.Provider></StopCtx.Provider></TurnCardsCtx.Provider></LandingCtx.Provider></AssistantRuntimeProvider>
   );
 }
 

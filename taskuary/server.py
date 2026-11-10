@@ -2340,7 +2340,15 @@ def _assistant_payload(task_id: int, session=None):
     published = [{**r, 'after': next((mid for at, mid in answers if at >= str(r.get('created_at') or '')), None)}
                  for r in (_artifact_row(a) for a in store.list_task_artifacts(task_id) if a.get('Kind') in ('claude_artifact', 'shown'))]
     from . import outputs
-    at_turn = lambda at: next((mid for a, mid in answers if a >= str(at or '')), None)
+    # ...but a card made BEFORE the owner's line that began that answer's turn is no card of it: a reply drafted on arrival was named with the
+    # answer to his "make it shorter", so its card - and once replaced, its record - stood under his line (the owner, 2026-11-10: "it reqrote in
+    # place then put it under the prompt"). It stands under the row it came after: the mail it answers, an earlier answer
+    rows = [(str(m.get('createdAt') or ''), m['id']) for m in messages]
+    asked = [str(m.get('createdAt') or '') for m in messages if m['role'] == 'user' and not m.get('brief') and not m.get('press')]
+    def at_turn(at):
+        at = str(at or ''); a = next(((s, mid) for s, mid in answers if s >= at), None)
+        if a and any(at < u <= a[0] for u in asked): return next((mid for s, mid in reversed(rows) if s <= at), None)
+        return a and a[1]
     # AN ACT IS DRAWN IN THE TURN THAT SET IT UP (the owner, 2026-11-05): every proposal on a tool a catalogue card declares an action view
     # for (a post, a tracker comment - connectorcatalog.action_for), waiting or answered, with the answer it belongs to and who it goes out
     # as - ActionCard draws what the card declares, and once it went, that it did and where

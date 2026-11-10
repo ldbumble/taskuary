@@ -14,7 +14,7 @@ test("an own row is drawn among the arrivals, on the left, headed You · on What
   assert.match(arrived, /\{\[\.\.\.headOf\(x\), stamp\]\.filter\(Boolean\)\.join\(" · "\)\}/);
   assert.match(arrived, /\$\{x\.own \? " tq-aui-arrived-own" : ""\}`\} data-tq-chat-arrived=\{x\.own \? "own" : ""\}/);
   // ...a brief whose only mail is the owner's own reply draws it (its own words are Taskuary's, never drawn)
-  assert.match(ws, /if \(brief && chat\) return mail\?\.length \? <MessagePrimitive\.Root className="tq-aui-message tq-aui-brief"><Arrived mail=\{mail\} \/>/);
+  assert.match(ws, /if \(brief && chat\) return mail\?\.length \? <><MessagePrimitive\.Root className="tq-aui-message tq-aui-brief"><Arrived mail=\{mail\} \/>/);
   // ...and on the left, where the arrivals beside it stand right
   const css = read("generalWorkspace.css");
   assert.match(css, /\.tq-aui-chat \.tq-aui-brief \{ justify-items: end; \}\r?\n\.tq-aui-chat \.tq-aui-arrived-own \{ justify-self: start;/);

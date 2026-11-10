@@ -16,7 +16,7 @@ test("a passed card is the server's word, drawn once in its turn, greyed, never 
   assert.match(page, /const turnCards = \[\.\.\.passedCards, /, "in the turn that raised it");
 });
 
-test("a reply draft is greyed while its agent's turn re-decides it", () => {
-  assert.match(src("TaskPage.jsx"), /replanning=\{agentState === AGENT\.working && !!pendingReview\}/);
-  assert.match(src("ReviewDecision.jsx"), /const off = busy \|\| drafting \|\| replanning;/);
+test("a reply draft the owner prompted past is greyed where it stands, for good (draftPassed.test.mjs)", () => {
+  assert.doesNotMatch(src("TaskPage.jsx"), /replanning=\{agentState/);
+  assert.match(src("ReviewDecision.jsx"), /const off = busy \|\| drafting \|\| passed;/);
 });

@@ -1029,7 +1029,9 @@ def shown_history(store, tid: int) -> list:
     if msgs and not msgs[0].get('brief'):
         got = [x for x in mail if str(x['JoinedAt']) <= str(rows[0].get('CreatedAt'))
                and (msgs[0].get('role') == 'assistant' or (x.get('Channel') or '') != ownwork.CHANNEL)]
-        if got: msgs.insert(0, {'id': f'came-in-{tid}', 'role': 'user', 'content': [{'type': 'text', 'text': ''}], 'brief': True,
+        # ...named as the row it is while nothing else was in the chat (came-in-<its first mail>): named by the task, one row had two ids, and a
+        # card placed under it found no row for a beat (the browser walk, 2026-11-10)
+        if got: msgs.insert(0, {'id': f'came-in-{got[0]["MessageId"]}', 'role': 'user', 'content': [{'type': 'text', 'text': ''}], 'brief': True,
                                 'createdAt': got[-1].get('CreatedAt'), 'mail': shown(got)})
     # ...and each answer with the summary filed after it (SUMMARY_TYPE): the turn's three parts, drawn under it
     summ = {f'comment-{k}': v for k, v in turn_summaries(store, tid).items()}

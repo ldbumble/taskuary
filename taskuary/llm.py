@@ -985,6 +985,15 @@ def said_text(msg: dict) -> str:
     return next((str((x.get('function') or {}).get('arguments') or '') for x in calls if (x.get('function') or {}).get('arguments')), '')
 
 
+# THE STABLE PART OF A CALL IS READ FROM THE PROVIDER'S CACHE (the owner, 2026-11-10: "32 million tokens? sounds very expensive"): the
+# guide, the tools and the conversation so far are the same bytes call after call - triage's guide on every mail, an agent's whole turn on
+# every step. The Messages API caches only what is marked: the system, the tool list and the conversation up to its newest block. The
+# OpenAI-style cards cache a repeated prefix by themselves, so there the order alone (stable first, apiagent.sent) is what hits
+EPHEMERAL, CACHE_FROM = {'type': 'ephemeral'}, 4_000      # a system under ~1K tokens is below what the API caches at all
+def cached(system: str):
+    return [{'type': 'text', 'text': system, 'cache_control': EPHEMERAL}] if len(system or '') >= CACHE_FROM else system
+
+
 def make_llm(t, cfg: dict, key: str):
     m, effort = split_effort(cfg.get('model'))
     if effort: cfg = {**cfg, 'model': m}
@@ -1018,7 +1027,7 @@ def make_llm(t, cfg: dict, key: str):
             forced = ({'tools': [{'name': want.get('name') or 'answer', 'description': 'Answer with these fields.',
                                   'input_schema': want.get('schema') or want}],
                        'tool_choice': {'type': 'tool', 'name': want.get('name') or 'answer'}} if want else {})
-            r = ask(model=model, max_tokens=max_tokens, system=system, messages=[{'role': 'user', 'content': content}], **forced)
+            r = ask(model=model, max_tokens=max_tokens, system=cached(system), messages=[{'role': 'user', 'content': content}], **forced)
             if r.stop_reason == 'refusal': raise RuntimeError('model refused the request')
             if want:
                 call = next((b for b in r.content if b.type == 'tool_use'), None)
@@ -1028,8 +1037,10 @@ def make_llm(t, cfg: dict, key: str):
         # card speaks and go back in it, so the loop, its gate and its tools are the one road (to_anthropic / from_anthropic)
         def chat(messages, tools, max_tokens=MAX_TOKENS, tool_choice=None, **_):
             system, msgs, fns = to_anthropic(messages, tools)
+            if fns: fns[-1] = {**fns[-1], 'cache_control': EPHEMERAL}
+            if msgs and msgs[-1]['content']: msgs[-1]['content'][-1] = {**msgs[-1]['content'][-1], 'cache_control': EPHEMERAL}
             kw = {'tools': fns, **({'tool_choice': {'type': tool_choice}} if tool_choice in ('none', 'auto', 'any') else {})} if fns else {}
-            try: r = ask(model=model, max_tokens=max_tokens, messages=msgs, **({'system': system} if system else {}), **kw)
+            try: r = ask(model=model, max_tokens=max_tokens, messages=msgs, **({'system': cached(system)} if system else {}), **kw)
             except anthropic.BadRequestError as e: raise RuntimeError(f'anthropic error 400: {str(e)[:300]}') from e
             if r.stop_reason == 'refusal': raise RuntimeError('model refused the request')
             return from_anthropic(r.content)

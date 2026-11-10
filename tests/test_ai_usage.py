@@ -220,3 +220,18 @@ def test_every_step_of_an_agents_loop_is_counted_and_todays_totals_say_by_job():
     assert (r['Calls'], r['TokensIn'], r['Cached'], r['TokensOut']) == (3, 27000, 24000, 150)
     assert aiusage.today(s, str(r['At'])[:10])['general'] == {'calls': 3, 'in': 27000, 'cached': 24000, 'out': 150}
     assert not apiagent.can(aiusage.metered(s, rid, lambda system, user, **kw: 'ok')), 'a brain with no loop gains none from the meter'
+
+
+def test_an_anthropic_card_marks_the_stable_part_of_each_call_for_the_prompt_cache():
+    "The guide, the tools and the conversation so far are the same bytes call after call: marked, the provider bills them as cache reads."
+    msg = NS(stop_reason='end_turn', model='claude-sonnet-4-5', content=[NS(type='text', text='ok')], usage=None)
+    cli = mock.Mock(); cli.messages.create.return_value = msg
+    tools = [{'type': 'function', 'function': {'name': n, 'description': 'd', 'parameters': {'type': 'object', 'properties': {}}}} for n in 'ab']
+    with mock.patch('anthropic.Anthropic', return_value=cli):
+        brain = llm.make_llm('anthropic', {'model': 'claude-sonnet-4-5'}, 'sk-ant-test')
+        brain.chat([{'role': 'system', 'content': 'guide ' * 1000}, {'role': 'user', 'content': 'go'}], tools)
+        brain('guide ' * 1000, 'one mail'); brain('short', 'one mail')
+    (_, step), (_, one), (_, small) = cli.messages.create.call_args_list
+    assert step['system'][0]['cache_control'] == llm.EPHEMERAL and step['tools'][-1]['cache_control'] == llm.EPHEMERAL
+    assert 'cache_control' not in step['tools'][0] and step['messages'][-1]['content'][-1]['cache_control'] == llm.EPHEMERAL
+    assert one['system'][0]['text'] == 'guide ' * 1000 and small['system'] == 'short'

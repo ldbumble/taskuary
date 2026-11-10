@@ -84,6 +84,29 @@ def test_the_general_prompt_for_an_owner_task_still_quotes_its_source():
     assert BODY in user and 'SOURCE MATERIAL' in user and 'Run setup.sh first' in user
 
 
+def test_each_source_says_where_it_was_written_a_new_subject_once_and_a_long_one_keeps_its_end():
+    """The stress run, 2026-11-10: a mail and a chat line on another matter read as one flat list of senders and bodies, and a long mail
+    lost its last lines - where the ask often is - to a cut from the top."""
+    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't'); t = _task(s, 'erin@northwind.example'); s.update_task(t, {'Kind': 'general'}, 'router')
+    add = lambda **kw: s.add_message({'TaskId': t, 'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake', 'Status': 'routed', **kw})
+    add(Channel='email', Subject='RE: hi', BodyText='second on the same thread')
+    add(Channel='email', Subject='Trainly seats', BodyText='top of a long one. ' + 'filler words go here. ' * 400 + 'So: can you renew the seats by Friday?')
+    add(Channel='teams', BodyText='also - is the room booked?')
+    user = general._prompt(s, t)[1]
+    heads = [l for l in user.splitlines() if l.startswith('FROM ')]
+    assert [h.split('] ', 1)[-1] if '] ' in h else '' for h in heads] == ['· email · "hi"', '· email', '· email · "Trainly seats"', '· teams'], heads
+    assert 'top of a long one.' in user and 'can you renew the seats by Friday?' in user and 'reads it whole]' in user
+
+
+def test_a_strangers_file_carries_the_record_of_what_came_in():
+    from taskuary import context
+    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't'); t = _task(s, 'someone@vendor.example'); s.update_task(t, {'Kind': 'general'}, 'router')
+    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'someone@vendor.example', 'FromName': 'Someone', 'Subject': 'hi', 'BodyText': 'and one more thing',
+                   'Status': 'routed', 'RecipientsJson': json.dumps({'to': ['alex@northwind.example'], 'cc': ['ray@northwind.example']})})
+    user = general._prompt(s, t)[1]
+    assert context.CAME_HEAD in _file(t) and 'cc: ray@northwind.example' in _file(t) and context.CAME_HEAD not in user
+
+
 # ── fix round 1 ─────────────────────────────────────────────────────────────────────────────────────────────────
 from taskuary import blackboard, wrapup, outbox
 

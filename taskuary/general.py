@@ -1779,15 +1779,27 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if not stranger: mails = with_thread(store, mails)
     # ...each by its id, so a mail cut here is one the agent can open whole
     if len(mails) > SOURCE_MAILS: sources.append(compacted_mail(mails[:-SOURCE_MAILS]))
+    # ...WHERE EACH WAS WRITTEN, AND UNDER WHAT SUBJECT WHEN IT CHANGES (the stress run, 2026-11-10): a task holding a mail and a chat line on
+    # another matter read as one flat list of senders and bodies - nothing said the third message came by another road. A long one keeps
+    # its last lines too (triage.both_ends: the ask is as often under the story as over it)
+    from .routing import norm_subject
+    from .triage import both_ends
+    said_subject = None
     for m in mails[-SOURCE_MAILS:]:
         who = m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
+        subj, was = str(m.get('Subject') or '').strip(), said_subject
+        said_subject = norm_subject(subj) if subj else said_subject
+        where = ''.join(f' · {x}' for x in (m.get('Channel'), f'"{_flat(subj, 140)}"' if subj and norm_subject(subj) != was else '') if x)
         files = store.list_attachments(m['MessageId'])
         file_line = ('\nATTACHMENTS: ' + '; '.join(
             str(a.get('Name') or 'file') + (f" ({a.get('Path')})" if a.get('Path') else '')
             for a in files[:8])) if files else ''
         long = len(str(m.get('BodyText') or '')) > SOURCE_CHARS
-        body = _cut(m.get('BodyText'), SOURCE_CHARS) + (f" - read_message m{m['MessageId']} reads it whole" if long else '')
-        sources.append(f"FROM {who} ({m.get('SentAt') or ''}) [m{m['MessageId']}]{EARLIER if m.get('_earlier') else ''}\n{body}{file_line}")
+        body = both_ends(str(m.get('BodyText') or ''), SOURCE_CHARS) + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '')
+        sources.append(f"FROM {who} ({m.get('SentAt') or ''}) [m{m['MessageId']}]{where}{EARLIER if m.get('_earlier') else ''}\n{body}{file_line}")
+    # ...and a STRANGER's task has no hub read to carry the record of what came in (context.for_prompt is closed to it): whom each message
+    # went to, the addresses behind its words, how each reached the task - facts about these very messages, so they ride in their file
+    if stranger and (came := _ctx_came(store, tid)): sources.append(came)
     turns, said = [], chat_rows(store, tid, run=True)
     for c in said[-TURNS:]:
         role = 'ASSISTANT' if c.get('ActorType') == ASSISTANT_TYPE else 'USER'
@@ -1887,6 +1899,12 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         cut = f'[older source material trimmed - its first {len(src) - room + 300:,} characters; {READ_WHOLE}]\n\n'
         src = (cut + src[-(room - 300):]) if room > 700 else ''
     return system, head + (f"SOURCE MATERIAL\n{src}\n\n" if src else '') + conv
+
+
+def _ctx_came(store, tid: int) -> str:
+    from . import context
+    try: return context.came_in(store, tid)
+    except Exception as e: logger.debug(f'general: what came in on task {tid} not read - {e}'); return ''
 
 
 # COMPACTION (the owner, 2026-11-05: "we probably should have some sort of compaction if the chats get too long ... don't make a new parallel

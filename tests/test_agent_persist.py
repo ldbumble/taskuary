@@ -90,7 +90,7 @@ def test_older_mail_is_compacted_by_id():
     s.add_comment(tid, 'owner', general.USER_TYPE, 'Sum it up')
     with mock.patch.object(general, 'SOURCE_MAILS', 2): user = general._prompt(s, tid)[1]
     assert 'EARLIER MAIL ON THIS TASK, COMPACTED - 2 older messages' in user and f'[m{ids[0]}] Gail Moreno' in user and general.READ_WHOLE in user
-    assert f'[m{ids[3]}]\nmail 3 body' in user
+    assert f'[m{ids[3]}] · email\nmail 3 body' in user
 
 
 def test_the_thread_a_task_was_built_from_is_in_its_material():

@@ -56,6 +56,8 @@ export const reviewText = (review) => {
   // a workflow repair reads as what was wrong and what changes, never the step list's JSON (flow.repair)
   if (proposal?.action === "repair_workflow") return [proposal.why, proposal.changes].filter(Boolean).join("\n\n");
   if (proposal?.action === "run_tool") return toolBody(proposal);
+  // a part of the task going to a task of its own (proposals.break_out): the new task's title, what it is, and each thing that moves
+  if (proposal?.action === "break_out") return [proposal.summary, proposal.moves].filter(Boolean).join("\n\n");
   // the WHAT is the context line already (proposals.queue's Reason); the box is the exact command Approve runs, once - with no AI the card
   // said "agent-browser click @e12" three times over (2026-10-25)
   if (["browser_act", "shell_act", "desktop_act"].includes(proposal?.action)) return proposal.command ? `Approve runs: ${proposal.command}` : proposal.what || "";
@@ -198,6 +200,19 @@ export const proposalPresentation = (review) => {
     rejectLabel: "Dismiss",
     readOnly: true,
   };
+  // A PART OF THE TASK THAT IS ANOTHER MATTER (proposals.break_out, the owner 2026-11-10): the new task's title leads, what moves is read-only -
+  // Approve runs the task page's own split with exactly those messages and to-dos
+  if (proposal?.action === "break_out") return {
+    kind: "action",
+    title: "Move this part to a task of its own",
+    context: review.Reason || "Proposed · nothing moves until you approve",
+    destinationLabel: "New task",
+    destination: proposal.title || "",
+    approveLabel: APPROVE,
+    busyLabel: "moving…",
+    rejectLabel: "Dismiss",
+    readOnly: true,
+  };
   if (proposal?.action === "repair_workflow") return {
     kind: "action",
     title: "Repair this routine's steps",
@@ -233,7 +248,8 @@ export const reviewStatusLabel = (status) => REVIEW_STATUS[status] || String(sta
 // AN APPROVED ACT'S CARD IS ITS RESULT (the owner, 2026-11-09: "once i approve it should say sent and what to do next, not a new prompt"): what
 // it did in words, its link, and the command it ran folded - read off the receipt the server keeps (proposals.receipt). Null while it waits
 const VERB = { shell_act: "ran", browser_act: "ran on the page", desktop_act: "ran", comment_issue: "commented", close_issue: "closed",
-  merge_pr: "merged", land: "landed", open_pr: "opened the pull request", push_direct: "pushed", close_item: "closed", run_tool: "done" };
+  merge_pr: "merged", land: "landed", open_pr: "opened the pull request", push_direct: "pushed", close_item: "closed", run_tool: "done",
+  break_out: "moved to its own task" };
 export const resultOf = (review) => {
   if (review?.Kind !== "action" || !["approved", "edited"].includes(review?.Status)) return null;
   let p = {};
@@ -241,7 +257,7 @@ export const resultOf = (review) => {
   const r = p.result || {}, url = r.url || (/https?:\/\/\S+/.exec(String(r.said || "")) || [""])[0].replace(/[.,)]+$/, "");
   // ...a yes the page refused (browsergate._perform's `refused`) is over, and did nothing: it never reads "ran on the page"
   if (r.refused) return { said: "Approved · not done", what: String(r.refused), url: "", command: String(p.command || "") };
-  const what = String(p.about || p.what || r.performed || r.commented || r.closed || r.merged || "").trim();
+  const what = String(p.about || p.what || r.performed || r.commented || r.closed || r.merged || (r.task ? r.said : "") || "").trim();
   return { said: `Approved · ${VERB[p.action] || "done"}`, what, url, command: String(p.command || "") };
 };
 

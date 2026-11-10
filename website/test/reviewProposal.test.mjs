@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { heldActsLine, proposalPresentation, reviewStatusLabel, reviewText } from "../src/reviewProposal.js";
+import { heldActsLine, proposalPresentation, reviewStatusLabel, resultOf, reviewText } from "../src/reviewProposal.js";
 
 const playbook = {
   Kind: "action",
@@ -167,6 +167,18 @@ test("a held shell step leads with what it does and why, its command folded", ()
   const card = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
   assert.match(card, /\{cmdOpen \? "Hide the command" : "Show the command"\}/);
   assert.match(card, /\.\.\.\(proposal\?\.folded && !cmdOpen \? \{ display: "none" \} : \{\}\)/, "the command's box stays folded until asked for");
+});
+
+test("a break-out card says the new task and what moves to it, and its result names the task", () => {
+  const p = { action: "break_out", title: "Renew the Trainly seats", summary: "Erin's ask about seats, apart from the invoice", messages: [12], items: [],
+    moves: "Erin Blake: can we renew the Trainly seats before Friday?" };
+  assert.equal(reviewText({ Kind: "action", DraftText: JSON.stringify(p) }),
+    "Erin's ask about seats, apart from the invoice\n\nErin Blake: can we renew the Trainly seats before Friday?");
+  const card = proposalPresentation({ Kind: "action", DraftText: JSON.stringify(p), Reason: "the agent proposes to move 1 message to a task of its own" });
+  assert.deepEqual([card.title, card.destinationLabel, card.destination, card.readOnly], ["Move this part to a task of its own", "New task", "Renew the Trainly seats", true]);
+  const done = { ...p, result: { task: 9, ref: "TQ-0009", said: "TQ-0009 is the new task: Renew the Trainly seats" } };
+  assert.deepEqual(resultOf({ Kind: "action", Status: "approved", FinalText: JSON.stringify(done) }),
+    { said: "Approved · moved to its own task", what: "TQ-0009 is the new task: Renew the Trainly seats", url: "", command: "" });
 });
 
 test("the section says Also waiting on you only under something else that waits", () => {

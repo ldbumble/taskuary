@@ -162,3 +162,25 @@ def test_the_owners_answer_is_a_line_that_says_what_it_allowed(s):
         said = [l['content'][0]['text'] for l in general.press_lines(s, tid)]
         assert said[-1] == want, said
     assert not any('permission answered' in x for x in said)
+
+
+def test_a_request_the_last_run_left_open_is_refused_and_said_when_taskuary_starts_again(s):
+    """Taskuary was killed while the agent waited on Allow (the agent walk, 2026-11-09): the next run drew no card and no line, and the
+    step it had asked for read as the last thing the agent did. Nobody in the new process holds the request - it says so, once."""
+    tid = coding(s); s.update_task(tid, {'Status': 'in_progress'}, 'test')
+    t, _ = asking(s, tid, perm.from_acp(ACP), wait=60)
+    assert ws.status(s, tid)['state'] == 'approval_needed'
+    said = lambda: [c['Body'] for c in s.list_comments(tid) if 'Taskuary closed first' in c['Body']]
+    assert perm.refuse_orphans(s) == [] and not said(), 'a request this process still holds is its own'
+    with perm._LOCK: held = dict(perm.PENDING); perm.PENDING.clear()     # the process is gone: its sessions and what it held with it
+    term.SESSIONS.clear()
+    try:
+        term.recover_after_restart(s)
+        assert said() == ["The agent's request was refused - Taskuary closed first: it wants to run `npm test -- money`"
+                          f" ({os.path.join(REPO, 'money.js')})."]
+        st = ws.status(s, tid)
+        assert (st['requests'], st['state']) == ([], 'disconnected'), "the run's ending is its last word, with nothing left asking"
+        assert perm.refuse_orphans(s) == [] and len(said()) == 1, 'said once: a run the record has ended is left as it reads'
+    finally:
+        with perm._LOCK: perm.PENDING.update(held)
+        ws.release(tid); t.join(5)

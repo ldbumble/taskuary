@@ -157,7 +157,7 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None) -> s
     if not ans:
         ans = _pick(r, False)
         said = (f"No answer in {round(wait / 60) or 1} min{'s' if round(wait / 60) != 1 else ''} - the agent's request was refused: it {line(r)}."
-                if out is None and not ws.STOP.is_set() else f"The agent's request was refused - Taskuary closed first: it {line(r)}.")
+                if out is None and not ws.STOP.is_set() else CLOSED_FIRST.format(line(r)))
         try: ws.record(store, tid, sid, 'answered', request_id=rid, text='timed out - refused', source='permission')
         except Exception: pass
         store.add_comment(tid, 'taskuary', 'agent', said)
@@ -186,6 +186,31 @@ def answer(store, tid: int, pid: str, option: str, actor: str = 'owner') -> dict
     try: agentchannels.permission_done(store, int(tid), pid, said)
     except Exception as e: logger.debug(f'permission on {task_ref(tid)}: answer line not posted - {e}')
     return {'ok': True, 'answer': o, 'says': said}
+
+
+# A REQUEST WHOSE ASKER IS GONE (the agent walk, 2026-11-09). PENDING is this process's own: Taskuary killed while an agent waited on the
+# owner's Allow, the next run found the request open in the worker's record with nothing holding it - no card, no line, and the step it
+# had asked for stood in the transcript as the last thing the agent did. A clean close says the request was refused (ask's own ending);
+# a kill says nothing, so the next start says it, before the run's ending is written (terminal.recover_after_restart): the request is
+# closed in the record and the task reads that it was never run. A run the record already ended is history, and is left as it reads
+CLOSED_FIRST = "The agent's request was refused - Taskuary closed first: it {}."
+def refuse_orphans(store) -> list:
+    "Every permission request the record holds open with nobody in this process asking it: refused, and said on its task - [task ids]."
+    from . import workerstate as ws
+    with _LOCK: held = {p['rid'] for p in PENDING.values() if p['store'] is store}
+    tids = [r['TaskId'] for r in store._rows(
+        "SELECT DISTINCT e.TaskId FROM worker_event e WHERE e.Kind='approval_needed' AND e.Source='permission' AND NOT EXISTS "
+        "(SELECT 1 FROM worker_event a WHERE a.TaskId=e.TaskId AND a.Kind='answered' AND a.RequestId=e.RequestId)")]
+    out = []
+    for tid in tids:
+        evs = ws.events(store, tid); said = [e for e in evs if e['Kind'] not in ws.NOTES]
+        if not said or said[-1]['Kind'] in ws.TERMINAL: continue
+        for e in ws.open_requests(evs):
+            if e.get('Source') != 'permission' or e['RequestId'] in held: continue
+            ws.record(store, tid, e['Sid'], 'answered', request_id=e['RequestId'], text='Taskuary closed first - refused', source='permission')
+            store.add_comment(tid, 'taskuary', 'agent', CLOSED_FIRST.format(str(e.get('Text') or '').removeprefix('The agent ') or 'asked for your OK'))
+            out.append(tid)
+    return out
 
 
 # ── the ACP road (acpgate) ─────────────────────────────────────────────────────────────────────────────────────────────────

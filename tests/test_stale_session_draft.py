@@ -97,16 +97,16 @@ class StaleSessionDraftTests(Base):
         with mock.patch('taskuary.workerstate.current_sid', return_value='s-new'): terminal.release_held(s, tid, 'owner')
         self.assertEqual(s.get_review(rid)['Status'], 'pending', 'A6 stands for drafts no agent session wrote')
 
-    def test_the_wrap_up_drafts_fresh_instead_of_bringing_the_stale_draft_back(self):
+    def test_the_wrap_up_raises_a_fresh_reply_instead_of_bringing_the_stale_draft_back(self):
         s = MemoryStore(); tid, mid = task_with(s)
         old = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-old')['review_id']
         wrapup.hold_stale(s, tid, 's-new')
         with mock.patch('taskuary.workerstate.current_sid', return_value='s-new'), \
              mock.patch('taskuary.responder.write_draft', return_value=NEW) as redraft:
-            wrapup.raise_reply(s, tid, mid, None, {'summary': 'all reconciled', 'outcome': 'did_work'})
-        redraft.assert_called_once()
+            owed = wrapup.raise_reply(s, tid, mid, None)
+        redraft.assert_not_called()                          # ...the reply owed, the new session's agent's to write (2026-11-10)
         self.assertEqual(s.get_review(old)['Status'], 'closed_unsent')
-        self.assertNotEqual(s.pending_review(tid)['ReviewId'], old)
+        self.assertEqual(s.pending_review(tid)['ReviewId'], owed); self.assertNotEqual(owed, old)
 
     def test_send_refuses_a_held_stale_draft(self):
         s = MemoryStore(); tid, _ = task_with(s)

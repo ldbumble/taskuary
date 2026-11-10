@@ -833,10 +833,10 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(parse_cli_json('{"result": "OK", "session_id": "abc"}'), ('OK', 'abc'))
         self.assertEqual(parse_cli_json('plain'), ('plain', None))
 
-    def test_finishing_hands_the_reply_to_the_responder(self):
-        """A finished session does not write email. It reports; the SAME responder that answers
-        reply-only mail turns that report into the draft you approve - and the draft has to
-        survive the close, which used to supersede it on the spot."""
+    def test_finishing_raises_the_reply_owed_and_no_writer_drafts_it(self):
+        """A finished session's reply is the AGENT's (the owner, 2026-11-10: "no more triage creates draft. agent should be doing
+        it"): one it did not write waits as the reply owed, with no words on it - no tool-less writer drafts it from the report - and
+        it survives the close, which used to supersede it on the spot."""
         from unittest import mock
         from taskuary.wrapup import finish
         s = MemoryStore()
@@ -853,14 +853,13 @@ class CoreTests(unittest.TestCase):
         with mock.patch('taskuary.llm.build_llm', return_value=fake_llm):
             finish(s, tid, rep)
         pend = s.list_reviews('pending')
-        self.assertEqual((len(pend), pend[0]['Kind'], s.get_task(tid)['Status']), (1, 'draft_reply', 'waiting'))
-        self.assertIn('import is running again', pend[0]['DraftText'])
-        self.assertIn('fixed the date parse', seen['user'])            # the report is the source of truth
-        self.assertIn('FINISHED', seen['system'])                      # ...and it reports, never promises
+        self.assertEqual((len(pend), pend[0]['Kind'], s.get_task(tid)['Status']), (1, 'draft', 'waiting'))
+        self.assertFalse(pend[0].get('DraftText'))
+        self.assertEqual(seen, {})                                     # no model was asked for it
 
-    def test_finished_reply_uses_the_complete_eight_item_result(self):
+    def test_a_pressed_reply_uses_the_complete_eight_item_result(self):
         """The task card's compact report must not become a lossy reply source. A real session
-        answered eight separate issues; all eight have to reach the responder with room to write."""
+        answered eight separate issues; all eight have to reach the writer the owner's Draft with AI asks, with room to write."""
         from unittest import mock
         from taskuary import wrapup, responder
         s = MemoryStore()
@@ -874,9 +873,8 @@ class CoreTests(unittest.TestCase):
         def fake_llm(system, user, **kw):
             seen.update(system=system, user=user, tokens=kw.get('max_tokens'))
             return final
-        compact = {'summary': 'Issue 1 was checked.', 'determination': '', 'actions': ''}
         with mock.patch('taskuary.llm.build_llm', return_value=fake_llm):
-            wrapup.finish(s, tid, compact, complete_result=wrapup.reply_source('ignored', final))
+            responder.draft_reply(s, tid, resolution='COMPLETE FINAL RESPONSE FROM THE WORK SESSION:\n' + final, pressed=True)
         for n in range(1, 9):
             self.assertIn(f'Issue {n}: completed with result {n}.', seen['user'])
         self.assertIn('EVERY distinct question', seen['system'])
@@ -905,7 +903,7 @@ class CoreTests(unittest.TestCase):
         rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': 'r'})
         self.assertFalse(hasattr(agents, 'dispatch'))            # deleted, not left dormant
         with mock.patch('taskuary.llm.build_llm', return_value=lambda sys_, usr, **kw: 'Fixed - it posts to August now.'):
-            out = responder.write_draft(s, tid, rid, 'Actions: fixed it')
+            out = responder.write_draft(s, tid, rid, pressed=True)
         self.assertIn('August', out)
         self.assertEqual(s.get_review(rid)['DraftText'], out)
 

@@ -57,11 +57,14 @@ class AgentReplyTests(NoHook):
         self.assertEqual(len(rvs), 1); self.assertEqual(rvs[0]['DraftText'], OWN)
         self.assertIn("coding's own reply", rvs[0]['Reason'])
 
-    def test_without_one_the_responder_drafts_as_before(self):
+    def test_without_one_no_writer_drafts_it_and_it_waits_owed(self):
+        """The owner, 2026-11-10: "no more triage creates draft. agent should be doing it" - at a run's end too."""
         s = MemoryStore(); tid, _ = task_with(s)
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as redraft:
-            wrapup.finish(s, tid, REP, None, 'coding')
-        redraft.assert_called_once()
+            out = wrapup.finish(s, tid, REP, None, 'coding')
+        redraft.assert_not_called()
+        rv = s.get_review(out['owed'])
+        self.assertEqual((rv['Status'], rv.get('DraftText') or ''), ('pending', ''))
 
     def test_a_reply_that_already_went_out_is_not_put_back_on_the_table(self):
         # a resumed session saved its first session's reply again after the owner had sent it, and the sender's "Thanks!"

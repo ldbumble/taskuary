@@ -41,7 +41,7 @@ class OpenQuestionAtWrap(unittest.TestCase):
 
     def finish(self, s, tid):
         with mock.patch('taskuary.responder.write_draft', return_value='draft') as wd:
-            out = wrapup.finish(s, tid, {'summary': NOTE}, None, 'assistant', wrapup.reply_source('', NOTE), keep_open=True)
+            out = wrapup.finish(s, tid, {'summary': NOTE}, None, 'assistant', keep_open=True)
         return out, wd
 
     def test_a_run_ended_on_an_unanswered_question_drafts_no_reply(self):
@@ -52,14 +52,14 @@ class OpenQuestionAtWrap(unittest.TestCase):
         self.assertEqual(s.list_reviews('pending'), [])
         self.assertTrue(any('waiting on your answer - no reply drafted' in c['Body'] for c in s.list_comments(tid)))
 
-    def test_finished_work_still_drafts_as_before(self):
+    def test_finished_work_still_raises_the_reply_as_before(self):
         s = MemoryStore(); tid, mid = vendor_task(s)
         ev(s, tid, 'working'); ev(s, tid, 'turn_end', 'Retried from the allowed host - it connects and the files came through.')
         out, wd = self.finish(s, tid)
-        wd.assert_called_once(); self.assertTrue(out['drafting'])
-        self.assertEqual(s.list_reviews('pending')[0]['Reason'], 'the agent finished the work - reply awaiting approval')
+        wd.assert_not_called(); self.assertTrue(out['drafting'])         # the reply owed, its agent's to write (2026-11-10)
+        self.assertTrue(s.list_reviews('pending')[0]['Reason'].startswith('the agent finished without writing the reply'))
 
-    def test_a_run_stopped_mid_turn_drafts_as_stopped_not_finished(self):
+    def test_a_run_stopped_mid_turn_says_stopped_not_finished(self):
         "The overnight run, 2026-11-03: Stop and save mid-turn left a draft saying 'the agent finished the work'."
         s = MemoryStore(); tid, mid = vendor_task(s)
         ev(s, tid, 'working'); ev(s, tid, 'stopped', 'the agent stopped in the middle of its turn')

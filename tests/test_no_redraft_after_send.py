@@ -107,11 +107,12 @@ class TheEnding(Base):
         self.assertFalse(out['drafting']); self.assertEqual(pending(self.s, self.tid), [])
         self.assertTrue(any('already went at 05:33 PM' in c['Body'] for c in self.s.list_comments(self.tid)))
 
-    def test_with_new_mail_the_ending_drafts_as_before(self):
+    def test_with_new_mail_the_ending_raises_the_reply_as_before(self):
         mail(self.s, self.tid, 'g-2', 'One more - can you also add September?', '18:00:00')
         with mock.patch('taskuary.responder.write_draft', return_value='Sure.') as redraft:
-            self.assertTrue(wrapup.finish(self.s, self.tid, REP, None, 'coding')['drafting'])
-        redraft.assert_called_once()
+            out = wrapup.finish(self.s, self.tid, REP, None, 'coding')
+        self.assertTrue(out['drafting']); self.assertTrue(out['owed'])
+        redraft.assert_not_called()                     # ...the agent's to write (2026-11-10), never a second voice's
 
 
 class TheAgentIsTold(Base):

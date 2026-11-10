@@ -269,7 +269,7 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
 # 1024 bytes, so the WHOLE rule lives in CODING.md (which rides in as RULES) and this is only the
 # part that must survive a blanked document: the command, and what pressing it does.
 SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --reply "<text>"` (a file it promises: add `--attach <path>`) - the owner approves it. '
-             'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it files your ending and drafts the reply unless you saved one; the owner closes the task; '
+             'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it files your ending, and a reply owed that you did not save is asked of you; the owner closes the task; '
              'add `--no-reply` when nobody should hear back. '
              'ONLY SOMEONE ELSE CAN ANSWER: ask them, then `taskuary --waiting-on "<who>"` - their reply brings the task back.')
 # ...and its opposite, for a session the owner opened to sit in (stays_open): the one thing the

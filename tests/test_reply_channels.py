@@ -88,12 +88,12 @@ class FinishTests(unittest.TestCase):
         self.assertEqual(len(s.list_reviews('pending')), 1)
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')   # the draft waits on the owner's word: send elsewhere, or close without sending
 
-    def test_a_channel_switched_off_drafts_but_hides_send(self):
+    def test_a_channel_switched_off_raises_the_reply_but_hides_send(self):
         s = MemoryStore(); s.set_setting('reply_channels', 'email', 't')
         tid, _ = task_with(s, 'discord')
         with mock.patch('taskuary.responder.write_draft', return_value='hi') as wd:
             out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
-        wd.assert_called_once()
+        wd.assert_not_called(); self.assertTrue(out['owed'])          # the reply owed, its agent's to write (2026-11-10)
         self.assertEqual((out['drafting'], out['can_send']), (True, False))
         self.assertIn('Settings', out['send_block'])
 
@@ -148,7 +148,9 @@ class WrapEndpointTests(unittest.TestCase):
     def test_email_wrap_does_promise_one(self):
         self.assertTrue(self._wrap('email')['drafting'])
 
-    def test_email_wrap_drafts_from_the_full_final_response(self):
+    def test_email_wrap_keeps_the_full_final_response_for_the_reply(self):
+        """Nothing drafts at the wrap now (2026-11-10), but the owner's Draft with AI / Redraft reads the run's result (responder.
+        resolution_of): it must be the full final response, never the card's compact report."""
         s = MemoryStore(); tid, _ = task_with(s, 'email')
         final = '\n'.join(f'{n}. Complete answer for requested item {n}.' for n in range(1, 9))
         compact = {'summary': 'Only item 1 fits on the card.', 'determination': '', 'actions': ''}
@@ -156,10 +158,11 @@ class WrapEndpointTests(unittest.TestCase):
         with mock.patch.object(terminal, 'session_for', return_value=None), \
              mock.patch.object(terminal, 'transcript_for', return_value=('full transcript', 'claude', None)), \
              mock.patch.object(wrapup, 'report_from_transcript', return_value=compact), \
-             mock.patch('taskuary.responder.write_draft', return_value='draft') as write:
+             mock.patch('taskuary.responder.write_draft', side_effect=AssertionError('a second voice drafted the reply')):
             wrapup.wrap(s, tid, close=True, actor='owner', final_message=final)
-        source = write.call_args.args[3]
-        self.assertNotIn('Only item 1 fits on the card.', source)
+        from taskuary import responder
+        source = responder.resolution_of(s, tid)
+        self.assertTrue(source.startswith('COMPLETE FINAL RESPONSE FROM THE WORK SESSION:' + chr(10) + '1. Complete answer'))     # it leads
         for n in range(1, 9):
             self.assertIn(f'Complete answer for requested item {n}.', source)
 

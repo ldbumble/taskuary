@@ -180,7 +180,7 @@ def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: s
 
     if mode == 'task':
         # the review is created NOW and held: wrapup.raise_reply finds it when the agent finishes
-        # and has the responder rewrite it from what was actually found. Without it, finishing an
+        # and asks its agent to write it from what was actually found. Without it, finishing an
         # outbound task would look for a message to answer, find only ours, and draft nothing.
         rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending',
                                 'Reason': f'you asked for this to be looked into first - {to_text} hears back when it is',

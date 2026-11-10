@@ -621,8 +621,8 @@ class TerminalTests(unittest.TestCase):
             self.assertEqual(typed, [])                                        # the agent was never asked
             self.assertNotIn(t.sid, [x['sid'] for x in terminal.listing()])     # session gone
             pend = [r for r in server.store.list_reviews('pending') if r['TaskId'] == tid]
-            self.assertEqual((len(pend), pend[0]['Kind']), (1, 'draft_reply'))  # the sender is still owed the answer
-            self.assertIn('no longer gets a mailbox', pend[0]['DraftText'])
+            # the sender is still owed the answer - the agent's to write, never a second voice's (2026-11-10)
+            self.assertEqual((len(pend), pend[0]['Kind'], pend[0].get('DraftText') or ''), (1, 'draft', ''))
             self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')  # waiting on you to send it; dismissing it closes the task
             self.assertNotIn('stay:open', server.store.get_task(tid).get('Tags') or '')   # ...because the owner's mark came off (2026-09-07)
             self.assertTrue(any('flipped it to N/N' in cm['Body'] for cm in server.store.list_comments(tid)))
@@ -1179,10 +1179,10 @@ class DurableWrapTests(unittest.TestCase):
         self.assertEqual(c.post(f'/api/tasks/{tid}/wrap', json={'close': True}).status_code, 422)
         self.assertEqual(c.post('/api/tasks/999999/wrap', json={'close': True}).status_code, 422)
 
-    def test_a_reply_drafted_from_the_mail_is_held_while_the_agent_works_and_rewritten_after(self):
+    def test_a_reply_drafted_from_the_mail_is_held_while_the_agent_works_and_comes_back_stale(self):
         """Triage answers a question from the mail alone. Send that same task to a coding agent and
         the draft was still sitting in Review looking ready to send - promising a fix nobody had
-        looked at yet. It waits, then comes back written from what the session found."""
+        looked at yet. It waits, then comes back as the reply owed - the agent's to write (2026-11-10), its old words marked stale."""
         tid = self._task('held reply task')
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:HELD1', 'Channel': 'email',
                                         'FromEmail': 'asker@corp.com', 'SourceName': 'me@corp.com',
@@ -1202,10 +1202,10 @@ class DurableWrapTests(unittest.TestCase):
         with mock.patch('taskuary.responder.write_draft', return_value='The import is fixed.') as wd:
             with mock.patch('taskuary.llm.build_llm', return_value=None):
                 out = c.post(f'/api/tasks/{tid}/wrap', json={'close': True}).json()
-        self.assertTrue(out['drafting'])
-        self.assertEqual(wd.call_args.args[2], rid)          # the SAME review, not a second one
-        self.assertIn(rid, pending())                        # back in the queue, rewritten
-        self.assertIn('what it found', server.store.get_review(rid)['Reason'])
+        self.assertTrue(out['drafting']); wd.assert_not_called()
+        self.assertIn(rid, pending())                        # the SAME review back in the queue, not a second one
+        self.assertIn("the agent's to write", server.store.get_review(rid)['Reason'])
+        self.assertEqual(server.store.get_review(rid)['Stale'], 1)       # ...its words from before the work never go as the answer
 
     def test_a_held_reply_can_be_released_without_waiting(self):
         tid = self._task('released reply task')

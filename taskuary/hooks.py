@@ -516,8 +516,9 @@ def _events(t, p: dict) -> None:
 
 # DID A HEADLESS TURN END SHORT? A general agent's CLI is not woken by work it left in the background, so a turn ending "I have
 # the mail side - I'm waiting for the app walkthrough to finish, then I'll write the brief" was filed as its answer, and the task
-# read "researcher answered · agent waiting on you" over a brief that would never come (the owner, 2026-10-21). A light model reads
-# it - never a phrase list. It used to file such a turn as the run FAILING and end the session; the owner, 2026-11-05: "failure
+# read "researcher answered · agent waiting on you" over a brief that would never come (the owner, 2026-10-21). What the turn's own
+# record says comes first (background.left: work it started still running, or all of it back) - "no model call where stored facts
+# already answer" (2026-11-10); only where it cannot tell does a light model read it - never a phrase list. It used to file such a turn as the run FAILING and end the session; the owner, 2026-11-05: "failure
 # means nothing to the user". Now it only says what the turn still waits on, to `then(why)` - the general agent wakes itself once to do it
 # (general.GeneralSession.wake). Nothing is recorded: the session stays open and the turn's answer stands.
 ENDED_SYSTEM = ('You read the last message an agent wrote before its turn ended. Nothing will wake the agent again until its owner '
@@ -559,15 +560,18 @@ def held_for(store, tid: int, sid: str) -> bool:
 def finished(summ) -> bool: return isinstance(summ, dict) and summ.get('nothing_left') is True
 
 
-def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = False, then=None, summ=None):
+def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = False, then=None, summ=None, jobs=None):
     """Read a headless turn's last message for work it left unfinished; hand `then` what it still waits on, when it did - never a failure.
-    `summ`: the turn's own summary - one that says it is finished (nothing_left) is never read."""
+    `summ`: the turn's own summary - one that says it is finished (nothing_left) is never read. `jobs`: what the turn's record says of the
+    work it put aside (background.left) - still running wakes it, [] (all back) does not, and only None leaves it to the model."""
     import hashlib
+    from . import background
     if finished(summ): return
     key = (str(sid), hashlib.sha1(said.encode('utf-8', 'replace')).hexdigest())
     def go():
         from . import workerstate as ws
-        if key in _ENDED: why = _ENDED[key]
+        if jobs is not None: why = background.summary(jobs)
+        elif key in _ENDED: why = _ENDED[key]
         else:
             try:
                 from .llm import build_llm, ask_json

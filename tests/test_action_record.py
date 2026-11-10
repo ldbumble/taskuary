@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from taskuary import agenttools, general, proposals, shellgate as sg, terminal as term, verdicts
-from taskuary.store import MemoryStore
+from taskuary.store import MemoryStore, task_ref
 from taskuary.testing import Factory
 
 HELD = r'C:\work\ledger'
@@ -43,6 +43,46 @@ class Acts(unittest.TestCase):
     def answered(self):
         self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The comment is ready - press Approve.')
         self.s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (self.tid,))
+
+
+
+class EveryPressOfTheOwnersIsSaidInWords(Acts):
+    """A press with no phrase of its own is said by its audit row's bare name (general.presses): the chat read "You check back cancelled.",
+    "You merged from task.", "You closed out.", and - on the task a break-out made - "You split from task." (the stress round, 2026-11-10)."""
+    def lines(self, tid=None): return [m['content'][0]['text'] for m in general.press_lines(self.s, tid or self.tid)]
+
+    def test_a_check_back_taken_off_and_a_merge_say_what_they_were(self):
+        from datetime import date, timedelta
+        from taskuary import checkback, reshape
+        checkback.set_check(self.s, self.tid, (date.today() + timedelta(days=3)).isoformat(), 'see whether Erin answered', 'assistant')
+        checkback.cancel(self.s, self.tid, 'owner')
+        self.assertEqual(self.lines(), ['You took off the check-back - see whether Erin answered.'])
+        f = Factory(self.s); other = f.task('Seats again'); f.message(other, from_name='Erin Blake', body='And the seats?')
+        reshape.merge_tasks(self.s, other, self.tid, 'owner')
+        self.assertEqual(self.lines()[-1], f'You merged {task_ref(other)} into this task.')
+        self.assertEqual(self.lines(other), [f'You merged this task into {task_ref(self.tid)}.'])
+
+    def test_the_task_a_break_out_made_says_where_it_came_from(self):
+        f = Factory(self.s); f.message(self.tid, from_name='Erin Blake', body='Where is the Payworth invoice?')
+        mid = f.message(self.tid, from_name='Erin Blake', body='Also, can we renew the Trainly seats?')
+        q = proposals.queue(self.s, self.tid, {'action': 'break_out', 'title': 'Renew the Trainly seats', 'messages': [f'm{mid}'], 'why': 'another matter'}, 'agent')
+        with mock.patch.object(general, 'approved'): out = verdicts.decide(self.s, self.s.get_review(q['reviewId']), 'approve')
+        self.assertEqual(self.lines(out['result']['task']), [f'You made this task from part of {task_ref(self.tid)}.'])
+
+    def test_their_own_typed_line_and_a_close_out_that_went_are_no_line_of_their_own(self):
+        from taskuary import waitroom
+        with mock.patch.object(waitroom, 'deliver', return_value={'delivered': 0, 'state': 'held'}): waitroom.add(self.s, self.tid, 'also check the Spendly export', 'owner')
+        proposals.closed_out(self.s, self.tid, 'owner', 'Closed out.')
+        self.assertEqual(self.lines(), [], 'the note is their bubble, and the close-out card says it went')
+
+    def test_no_press_the_app_itself_writes_is_left_to_its_bare_name(self):
+        "Every task audit row written in the owner's name, read off the source: a phrase (PRESSES) or said elsewhere (QUIET) - never neither."
+        import re
+        from pathlib import Path
+        rows = re.compile(r"audit\('task',[^,]+,\s*'([a-z_\-]+)',\s*(?:ACTOR|'owner'|'you')\b")
+        bare = sorted({a for fn in Path(general.__file__).parent.glob('*.py') if fn.name not in ('remote_assistant.py', 'devphone.py')
+                       for a in rows.findall(fn.read_text(encoding='utf-8')) if a not in general.PRESSES and a not in general.QUIET})
+        self.assertEqual(bare, [])
 
 
 class APressThatFailed(Acts):

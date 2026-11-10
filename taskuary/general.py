@@ -604,7 +604,24 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if 
            'shell_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_done': lambda d: f"approved: {_held_what(d)} - it ran on the page",
            'desktop_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_refused': lambda d: 'approved it - the page did not take it',
            # ...and a step the agent handed them ON ITS PAGE - a captcha, the last button of a checkout: the page moved on, or they pressed Done
-           'browser_act_pressed': lambda d: _on_page(d)}
+           'browser_act_pressed': lambda d: _on_page(d),
+           # ...AND EVERY OTHER PRESS OF THEIRS THAT HAD NO WORDS (the stress round, 2026-11-10): with none it is said by its audit row's
+           # bare name, and the chat read "You check back cancelled.", "You merged from task.", "You split from task." on the task a
+           # break-out made, "You dispatch cancel."
+           'check_back_cancelled': lambda d: f"took off the check-back{' - ' + _cut(' '.join(str(d['what']).split()), 160) if d.get('what') else ''}",
+           'merged_from_task': lambda d: f"merged {_ref(d.get('from_task'))} into this task", 'merged_into_task': lambda d: f"merged this task into {_ref(d.get('into'))}",
+           'split_from_task': lambda d: f"made this task from part of {_ref(d.get('from_task'))}",
+           'dispatch_retry': lambda d: 'pressed Retry on its start', 'dispatch_cancel': lambda d: 'cancelled its queued start',
+           'outbox': lambda d: f"started a message to {_to(d)}", 'task_email': lambda d: f"started an email to {_to(d)}",
+           'land_review_revert': lambda d: f"reverted part of the agent's change in {', '.join(d.get('files') or []) or 'its files'}",
+           'strong-again': lambda d: 'asked for it again on the strong model', 'filed_not_work': lambda d: 'filed a message on it as not work',
+           'origin_raised': lambda d: 'said what is on it so far can be trusted', 'use_repo': lambda d: 'changed where its code lives',
+           'not_a_task_delete': lambda d: 'said it is not a task', 'not_mine_delete': lambda d: 'said it is not for them',
+           'archived_not_deleted': lambda d: 'asked to delete it - it was closed and kept'}
+def _ref(tid) -> str:
+    from .store import task_ref
+    return task_ref(int(tid)) if str(tid or '').isdigit() else 'another task'
+def _to(d) -> str: return ', '.join(map(str, x)) if isinstance(x := d.get('to'), (list, tuple)) and x else str(d.get('to') or 'someone')
 def _land_how(d) -> str:
     from .landing import HOW
     return HOW.get(d.get('how'), 'the button')
@@ -618,7 +635,11 @@ def _held_what(d) -> str: return _cut(' '.join(str(d.get('about') or d.get('what
 HELD_DONE = ('shell_act_done', 'browser_act_done', 'desktop_act_done')
 QUIET = {'chat', 'continue', 'continue-work', 'continue-session', 'create', 'judged', 'kind_by_typing', 'reopened_by_typing',
          'waitroom_image', 'stay_open', 'funnel_pin', 'worker_answer',       # the turn itself, or said by it (an answer is their bubble, or its card's line)
-         'browser_act_not_pressed'}      # nothing was pressed: the agent hears it from Taskuary (browsergate.not_pressed), or with their own words
+         'browser_act_not_pressed',      # nothing was pressed: the agent hears it from Taskuary (browsergate.not_pressed), or with their own words
+         # ...their own typed line on its way to the agent, and where a task came from: the turn, and the task, say those already
+         'waitroom_add', 'waitroom_add_many', 'agent_channel_tell', 'continue_assistant_dock', 'create_from_meeting', 'mine', 'note',
+         'archive_assistant_dock', 'purge_dropped', 'reason_held', 'reason_message',     # Taskuary's own housekeeping, written in the owner's name
+         'closed_out'}                   # the close-out's card says it went (proposals.closed_out): it read "You closed out."
 DECIDED = {'approved': 'approved (sent, if it sends)', 'edited': 'edited and sent', 'rejected': 'turned down', 'closed_unsent': 'closed, unsent',
            'no_reply': 'said no reply is needed for'}
 def clock_of(at) -> str:

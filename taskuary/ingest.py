@@ -2210,10 +2210,7 @@ def first_agent(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> 
                                               or started(store, tid)): return None
     if t.get('Kind') not in (*task_kinds.AGENT, 'task'): return None
     ok, who = auto_start_ok(store, msg, mid, kind)
-    if not ok:
-        if getattr(who, 'stranger', False): store.tag_task(tid, HOLD_TAG)
-        not_started(store, tid, who)
-        return False
+    if not ok: not_started(store, tid, who); return False
     if t.get('Kind') != kind and not (kind == 'general' and general.handles(t)): store.update_task(tid, {'Kind': kind}, 'triage')
     watch.stop(store, tid, 'triage')                         # someone's work now, not a thread watched
     if t.get('Status') in ('done', 'waiting'): store.update_task(tid, {'Status': 'open'}, 'triage')
@@ -2232,7 +2229,9 @@ NOT_STARTED = 'No agent started:'
 
 
 def not_started(store, tid, why) -> None:
-    """'No agent started: <why>' on the task's agent line - once: the same reason on the next line of the thread is not said again."""
+    """'No agent started: <why>' on the task's agent line - once: the same reason on the next line of the thread is not said again.
+    A stranger's words hold the task as well (HOLD_TAG: the feed row and the release both read it)."""
+    if getattr(why, 'stranger', False): store.tag_task(tid, HOLD_TAG)
     line = f"{NOT_STARTED} {' '.join(str(why).split()).rstrip('.')}."
     last = next((c for c in reversed(store.list_comments(tid)) if str(c.get('Body') or '').startswith(NOT_STARTED)), None)
     if (last or {}).get('Body') != line: store.add_comment(tid, 'router', 'agent', line)
@@ -2246,7 +2245,7 @@ def not_started(store, tid, why) -> None:
 # own Send to agent does); REPLY_TAG remembers the job is still the reply, so every start - now, queued, or after a repository pick - is
 # told so (reply_job).
 REPLY_TAG = 'reply-owed'
-REPLY_JOB = ('THIS TASK IS A REPLY OWED to {who}{need}. Work out the answer - read, look '
+REPLY_JOB = ('THIS TASK IS A REPLY OWED to {who}. Work out the answer - read, look '
              'up, check or think it through - then write the reply they get, in the owner\'s voice, with the substance in it: never a '
              'promise to look into it later. Nothing is sent: the reply waits for the owner\'s Send. When they asked for your thoughts '
              'on something (a draft, a plan, numbers), your result for the owner is those thoughts - what works, what to change, the '
@@ -2257,14 +2256,7 @@ def reply_job(store, tid) -> str:
     """What an agent started on a reply task is told its job is - '' on any other task."""
     if not store.task_has_tag(tid, REPLY_TAG): return ''
     first = next((m for m in store.list_messages(tid) if not is_ours(m)), None) or {}
-    need = next((str(c['Body'])[len(DRAFTER_NEEDS):] for c in reversed(store.list_comments(tid))
-                 if c.get('Actor') == 'responder' and str(c.get('Body') or '').startswith(DRAFTER_NEEDS)), '')
-    return REPLY_JOB.format(who=first.get('FromName') or first.get('FromEmail') or 'the person who wrote',
-                            need=f' (the reply writer said it needs {need.rstrip(".")})' if need else '')
-
-
-DRAFTER_NEEDS = 'The reply writer could not answer it from what it had - it needs '
-NEEDS_SAID = 'not drafted - it needs '      # how responder._answer words a NEEDS failure
+    return REPLY_JOB.format(who=first.get('FromName') or first.get('FromEmail') or 'the person who wrote')
 
 
 def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str, opening: bool = False) -> bool:
@@ -2279,7 +2271,6 @@ def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str,
         not_started(store, tid, f'items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them'); return False
     ok, who = auto_start_ok(store, msg, mid, kind)
     if not ok:
-        if getattr(who, 'stranger', False): store.tag_task(tid, HOLD_TAG)
         not_started(store, tid, who)
         store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': str(who), 'reply': True})
         return False

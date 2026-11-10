@@ -386,7 +386,7 @@
       "phase": "7",
       "requirement": "Always request draft generation for `reply_only`; do not gate this path on",
       "status": "implemented",
-      "test": "`tests/test_reply_always_drafts.py` (draft requested with auto_draft off; fresh question on an existing task reuses it with one review); reclassify path shares _auto_draft",
+      "test": "`tests/test_reply_always_drafts.py` (the reply goes to the task's agent with auto_draft off; fresh question on an existing task reuses it with one review); reclassify path shares reply_to_agent",
       "commit": "8b89e26; 8b89e26, CI run 34039576824 (all ten jobs passed)"
     },
     {

@@ -318,6 +318,45 @@ def pick_models(models) -> tuple:
     return by(FAST), by(AGENT)
 
 
+# THREE TIERS ON EVERY AI CARD (the owner, 2026-11-09): a card set up with its model boxes blank ran everything on the gateway's
+# default alias and never stepped up. Set up or tested, each EMPTY box is filled from the models the card lists - read off the
+# names' family words, never a price list: the top family is the strong tier, the mid one normal, the quick cheap one light. Claude
+# leads normal and strong where it is listed (the owner's ask), flash leads light; newest version first. A box the owner filled is kept.
+_LIGHT = re.compile(r'(?:^|[-_./:])(?:lite|flash|haiku|nano|mini|small)(?:$|[-_./:])', re.I)
+_STRONG = re.compile(r'(?:^|[-_./:])(?:opus|pro|ultra|large)(?:$|[-_./:])|gpt-?5', re.I)
+TIER_BOX = {'azure_openai': 'deployment'}          # the card's normal model is the box its requests name
+
+
+def _tier(m: str) -> str: return 'light' if _LIGHT.search(m) else 'strong' if _STRONG.search(m) else 'normal'
+def _ver(m: str) -> tuple: return tuple(int(x) for x in re.findall(r'\d+', m))
+
+
+def tier_models(models, alias: str = '') -> dict:
+    """{model, light_model, strong_model} from a card's model ids - '' where no distinct model fits that tier."""
+    real = list(dict.fromkeys(str(m).strip() for m in models or [] if str(m).strip() and str(m).strip() != alias))
+    best = lambda tier, pref: max((m for m in real if _tier(m) == tier), key=lambda m: (pref in m.lower(), _ver(m), -len(m)), default='')
+    model = best('normal', 'claude') or best('strong', 'claude') or best('light', 'flash')
+    strong, light = best('strong', 'claude'), best('light', 'flash')
+    return {'model': model, 'light_model': '' if light == model else light, 'strong_model': '' if strong == model else strong}
+
+
+def fill_tiers(store, cid: int, models=None) -> dict:
+    """Fill the card's EMPTY model boxes from what it lists; returns what was written."""
+    from . import llm
+    c = store.get_connector(cid, with_secret=True) or {}
+    if c.get('Type') not in llm.AI_TYPES: return {}
+    try: conf = json.loads(c.get('ConfigJson') or '{}') or {}
+    except ValueError: conf = {}
+    if models is None:
+        try: models = llm.list_models(c['Type'], conf, c.get('Secret') or '')
+        except Exception as e: logger.info(f'{c["Type"]}: no model list to fill its tiers from - {e}'); return {}
+    tiers = tier_models(models, (llm.OPENAI_COMPATIBLE.get(c['Type']) or ('', ''))[1])
+    tiers[TIER_BOX.get(c['Type'], 'model')] = tiers.pop('model')
+    put = {k: v for k, v in tiers.items() if v and not str(conf.get(k) or '').strip()}
+    if put: store.merge_connector_config(cid, put); store.audit('connector', cid, 'fill_tiers', 'system', detail=put)
+    return put
+
+
 def models_by_job(store, cfg: dict, cid: int, only_blank: bool = False) -> dict:
     """Point triage and the Assistant at the card's fastest model and the general agent at its Sonnet. `only_blank`: the Connections
     page - a job the owner pointed somewhere, or one a brain already runs, keeps it; setup's pick sets them all."""
@@ -335,8 +374,11 @@ def models_by_job(store, cfg: dict, cid: int, only_blank: bool = False) -> dict:
     other = only_blank and (agents.ready_brains(store) or any(o['ConnectorId'] != cid and o['Type'] in llm.AI_TYPES and o['Active']
                                                                and (o['HasSecret'] or o['Type'] == 'ollama') for o in store.list_connectors()))
     free = lambda slot: not only_blank or (not str(store.get_setting(slot) or '').strip() and not other)
+    # triage's model is the card's own box: a card with a light tier (fill_tiers) sorts on that gear, its model box stays the normal one
+    light = str(conf.get('light_model') or '').strip()
     for slot, model in (('triage_ai', fast), ('concierge_ai', fast), ('assistant_ai', agent)):
-        if model and free(slot): aidefaults.apply(store, cfg, slot, pick, model, actor='migration' if only_blank else 'owner')
+        if model and free(slot): aidefaults.apply(store, cfg, slot, pick, None if slot == 'triage_ai' and light else model,
+                                                  actor='migration' if only_blank else 'owner')
     return {'fast': fast, 'agent': agent}
 
 
@@ -446,6 +488,7 @@ def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
         said = str(out.get('detail') or 'the provider said no')[:200]
         if not secret: return {'ok': False, 'why': f"{c.get('Name') or typ} didn't answer ({said}). Check it is running and the model is named, then press Connect."}
         return {'ok': False, 'why': f"That key didn't work ({said}). Copy all of it again and press Connect."}
+    tiers = fill_tiers(store, c['ConnectorId'])
     was = _brains(store)
     _everywhere(store, f"connector:{c['ConnectorId']}")
     # THE TEST EMAIL IS SORTED ON THE MODEL THAT WILL SORT THE MAIL: the gateway's quickest model took triage only after the test, on
@@ -456,7 +499,10 @@ def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
         from . import config as config_mod
         m = models_by_job(store, config_mod.load(), c['ConnectorId'])
     why = _prove(store)
-    if why and m['fast']: _models(store, c['ConnectorId'], kept); m, why = {'fast': ''}, _prove(store)
+    # ...the light tier just filled is a model nobody had tried too: one that cannot sort the mail is taken off again
+    if why and (m['fast'] or tiers.get('light_model')):
+        _models(store, c['ConnectorId'], kept); m, why = {'fast': ''}, _prove(store)
+        if tiers.get('light_model'): store.merge_connector_config(c['ConnectorId'], {'light_model': None}); why = _prove(store)
     if why:
         _restore(store, was); _models(store, c['ConnectorId'], kept)
         return {'ok': False, 'why': f"The key works, but {why.split(' - ')[0]}. Pick another AI, or another model on its card.", 'detail': why}

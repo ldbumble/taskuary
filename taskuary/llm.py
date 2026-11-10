@@ -659,9 +659,10 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
             if c['Type'] in AI_TYPES and ready and selected:
                 full = store.get_connector(c['ConnectorId'], with_secret=True)
                 config = {**json.loads(full.get('ConfigJson') or '{}'), '_cid': full['ConnectorId']}   # a rotated sign-in token is saved back to its card
-                # an API key's strong gear is the card's own strong_model, swapped in for the call (blank: no strong tier)
-                if gear == 'strong' and not chosen_model and str(config.get('strong_model') or '').strip():
-                    config = {**config, 'model': str(config['strong_model']).strip()}
+                # an API key's strong and light gears are the card's own strong_model / light_model, swapped in for the call (blank:
+                # no such tier) - into the box its requests name, Azure's deployment (firstrun.TIER_BOX)
+                box, tier = ('deployment' if full['Type'] == 'azure_openai' else 'model'), {'strong': 'strong_model', 'light': 'light_model'}.get(gear)
+                if tier and not chosen_model and str(config.get(tier) or '').strip(): config = {**config, box: str(config[tier]).strip()}
                 if chosen_model: config = {**config, 'model': chosen_model}
                 return _Cooling(store, candidate, make_llm(full['Type'], config, full.get('Secret')))
         return None

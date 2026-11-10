@@ -7625,6 +7625,11 @@ def save_connector(body: ConnectorBody):
         except Exception as e:
             from .channels import plain_failure
             discovery = {'error': plain_failure(e)}      # shown under Save: "401 Client Error ... api.github.com" helped nobody
+    # an AI card switched on or given its key here fills its empty model boxes from what it lists (firstrun.fill_tiers)
+    from . import llm as _llm
+    if c.get('Type') in _llm.AI_TYPES and c.get('Active') and (c.get('Secret') or c['Type'] == 'ollama') and ('Secret' in fields or fields.get('Active')):
+        from . import firstrun
+        firstrun.fill_tiers(store, cid)
     # an organisation's AI card switched on here: each job still unpointed goes to the model that fits it (firstrun.models_by_job)
     if c.get('Type') == 'hipaa_ai' and c.get('Active') and c.get('Secret') and ('Secret' in fields or fields.get('Active')):
         from . import firstrun
@@ -7732,6 +7737,10 @@ def connector_test(cid: int, body: ConnectorTestBody | None = None):
         return {**out, 'draft': True}
     out = test_connector(store, cid)
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
+    from . import llm as _llm
+    if out['ok'] and c['Type'] in _llm.AI_TYPES:
+        from . import firstrun
+        out['tiers'] = firstrun.fill_tiers(store, cid)
     if not out['ok']: _failed_test(cid, c.get('Name') or c.get('Type'), out)
     # the test rewrote LastError, which the rail does not count as a change (touch_connector): without this the pile kept the old
     # error, Next put the row down under it, and the new one raised it again the moment Next was pressed (the card's Check again)

@@ -646,7 +646,8 @@ def _words(store, p: str, cfg) -> dict:
         quick = spell(light) or (f'{SAME}, {dflt[7:]} effort' if dflt.startswith('effort:') else '') or \
                 (f'{SAME}, {LIFT["light"]} effort' if lift(store, p, 'light', cfg=cfg) else SAME)
         normal = spell(own) or 'its default model'
-    else: quick, normal = (f'{SAME}, {LIFT["light"]} effort' if lift(store, p, 'light', cfg=cfg) else SAME), _card_model(store, p)
+    else: quick, normal = (spell(_own(store, p, 'light_model')) or (f'{SAME}, {LIFT["light"]} effort' if lift(store, p, 'light', cfg=cfg) else SAME),
+                           _card_model(store, p))
     hard = spell(strong_of(store, p, cfg)) or (f'{SAME}, {LIFT["strong"]} effort' if lift(store, p, 'strong', cfg=cfg) else SAME)
     return {'quick': quick, 'normal': normal, 'hard': hard}
 

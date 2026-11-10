@@ -79,13 +79,16 @@ class AiCardFirstRunTests(unittest.TestCase):
         with _Proxy(self.allow, good, models=('card-default', 'x-flash', 'x-sonnet')) as p: out = self.choose(p)
         self.assertTrue(out['ok'], out)
         self.assertEqual(p.bodies[-1]['model'], 'x-flash')
-        self.assertEqual(self.card_model(), 'x-flash')
+        # the quick model is the card's light tier now (firstrun.fill_tiers); its model box keeps the normal one
+        conf = json.loads(self.s.get_connector(self.cid)['ConfigJson'])
+        self.assertEqual((conf['light_model'], self.card_model()), ('x-flash', 'x-sonnet'))
         llm._FORMAT_FROM.clear(); self.s = MemoryStore(); self.cid = self.s.get_connector_by_type('hipaa_ai')['ConnectorId']
         flaky = lambda b: said('I cannot help with that.') if b.get('model') == 'x-flash' else good(b)
         with _Proxy(self.allow, flaky, models=('card-default', 'x-flash', 'x-sonnet')) as p: out = self.choose(p)
         self.assertTrue(out['ok'], out)
         self.assertIn('x-flash', [b.get('model') for b in p.bodies])
         self.assertNotEqual(self.card_model(), 'x-flash')
+        self.assertNotIn('light_model', json.loads(self.s.get_connector(self.cid)['ConfigJson']))
         self.assertEqual(self.s.get_setting('triage_ai'), f'connector:{self.cid}')
 
     def test_with_only_the_card_every_job_that_needs_an_ai_has_one_and_coding_has_none(self):

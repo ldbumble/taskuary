@@ -96,6 +96,61 @@ class ModelsByJobTests(unittest.TestCase):
         self.assertEqual((s.get_setting('assistant_ai'), s.setting_writer('assistant_ai')), (f'connector:{cid}', 'migration'))
 
 
+class CardTiersTests(unittest.TestCase):
+    """Set up or tested, an AI card's EMPTY model boxes are filled from what it lists (the owner, 2026-11-09) - never one they filled."""
+    MODELS = ['gemini-3.8-flash', 'claude-sonnet-5-5', 'claude-opus-5-5', 'gemini-2.5-pro', 'hipaa-ai']
+    OWNERS = {'model': 'claude-sonnet-5-5', 'light_model': 'gemini-3.8-flash', 'strong_model': 'claude-opus-5-5'}
+
+    def _card(self, conf=None, typ='hipaa_ai'):
+        s = MemoryStore(); cid = s.get_connector_by_type(typ)['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1, 'ConfigJson': json.dumps(conf or {})}, 'owner')
+        return s, cid
+
+    def _conf(self, s, cid): return json.loads(s.get_connector(cid)['ConfigJson'])
+
+    def test_the_ranking_reads_the_family_words(self):
+        from taskuary import firstrun
+        self.assertEqual(firstrun.tier_models(self.MODELS, 'hipaa-ai'), self.OWNERS)
+        self.assertEqual(firstrun.tier_models(['gpt-5', 'gpt-5-mini', 'gpt-4.1']), {'model': 'gpt-4.1', 'light_model': 'gpt-5-mini', 'strong_model': 'gpt-5'})
+        self.assertEqual(firstrun.tier_models(['only-one']), {'model': 'only-one', 'light_model': '', 'strong_model': ''})
+        self.assertEqual(firstrun.tier_models([]), {'model': '', 'light_model': '', 'strong_model': ''})
+
+    def test_the_gateway_card_gets_exactly_the_owners_three(self):
+        from taskuary import firstrun
+        s, cid = self._card({'base_url': 'https://ai.northwind.example/v1'})
+        with mock.patch('taskuary.llm.list_models', return_value=self.MODELS): firstrun.fill_tiers(s, cid)
+        self.assertEqual({k: self._conf(s, cid).get(k) for k in self.OWNERS}, self.OWNERS)
+
+    def test_a_box_the_owner_filled_is_kept(self):
+        from taskuary import firstrun
+        s, cid = self._card({'strong_model': 'gemini-2.5-pro'})
+        with mock.patch('taskuary.llm.list_models', return_value=self.MODELS): firstrun.fill_tiers(s, cid)
+        c = self._conf(s, cid)
+        self.assertEqual((c['strong_model'], c['model'], c['light_model']), ('gemini-2.5-pro', 'claude-sonnet-5-5', 'gemini-3.8-flash'))
+
+    def test_one_model_is_the_model_and_no_strong_tier(self):
+        from taskuary import firstrun
+        s, cid = self._card()
+        with mock.patch('taskuary.llm.list_models', return_value=['claude-sonnet-5-5', 'hipaa-ai']): firstrun.fill_tiers(s, cid)
+        c = self._conf(s, cid)
+        self.assertEqual((c.get('model'), c.get('strong_model'), c.get('light_model')), ('claude-sonnet-5-5', None, None))
+
+    def test_azure_fills_its_tiers_beside_the_deployment_it_names(self):
+        from taskuary import firstrun
+        s, cid = self._card({'endpoint': 'https://az.example', 'deployment': 'mine'}, 'azure_openai')
+        with mock.patch('taskuary.llm.list_models', return_value=['gpt-4.1', 'gpt-5', 'gpt-5-mini']): firstrun.fill_tiers(s, cid)
+        c = self._conf(s, cid)
+        self.assertEqual((c['deployment'], c['strong_model'], c['light_model'], c.get('model')), ('mine', 'gpt-5', 'gpt-5-mini', None))
+
+    def test_the_cards_test_and_save_fill_it(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.llm.list_models', return_value=self.MODELS),              mock.patch('taskuary.agents.ready_brains', return_value=['claude']):
+            TestClient(server.app).post('/api/connectors', json={'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1})
+        self.assertEqual({k: self._conf(s, cid).get(k) for k in self.OWNERS}, self.OWNERS)
+
+
 class _Gateway:
     """A gateway on this computer that answers /v1/models and /v1/chat/completions - or turns every code away (`status`)."""
     def __init__(self, allow, status=200):

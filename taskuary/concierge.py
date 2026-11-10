@@ -146,14 +146,12 @@ CHIPS ={'review': ('send_close', 'approve', 'redraft', 'close', 'defer', 'watch'
          # ...and Pause this report, for the Advisor to light over a run whose findings the owner said they do not care about (the owner,
          # 2026-10-27: "the Advisor may suggest switching a report off"); the press is the owner's, the report stays under Reports
          'report': ('mine', 'regular_agent', 'report_off', 'next'), 'agentdone': ('close', 'reply', 'next'),
-         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'not_ours_kind', 'defer', 'next'), 'task': ('close', 'defer', 'watch', 'next'),
-         'asked': ('reply', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'not_ours_sender', 'next'),
+         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'watch', 'next'),
+         'asked': ('reply', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'next'),
          # a to-do with a task behind it (a promise you made in a chat) is closed here too - Next only read it (2026-10-15)
-         'todo': ('reply', 'close', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'not_ours_sender', 'next'),
-         # ...and Not ours taken further is the item's own (the owner, 2026-11-10: "on bottom the only buttons should be nav"): Ignore this
-         # sender beside a mail's Not for me, No more ideas like this beside an idea's - a chip under the receipt rode onto the NEXT item's bar
+         'todo': ('reply', 'close', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'next'),
          # an fyi can become WORK too: "make this job stop emailing me" arrived as a notification (2026-09-24)
-         'fyi': ('mine', 'regular_agent', 'not_ours', 'not_ours_sender', 'next'),
+         'fyi': ('mine', 'regular_agent', 'not_ours', 'next'),
          # the handful carries its own "All read, next" button (2026-09-14) and nothing else
          'fyis': (),
          # a connection that stopped answering: ask it again, here - Next was its only word, a dead end (2026-09-23)
@@ -2473,14 +2471,6 @@ def phone_screens() -> str:
             + _screens(link=False) + '\n' + THIS_APP + '\n\n')
 
 
-def _urgent_line(pile_items: list, item: dict | None) -> str:
-    """One line for the prompt when something more pressing waits behind the item on the table."""
-    more = funnel.more_urgent(pile_items, (item or {}).get('key'))
-    if not more: return ''
-    return ('\nMORE URGENT WAITING (not what we are on): ' + '; '.join(f"{i.get('who') + ' - ' if i.get('who') else ''}{i['title']} ({funnel.lane_word(i)})" for i in more[:3])
-            + ' - mention it in one short clause and offer to switch after this one; do not describe it.\n')
-
-
 _REF = re.compile(r'\bTQ-0*(\d+)\b')
 
 def off_subject(say: str, item: dict | None) -> bool:
@@ -2495,7 +2485,7 @@ def off_subject(say: str, item: dict | None) -> bool:
 def _ask(store, llm, tid: int, item: dict | None, instruction: str, pile_items: list) -> tuple[str, list, str]:
     # the item comes FIRST and is named as the only subject; the pile is counts only while one is on the table
     user = ((f"THE ITEM ON THE TABLE - speak only about this one:\n{facts(store, item)}\n\n" if item else '')
-            + f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(pile_items, coming=item is None)}{_urgent_line(pile_items, item)}\n\n"
+            + f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(pile_items, coming=item is None)}\n\n"
             + (f"CONVERSATION SO FAR:\n{_turns(store, tid)}\n\n" if _turns(store, tid) else '')
             + (f"{facts(store, item)}\n\n" if not item else '') + instruction)
     system = _system(store, llm)
@@ -5859,7 +5849,14 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
     dock_tid = int(raw) if str(raw or '').isdigit() else None
     proposed = bool(dock_tid) and (op.get('id') in PRESSED or _chat_proposed(store, dock_tid, op.get('id')))
     if not dock_tid or not (table or proposed): return {'say': line, 'chips': []}
+    # ...but a BUTTON PRESSED ON A TASK is the task's, never a line in the Assistant's chat (the owner, 2026-11-10: "i still see the
+    # assistant gets numbers in the corner of messages that happens on tasks ... the agents don't tell the assistant anything unless you
+    # ask assistant questions"): a Send that failed, a send's Mark done and Next, an act with no card raised the pill's number over a
+    # press made on the task, which already says what happened where it was pressed (taskOps.runOperation). The chat keeps what it
+    # was asked: a proposal it wrote (_chat_proposed) and an act run inside the owner's own turn to it (`table` without `press`)
+    own = _chat_proposed(store, dock_tid, op.get('id')) or (table and not press)
     if st != 'done':
+        if not own: return {'say': line, 'chips': []}
         way = recover(store, op, actor, llm)
         line = f"{line} {way['say']}".strip()
         # a NOTE kind (AssistantView NOTE_KINDS): the sentence shows and the chips sit under it - an item kind hid the words
@@ -5867,7 +5864,7 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
                                                    'tid': None, 'ref': ref or None})
         return {'say': line, 'chips': way['chips']}
     if (chips := sent_chips(store, op)):
-        record(store, dock_tid, 'assistant', line, {'kind': 'words', 'key': None, 'title': label, 'chips': chips, 'tid': None, 'ref': ref or None})
+        if own: record(store, dock_tid, 'assistant', line, {'kind': 'words', 'key': None, 'title': label, 'chips': chips, 'tid': None, 'ref': ref or None})
         return {'say': line, 'chips': chips}
     # A PRESS ON THE TABLE'S TASK VIEW (Stream B, 2026-10-18): its receipt is a notice beside the view, never a card that takes the table
     # from it. ONE LINE PER ACT and no Take it back (the owner, 2026-10-19: "no take it back button. hate that") - a wrong Mark done is
@@ -5877,8 +5874,8 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
     # come back as `say` for the phone. An act with no card in the chat to wear it (a report set up from words, a connection) keeps its
     # line: there is nothing else to show it happened, nor that it waits on an authorization
     if press and not start and _stamp_pressed(store, dock_tid, op, label): return {'say': line, 'chips': []}
-    record(store, dock_tid, 'assistant', line, None if proposed else {'kind': 'words', 'key': None, 'title': label, 'chips': [], 'tid': None,
-                                                                     'ref': ref or None, 'background_event': True})
+    if own: record(store, dock_tid, 'assistant', line, None if proposed else {'kind': 'words', 'key': None, 'title': label, 'chips': [], 'tid': None,
+                                                                             'ref': ref or None, 'background_event': True})
     return {'say': line, 'chips': []}
 
 

@@ -1853,8 +1853,8 @@ def reset_walk(store):
 
 
 def alerts(store, items: list = None) -> list:
-    """What interrupts the conversation, whatever it is on: a meeting inside fifteen minutes and an
-    agent that just asked. Each once - acknowledged alerts stay quiet until the fact changes."""
+    """What interrupts the PHONE's conversation, whatever it is on (remote_assistant.push_alerts): a meeting inside fifteen minutes and an
+    agent that just asked. Each once - acknowledged alerts stay quiet until the fact changes. The desk never reads them (server._pile_payload)."""
     items = items if items is not None else build(store)['items']
     states = store.funnel_states()
     out = []
@@ -1883,22 +1883,6 @@ def alerts(store, items: list = None) -> list:
     return ([a | {'order_band': bands.get(a['item'], 3)} for a in out
              if (states.get(a['key']) or {}).get('Status') != 'ack']
             + notices(store, states))                                  # the watcher's own, kept until Open or Later
-
-
-def desk_alerts(alerts_: list) -> list:
-    """The by-the-way lines the DESKTOP draws: all but an agent's question (the owner, 2026-10-21: "general agent question should only
-    be once on the canvas ... save 'The agent asked' for whatsapp"). The question is in its Agent work pane's answer box; the phone,
-    which has no box, still says the agent asked (remote_assistant.push_alerts reads the pile's own alerts)."""
-    return [a for a in alerts_ or [] if not (a.get('kind') == 'agent' and a.get('asking'))]
-
-
-def more_urgent(items: list, current_key: str = None) -> list:
-    """What waits in a promoted lane while the owner is on something lesser - for the assistant to
-    mention in a clause, and for the page to raise as a by-the-way."""
-    cur = next((i for i in items if i['key'] == current_key), None)
-    band = _band(cur) if cur else 3
-    return [i for i in items if not i.get('surfaced') and not i.get('settling')
-            and not _not_yet(i) and _band(i) < band and i['key'] != current_key]
 
 
 def summary(items: list, coming: bool = True) -> str:

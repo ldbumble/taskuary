@@ -231,7 +231,6 @@ class CheckBackTests(unittest.TestCase):
         with mock.patch.object(advisor, '_item', lambda *a, **k: it), mock.patch.object(checkback, 'fire', side_effect=lambda st, t, what: fired.append((t, what))), \
              mock.patch('taskuary.ingest._spawn', lambda fn, *a: fn(*a)), mock.patch('taskuary.ingest.has_room', return_value=True), \
              mock.patch.object(general, 'provider_options', return_value=[{'pick': 'api:x', 'type': 'api'}]):
-            remind.tick(s); self.assertEqual(fired, [], 'no conversation of its agent to wake')
             with mock.patch.object(general, 'history', return_value=[{'role': 'user', 'text': 'x'}]):
                 s.set_setting('general_auto_enabled', '0', 'owner'); remind.tick(s); self.assertEqual(fired, [], 'the switch is off')
                 s.set_setting('general_auto_enabled', '1', 'owner'); remind.tick(s); remind.tick(s)
@@ -239,6 +238,36 @@ class CheckBackTests(unittest.TestCase):
         self.assertIn('Ray Colton', fired[0][1]); self.assertIn('chase', fired[0][1])
         self.assertTrue(checkback.woke(s, tid)); self.assertFalse(s.get_task(tid).get('CheckBackAt'))
         self.assertIsNone(rulebook.recommended(s, it), 'its woken agent speaks for it: no Chase lit over its turn')
+
+    def test_a_late_answer_starts_a_first_agent_where_none_has_worked(self):
+        """The same lateness on a task no agent has worked (the owner, 2026-11-10: "yes"): it starts the task's first agent with the same turn,
+        through the start check every start passes - the switch off says why once on the task and leaves Chase lit; a full house queues it."""
+        from taskuary import advisor, ingest, rulebook
+        def late_task(title):
+            tid = owner_task(s, title, Status='waiting')
+            s._exec("UPDATE task SET WaitingOn='ray.colton@northwind.example' WHERE TaskId=?", (tid,))
+            s.add_message({'TaskId': tid, 'Direction': 'out', 'Subject': 'W-9?', 'Body': 'Could you send the W-9?', 'Channel': 'email',
+                           'SentAt': f'{datetime.now() - timedelta(days=7):%Y-%m-%d %H:%M:%S}', 'Status': 'routed'})
+            return tid, {'key': f'task:{tid}', 'kind': 'todo', 'lane': 'theirs', 'tid': tid}
+        s = MemoryStore(); tid, it = late_task('Vendor W-9')
+        fired, room = [], [True]
+        with mock.patch.object(advisor, '_item', lambda st, k, t, **kw: {**it, 'key': f'task:{t}', 'tid': t}), \
+             mock.patch.object(checkback, 'fire', side_effect=lambda st, t, what: fired.append((t, what))), \
+             mock.patch('taskuary.ingest._spawn', lambda fn, *a: fn(*a)), mock.patch('taskuary.ingest.has_room', side_effect=lambda *a: room[0]), \
+             mock.patch.object(general, 'provider_options', return_value=[{'pick': 'api:x', 'type': 'api'}]):
+            s.set_setting('general_auto_enabled', '0', 'owner'); remind.tick(s); remind.tick(s)
+            self.assertEqual(fired, [], 'the switch is off')
+            said = [c['Body'] for c in s.list_comments(tid) if c['Body'].startswith(ingest.NOT_STARTED)]
+            self.assertEqual(len(said), 1, 'why is said once'); self.assertIn('switched off', said[0])
+            self.assertEqual((rulebook.recommended(s, it) or {}).get('verb'), 'chase', 'Chase stays lit where none started')
+            s.set_setting('general_auto_enabled', '1', 'owner')
+            other, _ = late_task('Signed lease'); remind.tick(s); remind.tick(s)
+            self.assertEqual([t for t, _ in fired], [other], 'a first agent, once, on the task none has worked')
+            self.assertIn('Ray Colton', fired[0][1]); self.assertIn('chase', fired[0][1])
+            room[0] = False; third, _ = late_task('Insurance card'); remind.tick(s)
+        self.assertEqual(len(fired), 1); self.assertTrue(checkback.woke(s, third))
+        self.assertEqual((s.get_dispatch(third) or {}).get('Turn'), 'replan', 'a full house queues its turn')
+        self.assertIn('Ray Colton', (s.get_dispatch(third) or {}).get('Brief') or '')
 
     def test_the_door_the_tool_and_the_cli_flag(self):
         s = MemoryStore(); tid = owner_task(s)

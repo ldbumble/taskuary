@@ -81,7 +81,7 @@ test("a sweep that took the table with it offers Next; one that did not just rel
 // The Next button itself: the receipt row carries chips, and a sweep that took the table puts one there.
 test("the receipt after a sweep carries Next, and the page puts the table down without walking on", () => {
   const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  // nothing done, no recovery offered: Next at least; a Not ours done offers nothing more - how far is the item's own button (concierge.CHIPS)
+  // nothing done, no recovery offered: Next at least; a Not ours done offers no chip after it (2026-11-10)
   assert.match(view, /: step === "offer" \|\| out\.status !== "done" \? \[\{ verb: "next", label: btn\("next"\) \}\] : \[\];/);
   assert.match(view, /role: "receipt", status: out\.status, text: out\.receipt, tid: p\.tid \|\| res\?\.outcome\?\.taskId, ref: p\.ref \|\| res\?\.outcome\?\.ref, chips/);
   // ...and a failed act's receipt carries its way on (concierge.recover), not the sweep's lone Next

@@ -180,14 +180,16 @@ def test_not_a_task_on_the_table_is_no_line_and_nothing_to_take_back(s, c):
 
 
 def test_a_press_that_did_not_go_through_is_still_said(s, c):
-    """An error is not a receipt: the line saying it failed, with its way on, stays - and the card wears no badge."""
+    """An error is not a receipt: the press's answer says it failed, where it was pressed - and the card wears no badge. Since 2026-11-10 it
+    is no line in the Assistant's chat: a press on a task is the task's (the owner: "the agents don't tell the assistant anything unless you
+    ask assistant questions")."""
     tid = task(s)
     dock = on_table(s, tid); n = drawn(s, dock, tid)
     with mock.patch.object(server, '_run_kind', side_effect=RuntimeError('the mailbox is not answering')):
         out = run(c, 'task.complete', tid)
     assert out['status'] == 'error' and out['receipt'].startswith('Not done - ')
     rows = cards(s, dock)
-    assert len(rows) == n + 1 and rows[-1][0].startswith('Not done - ') and 'pressed' not in rows[-2][1]
+    assert len(rows) == n and 'pressed' not in rows[-1][1]
 
 
 def test_the_same_press_off_the_table_records_the_operation_and_says_nothing_in_the_chat(s, c):

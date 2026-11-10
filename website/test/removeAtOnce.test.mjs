@@ -62,8 +62,8 @@ test("leaving a card saves what was still waiting to save - nothing asks, nothin
   assert.doesNotMatch(d, /keptDraft/);
 });
 
-// ...and how far is the item's own button beside it, never a chip after it (the owner, 2026-11-10: the chip rode onto the next item's bar)
-test("Not ours runs as just this once; From now on is the item's own button, not a chip after the press", () => {
+// ...and no chip after it (the owner, 2026-11-10: the chip rode onto the next item's bar)
+test("Not ours runs as just this once, and leaves no chip after the press", () => {
   assert.doesNotMatch(read("proposalCard.js"), /followUps|FURTHER/);
   // the card no longer prints the switch behind just-this-once
   assert.match(read("proposalCard.js"), /"wrap", "learn"\]/);

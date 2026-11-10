@@ -9,8 +9,10 @@ const reviews = fs.readFileSync(new URL("../src/ReviewDecision.jsx", import.meta
 
 test("Assistant sends the message revision it saw and a newer live-chat line refreshes the card", () => {
   assert.match(view, /context_mid: currentItem\?\.mid/);
-  assert.match(view, /New message from/);
-  assert.match(view, /The context is refreshed/);
+  // ...and new mail on the table's thread refreshes the card in place, said nowhere - not even aloud (the owner, 2026-11-10: "the agents
+  // don't tell the assistant anything unless you ask assistant questions")
+  assert.doesNotMatch(view, /New message from/);
+  assert.match(view, /putOnTable\(refreshed, "sync"\)/);
   assert.doesNotMatch(view, /notice:msg:/);   // no strip notice any more (2026-09-23): the card refreshes, never a chat line (PW-165)
 });
 

@@ -262,7 +262,7 @@ class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):
     def test_an_item_on_the_table_gets_a_verb(self):
         """The demo is where newcomers first meet the Advisor: an item on the table is decided at once, never pending - and NO DEFAULT
         VERB (the owner, 2026-10-28): a button is lit only beside its fact, so the scripted line that only explains the button lights none."""
-        from taskuary import advisor, funnel
+        from taskuary import advisor, funnel, rulebook
         s = MemoryStore(); demo.seed(s)
         with on(), mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []):
             funnel.invalidate()
@@ -273,7 +273,8 @@ class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):
             got = advisor.for_key(s, keys[0])
         funnel.invalidate()
         self.assertTrue(got.get('state'), got); self.assertNotIn('pending', got)
-        self.assertTrue(not got.get('verb') or got['verb'] == 'next' or got.get('line'), got)
+        # ...or the move the state's own fact names (rulebook.MOVES: an ask no agent took lights Send to agent - the owner, 2026-11-10)
+        self.assertTrue(not got.get('verb') or got['verb'] == 'next' or got.get('line') or got['state'] in rulebook.MOVES, got)
 
 
 class TheWorldTests(unittest.TestCase):

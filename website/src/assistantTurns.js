@@ -160,6 +160,20 @@ export function pressChip(messages = [], chip) {
   const at = messages.map((m) => chipsHeld(m).some((c) => sameChip(c, chip))).lastIndexOf(true);
   return at < 0 ? messages : messages.map((m, i) => (i === at ? { ...m, pressed: chip.label, chips: chipsHeld(m).filter((c) => !sameChip(c, chip)) } : m));
 }
+// THE PILL COUNTS ONE THING (the owner, 2026-11-10: "i still see the assistant gets numbers in the corner of messages that happens on
+// tasks ... the agents don't tell the assistant anything unless you ask assistant questions"): answers to what the owner asked it that came
+// after he last had the window in view (`seen`) - one per question, its first answering line. A line nobody asked for (a press's receipt, an
+// older chat's history, anything a task said) is never a number. Nothing seen yet: only this session's answers, never a reload's history
+const SESSION_LINE = /^(a|s|d|r|context)\d/;
+export function unseenAnswers(lines = [], seen = null) {
+  const at = seen == null ? -1 : lines.findIndex((m) => m?.id === seen || m?.commentId === seen);
+  let asked = false, n = 0;
+  lines.forEach((m, i) => {
+    if (m?.role === "user") asked = true;
+    else if (asked && (m?.role === "assistant" || m?.role === "receipt")) { asked = false; if (i > at && (at >= 0 || SESSION_LINE.test(String(m.id)))) n += 1; }
+  });
+  return n;
+}
 // the badge's label: the page's own at the press, the server's stamp after a read
 export const pressedOf = (m) => m?.pressed || m?.card?.pressed || "";
 export const pressedNoteOf = (m) => m?.pressedNote || m?.card?.pressed_note || "";

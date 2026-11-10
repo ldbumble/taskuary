@@ -69,3 +69,4 @@ test("a task's row: the server's ReadsReply decides, a machine's notice on email
   assert.equal(hasCorrespondent({ Channel: "email", FromOwner: false, ReadsReply: true }), true);
   assert.equal(hasCorrespondent({ Channel: "own", FromOwner: false }), false, "a row from before the field still reads its channel");
 });
+

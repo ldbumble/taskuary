@@ -6345,12 +6345,14 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     started, seen = time.time(), live_bus.seq()
     # funnel.pile owns invalidation and single-flight across open tabs; the walk reads that same cached build, never a second one
     cached = funnel.pile(store, force=force)
-    events = cached.get('events') or []
     # generated_at: when this read BEGAN (server clock, ms) - the page compares it to its live events
     # to know which writes this read already saw (funnelPile.coveredByReload); transient, outside the revision
     # live_seq: the newest write stamp the rows were built after (live.seq) - the cached build's own when the cache answered
-    p = {**cached, 'display_revision': None, 'generated_at': int(started * 1000), 'live_seq': cached.get('live_seq', seen),
-         'alerts': funnel.desk_alerts(funnel.alerts(store, cached['items'])), 'events': events}
+    # ...and NOT the pile's by-the-way alerts nor the watcher's transitions: those are the phone's (remote_assistant.push_alerts). On the
+    # desk a task's news is its rail row and the task itself, and the Assistant hears none of it (the owner, 2026-11-10: "the agents
+    # don't tell the assistant anything unless you ask assistant questions")
+    p = {**{k: v for k, v in cached.items() if k not in ('alerts', 'events')}, 'display_revision': None,
+         'generated_at': int(started * 1000), 'live_seq': cached.get('live_seq', seen)}
     # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
     # leaves the pile, and nothing told the page - so a sent reply sat on the table as
     # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03). Looked up in the build the pile came from.

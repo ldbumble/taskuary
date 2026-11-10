@@ -86,8 +86,8 @@ export function afterExecute(p, res) {
 // A HAND-OFF THAT STARTED is "watch": its task opens on the table with the agent working in it, and the walk waits for Next
 // (the owner, 2026-10-01: "it should open the task and I can see the agent doing its work, why did it just close it?").
 // NOT OURS ACTS AT ONCE, AS JUST THIS ONCE (the owner, 2026-10-21: no "are you sure"). How far - Ignore this sender, No more ideas like
-// this - is the item's own button beside it (concierge.CHIPS), never a chip under the receipt: that one rode onto the NEXT item's bar,
-// an idea's put-down offered over an FYI batch (the owner, 2026-11-10: "who asked you to add this to fyi???")
+// this - stays Not ours's own question (buttons.json `choices`: the phone's How far?, the typed words), never a chip under the receipt:
+// that one rode onto the NEXT item's bar, an idea's put-down offered over an FYI batch (the owner, 2026-11-10: "who asked you to add this to fyi???")
 
 export function afterConfirm(p, out, current) {
   if (out?.handoff && out.tid) return "watch";

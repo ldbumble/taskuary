@@ -478,7 +478,9 @@ def unsent(store, tid: int) -> list:
             if d.get('closeout') or d.get('action') in proposals.CLOSEOUT or d.get('block') or str(rv.get('Reason') or '').startswith('the workflow'): continue
             to, what = str(d.get('type') or d.get('action') or ''), f"the proposal ({' '.join(str(rv.get('Reason') or d.get('action')).split())[:160]})"
         elif k in ('draft', 'draft_reply', 'slot'):
-            to = ', '.join(d.get('to') or []) if isinstance(d.get('to'), list) else str(d.get('to') or '')
+            # ...one nobody has written is nothing set up: a reply owed at arrival was told to the agent as "ALSO SET UP AND NOT SENT" (the audit)
+            if not str(rv.get('DraftText') or '').strip(): continue
+            to =', '.join(d.get('to') or []) if isinstance(d.get('to'), list) else str(d.get('to') or '')
             if not to and rv.get('MessageId'): to = str((store.get_message(rv['MessageId']) or {}).get('FromEmail') or '')
             what = f"the {'email' if k == 'slot' else 'reply'}" + (f' to {to}' if to else '')
         else: continue

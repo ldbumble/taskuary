@@ -93,3 +93,16 @@ def test_a_playbook_the_agent_proposed_is_its_own_to_take_back_and_the_ledgers_i
     assert [r['rid'] for r in verdicts.unsent(s, tid)] == [mine]
     assert verdicts.withdraw(s, tid, 'the owner said the steps are wrong', 'assistant', which=str(mine))['ok']
     assert s.get_review(mine)['Status'] == 'closed_unsent'
+
+
+def test_a_reply_nobody_has_written_is_nothing_set_up():
+    """The audit, 2026-11-10: a reply owed at arrival - its review open, no word in it yet - was told to the agent's first turn as "ALSO SET UP AND
+    NOT SENT ... rv1: the reply to erin@...", a thing it had set up and might take back. Nothing was set up; once written it is listed."""
+    from taskuary import general
+    s = MemoryStore(); tid = own_task(s, 'general')
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'e1', 'ConversationId': 'c1', 'Channel': 'email', 'FromName': 'Erin Blake',
+                         'FromEmail': 'erin@northwind.example', 'Subject': 'Tuesday', 'BodyText': 'Free Tuesday?', 'Status': 'routed'})
+    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': ''})
+    assert verdicts.unsent(s, tid) == [] and 'ALSO SET UP' not in general.turn_facts(s, tid)
+    s.update_review_draft(rid, 'Yes, Tuesday works.', None)
+    assert [x['rid'] for x in verdicts.unsent(s, tid)] == [rid]

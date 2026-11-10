@@ -96,8 +96,9 @@ class WatcherTests(unittest.TestCase):
         with mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=live(t)):
             c = TestClient(server.app)
             self.assertEqual(c.post('/api/funnel/settle', json={'key': key, 'verb': 'ack'}).json()['verb'], 'ack')
-            self.assertEqual([a for a in c.get('/api/funnel/pile?force=1').json()['alerts'] if a.get('notice')], [])
-        self.assertEqual(s.get_task(t)['Status'], 'in_progress')                         # the task is as it was
+            self.assertNotIn('alerts', c.get('/api/funnel/pile?force=1').json())     # the desk reads no alerts at all (2026-11-10)
+        self.assertEqual([a for a in self._alerts(s, live(t)) if a.get('notice')], [])   # ...and the phone's own are put down
+        self.assertEqual(s.get_task(t)['Status'], 'in_progress')                        # the task is as it was
         self.assertEqual({k: v['Status'] for k, v in s.funnel_states().items() if not k.startswith('notice:')}, {})   # no item was marked
         funnel.reset_walk(s)                                                             # a new chat...
         self.assertEqual([a for a in self._alerts(s, live(t)) if a.get('notice')], [])   # ...does not raise it again
@@ -119,6 +120,37 @@ class WatcherTests(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             self.assertEqual(funnel.next_item(s, first['key'], include_surfaced=True)['key'], first['key'])   # still on the table
         self.assertEqual(s.funnel_states()[first['key']]['Status'], 'surfaced')
+
+    def test_no_news_of_a_task_reaches_the_assistants_chat(self):
+        """THE ASSISTANT HEARS ONLY WHAT IT IS ASKED (the owner, 2026-11-10: "i still see the assistant gets numbers in the corner of messages
+        that happens on tasks ... the agents don't tell the assistant anything unless you ask assistant questions"). Each kind of news on the
+        task on the table - its agent asked, a draft, a card waiting, new mail, a Send pressed that failed, one that went, its agent done -
+        leaves the Assistant's conversation as it was: the pill counts lines of it (AssistantView unseenAnswers)."""
+        from taskuary import operations
+        s = store(); t = task(s)
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            key = next(i['key'] for i in funnel.build(s)['items'] if i.get('tid') == t)
+            concierge.surface(s, key=key, llm=lambda *a, **k: 'never asked')                          # the task is on the table
+        dock = general.dock_task(s)[0]['TaskId']
+        said = lambda: [(m['role'], m['text']) for m in concierge.history(s, dock)]
+        before = said()
+        self._events(s, live(t)); self._events(s, live(t, idle=200, waiting=True, state='asking', tail=['Which cutoff?']))
+        self.assertEqual(said(), before, 'its agent asked')
+        mid = s.add_message({'TaskId': t, 'ExternalId': 'x:2', 'ConversationId': 'c:Import census', 'Channel': 'email', 'Subject': 'Re: Import census',
+                             'FromName': 'Erin', 'FromEmail': 'erin@northwind.example', 'SentAt': ago(0), 'BodyText': 'Any news?', 'Status': 'routed'})
+        rid = s.add_review({'TaskId': t, 'MessageId': mid, 'Kind': 'reply', 'DraftText': 'Tomorrow.', 'Status': 'pending'})
+        operations.propose(s, 'task.complete', t, {}, 'agent')
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]): funnel.pile(s, force=True)
+        self.assertEqual(said(), before, 'new mail, a draft and a card waiting')
+        with mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            c = TestClient(server.app)
+            for run, what in ((mock.Mock(side_effect=RuntimeError('the mail server refused it')), 'a Send that failed'), (mock.Mock(return_value={}), 'a Send that went')):
+                op = c.post('/api/operations', json={'kind': 'review.approve', 'target': rid, 'params': {}}).json()
+                with mock.patch.object(server, '_run_operation', run): out = c.post(f"/api/operations/{op['id']}/execute", json={'version': op['version']}).json()
+                self.assertTrue(out.get('receipt'), f'{what} still answers the press that made it')
+                self.assertEqual(said(), before, what)
+        s.add_comment(t, 'codex', 'agent', 'AGENT REPORT\nSummary: imported all 80 files.'); self._events(s, [])
+        self.assertEqual(said(), before, 'its agent finished')
 
 
 if __name__ == '__main__':

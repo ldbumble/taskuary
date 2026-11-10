@@ -263,3 +263,22 @@ test("the same card-less line twice in a row stands once", async () => {
   m = placeLine(m, { id: "a4", role: "assistant", text: say, card: null });
   assert.equal(m.length, 3, "said again after something else, it is a new line");
 });
+
+// THE PILL COUNTS ONE THING (the owner, 2026-11-10: "the agents don't tell the assistant anything unless you ask assistant questions")
+test("the pill's number counts answers to the owner's own questions, never what a task said", async () => {
+  const { unseenAnswers } = await import("../src/assistantTurns.js");
+  const asked = [{ id: 501, role: "user", text: "what's on today?" }, { id: 502, role: "assistant", text: "Two meetings and a draft." }];
+  // a task's news landing in the chat - an agent asked, finished, a draft, a failed send, a card waiting, new mail - with no question before it
+  const task = ["Not sent - the server refused it.", "Sent. Mark done or Next.", "By the way - researcher asked you: keep the rows?",
+    "TQ-0007 finished.", "A reply is waiting for your yes.", "New message from Erin Blake arrived on TQ-0009."]
+    .map((text, i) => ({ id: 600 + i, role: i < 2 ? "receipt" : "assistant", text }));
+  assert.equal(unseenAnswers([...asked, ...task], 502), 0, "nothing a task said raises it");
+  // ...he asked, shut the window, and the answer came: one; seeing it clears it
+  const q = [...asked, ...task, { id: "u9", role: "user", text: "and tomorrow?" }];
+  assert.equal(unseenAnswers([...q, { id: "a10", role: "assistant", text: "Clear." }], "u9"), 1);
+  assert.equal(unseenAnswers([...q, { id: "context9", role: "assistant", text: "The thread moved." }, { id: "a10", role: "assistant", text: "Clear." }], "u9"), 1, "one per question");
+  assert.equal(unseenAnswers([...q, { id: "a10", role: "assistant", text: "Clear." }], "a10"), 0);
+  assert.equal(unseenAnswers([...q, { id: "a10", role: "assistant", text: "Clear." }, ...task], "u9"), 1, "task lines after the answer add nothing");
+  // ...nothing seen yet: a reload's history is not news
+  assert.equal(unseenAnswers([...asked, ...task]), 0);
+});

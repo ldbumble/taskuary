@@ -159,9 +159,11 @@ def test_time_critical_items_lead_waits_and_scheduled_items_do_not_raise_urgency
     # one level for the owner's work - the urgent rows too, shaded in place (2026-10-22) - and inside it these share an age, so
     # the stable key orders them
     assert [row["key"] for row in ordered] == ["current", "meeting", "scheduled", "urgent", "wait", "working"]
-    assert [row["key"] for row in funnel.more_urgent(ordered, "current")] == ["meeting", "urgent"]
-    assert [row["key"] for row in funnel.more_urgent(ordered, "scheduled")] == ["meeting", "urgent"]
-    assert "scheduled" not in [row["key"] for row in funnel.more_urgent(ordered, "working")]
+    # ...and what outranks the row on the table is a band above it (remote_assistant.push_alerts' rule): never a meeting still to come
+    above = lambda key: [r["key"] for r in ordered if funnel._band(r) < funnel._band(next(o for o in ordered if o["key"] == key))
+                         and not funnel._not_yet(r)]
+    assert above("current") == above("scheduled") == ["meeting", "urgent"]
+    assert "scheduled" not in above("working")
 
 
 @pytest.mark.parametrize("kind", ["coding", "general"])

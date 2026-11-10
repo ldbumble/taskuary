@@ -4,8 +4,7 @@
 // whole day's Timeline runs on below it, dated. The STAGE on the right is one long conversation with
 // Taskuary (concierge.py): one item per turn, said in a breath, with the card that acts on it
 // underneath; clicking a row pulls it in, a name or a subject typed into it pulls that thing in.
-// A meeting in ten minutes or an agent that just asked interrupts as a "by the way" line above the
-// composer, whatever the chat is on. Two ways to use the stage, one toggle: CHAT (the default -
+// Nothing on a task interrupts it: the Assistant speaks when it is asked (2026-11-10). Two ways to use the stage, one toggle: CHAT (the default -
 // rows go to the conversation) or TASK (rows open on the stage the way the Timeline always did:
 // hover previews, click pins). Past chats slide over; New chat starts a fresh conversation.
 // Everything durable lives on the server; this file only draws and pushes buttons.
@@ -84,7 +83,7 @@ import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
 import { isCoveragePending } from "./processingAll.js";
-import { actReceipt, lineKeys, mergeDurableTurns, nextBadge, pickLine, placeLine, pressChip, pressLine, pressedNoteOf, pressedOf } from "./assistantTurns.js";
+import { actReceipt, lineKeys, mergeDurableTurns, nextBadge, pickLine, placeLine, pressChip, pressLine, pressedNoteOf, pressedOf, unseenAnswers } from "./assistantTurns.js";
 import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js";
 import * as pageView from "./pageView.js";
 import DigestText from "./DigestText.jsx";
@@ -1662,14 +1661,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       pileRef.current = refreshPilePresentation(pileRef.current, data); notePile(askedAt);
       setPile((p) => refreshPilePresentation(p, data)); setPileRead(true);
       if (!(await readChat(epoch))) return;
-      if (data.events?.length) {
-        // The watcher's word is a strip notice the server keeps (PW-165/166) and, here, a spoken line.
-        // Background activity is never permission to choose, replace, clear, or advance the subject.
-        // A FINISHED task says nothing: it is waiting on nobody. An agent that stopped to ask is the
-        // one transition that lands on the owner, so it is the one that speaks (the owner, 2026-09-14).
-        for (const e of data.events) if (e.kind === "asking") speakRef.current?.(e.text);
-      }
-      // the item on the table is live: an agent that stops and starts again changes what its row and card say
+      // ...and the Assistant SAYS NOTHING OF A TASK UNASKED, not even aloud (the owner, 2026-11-10: "the agents don't tell the assistant
+      // anything unless you ask assistant questions"): an agent that asked and a new mail on the table's thread are on its row and its task
+      // ...the item on the table is live: an agent that stops and starts again changes what its row and card say
       // ...and when the server says the key is GONE - the reply was sent, the task closed, it was swept -
       // the table clears itself instead of showing a draft that is no longer waiting on anybody.
       {
@@ -1680,16 +1674,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // absent, but the task is not gone: prefer its working row before clearing the table.
         const fresh = currentItemFromPile(cur, data);
         if (fresh) {
+          // an update about Current is never a line the chat writes by itself, nor says aloud: the card refreshes in place
           const newer = fresh.mid && cur.mid && fresh.mid !== cur.mid;
-          if (newer) {
-            // an update about Current is never a line the chat writes by itself: the card refreshes in place
-            // (below) and, with speech on, it is said aloud
-            const preview = String(fresh.preview || "").replace(/\s+/g, " ").trim().slice(0, 180);
-            const line = `New message from ${fresh.who || "someone"} arrived on ${fresh.ref || fresh.title || "this thread"}`
-              + (preview ? `: “${preview}”` : "") + ". The context is refreshed."
-              + (fresh.rid ? " The earlier draft is now out of date; redraft it before sending." : "");
-            speakRef.current?.(line);
-          }
           const refreshed = refreshCurrentPresentation(cur, fresh);
           if ("recommended" in fresh) recAt.current.set(fresh, askedAt);
           if (newer || refreshed !== cur) putOnTable(refreshed, "sync");
@@ -3610,13 +3596,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => { if (winFull && popLast) setSeen(popLast.id); }, [winFull, popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...but a press REFUSED, or one that failed, is said where it can be read: the window comes up for it (the error the owner must see)
   useEffect(() => { if (popLast && /^[adrw]\d/.test(popLast.id) && (popLast.refused || (popLast.role === "receipt" && popLast.status === "error"))) setPopOpen(true); }, [popLast?.id]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const unseen = useMemo(() => {
-    if (winFull) return 0;
-    const at = seen == null ? -1 : winLines.findIndex(([m]) => m.id === seen || m.commentId === seen);
-    // ...nothing seen yet: only this session's answers count, never a reload's history
-    const after = at >= 0 ? winLines.slice(at + 1) : winLines.filter(([m]) => /^(a|s|d|context)\d/.test(m.id));
-    return after.filter(([m]) => m.role === "assistant").length;
-  }, [winFull, seen, winLines]);
+  // ...and only ANSWERS to what he asked count (assistantTurns.unseenAnswers): nothing a task does raises it
+  const unseen = useMemo(() => (winFull ? 0 : unseenAnswers(winLines.map(([m]) => m), seen)), [winFull, seen, winLines]);
   // ...and IT NEVER SHUTS BY ITSELF (the owner, 2026-10-27: "it disappeared when done? not sure what happened"): every turn ends on words
   // (actReceipt), and the window stays until its × or Esc
   // ...and A PRESS THAT FAILED SAYS SO WHERE IT CAN BE READ (the 2026-10-28 flow walk): a Next whose request never got an answer wrote its

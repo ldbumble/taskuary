@@ -234,7 +234,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(view, /chipsOf\(m\)/);                       // from the durable turn: a poll must not erase them
   assert.match(view, /chip: runChip/);                    // one road for every one of them
   assert.match(view, /moved up - it looked urgent/);       // the rail shows promotions
-  assert.match(view, /data\.events\?\.length/);           // the watcher's lines land in the chat as they happen
+  assert.doesNotMatch(view, /data\.events/);              // the watcher's news never reaches the Assistant, not even aloud (2026-11-10)
   // a rerun is the chat line's word now, not a second button on the card (2026-09-07: "only one place")
   assert.doesNotMatch(cardsSrc(), /Run it again/);
   assert.match(cardsSrc(), /Open walkthrough/);             // set-up opens the Assistant operator, not a coding checkout

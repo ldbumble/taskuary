@@ -201,9 +201,11 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
     const now = !!ses.live && si === sessions.length - 1 && working;
     let turn = null;
     const close = () => { if (turn) rows.push(turn); turn = null; };
-    steps.forEach((s) => {
+    steps.forEach((s, i) => {
       if (s.k === "you" || s.k === "brief") {
-        const w = s.k === "you" ? s.text : ownerIn(s.text);
+        // ...a brief right after his own recorded line is the prompt that line went in (acpcoding._show): its FROM THE OWNER part is the waiting
+        // room's batch round that same line, never a second line of his (the browser walk, 2026-11-10)
+        const w = s.k === "you" ? s.text : steps[i - 1]?.k === "you" ? "" : ownerIn(s.text);
         // A PRESS LETS THE TURN GO ON (the owner, 2026-11-09: "a button click is not a new prompt, just allowing the agent to continue. If you send
         // a new message, that's a new turn"): Taskuary's note after an Approve, a Push, a sign-in joins the turn at work - only the owner's line,
         // or a mail come in since the turn's last step, opens a new one

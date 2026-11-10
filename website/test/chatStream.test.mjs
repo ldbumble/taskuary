@@ -75,6 +75,19 @@ test("the owner's words inside a Resume brief are their own line, the rest stays
   assert.equal(ownerIn("TASKUARY: work TQ-0042 ..."), "");
 });
 
+test("a brief that carries a line already drawn as his draws no second bubble of Taskuary's words round it", () => {
+  // the browser walk, 2026-11-10: a line typed after a coding session ended stood as his bubble, and under it a second bubble of his - "The
+  // owner left 1 note for you after the last session ended. Take them in order: (1) now check the tax line" - the reopening's brief, whose
+  // FROM THE OWNER part is the waiting room's batch wrapped round the line the prompt had already recorded as his (acpcoding._show)
+  const brief = "FROM THE OWNER: The owner left 1 note for you after the last session ended. Take them in order: (1) now check the tax line\n\nThe owner chose Resume for this task.";
+  const rows = chatRows({ sessions: [ses({ source: "acp", updates: [
+    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "now check the tax line" }, _meta: { taskuary: "owner", line: 6 } },
+    { sessionUpdate: "user_message_chunk", content: { type: "text", text: brief }, _meta: { taskuary: "brief" } },
+    ...chunks("agent_message_chunk", "The tax line adds up.")] })] });
+  assert.deepEqual(rows.map((r) => r.kind), ["you", "turn"]);
+  assert.equal(rows[0].text, "now check the tax line");
+});
+
 test("the mail that came in stands over the turn it woke, a burst as one row", () => {
   const mails = [{ who: "Erin Blake", words: "The budget skips tax.", channel: "email", at: "2026-11-06 08:58:00", joined: "2026-11-06 08:59:00" },
     { who: "Erin Blake", words: "Also the rounding.", channel: "email", at: "2026-11-06 08:59:30", joined: "2026-11-06 08:59:40" },

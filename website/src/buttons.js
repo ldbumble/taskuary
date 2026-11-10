@@ -21,3 +21,6 @@ export const rowsOf = (verb) => VERBS[liveVerb(verb)]?.row || [];
 export const ALL_LABELS = [...new Set(Object.values(VERBS).flatMap((v) => [v.label, ...Object.values(v.states || {})]))];
 // a choice's answer, by its verb, inside one of the card's questions (Not ours / an idea / which agent)
 export const choice = (q, verb) => (CHOICES[q] || []).find(([k]) => k === verb)?.[1] || "";
+// ...and NOT FOR ME'S OWN QUESTION, how far (the phone's numbered answers, remote_assistant.proposal_choices): an idea's - this one, or
+// this kind - else a mail's - this once, their mail filed from now on, a rule. [] where there is nothing to ask (a task: no sender)
+export const howFar = (item) => (item?.kind === "idea" ? CHOICES.idea : item?.mid ? CHOICES.not_ours : null) || [];

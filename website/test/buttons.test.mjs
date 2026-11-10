@@ -116,3 +116,17 @@ test("no removed or second name for a button is left where a person can read it"
   assert.doesNotMatch(code, /verb === "prep"|\/api\/calendar\/prep/, "Prep me is gone, its road too");
   assert.doesNotMatch(code, /\bshortLabel\b/, "no second, shorter name for the bar");
 });
+
+// NOT FOR ME ASKS HOW FAR ON THE DESK TOO (the owner, 2026-11-10: "yes on 1"): the phone's answers (buttons.json `choices`) in a small menu
+// under the pressed button, one press to pick; the answer runs once as its own verb and nothing is carried onto the next item
+test("Not for me asks how far from its own choices, under the button pressed", async () => {
+  const { howFar, CHOICES } = await import("../src/buttons.js");
+  assert.deepEqual(howFar({ kind: "idea", idea: 4 }).map(([v]) => v), ["not_ours", "not_ours_kind"]);
+  assert.deepEqual(howFar({ kind: "fyi", mid: 9 }).map(([v]) => v), CHOICES.not_ours.map(([v]) => v));
+  assert.deepEqual(howFar({ kind: "todo", tid: 3 }), [], "a task has no sender to ask about: it runs as pressed");
+  const view = (await import("node:fs")).readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
+  assert.match(view, /run: \(e, a\) => onChip\(c, undefined, a \|\| e\?\.currentTarget\)/);
+  assert.match(view, /if \(liveVerb\(c\.verb\) === "not_ours" && !c\.how && at && howFar\(item\)\.length > 1\) \{ setHowOn\(\{ at, c, how: howFar\(item\) \}\); return; \}/);
+  assert.match(view, /<Menu open anchorEl=\{howOn\.at\}/);
+  assert.match(view, /onClick=\{\(\) => \{ const h = howOn; setHowOn\(null\); runChip\(\{ \.\.\.h\.c, verb, how: true \}\); \}\}/);
+});

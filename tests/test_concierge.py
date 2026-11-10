@@ -1006,6 +1006,32 @@ class ActTests(unittest.TestCase):
         prop = concierge.propose_direct(s, 'not_ours', key, table=True)
         self.assertEqual((prop['kind'], prop['target'], prop['params']), ('idea.act', i['IdeaId'], {'verb': 'dismiss'}))
 
+    def test_each_answer_to_how_far_runs_once_from_a_desk_press(self):
+        """NOT FOR ME ASKS HOW FAR ON THE DESK, as on the phone (the owner, 2026-11-10: "yes on 1"): each answer in buttons.json `choices`
+        is pressed as its own verb through the desk's act road (/api/concierge/propose, press) and runs at once - on an idea, just this one or
+        no more like it; on a mail, just this once, their mail filed from now on, or a rule. Nothing rides onto the next item."""
+        from taskuary import buttons
+        self.assertEqual([v for v, _ in buttons.choices('idea')], ['not_ours', 'not_ours_kind'])
+        self.assertEqual([v for v, _ in buttons.choices('not_ours')], ['not_ours', 'not_ours_sender', 'block_sender'])
+        for verb, act in (('not_ours', 'dismiss'), ('not_ours_kind', 'dismiss_kind')):
+            s, i, key = self._idea()
+            with mock.patch.object(server, 'store', s):
+                prop = TestClient(server.app).post('/api/concierge/propose', json={'verb': verb, 'key': key, 'table': True, 'press': True}).json()
+                self.assertTrue(prop['auto'], verb); self.assertEqual((prop['kind'], prop['params']), ('idea.act', {'verb': act}))
+                self.assertEqual(concierge.run_proposal(s, prop)['status'], 'done', verb)
+            self.assertEqual(s.get_idea(i['IdeaId'])['Status'], 'dismissed', verb)
+        for verb, kind in (('not_ours', 'message.file'), ('not_ours_sender', 'preference.exclude_sender'), ('block_sender', None)):
+            s = store()
+            m = s.add_message({'ExternalId': f'x:{verb}', 'ConversationId': f'c:{verb}', 'Channel': 'email', 'Subject': 'Weekly digest',
+                               'FromName': 'Spendly', 'FromEmail': 'news@vendor.example', 'SentAt': ago(1), 'BodyText': 'This week.', 'Status': 'routed'})
+            key = next(x['key'] for x in funnel.build(s)['items'] if x.get('mid') == m)
+            with mock.patch.object(server, 'store', s):
+                prop = TestClient(server.app).post('/api/concierge/propose', json={'verb': verb, 'key': key, 'table': True, 'press': True}).json()
+                self.assertTrue(prop.get('id'), (verb, prop.get('say')))
+                if kind: self.assertEqual(prop['kind'], kind, verb)
+                self.assertEqual(concierge.run_proposal(s, prop)['status'], 'done', verb)
+            if verb == 'not_ours': self.assertEqual(s.get_message(m)['Status'], 'ignored', 'just this once puts this mail down')
+
     def test_a_desk_press_runs_at_once_and_writes_nothing_in_the_owners_name(self):
         """The 2026-10-25 sweep: a row button's press was written into the chat as an owner line nobody typed ("Not ours: ..."), with a
         card of its own that folded the next item, and a verb that was not AUTO drew "Nothing happens until you say yes" over a button

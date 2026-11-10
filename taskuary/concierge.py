@@ -146,14 +146,12 @@ CHIPS ={'review': ('send_close', 'approve', 'redraft', 'close', 'defer', 'watch'
          # ...and Pause this report, for the Advisor to light over a run whose findings the owner said they do not care about (the owner,
          # 2026-10-27: "the Advisor may suggest switching a report off"); the press is the owner's, the report stays under Reports
          'report': ('mine', 'regular_agent', 'report_off', 'next'), 'agentdone': ('close', 'reply', 'next'),
-         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'not_ours_kind', 'defer', 'next'), 'task': ('close', 'defer', 'watch', 'next'),
-         'asked': ('reply', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'not_ours_sender', 'next'),
+         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'watch', 'next'),
+         'asked': ('reply', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'next'),
          # a to-do with a task behind it (a promise you made in a chat) is closed here too - Next only read it (2026-10-15)
-         'todo': ('reply', 'close', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'not_ours_sender', 'next'),
-         # ...and Not ours taken further is the item's own (the owner, 2026-11-10: "on bottom the only buttons should be nav"): Ignore this
-         # sender beside a mail's Not for me, No more ideas like this beside an idea's - a chip under the receipt rode onto the NEXT item's bar
+         'todo': ('reply', 'close', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'next'),
          # an fyi can become WORK too: "make this job stop emailing me" arrived as a notification (2026-09-24)
-         'fyi': ('mine', 'regular_agent', 'not_ours', 'not_ours_sender', 'next'),
+         'fyi': ('mine', 'regular_agent', 'not_ours', 'next'),
          # the handful carries its own "All read, next" button (2026-09-14) and nothing else
          'fyis': (),
          # a connection that stopped answering: ask it again, here - Next was its only word, a dead end (2026-09-23)

@@ -114,7 +114,10 @@ def reply_target(store, task_id: int):
     written again went to "nobody" and was filed as a result (2026-10-13). Only a task with nobody behind any row gets one."""
     # ...and never the owner's own mail: a self-forward ("sign me up?") drafted "Hi Alex" back to the owner (the email walk, 2026-10-29)
     # ...and a person before a machine: a code host's notice on the thread is nobody to answer while someone on it is (reads_replies)
-    rows = [m for m in reversed(store.list_messages(task_id)) if m.get('Status') not in ('context', 'skipped') and not from_owner(store, m)]
+    # ...the owner's addresses read once, not once a row: a task of 1,500 chat lines asked the store 4,600 times (the row's Reply asks it now)
+    from .ingest import own_addresses
+    me = own_addresses(store)
+    rows = [m for m in reversed(store.list_messages(task_id)) if m.get('Status') not in ('context', 'skipped') and not from_owner(store, m, me)]
     own = next((m['MessageId'] for m in rows if reads_replies(m)), None)
     # ...and a promise task answers the owner's own mail it was made from: whom they promised is who waits (store.promised_in). Only
     # where nobody on the task's own rows is: a line that came in on it since is the newer ask

@@ -397,7 +397,10 @@ def declined(store, tid: int, p: dict) -> None:
                       'carry on without it, or ask the owner what they want instead.')
 
 
-NEXT = ('Tell the owner in a line what it did (with its link, if it gave one) and what comes next, then carry on.')     # the turn an approval wakes says what happened
+# the turn an approval wakes says what happened. ...AND NOTHING ABOUT WHAT DID NOT (agent walk 2, 2026-11-10): told "(with its link, if it
+# gave one)", the agent closed every sent mail with "No link came back with it."
+NEXT = ('Tell the owner in a line what it did and what comes next, then carry on. A link the result gave goes in that line; where it gave '
+        'none, say nothing about links.')
 
 
 def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False) -> None:

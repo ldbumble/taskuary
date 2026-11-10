@@ -299,6 +299,8 @@ CHAT_LINE = (
     f'question, offered options, or still need something; a conversation that is still going is '
     f'not an ending, and neither is an answer the owner may want to push back on.')
 
+HANDLES_LINE = ('An id Taskuary gives a draft or a card (rv4, the review number a tool returned) is its handle for your tools and your '
+                'withdraw line - the owner never sees it: to them, name a thing by what it is and whom it is to.')
 # ...and WHERE THE OWNER CLOSES IT (no CHAT_LINE: nobody wrote in, or the owner keeps the task to finish): the agent said "I couldn't
 # close the task from here", a failure over finished work (the desktop stress test, 2026-11-03). It is told whose press the close is
 def owner_closes_line() -> str:
@@ -314,7 +316,9 @@ def owner_closes_line() -> str:
             # ...and SAID ONCE (the agent walk, 2026-11-10): each draft stood twice - its subject and body quoted in the answer, over the
             # card that showed the same words
             f'After you set up a reply or an email, say in one line what you set up and for whom, and any assumption you made in it (an '
-            f'address you guessed, a date you picked) - never repeat the draft\'s words in your answer: the card shows them.')
+            f'address you guessed, a date you picked) - never repeat the draft\'s words in your answer: the card shows them. '
+            # ...and NAMED AS THE OWNER KNOWS IT (agent walk 2, 2026-11-10: "send it after rv3", "set up for your Send (review 5)")
+            f'{HANDLES_LINE}')
 
 
 # THE ONE ENDING THE AGENT SAYS (the owner, 2026-11-05: "it should trigger a new taskuary chat ... saying i saw you reply so i will close the

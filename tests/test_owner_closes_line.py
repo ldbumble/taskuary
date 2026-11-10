@@ -30,6 +30,8 @@ def test_a_draft_is_said_in_a_line_and_its_words_are_the_cards():
                    'FromEmail': 'gail@northwind.example', 'BodyText': 'Can you check the March batch?', 'Status': 'routed'})
     line = selfclose.owner_closes_line()
     assert 'say in one line what you set up and for whom' in line and "never repeat the draft's words" in line and 'assum' in line
+    # ...nor its id (agent walk 2, 2026-11-10: "send it after rv3"): the prompt names drafts by Taskuary's handle, which the owner never sees
+    assert selfclose.HANDLES_LINE in line and 'the owner never sees it' in line
     marked = general._prompt(s, t)[0]; tooled = general.by_tool(marked)
     for system in (marked, tooled): assert system.count("never repeat the draft's words") == 1
     # ...a session that drafts by marked block writes the words once, in the block: there the block IS the draft

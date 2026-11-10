@@ -81,6 +81,8 @@ class EveryYesCarriesOn(unittest.TestCase):
         [n] = self.s.waiting_notes(self.tid)
         self.assertEqual(n['CreatedBy'], 'router', 'Taskuary\'s note - never drawn as the owner\'s (codingchat.waiting, waitroom.batch)')
         self.assertIn('pressed Approve', n['Note']); self.assertIn(SAID, n['Note']); self.assertIn('what comes next', n['Note'])
+        # ...and nothing invites a line about a link that did not come (agent walk 2, 2026-11-10: "No link came back with it", after every Send)
+        self.assertNotIn('if it gave one', n['Note']); self.assertIn('where it gave none, say nothing about links', n['Note'])
 
     def test_a_resting_general_agent_that_answered_is_woken_once_never_as_the_owner(self):
         self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The reply is ready - press Send.')

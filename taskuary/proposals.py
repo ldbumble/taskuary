@@ -307,6 +307,17 @@ def break_out_words(p: dict) -> str:
 
 # A REFUSAL THAT STEERS (the owner, 2026-11-05, from the open-source assistants: a tool's error says what to try next): "the reason is on
 # the task" sent the agent to a page it cannot read - it is told the reason, and the next move
+# AN ACT ON "THE LINKED ISSUE" NEEDS ONE (the stress round, 2026-11-10): a comment or a close proposed on a task that came from mail passed
+# every check, stood as a card, and its Approve could only ever fail - "this task carries no GitHub issue/PR to act on". Asked at the door,
+# so the agent is told while it can still ask another way, and read by the press from the same place
+_LINKED = re.compile(r'github\.com/([^/]+/[^/]+)/(?:issues|pull)/(\d+)')
+NO_LINK = 'this task carries no GitHub issue/PR to act on'
+def linked(store, tid) -> tuple | None:
+    "(repo, number) of the GitHub issue or pull request task `tid` came from - None when it came from anywhere else."
+    m = _LINKED.search(str((store.get_task(tid) or {}).get('SourceRef') or '')) if tid else None
+    return (m.group(1), int(m.group(2))) if m else None
+
+
 def refusal_line(why) -> str:
     return (f"the proposal was refused: {why or 'it did not validate'}. Fix that and propose it again - or, if it cannot be fixed from "
             "here, say in your answer what is missing and who could supply it.")
@@ -361,6 +372,8 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     if ok and p.get('action') == 'break_out':
         p, miss = break_out(store, task_id, p)
         if miss: ok, why = False, miss
+    if ok and p.get('action') in ('comment_issue', 'close_issue') and not linked(store, task_id):
+        ok, why = False, f"{NO_LINK} - a comment or an issue on a repository you name is a run_tool (the guide tool's `propose` topic)"
     if not ok:
         store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
         store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why, **({'unheard': True} if unheard else {})})
@@ -650,11 +663,8 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     elif a in ('comment_issue', 'close_issue'):
         from . import github
         from .ci import _conn
-        c, t = _conn(store), store.get_task(tid) or {}
-        ref = str(t.get('SourceRef') or '')
-        m = re.search(r'github\.com/([^/]+/[^/]+)/(?:issues|pull)/(\d+)', ref)
-        if not m: raise RuntimeError('this task carries no GitHub issue/PR to act on')
-        repo, num = m.group(1), int(m.group(2))
+        if not (at := linked(store, tid)): raise RuntimeError(NO_LINK)
+        c, (repo, num) = _conn(store), at
         if a == 'comment_issue':
             url = github.comment_issue(c['Secret'], repo, num, p['body'])
             out = {'commented': f'{repo}#{num}', 'url': url}

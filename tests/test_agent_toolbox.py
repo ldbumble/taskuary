@@ -121,6 +121,7 @@ class TheServer(unittest.TestCase):
         self.assertIn('4% works', rv[-1]['DraftText'])
 
     def test_a_github_comment_is_a_proposal_and_a_merge_cannot_be_proposed(self):
+        self.s.update_task(self.tid, {'SourceRef': 'https://github.com/northwind/ledger/issues/7'}, 'owner')     # the issue it comments on
         with mock.patch('taskuary.proposals._switch_ok', return_value=True):
             text, err = tool(self.tid, 'propose', action='comment_issue', body='Fixed in the next release.', why='the reporter asked')
         self.assertFalse(err, text); self.assertIn('queued', text)

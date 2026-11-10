@@ -112,6 +112,27 @@ class AMarkThatWasRefusedIsHeard(Acts):
         self.assertEqual((miss, proposals.unheard(self.s, self.tid)), ([], []))
 
 
+
+class AnActOnTheLinkedIssueNeedsOne(Acts):
+    """A comment or a close "on the linked issue", proposed on a task that came from mail, passed every check and stood as a card whose
+    Approve could only fail (the stress round, 2026-11-10)."""
+    def ask(self, tid, a):
+        miss = []
+        with mock.patch.object(proposals, '_switch_ok', return_value=True): return proposals.queue(self.s, tid, {'action': a, 'body': 'Fixed.', 'why': 'x'}, 'agent', refused=miss), miss
+
+    def test_it_is_refused_at_the_door_with_the_other_road(self):
+        for a in ('comment_issue', 'close_issue'):
+            with self.subTest(a):
+                q, miss = self.ask(self.tid, a)
+                self.assertIsNone(q); self.assertIn(proposals.NO_LINK, miss[0]); self.assertIn('run_tool', miss[0])
+        self.assertEqual(self.s._rows("SELECT 1 x FROM review WHERE TaskId=? AND Kind='action'", (self.tid,)), [], 'no card that cannot run')
+
+    def test_a_task_from_an_issue_takes_it(self):
+        tid = Factory(self.s).task('Export drops a row', source='github', SourceRef='https://github.com/northwind/ledger/issues/7')
+        q, miss = self.ask(tid, 'comment_issue')
+        self.assertTrue(q); self.assertEqual((miss, proposals.linked(self.s, tid)), ([], ('northwind/ledger', 7)))
+
+
 class APressThatFailed(Acts):
     WHY = 'GitHub refused it: the token may not comment on northwind/ledger'
     def fail(self, rv, why=None):

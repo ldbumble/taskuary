@@ -228,36 +228,25 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(store_mod.DEFAULT_SETTINGS['timeline_fade'], 'normal')
         self.assertEqual(MemoryStore().get_settings()['timeline_fade'], 'normal')
 
-    def test_reply_only_is_drafted_by_the_main_ai_not_a_coding_agent(self):
-        """A question needs an answer, not an agent. Drafting used to require a CLI agent
-        named 'responder' - nobody has one, so reply mail sat undrafted, and the fallback
-        was the CODING agent opening a repo to write two sentences."""
+    def test_reply_only_is_the_tasks_agents_to_write_never_a_coding_session(self):
+        """A question is answered by the task's agent, started at arrival like any work (the owner, 2026-11-10: "no more triage
+        creates draft. agent should be doing it"). A one-shot writer used to draft it in one model call; before that the fallback
+        was the CODING agent opening a repo to write two sentences. The review waits as a reply owed, with no draft, and what is
+        set going is the hand-over to the general agent - never a coding session, never a model call of triage's own."""
         from unittest import mock
         import taskuary.ingest as ing
-
-        class InlineThread:
-            def __init__(self, target=None, args=(), daemon=None): self.t, self.a = target, args
-            def start(self): self.t(*self.a)
-
         s = MemoryStore()
-        s.set_setting('auto_draft_enabled', '1', 't')
         s.upsert_agent('coding', 'coding', 'cli', '{"cmd": "claude"}')    # the only agent, and NOT for this
-        seen = {}
-        def fake_llm(system, user, **kw):
-            seen['system'], seen['user'] = system, user
-            return 'Yes - Monday is covered. I will confirm the cover with Dana.'
-        with mock.patch.object(ing, 'threading') as th, \
-             mock.patch('taskuary.llm.build_llm', return_value=fake_llm), \
+        with mock.patch.object(ing, '_spawn') as spawn, \
+             mock.patch('taskuary.llm.build_llm', side_effect=AssertionError('nothing drafts at arrival')), \
              mock.patch('taskuary.terminal.start_on_task') as sess:
-            th.Thread = InlineThread
             out = ingest_message(s, self.msg(external_id='r1', subject='Tuesday?',
                                              body='are you available tuesday?'), llm=REPLY_LLM)
-        sess.assert_not_called()                                           # no agent was opened at it
+        sess.assert_not_called()                                           # no coding session was opened at it
         rv = s.list_reviews('pending')[0]
         self.assertEqual(rv['TaskId'], out['task_id'])
-        self.assertIn('Monday is covered', rv['DraftText'])
-        self.assertIn('are you available tuesday?', seen['user'])          # the thread went in
-        self.assertIn('Output ONLY the message body', seen['system'])
+        self.assertFalse((rv.get('DraftText') or '').strip())              # owed, not written
+        self.assertEqual([(c.args[0].__name__, c.args[2:]) for c in spawn.call_args_list], [('reply_to_agent', (out['task_id'], rv['ReviewId']))])
 
     def test_skip_policy_hides_flood_senders(self):
         s = MemoryStore()

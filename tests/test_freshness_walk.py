@@ -167,7 +167,7 @@ def mail(text, ext):
 
 
 class SupersedeTests(Base):
-    def test_a_new_ask_on_a_task_with_a_pending_draft_marks_it_behind_and_redrafts_that_same_review(self):
+    def test_a_new_ask_on_a_task_with_a_pending_draft_marks_it_behind_and_hands_that_same_review_to_the_agent(self):
         tid, first, rid = mail_task(self.s)
         spawned = []
         llm = lambda *a, **k: json.dumps({'intent': 'reply_only', 'why': 'another question'})
@@ -175,10 +175,10 @@ class SupersedeTests(Base):
             out = ingest.ingest_message(self.s, mail('And could you add the July file too?', 'm:second'), llm=llm)
         self.assertEqual((out['status'], out['task_id']), ('attached', tid))
         self.assertEqual(self.s.get_review(rid)['Stale'], 1)
-        self.assertEqual(spawned, [('_auto_draft', rid)])                          # the SAME review, redrafted - never a second one
+        self.assertEqual(spawned, [('reply_to_agent', rid)])                       # the SAME review, the agent's to write again - never a second one
         self.assertEqual(len(self.s.list_reviews('pending')), 1)
 
-    def test_a_second_line_judged_a_task_still_repoints_and_redrafts_the_pending_reply(self):
+    def test_a_second_line_judged_a_task_still_repoints_the_pending_reply_and_hands_it_to_the_agent(self):
         """Ray asked for the budgets link, then wrote again asking for access to the files. Triage
         called the second mail a task, so the draft was ONLY marked behind: still pinned to the
         first mail, warned as stale, with nothing behind the warning but a Refresh link (TQ-0665,
@@ -191,7 +191,7 @@ class SupersedeTests(Base):
         rv = self.s.get_review(rid)
         self.assertEqual(out['task_id'], tid)
         self.assertNotEqual(rv['MessageId'], first)                                # re-pointed at the line it must answer
-        self.assertIn(('_auto_draft', rid), spawned)                               # ...and rewritten from it
+        self.assertIn(('reply_to_agent', rid), spawned)                            # ...and the agent's to write from it
         self.assertEqual(len(self.s.list_reviews('pending')), 1)
 
     def test_the_second_message_adds_its_own_boxes_to_the_task_list(self):
@@ -219,14 +219,14 @@ class SupersedeTests(Base):
             ingest.ingest_message(self.s, mail('Thanks so much!', 'm:thanks'), llm=llm)
         self.assertEqual(self.s.get_review(rid)['Stale'], 0); spawn.assert_not_called()
 
-    def test_someone_elses_fyi_has_the_writer_reread_the_draft(self):
+    def test_someone_elses_fyi_has_the_agent_look_at_the_draft_again(self):
         "The night run, 2026-11-09: a colleague answered the question on the thread, and the drafted answer stayed ready to send."
         tid, first, rid = mail_task(self.s)
         llm = lambda *a, **k: json.dumps({'intent': 'fyi', 'why': 'Gail answered it'})
         with mock.patch.object(ingest, '_spawn') as spawn:
             ingest.ingest_message(self.s, {**mail('Dana - it is in the shared folder.', 'm:gail'), 'from_email': 'gail@northwind.example',
                                            'from_name': 'Gail Moreno'}, llm=llm)
-        self.assertEqual([c.args[0] for c in spawn.call_args_list], [ingest._auto_draft])
+        self.assertEqual([(c.args[0], c.args[2:]) for c in spawn.call_args_list], [(ingest.reply_to_agent, (tid, rid))])
 
     def test_the_owners_external_answer_retires_the_draft_and_the_notice_says_so(self):
         tid, first, rid = teams_task(self.s)

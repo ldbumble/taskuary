@@ -2117,12 +2117,10 @@ def task_detail(task_id: int):
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
     memo, sigs, here = {}, {}, {m['MessageId']: m for m in d.get('messages') or []}
-    from .ingest import DRAFTING
     for r in d.get('reviews') or []:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Connect'] = _review_connect(memo, r)
         r['Signature'] = signatures.for_review(store, r, here.get(r.get('MessageId')), memo=sigs)     # what goes under it: the reply box shows it
-        r['Drafting'] = r['ReviewId'] in DRAFTING                         # its draft is being written: the box waits, never "nothing yet"
     # the owner's own mail has nobody behind it to answer (wrapup.from_owner): the page's Reply doors read this, never a guess
     from .ingest import own_addresses, row_recipients
     from .wrapup import from_owner
@@ -2773,12 +2771,11 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
         if mid and not store.pending_review(task_id):
             rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                                     'Reason': 'reclassified by you: a question, not work to do - needs a reply'})
-            store.add_comment(task_id, ACTOR, 'human', 'Reclassified as a question - it needs an answer, not an agent.')
+            store.add_comment(task_id, ACTOR, 'human', 'Reclassified as a question - it needs an answer, not code.')
             if background is not None:
-                # always drafted (PW-043) and guarded like ingest's auto-draft: no AI connected means
-                # a review waiting in the queue with the failure written on it, never an exception
-                from .ingest import _auto_draft
-                background.add_task(_auto_draft, store, task_id, rid)
+                # the answer is the task's agent's to write, as at arrival (ingest.reply_to_agent): where none may start, the task says why
+                from .ingest import reply_to_agent
+                background.add_task(reply_to_agent, store, task_id, rid)
         # a reclassification is a triage verdict the owner had to overturn - worth generalizing
         if background is not None:
             background.add_task(learn.learn_from, store,
@@ -4043,9 +4040,8 @@ def open_reply(mid: int, body: OpenReplyBody = None):
         # ...and kept, not thrown away once the model has read them (2026-10-23) - the owner's own, never a chase's brief
         if not body.app_words: _keep_instruction(rid, body.instruction)
     # REPLY DRAFTS, AGENT OR NOT (the owner, 2026-11-03: "drafting reply is broken ... if its still working stay spinning until done"):
-    # Reply on a task no agent had worked opened a signature-only box under Draft with AI, nothing coming (2026-10-28) - and when the
-    # arrival's own draft was still being written (ingest.DRAFTING) it landed in that box seconds later, unannounced. Every press that
-    # asks for a draft is owed one; the page's /draft waits on a draft already under way, and a writer with nothing to go on says so.
+    # Reply on a task no agent had worked opened a signature-only box under Draft with AI, nothing coming (2026-10-28). Every press that
+    # asks for a draft is owed one, and a writer with nothing to go on says so.
     owed, failed = not draft and (body is None or body.draft), False
     if owed and not later:
         try:
@@ -4925,14 +4921,12 @@ def get_run(run_id: int):
 @app.get('/api/reviews')
 def reviews(status: str = None):
     from .verdicts import context_moved
-    from .ingest import DRAFTING
     rows = store.list_reviews(status)
     memo, sigs = {}, {}
     for r in rows:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Connect'] = _review_connect(memo, r)
         r['Signature'] = signatures.for_review(store, r, memo=sigs)
-        r['Drafting'] = r['ReviewId'] in DRAFTING
         moved, latest = context_moved(store, r)          # material change only (PW-240), never a polling timestamp
         r['Stale'] = bool(moved)
         if r['Stale'] and latest:
@@ -7094,16 +7088,6 @@ def draft_review(rid: int, body: DraftBody = None):
     if deliver.get('kind') == 'calendar': raise HTTPException(422, 'the note on a calendar answer is yours to write - or leave it empty')
     # THE OWNER'S WORDS FOR IT ARE KEPT on the review (the owner, 2026-10-23: a Redraft's instruction is stored and remembered)
     if body and (body.instruction or '').strip(): _keep_instruction(rid, body.instruction)
-    # ...and a plain ask while the arrival's own draft is being written is that draft: one model call, not a second over it
-    from .ingest import DRAFTING
-    running = None if body and (body.instruction or '').strip() else DRAFTING.get(rid)
-    if running and running.wait(180):
-        got = store.get_review(rid) or {}
-        if got.get('DraftText'): return {'ok': True, 'draft': got['DraftText'], 'receipt': _draft_receipt(rv.get('TaskId'), {'changed': True}, False, body and body.line)}
-        # ...and what that writer said it needs is the answer too: a second call would only say it again (ingest._auto_draft)
-        if got.get('DraftNeeds'):
-            needs = by_sentence(str(got['DraftNeeds']), 2000)
-            return {'ok': False, 'draft': '', 'needs': needs, 'receipt': _draft_receipt(rv.get('TaskId'), {'changed': False, 'why': needs}, False, body and body.line)}
     try:
         if rv.get('Kind') == 'slot':
             from . import outbox as ob

@@ -55,14 +55,15 @@ def test_the_writer_gets_the_whole_pasted_draft_and_the_no_promise_rule(s):
 
 def test_the_writers_own_needs_lands_on_the_review_the_owner_sees(s):
     """Whether it can answer is the writer's judgement (its NEEDS), never a word list over its text (the owner, 2026-10-28)."""
-    from taskuary import ingest
+    from taskuary import server
     tid = ask(s)
     mid = s.list_messages(tid)[0]['MessageId']
     rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'DraftText': '', 'Status': 'pending', 'Reason': 'asks for thoughts'})
     llm, calls = writer('NEEDS: the portal logs to say why it fails')
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr('taskuary.llm.build_llm', lambda *a, **k: llm)
-        ingest._auto_draft(s, tid, rid)
+        mp.setattr(server, 'store', s); mp.setattr(server, '_refresh_chat_context', lambda *a, **k: {})
+        assert server.draft_review(rid)['ok'] is False             # the owner's Draft with AI: no draft, its NEEDS said plainly
     assert 'needs the portal logs' in (s.get_review(rid).get('DraftNeeds') or '') and len(calls) == 1
 
 

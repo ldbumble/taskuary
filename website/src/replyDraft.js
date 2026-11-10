@@ -23,12 +23,7 @@ export function draftBehind(api, rid, instruction = null, line = null) {
   return promise;
 }
 
-// A DRAFT THE SERVER IS ALREADY WRITING (the review's `Drafting`: the arrival's own, ingest.DRAFTING) is followed, never left looking like
-// nothing is coming (the owner, 2026-11-03: "sometimes it just fills out the text 10 seconds later"): /draft waits on that one and answers
-// with it - no second model call (server.draft_review) - so the card spins until it lands, then shows it, or says why not
-export const followDraft = (api, r) => (r?.Drafting && draftJob(r.ReviewId)?.state !== "drafting" ? draftBehind(api, r.ReviewId) : null);
-
-// ...and its box meanwhile is EMPTY, so it reads "Drafting…" beside the spinner - the signature alone read as a reply left to write.
+// A DRAFT BEING WRITTEN leaves its box EMPTY, so it reads "Drafting…" beside the spinner - the signature alone read as a reply left to write.
 // The owner's own edit always stands; a redraft keeps the old draft in view until the new one replaces it.
 export const boxText = ({ text, draft, drafting, signature }) => text ?? (drafting && !draft ? "" : withSignature(draft, signature));
 

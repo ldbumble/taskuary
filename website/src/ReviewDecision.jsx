@@ -19,7 +19,7 @@ import { CcRow, DraftField, SubjectRow, ToRow, timeAgo, cleanText, splitQuoted }
 import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, replyContext } from "./replyDelivery.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
-import { boxText, editAfterRefile, followDraft, useDraftJob } from "./replyDraft.js";
+import { boxText, editAfterRefile, useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 import { draftState, failureHead, failureWhy, replySendFailure, reviewDeliveryState, savedSendFailure, sendFix } from "./sendState.js";
@@ -205,8 +205,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // while the model writes, and only Redraft says what is happening
   const [redrafting, setRedrafting] = useState(false);
   // ...and one the SERVER is still writing (`Drafting`: the arrival's own) is followed and waited on, not shown as nothing coming (2026-11-03)
-  const drafting = job?.state === "drafting" || redrafting || !!r.Drafting;
-  useEffect(() => { followDraft(api, r); }, [r.ReviewId, r.Drafting]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const drafting = job?.state === "drafting" || redrafting;
   // the signature that goes under this email (signatures.py) is in the box: an empty one opens on it, a draft gets it once - and
   // a box holding only it is still "write the reply first"
   // ...but while the AI writes it the box is empty under its spinner, reading "Drafting…" - the signature alone read as nothing coming

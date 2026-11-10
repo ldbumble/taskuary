@@ -3,8 +3,10 @@
 The shapes that pinned it, with invented people: a reply task's thread got a second mail triage judged work for an agent, the join
 dropped that verdict, and the tool-less writer drafted "I have to look into it and will send that separately"; a colleague pasted a
 long draft update asking for thoughts and got "I'll review this and send you my thoughts." Now: an agent verdict joining a reply task
-starts that agent (work it out, then draft the reply for the owner's Send); a writer that cannot answer says NEEDS and the task goes to
-the general agent; a placeholder is never a draft; why no agent started is always written; a quick fact is still drafted at once.
+starts that agent (work it out, then draft the reply for the owner's Send); why no agent started is always written.
+And since 2026-11-10 (the owner: "no more triage creates draft. agent should be doing it" ... "as it arrives of course") every reply owed
+is the task's agent's from arrival (ingest.reply_to_agent): nothing drafts it in one tool-less call first - a quick fact included - and
+the writer's NEEDS is only ever the answer to the owner's own Draft with AI press.
 And a webinar invite whose thread fills with banter stays one task under its own title, with triage's offer one press away.
 """
 import json
@@ -52,7 +54,8 @@ def ingested(s, m, llm, wrote=True):
 
 def reply_task(s):
     out, spawned = ingested(s, mail(), says(intent='reply_only', kind='task', title='Erin asks if you are free Tuesday'))
-    assert spawned == ['_auto_draft'] and s.get_task(out['task_id'])['Kind'] == 'reply'
+    assert spawned == ['reply_to_agent'] and s.get_task(out['task_id'])['Kind'] == 'reply'
+    assert not (s.pending_review(out['task_id'], kind='draft').get('DraftText') or '').strip()          # owed: nothing wrote it at arrival
     return out['task_id']
 
 
@@ -100,7 +103,7 @@ def test_a_joining_general_verdict_on_a_reply_task_starts_the_assistant():
     _out, spawned = ingested(s, mail(**WORK), says(intent='task', kind='general', title='Why the October invoice total is higher'))
     t = s.get_task(tid)
     assert t['Kind'] == 'general' and s.task_has_tag(tid, ingest.REPLY_TAG)
-    assert spawned == ['_auto_general']                                              # the agent - and no tool-less redraft beside it
+    assert spawned == ['_auto_general']                                              # the agent - and no second hand-over beside it
     assert any('needs the agent before it can be answered' in x and 'drafts the reply for your Send' in x for x in lines(s, tid))
     assert 'REPLY OWED to Erin Blake' in ingest.reply_job(s, tid)
 
@@ -154,58 +157,48 @@ def test_carry_on_that_cannot_start_says_why():
     assert any(x.startswith('No agent started: Starting an agent by itself is switched off') for x in lines(s, tid))
 
 
-# ── ruling 3: no placeholder drafts; NEEDS hands the reply to the general agent ────────────────────────────────────────────
-def writer(*said):
-    calls, said = [], list(said)
-    def llm(system, user, **k): calls.append({'system': system, 'user': user, **k}); return said.pop(0) if len(said) > 1 else said[0]
-    return llm, calls
-
-
-def drafted(s, tid, llm):
+# ── ruling 3, as it stands since 2026-11-10: the reply is handed to the general agent at arrival - no writer, no placeholder ────────────
+def handed(s, tid, wrote=True):
+    "The arrival's hand-over run as its spawned thread runs it: (the review after, what it set going)."
     rv = s.pending_review(tid, kind='draft')
-    with mock.patch('taskuary.llm.build_llm', lambda *a, **k: llm), mock.patch('taskuary.ingest._spawn') as spawn, \
-         mock.patch.object(senders, 'wrote_to', return_value=True), \
+    with mock.patch('taskuary.llm.build_llm', side_effect=AssertionError('nothing drafts at arrival')), mock.patch('taskuary.ingest._spawn') as spawn, \
+         mock.patch.object(senders, 'wrote_to', return_value=wrote), \
          mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
-        ingest._auto_draft(s, tid, rv['ReviewId'])
-    return s.get_review(rv['ReviewId']), [getattr(c[0][0], '__name__', '') for c in spawn.call_args_list]
+        went = ingest.reply_to_agent(s, tid, rv['ReviewId'])
+    return s.get_review(rv['ReviewId']), [getattr(c[0][0], '__name__', '') for c in spawn.call_args_list], went
 
 
 def test_the_writer_is_told_never_to_promise_and_to_say_needs():
+    "The owner's own Draft with AI press still reaches the writer: its rule stands."
     assert 'never write a placeholder' in responder.NOT_YET and responder.NEEDS in responder.NOT_YET
     assert 'you will pick it up' not in responder.NOT_YET
 
 
-def test_needs_leaves_no_draft_and_starts_the_general_agent():
+def test_a_reply_owed_starts_the_general_agent_and_leaves_no_draft():
     s = store(); tid = reply_task(s)
-    rv, spawned = drafted(s, tid, writer('NEEDS: the October invoice run, to see why the total moved')[0])
-    assert not (rv.get('DraftText') or '').strip() and 'needs the October invoice run' in rv['DraftNeeds'] and not rv.get('DraftError')
-    assert spawned == ['_auto_general'] and s.get_task(tid)['Kind'] == 'general'
-    assert 'the reply writer said it needs the October invoice run' in ingest.reply_job(s, tid)
+    rv, spawned, went = handed(s, tid)
+    assert went and spawned == ['_auto_general'] and s.get_task(tid)['Kind'] == 'general' and s.task_has_tag(tid, ingest.REPLY_TAG)
+    assert not (rv.get('DraftText') or '').strip() and not rv.get('DraftNeeds') and not rv.get('DraftError') and rv['Status'] == 'pending'
+    job = ingest.reply_job(s, tid)
+    assert job.startswith('THIS TASK IS A REPLY OWED to Erin Blake. Work out the answer') and 'never a promise' in job
+    assert 'reply writer' not in job and not [x for x in lines(s, tid) if 'reply writer' in x]         # no second voice is quoted to it
 
 
-def test_a_short_mail_the_writer_cannot_answer_is_no_draft():
-    """The writer says it can't answer (its NEEDS) - its judgement, not a phrase list (the owner, 2026-10-28) - so no draft is
-    parked and the work goes to the agent."""
-    s = store(); tid = reply_task(s)
-    llm, calls = writer('NEEDS: the export logs, to see why the total moved')
-    rv, spawned = drafted(s, tid, llm)
-    assert len(calls) == 1 and not (rv.get('DraftText') or '').strip()
-    assert 'needs the export logs' in rv['DraftNeeds'] and spawned == ['_auto_general']
-
-
-def test_a_reply_it_cannot_write_with_auto_start_off_lights_send_to_agent_with_the_reason():
+def test_with_auto_start_off_the_reply_waits_and_the_task_says_why():
     s = store(general_auto_enabled='0'); tid = reply_task(s)
-    rv, spawned = drafted(s, tid, writer('NEEDS: the export logs')[0])
-    assert spawned == [] and s.get_task(tid)['Kind'] == 'reply'
-    assert 'An agent can work it out' in rv['DraftNeeds']
-    assert any(x.startswith('No agent started:') for x in lines(s, tid))
+    rv, spawned, went = handed(s, tid)
+    assert not went and spawned == [] and s.get_task(tid)['Kind'] == 'reply'
+    assert not (rv.get('DraftText') or '').strip() and rv['Status'] == 'pending'                       # still a reply owed, the owner's to start
+    assert [x for x in lines(s, tid) if x.startswith('No agent started: Starting an agent by itself is switched off')]
 
 
-def test_a_quick_fact_is_still_drafted_at_once():
-    s = store(); tid = reply_task(s)
-    rv, spawned = drafted(s, tid, writer('Hi Erin,\n\nYes - Tuesday from 2 works for me.\n\nAlex')[0])
-    assert 'Tuesday from 2 works' in rv['DraftText'] and not rv.get('DraftError') and not rv.get('DraftNeeds') and spawned == []
-    assert s.get_task(tid)['Kind'] == 'reply'
+def test_a_strangers_reply_is_held_with_the_reason():
+    s = store()
+    out, spawned = ingested(s, mail(from_email='rep@vendor.example', from_name='Sam Rook'), says(intent='reply_only', kind='task'), wrote=False)
+    tid = out['task_id']; assert spawned == ['reply_to_agent']
+    _rv, spawned, went = handed(s, tid, wrote=False)
+    assert not went and spawned == [] and s.get_task(tid)['Kind'] == 'reply' and s.task_has_tag(tid, ingest.HOLD_TAG)
+    assert any(x.startswith('No agent started:') and 'never written to them' in x for x in lines(s, tid))
 
 
 # ── the add-on: a webinar invite and its banter are one task under one title, with the offer one press away ────────────────
@@ -255,11 +248,8 @@ def test_accepting_the_offer_starts_the_assistant_with_that_job():
         assert c.post(f'/api/tasks/{tid}/offer').status_code == 409                 # taken once
 
 
-# ── a GENERAL task whose writer says NEEDS goes to the assistant too (Task 3.2, 2026-11-04): only a reply task did, so a general task
-# asking the owner for details their own files hold stopped at the writer's NEEDS with no agent ever run on it ───────────────────────
-PORTAL = 'NEEDS: the portal login Gail is waiting for - it is kept in one of your projects, not in the thread'
-
-
+# ── a reply owed on a GENERAL task no agent has run on goes to the assistant too (Task 3.2, 2026-11-04): only a reply task did, so a
+# general task asking the owner for details their own files hold stopped with no agent ever run on it ────────────────────────────────
 def general_ask(s, kind='general'):
     from taskuary.testing import Factory
     f = Factory(s)
@@ -270,37 +260,37 @@ def general_ask(s, kind='general'):
     return tid
 
 
-def test_needs_on_a_general_task_starts_the_assistant_once_with_the_needs_as_its_brief():
+def test_a_reply_owed_on_a_general_task_starts_the_assistant_once_told_the_reply_job():
     s = store(); tid = general_ask(s)
-    rv, spawned = drafted(s, tid, writer(PORTAL)[0])
-    assert 'needs the portal login Gail is waiting for' in rv['DraftNeeds'] and spawned == ['_auto_general']
-    assert s.get_task(tid)['Kind'] == 'general'
-    ask = ingest.first_ask(s, tid)
-    assert ask.startswith('THIS TASK IS A REPLY OWED to Ray Colton') and 'the portal login Gail is waiting for' in ask
+    _rv, spawned, went = handed(s, tid)
+    assert went and spawned == ['_auto_general'] and s.get_task(tid)['Kind'] == 'general'
+    assert ingest.first_ask(s, tid).startswith('THIS TASK IS A REPLY OWED to Ray Colton')
 
 
 @pytest.mark.parametrize('case', ['coding', 'live'])
-def test_needs_on_a_coding_task_or_under_a_live_agent_starts_nothing_new(case):
+def test_a_reply_owed_on_a_coding_task_or_under_a_live_agent_starts_nothing_new(case):
     s = store(); tid = general_ask(s, kind='coding' if case == 'coding' else 'general')
     if case == 'live': general.OPENING.add(tid)
-    try: rv, spawned = drafted(s, tid, writer(PORTAL)[0])
+    try: _rv, spawned, went = handed(s, tid)
     finally: general.OPENING.discard(tid)
-    assert 'needs the portal login' in rv['DraftNeeds'] and spawned == [] and not s.task_has_tag(tid, ingest.REPLY_TAG)
+    assert not went and spawned == [] and not s.task_has_tag(tid, ingest.REPLY_TAG)
 
 
-def test_needs_keeps_a_general_kind_and_holds_the_start_against_a_second_one():
+def test_the_hand_over_keeps_a_general_kind_and_holds_the_start_against_a_second_one():
     s = store(); tid = general_ask(s, kind='research')
-    _rv, spawned = drafted(s, tid, writer(PORTAL)[0])
-    assert spawned == ['_auto_general'] and s.get_task(tid)['Kind'] == 'research'
-    assert tid in general.OPENING                     # opening from the hand-over on: a second NEEDS meanwhile is an agent live on it
-    assert drafted(s, tid, writer(PORTAL)[0])[1] == []
+    try:
+        _rv, spawned, went = handed(s, tid)
+        assert went and spawned == ['_auto_general'] and s.get_task(tid)['Kind'] == 'research'
+        assert tid in general.OPENING                     # opening from the hand-over on: a second one meanwhile is an agent live on it
+        assert handed(s, tid)[1:] == ([], False)
+    finally: general.OPENING.discard(tid)
 
 
-def test_needs_on_a_general_task_with_a_conversation_already_starts_nothing():
+def test_a_reply_owed_on_a_general_task_with_a_conversation_already_starts_nothing():
     s = store(); tid = general_ask(s)
     with mock.patch.object(general, 'history', return_value=[{'role': 'user', 'content': 'earlier'}]):
-        _rv, spawned = drafted(s, tid, writer(PORTAL)[0])
-    assert spawned == [] and not s.task_has_tag(tid, ingest.REPLY_TAG) and tid not in general.OPENING
+        _rv, spawned, went = handed(s, tid)
+    assert not went and spawned == [] and not s.task_has_tag(tid, ingest.REPLY_TAG) and tid not in general.OPENING
 
 
 

@@ -494,11 +494,23 @@ def _draft(store, item, target_kind, target_id):
     return r if r and r.get('Status') in ('pending', 'held') and (r.get('FinalText') or r.get('DraftText')) else None
 
 
+def _unwritten(store, item) -> dict:
+    "The item's review still waiting with no draft on it - {} when it has one, or none waits."
+    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or (store.pending_review(int(item['tid']), live_only=False) if item.get('tid') else None) or {}
+    return {} if r.get('Status') not in ('pending', 'held') or str(r.get('DraftText') or '').strip() else r
+
+
 def draft_needs(store, item) -> str:
     """What the reply writer said it NEEDS on the item's pending review, with no draft on it - '' when it drafted, or never said."""
-    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or (store.pending_review(int(item['tid']), live_only=False) if item.get('tid') else None) or {}
-    if r.get('Status') not in ('pending', 'held') or str(r.get('DraftText') or '').strip(): return ''
-    return str(r.get('DraftNeeds') or '').strip()
+    return str(_unwritten(store, item).get('DraftNeeds') or '').strip()
+
+
+# A REPLY OWED THAT NOTHING HAS WRITTEN is the task's agent's to write (ingest.reply_to_agent; the owner, 2026-11-10: "no more triage
+# creates draft. agent should be doing it"). Where its agent did not start by itself - the setting, a stranger held - the move is the
+# owner's Send to agent, as it was when the old writer said what it needed
+def reply_unwritten(store, item) -> bool:
+    r = _unwritten(store, item)
+    return r.get('Kind') == 'draft' and not str(r.get('FinalText') or '').strip()
 
 
 def draft_line(store, item, target_kind, target_id) -> str:

@@ -1,9 +1,10 @@
 """THE WRITER'S NEEDS IS WORK, NOT A FAILURE (walk 2026-10-29): a reply writer that said what it needs was kept as a DraftError - the card
 drew a red app failure cut mid-word at 240/300 characters, and the Advisor lit "New task to fix this". Now it is kept on its own
-(DraftNeeds), whole, the card says it as a plain line, and the rule lights Continue / Send to agent."""
+(DraftNeeds), whole, the card says it as a plain line, and the rule lights Continue / Send to agent.
+The writer is the owner's own press now (Draft with AI / Redraft): nothing drafts at arrival - the reply is the task's agent's."""
 from unittest import mock
 
-from taskuary import advisor, ingest, responder, rulebook
+from taskuary import advisor, responder, rulebook
 from taskuary.store import MemoryStore, by_sentence
 from taskuary.testing import Factory
 
@@ -18,9 +19,10 @@ def reply_with_needs(s, said=LONG):
     mid = f.message(tid, from_email='erin@northwind.example', from_name='Erin Blake', subject='October invoice',
                     body='Why did the October total go up?')
     rid = f.review(tid, mid)
-    with mock.patch.object(responder, 'write_draft', side_effect=lambda *a, **k: responder._answer(lambda *a, **k: said, 's', 'u', 100)), \
-         mock.patch.object(ingest, 'hand_reply_to_agent', return_value=False):
-        ingest._auto_draft(s, tid, rid)
+    from taskuary import server
+    with mock.patch.object(server, 'store', s), mock.patch.object(server, '_refresh_chat_context'), \
+         mock.patch.object(responder, 'write_draft', side_effect=lambda *a, **k: responder._answer(lambda *a, **k: said, 's', 'u', 100)):
+        assert server.draft_review(rid)['ok'] is False            # the owner pressed Draft with AI: the writer said what it needs
     return tid, rid
 
 

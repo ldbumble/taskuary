@@ -113,7 +113,7 @@ NEEDS = 'NEEDS:'
 # This line used to say "the owner will turn it into a task" (a sentence about what someone ELSE would do), then "say in one line that
 # you will pick it up" - and that is what came back: "I have to look into it and will send that separately" (the owner, 2026-10-28:
 # "don't draft AI slop answers 'I'm looking into it'. that's useless"). A reply that cannot answer is not written: NEEDS says what work
-# it needs, to the owner, and the task goes to an agent that does the work and drafts the real reply (ingest.hand_reply_to_agent).
+# it needs, to the owner, and the task goes to an agent that does the work and drafts the real reply (the owner's Send to agent).
 NOT_YET = ('A reply is worth sending only if it ANSWERS. When a request put to you cannot be answered substantively from what is in '
            'front of you - it needs looking into, checking, working out, deciding or doing first - never write a placeholder that '
            'promises to ("I\'m looking into it", "I\'ll get back to you", "will send that separately"): that is no answer and it is '
@@ -135,7 +135,7 @@ FEEDBACK_TOKENS = 700    # a few specific points need more room than a two-line 
 
 class NotDrafted(RuntimeError):
     """The writer could not answer from what it had - it said what it NEEDS, its own judgement. No draft exists; the reason is the
-    owner's, and a reply task is handed to an agent that does the work (ingest.hand_reply_to_agent)."""
+    owner's: the card says what it needs, and the task's agent does the work."""
 
 # the agent has already closed the thread: this reply reports an outcome, never promises one
 # the owner said what this reply says. Every caller that passes one passes THEIR words - the chase that wrote follow-ups is

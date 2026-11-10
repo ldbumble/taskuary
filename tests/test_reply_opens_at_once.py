@@ -60,39 +60,6 @@ class ReplyOpensAtOnceTests(unittest.TestCase):
         out2 = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()    # the box pressed to write it yourself
         self.assertEqual((out2['reviewId'], out2['draft'], out2['drafting']), (out['reviewId'], '', False))
 
-    def test_reply_pressed_while_the_arrivals_draft_is_written_says_drafting(self):
-        """"Sometimes it just fills out the text 10 seconds later": a Reply pressed while the arrival's own draft was still being
-        written (ingest._auto_draft) reused that review, said nothing was coming, and the draft landed later on its own. The press
-        says drafting, and the task's read marks the review `Drafting` so a page opened meanwhile waits on it too."""
-        import threading
-        from taskuary import ingest
-        rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()['reviewId']
-        ingest.DRAFTING[rid] = threading.Event()
-        try:
-            out = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True}).json()
-            self.assertEqual((out['reviewId'], out['drafting']), (rid, True))
-            rv = next(r for r in self.c.get(f'/api/tasks/{self.tid}').json()['reviews'] if r['ReviewId'] == rid)
-            self.assertTrue(rv['Drafting'])
-            self.assertTrue(next(r for r in self.c.get('/api/reviews').json()['data'] if r['ReviewId'] == rid)['Drafting'])
-        finally: ingest.DRAFTING.pop(rid, None)
-        rv = next(r for r in self.c.get(f'/api/tasks/{self.tid}').json()['reviews'] if r['ReviewId'] == rid)
-        self.assertFalse(rv['Drafting'])
-
-    def test_a_press_after_the_arrivals_writer_said_what_it_needs_reads_that(self):
-        """The arrival's writer could not answer (NotDrafted): the press that waited on it says what it needs - no second call."""
-        import threading
-        from taskuary import ingest
-        rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()['reviewId']
-        done = ingest.DRAFTING[rid] = threading.Event()
-        self.s.set_review_draft_needs(rid, 'NEEDS: the Tuesday rota from Gail Moreno')
-        done.set()
-        try:
-            with mock.patch.object(responder, 'write_draft', side_effect=AssertionError('a second model call')):
-                r = self.c.post(f'/api/reviews/{rid}/draft')
-        finally: ingest.DRAFTING.pop(rid, None)
-        self.assertEqual((r.status_code, r.json()['draft']), (200, ''))
-        self.assertIn('Tuesday rota', r.json()['needs'])
-
     def test_a_box_that_already_has_its_draft_owes_none(self):
         rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()['reviewId']
         self.s.update_review_draft(rid, 'Already written.', None)
@@ -107,29 +74,19 @@ class ReplyOpensAtOnceTests(unittest.TestCase):
         out = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': True, 'later': True, 'instruction': 'yes, Tuesday works'}).json()
         self.assertEqual((out['reviewId'], out['draft'], out['drafting']), (rid, '', True))
 
-    def test_a_press_while_the_arrivals_own_draft_is_written_waits_for_it(self):
-        """A reply task's draft is written at arrival (ingest._auto_draft); the card says "No draft yet" until it lands, and a Draft
-        with AI pressed meanwhile wrote a second one over it - two model calls for one reply (the intake walk, 2026-10-26)."""
-        import threading
-        from taskuary import ingest
+    def test_no_review_is_said_to_be_drafting_by_itself(self):
+        """Nothing writes a draft at arrival any more (the owner, 2026-11-10: the reply is the task's agent's): a review with no draft is a
+        reply owed, and neither read of it claims a draft is on its way - only the owner's own press owes one."""
         rid = self.c.post(f'/api/messages/{self.mid}/reply', json={'draft': False}).json()['reviewId']
-        go, calls = threading.Event(), []
-        def slow(store, tid, rid_, actor=None, nudge=None, **kw):
-            calls.append(actor); go.wait(10)
-            store.update_review_draft(rid_, 'Yes, I can cover Tuesday.', None)
-            return 'Yes, I can cover Tuesday.'
-        with mock.patch.object(responder, 'write_draft', side_effect=slow), mock.patch.object(server, '_refresh_chat_context', return_value={}):
-            arrival = threading.Thread(target=ingest._auto_draft, args=(self.s, self.tid, rid)); arrival.start()
-            while not calls: pass
-            threading.Timer(0.3, go.set).start()
+        rv = next(r for r in self.c.get(f'/api/tasks/{self.tid}').json()['reviews'] if r['ReviewId'] == rid)
+        self.assertFalse(rv.get('Drafting'))
+        self.assertFalse(next(r for r in self.c.get('/api/reviews').json()['data'] if r['ReviewId'] == rid).get('Drafting'))
+        calls = []
+        def fake(store, tid, rid_, actor=None, nudge=None, **kw):
+            calls.append(actor); store.update_review_draft(rid_, 'Yes, I can cover Tuesday.', None); return 'Yes, I can cover Tuesday.'
+        with mock.patch.object(responder, 'write_draft', side_effect=fake), mock.patch.object(server, '_refresh_chat_context', return_value={}):
             r = self.c.post(f'/api/reviews/{rid}/draft')
-            arrival.join(10)
-            self.assertEqual((r.status_code, r.json()['draft']), (200, 'Yes, I can cover Tuesday.'))
-            self.assertEqual(calls, ['auto-draft'], 'the press wrote a second draft')
-            self.assertNotIn(rid, ingest.DRAFTING)
-            # ...and once it has landed, a press is a real redraft again
-            self.c.post(f'/api/reviews/{rid}/draft')
-            self.assertEqual(len(calls), 2)
+        self.assertEqual((r.status_code, r.json()['draft'], len(calls)), (200, 'Yes, I can cover Tuesday.', 1))      # the press writes at once, waiting on nothing
 
 if __name__ == '__main__':
     unittest.main()

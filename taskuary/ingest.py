@@ -1144,8 +1144,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                         and prior.get('Status') not in ('context', 'skipped', 'triaging', 'error')):
                     store.attach_message(rel_mid, tid)
             # the agents actually pick work up here:
-            # - reply tasks ALWAYS enter the review queue ("needs me") with the draft written at once - for everyone,
-            #   there is no setting for it (S1, 2026-09-25)
+            # - reply tasks ALWAYS enter the review queue ("needs me") - for everyone, there is no setting for it (S1, 2026-09-25) -
+            #   and the reply is the task's agent's to write, started here as for any work (reply_to_agent)
             # - CODING and GENERAL tasks start their agent by themselves when Settings and the sender allow it
             # - anything else that is real work queues as needs-you, for you to route
             # ...an invite's answer is not an email: its row's Accept, Decline and Propose a new time draft it (calwrite.draft)
@@ -1153,7 +1153,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage',
                                                   'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"
                                                             + (f' · {unsendable}' if unsendable else '')})
-                _spawn(_auto_draft, store, tid, rid)        # always drafted (PW-043)
+                _spawn(reply_to_agent, store, tid, rid)
             elif f['kind'] == 'reply' and (job := invite_agent(store, tid, msg, mid)): starts.append((_auto_general, store, tid, job, True))
             # Almost everything a keyboard can do goes to the agent - the owner's rule (2026-08-27,
             # restated 2026-08-29): it does what it is supposed to, or says "nothing to do here" and
@@ -1536,13 +1536,14 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         # answers (thread_moved - the agent re-plans; a filed line's own verdict and reading ride with it)
         # ...by any road (the night run, 2026-11-09: "never mind, Omar sent it" on another channel was filed as "the same, nothing new" -
         # nothing told the task it was settled)
-        # ...and with no agent on it, a writer's draft is re-read by its writer when SOMEONE ELSE spoke - it may find no reply owed any more
-        # (the night run, 2026-11-09: a colleague answered "it's PO-5512" on the thread and the drafted "It's PO-5512" stayed ready to send)
+        # ...and with no agent on it yet, a draft standing when SOMEONE ELSE spoke is the agent's to look at again - it may find no reply
+        # owed any more (the night run, 2026-11-09: a colleague answered "it's PO-5512" on the thread and the drafted "It's PO-5512" stayed
+        # ready to send)
         elif own and not kept and not thread_moved(store, tid, msg, mid, v, actor) and t.get('Kind') != 'coding':
             from .wrapup import _person
             rv = store.pending_review(tid, kind='draft') or {}
             if str(rv.get('DraftText') or '').strip() and _person(store, rv.get('AnswersMid') or rv.get('MessageId')) != _person(store, mid):
-                _spawn(_auto_draft, store, tid, rv['ReviewId'])
+                _spawn(reply_to_agent, store, tid, rv['ReviewId'])
         return {'status': 'filed', 'task_id': tid, 'message_id': mid}
     mid = _land(store, msg, tid, 'routed')
     back = closed and _reopen(store, tid, msg, actor, v)
@@ -1596,8 +1597,8 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         if v and not talking:
             store.update_review_message(behind['ReviewId'], mid)
             if not msg.get('_reply_agent') and not agent_drafts(store, tid, went):
-                store.add_comment(tid, 'triage', 'agent', 'The thread moved - the drafted reply is behind it and is being rewritten from the latest context.')
-                _spawn(_auto_draft, store, tid, behind['ReviewId'])
+                store.add_comment(tid, 'triage', 'agent', 'The thread moved - the drafted reply is behind it.')
+                _spawn(reply_to_agent, store, tid, behind['ReviewId'])
     if v and v.get('checklist') and own:
         # a later message that asks for something new adds boxes; nothing moves or unticks, and the
         # change is said on the task rather than made silently (PW-076) - only a correction rewords an open one (reword_todos, above)
@@ -1609,11 +1610,11 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
     if (v and v.get('intent') == 'reply_only' and not talking and not v.get('invite')
             and not is_aside(v) and not store.pending_review(tid) and not agent_drafts(store, tid, went)):
         # a fresh question on an existing task is reply-needed there: one pending review for
-        # this message, drafted at once, whatever the channel can carry (PW-043)
+        # this message, whatever the channel can carry (PW-043) - the agent's to write (reply_to_agent)
         unsendable = send_block(store, msg.get('channel'))
         rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage',
                                 'Reason': f"needs a reply: {v.get('why') or 'question for you'}" + (f' · {unsendable}' if unsendable else '')})
-        _spawn(_auto_draft, store, tid, rid)
+        _spawn(reply_to_agent, store, tid, rid)
     # the classic round trip: the agent asked something, the hub asked the person, and
     # THIS is their answer arriving on the same thread. With answer_to_agent=auto it is
     # typed straight into the live session; 'ask' leaves the one-click offer in the
@@ -2241,7 +2242,7 @@ def not_started(store, tid, why) -> None:
 # own Send to agent does); REPLY_TAG remembers the job is still the reply, so every start - now, queued, or after a repository pick - is
 # told so (reply_job).
 REPLY_TAG = 'reply-owed'
-REPLY_JOB = ('THIS TASK IS A REPLY OWED to {who}, and it needs work before it can be answered{need}. Work out the answer - read, look '
+REPLY_JOB = ('THIS TASK IS A REPLY OWED to {who}{need}. Work out the answer - read, look '
              'up, check or think it through - then write the reply they get, in the owner\'s voice, with the substance in it: never a '
              'promise to look into it later. Nothing is sent: the reply waits for the owner\'s Send. When they asked for your thoughts '
              'on something (a draft, a plan, numbers), your result for the owner is those thoughts - what works, what to change, the '
@@ -2309,13 +2310,14 @@ def invite_agent(store, tid, msg: dict, mid) -> str:
     return INVITE_JOB.format(line=c['line'])
 
 
-def hand_reply_to_agent(store, tid, rid, why: str) -> bool:
-    """The reply writer could not answer (responder.NotDrafted: NEEDS, or only a promise): no draft, and a reply task goes to the
-    general agent to do the work and draft the real reply - by itself where it may, else the line says why it did not.
-    ...and a GENERAL task no agent has run on yet the same (Task 3.2, 2026-11-04): a colleague asked the owner for details kept in the
-    owner's own project, the writer said NEEDS, and nothing more happened. Whether the agent can find what the writer lacks is its
-    judgement, read from the NEEDS words it is handed (reply_job) - never a list here. A coding task, an agent live on it, or a general
-    conversation already open is left as it is: the owner's Continue or the agent's own turn picks it up, never a second start."""
+def reply_to_agent(store, tid, rid) -> bool:
+    """A REPLY OWED IS THE TASK'S AGENT'S TO WRITE, FROM THE MOMENT IT ARRIVES (the owner, 2026-11-10: "no more triage creates draft.
+    agent should be doing it" ... "as it arrives of course"). A tool-less writer used to draft every reply at arrival in one model call
+    and hand on only what it said it could not answer - a second voice, with nothing to look anything up in. The task goes to the general
+    agent, by itself where it may start (auto_start_ok), else the task says why it did not: it works out the answer and sets the reply up
+    as its Send card, or asks the owner the one thing it lacks. The review waits meanwhile as a reply owed, with no draft.
+    A coding task, an agent live on it, or a general conversation already open is left as it is: the line reaches that agent by its own
+    road (_carry_on, thread_moved) or the owner's Continue picks it up, never a second start. True when an agent was set going."""
     from . import general
     t = store.get_task(tid) or {}
     if t.get('Status') in ('done', 'dropped') or live_agent(store, tid): return False
@@ -2323,11 +2325,8 @@ def hand_reply_to_agent(store, tid, rid, why: str) -> bool:
     rv = store.get_review(rid) or {}
     m = store.get_message(rv['MessageId']) if rv.get('MessageId') else None
     if not m: return False
-    w = ' '.join(str(why).split())
-    need = (w[len(NEEDS_SAID):].split('. ')[0] if w.startswith(NEEDS_SAID)
-            else 'the work done first - its draft only promised to look into it later')
-    store.add_comment(tid, 'responder', 'agent', f"{DRAFTER_NEEDS}{need.rstrip('.')}.")
-    return agent_on_reply(store, tid, _from_row(m, store), m['MessageId'], {'intent': 'task', 'kind': 'general', 'why': why}, 'auto-draft', opening=True)
+    try: return agent_on_reply(store, tid, _from_row(m, store), m['MessageId'], {'intent': 'task', 'kind': 'general', 'why': rv.get('Reason') or ''}, 'triage', opening=True)
+    except Exception as e: logger.warning(f'the reply on task {tid} was not handed to an agent: {e}'); return False
 
 
 # WHAT AN AGENT COULD DO FOR THE OWNER (the owner, 2026-10-28): triage reads the main ask and may say, in one sentence to the owner, what
@@ -3305,31 +3304,6 @@ def _start_general(store, tid, brief: str = None) -> bool:
     finally: general.OPENING.discard(tid)
 
 
-# THE DRAFTS BEING WRITTEN AT ARRIVAL, by review: a Draft with AI or a Reply pressed on the new row meanwhile waits for this one
-# (server.draft_review) - the card says "No draft yet" until it lands, and the press wrote a second draft over the first, two
-# model calls for one reply (the intake walk, 2026-10-26)
-DRAFTING: dict = {}
-
-
-def _auto_draft(store, tid, rid):
-    """A reply needs an answer, not an agent: the MAIN AI writes it and it waits for approval.
-    A CLI agent named `responder` takes over only if the owner deliberately configured one.
-    A draft that could not be written says so on the review (PW-046) - the item stays reply-needed
-    and the owner can retry or write it; it never passes for an fyi or a draft that exists."""
-    from . import responder
-    done = DRAFTING.setdefault(rid, threading.Event())
-    try: responder.write_draft(store, tid, rid, actor='auto-draft')
-    except Exception as e:
-        # ...a writer that said what it NEEDS is an expected outcome, logged as one: it was the only WARNING in a whole clean run (2026-11-08)
-        (logger.info if isinstance(e, responder.NotDrafted) else logger.warning)(f'auto-draft {"handed on" if isinstance(e, responder.NotDrafted) else "failed"} for task {tid}: {e}')
-        # a writer that said what it NEEDS did not fail: no draft, work for an agent (store.set_review_draft_needs)
-        try: (store.set_review_draft_needs if isinstance(e, responder.NotDrafted) else store.set_review_draft_error)(rid, str(e))
-        except Exception as e2: logger.warning(f'could not record the draft failure on review {rid}: {e2}')
-        # ...and a reply it could not ANSWER is work: the general agent does it and drafts the real reply (the owner, 2026-10-28)
-        if isinstance(e, responder.NotDrafted):
-            try: hand_reply_to_agent(store, tid, rid, str(e))
-            except Exception as e3: logger.warning(f'the reply on task {tid} was not handed to an agent: {e3}')
-    finally: DRAFTING.pop(rid, None); done.set()
 
 
 def _fields(msg, task_id):

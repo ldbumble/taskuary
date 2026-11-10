@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { withSignature } from "../src/signature.js";
-import { boxText, draftJob, followDraft, openReply, subscribeDrafts } from "../src/replyDraft.js";
+import { boxText, draftJob, openReply, subscribeDrafts } from "../src/replyDraft.js";
 
 const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
 const fakeApi = (draft) => {
@@ -88,27 +88,18 @@ test("every Reply press opens at once, and both views of a draft show Drafting w
 // "IT STARTS WITH CIRCLING, THEN OPENS THIS? AND THEN SOMETIMES IT JUST FILLS OUT THE TEXT 10 SECONDS LATER" (the owner, 2026-11-03): a draft
 // the server is still writing (the review's `Drafting`: the arrival's own) showed a signature-only box under Draft with AI, as if nothing
 // were coming. The card follows that draft - /draft waits on the one under way - and the box reads Drafting until it lands.
-test("a draft already being written is followed, once, and the box waits for it instead of showing the signature alone", async () => {
-  const api = fakeApi("Yes, I can cover Tuesday.");
-  assert.equal(followDraft(api, { ReviewId: 77 }), null, "nothing under way: nothing asked");
-  const p = followDraft(api, { ReviewId: 77, Drafting: true });
-  assert.ok(p, "the draft under way is asked for");
-  followDraft(api, { ReviewId: 77, Drafting: true });
-  assert.deepEqual(api.calls, [["/api/reviews/77/draft", {}]], "a second read while it runs is the same job");
-  assert.equal(draftJob(77).state, "drafting");
+test("the box of a draft being written is empty, never the signature alone", () => {
   const sign = "Alex Doyle\nNorthwind";
   assert.equal(boxText({ text: null, draft: "", drafting: true, signature: sign }), "", "empty while it is written, so the box says Drafting");
   assert.equal(boxText({ text: null, draft: "", drafting: false, signature: sign }), withSignature("", sign), "nothing coming: the signature to write over");
   assert.equal(boxText({ text: null, draft: "Yes.", drafting: true, signature: sign }), withSignature("Yes.", sign), "a redraft keeps the draft there in view");
   assert.equal(boxText({ text: "my own words", draft: "", drafting: true, signature: sign }), "my own words", "the owner's edit is never wiped");
-  api.release(); await p;
-  assert.deepEqual([draftJob(77).state, draftJob(77).draft], ["done", "Yes, I can cover Tuesday."]);
 });
 
 test("Close out's reply card follows a draft under way, spins in its box, and says plainly when the draft failed", () => {
   const dec = read("ReviewDecision.jsx");
-  assert.match(dec, /followDraft\(api, r\)/);
-  assert.match(dec, /const drafting = job\?\.state === "drafting" \|\| redrafting \|\| !!r\.Drafting/);
+
+  assert.match(dec, /const drafting = job\?\.state === "drafting" \|\| redrafting;/);
   assert.match(dec, /boxText\(\{ text, draft: reviewText\(r\), drafting, signature: r\.Signature \}\)/);
   assert.match(dec, /\["needs", "failed", "empty", "kept"\]\.includes\(draftState\(r\)\.state\)/);
 });

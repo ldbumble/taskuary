@@ -1,14 +1,15 @@
-"""A question always gets its draft; sending capability decides only whether it can be sent
+"""A question always gets its reply review; sending capability decides only whether it can be sent
 (PW-042 to PW-047), and a task whose kind the brain could not name is general, not coding
 (PW-067, PW-068).
 
 `reply_only` on a channel with replies switched off used to be FILED - a question the owner
 still had to answer, wearing the "nothing to do" face, with no draft anywhere. And the draft
 itself waited on auto_draft_enabled. Now every reply-needed item opens (or reuses) its task and
-pending review and asks for a draft at once; the review carries why sending is unavailable, so
+pending review and hands the reply to the task's agent at once (ingest.reply_to_agent; the owner,
+2026-11-10: nothing of triage's drafts it); the review carries why sending is unavailable, so
 every surface can hide the send button and say so, while the server keeps refusing to send. A
-draft that could not be written says so on the review and can be retried; the item stays
-reply-needed. Uncertain kind defaults to `general`: no coding session starts on a guess.
+draft the owner pressed for that could not be written says so on the review and can be retried;
+the item stays reply-needed. Uncertain kind defaults to `general`: no coding session starts on a guess.
 """
 import unittest
 from unittest import mock
@@ -42,15 +43,16 @@ class AlwaysDraftTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Kind'], 'reply')
         rv = s.pending_review(tid)
         self.assertIsNotNone(rv); self.assertEqual(rv['MessageId'], out['message_id'])
-        self.assertIn(('_auto_draft', (s, tid, rv['ReviewId'])), spawned)
+        self.assertIn(('reply_to_agent', (s, tid, rv['ReviewId'])), spawned)
+        self.assertFalse((rv.get('DraftText') or '').strip())          # owed, the agent's to write
         reason = s.message_routes(out['message_id'])[-1]['Reason']
         self.assertIn('replies are off for teams', reason); self.assertNotIn('filed instead of drafted', reason)
 
-    def test_the_draft_is_requested_even_with_auto_draft_off(self):
+    def test_the_reply_goes_to_the_agent_even_with_auto_draft_off(self):
         s = store(replies_off=(), auto_draft='0'); spawned = []
         with mock.patch.object(ingest, '_spawn', side_effect=lambda f, *a: spawned.append(f.__name__)):
             ingest.ingest_message(s, dict(Q), llm=ASK)
-        self.assertIn('_auto_draft', spawned)
+        self.assertIn('reply_to_agent', spawned)
 
     def test_a_fresh_question_on_an_existing_task_reuses_it_with_one_review(self):
         # an email thread: chat follow-ups take the chat reader's road (chat_continues), which the
@@ -66,7 +68,7 @@ class AlwaysDraftTests(unittest.TestCase):
         self.assertEqual(again['status'], 'duplicate')
         reviews = [r for r in s.list_reviews('pending') if r['TaskId'] == tid]
         self.assertEqual(len(reviews), 1); self.assertEqual(reviews[0]['MessageId'], out['message_id'])
-        self.assertEqual(spawned.count('_auto_draft'), 1)
+        self.assertEqual(spawned.count('reply_to_agent'), 1)
         self.assertEqual(len(s.list_tasks()), 1)
 
 
@@ -76,9 +78,15 @@ class DraftFailureTests(unittest.TestCase):
         p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
         self.c = TestClient(server.app)
 
+    def asked(self):
+        "A question in, and the owner's own Draft with AI pressed on it with no AI connected: the draft fails."
+        with mock.patch.object(ingest, '_spawn'): out = ingest.ingest_message(self.s, dict(Q), llm=ASK)
+        r = self.c.post(f"/api/reviews/{self.s.pending_review(out['task_id'])['ReviewId']}/draft")
+        self.assertEqual(r.status_code, 422, r.text)
+        return out
+
     def test_a_draft_that_could_not_be_written_says_so_and_keeps_the_item_reply_needed(self):
-        with mock.patch.object(ingest, '_spawn', side_effect=lambda f, *a: f(*a)):     # run the draft inline
-            out = ingest.ingest_message(self.s, dict(Q), llm=ASK)                        # no responder brain: the draft fails
+        out = self.asked()
         rv = self.s.pending_review(out['task_id'])
         self.assertEqual(rv['Status'], 'pending'); self.assertFalse(rv.get('DraftText'))
         self.assertIn('no AI connector', rv['DraftError'])
@@ -87,8 +95,7 @@ class DraftFailureTests(unittest.TestCase):
         self.assertEqual(row['ReviewStatus'], 'pending')
 
     def test_a_successful_redraft_clears_the_failure(self):
-        with mock.patch.object(ingest, '_spawn', side_effect=lambda f, *a: f(*a)):
-            out = ingest.ingest_message(self.s, dict(Q), llm=ASK)
+        out = self.asked()
         rv = self.s.pending_review(out['task_id'])
         self.assertTrue(rv['DraftError'])
         def written(store_, tid, rid_, **k):

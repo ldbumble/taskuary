@@ -46,4 +46,4 @@ def test_after_the_owner_sends_a_chat_agent_is_done_until_typed_to_again():
     assert taskstate.state(s, s.get_task(tid), session={**live, 'waiting': False}) == 'working', 'typed to again: working'
     s._exec("UPDATE comment SET CreatedAt='2999-01-02 00:00:00' WHERE TaskId=?", (tid,))
     assert not taskstate.chat_moved_on(s, tid), 'it answered again since the send: waiting on you'
-    assert funnel.lane_word({'lane': 'report', 'kind': 'wrapup', 'chat_done': True}) == lanes.word('chat_done') == 'agent done'
+    assert funnel.lane_word({'lane': 'yours', 'kind': 'wrapup', 'chat_done': True}) == lanes.word('chat_done') == 'agent done'

@@ -35,6 +35,11 @@ def test_once_the_email_is_sent_the_chat_agent_is_done_for_now():
     s._exec("UPDATE review SET Status='approved', DeliveryState='sent' WHERE ReviewId=?", (rid,))
     assert s.waiting_on_owner(tid) is None
     assert taskstate.state(s, s.get_task(tid), session={'alive': True, 'waiting': True, 'state': 'parked'}) == 'agentdone'
+    # ...and its row stays under Tasks, where the open task was - it went to the Reports pile with the send (the agent walk, 2026-11-09)
+    from taskuary import lanes
+    row = funnel.from_agents(s, live_state=[{'taskId': tid, 'agent': 'assistant', 'sid': 'g1', 'mode': 'assistant', 'waiting': True,
+                                             'state': 'parked', 'line': '', 'tail': []}])[0]
+    assert (row['kind'], row.get('chat_done'), lanes.lane_section(row['lane'])) == ('wrapup', True, 'task')
 
 
 def test_a_finished_run_with_a_post_waiting_is_that_press_not_agent_done():

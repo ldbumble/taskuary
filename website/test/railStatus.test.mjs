@@ -148,7 +148,7 @@ test("a chat task's waiting agent and its ready reply both say agent waiting on 
 
 // ONE CYCLE (the owner, 2026-11-06): working -> waiting on you -> after a Send "agent done" -> typed to again, working
 test("a chat agent the owner answered is agent done on the rail and the chip, never waiting on you; typed to again it works", () => {
-  const row = railStatus({ lane: "report", kind: "wrapup", chat_done: true, tid: 5 });
+  const row = railStatus({ lane: "yours", kind: "wrapup", chat_done: true, tid: 5 });
   assert.equal(row.word, "agent done"); assert.equal(row.badge, ""); assert.equal(row.spins, false);
   const parked = { alive: true, waiting: true };
   assert.equal(taskStatus({ chat: true, live: parked, state: "agentdone" }).word, "agent done");

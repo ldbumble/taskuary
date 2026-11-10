@@ -85,11 +85,14 @@ class IdleOut(unittest.TestCase):
 
     def test_an_idled_task_reads_as_the_task_never_stopped_or_saved(self):
         "The stress run, 2026-11-05: the page said 'agent stopped' and the rail 'the assistant's conversation ... is saved' over an idled agent."
-        from taskuary import funnel, taskstate
+        from taskuary import funnel, lanes, taskstate
         general.idle_sweep(self.later())
         item = {'tid': self.tid, 'lane': 'yours', 'kind': 'task'}
         # ...and as it read live (the owner, 2026-11-07): a turn that asked nothing is done for now, never "waiting on you"
-        self.assertEqual({k: funnel.paused_conversation(self.s, item).get(k) for k in ('lane', 'chat_done')}, {'lane': 'report', 'chat_done': True})
+        row = funnel.paused_conversation(self.s, item)
+        self.assertEqual((row['kind'], row.get('chat_done'), funnel.lane_word(row)), ('wrapup', True, 'agent done'))
+        # ...under Tasks, where the open task was: it jumped to the Reports pile when its agent was done (the agent walk, 2026-11-09)
+        self.assertEqual(lanes.lane_section(row['lane']), 'task')
         self.assertEqual(taskstate.state(self.s, self.s.get_task(self.tid)), 'agentdone')
 
     def test_the_task_reads_the_same_live_or_idled_out(self):
@@ -107,6 +110,8 @@ class IdleOut(unittest.TestCase):
         self.assertEqual(taskstate.open_question(s, tid)['text'], 'Which site goes first?')
         row = funnel.paused_conversation(s, {'tid': tid, 'lane': 'yours', 'kind': 'task'})
         self.assertEqual((row['lane'], row['tail']), ('blocked', ['Which site goes first?']))      # ...on the rail...
+        from taskuary import stages
+        self.assertEqual(stages.of_task(s, s.get_task(tid)), 'agent_result')       # ...its question to answer, no "agent working" with nothing running
         with mock.patch.object(server, 'store', s):
             asked = server._assistant_payload(tid)['asking']
         self.assertEqual((asked['text'], asked['resting']), ('Which site goes first?', True))     # ...and on the page, answered by typing

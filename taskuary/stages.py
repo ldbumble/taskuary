@@ -27,9 +27,10 @@ def parts(key: str) -> dict:
     return STAGE.get(key) or {}
 
 
-def facts(store, t: dict, state: str | None = None, msgs=None) -> dict:
+def facts(store, t: dict, state: str | None = None, msgs=None, session=None) -> dict:
     """The rules' facts for a task, from its rows. `state` is its taskstate key (blocked, working, approve, theirs, closed...),
-    read once by the caller - the detail already has it - else read here; `msgs` its messages, when the caller read them too."""
+    read once by the caller - the detail already has it - else read here; `msgs` its messages, when the caller read them too;
+    `session` its live session, when it has one."""
     from . import kinds, taskstate
     tid = int(t['TaskId'])
     st = state or taskstate.state(store, t)
@@ -42,9 +43,13 @@ def facts(store, t: dict, state: str | None = None, msgs=None) -> dict:
     # ...closed by its own agent (taskstate.closed_why says who and why): it opens on the Agent, not Close out (trust audit S2, 2026-10-28)
     try: by_agent = closed and bool(taskstate.closed_why(store, t))
     except Exception: by_agent = False
-    return {'live': st in ('working', 'blocked'), 'waiting': st == 'theirs', 'agent_closed': by_agent, 'closed': closed,
+    # ...`blocked` is live only with a session open at its prompt. A chat agent that idled out over its question is `blocked` too
+    # (taskstate._chat_resting: the question still waits on you) with nothing running - and the Assistant was told "agent working",
+    # its one move Stop, over an agent that was not there (the agent walk, 2026-11-09). At rest it is the agent's result to answer
+    asks = st == 'blocked'; open_ = bool(session and session.get('alive', True))
+    return {'live': st == 'working' or (asks and open_), 'waiting': st == 'theirs', 'agent_closed': by_agent, 'closed': closed,
             'drafted': st == 'approve' or (not closed and bool(store.sent_reply(task_id=tid))),
-            'result': st in ('saved', 'stopped', 'agentdone'),
+            'result': st in ('saved', 'stopped', 'agentdone') or (asks and not open_),
             'owed': sender and str(t.get('Kind') or '') not in kinds.AGENT,
             'list': checklist or bool(str(t.get('DoneWhen') or '').strip())}
 
@@ -62,5 +67,5 @@ def state_of(store, t: dict, session=None) -> str:
 
 def of_task(store, t: dict, state: str | None = None, session=None, msgs=None) -> str | None:
     """The stage of task `t`, or None when it cannot be read. `state`: its taskstate key when the caller has it (the task detail)."""
-    try: return of(facts(store, t, state or state_of(store, t, session), msgs))
+    try: return of(facts(store, t, state or state_of(store, t, session), msgs, session))
     except Exception: return None

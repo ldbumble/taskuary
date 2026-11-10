@@ -901,12 +901,15 @@ def agent_found(store, tid) -> str:
 
 
 def chat_done(store, task: dict, when=None) -> dict:
-    "A chat agent done for now - its turn asked nothing - as the task's wrap-up row: after a Send, that the reply went (taskstate.chat_moved_on)."
+    """A chat agent done for now - its turn asked nothing - as the task's wrap-up row: after a Send, that the reply went (taskstate.chat_moved_on).
+    In the task's own lane: the task is still open and still the owner's, so its row stays under Tasks where it was (rows never move
+    sections). It was built on `report`, a lane from before the rail had sections - and an open task jumped to the Reports pile the
+    moment its reply went, then left the rail at the next Next as a report that had been read (the agent walk, 2026-11-09)."""
     from . import taskstate
     tid = task['TaskId']
     why = ('your reply went out - the agent is done for now, and the task is still open' if taskstate.chat_moved_on(store, tid)
            else 'the agent is done for now - type to carry on, and the task is still open')
-    return _item(f"wrap:{tid}", 'wrapup', 'report', task.get('Title') or f'task {tid}', who='you', when=when, tid=tid,
+    return _item(f"wrap:{tid}", 'wrapup', 'yours', task.get('Title') or f'task {tid}', who='you', when=when, tid=tid,
                  priority=task.get('Priority'), chat_done=True, why=why)
 
 

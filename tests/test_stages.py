@@ -68,7 +68,9 @@ class ATaskReadFromItsRows(unittest.TestCase):
     def test_a_live_agent_and_one_that_stopped(self):
         s = MemoryStore(); t = task(s, Kind='coding')
         self.assertEqual(stages.of(stages.facts(s, s.get_task(t), 'working')), 'agent_working')
-        self.assertEqual(stages.of(stages.facts(s, s.get_task(t), 'blocked')), 'agent_working')
+        self.assertEqual(stages.of(stages.facts(s, s.get_task(t), 'blocked', session={'alive': True, 'waiting': True})), 'agent_working')
+        # ...and a question it left with nothing running (a chat agent that idled out) is its result to answer, never "agent working"
+        self.assertEqual(stages.of(stages.facts(s, s.get_task(t), 'blocked')), 'agent_result')
         s.tag_task(t, terminal.SAVED, True, 'owner')
         self.assertEqual(stages.of_task(s, {**s.get_task(t), 'Assignee': 'agent:coding'}), 'agent_result')
 

@@ -592,6 +592,8 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if 
            'send_kept_open': lambda d: f"asked to close it with that send - it stays open: {'; '.join(d.get('kept') or []) or 'something on it still waits'}",
            # ...Not now on the landing card (landing.hold): nothing went, and the agent is not to bring it up again (landing.NOT_NOW)
            'land_held': lambda d: f"pressed Not now on the {d.get('what') or 'push'} - nothing went out, and it is not to be asked for again unprompted",
+           # ...and the press that LANDED it: with no phrase of its own the line read "You landed." (agent walk 2, 2026-11-10)
+           'landed': lambda d: f"pressed {_land_how(d)} on the agent's work - it went through" + (f" ({d['sha'][:7]})" if d.get('sha') else ''),
            # ...one of the task's emails let go (slots.drop), by who it was to - drafted or not (the agent walk, 2026-11-09: told "turned down
            # rv3", or nothing, the agent went on saying the dropped one "waits for Send")
            'slot_dropped': lambda d: f"dropped the {'email' if d.get('kind', 'email') == 'email' else d.get('kind') + ' message'} to {d.get('to') or 'them'} - it will not be sent",
@@ -603,6 +605,9 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if 
            'desktop_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_refused': lambda d: 'approved it - the page did not take it',
            # ...and a step the agent handed them ON ITS PAGE - a captcha, the last button of a checkout: the page moved on, or they pressed Done
            'browser_act_pressed': lambda d: _on_page(d)}
+def _land_how(d) -> str:
+    from .landing import HOW
+    return HOW.get(d.get('how'), 'the button')
 def _on_page(d) -> str:
     site, btn = d.get('site') or 'the page', d.get('btn')
     if d.get('by') == 'done': return f"pressed Done: {f'{btn} on {site} is pressed' if btn else f'the step on {site} is finished'}"

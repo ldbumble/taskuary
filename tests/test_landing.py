@@ -213,6 +213,10 @@ class LandingTests(unittest.TestCase):
         self.assertEqual([a['how'] for a in s['answers']], ['push'], 'no deploy branch known yet: Push alone')
         self.assertEqual((s['push']['tip'], s['push']['ahead']), (self.sha('master'), 1))
         self.assertIn('Push it?', s['line'])
+        # ...and the press is a line of the chat in the owner's voice, never the audit row's bare name ("You landed.")
+        from taskuary import general
+        self.dev(); landing.land(self.s, self.tid, 'push')
+        self.assertIn("pressed Push on the agent's work - it went through", general.presses(self.s, self.tid)[-1][2])
 
     def test_two_commits_in_one_second_push_up_to_the_newer(self):
         self.on_master_with_origin()

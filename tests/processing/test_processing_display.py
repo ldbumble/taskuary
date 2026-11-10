@@ -57,7 +57,7 @@ def test_pure_revisions_are_strict_canonical_and_event_delivery_is_transient():
     assert display_revision(base) != display_revision({**base, "current": None})
 
 
-def test_full_body_beyond_preview_changes_strong_revisions_but_not_legacy_selection_revision():
+def test_full_body_beyond_preview_changes_strong_revisions():
     prefix = "x" * 5000
     store, _tid, mid, _rid = seeded(body=prefix + " first ending")
     before, old_item = one(store)
@@ -69,7 +69,6 @@ def test_full_body_beyond_preview_changes_strong_revisions_but_not_legacy_select
 
     assert (new_item["key"], new_item["lane"], new_item["preview"]) == (
         old_item["key"], old_item["lane"], old_item["preview"])
-    assert after["rev"] == before["rev"]
     assert new_item["presentation_revision"] != old_item["presentation_revision"]
     assert after["display_revision"] != before["display_revision"]
 
@@ -77,7 +76,7 @@ def test_full_body_beyond_preview_changes_strong_revisions_but_not_legacy_select
 def test_draft_edit_clear_and_delete_change_same_review_presentation():
     store, _tid, _mid, rid = seeded(review=True)
     before, initial = one(store)
-    assert initial["key"] == f"review:{rid}"
+    assert f"review:{rid}" in initial["aliases"]
 
     store.save_review_draft(rid, "A materially revised reply")
     edited, edited_item = one(store)
@@ -86,7 +85,6 @@ def test_draft_edit_clear_and_delete_change_same_review_presentation():
     store._exec("DELETE FROM review WHERE ReviewId=?", (rid,))
     deleted = funnel.present(store, {"items": [], "current": edited_item})
 
-    assert edited["rev"] == before["rev"]
     assert edited_item["key"] == initial["key"]
     assert edited_item["presentation_revision"] != initial["presentation_revision"]
     assert cleared["current"]["presentation_revision"] != edited_item["presentation_revision"]
@@ -107,7 +105,7 @@ def test_taskless_review_tracks_new_conversation_context_and_reply_permission():
     })
     funnel.invalidate()
     _picture, item = one(store)
-    assert item["key"] == f"review:{rid}" and item.get("tid") is None
+    assert f"review:{rid}" in item["aliases"] and item.get("tid") is None
     static = {"items": [], "current": item}
 
     store.add_message({
@@ -152,10 +150,8 @@ def test_exact_group_members_and_attachment_metadata_change_without_row_shape_ch
 
     assert (initial["key"], initial["lane"], initial.get("more"), initial["preview"]) == (
         replaced_item["key"], replaced_item["lane"], replaced_item.get("more"), replaced_item["preview"])
-    assert replaced["rev"] == before["rev"]
     assert replaced_item["presentation_revision"] != initial["presentation_revision"]
     assert attached_item["presentation_revision"] != replaced_item["presentation_revision"]
-    assert attached["rev"] == replaced["rev"]
 
 
 def test_fyi_batch_revision_binds_each_childs_full_backing():
@@ -194,7 +190,6 @@ def test_task_priority_status_and_native_question_content_are_revision_bound():
     store.update_task(tid, {"Priority": "high", "Status": "waiting"}, "test")
     changed, task_item = one(store)
     assert (task_item["key"], task_item["lane"]) == (initial["key"], initial["lane"])
-    assert changed["rev"] == before["rev"]
     assert task_item["presentation_revision"] != initial["presentation_revision"]
 
     session = {"taskId": tid, "waiting": True, "phase": "parked", "agent": "codex",
@@ -207,7 +202,6 @@ def test_task_priority_status_and_native_question_content_are_revision_bound():
         waiting_two, agent_two = one(store)
     assert (agent_one["key"], agent_one["lane"], agent_one["asking"]) == (
         agent_two["key"], agent_two["lane"], agent_two["asking"])
-    assert waiting_one["rev"] == waiting_two["rev"]
     assert agent_one["presentation_revision"] != agent_two["presentation_revision"]
     assert waiting_one["display_revision"] != waiting_two["display_revision"]
 

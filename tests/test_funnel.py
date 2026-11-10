@@ -43,9 +43,9 @@ class CacheTests(unittest.TestCase):
         s = store()
         started, release, calls, answers = threading.Event(), threading.Event(), [], []
 
-        def slow_build(_store):
+        def slow_build(_store, **_kw):
             calls.append(1); started.set(); release.wait(2)
-            return {'rev': 'fresh', 'items': []}
+            return {'rev': 'fresh', 'items': [], 'lanes': [], 'counts': {}}
 
         def read(): answers.append(funnel.pile(s, force=True)['rev'])
 
@@ -64,9 +64,9 @@ class CacheTests(unittest.TestCase):
         s, top = store(), [1]
         started, release, calls, answers = threading.Event(), threading.Event(), [], []
 
-        def slow_build(_store):
+        def slow_build(_store, **_kw):
             calls.append(1); started.set(); release.wait(2)
-            return {'rev': f'build {len(calls)}', 'items': []}
+            return {'rev': f'build {len(calls)}', 'items': [], 'lanes': [], 'counts': {}}
 
         def read(**kw): answers.append(funnel.pile(s, observed=[], **kw)['rev'])
 
@@ -85,10 +85,10 @@ class CacheTests(unittest.TestCase):
         s = store()
         started, release, calls, answers, top = threading.Event(), threading.Event(), [], [], [1]
 
-        def slow_build(_store):
+        def slow_build(_store, **_kw):
             n = len(calls); calls.append(1)
             if not n: started.set(); release.wait(2)
-            return {'rev': f'build{n}', 'items': []}
+            return {'rev': f'build{n}', 'items': [], 'lanes': [], 'counts': {}}
 
         def read(): answers.append(funnel.pile(s, force=True, observed=[])['rev'])
 
@@ -192,21 +192,7 @@ class PausedConversationTests(unittest.TestCase):
 class FollowUpTests(unittest.TestCase):
     """What a reply on an open task IS is triage's verdict, not the task's kind and not a keyword here
     (the owner, 2026-09-03: "Thank you is a close should not be hard coded"). ingest files an fyi
-    follow-up onto the task; the pipe then reads the row's own category, and what is left for the
-    owner is the wrap-up: your reply went out, the task is still open."""
-
-    def test_an_fyi_follow_up_on_an_open_task_is_not_asked_you(self):
-        s = store()
-        t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        mail(s, 'PTO', who='Erin', email='erin@vendor.example', body='Can you import pto for Aug 9 thru Aug 22?', hours=8, tid=t, conv='c:pto')
-        s.add_message({'TaskId': t, 'ExternalId': 'x:own', 'ConversationId': 'c:pto', 'Channel': 'email', 'Subject': 'RE: PTO', 'FromName': 'You',
-                       'FromEmail': 'owner@ours.com', 'SentAt': ago(3), 'BodyText': 'Done. All PTO batches posted.', 'Status': 'context'})
-        m = mail(s, 'RE: PTO', who='Erin', email='erin@vendor.example', body='Thank you!', hours=1, tid=t, conv='c:pto', status='filed')
-        s.add_route(m, t, 'attach', 1.0, 'triage: fyi - only says thanks · kept on TQ-0322 for the chain', [], 'triage')
-        items = funnel.build(s)['items']
-        self.assertEqual([(i['kind'], i['lane'], i['key']) for i in items], [('wrapup', 'report', f'wrap:{t}')])
-        self.assertIn('the reply went out', items[0]['why']); self.assertIn('still open', items[0]['why'])
-        self.assertIn('All PTO batches posted', items[0]['sent'])          # your own reply is what went out
+    follow-up onto the task; the pipe then reads the row's own category."""
 
     def test_a_follow_up_triage_kept_as_work_still_asks_you(self):
         s = store()
@@ -215,15 +201,6 @@ class FollowUpTests(unittest.TestCase):
                        'FromEmail': 'owner@ours.com', 'SentAt': ago(3), 'BodyText': 'Done.', 'Status': 'context'})
         mail(s, 'RE: PTO', who='Erin', email='erin@vendor.example', body='Thanks! Can you also do the M44 period?', hours=1, tid=t, conv='c:pto2')
         self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('todo', 'yours')])
-
-    def test_the_wrap_up_counts_a_reply_typed_in_your_own_mail_client(self):
-        s = store()
-        t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        s.add_message({'TaskId': t, 'ExternalId': 'x:own4', 'ConversationId': 'c:exp', 'Channel': 'email', 'Subject': 'RE: Export', 'FromName': 'You',
-                       'FromEmail': 'owner@ours.com', 'SentAt': ago(2), 'BodyText': 'Fixed and deployed.', 'Status': 'context'})
-        wrapped = funnel.from_wrapped(s, datetime.now(), set())
-        self.assertEqual([(w['kind'], w['tid']) for w in wrapped], [('wrapup', t)])
-        self.assertIn('Fixed and deployed', wrapped[0]['sent'])
 
 
 class FlapTests(unittest.TestCase):
@@ -314,22 +291,6 @@ class ChatHasNoSubjectTests(unittest.TestCase):
 
 
 class OneLinePerThreadTests(unittest.TestCase):
-    def test_the_row_says_how_much_of_the_thread_it_stands_for(self):
-        """Three lines in one WhatsApp room are one row - and the Timeline showing three of them read
-        as the pipe losing two (the owner, 2026-09-03: "TImeline has 2 whatsapp while on the funnel
-        it's only 1?")."""
-        s = store()
-        for n in range(3):
-            m = mail(s, '', who='Tess', email='', body=f'line {n}', hours=0, channel='whatsapp', conv='wa:tess', status='filed')
-            s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
-        items = funnel.build(s)['items']
-        self.assertEqual([(i['who'], i.get('more')) for i in items], [('Tess', 2)])
-        # ...and a single line says nothing extra
-        s2 = store()
-        m = mail(s2, '', who='Tess', email='', body='just one', hours=0, channel='whatsapp', conv='wa:one', status='filed')
-        s2.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
-        self.assertIsNone(funnel.build(s2)['items'][0].get('more'))
-
     def test_a_triaged_task_is_one_row_and_does_not_swallow_other_tasks_in_the_same_chat(self):
         """The task, not a long-lived WhatsApp room, is the grouping boundary after triage."""
         s = store()
@@ -439,63 +400,6 @@ class InHandTests(unittest.TestCase):
             items = [i for i in funnel.build(s)['items'] if i['kind'] == 'idea']
         self.assertEqual([(i['tid'], i['action'].get('tid')) for i in items], [(None, None)])
 
-    def test_a_line_about_a_task_an_agent_has_rides_on_the_shelf(self):
-        s = store()
-        t = s.create_task({'Title': 'July 2026 financials', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        self._line_about(s, t, f"TQ-{t:04d} July financials hasn't moved in three hours")
-        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            items = funnel.build(s)['items']
-        self.assertEqual([(i['lane'], i['key'], i['ref']) for i in items], [('working', f'agent:{t}', f'TQ-{t:04d}')])
-        self.assertIn('nothing for you until it stops or asks', items[0]['why'])
-
-    def test_the_same_line_is_an_fyi_once_the_agent_is_no_longer_on_it(self):
-        s = store()
-        t = s.create_task({'Title': 'July 2026 financials', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        self._line_about(s, t, f"TQ-{t:04d} July financials hasn't moved in three hours")
-        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            items = funnel.build(s)['items']
-        # the assistant's own line about a task nobody is on is an fyi until TRIAGE calls it work
-        # (the owner, 2026-09-07: "assistant ideas and slipped stuff should be fyi unless triage
-        # turns it into task") - it used to open in a lane of its own inside the actionable band
-        self.assertEqual([(i['lane'], i['kind'], i['ref']) for i in items], [('fyi', 'idea', f'TQ-{t:04d}')])
-
-    def test_no_wrap_up_is_asked_for_while_an_agent_still_has_the_task(self):
-        s = store()
-        t, m, r = None, None, None
-        t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        s.add_message({'TaskId': t, 'ExternalId': 'x:own', 'ConversationId': 'c:pto', 'Channel': 'email', 'Subject': 'RE: PTO',
-                       'FromName': 'You', 'FromEmail': 'owner@ours.com', 'SentAt': ago(2), 'BodyText': 'Done.', 'Status': 'context'})
-        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            self.assertEqual(funnel.build(s)['items'], [])
-        s.update_task(t, {'Status': 'waiting'}, 'o')
-        funnel.invalidate()
-        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('wrapup', 'report')])
-
-
-class MutedTests(unittest.TestCase):
-    def test_a_standing_rule_keeps_a_kind_of_mail_out_of_the_pipe_but_not_a_real_ask(self):
-        s = store()
-        s.set_setting('team_domains', 'ours.com', 't')
-        for n in range(2):
-            m = mail(s, f'Northwind Financial Report - .0{n} P&L', who='Paula Vance', email='pvance@vendor.example',
-                     body='generated by Intacct', hours=n + 1, status='filed')
-            s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
-        keep = mail(s, 'RE: Payworth', who='Omar', email='omar@vendor.example', body='please respond', hours=1, status='filed')
-        s.add_route(keep, None, 'file', None, 'triage: fyi', [], 'triage')
-        self.assertEqual(len(funnel.build(s)['items']), 3)
-        # a mute an older version wrote - nothing writes one now (2026-10-27); the funnel still applies it
-        s.set_setting(funnel.MUTES_KEY, json.dumps([{'sender': 'pvance@vendor.example', 'words': ['northwind', 'financials'], 'why': 'part of the financials process'}]), 'o'); funnel.invalidate()
-        p = funnel.build(s)
-        self.assertEqual([i['who'] for i in p['items']], ['Omar'])
-        self.assertEqual((p['muted'], p['rules']), (2, ['part of the financials process']))
-        # a rule reaches only the lanes with nothing to do
-        t = s.create_task({'Title': 'Re-run .02', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        mail(s, 'Northwind Financial Report - can you re-run .02?', who='Paula Vance', email='pvance@vendor.example',
-             body='please re-run it', hours=0, tid=t)
-        funnel.invalidate()
-        self.assertIn('yours', [i['lane'] for i in funnel.build(s)['items'] if i.get('tid') == t])
-
 
 class LanesTests(unittest.TestCase):
     def test_a_send_the_mail_server_refused_says_not_sent_and_why(self):
@@ -510,24 +414,6 @@ class LanesTests(unittest.TestCase):
         s._exec("UPDATE review SET DeliveryState='failed' WHERE ReviewId=?", (rid,)); funnel.invalidate()
         it = funnel.build(s)['items'][0]
         self.assertEqual((it['lane'], it['not_sent'], it['why']), ('approve', True, 'the mail server refused erin@northwind.example (5.1.1 no such user)'))
-
-    def test_a_drafted_reply_outranks_a_report_and_the_oldest_in_a_lane_comes_first(self):
-        s = store()
-        t1 = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        m1 = mail(s, 'Export still broken', hours=5, tid=t1)
-        s.add_review({'TaskId': t1, 'MessageId': m1, 'Kind': 'reply', 'DraftText': 'Attached.', 'Status': 'pending'})
-        t2 = s.create_task({'Title': 'Invoice question', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        m2 = mail(s, 'Invoice question', who='Sam', email='sam@vendor.com', hours=30, tid=t2)
-        s.add_review({'TaskId': t2, 'MessageId': m2, 'Kind': 'reply', 'DraftText': '', 'Status': 'pending'})
-        s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'Process Error Check', 'Subject': 'Process Error Check FAILED',
-                       'FromName': 'Process Error Check', 'SentAt': ago(1), 'BodyText': 'Could not open db', 'Status': 'feed'})
-        keys = [(i['lane'], i['kind'], i['title']) for i in funnel.build(s)['items']]
-        # the failed run wears the 'broken' lane now (promoted from 'report', which sat behind
-        # everything) - but still UNDER both drafted replies, which is what this test is about
-        self.assertEqual(keys, [('approve', 'review', 'Invoice question'), ('approve', 'review', 'Export still broken'),
-                                ('broken', 'report', 'Process Error Check FAILED')])          # a timeline: 30h old before 5h old
-        report = funnel.build(s)['items'][-1]
-        self.assertTrue(report['bad']); self.assertIn('failed', report['why'])
 
     def test_a_failed_check_is_promoted_and_does_not_expire_while_it_is_still_failing(self):
         """"Could not open a connection to SQL Server" needs no classifier - it says what it is. It
@@ -544,72 +430,12 @@ class LanesTests(unittest.TestCase):
         by = {i['title']: i for i in items}
         self.assertEqual(by['Process Error Check FAILED']['lane'], 'broken')
         self.assertEqual(by['Headcount - 5 rows']['lane'], 'report')            # a run that worked is still just news
-        # 30 hours old and still in the pipe, while the ordinary report beside it obeys the window
+        # 30 hours old and still in the pipe
         # a check that could not run is the owner's task; the run that worked is a result below it
         self.assertLess(funnel._band(by['Process Error Check FAILED']), funnel._band(by['Headcount - 5 rows']))
         # a drafted reply and a failed check are both the owner's task now - one level, oldest first
         self.assertEqual(funnel._band({'lane': 'approve'}), funnel._band(by['Process Error Check FAILED']))
-        self.assertFalse(funnel._aged_out(by['Process Error Check FAILED'], datetime.now(), 12))
         self.assertNotIn('broken', funnel.MUTED_LANES)   # a rule that quiets a report cannot quiet it FAILING
-
-    def test_an_assistant_line_waits_a_day_to_be_seen_not_twelve_hours(self):
-        """A mail going quiet after twelve hours is fine. The assistant's standing note that
-        something is LOOSE is the opposite - still true tomorrow - and expiring it is how "TQ-0329
-        hasn't moved, Paula asked for that file today" left the pipe unseen."""
-        now = datetime.now()
-        idea = {'kind': 'idea', 'lane': 'forgotten', 'when': (now - timedelta(hours=18)).strftime('%Y-%m-%d %H:%M:%S')}
-        mail = {'kind': 'fyi', 'lane': 'fyi', 'when': (now - timedelta(hours=18)).strftime('%Y-%m-%d %H:%M:%S')}
-        self.assertFalse(funnel._aged_out(idea, now, 12))    # the same age, a day's grace
-        self.assertTrue(funnel._aged_out(mail, now, 12))     # ...and the mail beside it goes
-        old = {'kind': 'idea', 'lane': 'forgotten', 'when': (now - timedelta(hours=30)).strftime('%Y-%m-%d %H:%M:%S')}
-        self.assertTrue(funnel._aged_out(old, now, 12))      # a day, not for ever - 64 open ideas is a flood
-        # a window the owner widened himself is never narrowed by this
-        wide = {'kind': 'idea', 'lane': 'forgotten', 'when': (now - timedelta(hours=40)).strftime('%Y-%m-%d %H:%M:%S')}
-        self.assertFalse(funnel._aged_out(wide, now, 48))
-
-    def test_a_working_agents_task_is_walked_in_its_place_and_is_not_on_you(self):
-        s = store()
-        t1 = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        mail(s, 'Export still broken', hours=1, tid=t1)
-        t2 = s.create_task({'Title': 'Rename the flag', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        mail(s, 'Rename the flag please', hours=3, tid=t2)
-        live = [{'taskId': t1, 'agent': 'claude', 'label': 'claude', 'started': ago(hours=1), 'idle': 120, 'waiting': True, 'state': 'asking',
-                 'tail': ['Edited export.py', 'Should I also update the tests? (y/n)']},
-                {'taskId': t2, 'agent': 'codex', 'label': 'codex', 'started': ago(minutes=5), 'idle': 2, 'waiting': False, 'tail': ['working…']}]
-        with mock.patch('taskuary.terminal.live_sessions', return_value=live):
-            items = funnel.build(s)['items']
-            # a task an agent is working is a task under Tasks, walked in the rail's order - oldest first (the owner, 2026-10-21)
-            self.assertEqual(railwalk.top(s)['tid'], t2)
-        self.assertEqual([(i['lane'], i['kind'], i['tid']) for i in items], [('working', 'todo', t2), ('blocked', 'agent', t1)])
-        self.assertEqual([funnel.level_of(i) for i in items], ['task', 'task'])
-        self.assertFalse(funnel.on_you(items[0])); self.assertTrue(funnel.on_you(items[1]))   # ...but only the asking one is on you
-        items = items[::-1]
-        self.assertTrue(items[0]['asking']); self.assertIn('asked you something', items[0]['why']); self.assertIn('Agent has it', items[1]['why'])
-        self.assertEqual((items[0].get('sid'), items[0]['mode']), (None, 'terminal'))           # the card embeds the screen when a sid is known
-        # the mail that started t1 is not a second line: answering the agent answers the mail
-        self.assertEqual(items[0]['mid'], s.list_messages(t1)[0]['MessageId'])
-
-    def test_a_waiting_agent_stays_in_the_pipe_after_it_was_shown_and_is_walked_in_its_place(self):
-        """Shown is not acted on: an agent waiting on you, shown once, stays in its place and the walk's top is still it - no
-        cooldown, no three hours (2026-09-25, replaced by rule 6 on 2026-10-30)."""
-        s = store()
-        t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        mail(s, 'PTO', hours=3, tid=t)
-        live = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(hours=1), 'idle': 200, 'waiting': True, 'tail': ['import now? (y/n)']}]
-        with mock.patch('taskuary.terminal.live_sessions', return_value=live):
-            self.assertEqual(railwalk.top(s)['key'], f'agent:{t}')
-            funnel.settle(s, f'agent:{t}', 'surfaced')
-            items = funnel.build(s)['items']
-            self.assertEqual([i['key'] for i in items], [f'agent:{t}'])                         # still in the pipe
-            self.assertEqual(railwalk.top(s)['key'], f'agent:{t}')                           # ...and still the walk's top
-        # ...and when the agent picks the work back up, the shown item rides up to the shelf instead of vanishing
-        busy = [dict(live[0], idle=2, waiting=False)]
-        with mock.patch('taskuary.terminal.live_sessions', return_value=busy):
-            items = funnel.build(s)['items']
-            self.assertEqual([i['lane'] for i in items], ['working'])              # a task an agent is working is walked like any task
-        with mock.patch('taskuary.terminal.live_sessions', return_value=live):
-            funnel.settle(s, f'agent:{t}', 'done')
-            self.assertEqual(funnel.build(s)['items'], [])
 
     def test_the_watcher_turns_agent_transitions_into_lines_in_the_chat(self):
         from taskuary import concierge, general
@@ -734,79 +560,12 @@ class LanesTests(unittest.TestCase):
         self.assertEqual(it['kind'], 'review'); self.assertIn('fixed the escaping', it['summary'])
         self.assertEqual(railwalk.top(s)['key'], it['key'])
 
-    def test_something_important_waiting_is_an_alert_and_the_assistant_is_told(self):
-        from taskuary import concierge
-        s = store()
-        s.set_setting('team_domains', 'ours.com', 't')
-        m = mail(s, 'Team note', who='Lee', email='lee@ours.com', body='FYI.', hours=1, status='filed', conv='n1')
-        s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
-        t = s.create_task({'Title': 'T&E portal', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        m2 = mail(s, 'RE: T&E Portal', who='Craig Palmer', email='craig@northwind.example', hours=0, tid=t)
-        s.add_review({'TaskId': t, 'MessageId': m2, 'Kind': 'reply', 'DraftText': 'Yes, go ahead.', 'Status': 'pending'})
-        p = funnel.build(s)
-        al = funnel.alerts(s, p['items'])
-        self.assertEqual([(a['kind'], a['lane'], a['text']) for a in al], [('review', 'approve', "Craig Palmer's reply is waiting for your yes")])
-        fyi = next(i for i in p['items'] if i['lane'] == 'fyi')
-        self.assertEqual([i['kind'] for i in funnel.more_urgent(p['items'], fyi['key'])], ['review'])
-        self.assertEqual(funnel.more_urgent(p['items'], f'review:{s.list_reviews("pending")[0]["ReviewId"]}'), [])
-        line = concierge._urgent_line(p['items'], fyi)
-        self.assertIn('MORE URGENT WAITING', line); self.assertIn('Craig Palmer - RE: T&E Portal (ready to send)', line)
-        funnel.settle(s, al[0]['key'], 'ack')
-        self.assertEqual(funnel.alerts(s), [])                            # put down, it is no longer news (a walk marks nothing, 2026-10-30)
-
-    def test_a_task_whose_reply_went_out_and_agent_finished_asks_to_be_closed(self):
-        s = store()
-        t = s.create_task({'Title': 'T&e portal', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        m = mail(s, 'RE: T&E Portal', who='Craig', email='craig@northwind.example', hours=3, tid=t, conv='te')
-        s.add_comment(t, 'coding', 'agent', 'AGENT REPORT' + chr(10) + 'Summary: Bulk Approve removed and deployed.')
-        r = s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Done - it is off now.', 'Status': 'pending'})
-        self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['review'])
-        s.decide_review(r, 'approved', 'Done - it is off now.', 'owner')
-        items = funnel.build(s)['items']
-        self.assertEqual([(i['kind'], i['lane'], i['tid']) for i in items], [('wrapup', 'report', t)])
-        self.assertIn('Bulk Approve removed', items[0]['summary']); self.assertEqual(items[0]['sent'], 'Done - it is off now.')
-        s.update_task(t, {'Status': 'done'}, 'o')
-        self.assertEqual(funnel.build(s)['items'], [])                                    # closed means out of the funnel
-
     def test_a_closed_agent_job_never_reenters_the_funnel(self):
         s = store()
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'done'}, 'o')
         s.add_comment(t, 'claude', 'agent', 'AGENT REPORT\nSummary: corrected the CSV escaping and added a test.')
         self.assertEqual(funnel.build(s)['items'], [])
         self.assertIsNone(funnel.next_item(s, f'done:{t}'))
-
-    def test_the_assistants_open_lines_are_fyi_until_triage_calls_them_work(self):
-        s = store()
-        s.upsert_idea({'key': 'followup:c9', 'kind': 'followup', 'text': 'No answer from Dana in 4 days - follow up?', 'sig': 'x',
-                       'action': {'type': 'followup', 'mid': 5, 'why': 'you asked on Monday'}}, ago(1))
-        items = funnel.build(s)['items']
-        self.assertEqual([(i['lane'], i['kind'], i['idea_kind']) for i in items], [('fyi', 'idea', 'followup')])
-        self.assertEqual(items[0]['why'], 'you asked on Monday')
-        # Being spoken in the Assistant marks an ordinary follow-up read and removes it.
-        funnel.settle(s, items[0]['key'], 'surfaced')
-        self.assertEqual(funnel.build(s)['items'], [])
-        # Closing the underlying task does not mean the owner read the Assistant's line. It stays
-        # in Unread until it is explicitly surfaced there; task completion and reading are
-        # deliberately separate state machines.
-        done = s.create_task({'Title': 'Deploy gpt-4.1', 'Kind': 'coding', 'Status': 'done'}, 'o')
-        s.upsert_idea({'key': 'cold:TQ-done', 'kind': 'cold', 'text': 'Deploy gpt-4.1 has sat quiet', 'sig': 'z', 'action': {'tid': done}}, ago(1))
-        task_line = funnel.build(s)['items'][0]
-        self.assertEqual((task_line['kind'], task_line['tid']), ('idea', done))
-        self.assertEqual(s.get_idea(next(i['IdeaId'] for i in s.list_ideas() if i['Key'] == 'cold:TQ-done'))['Status'], 'open')
-        funnel.settle(s, task_line['key'], 'surfaced')
-        self.assertEqual(funnel.build(s)['items'], [])
-        # ...and a line about a thread the owner has since replied on is over too
-        s.set_setting('team_domains', 'ours.com', 't')
-        mm = mail(s, 'PTO', who='Erin', email='erin@ours.com', hours=20, status='filed', conv='pto')   # a filed mail, past the window
-        s.upsert_idea({'key': 'asked:pto', 'kind': 'asked', 'text': 'Erin asked for the PTO import', 'sig': 'p', 'action': {'type': 'message', 'mid': mm}}, ago(hours=2))
-        self.assertIn('asked', [i.get('idea_kind') for i in funnel.build(s)['items']])
-        rr = s.add_review({'TaskId': None, 'MessageId': mm, 'Kind': 'reply', 'DraftText': 'Imported, all 80 files.', 'Status': 'pending'})
-        s.decide_review(rr, 'approved', 'Imported, all 80 files.', 'owner')
-        self.assertNotIn('asked', [i.get('idea_kind') for i in funnel.build(s)['items']])
-        self.assertEqual(next(i for i in s.list_ideas() if i['Key'] == 'asked:pto')['Status'], 'done')
-        # ...and it enters when SAID: a line last raised days ago is not this morning's pipe
-        s.upsert_idea({'key': 'cold:TQ-0009', 'kind': 'cold', 'text': 'TQ-0009 has sat quiet', 'sig': 'y', 'action': {'tid': 9}}, ago(days=3))
-        self.assertEqual(funnel.build(s)['items'], [])
 
     def test_one_level_for_the_owners_work_oldest_first_then_results_then_fyi(self):
         s = store()
@@ -833,18 +592,6 @@ class LanesTests(unittest.TestCase):
         s.add_route(m, None, 'file', None, 'marketing', [], 'triage')
         self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('fyi', 'fyi')])
 
-    def test_an_unread_assistant_idea_survives_its_source_task_closing(self):
-        s = store()
-        task = s.create_task({'Title': 'One login case', 'Kind': 'general', 'Status': 'open'}, 'o')
-        source = mail(s, 'Blank login', tid=task, conv='login')
-        idea = s.upsert_idea({'key': 'blank-logins-pattern', 'kind': 'idea',
-                              'text': 'Blank logins happened twice; add an import check.', 'sig': 'new',
-                              'action': {'type': 'task', 'mid': source, 'tid': task}}, ago(1))
-        s.update_task(task, {'Status': 'done'}, 'owner')
-        items = funnel.build(s)['items']
-        self.assertIn(f"idea:{idea['IdeaId']}", [i['key'] for i in items])
-        self.assertEqual(s.get_idea(idea['IdeaId'])['Status'], 'open')
-
     def test_a_read_source_row_does_not_hide_a_later_unread_assistant_idea(self):
         s = store()
         source = mail(s, 'Connector issue', conv='connector')
@@ -852,9 +599,9 @@ class LanesTests(unittest.TestCase):
                               'text': 'The connector report suggests a separate follow-up.', 'sig': 'new',
                               'action': {'type': 'task', 'mid': source}}, ago(1))
         funnel.settle(s, f'msg:{source}', 'surfaced')
-        items = funnel.build(s)['items']
-        self.assertIn(f"idea:{idea['IdeaId']}", [i['key'] for i in items])
-        self.assertNotIn(f'msg:{source}', [i['key'] for i in items])
+        names = [a for i in funnel.build(s)['items'] for a in i['aliases']]
+        self.assertIn(f"idea:{idea['IdeaId']}", names)
+        self.assertNotIn(f'msg:{source}', names)
 
 
 class FeedUnreadTests(unittest.TestCase):
@@ -930,7 +677,7 @@ class FeedUnreadTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=waving):
             row = next(r for r in s.feed() if r['MessageId'] == mid)
             self.assertEqual((row['Unread'], row['UnreadRank']), (1, 2))
-            self.assertEqual(railwalk.top(s)['key'], f'agent:{task}')
+            self.assertIn(f'agent:{task}', railwalk.top(s)['aliases'])
 
 
 class MemoryTests(unittest.TestCase):
@@ -942,24 +689,6 @@ class MemoryTests(unittest.TestCase):
             s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'ok', 'Status': 'pending'})
         return s
 
-    def test_read_is_gone_later_hides_until_its_time_and_done_removes(self):
-        s = self._two()
-        one, two = [i['key'] for i in funnel.build(s)['items']]
-        funnel.settle(s, one, 'surfaced')
-        items = funnel.build(s)['items']
-        # a reply for your yes stays in its place, shown or not - nothing marks it passed, and the walk's top is still it (2026-10-30)
-        self.assertEqual([(i['key'], bool(i.get('surfaced'))) for i in items], [(one, False), (two, False)])
-        self.assertEqual(railwalk.top(s)['key'], one)
-        self.assertEqual(funnel.next_item(s, one)['key'], one)          # the named one is always reachable
-        out = funnel.settle(s, two, 'later', hours=2)
-        self.assertTrue(out['until'] > ago(0))
-        # put away, it waits in For later (the canvas redesign, 2026-09-29) - on the rail, never next
-        self.assertEqual([(i['key'], bool(i.get('deferred'))) for i in funnel.build(s)['items']], [(one, False), (two, True)])
-        self.assertEqual(railwalk.top(s)['key'], one, 'For later is off the walk; the reply is still its top')
-        funnel.settle(s, one, 'done')
-        self.assertEqual([i['key'] for i in funnel.build(s, keep_surfaced=True)['items']], [two], 'done removes; later still waits')
-        self.assertIsNone(railwalk.top(s))
-
     def test_a_reply_shown_once_stays_and_a_rewritten_draft_stays_too(self):
         """Shown is not acted on (2026-10-13): a reply for your yes put on the table stays in its place, and so does its rewrite -
         never walked past for having been shown (rule 6, 2026-10-30)."""
@@ -969,7 +698,7 @@ class MemoryTests(unittest.TestCase):
         funnel.settle(s, one, 'surfaced', note=it['sig'])
         self.assertEqual([i['key'] for i in funnel.build(s)['items']], [one, two])
         self.assertEqual(railwalk.top(s)['key'], one)
-        s.save_review_draft(int(one.split(':')[1]), 'The agent rewrote this after finishing the job.')
+        s.save_review_draft(it['rid'], 'The agent rewrote this after finishing the job.')
         self.assertEqual([i['key'] for i in funnel.build(s)['items']], [one, two])
         self.assertEqual(railwalk.top(s)['key'], one)
 
@@ -981,54 +710,6 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual([i['key'] for i in funnel.build(s)['items']], [one, two])
         self.assertEqual(s.funnel_states()[one]['Status'], 'surfaced', 'read stays read')
         self.assertNotIn('alert:x', s.funnel_states())
-
-    def test_the_owners_knobs_bound_the_pile(self):
-        s = store()
-        for n in range(6):
-            m = mail(s, f'note {n}', who=f'Person {n}', email=f'p{n}@ours.com', body='FYI, done.', hours=n * 5, status='filed', conv=f'c{n}')
-            s.add_route(m, None, 'file', None, 'triage: fyi - a person told you something', [], 'triage')
-        s.set_setting('team_domains', 'ours.com', 't')
-        # the default window is twelve hours: notes 0, 1 and 2 are inside it, 3 to 5 are yesterday's
-        self.assertEqual([i['title'] for i in funnel.build(s)['items']], ['note 2', 'note 1', 'note 0'])   # oldest first
-        s.set_setting('funnel_hours', '48', 't')
-        self.assertEqual(len(funnel.build(s)['items']), 6)
-        s.set_setting('funnel_max', '2', 't')
-        p = funnel.build(s)
-        self.assertEqual(([i['title'] for i in p['items']], p['hidden']), (['note 5', 'note 4'], 4))
-        # ...and what an agent has rides above the cap - in its place among the tasks, ahead of the fyi (2026-10-21)
-        w = s.create_task({'Title': 'In hand', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        mail(s, 'In hand', hours=1, tid=w)
-        live = [{'taskId': w, 'agent': 'codex', 'label': 'codex', 'started': ago(minutes=5), 'idle': 2, 'waiting': False, 'tail': []}]
-        with mock.patch('taskuary.terminal.live_sessions', return_value=live):
-            p = funnel.build(s)
-        self.assertEqual(([(i['title'], i['lane']) for i in p['items']], p['hidden']), ([('In hand', 'working'), ('note 5', 'fyi'), ('note 4', 'fyi')], 4))
-        self.assertTrue(p['rev'].endswith(':4:0'), p['rev'])          # hidden by the cap, none held by a rule
-        # a draft waiting for a yes ignores the window
-        s.set_setting('funnel_hours', '1', 't'); s.set_setting('funnel_max', '25', 't')
-        t = s.create_task({'Title': 'old ask', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        m = mail(s, 'old ask', hours=90, tid=t)
-        s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'ok', 'Status': 'pending'})
-        # note 0 is from just now; 'In hand' is working whether or not a session is alive - a task
-        # whose status says in_progress is being worked (the owner, 2026-09-03) - and is a task, among the tasks
-        self.assertEqual([(i['title'], i['lane']) for i in funnel.build(s)['items']],
-                         [('old ask', 'approve'), ('In hand', 'working'), ('note 0', 'fyi')])
-
-    def test_one_line_per_thread_no_auto_replies_and_nothing_an_agent_is_working(self):
-        s = store()
-        s.set_setting('team_domains', 'ours.com', 't')
-        for n in range(3):
-            m = mail(s, f'Re: budget {n}', who='Lee', email='lee@ours.com', body='thoughts below', hours=n, status='filed', conv='budget')
-            s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
-        m = mail(s, 'Automatic reply: out of office', who='Sam', email='sam@ours.com', body='Back Monday.', hours=1, status='autoreply', conv='ooo')
-        s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
-        t = s.create_task({'Title': 'Fix the import', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        mail(s, 'Import broken', hours=1, tid=t)
-        live = [{'taskId': t, 'agent': 'claude', 'label': 'claude', 'started': ago(minutes=5), 'idle': 3, 'waiting': False, 'tail': ['editing…']}]
-        with mock.patch('taskuary.terminal.live_sessions', return_value=live):
-            items = funnel.build(s)['items']
-        # the row reads triage's own title ("Fix the import") rather than the mail header it arrived
-        # under ("Import broken") - funnel.says prefers Title now (the owner, 2026-09-16)
-        self.assertEqual([(i['title'], i['kind'], i['lane']) for i in items], [('Fix the import', 'todo', 'working'), ('Re: budget 0', 'fyi', 'fyi')])
 
     def test_an_open_task_is_on_you_whatever_the_last_message_said(self):
         """TQ-0626 (the owner, 2026-09-18): a Teams ask became a task, the owner answered "done",
@@ -1047,11 +728,7 @@ class MemoryTests(unittest.TestCase):
         thanks = mail(s, 'clock-out', who='Robin', email='robin@ours.com', body='thanks', hours=9, tid=t, status='filed',
                       channel='teams', conv='room')
         s.add_route(thanks, t, 'attach', 1.0, 'triage: fyi - a thank-you, nothing asked', [], 'triage')
-        # the legacy pile has the wrap-up ("the reply went out - the task is still open"), which says
-        # more than "on you" and still outranks the row (FollowUpTests)...
-        self.assertEqual([(i['kind'], i['lane']) for i in funnel.build(s)['items']], [('wrapup', 'report')])
-        # ...and the processing pile, the one the live rail reads and where TQ-0626 sat, has no wrap-up:
-        # there the open task is the row, as the owner's own work
+        # the rail has no wrap-up row: the open task is the row, as the owner's own work
         settle = lambda: (s.reconcile_processing_membership(fixed_now=ago(0)), funnel.invalidate())
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
         self.assertEqual([(i['title'], i['kind'], i['lane']) for i in funnel.build(s)['items'] if i.get('tid') == t],
@@ -1366,14 +1043,6 @@ class MemoryTests(unittest.TestCase):
         self.assertIn('LEFT IN THE PIPE: 2 - 2 ready to send', text)
         self.assertIn('Coming next: Dana - one (ready to send)', text)
         self.assertEqual(funnel.summary([]), 'THE PIPE IS EMPTY - nothing else needs the owner right now.')
-
-    def test_the_pile_is_cached_briefly_and_carries_a_revision(self):
-        s = self._two()
-        p1 = funnel.pile(s)
-        s.create_task({'Title': 'three', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
-        self.assertEqual(funnel.pile(s)['rev'], p1['rev'])              # within the cache window
-        self.assertEqual(len(funnel.pile(s, force=True)['items']), 2)    # a task with no mail is not on the pile
-        self.assertIn('alerts', p1); self.assertEqual(len(p1['rev'].split(':')[0]), 12)
 
 
 if __name__ == '__main__':

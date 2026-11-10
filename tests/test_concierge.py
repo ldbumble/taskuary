@@ -87,7 +87,7 @@ class TurnTests(unittest.TestCase):
         fake = lambda system, user, **kw: seen.update(system=system, user=user) or \
             'Dana wants the corrected file; the draft below says "Attached." - I would send it.\nOPTIONS: send it | redraft it'
         out = concierge.surface(s, llm=fake)
-        self.assertEqual(out['item']['key'], f'review:{r}')
+        self.assertIn(f'review:{r}', out['item']['aliases'])
         self.assertEqual(out['say'], 'Dana wants the corrected file; the draft below says "Attached." - I would send it.')
         self.assertEqual(out['options'], ['send it', 'redraft it'])
         # the model saw the item, the draft and the pile - and was told what it is
@@ -95,7 +95,7 @@ class TurnTests(unittest.TestCase):
         self.assertIn('THE DRAFT', seen['user']); self.assertIn('Attached.', seen['user'])
         self.assertIn('Can you send the corrected file?', seen['user'])
         # shown once: a reply for your yes stays in the pipe, in its place - shown is not acted on, and nothing is "passed" (2026-10-30)
-        self.assertEqual([i['key'] for i in funnel.build(s)['items']], [f'review:{r}'])
+        self.assertEqual([i['key'] for i in funnel.build(s)['items']], [out['item']['key']])
         self.assertFalse(funnel.next_item(s, f'review:{r}').get('surfaced'))
         # the conversation carries the card, without the marker in the words
         hist = concierge.history(s, general.dock_task(s)[0]['TaskId'])
@@ -169,7 +169,7 @@ class TurnTests(unittest.TestCase):
         # ...the typed word decides Next and the page presses it from the row on its table: the walk's one Next stamps the badge (railwalk)
         self.assertEqual(out['decision'], {'verb': 'next'})
         from taskuary import railwalk
-        railwalk.next(s, f'review:{r}')
+        railwalk.next(s, funnel.next_item(s, f'review:{r}')['key'])
         card = next(h['card'] for h in concierge.history(s, general.dock_task(s)[0]['TaskId']) if (h.get('card') or {}).get('rid') == r)
         self.assertEqual(card.get('pressed'), concierge.next_badge(card))
 
@@ -283,10 +283,6 @@ class TurnTests(unittest.TestCase):
         self.assertEqual(concierge._resolve_named(s, 'TQ-0999', None), '?')
         for words in ('what did Dana send about the export?', 'show me the Lee chat', 'thanks, next'):
             self.assertEqual(concierge._resolve_named(s, words, None), '?', "words are the model's to resolve, never a guess here")
-        old = s.create_task({'Title': 'Rename the flag', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        s.add_comment(old, 'claude', 'agent', 'AGENT REPORT\nSummary: renamed it in three places.')
-        pulled = concierge.surface(s, key=f'task:{old}', llm=lambda *a, **k: 'That one is renamed in three places.')
-        self.assertEqual((pulled['item']['kind'], pulled['item']['tid']), ('task', old)); self.assertIn('renamed it', pulled['item']['summary'])
         concierge.surface(s, llm=lambda *a, **k: 'first')               # Dana's is on the table
         # ...but the owner's WORDS never override the model's answer: a word match replaced it with whatever subject
         # shared half the words - "yes, go ahead" became someone else's message (the 2026-09-24 debug). The model
@@ -912,7 +908,7 @@ class OpeningTests(unittest.TestCase):
         self.assertTrue(out['opened']); self.assertEqual(out['card']['kind'], 'brief'); self.assertEqual((out['card']['n'], out['card']['mail']), (1, 1))
         self.assertIn('THE DAY', seen['user']); self.assertIn('LEFT IN THE PIPE: 1', seen['user']); self.assertIn('AGENTS HAVE', seen['user'])
         self.assertFalse(concierge.open_day(s, llm=fake)['opened'])          # said once per chat
-        self.assertEqual(funnel.build(s)['items'][0]['key'], f'review:{r}')  # nothing was surfaced by the opening
+        self.assertIn(f'review:{r}', funnel.build(s)['items'][0]['aliases'])  # nothing was surfaced by the opening
         # the walk: the agent's findings are said before the yes is asked
         nxt = concierge.surface(s, llm=lambda sy, u, **k: seen.update(walk=u) or 'The agent regenerated the export; the reply below says so - I would send it.', only='mail')
         self.assertEqual(nxt['item']['rid'], r); self.assertIn('THE AGENT FOUND: regenerated the export', seen['walk'])
@@ -938,7 +934,7 @@ class AgentGotThereFirstTests(unittest.TestCase):
         # one level for every task, oldest first: the in-progress todo (3h) is ahead of the draft (1h) - it was below it, in a
         # band of its own, while its status said an agent had it (the owner, 2026-10-21)
         todo, first = funnel.build(s)['items']
-        self.assertEqual(first['key'], f'review:{r2}')
+        self.assertIn(f'review:{r2}', first['aliases'])
         self.assertEqual((todo['kind'], todo['coding']), ('todo', True))
         # codex starts on TQ-0001 between the pile being built and the pull
         live = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(0), 'idle': 3, 'waiting': False, 'tail': []}]
@@ -948,10 +944,11 @@ class AgentGotThereFirstTests(unittest.TestCase):
         self.assertEqual((out['item']['tid'], out['item']['lane']), (t, 'working'))
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             # a task, under the agent's key, in its place among the tasks - the older first (the owner, 2026-10-21)
-            self.assertEqual([(i['key'], i['lane']) for i in funnel.build(s)['items']], [(f'agent:{t}', 'working'), (f'review:{r2}', 'approve')])
+            self.assertEqual([(name in i['aliases'], i['lane']) for name, i in zip((f'agent:{t}', f'review:{r2}'), funnel.build(s)['items'])],
+                             [(True, 'working'), (True, 'approve')])
             self.assertEqual([funnel.level_of(i) for i in funnel.build(s)['items']], ['task', 'task'])
             from taskuary import railwalk
-            self.assertEqual(railwalk.next(s, f'agent:{t}')['item']['key'], f'review:{r2}')   # ...and NEXT from it takes the row below
+            self.assertIn(f'review:{r2}', railwalk.next(s, f'agent:{t}')['item']['aliases'])   # ...and NEXT from it takes the row below
 
 
     def test_an_agent_that_is_asking_is_not_shown_as_working(self):
@@ -977,13 +974,15 @@ class ActTests(unittest.TestCase):
                            'FromEmail': 'erin@vendor.example', 'SentAt': ago(100), 'BodyText': 'Here is the ledger.', 'Status': 'filed'})
         i = s.upsert_idea({'key': 'followup:c9', 'kind': 'followup', 'text': 'No answer from Erin in 4 days - follow up?', 'sig': 'x',
                            'action': {'type': 'followup', 'mid': m, 'why': 'you asked on Monday'}}, ago(1))
+        # the mail was read days ago, so the line about it is the row: unread, its own row speaks first (processing_unread.rail_of)
+        funnel.settle(s, funnel.build(s)['items'][0]['key'], 'surfaced', 'owner', read=True)
         return s, i, funnel.build(s)['items'][0]['key']
 
     def test_done_and_later_go_to_the_pile_and_done_puts_the_idea_down(self):
         """I4 (2026-09-27): the rail's Done wrote only the rail's state, and the Advisor went on reading the idea as open."""
         s, i, key = self._idea()
         self.assertEqual(concierge.act(s, key, 'later', hours=1)['verb'], 'later')
-        self.assertEqual(funnel.build(s)['items'], [])
+        self.assertNotIn(key, [x['key'] for x in funnel.build(s)['items']])
         self.assertEqual(s.get_idea(i['IdeaId'])['Status'], 'open')             # Later is not a verdict on the idea
         s.set_funnel_state(key, 'surfaced')
         concierge.act(s, key, 'done')
@@ -995,7 +994,7 @@ class ActTests(unittest.TestCase):
         s, i, key = self._idea()
         concierge.act(s, key, 'dismiss')
         self.assertEqual(s.get_idea(i['IdeaId'])['Status'], 'dismissed')
-        self.assertEqual(funnel.build(s)['items'], [])
+        self.assertNotIn(key, [x['key'] for x in funnel.build(s)['items']])
 
     def test_an_idea_offers_the_five_words_and_routes_them_to_the_idea(self):
         """C5: Make a task, Send to agent, Not ours, Remind me, Next - and Not ours is the idea's, never message.file."""
@@ -1028,7 +1027,7 @@ class ApiTests(unittest.TestCase):
              mock.patch.object(concierge, 'brain', return_value=lambda *a, **k: 'Dana wants the file - the draft is below.'):
             c = TestClient(server.app)
             pile = c.get('/api/funnel/pile').json()
-            self.assertEqual([i['key'] for i in pile['items']], [f'review:{r}'])
+            self.assertEqual([f'review:{r}' in i['aliases'] for i in pile['items']], [True])
             # nine lanes now: 'broken' was added between approve and asked, so a failed check ranks
             # above a person's ask instead of behind every report (funnel.LANES)
             self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])   # fifteen since 'theirs' (2026-09-25)

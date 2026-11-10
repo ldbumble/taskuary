@@ -72,7 +72,8 @@ class WatcherTests(unittest.TestCase):
         self.assertEqual([e['kind'] for e in ev], ['asking']); self.assertIsNone(ev[0]['card'])
         self.assertEqual(concierge.history(s, dock), [])
         al = self._alerts(s, asking)
-        self.assertEqual([a['key'] for a in al if a['kind'] == 'agent'], [f'alert:agent:{t}'])
+        row = next(i for i in funnel.pile(s)['items'] if f'agent:{t}' in i['aliases'])
+        self.assertEqual([a['key'] for a in al if a['kind'] == 'agent'], [f"alert:{row['key']}"])
         self.assertEqual([a for a in al if a.get('notice')], [])                        # one surface, one entry
 
     def test_a_newer_fact_about_the_same_task_replaces_the_older_notice(self):

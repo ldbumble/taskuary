@@ -35,14 +35,6 @@ class ChatFreshnessTests(unittest.TestCase):
                               'FromName': 'Robin', 'SentAt': stamp(),
                               'BodyText': 'Actually, the account works now. No need to reset it.', 'Status': 'routed'})
 
-    def test_review_card_speaks_with_newest_message_and_marks_old_draft_stale(self):
-        s, tid, _first, rid = self.thread()
-        later = self.add_later(s, tid)
-        item = next(i for i in funnel.build(s, keep_surfaced=True)['items'] if i['key'] == f'review:{rid}')
-        self.assertEqual(item['mid'], later)
-        self.assertTrue(item['stale'])
-        self.assertIn('works now', item['preview'])
-
     def test_approve_refreshes_stale_draft_and_requires_another_yes(self):
         s, tid, _first, rid = self.thread()
         later = self.add_later(s, tid)

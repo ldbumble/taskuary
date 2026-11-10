@@ -5737,7 +5737,7 @@ def _stamp_pressed(store, dock_tid: int, op: dict, label: str) -> bool:
 
 
 # what Next READS rather than passes: a row with nothing to do - a report run, a dashboard, an agent's finished result, an fyi - is gone
-# once walked past; anything in an owner lane (a task, a reply, an ask) stays under Tasks, still yours (funnel._apply_states)
+# once walked past; anything in an owner lane (a task, a reply, an ask) stays under Tasks, still yours
 READ_ON_NEXT = ('report', 'fyi')
 def next_badge(card: dict) -> str:
     """The badge a card Next walked past wears (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit next"):
@@ -6321,8 +6321,10 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # keep goes into the memory, LEARNED.md (memory.remember)
     if decision and verb in PROPOSALS and routes():
         if verb == 'answer_agent' and target_item and target_item.get('tid'):
-            # ...and to an agent at work on a task, not one that asked, they are its next prompt (_tell_now)
-            if target_item.get('kind') != 'agent':
+            # ...and to an agent at work on a task, not one that asked, they are its next prompt (_tell_now). WHETHER IT ASKED is the row's
+            # own open question or held step, as the tool road reads it (call_turn) - never the row's kind: a task's one row is its
+            # agent's row while it works, and "tell the agent to skip the empty rows" went in as the answer to a question nobody asked
+            if not (target_item.get('kind') == 'agent' and (target_item.get('asking') or target_item.get('request_kind'))):
                 try: return _tell_now(store, tid, int(target_item['tid']), decision.get('text') or text, actor, owner=text)
                 except CallMiss as e:
                     say_ = f"That did not reach the agent on {task_ref(int(target_item['tid']))} - {str(e).split(' - say so')[0].rstrip('.')}."

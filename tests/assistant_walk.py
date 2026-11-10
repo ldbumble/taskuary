@@ -101,6 +101,11 @@ def world(real: bool = False):
     funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
     s = MemoryStore()
     with mock.patch.object(terminal, 'live_sessions', return_value=[]): demo.seed(s)
+    # ...then started, as the server starts the demo's home once it is seeded (server lifespan), its membership kept current inline
+    # where the app runs a worker: a read after a write waits for it (processing_all.wait_settled)
+    from types import SimpleNamespace
+    from taskuary import processing_startup
+    processing_startup.initialize(s, live_state=[]); s.membership_worker = SimpleNamespace(kick=s.reconcile_processing_membership)
     for k in ('auto_draft_enabled',): s.set_setting(k, '0', 't')
     args = ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'] + (REAL_ARGS if real else [])
     s.upsert_agent('claude', 'general', 'cli', json.dumps({'cmd': 'claude', 'args': args}))

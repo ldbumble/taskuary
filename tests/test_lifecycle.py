@@ -44,7 +44,7 @@ class LifecycleTests(unittest.TestCase):
         # 3. the owner starts; the item comes onto the table - its card carries it, the line only names it (2026-10-21)
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             out = concierge.surface(s, only='mail')
-        self.assertEqual(out['item']['key'], f'msg:{m}')
+        self.assertIn(f'msg:{m}', out['item']['aliases'])
         self.assertEqual(out['say'], f"Next up: {out['item']['ref']}.")
         # 4. the owner decides in words: the model names the hand-off, it comes back as a PROPOSAL with every
         #    word of the ask, and only the click on its button starts the agent (PW-123/124)
@@ -74,8 +74,8 @@ class LifecycleTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             funnel.announce(s)                                                   # first look remembers
             p = funnel.pile(s, force=True)
-            self.assertEqual(railwalk.top(s)['key'], f'agent:{t}')
-        self.assertEqual([(i['key'], i['lane']) for i in p['items']], [(f'agent:{t}', 'working')])
+            self.assertIn(f'agent:{t}', railwalk.top(s)['aliases'])
+        self.assertEqual([(f'agent:{t}' in i['aliases'], i['lane']) for i in p['items']], [(True, 'working')])
         # 6. it stops to ask: front of the pipe, a line in the chat with the card
         parked = [dict(working[0], idle=120, waiting=True, state='asking', tail=['Remove Bulk Deny as well? (y/n)'])]
         with mock.patch('taskuary.terminal.live_sessions', return_value=parked):
@@ -135,8 +135,8 @@ class LifecycleTests(unittest.TestCase):
             p = funnel.pile(s, force=True)
         self.assertEqual([e['kind'] for e in p['events']], ['working'])
         item = next(i for i in p['items'] if i.get('tid') == t)
-        self.assertEqual((item['key'], item['lane'], item['agent'], item['sid']),
-                         (f'agent:{t}', 'working', 'Agent', 'live123'))
+        self.assertIn(f'agent:{t}', item['aliases'])
+        self.assertEqual((item['lane'], item['agent'], item['sid']), ('working', 'Agent', 'live123'))
 
     def test_the_page_walks_the_same_loop(self):
         s = self.s

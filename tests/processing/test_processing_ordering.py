@@ -9,6 +9,7 @@ import pytest
 from taskuary import funnel, terminal
 from taskuary.processing_order import attention_band
 from taskuary.store import MemoryStore
+from conftest import start_home
 
 
 NOW = datetime(2026, 9, 6, 12, 0, 0)
@@ -169,6 +170,7 @@ def test_both_workers_move_between_working_and_owner_wait_with_feed_band_parity(
     tid, mid = task_message(store, f"{kind}-{request_kind}", priority="urgent", kind=kind, status="in_progress")
     worker = {"taskId": tid, "agent": kind, "sid": "synthetic", "started": stamp(-30),
               "idle": 0, "waiting": False, "tail": ["Still working"]}
+    start_home(store)
     frozen = list(store.cx.iterdump())
     # ...the same level working, waiting and working again: the row never moves between sections (2026-10-21)
     for waiting, expected in ((False, 2), (True, 2), (False, 2)):
@@ -176,11 +178,11 @@ def test_both_workers_move_between_working_and_owner_wait_with_feed_band_parity(
         if waiting:
             observed["request"] = {"kind": request_kind, "request_id": "fixed-request", "text": "Which file?",
                                    "at": stamp(-2), "choices": []}
-        pile = funnel.build(store, now=NOW, reconcile=False, live_state=[observed])
+        pile = funnel.build(store, now=NOW, live_state=[observed])
         assert len(pile["items"]) == 1
         row = pile["items"][0]
         feed = next(row for row in store.feed(live_state=[observed]) if row["MessageId"] == mid)
-        assert row["key"] == feed["FunnelKey"] == f"agent:{tid}"
+        assert feed["FunnelKey"] == f"agent:{tid}" and f"agent:{tid}" in row["aliases"]
         assert row["priority"] == "urgent"
         assert funnel._band(row) == feed["UnreadRank"] == expected
         assert feed["Unread"] == 1
@@ -211,17 +213,6 @@ def test_feed_review_report_and_task_producers_keep_saved_priority(store):
         assert by_mid[mid]["UnreadRank"] == band
 
 
-def test_ideas_use_their_own_saved_priority_not_the_related_task_priority(store):
-    tid, mid = task_message(store, "Referenced urgent work", priority="urgent")
-    own = store.upsert_idea({"key": "ordering-own", "kind": "followup", "text": "Independent follow-up",
-                            "action": {"mid": mid, "tid": tid, "triage": {"intent": "task", "priority": "low"}}}, stamp(-3))
-    unknown = store.upsert_idea({"key": "ordering-unknown", "kind": "followup", "text": "Another independent follow-up",
-                                "action": {"tid": tid}}, stamp(-4))
-    rows = {row["key"]: row for row in funnel.from_forgotten(store, set(), set(), reconcile=False)}
-    assert rows[f"idea:{own['IdeaId']}"]["priority"] == "low"
-    assert rows[f"idea:{unknown['IdeaId']}"]["priority"] in (None, "")
-
-
 @pytest.mark.parametrize(("intent", "priority", "expected_band"), [
     ("task", "urgent", 1), ("reply_only", "urgent", 1), ("fyi", "urgent", 4),
     ("task", None, 2),                     # a task without the owner's urgency is still the owner's task
@@ -229,21 +220,10 @@ def test_ideas_use_their_own_saved_priority_not_the_related_task_priority(store)
 def test_only_an_ideas_explicit_urgent_owner_request_is_promoted(store, intent, priority, expected_band):
     idea = store.upsert_idea({"key": "own-ranking", "kind": "followup", "text": "Urgent ASAP is only source text",
                              "action": {"triage": {"intent": intent, "priority": priority}}}, stamp(-3))
-    produced = funnel.from_forgotten(store, set(), set(), reconcile=False)
-    assert len(produced) == 1 and produced[0]["key"] == f"idea:{idea['IdeaId']}"
+    produced = funnel.build(store, now=NOW, live_state=[])["items"]
+    assert len(produced) == 1 and f"idea:{idea['IdeaId']}" in produced[0]["aliases"]
     assert produced[0]["priority"] == priority
     assert funnel._band(produced[0]) == expected_band
-
-
-def test_urgent_idea_ordering_does_not_change_its_existing_age_window(store):
-    store.set_setting("funnel_hours", "12", "test")
-    idea = store.upsert_idea({"key": "old-urgent", "kind": "followup", "text": "Old independent request",
-                             "action": {"triage": {"intent": "task", "priority": "urgent"}}}, stamp(-25 * 60))
-    produced = funnel.from_forgotten(store, set(), set(), reconcile=False)
-    assert len(produced) == 1 and produced[0]["key"] == f"idea:{idea['IdeaId']}"
-    assert funnel._band(produced[0]) == 1
-    assert funnel._aged_out(produced[0], NOW, 12) is True
-    assert funnel.build(store, now=NOW, reconcile=False, live_state=[])["items"] == []
 
 
 def test_failed_report_does_not_become_an_urgent_request_only_in_feed(store):
@@ -280,16 +260,6 @@ def test_report_rank_uses_saved_run_outcome_even_when_subject_disagrees(store, m
         assert produced["lane"] == "time" and produced["kind"] == "todo"
 
 
-def test_wrapup_keeps_task_priority_and_actual_completion_activity(store):
-    tid, mid = task_message(store, "Finished result", priority="high")
-    rid = store.add_review({"TaskId": tid, "MessageId": mid, "Kind": "reply", "Status": "pending", "DraftText": "Done."})
-    store.decide_review(rid, "approved", "Done.", "owner")
-    store._exec("UPDATE review SET DecidedAt=? WHERE ReviewId=?", (stamp(-2), rid))
-    result = funnel.from_wrapped(store, NOW, set())
-    assert len(result) == 1
-    assert (result[0]["priority"], result[0]["when"], funnel._band(result[0])) == ("important", stamp(-2), 3)
-
-
 def test_a_priority_change_moves_no_row_and_the_walk_writes_nothing_to_see_it(store):
     """Inside one level the oldest leads, whatever priority it was saved with (2026-09-07), and urgent is a shade in its place
     (2026-10-22): raising a task to urgent moves nothing on the walk's line. Looking at what Next would bring (railwalk.peek) writes
@@ -316,35 +286,6 @@ def test_a_priority_change_moves_no_row_and_the_walk_writes_nothing_to_see_it(st
     assert store.funnel_states() == states, "looking ahead wrote a state"
     assert store.get_task(first_tid)["Status"] == store.get_task(second_tid)["Status"] == "open"
     assert set(store.funnel_states()) == {f"msg:{done}", f"msg:{deferred}"}
-
-
-def test_named_current_review_survives_more_than_400_arrivals_without_expanding_default_queue(store):
-    tid, mid = task_message(store, "Older explicit Current", at=stamp(-180))
-    rid = store.add_review({"TaskId": tid, "MessageId": mid, "Kind": "reply", "Status": "pending",
-                            "DraftText": "Retain this exact draft."})
-    current_key = f"review:{rid}"
-    initial = funnel.next_item(store, current_key)
-    assert (initial["key"], initial["mid"], initial["rid"]) == (current_key, mid, rid)
-    for index in range(405):
-        message(store, f"New arrival {index:03}", status="filed", at=stamp(-1))
-    store.set_setting("funnel_max", "3", "test")
-    before = list(store.cx.iterdump())
-
-    # Automatic queue coverage remains the legacy 400 input rows and configured cap.
-    assert len(store.feed(limit=400, live_state=[])) == 400
-    ordinary = funnel.build(store, now=NOW, reconcile=False, live_state=[])
-    assert len(ordinary["items"]) == 3
-    assert ordinary["hidden"] == 397
-    assert current_key not in {row["key"] for row in ordinary["items"]}
-
-    # Returning to an already named Current must not confuse that input cap with absence.
-    restored = funnel.next_item(store, current_key)
-    assert (restored["key"], restored["mid"], restored["rid"]) == (current_key, mid, rid)
-    assert restored["lane"] == "approve" and restored["order_band"] == 2
-    assert store.get_review(rid)["DraftText"] == "Retain this exact draft."
-    assert store.get_review(rid)["Status"] == "pending"
-    assert store.get_task(tid)["Status"] == "open"
-    assert list(store.cx.iterdump()) == before
 
 
 def test_current_card_retains_authoritative_band_when_its_presentation_lane_is_asked():

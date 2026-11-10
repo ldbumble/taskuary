@@ -1129,7 +1129,7 @@ def seed_agent_day(store, f) -> int:
     """The general agent's finished work on six of the morning's asks. Returns how many messages it wrote."""
     from . import config, general, outputs, reports, verdicts
     made, tids = 0, {}
-    # ...six more rows on a rail the pipe caps at its default (funnel.knobs): a demo morning shows all of it, the batch of FYI included
+    # ...six more rows than the rail's old cap held (funnel_max, a retained value nothing applies now)
     store.set_setting('funnel_max', '40', 'demo')
     stamp = lambda table, col, rid, mins: store._exec(f'UPDATE {table} SET CreatedAt=? WHERE {col}=?', (_at(mins), rid))
     def mail(tid, who, email, channel, subject, body, mins, why='', out=False):

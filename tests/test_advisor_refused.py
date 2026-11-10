@@ -30,8 +30,8 @@ class RefusedTests(_Rail):
     def _draft(self, s, channel='email'):
         """A draft waiting for its yes on a mail the demo's world has - its rail key and its review."""
         for i in funnel.pile(s)['items']:
-            if not i['key'].startswith('review:'): continue
-            r = s.get_review(int(i['key'][7:]))
+            if i['kind'] != 'review': continue
+            r = s.get_review(i['rid'])
             # ...one whose words are ready to send: a draft the world stores a redraft verdict for is not sent (demo.VERDICTS)
             if i.get('title') in demo.VERDICTS: continue
             if (s.get_message(r['MessageId']) or {}).get('Channel') == channel: return i['key'], r

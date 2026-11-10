@@ -1947,12 +1947,12 @@ def _remind(store, act: dict, actor: str) -> str:
 
 
 def _draft_card(store, rid, actor: str = 'owner') -> dict:
-    """The draft just written, brought up. Under canonical processing reads a review is found only once membership has been
+    """The draft just written, brought up. A review is found only once membership has been
     reconciled, which the background does a moment later: the phone answered "I can't find that one" over the draft it had
     just written (F4). The row is reconciled first when it is not there yet - the same recovery funnel.settle uses."""
     from . import concierge, funnel
     key = f'review:{rid}'
-    if getattr(store, 'processing_reads_active', lambda: False)() and not funnel.next_item(store, key, include_surfaced=True):
+    if not funnel.next_item(store, key, include_surfaced=True):
         try:
             from . import processing_all
             processing_all.wait_settled(store)

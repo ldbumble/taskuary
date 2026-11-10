@@ -650,6 +650,15 @@ def on_rail(card) -> bool:
     return bool(card.get('unread') or ((card.get('deferred') or card.get('watching')) and card.get('tid') and not card.get('closed')))
 
 
+def rail_of(cards: list) -> list:
+    """The rows of a build that are ON THE RAIL (on_rail) - less an Advisor idea about a mail whose own row is still unread on it. The
+    mail's row is the line until it is read, then the idea's: the two stood one under the other, the Advisor's row saying again what
+    the mail's row said (one thing, one place - railcheck names it). The builder's unread rail and funnel.pile both read this."""
+    on = [c for c in cards if on_rail(c)]
+    mail = {c['mid'] for c in on if c.get('mid') and c.get('kind') != 'idea' and c.get('unread')}
+    return [c for c in on if not (c.get('kind') == 'idea' and c.get('mid') in mail)]
+
+
 def _fyi_mail(c) -> bool:
     return (c.get('lane') == 'fyi' and c.get('kind') == 'fyi' and not c.get('tid') and bool(c.get('cid'))
             and str(c.get('channel') or '').lower() == 'email')
@@ -718,9 +727,9 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, noise, leads) for row in rows]
     # ...and a task put away with Remind me stays on the rail, in For later, saying its day - it is still open work, and
     # the rail is where open work lives (2026-09-29). It is never actionable, so the walk does not offer it early.
-    kept = on_rail
     # ...a goal's child told by the goal's row is not a row, read or unread (on_rail)
-    cards = [card for card in cards if (include_read or kept(card)) and not card.get('ranked_wait') and not card.get('folded')]
+    cards = [card for card in cards if not card.get('ranked_wait') and not card.get('folded')]
+    if not include_read: cards = rail_of(cards)
     # Calendar keeps its established adapter; source filtering applies to it too.
     query = query_for(store, only)
     if processing_all._matches('calendar', '', query):

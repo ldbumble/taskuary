@@ -6,7 +6,6 @@ item is in is one rule shared with the page (website/src/funnelPile.js levelOf),
 from both sides, so the phone doorway's section walk and the rail agree on membership.
 """
 import json, os, unittest
-from datetime import datetime, timedelta
 from unittest import mock
 
 from taskuary import funnel, processing_unread, remind
@@ -90,30 +89,6 @@ class SectionWalkTests(unittest.TestCase):
     def test_a_section_that_runs_out_says_so_in_its_own_words(self):
         self.assertEqual(funnel.section_done('fyi'), 'FYI done.')
         self.assertEqual(funnel.section_done('later'), 'For later done.')
-
-
-class LegacyPileForLaterTests(unittest.TestCase):
-    """The demo world runs the legacy pile (funnel.build): walked-past open work stays under Tasks there too, and Remind me
-    puts it in For later."""
-    def test_walked_past_open_work_stays_in_tasks_and_later_says_its_day(self):
-        now = datetime.now()
-        at = (now - timedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S')
-        until = (now + timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S')
-        back = (now + timedelta(minutes=170)).strftime('%Y-%m-%d %H:%M:%S')
-        items = [{'key': 'msg:1', 'lane': 'yours', 'tid': 4}, {'key': 'msg:2', 'lane': 'fyi'},
-                 {'key': 'msg:3', 'lane': 'yours', 'tid': 5}, {'key': 'msg:4', 'lane': 'yours', 'tid': 6}]
-        # Next leaves a mark carrying when it is back (concierge.move_on, put_down); a card merely SHOWN leaves one without
-        states = {'msg:1': {'Status': 'surfaced', 'At': at, 'Until': back}, 'msg:2': {'Status': 'surfaced', 'At': at},
-                  'msg:3': {'Status': 'later', 'Until': until}, 'msg:4': {'Status': 'surfaced', 'At': at}}
-        out = {i['key']: i for i in funnel._apply_states(items, states, now)}
-        self.assertEqual(set(out), {'msg:1', 'msg:3', 'msg:4'}, 'a read fyi is gone; open work is not')
-        self.assertFalse(out['msg:1'].get('surfaced'), 'nothing is "passed" (2026-10-30)')
-        self.assertNotIn('back_at', out['msg:1'], 'an open task walked past has no clock')
-        self.assertEqual((out['msg:3']['deferred'], out['msg:3']['back_at']), (True, until))
-        self.assertEqual({k: funnel.level_of(i | {'order_band': 2}) for k, i in out.items()},
-                         {'msg:1': 'task', 'msg:3': 'later', 'msg:4': 'task'},
-                         'walked past or clicked away from stays under Tasks (2026-10-08, 2026-10-21); Remind me is For later')
-        self.assertNotIn('back_at', out['msg:4'])
 
 
 class ServedRailTests(unittest.TestCase):

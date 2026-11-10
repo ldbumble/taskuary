@@ -184,9 +184,10 @@ class TheTurnBuildsNoPipeItDoesNotNeed(unittest.TestCase):
     """The canvas timing (2026-10-26): every typed turn built the whole pipe twice more for SELECT's few words - the index's selector,
     which names no value, and the turn's values, unchanged since the last turn. Built once while nothing moved, and never for the index."""
     def test_the_values_are_built_once_while_nothing_moved(self):
-        from taskuary import toolcatalog
+        from taskuary import processing_all, toolcatalog
         with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(ingest, '_spawn'):
             s, _ = world()
+            processing_all.wait_settled(s)        # nothing moved: the dock's own task is on the rail's books, as it is long before a turn is typed
             with mock.patch.object(funnel, 'build', wraps=funnel.build) as b:
                 toolcatalog.block(s)
                 self.assertEqual(b.call_count, 0, 'the index names no value')

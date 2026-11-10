@@ -79,20 +79,9 @@ SOON_MIN, ALERT_MIN, STARTED_MIN = 120, lanes.ALERT_MIN, 5   # calendar visibili
 SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand
 LATER_HOURS = 3                   # "not now" - it comes back this much later
 FEED_DAYS = 7
-# the owner's two knobs (Settings > Assistant): how far back the pipe reaches for ordinary mail - a
-# first launch must not surface a year of never-triaged mail - and how much it holds at once.
-# Drafts waiting for a yes and agents parked on a question ignore the window: they are on you
-# whenever they happened.
+# what two Settings knobs ship as (settings_defaults.json is written from them): how far back unread ordinary mail
+# reaches (funnel_hours, read by the store) and the cap the rail once had (funnel_max, a retained value nothing applies).
 HOURS_DEFAULT, MAX_DEFAULT = 12, 25
-# The assistant's OWN lines get a longer window than mail. A mail going quiet after twelve hours
-# is fine; its standing note that something is loose is the opposite - it is still true tomorrow,
-# and expiring it is how "TQ-0329 hasn't moved, Paula asked for that file today" left the pipe
-# unseen (the owner, 2026-09-04: "ideas ... should come back every time assistant thinks of
-# something new"). Measured on the owner's own store: at 12h two of the 64 open ideas reach the
-# pipe, at 24h five, at 72h thirty-eight - so a day is the point where more becomes a flood
-# rather than a reminder. An idea whose facts change is re-said, which bumps LastSaid and brings
-# it back on its own; this window is only about how long an undecided one waits to be seen.
-IDEA_HOURS = 24
 # A failed run is named by convention: reports.py sends '<title> - FAILED' (reports.run_report_source
 # reads the same suffix back). Matching those words ANYWHERE in the subject called 'Process Error
 # Check - 0 rows' a failure, because the report's own name contains 'Error' (the owner, 2026-09-03:
@@ -1017,33 +1006,6 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
     return out
 
 
-def from_proposals(store, used_rids: set, used_tids: set = frozenset()) -> list:
-    """A pending proposal with no mail and no task behind it - a switch the owner asked for in the
-    chat, waiting for their yes. Every other review reaches the pile through its message row, so a
-    task-less one could only be approved from the chat line that proposed it, and that scrolls away."""
-    out = []
-    for rv in store.list_reviews('pending'):
-        if rv.get('Kind') != 'action' or rv.get('MessageId') or rv.get('TaskId') or rv['ReviewId'] in used_rids: continue
-        out.append(_item(f"review:{rv['ReviewId']}", 'action', 'approve', rv.get('Reason') or 'a change waits for your yes',
-                         who='you asked for it', when=rv.get('CreatedAt'), rid=rv['ReviewId'],
-                         why='a setting waits for your yes - nothing changes until you approve it'))
-    # a task's emails (slots.py) have no message row to ride on, so they arrive here - ONE row per task, its NEWEST draft
-    # first (as the processing rail leads): approving it puts the next one up with the count one smaller. A task already
-    # on the rail (`used_tids`: its message, its reply) is not listed again - its card holds the emails (2026-10-06: a
-    # reply row and an email row for one task)
-    from . import slots
-    per = {}
-    for rv in store.list_reviews('pending'):
-        if rv.get('Kind') == slots.KIND and rv.get('TaskId') and rv['ReviewId'] not in used_rids and rv['TaskId'] not in used_tids:
-            per.setdefault(rv['TaskId'], []).append(rv)
-    for tid, rvs in per.items():
-        first, n = max(rvs, key=lambda r: r['ReviewId']), len(rvs)
-        out.append(_item(f"review:{first['ReviewId']}", 'review', 'approve', (store.get_task(tid) or {}).get('Title') or first.get('Reason') or 'emails wait for your yes',
-                         tid=tid, when=first.get('CreatedAt'), rid=first['ReviewId'], draft=True,
-                         why=f"{plural(n, 'email')} drafted for you to send"))
-    return out
-
-
 def from_calendar(store, now: datetime) -> list:
     out = []
     # how long a started meeting stays on the rail - a setting (the owner, 2026-09-25), STARTED_MIN when unset
@@ -1069,7 +1031,7 @@ def slipped_followup(store, action: dict, now: datetime = None) -> tuple:
     """SLIPPED (spec 2026-10-12): a follow-up quiet past THAT person's day is the owner's move, in the slipped lane. The day is
     the ledger's (outcomes.late_after), the default the owner's (Settings -> Advisor); someone away never slips, and a reply
     from them ends it. Returns (lane, days past the person's day, days quiet, the person's day): lane is 'forgotten', 'answered'
-    (close the idea) or None - one rule for the legacy pile and the processing rail."""
+    (close the idea) or None - one rule for the rail and the Advisor's own read of it."""
     a = action or {}
     if a.get('type') != 'followup' or not a.get('who_email') or not a.get('asked_at') or a.get('away'): return (None, 0, 0, 0)
     from . import outcomes
@@ -1084,94 +1046,6 @@ def slipped_followup(store, action: dict, now: datetime = None) -> tuple:
 def slipped_why(who_email: str, quiet: int, day: int) -> str:
     from .processing_unread import holder_name
     return f"No answer from {holder_name('person:' + str(who_email or ''))} in {quiet} days - late for them after {day}"
-
-
-def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = frozenset(),
-                   reconcile: bool = True) -> list:
-    """The assistant's own open lines (assistant.py posts them on its half-hourly check: the ask that
-    slipped, the promise, the thread gone quiet). They enter the pipe when SAID - LastSaid, not the
-    age of the thread they are about - so a four-day-old silence raised this morning is this morning's."""
-    out, seen_cids = [], set()
-    for i in store.list_ideas('open'):
-        try: a = json.loads(i.get('ActionJson') or '{}')
-        except ValueError: a = {}
-        if i.get('Kind') == 'prep': continue                      # the calendar lane already has the meeting itself
-        # the report's card said work=no for this post: news to read on the Timeline, not a row here
-        if a.get('work') is False: continue
-        # A closed source task does NOT mean the Assistant post was read. The post may also name a
-        # separate follow-up or a pattern learned across several tasks (for example, recurring blank
-        # logins). It leaves Unread only through its own idea state, never as a side effect of closing
-        # the task it cited. (Closing the task it is ABOUT - its `about`, or its mail - writes that state: _task_ideas.)
-        m0 = (store.get_message(a['mid']) or {}) if a.get('mid') else {}
-        tid = a.get('tid') or m0.get('TaskId')
-        if not tid and m0.get('ConversationId'):
-            # the mail itself never joined the task, but its thread did: the thread's task is the fact
-            try: tid = next((c.get('TaskId') for c in store.thread_messages(conversation_id=m0['ConversationId'], limit=12) if c.get('TaskId')), None)
-            except Exception: tid = None
-        # ...and a line about a thread the owner has since REPLIED on is over too - the reply is the follow-up
-        from .assistant import sent_reply_for
-        sent = sent_reply_for(store, {'action': a})
-        if sent and _ts(sent.get('DecidedAt') or sent.get('CreatedAt')) >= _ts(i.get('LastSaid') or i.get('FirstSeen')):
-            if reconcile: store.set_idea_status(i['IdeaId'], 'done', 'funnel')
-            continue
-        if a.get('mid') in used_mids or (a.get('tid') and a['tid'] in used_tids): continue
-        # nothing to do until TRIAGE says otherwise (the owner, 2026-09-07: "assistant ideas and
-        # slipped stuff should be fyi unless triage turns it into task"). It used to open as 'slipped'
-        # - or 'report' for a systems section - so an idea whose verdict failed, or that was still
-        # waiting for an AI connector to reach one, was shown as work nobody had called work.
-        # the shared verdict decides the lane (PW-200), by the one rule the canonical rail uses too
-        from .processing_all import idea_lane
-        lane, tri = idea_lane(i), a.get('triage') or {}
-        slip, late, quiet, day = slipped_followup(store, a)
-        if slip == 'answered':                                   # they wrote back: the line is over, like the owner's own reply
-            if reconcile: store.set_idea_status(i['IdeaId'], 'done', 'funnel')
-            continue
-        if slip: lane = slip
-        why = a.get('why') or 'the assistant raised this'
-        # in words, not the exception: "'claude' not found on PATH" tells someone who never wrote code nothing (U16)
-        if tri.get('error'): why = f"couldn't sort this yet - it tries again on the next check; {why}"
-        elif tri.get('pending'): why = f'waiting to be sorted - no AI is connected yet; {why}'
-        m = (store.get_message(a['mid']) or {}) if a.get('mid') else {}
-        cid = m.get('ConversationId')
-        if cid and (cid in used_cids or cid in seen_cids): continue     # one line per conversation
-        if cid: seen_cids.add(cid)
-        # THE TASK IS THE ACTION'S OWN `tid`, written where the line was made (the Advisor's candidate, or the model's `about`).
-        # A TQ ref read out of the line's text and the model's `why` used to pick the task here - the same guess as the reverted
-        # _followed_up, and a line naming two tasks went to whichever matched first (the owner, 2026-10-11: no regex decides meaning)
-        out.append(_item(f"idea:{i['IdeaId']}", 'idea', lane, i['Text'], when=i.get('LastSaid') or i.get('FirstSeen'), mid=a.get('mid'), tid=a.get('tid'),
-                         who=m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '',
-                         idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=why, priority=tri.get('priority'), workstream=i.get('Workstream') or '',
-                         who_email=a.get('who_email') or '', late_days=late,
-                         urgent_request=tri.get('intent') in ('task', 'reply_only') and (bool(tri.get('urgent')) or priority_rank(tri.get('priority')) == 0)))
-    return out
-
-
-def from_wrapped(store, now: datetime, busy: set) -> list:
-    """Sending a reply and ending an agent run never close a task (the owner controls completion), so a
-    task can sit in 'waiting' with the reply sent and the result saved. That last step is the owner's
-    - the assistant puts it in front of them once: close it, or keep it open."""
-    out = []
-    for t in store.list_tasks(active_only=True):
-        tid = t['TaskId']
-        # in_progress means an agent has it: there is nothing to close yet, whether or not a session
-        # is alive right now (the same rule build() uses to put such a task on the shelf)
-        if t.get('Status') not in ('open', 'waiting') or tid in busy or t.get('SourceRef') == 'assistant:dock': continue
-        if t.get('ReviewStatus') == 'pending' or store.waiting_on_owner(tid): continue
-
-        from . import slots
-        if slots.open_(store, tid): continue           # its emails still wait (slots.py): not a task to wrap up yet
-        sent = store.sent_reply(task_id=tid)
-        # ...or the owner answered from their own mail client: a reply typed in Outlook ends the work
-        # exactly as much as one approved here, and this used to see only Taskuary's own sends
-        own = None if sent else store.own_reply_on_thread(task_id=tid)
-        if not (sent or own): continue
-        found = agent_found(store, tid)
-        when = (sent.get('DecidedAt') or sent.get('CreatedAt')) if sent else own.get('SentAt')
-        out.append(_item(f"wrap:{tid}", 'wrapup', 'report', t.get('Title'), who='you', when=when, tid=tid, summary=found,
-                         mid=reply_to(store, tid), priority=t.get('Priority'),
-                         sent=_short(sent.get('FinalText') or sent.get('DraftText') if sent else own.get('BodyText'), 200),
-                         why='the reply went out' + (' and the agent finished' if found else '') + ' - the task is still open'))
-    return out
 
 
 # ── the pile ─────────────────────────────────────────────────────────────────────────────────
@@ -1263,66 +1137,6 @@ def _order(items: list) -> list:
     return sorted(items, key=order_key)
 
 
-_LATER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved')
-
-
-def _ts_dt(value):
-    try: return datetime.strptime(str(value)[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
-    except ValueError: return None
-
-
-def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool = False) -> list:
-    """Apply the owner's decisions to the assistant's work queue.
-
-    A surfaced row is read and the feed's Unread view removes it. Unresolved approvals and agent
-    questions still remain in this internal queue (marked surfaced) so the assistant can report
-    that work accurately without presenting it again as the next unread item.
-    """
-    stamp = now.strftime('%Y-%m-%d %H:%M:%S')
-    out = []
-    for i in items:
-        st = states.get(i['key'])
-        if st:
-            # done is for good - except on a CONDITION whose error has changed since (a broken connection's
-            # sig): that is a new failure, not the one put down
-            if st['Status'] == 'done' and not (i.get('kind') == 'connection' and st.get('Note') and st['Note'] != i.get('sig')): continue
-            if st['Status'] in ('later', 'skip') and (not st.get('Until') or _ts(st['Until']) > stamp):
-                # FOR LATER (the canvas redesign, 2026-09-29): an open task put away stays on the rail, saying its day -
-                # never offered by the walk before it (next_item skips `deferred`)
-                if i.get('tid') and st.get('Until') and i['lane'] in _LATER_LANES:
-                    out.append(i | {'deferred': True, 'defer_until': st['Until'], 'back_at': st['Until']})
-                continue
-            if st['Status'] == 'surfaced':
-                # shown, but CHANGED since - the agent rewrote the draft, the question moved on: new again
-                if i.get('sig') and st.get('Note') and st['Note'] != i['sig']:
-                    out.append(i); continue
-                if i.get('kind') == 'connection': out.append(i); continue
-                # READ IS GONE from the queue - but an OPEN TASK is never read off the rail: Next leaves it in its place under Tasks
-                # (the walk has one owner, 2026-10-30, rule 4), and no clock and no band says it was passed
-                if not keep_surfaced and not (i.get('tid') and i['lane'] in _LATER_LANES) and i['lane'] not in ('blocked', 'approve', 'working'): continue
-                # an fyi's shown-state note is the summary the assistant wrote for it (PW-151); a sig'd item's note is its sig
-                if i.get('lane') == 'fyi' and not i.get('sig') and st.get('Note'): i = i | {'summary': st['Note']}
-        out.append(i)
-    return out
-
-
-def knobs(store) -> tuple[int, int]:
-    s = store.get_settings()
-    def n(k, d):
-        try: return max(1, int(s.get(k) or d))
-        except (TypeError, ValueError): return d
-    return n('funnel_hours', HOURS_DEFAULT), n('funnel_max', MAX_DEFAULT)
-
-
-def _aged_out(i: dict, now: datetime, hours: int) -> bool:
-    """Older than the owner's window is yesterday's - the pipe is what came in lately, not an archive.
-    A meeting, a parked agent, a draft waiting for a yes: on you whenever they happened."""
-    if i['lane'] in ('blocked', 'broken', 'time', 'approve', 'working'): return False
-    if i['kind'] == 'idea': hours = max(hours, IDEA_HOURS)      # ...and never shorter than a day
-    when = _dt(i.get('since') or i.get('when'))
-    return bool(when) and when < now - timedelta(hours=hours)
-
-
 RUN_STALE_MIN = 20        # a 'running' run row nobody has touched for this long is not working anything
 
 def working_tids(store, live_state=_LIVE_UNSET, now: datetime = None) -> set:
@@ -1347,166 +1161,13 @@ def working_tids(store, live_state=_LIVE_UNSET, now: datetime = None) -> set:
     return out
 
 
-def build(store, now: datetime = None, keep_surfaced: bool = False,
-          reconcile: bool = True, live_state=_LIVE_UNSET,
+def build(store, now: datetime = None, keep_surfaced: bool = False, live_state=_LIVE_UNSET,
           full_history: bool = False, keys=None) -> dict:
-    """`keys`: a lookup - the shared builder cards only what answers to them (processing_unread.build); the legacy
-    pile builds whole and the caller's match finds the same item in it."""
-    now = now or datetime.now()
-    if getattr(store, 'processing_reads_active', lambda: False)():
-        from .processing_unread import build as shared_build
-        return shared_build(store, now=now, include_read=keep_surfaced,
-                            live_state=None if live_state is _LIVE_UNSET else live_state,
-                            full_history=full_history, keys=keys)
-    # Explicit Current/named-item lookup must not lose its subject behind the
-    # ordinary transport cap. Its existing history/read/grouping rules still apply.
-    feed_limit = -1 if keep_surfaced else 400
-    rows = (store.feed(limit=feed_limit, days=FEED_DAYS) if live_state is _LIVE_UNSET
-            else store.feed(limit=feed_limit, days=FEED_DAYS, live_state=live_state))
-    items = from_feed(store, rows)
-    # the live session knows more about a parked agent than its feed row does (its last lines,
-    # whether it asked) - so its item replaces the row's
-    agents = {a['key']: a for a in from_agents(store, live_state=live_state, now=now)}
-    items = [agents.pop(i['key']) | {'mid': i.get('mid')} if i['key'] in agents else i for i in items] + list(agents.values())
-    # A saved general-agent conversation survived the restart even though its in-memory worker did
-    # not. Keep it on the agent road, explicitly paused, with the existing Resume action.
-    items = [paused_conversation(store, i) if i.get('kind') != 'agent' else i for i in items]
-    # ...and the mail that STARTED a task whose agent is now waiting is not a second item: the
-    # agent's question is the thing to answer, and answering it is answering the mail
-    parked = {i['tid'] for i in items if i['kind'] == 'agent'}
-    items = [i for i in items if not (i['kind'] in ('asked', 'todo', 'fyi') and i.get('tid') in parked)]
-    items += from_proposals(store, {i['rid'] for i in items if i.get('rid')}, {i['tid'] for i in items if i.get('tid')})
-    items += from_calendar(store, now)
-    # (a failing connection is not a row: it is the bell's alone - problems.py, the owner 2026-10-26)
-    # Only a row still inside the walk window may suppress a fresh Assistant follow-up about the
-    # same conversation. Once filed/automated mail was admitted to Unread, an old message could
-    # occupy used_cids here, hide this morning's follow-up, and then age out itself below—leaving
-    # neither one in the queue.
-    hours, _cap = knobs(store)
-    # Only a source row that is itself still unread can suppress an Assistant idea about the same
-    # message/task/thread. Previously a source row marked surfaced remained in `used_*` until the
-    # final state pass below; it hid the newer Assistant idea and was then removed itself, leaving
-    # neither one visible while Unread claimed All done.
-    states = store.funnel_states()
-    current = _apply_states([i for i in items if not _aged_out(i, now, hours)], states, now)
-    used_mids = {i['mid'] for i in current if i.get('mid')}
-    used_tids = {i['tid'] for i in current if i.get('tid')}
-    used_cids = {i['cid'] for i in current if i.get('cid')}
-    items += from_forgotten(store, used_mids, used_tids, used_cids, reconcile=reconcile)
-    # Closed is authoritative. The final report remains on the task, but a task the owner or agent
-    # has closed is no longer work to walk through and must never be reintroduced into the funnel.
-    # an agent mid-job: nothing to do here yet, whatever the mail or the idea says about the task - so it
-    # rides at the TOP of the pipe as 'in hand', and drops to the front when the agent stops or asks
-    busy = working_tids(store, live_state=live_state, now=now)
-    from . import terminal as term
-    # Keep the live session's identity on the working row. The message row used to change only its
-    # key/lane, so the Assistant knew something was in hand but its card still had no sid, tail or
-    # agent and rendered as "coding - nobody on it" after the agent was started from Tasks/Board.
-    if live_state is _LIVE_UNSET:
-        try: live_by_tid = {t['taskId']: t for t in term.live_sessions(tail=6) if t.get('taskId')}
-        except Exception: live_by_tid = {}
-    else:
-        live_by_tid = {t['taskId']: t for t in live_state if t.get('taskId')}
-    live_tids = busy | {i['tid'] for i in items if i['kind'] == 'agent' and i.get('tid')}   # working, parked or asking: an agent is on it
-    stale_before = (now - timedelta(minutes=RUN_STALE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
-    # ...and a task whose STATUS says in_progress is in the middle of being worked, whether or not a
-    # session is alive right now: the owner reads it that way ("it's in middle of working... it should
-    # say working so it's not in funnel"), and it comes back to the front the moment the watcher moves
-    # it to waiting or the agent asks (2026-09-03).
-    # 'in_progress' means an agent is mid-job, and the owner reads it that way even between sessions
-    # ("it's in middle of working... it should say working so it's not in funnel"). But nobody moves
-    # the status back when a session DIES, so the status alone held a task in the working lane for
-    # ever: TQ-0006 sat there with no session and "nothing for you", and the outage task fell out of
-    # the pipe entirely (the 2026-09-03 break test). Mid-job is a live agent, or a task somebody has
-    # touched in the last RUN_STALE_MIN; anything older is abandoned, and comes back to the owner.
-    def mid_job(tid):
-        t = store.get_task(tid) or {}
-        if t.get('Status') != 'in_progress': return False
-        if tid in live_tids: return True
-        # ...and a session that ENDED by finishing is not mid-job, however recent: its report is written and nobody is on it
-        # (TQ-1112 shape: closed, still in_progress for two minutes while the ending wrote, and read as "agents working")
-        return str(t.get('UpdatedAt') or t.get('CreatedAt') or '') >= stale_before and not session_finished(store, tid)
-    def held(tid): return bool(tid) and (tid in busy or mid_job(tid))
-    # ...and a drafted reply with an agent still WORKING the task: the latest action is the status, and
-    # working is newer than any draft the agent made along the way (the owner, 2026-09-24). Only a live
-    # worker, never the in_progress clock - a reply waits on nothing once the agent has stopped.
-    def in_hand(i):
-        if i['kind'] == 'review': return i.get('tid') in busy
-        return i['kind'] not in ('agent', 'action') and (i.get('working') or held(i.get('tid')))
-    # ...under the SAME key the parked agent will have (agent:<tid>), so shown-once and the page's live
-    # row follow the task through stopping and starting instead of losing it at each change
-    def held_item(i):
-        if not in_hand(i): return i
-        live = live_by_tid.get(i.get('tid')) or {}
-        who = i.get('working') or (task_kinds.shown(live) if live else task_kinds.SHOWN)
-        if i['kind'] == 'review': i = i | {'kind': 'agent', 'rid': None, 'draft': False, 'reply_pending': True}
-        return i | {'key': f"agent:{i['tid']}" if i.get('tid') else i['key'], 'lane': 'working',
-                    'why': f"{who} has it - nothing for you until it stops or asks",
-                    'working': who, 'agent': who,
-                    'sid': live.get('sid'), 'tail': live.get('tail') or [],
-                    'mode': live.get('mode') or 'terminal'}
-    items = [held_item(i) for i in items]
-    # ...and a CHAT task's waiting move is the agent's, whatever it is (the owner, 2026-11-05: "we can remove reply ready for you since it can be
-    # any action"): its row says "agent ready for you" (lanes.json `chat_ready`) - a coding task keeps its own words
-    if (tids := {i['tid'] for i in items if i.get('tid') and i.get('lane') in CHAT_READY_LANES}):
-        from . import general
-        chats = {r['TaskId'] for r in store._rows(f"SELECT TaskId, Kind FROM task WHERE TaskId IN ({','.join('?' * len(tids))})", tuple(tids))
-                 if general.handles(r)}
-        items = [i | {'chat': True} if i.get('tid') in chats and i.get('lane') in CHAT_READY_LANES else i for i in items]
-    # the wrap-up on a task an agent still holds is not a question yet either
-    seen = set(); items = [i for i in items if not (i['key'] in seen or seen.add(i['key']))]
-    hours, cap = knobs(store)
-    items = [i for i in items if not _aged_out(i, now, hours)]
-    items = [i for i in _apply_states(items, states, now, keep_surfaced) if not i.get('ranked_wait')]
-    # The wrap-up is merged HERE, once the pile is what the owner has left: a task whose message they
-    # have already read (or that triage filed as fyi - "Thank you!") is a task nobody closed, and the
-    # wrap-up is the one thing still on them. Merged before the read, the row they had just cleared
-    # suppressed it and the task fell out of the pipe altogether (2026-09-03).
-    wrapped = _apply_states(from_wrapped(store, now, busy), states, now, keep_surfaced)
-    wrap_tids = {w['tid'] for w in wrapped}
-    # ...and it outranks a row that is on the rail for its open task alone (from_feed open_only): an
-    # open task whose reply already went out is better told as "the reply went out - the task is
-    # still open" than as work with nobody on it. A line triage kept as WORK stays what it is.
-    items = [i for i in items if not (i['lane'] == 'fyi' or i.get('open_only')) or i.get('tid') not in wrap_tids]
-    held = {i['tid'] for i in items if i.get('tid')}
-    items = items + [w for w in wrapped if w['tid'] not in held]
-    # a task's row is placed by when the TASK arrived, not by its newest mail or its agent (order_key, the owner 2026-10-22)
-    # ...or its FIRST mail, when that came first: triage makes the task a little after the mail that asked for it. The row's own time
-    # is its NEWEST activity - an agent starting or asking - so it counts only for a task with no mail at all: it moved a row an hour
-    # down when its agent asked, and Next, walking on below the place that row had held, found nothing (tests/test_lifecycle.py)
-    def made_at(tid):
-        sent = [m.get('SentAt') for m in (store.list_messages(tid) if hasattr(store, 'list_messages') else [])[:1]]
-        return [x for x in ((store.get_task(tid) or {}).get('CreatedAt'), *sent) if x], bool(sent)
-    made = {tid: made_at(tid) for tid in {i['tid'] for i in items if i.get('tid')}}
-    def first(i, made_at):
-        stamps, mailed = made_at
-        at = not_ahead([s for s in (*stamps, *(() if mailed else (i.get('sort_at') or i.get('since') or i.get('when'),))) if _activity_time(s)])
-        return min(at, key=_activity_time) if at else (stamps or [None])[0]
-    from .processing_unread import came_back
-    back = {tid: came_back(store, tid, store.list_messages(tid) if hasattr(store, 'list_messages') else []) for tid in made}
-    items = _order([i | {'arrived_at': back[i['tid']] or first(i, made[i['tid']])} if i.get('tid') and made.get(i['tid']) and not i.get('arrived_at') else i
-                    for i in items])
-    # the owner's standing rules: what they told us to stop showing them never enters again. Only the
-    # lanes with nothing to do - a rule must not be able to hide something asking them for something.
-    rules = mutes(store)
-    quiet = [i for i in items if i['lane'] in MUTED_LANES and any(muted(r, i) for r in rules)] if rules else []
-    if quiet:
-        items = [i for i in items if i not in quiet]
-        logger.debug(f'funnel: {len(quiet)} item(s) held back by your standing rules')
-    # never more than the owner wants to look at: the rest waits its turn (and its arrivals still land)
-    # ...but a task an agent is working is never capped away - and it keeps its place in the order, among the other tasks: it
-    # was shelved after everything else, under a section of its own (the owner, 2026-10-21)
-    queue = [i for i in items if i['lane'] != 'working']
-    hidden = max(0, len(queue) - cap) if not keep_surfaced else 0
-    if hidden:
-        drop = {id(i) for i in queue[cap:]}
-        items = [i for i in items if id(i) not in drop]
-    items = [i | {'order_band': _band(i)} for i in items]  # same band for rendered cards and alerts
-    rev = hashlib.sha1('|'.join(f"{i['key']}:{i['lane']}:{int(bool(i.get('settling')))}" for i in items).encode()).hexdigest()[:12] + f':{hidden}:{len(quiet)}'
-    return {'rev': rev, 'items': items, 'hidden': hidden, 'muted': len(quiet),
-            'rules': [str(r.get('why') or ' '.join(r.get('words') or []))[:120] for r in rules],
-            'lanes': [{'lane': l, 'word': LANE_WORDS[l][0], 'role': LANE_WORDS[l][1],
-                       'n': sum(1 for i in items if i['lane'] == l)} for l in LANES]}
+    """The rail, from the one builder there is (processing_unread.build). `keys`: a lookup - it cards only what answers to them."""
+    from .processing_unread import build as shared_build
+    return shared_build(store, now=now or datetime.now(), include_read=keep_surfaced,
+                        live_state=None if live_state is _LIVE_UNSET else live_state,
+                        full_history=full_history, keys=keys)
 
 
 def _chat_only(store, low, high) -> bool:
@@ -1641,16 +1302,13 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
         mark, began = _rail_top(store), time.perf_counter()   # taken BEFORE the build: a write during it counts as after
         # the watcher speaks first: a transition changes the pile too. Quiet, it keeps what it last said.
         events = ((_CACHE['pile'] or {}).get('events') or [] if same_store else []) if quiet else announce(store)
-        # ONE build serves the pile and the item the page is holding: the shared builder computes
+        # ONE build serves the pile and the item the page is holding: the builder computes
         # every card's read state anyway, and the pile is its unread subset (processing_unread.build)
-        shared = getattr(store, 'processing_reads_active', lambda: False)()
-        full = build(store, keep_surfaced=True) if shared else None
-        if shared:
-            from .processing_unread import on_rail
-            items = [i for i in full['items'] if on_rail(i)]
-            p = {**full, 'items': items, 'lanes': [{**l, 'n': sum(i['lane'] == l['lane'] for i in items)} for l in full['lanes']],
-                 'counts': {**full['counts'], 'unread': len(items), 'actionable': sum(i['actionable'] for i in items)}}
-        else: p = build(store)
+        from .processing_unread import rail_of
+        full = build(store, keep_surfaced=True)
+        items = rail_of(full['items'])
+        p = {**full, 'items': items, 'lanes': [{**l, 'n': sum(i['lane'] == l['lane'] for i in items)} for l in full['lanes']],
+             'counts': {**full['counts'], 'unread': len(items), 'actionable': sum(i['actionable'] for i in items)}}
         # A CLOSE ON ITS WAY IS CLOSED (the owner, 2026-11-09: "i marked task done, the one before came back and then disappeared again"):
         # Mark done on an agent's task writes it up first and closes after (writeup.closing); a read meanwhile drew it again for a read or two
         from . import writeup
@@ -1679,10 +1337,10 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
             logger.debug(f'batch progress did not reach the rail: {e}'); p['batch_progress'] = {}
         p['events'] = events
         p['live_seq'] = seen
-        _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
+        _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'],
                       generation=_CACHE.get('generation', 0) + 1, mark=mark, workers=workers)
         _KNOWN.update(store=store, pile=p, full=_CACHE['full'], began=began)
-        _keep_threads(store, [*(full['items'] if shared else ()), *p['items']])
+        _keep_threads(store, [*full['items'], *p['items']])
         return p
 
 
@@ -1961,7 +1619,7 @@ def next_item(store, key: str = None, include_surfaced: bool = False, items: lis
         # every chat read, every 30 s tick, and outside the window it paid for the WHOLE history each time (P4).
         pool = items if items is not None else build(store, keep_surfaced=True, keys=[key])['items']
         item = next((i for i in pool if i['key'] == key or key in i.get('aliases', [])), None)
-        if item is None and getattr(store, 'processing_reads_active', lambda: False)():
+        if item is None:
             item = next((i for i in build(store, keep_surfaced=True, full_history=True, keys=[key])['items']
                          if i['key'] == key or key in i.get('aliases', [])), None)
         return shut(store, _present_one(store, item)) or batch_item(store, key)

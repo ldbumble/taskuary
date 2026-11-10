@@ -86,6 +86,7 @@ def world():
     from taskuary.funnel import _item as mk
     from taskuary.testing import Factory
     s = MemoryStore(); s.set_setting('calendar_enabled', '0', 'test')
+    s.starts_itself = True      # tests/conftest.py leaves the start to this world, below
     demo.seed(s)
     with mock.patch.dict(os.environ, {faults.ENV: '1'}):
         assert faults.active(), 'the eval needs a scratch home'
@@ -136,6 +137,11 @@ def world():
     pt = f.task(title='Payworth seat count renewal', status='open', kind='task')
     f.message(task_id=pt, subject='Payworth seat count renewal', body='Your seats renew next month. Reply to change the count.', from_name='Payworth Renewals',
               from_email='renewals@payworth.example', conversation_id='email:payworth-seats', sent_at=at(h=2))
+    # the home starts, as the app starts one before anything reads its rail (server lifespan), its membership then kept current inline
+    # where the app runs a worker
+    from types import SimpleNamespace
+    from taskuary import processing_startup
+    processing_startup.initialize(s, live_state=[]); s.membership_worker = SimpleNamespace(kick=s.reconcile_processing_membership)
     funnel.invalidate()
     pile = funnel.pile(s, quiet=True).get('items') or []
     seen, items = set(), []
@@ -152,18 +158,17 @@ def world():
               else mk(f'agent:{tid}', 'agent', 'stopped', title, **kw) if w == 'failed'
               else mk(f'agent:{tid}', 'agentdone', 'done', title, summary='Done - the export keeps inter-company rows now, and the tests pass.', **kw))
         syn[it['key']] = it; items = [i for i in items if i.get('tid') != tid] + [it]
-    # ...and the processing rail's cards, where a real install draws them: a person past their day and a goal's facts are its reading
+    # ...and the rail's own cards, read ones kept: a person past their day and a goal's facts are its reading
     from taskuary import processing_unread
-    try:
-        s.reconcile_processing_membership(); s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[]); funnel.invalidate()
-        rail = processing_unread.build(s, live_state=[], include_read=True)['items']
+    try: rail = processing_unread.build(s, live_state=[], include_read=True)['items']
     except Exception: rail = []
     by = {}
     for title, *_ in CASES:
         hit = next((i for i in rail if title in RAIL and title.lower() in str(i.get('title') or '').lower()), None)
         hit = hit or next((i for i in items if title.lower() in str(i.get('title') or '').lower()), None)
-        # ...and a row the legacy pile cut (its `hidden` tail - read before the processing reads are on) is still on the rail a real
-        # install draws: the demo's calendar rows pushed the GL-export notice past that cut (2026-10-20)
+        # ...a drafted reply's card is titled by its task; the case names the mail it answers
+        hit = hit or next((i for i in items if i.get('mid') and title.lower() in str((s.get_message(i['mid']) or {}).get('Subject') or '').lower()), None)
+        # ...and a row already read when the home started is still a card of the rail (the demo's GL-export notice, 2026-10-20)
         hit = hit or next((i for i in rail if title.lower() in str(i.get('title') or '').lower()), None)
         if not hit:
             t = next((x for x in s.list_tasks() if title.lower() in str(x.get('Title') or '').lower()), None)

@@ -65,10 +65,9 @@ MATRIX = [
     ('AP cutover - Thursday?', 'draft_ready', 'approve', False),
     ('Lease renewal for the Elm Street office', 'failed_cause', 'new_task', True),
     ('Spendly card limits', 'idea', 'mine', False),
-    ('Q3 accruals file', 'agent_done', 'close', True),           # "Your reply went at 10:02; nothing since."
+    ('Q3 accruals file', 'answered', 'close', True),             # "Your reply went at 10:02; nothing since."
     ('Helpdesk tickets by day', 'report_ok', 'next', False),
     ('Vendor portal maintenance', 'fyi', 'next', False),
-    ('Reconcile the August GL export', 'working', None, False),      # a chat agent's turn picks the light (advisor.agent_light)
     ('agent asking (coding)', 'agent_asking', None, False),       # a coding agent's ask lights nothing (the owner, 2026-11-02)
     ('agent finished (general)', 'agent_done', None, False),     # its turn said nothing is left nowhere: nothing lit (advisor.agent_light)
     ('agent failed (general)', 'failed_cause', 'continue', False),    # ...its failure's Try again, said by the run's own line
@@ -460,21 +459,6 @@ def test_a_held_action_is_read_before_an_agent_asking(s):
     rv = s._one("SELECT ReviewId FROM review WHERE TaskId=? AND Kind='action'", (t,))['ReviewId']
     s._exec("UPDATE review SET Status='dismissed' WHERE ReviewId=?", (rv,))
     assert rulebook.facts(s, it, _verbs('approve', 'stop_agent'))['state'] == 'agent_asking', 'answered: the agent asking is read as before'
-
-
-def test_the_held_actions_approve_is_on_the_tasks_row_and_pressed_answers_that_proposal(s):
-    from tests.test_advisor import brain_saying
-    t, _ = _held(s)
-    funnel.invalidate()
-    rv = s._one("SELECT ReviewId FROM review WHERE TaskId=? AND Kind='action'", (t,))['ReviewId']
-    it = advisor._item(s, 'task', t)
-    assert not it.get('rid') and concierge.cannot(it, 'approve', s) == ''
-    assert {'verb': 'approve', 'label': 'Approve'} in concierge.row_buttons(s, it)
-    advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=brain_saying({'verb': 'approve', 'line': '', 'evidence': []}))
-    with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, f'task:{t}', preread=False)
-    assert (d['state'], d['verb'], d['label']) == ('action_held', 'approve', 'Approve'), d
-    prop = concierge.propose_direct(s, 'approve', f'task:{t}', press=True)
-    assert (prop['kind'], int(prop['target'])) == ('review.approve', rv), prop
 
 
 def test_a_close_out_or_a_playbook_is_no_held_action(s):

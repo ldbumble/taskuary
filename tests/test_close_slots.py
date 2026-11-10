@@ -359,12 +359,12 @@ def test_a_triaged_chat_message_never_owes_its_sender_an_email():
 def test_the_rail_shows_one_row_per_task_with_its_count(s):
     from taskuary import funnel
     tid = typed(s, FOUR[:2]); a, b = draft(s, tid, 0), draft(s, tid, 1)
-    rows = [r for r in funnel.from_proposals(s, set()) if r.get('tid') == tid]
-    # the NEWEST draft leads, as on the processing rail (processing_unread) - both rails send the same one first
-    assert len(rows) == 1 and rows[0]['key'] == f'review:{b}' and rows[0]['lane'] == 'approve' and '2 emails' in rows[0]['why']
+    rows = [r for r in funnel.build(s)['items'] if r.get('tid') == tid]
+    # the NEWEST draft leads
+    assert len(rows) == 1 and rows[0]['rid'] == b and rows[0]['lane'] == 'approve' and '2 emails' in rows[0]['why']
     approve(s, b)
-    rows = [r for r in funnel.from_proposals(s, set()) if r.get('tid') == tid]
-    assert len(rows) == 1 and rows[0]['key'] == f'review:{a}' and '1 email ' in rows[0]['why']
+    rows = [r for r in funnel.build(s)['items'] if r.get('tid') == tid]
+    assert len(rows) == 1 and rows[0]['rid'] == a and '1 email ' in rows[0]['why']
 
 
 def test_a_task_already_on_the_rail_is_not_listed_again_for_its_emails(s):
@@ -558,15 +558,12 @@ def test_triage_never_adds_emails_to_a_list_the_owner_already_wrote(s):
 
 
 def test_no_wrap_up_card_while_emails_still_wait(s):
-    from taskuary import funnel
     tid, mid, first = mail_task(s); s.decide_review(first, 'rejected', None, 'owner', 'redrafted')
     slots.add(s, tid, FOUR[:1], 'owner'); draft(s, tid, 0)
     reply = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Done.',
                           'Deliver': json.dumps({'kind': 'reply', 'to': ['erin@example.com'], 'cc': [], 'mode': 'reply_to'})})
     send_reply(s, reply)                                   # the reply is the newest review, as when an agent finishes last
     assert s.get_task(tid)['Status'] != 'done'
-    from datetime import datetime as _dt
-    assert [i for i in funnel.from_wrapped(s, _dt.now(), set()) if i.get('tid') == tid] == []
 
 
 def test_the_slot_card_names_the_recipient_once(s):

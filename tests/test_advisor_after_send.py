@@ -48,7 +48,7 @@ class AfterSendTests(_Rail):
         from unittest import mock
         p = advisor._prompt(s, advisor.SHOWN, advisor._item(s, 'task', t) or {}, [{'verb': 'reply', 'label': 'Reply'}], 1, 'task', t)
         self.assertIn('A REPLY WAS ALREADY SENT', p, 'the model is given the send as evidence')
-        self.assertRegex(p, r"\): agent_done - .*; the fact: Your reply went .*; nothing since\.")
+        self.assertRegex(p, r"\): answered - .*; the fact: Your reply went .*; nothing since\.")
         advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=lambda sy, u, **kw: '{"verb": "close", "line": "", "evidence": []}')
         with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, f'task:{t}')
         self.assertEqual((d['verb'], d['by'], d.get('section')), ('close', 'model', None), 'Mark done lit - the page opens on its chat, no section named')

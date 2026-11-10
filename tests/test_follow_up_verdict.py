@@ -15,9 +15,7 @@ from taskuary.store import MemoryStore
 
 
 def ago(hours=0, minutes=0):
-    """The pipe is a WINDOW (funnel.HOURS_DEFAULT, 12h), not an archive: a wall-clock date here
-    passes until the run crosses 12h past it, then the ask ages out and a wrapup takes its row.
-    So every stamp is relative to the run - the same helper test_funnel.py uses."""
+    """Every stamp is relative to the run - the same helper test_funnel.py uses."""
     return (datetime.now() - timedelta(hours=hours, minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
 
 
@@ -69,9 +67,6 @@ class FollowUpVerdictTests(unittest.TestCase):
         self.assertIn('triage: fyi', reason); self.assertIn('only says thanks', reason); self.assertIn('for the chain', reason)
         saved = json.loads(s.list_routes(t)[-1]['VerdictJson'])
         self.assertEqual((saved['intent'], saved['why']), ('fyi', 'only says thanks - nothing left to do'))
-        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            items = funnel.build(s)['items']
-        self.assertEqual([(i['kind'], i['lane']) for i in items], [('wrapup', 'report')])   # your reply went out; close it?
 
     def test_a_follow_up_with_something_in_it_stays_work_on_the_task(self):
         s = store(); t = opened(s)

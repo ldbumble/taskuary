@@ -15,12 +15,12 @@ from unittest import mock
 import pytest
 
 from taskuary import funnel
-from taskuary.store import MemoryStore, SQLiteStore
+from taskuary.store import SQLiteStore
 
 STAMP = datetime.now().replace(microsecond=0).isoformat(sep=' ')
 
 
-def drafted(store, *, canonical):
+def drafted(store):
     tid = store.create_task({'Title': 'Budget tab missing', 'Kind': 'coding', 'Status': 'in_progress',
                              'Assignee': 'agent:coding'}, 'triage')
     mid = store.add_message({'TaskId': tid, 'ExternalId': 'x:budget', 'ConversationId': 'c:budget',
@@ -29,9 +29,8 @@ def drafted(store, *, canonical):
                              'BodyText': 'I still cannot see the budget tab.', 'Status': 'routed'})
     store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending',
                       'DraftText': 'Your access is fixed.', 'Reason': 'coding wrote this reply in its session - approve to send'})
-    if canonical:
-        store.reconcile_processing_membership(fixed_now=STAMP)
-        store.activate_processing_reads(fixed_now=STAMP, live_state=[])
+    store.reconcile_processing_membership(fixed_now=STAMP)
+    store.activate_processing_reads(fixed_now=STAMP, live_state=[])
     return tid
 
 
@@ -47,38 +46,37 @@ def lane(store, tid, live):
     return next(i['lane'] for i in items if i.get('tid') == tid)
 
 
-@pytest.fixture(params=['canonical', 'legacy'])
-def store(request, tmp_path):
-    s = SQLiteStore(str(tmp_path / 'draft.db')) if request.param == 'canonical' else MemoryStore()
+@pytest.fixture
+def store(tmp_path):
+    s = SQLiteStore(str(tmp_path / 'draft.db'))
     s.set_setting('funnel_hours', '72', 'fixture')
-    s.canonical = request.param == 'canonical'
     yield s
-    if s.canonical: s.close()
+    s.close()
 
 
 def test_a_working_agent_is_the_status_not_its_draft(store):
-    tid = drafted(store, canonical=store.canonical)
+    tid = drafted(store)
     assert lane(store, tid, session(tid, waiting=False)) == 'working'
 
 
 def test_the_reply_is_ready_again_once_the_session_ends(store):
-    tid = drafted(store, canonical=store.canonical)
+    tid = drafted(store)
     assert lane(store, tid, []) == 'approve'
 
 
 def test_a_parked_agent_still_speaks_for_the_task(store):
     # unchanged: an agent waiting at its prompt already outranked the draft
-    tid = drafted(store, canonical=store.canonical)
+    tid = drafted(store)
     assert lane(store, tid, session(tid, waiting=True)) == 'blocked'
 
 
 def test_the_agent_card_still_knows_a_reply_waits_behind_it(store):
     # closing from the agent's card dismisses that reply, so the card must carry it to say
     # "Close without sending" (the owner, 2026-09-24)
-    tid = drafted(store, canonical=store.canonical)
+    tid = drafted(store)
     for live in (session(tid, waiting=False), session(tid, waiting=True)):
         funnel.invalidate(); funnel.forget_states()
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             items = funnel.build(store, live_state=live, keep_surfaced=True)['items']
         agent = next(i for i in items if i.get('tid') == tid and i['kind'] == 'agent')
-        assert agent.get('reply_pending') or store.canonical is False and live[0]['waiting']
+        assert agent.get('reply_pending')

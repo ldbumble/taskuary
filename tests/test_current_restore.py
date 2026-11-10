@@ -56,36 +56,38 @@ class RestoreTests(unittest.TestCase):
     def test_a_reload_restores_the_item_on_the_table_without_a_new_turn(self):
         t, m = asked(self.s)
         nxt = self.c.post('/api/concierge/next', json={}).json()
-        self.assertEqual(nxt['item']['key'], f'msg:{m}')
+        key = nxt['item']['key']; self.assertIn(f'msg:{m}', nxt['item']['aliases'])
         before = self.c.get('/api/concierge').json()
-        self.assertEqual((before['current']['key'], before['current']['kind'], len(before['messages'])), (f'msg:{m}', 'todo', 1))
+        self.assertEqual((before['current']['key'], before['current']['kind'], len(before['messages'])), (key, 'todo', 1))
         again = self.c.get('/api/concierge').json()                                                     # a tab switch, a reload, a reconnect
-        self.assertEqual((again['current']['key'], len(again['messages'])), (f'msg:{m}', 1))
-        self.assertEqual(concierge.current_key(self.s, general.dock_task(self.s)[0]['TaskId']), f'msg:{m}')
+        self.assertEqual((again['current']['key'], len(again['messages'])), (key, 1))
+        self.assertEqual(concierge.current_key(self.s, general.dock_task(self.s)[0]['TaskId']), key)
 
     def test_a_row_closed_under_the_table_stays_on_it_drawn_as_it_is_now(self):
         """PW-162 cleared Current when its row was settled or closed, and the table emptied under the owner. The row on screen now
         stays on screen as it is now; Next and Back measure from its place (spec 2.1, the closed-Current ruling; 3.5 closes elsewhere)."""
         dock = general.dock_task(self.s)[0]['TaskId']
         t, m = asked(self.s)
-        self.c.post('/api/concierge/next', json={})
+        key = self.c.post('/api/concierge/next', json={}).json()['item']['key']
         self.c.post('/api/funnel/settle', json={'key': f'msg:{m}', 'verb': 'done'})
         st = self.c.get('/api/concierge').json()
-        self.assertEqual(st['messages'][0]['card']['key'], f'msg:{m}')                                  # the card is still in the transcript
-        self.assertEqual(concierge.current_key(self.s, dock), f'msg:{m}')                               # ...and still on the table
+        self.assertEqual(st['messages'][0]['card']['key'], key)                                         # the card is still in the transcript
+        self.assertEqual(concierge.current_key(self.s, dock), key)                                      # ...and still on the table
         t3, m3 = asked(self.s, 'PTO import', 'Erin', 0)
-        self.assertEqual(self.c.post('/api/concierge/next', json={'key': f'msg:{m3}'}).json()['item']['key'], f'msg:{m3}')
+        third = self.c.post('/api/concierge/next', json={'key': f'msg:{m3}'}).json()['item']
+        self.assertIn(f'msg:{m3}', third['aliases'])
         self.s.update_task(t3, {'Status': 'done'}, 'owner'); funnel.invalidate()
         st = self.c.get('/api/concierge').json()
-        self.assertEqual((st['current']['key'], st['current'].get('closed')), (f'msg:{m3}', True))     # drawn closed, nothing chosen instead
+        self.assertEqual((st['current']['key'], st['current'].get('closed')), (third['key'], True))    # drawn closed, nothing chosen instead
         self.assertEqual(len([x for x in st['messages'] if x['card']]), 2)                              # no turn was added by the read
 
     def test_a_named_item_and_the_fyi_handful_are_written_down_too(self):
         t, m = asked(self.s)
         other_t, other_m = asked(self.s, 'Refund for Mrs Garnett', 'Nina', 1)
         self.c.post('/api/concierge/next', json={})
-        self.c.post('/api/concierge/next', json={'key': f'msg:{other_m}'})                                # the owner pulled another in
-        self.assertEqual(self.c.get('/api/concierge').json()['current']['key'], f'msg:{other_m}')
+        pulled = self.c.post('/api/concierge/next', json={'key': f'msg:{other_m}'}).json()['item']       # the owner pulled another in
+        self.assertIn(f'msg:{other_m}', pulled['aliases'])
+        self.assertEqual(self.c.get('/api/concierge').json()['current']['key'], pulled['key'])
         s2 = store(); patches, c2 = client(s2)
         for p in patches: p.start(); self.addCleanup(p.stop)
         for n in range(2):
@@ -137,10 +139,11 @@ class RestoreTests(unittest.TestCase):
         """The guard is "over", never "read": an item the assistant puts in the chat IS read, and
         clearing Current on that would empty the table the moment it was set."""
         t, m = asked(self.s)
-        self.c.post('/api/concierge/next', json={})
+        shown = self.c.post('/api/concierge/next', json={}).json()['item']
         dock = general.dock_task(self.s)[0]['TaskId']
-        self.assertEqual(self.c.get('/api/concierge').json()['current']['key'], f'msg:{m}')
-        self.assertEqual(concierge.current_key(self.s, dock), f'msg:{m}')
+        self.assertIn(f'msg:{m}', shown['aliases'])
+        self.assertEqual(self.c.get('/api/concierge').json()['current']['key'], shown['key'])
+        self.assertEqual(concierge.current_key(self.s, dock), shown['key'])
 
     def test_a_new_chat_has_nothing_on_the_table(self):
         t, m = asked(self.s)

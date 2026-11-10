@@ -218,14 +218,13 @@ def run(store, now: datetime = None) -> dict:
     now = now or datetime.now()
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     from . import processing_unread
-    canonical = store.processing_reads_active()
-    if canonical: store.reconcile_processing_membership()      # the rail as it stands now, not as the last settle left it
+    store.reconcile_processing_membership()      # the rail as it stands now, not as the last settle left it
     # the rail as the owner has it, read rows too. ONE MAIL, ONE PLACE (the owner, 2026-10-28: "if the advisor idea belongs in the
     # tasks why is the email in fyi??"): a mail the rail still draws, in ANY lane, is not raised again - an On you line over its own
     # FYI row said two things about one mail, and pressing it walked into the FYI row. It was only the On you lanes, and a mail with
     # no task is drawn under FYI. What this check is for is the ask that has LEFT the rail (read and let go, or past its window).
     # Every mail of a row counts (member_ids), not only the one it speaks with.
-    cards = processing_unread.build(store, now=now, include_read=True)['items'] if canonical else []
+    cards = processing_unread.build(store, now=now, include_read=True)['items']
     shown = set()
     for c in cards:
         # ...the mail's own row, never this check's line about it: that one is the ask said, not the ask seen
@@ -233,7 +232,7 @@ def run(store, now: datetime = None) -> dict:
         shown |= {c['mid']} if c.get('mid') else set()
         shown |= {int(k.split(':', 1)[1]) for k in c.get('member_ids') or () if str(k).startswith('message:') and k.split(':', 1)[1].isdigit()}
     asks = aged_asks(store, now, shown)
-    loose = loose_tasks(store, cards, now) if canonical else []
+    loose = loose_tasks(store, cards, now)
     said = _say_once(store, asks + loose, stamp)
     # ...and a line whose task has found a state since, or whose ask was answered, tasked or ruled, is put down
     want, cleared = {c['key'] for c in asks + loose}, 0

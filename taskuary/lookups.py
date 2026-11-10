@@ -257,9 +257,7 @@ def pipe_read(store, p: dict) -> str:
     elif want in funnel.LANE_WORDS: xs, said = [i for i in items if i.get('lane') == want], f'lane {want}'
     else: return f'There is no rail section {want!r} - section: {" | ".join(funnel.lanes.LEVEL_ORDER)} (or a lane: {", ".join(funnel.LANE_WORDS)}).'
     if who: xs = [i for i in xs if who in f"{shows(i)['who']} {i.get('who') or ''} {i.get('email') or ''}".lower()]
-    # ...and what the rail's own limit (Settings, funnel_max) holds back is said too: those rows are not on it yet
-    held = f" {pl['hidden']} more wait behind the rail's limit and come on as these go." if pl.get('hidden') else ''
-    head = f"THE RAIL: {len(items)} rows ({rail_counts(items)}).{held} {said}{' from ' + who if who else ''}: {len(xs)}."
+    head = f"THE RAIL: {len(items)} rows ({rail_counts(items)}). {said}{' from ' + who if who else ''}: {len(xs)}."
     if not xs: return head + ' None.'
     n = max(OWN_FLOOR, min(OWN_CHARS, RAIL_READ_CHARS // len(xs) - 140))
     out, used, left = [head], len(head), 0

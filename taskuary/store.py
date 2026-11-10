@@ -2326,7 +2326,7 @@ class SQLiteStore:
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
             # ...and so does the Advisor idea the task was MADE from: left open, 96 ideas outlived their closed tasks
-            # (2026-10-10). Only SourceRef - an idea that merely cites a task may name a separate follow-up (funnel.from_forgotten).
+            # (2026-10-10). Only SourceRef - an idea that merely cites a task may name a separate follow-up.
             self._exec("UPDATE idea SET Status='done', DecidedBy='task', DecidedAt=? WHERE Status IN ('open','snoozed') AND "
                        "IdeaId IN (SELECT CAST(substr(SourceRef,16) AS INTEGER) FROM task WHERE TaskId=? AND SourceRef LIKE 'assistant:idea:%')",
                        (_now(), task_id))

@@ -90,13 +90,13 @@ class OnYouIsNeverBuriedTests(unittest.TestCase):
         _t, _m, r = drafted(s := store(), hours=6)
         for n in range(6): fyi(s, f'newsletter {n}')
         first = railwalk.top(s)
-        self.assertEqual(first['key'], f'review:{r}')             # it leads: it is the thing on them
+        self.assertIn(f'review:{r}', first['aliases'])            # it leads: it is the thing on them
         # ...and after being shown it STILL leads. Before this change the walk preferred any unread
         # fyi from here on, so the one item on the owner never came back.
         shown_a_while_ago(s, f'review:{r}')
         again = railwalk.top(s)
         self.assertIsNotNone(again, 'the walk went silent with a reply still waiting')
-        self.assertEqual(again['key'], f'review:{r}', 'the pending reply was buried under the unread fyi')
+        self.assertEqual(again['key'], first['key'], 'the pending reply was buried under the unread fyi')
 
     def test_on_you_names_the_two_lanes_that_wait_on_the_owner(self):
         self.assertTrue(funnel.on_you({'lane': 'approve'}))       # a reply wants your yes
@@ -179,23 +179,6 @@ class TodaysBriefLeadsTests(unittest.TestCase):
         brief = next(i for i in items if i['kind'] == 'report')
         self.assertFalse(funnel.todays_brief(brief))
         self.assertEqual(brief['order_band'], 3)
-
-    def test_only_the_latest_brief_of_the_day_leads_and_the_earlier_one_lands(self):
-        """Two identical rows led the work rail (the owner, 2026-09-14: "we should only have the
-        latest one"). The schedule no longer makes a pair - a launch defers to the slot since
-        TQ-0589 - but "Run now" on the Reports tab bypasses is_due, so a second brief still can."""
-        s = store()
-        report_source(s)
-        report_run(s, hours=today_ago(3), body='THE WINDOW IN NUMBERS: the 07:20 one')
-        report_run(s, hours=today_ago(1), body='THE WINDOW IN NUMBERS: the 08:00 one')
-        items = funnel.build(s)['items']
-        briefs = [i for i in items if i['kind'] == 'report']
-        self.assertEqual(len(briefs), 2, 'both runs are still on the timeline')
-        self.assertEqual([funnel.todays_brief(i) for i in briefs], [True, False], 'one brief leads, the other lands')
-        self.assertTrue(funnel.todays_brief(briefs[0]))
-        self.assertIn('the 08:00 one', briefs[0]['preview'] or briefs[0].get('why') or '')
-        self.assertEqual([i['order_band'] for i in briefs], [3, 3])
-        self.assertIn('a later brief has replaced this one', briefs[1]['why'])
 
     def test_an_ordinary_report_run_today_is_not_the_brief(self):
         s = store()

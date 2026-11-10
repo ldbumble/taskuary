@@ -672,6 +672,56 @@ def an_ai_is_connected(request):
     with mock.patch.object(srv, '_brainless', lambda coding: ''): yield
 
 
+def start_home(store):
+    """What app start does to a home before anything reads its rail (server lifespan -> processing_startup.initialize, less its
+    backup file) - and membership then kept current as the background worker keeps it (processing_all.MembershipWorker), here
+    inline: a read that follows a write waits for the worker, so it sees the write."""
+    from taskuary.store import SQLiteStore
+    if not isinstance(store, SQLiteStore): return False
+    if not store.processing_reads_active():
+        # a harness world that starts its own home once it is whole: a reader of its own (the Advisor's thread) may look while it
+        # is still being written, and a home started under the writer refuses the writer's next put-down
+        if getattr(store, 'starts_itself', False): return False
+        from types import SimpleNamespace
+        from taskuary import funnel
+        for left in range(9, -1, -1):       # app start admits no writer between the two; a test's own thread (a draft, a notice) may be one
+            store.reconcile_processing_membership()
+            # the rail's own clock, which a test may have set (tests/fake_clock.py): a home starts at the hour its mail was stamped in
+            try: store.activate_processing_reads(fixed_now=funnel.datetime.now().isoformat(), live_state=[]); break
+            except ValueError:
+                if not left: raise
+        if getattr(store, 'membership_worker', None) is None: store.membership_worker = SimpleNamespace(kick=store.reconcile_processing_membership)
+    return True
+
+
+_UNSTARTED = [False]      # the module now running is about a home before it starts
+
+
+@pytest.fixture(autouse=True, scope='session')
+def every_rail_is_a_started_home():
+    """The rail has one builder and it reads a STARTED home - the app starts every home before its first read. A test's bare
+    store is started the same way the first time its rail is read (funnel.build, funnel.pile), as a seeded demo home is, and
+    the worker has caught up with what was written since - before the read, as it has for a page that asks a moment after a
+    write, so the read is not itself a write. For the whole run, not a test at a time: a world built once for a class or a
+    module (setUpClass, a module's fixture) reads its rail before any test's own fixture is up."""
+    from taskuary import funnel, processing_all
+    def started(read):
+        def on_a_started_home(store, *a, **k):
+            if not _UNSTARTED[0] and start_home(store): processing_all.wait_settled(store)
+            return read(store, *a, **k)
+        return on_a_started_home
+    patch = pytest.MonkeyPatch()
+    for name in ('build', 'pile'): patch.setattr(funnel, name, started(getattr(funnel, name)))
+    yield
+    patch.undo()
+
+
+@pytest.fixture(autouse=True, scope='module')
+def a_module_about_the_home_before_it_starts(request):
+    """Such a module sets UNSTARTED_HOME = True, and its rails are read as they are."""
+    _UNSTARTED[0] = bool(getattr(request.module, 'UNSTARTED_HOME', False)); yield; _UNSTARTED[0] = False
+
+
 @pytest.fixture
 def fx():
     """A MemoryStore wrapped in the picture factory. Named pictures (pending_draft,

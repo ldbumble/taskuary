@@ -64,13 +64,13 @@ class TheChangeCheckFollowsTheFourTests(Base):
             polls.append(k.get('only'))
             later(self.s, tid); return 1                                          # the refresh brings a newer line
         item = railwalk.top(self.s)
-        self.assertEqual(item['key'], f'review:{rid}')
+        self.assertIn(f'review:{rid}', item['aliases'])
         with mock.patch.object(server, '_poll_reports', side_effect=poll):
             t = server._refresh_after({'item': item}); t.join(5)
         self.assertEqual(polls, [['teams']])
         # the line is in the store; the page's next read of the item carries it (the strip says so)
         self.assertEqual(self.s.last_inbound_on_task(tid)['BodyText'], 'Actually it works now.')
-        self.assertEqual(funnel.next_item(self.s, f'review:{rid}')['mid'], self.s.last_inbound_on_task(tid)['MessageId'])
+        self.assertIn(f"message:{self.s.last_inbound_on_task(tid)['MessageId']}", funnel.next_item(self.s, f'review:{rid}')['member_ids'])
 
     def test_an_fyi_batch_is_checked_once_per_channel(self):
         for i, ch in enumerate(('teams', 'slack', 'teams')):
@@ -116,14 +116,14 @@ class NoticeTests(Base):
         with mock.patch.object(server, '_poll_reports', side_effect=poll), mock.patch.dict(server.hub_term.SESSIONS, {}, clear=True):
             lines = self.stream(c)
             self.assertEqual([l['type'] for l in lines], ['done'])
-            self.assertEqual(lines[0]['item']['key'], f'review:{rid}')
+            self.assertIn(f'review:{rid}', lines[0]['item']['aliases'])
             self.assertEqual(lines[0]['item']['mid'], first, 'spoken as the rail had it - the check had not run yet')
             server.wait_refresh_after(5)
         self.assertEqual(polls, [['teams']])
         newest = self.s.last_inbound_on_task(tid)['MessageId']
         self.assertNotEqual(newest, first)
         cur = c.get('/api/funnel/pile', params={'force': 1, 'current': f'review:{rid}'}).json()['current']
-        self.assertEqual(cur['mid'], newest, "the page's next read carries the line that arrived")
+        self.assertIn(f'message:{newest}', cur['member_ids'], "the page's next read carries the line that arrived")
 
     def test_a_clicked_row_opens_at_once_and_its_source_is_checked_after(self):
         """A row you click opened only after its mailbox had been polled - 9 of the 12 seconds a click took (the owner,
@@ -140,7 +140,7 @@ class NoticeTests(Base):
             server.wait_refresh_after(5)
         self.assertEqual(polls, [['teams']], 'the source is still checked - after')
         cur = c.get('/api/funnel/pile', params={'force': 1, 'current': f'review:{rid}'}).json()['current']
-        self.assertEqual(cur['mid'], self.s.last_inbound_on_task(tid)['MessageId'])
+        self.assertIn(f"message:{self.s.last_inbound_on_task(tid)['MessageId']}", cur['member_ids'])
 
     def test_a_provider_that_cannot_be_reached_does_not_fail_the_answer(self):
         tid, first, rid = teams_task(self.s)

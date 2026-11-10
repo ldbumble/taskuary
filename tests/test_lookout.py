@@ -81,7 +81,7 @@ def test_the_check_holds_a_generic_idea_and_the_specific_one_lands_as_an_idea_ro
     assert held[0]['title'] == 'Communicate more with the approvers' and 'generic' in held[0]['why']
     # ...and it is on the rail as the Advisor's idea, with the verbs every idea has
     from taskuary import funnel
-    row = next(x for x in funnel.from_forgotten(s, set(), set(), reconcile=False) if x.get('idea') == i['IdeaId'])
+    row = next(x for x in funnel.build(s)['items'] if x.get('idea') == i['IdeaId'])
     assert row['idea_kind'] == 'money' and row['title'] == i['Text']
 
 

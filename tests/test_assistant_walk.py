@@ -34,7 +34,7 @@ def test_the_walks_lines_name_what_comes_up_and_repeat_nothing_its_card_shows():
     never its sender, its subject or its gist beside the card that shows them (the walk read the four FYIs out over their card)."""
     from contextlib import ExitStack
     from taskuary import concierge
-    s, seen = W.world(), []
+    s, seen, kinds = W.world(), [], set()
     with ExitStack() as st:
         W._guards(st, set())
         on = None
@@ -42,12 +42,12 @@ def test_the_walks_lines_name_what_comes_up_and_repeat_nothing_its_card_shows():
             out = concierge.surface(s, from_key=on)            # Next from the row on the table (railwalk)
             it = out.get('item')
             if not it or it['key'] in [k for k, _ in seen]: break
-            seen.append((it['key'], out['say']))
+            seen.append((it['key'], out['say'])); kinds.add(it['kind'])
             shown = [it.get('title'), it.get('who'), it.get('preview')] + [x for e in it.get('items') or [] for x in (e.get('title'), e.get('who'))]
             assert W.words(out['say']) <= W.BRIEF, (it['key'], out['say'])
             assert not [x for x in shown if x and len(str(x)) > 3 and str(x) in out['say']], (it['key'], out['say'])
             on = it['key']
-    assert {k.split(':')[0] for k, _ in seen} >= {'msg', 'review', 'report', 'fyis'}, seen       # every kind of card the demo has
+    assert kinds >= {'todo', 'review', 'report', 'fyis'}, seen                                  # every kind of card the demo has
 
 
 # CI's runners are shared and slow, and missed by a tenth of a second; on a desk machine the budgets stay as written

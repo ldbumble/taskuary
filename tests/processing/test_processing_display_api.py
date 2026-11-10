@@ -49,8 +49,8 @@ def test_current_same_key_gets_complete_new_display_revision(display_api, change
     db, client, tid, mid, rid = display_api
     key = f'review:{rid}'
     first = get_pile(client, key)
-    assert first['current']['key'] == key
-    stable = (key, first['current']['lane'], first['current'].get('settling'))
+    assert key in first['current']['aliases']
+    stable = (first['current']['key'], first['current']['lane'], first['current'].get('settling'))
     state_before = db.funnel_states()
     if change == 'body_tail':
         db.update_message_body(mid, 'x' * 4500 + ' changed tail')
@@ -78,7 +78,7 @@ def test_current_query_and_null_are_part_of_complete_response_revision(display_a
     held = get_pile(client, f'review:{rid}')
     missing = get_pile(client, 'msg:999999')
     assert 'current' not in ordinary
-    assert held['current']['key'] == f'review:{rid}'
+    assert f'review:{rid}' in held['current']['aliases']
     assert missing['current'] is None
     assert len({ordinary['display_revision'], held['display_revision'], missing['display_revision']}) == 3
 

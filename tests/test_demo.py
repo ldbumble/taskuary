@@ -421,10 +421,11 @@ class TheSameWorldAtEveryHourTests(unittest.TestCase):
             with fake_clock(day.replace(hour=h, minute=mi)), mock.patch.object(terminal, 'live_sessions', return_value=[]):
                 funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
                 s = MemoryStore(); demo.seed(s); funnel.invalidate()
-                seen[f'{h:02d}:{mi:02d}'] = sorted((i['kind'], i['key']) for i in funnel.build(s)['items'])
+                # a row's own key is minted when its home starts; the names it answers to are the same in every home
+                seen[f'{h:02d}:{mi:02d}'] = sorted((i['kind'], sorted(a for a in i['aliases'] if not a.startswith('processing:'))) for i in funnel.build(s)['items'])
         funnel.invalidate()
         first = next(iter(seen.values()))
-        self.assertEqual(sum(k == 'fyi' for k, _ in first), 4, first)
+        self.assertEqual(sum(k == 'fyi' for k, _ in first), 12, first)
         for at, pile in seen.items(): self.assertEqual(pile, first, at)
 
 

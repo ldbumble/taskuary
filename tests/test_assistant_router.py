@@ -564,7 +564,8 @@ def notices(s, n=9):
 
 
 def fyis(s): return [i for i in funnel.build(s)['items'] if i.get('kind') == 'fyi']
-def unread(s): return [i for i in funnel.build(s, keep_surfaced=True)['items'] if i.get('kind') == 'fyi']     # the batch shown on the table too
+# the batch shown on the table too; a row marked read stays listed on this build, told apart by `unread`
+def unread(s): return [i for i in funnel.build(s, keep_surfaced=True)['items'] if i.get('kind') == 'fyi' and i.get('unread')]
 
 
 class TheModelIsToldTheRow(unittest.TestCase):

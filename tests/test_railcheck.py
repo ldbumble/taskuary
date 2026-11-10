@@ -92,7 +92,10 @@ def test_a_line_said_before_its_mail_became_a_task_joins_the_task(s):
     s.add_route(mid, None, 'file', None, 'triage: nothing to do - a notice', [], 'triage')
     s.upsert_idea({'key': 'idea:export', 'kind': 'idea', 'text': 'The Payworth export failed twice this week.', 'sig': 'x',
                    'action': {'type': 'message', 'mid': mid}}, ago(days=1))
-    assert len([i for i in build(s)['items'] if i.get('mid') == mid]) == 2      # the mail's own row and the line about it (ASK OWNER)
+    on = [i for i in build(s)['items'] if i.get('mid') == mid]
+    assert [i['kind'] for i in on] == ['fyi']                                   # the mail's own row speaks first: the line about it waits behind it
+    funnel.settle(s, on[0]['key'], 'surfaced', 'owner', read=True)
+    assert [i['kind'] for i in build(s)['items'] if i.get('mid') == mid] == ['idea']   # ...and is the row once the mail is read
     tid = ingest.task_from_message(s, mid, 'owner', 'task', 'owner')            # Put it on my list: the mail is work now
     rows = [i for i in build(s, include_read=True)['items'] if i.get('mid') == mid or i.get('tid') == tid]
     assert len(rows) == 1 and rows[0]['tid'] == tid, [(r['kind'], r['lane'], r.get('tid')) for r in rows]

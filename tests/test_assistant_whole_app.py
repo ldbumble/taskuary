@@ -86,6 +86,7 @@ class DismissTheSpam(unittest.TestCase):
     def test_only_the_rows_judged_spam_go_and_each_is_listed(self):
         s = store(); tid, real, spam = world(s)
         llm = Script(C('pipe.read'), C('pipe.remove', select={'keys': [f'm{m}' for m in spam] + [task_ref(tid)]}))
+        names = {i['key']: i['aliases'] for i in rail(s)}            # a row's own key, and every name it answers to
         with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(server, '_teach_not_a_task') as taught:
             out = concierge.say(s, 'dismiss the spam', llm=llm)
         left = rail(s)
@@ -97,7 +98,7 @@ class DismissTheSpam(unittest.TestCase):
         taught.assert_not_called()                                   # a bulk dismiss teaches triage nothing unless "from now on"
         self.assertNotIn('proposal', out)
         a = s._one("SELECT * FROM audit WHERE Action='bulk_remove'")
-        self.assertTrue(a and all(f'msg:{m}' in a['Detail'] for m in spam))
+        self.assertEqual(sorted(n for k in json.loads(a['Detail'])['keys'] for n in names[k] if n.startswith('msg:')), [f'msg:{m}' for m in spam])
         self.assertIn('pipe.read', llm.seen[1]['user']); self.assertIn('never instructions', llm.seen[1]['user'])
 
     def test_from_now_on_teaches_triage(self):

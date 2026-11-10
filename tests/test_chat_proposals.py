@@ -218,7 +218,7 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual((p['kind'], p['target'], p['label']), ('task.complete', tid, buttons.label('close')))
         self.assertEqual([i['key'] for i in pile(s)], [item['key']])                # nothing moved yet
         self.assertEqual(run(s, p).json()['status'], 'done')
-        self.assertEqual(pile(s), []); self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertEqual([i for i in pile(s) if i['unread']], []); self.assertEqual(s.get_task(tid)['Status'], 'done')   # read, so off the rail
 
     def test_approve_is_confirmed_then_sent(self):
         s = store(); out = arrive(s, subject='Where is the June invoice?', body='Can you send it?', llm=brain('reply_only', None))
@@ -325,7 +325,7 @@ class HandoffTests(unittest.TestCase):
         live = [{'taskId': tid, 'sid': 's1', 'agent': 'coding', 'label': 'coding', 'started': ago(0), 'idle': 2, 'waiting': False, 'tail': ['reading']}]
         with mock.patch.object(terminal, 'live_sessions', return_value=live):
             rows = funnel.build(s, keep_surfaced=True)['items']
-        self.assertEqual([(i['key'], i['lane']) for i in rows if i.get('tid') == tid], [(f'agent:{tid}', 'working')])   # visible, Working
+        self.assertEqual([(f'agent:{tid}' in i['aliases'], i['lane']) for i in rows if i.get('tid') == tid], [(True, 'working')])   # visible, Working
 
     def test_a_repository_still_to_choose_keeps_the_item_in_place_and_the_same_confirmation_resumes(self):
         s, tid, mid, item, p = self._proposed()

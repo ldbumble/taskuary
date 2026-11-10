@@ -27,7 +27,6 @@ def test_grouped_fixture_has_one_visible_item_and_keeps_the_latest_line():
 
     assert len(items) == 1
     assert items[0]['mid'] == picture.grouped_messages[-1]
-    assert items[0]['more'] == 1
 
 
 def test_waiting_agent_fixture_is_visible_as_owner_attention():
@@ -39,8 +38,8 @@ def test_waiting_agent_fixture_is_visible_as_owner_attention():
                     if item.get('tid') == picture.waiting_task)
 
     assert (row['Working'], row['AgentWaiting'], row['Unread']) == ('Agent', True, 1)   # the shown name, never the profile (kinds.shown)
-    assert (item['key'], item['lane'], item['agent']) == (
-        f'agent:{picture.waiting_task}', 'blocked', 'Agent')
+    assert f'agent:{picture.waiting_task}' in item['aliases']
+    assert (item['lane'], item['agent']) == ('blocked', 'Agent')
 
 
 def test_duplicate_turn_fixture_persists_one_identical_assistant_turn():

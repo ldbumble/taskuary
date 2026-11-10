@@ -129,7 +129,7 @@ def test_next_walks_past_a_dashboard_as_it_walks_past_a_report_and_the_next_refr
                           'ConversationId': f"report:{report['SourceId']}", 'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                           'BodyText': 'x', 'Status': 'feed'})
     funnel._SOURCES['at'] = 0
-    keys = lambda: {i['key'] for i in funnel.pile(s, force=True)['items']}
+    keys = lambda: {a for i in funnel.pile(s, force=True)['items'] for a in i['aliases']}     # the names a row answers to
     assert {f'report:{mid}', f'report:{rmid}'} <= keys()
     from taskuary import railwalk
     railwalk.open(s, f'report:{mid}'); railwalk.next(s, f'report:{mid}')      # Next reads a report and a dashboard alike (rule 4)

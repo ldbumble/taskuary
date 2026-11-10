@@ -43,7 +43,7 @@ class RailReadTests(unittest.TestCase):
         self.assertIn('no rail section', read(s, section='bogus'))
 
     def test_a_long_lane_shortens_its_quotes_then_says_how_many_it_left_out(self):
-        s = world(0); s.set_setting('funnel_max', '200', 't')       # the rail itself holds all 130
+        s = world(0)
         long_words = 'The quarterly freight audit found nothing new. ' * 30
         with mock.patch.object(ingest, '_spawn'):
             for n in range(130): fyi(s, n, PEOPLE[n % len(PEOPLE)], long_words, hours=1 + n * 0.01)
@@ -55,8 +55,6 @@ class RailReadTests(unittest.TestCase):
         self.assertGreater(shown, 60)                                         # quotes shrank before rows were dropped
         few = read(world(2), section='fyi')
         self.assertNotIn('more not shown', few)
-        s.set_setting('funnel_max', '30', 't')                                # ...and what its limit holds back is said
-        self.assertRegex(read(s, section='fyi'), r"\d+ more wait behind the rail's limit")
 
     def test_the_turn_is_told_the_whole_rail_and_the_read_that_holds_it(self):
         items = [{'ref': f'TQ-{n:04}', 'who': 'Erin Blake', 'title': f'Task {n}', 'lane': 'yours'} for n in range(25)]

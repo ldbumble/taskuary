@@ -15,9 +15,15 @@ export const sentNow = (thread, at = Date.now(), busy = false) => ({ at, answers
 export const settled = (thread, sent) => !!sent && answers(thread) > sent.answers;
 
 // whether the pane draws the agent's turn: a line was just sent, or the agent is at work, and the thread draws no live turn at its end
-export function pendingTurn(thread, { busy = false, sent = null } = {}) {
+// ...and a line of his the thread has JUST drawn with nothing after it: the chat's own send draws it a beat before its run begins, with no `sent`
+// of the pane's - his line stood alone, no head under it, for a beat (CI and the frame-by-frame watch, 2026-11-10). A minute bounds it: a line
+// nothing ever answered is no turn at work
+const fresh = (m, now) => m?.role === "user" && !(m.brief || m.metadata?.custom?.brief || m.press || m.metadata?.custom?.press)
+  && m.createdAt && now - +new Date(m.createdAt) < 60000;
+export function pendingTurn(thread, { busy = false, sent = null, now = Date.now() } = {}) {
   const last = (thread || []).at(-1);
   if (last?.role === "assistant" && live(last)) return false;
+  if (fresh(last, now)) return true;
   if (settled(thread, sent)) return false;
   return !!sent || !!busy;
 }

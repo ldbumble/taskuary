@@ -42,3 +42,16 @@ test("an agent at work that the thread does not draw yet is a turn with its head
   assert.deepEqual(drawn([...thread, you("u2", "and October?"), agent("r1", "", { status: { type: "running" } })], { busy: true }),
     ["u1", "a1", "u2", "r1"]);
 });
+
+// THE CHAT'S OWN SEND (CI, 2026-11-10: "5115: no running head: nothing"; the frame-by-frame watch, CPU slowed as a runner is: his line drawn at
+// 89 ms and nothing under it until 186-331 ms): the runtime draws his line a beat before its run begins, and no press of the pane's kept `sent`
+// - the line just drawn, with nothing after it, is the turn owed, its head under it in the same paint
+test("a line of his the thread has just drawn, with nothing after it, draws the agent's turn under it at once", () => {
+  const now = Date.now(), line = { ...you("u2", "look at the south office first"), createdAt: new Date(now - 50) };
+  assert.equal(pendingTurn([you("u1", "hi"), agent("a1", "Hi."), line], { now }), true);
+  // ...not a brief, not a press, not a line from long ago that nothing answered
+  assert.equal(pendingTurn([{ ...line, metadata: { custom: { brief: true } } }], { now }), false);
+  assert.equal(pendingTurn([{ ...line, metadata: { custom: { press: true } } }], { now }), false);
+  assert.equal(pendingTurn([{ ...line, createdAt: new Date(now - 3600000) }], { now }), false);
+  assert.equal(pendingTurn([line, agent("a2", "On it.")], { now }), false, "an answer after it is the turn");
+});

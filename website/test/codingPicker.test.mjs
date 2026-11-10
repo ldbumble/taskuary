@@ -22,9 +22,10 @@ test("the coding picker filters to coding workers and names them by their CLI", 
   // writes is the brain, never the role, because every coding task's role is the coding profile.
   // ...and a brain the machine no longer has is still what this task NAMES: the list used to fall
   // back to brains[0], so filtering to installed brains would have shown a CLI nobody chose.
-  assert.match(picker, /const list = coding \? \(brain && !brains\.includes\(brain\) \? \[brain, \.\.\.brains\] : brains\) : roles;/);
-  assert.match(picker, /const value = coding \? brain : agent;/);
-  assert.match(picker, /onChange=\{\(e\) => \(coding \? onBrain : onAgent\)\(e\.target\.value\)\}/);
+  // ...and a coding task runs on a CLI OR an AI card (2026-11-09): the list is codingChoices', which keeps a brain the machine no longer
+  // has as what this task NAMES (codingPicker's own test below), and writes the brain or the card - never the role.
+  assert.match(picker, /const code = codingChoices\(/);
+  assert.match(picker, /const c = codingChoice\(e\.target\.value\); onBrain\?\.\(c\.brain\); onPick\?\.\(c\.pick\);/);
   assert.doesNotMatch(picker, /<em/);
 });
 
@@ -56,7 +57,7 @@ test("a general worker is chosen by name alone - the brain is its own picker", (
   // (the owner, 2026-10-15: "Profile has nothing to do with what brain it uses??")
   assert.doesNotMatch(picker, /models\[a\]\?\.cmd/);
   // ...and a hand-off names no profile at all: the agent is Taskuary, the profile rides behind it (the owner, 2026-10-29)
-  assert.match(picker, /\{!handOff && <Select size="small" value=\{selected/);
+  assert.match(picker, /\{!coding && !handOff && <Select size="small" value=\{selected/);
   assert.doesNotMatch(picker, /its profile · /);
 });
 
@@ -67,7 +68,7 @@ test("Settings defaults and backups offer coding CLIs rather than profile names"
   assert.match(settings, /label: models\[a\.Name\]\?\.cli \|\| models\[a\.Name\]\?\.cmd \|\| a\.Name/);
   assert.match(settings, /automatic — any other coding CLI/);
   // the judge picks a thing that decides rather than a thing that speaks, so it gets its own word
-  assert.match(defaults, /\{isAgent \? "which CLI" : isJudge \? "what decides" : "which brain"\}/);
+  assert.match(defaults, /\{isAgent \? "which AI" : isJudge \? "what decides" : "which brain"\}/);
   assert.match(defaults, /state\.agent_options \|\| agents/);
 });
 

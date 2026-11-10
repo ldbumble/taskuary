@@ -38,8 +38,9 @@ SLOTS = [
      'why': 'A reply in your voice is worth more than a triage verdict. Blank uses the triage brain, as before.'},
     # the CLI tool itself, never a profile (the owner, 2026-10-15: "it's models or cli tools only") - it held `default_agent`,
     # a profile name, which is how a profile came to be read as a brain
-    {'key': 'default_brain', 'label': 'Default coding CLI', 'pick': 'cli', 'gear': 'main',
-     'desc': 'Works the tasks. Start session, Send to coding agent and auto-dispatch all use this one.',
+    # ...or an AI card (the owner, 2026-11-09: "coding tasks should run on hipaa, why not") - saved as `connector:<id>`
+    {'key': 'default_brain', 'label': 'Coding agent', 'pick': 'cli', 'gear': 'main',
+     'desc': 'Works the coding tasks. Start session, Send to coding agent and auto-dispatch all use this one - a CLI, or an AI card.',
      'why': 'This is the expensive, capable gear: it reads your repository and writes code.'},
     {'key': 'concierge_ai', 'label': 'Assistant', 'pick': 'brain', 'gear': 'light',
      'model_setting': 'concierge_model',
@@ -113,7 +114,7 @@ def _strong_home(store, cfg, out: dict) -> tuple:
     "('cli', key) or ('connector', id) - where this card's brain keeps its strong gear; () for a card with no brain to keep one."
     if out.get('connector'): return ('connector', out['connector'])
     if not out.get('cli'): return ()
-    if SLOT[out['key']]['pick'] == 'cli': return ('cli', out['value'])
+    if SLOT[out['key']]['pick'] == 'cli': return ('cli', str(out['value']).removeprefix('cli:'))
     from .agents import brain_key
     return ('cli', brain_key(store, out['value'], cfg))
 
@@ -149,15 +150,27 @@ def _resolve(store, cfg, slot_key: str) -> dict:
            'settings': [slot_key, *([s['model_setting']] if s.get('model_setting') else [])]}
 
     if s['pick'] == 'cli':
-        from .agents import default_brain
-        key = value or default_brain(store)
+        # WHAT WILL RUN is the server's own answer (agents.resolve_brain: chosen -> a ready CLI -> the only card), never a guess here
+        from .agents import resolve_brain
+        pick = resolve_brain(store, 'coding')
+        if pick.startswith('connector:'):
+            c = store.get_connector(int(pick[10:])) if pick[10:].isdigit() else None
+            try: conf = json.loads((c or {}).get('ConfigJson') or '{}')
+            except ValueError: conf = {}
+            out.update(value=pick, model=str(conf.get('model') or conf.get('deployment') or ''), default=not value, ready=bool(c),
+                       default_hint=_conn_default(c['Type']) if c else '', connector=(c or {}).get('ConnectorId'),
+                       owner=f"the {c['Name'] or c['Type']} card" if c else '', owner_link=pick if c else '',
+                       display=(c or {}).get('Name') or pick)
+            if not c: out['note'] = 'that AI card is gone - choose another'
+            return out
+        key = pick[4:]
         cli = _cli_of(cfg, key) if key else ''
         cat = climodels.catalog(cli)
         model, effort = climodels.split_pick(str(_conn(cfg, key).get('model') or ''))
-        out.update(value=key, model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model), resolved=_resolved(cat, model),
+        out.update(value=pick, model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model), resolved=_resolved(cat, model),
                    owner=f'the {key} connection' if key else '', owner_link='ai_apps', cli=cli, display=key, default=not value,
                    ready=bool(key))
-        if not key: out['note'] = 'no CLI connected yet'
+        if not key: out['note'] = 'nothing will run yet - choose a CLI or an AI card above'
         return out
 
     # the judge: blank has a second meaning here (the report's own brain, which is what this did
@@ -311,7 +324,8 @@ def state(store, cfg) -> dict:
     agents = [a['Name'] for a in store.list_agents()]
     return {'slots': [resolve(store, cfg, s['key']) for s in SLOTS], 'agents': agents,
             'judge_options': judge_options(store),
-            'agent_options': hub_agents.cli_agent_options(store, preferred=[hub_agents.default_brain(store)])}
+            # the coding card's list: every connected CLI AND every active AI card, valued as resolve_brain answers
+            'agent_options': hub_agents.coding_options(store)}
 
 
 def judge_options(store) -> list:
@@ -334,6 +348,8 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
     if slot_key not in SLOT: raise ValueError(f'unknown slot: {slot_key}')
     s = SLOT[slot_key]
     if value is not None:
+        # the coding card offers `cli:<key>`, but default_brain keeps a CLI by its bare key (everything that runs one reads it so)
+        if s['pick'] == 'cli' and str(value).startswith('cli:'): value = str(value)[4:]
         store.set_setting(slot_key, str(value), actor)
         # Drafting back to blank is the triage brain on ITS model: a drafting model left behind would ride it unseen (2026-10-25)
         if slot_key == 'draft_ai' and not str(value).strip(): store.set_setting('draft_model', '', actor)
@@ -366,9 +382,10 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
         from .llm import effective_pick
         now = effective_pick(store) if slot_key == 'draft_ai' else default_pick(store)
 
-    if s['pick'] == 'cli':
-        from .agents import default_brain
-        key = now or default_brain(store)
+    if s['pick'] == 'cli' and cur.get('connector'):           # coding on an AI card: its model is the card's own
+        store.merge_connector_config(cur['connector'], {'model': model or None})
+    elif s['pick'] == 'cli':
+        key = cur['value'][4:] if str(cur.get('value') or '').startswith('cli:') else ''
         if not key: raise ValueError('no CLI is connected to set a model on')
         _save_gear(store, cfg, key, 'model', f'{model}@{effort}' if (model and effort) else model)
     elif now.startswith('cli:') and slot_key == 'concierge_ai':

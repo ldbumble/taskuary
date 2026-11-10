@@ -539,8 +539,12 @@ def picked(store, name: str) -> bool: return store.setting_writer(name) == 'owne
 def _cli_in(name: str, value) -> str:
     "The CLI key one brain setting names - `codex` from default_brain's `codex` or a slot's `cli:codex` - else ''."
     v = str(value or '').strip()
-    if name == 'default_brain': return v
+    if name == 'default_brain': return '' if is_card(v) else v
     return v[4:] if v.startswith('cli:') and ',' not in v else ''
+
+def is_card(v) -> bool:
+    "Does a brain setting name an AI card (`connector:<id>`, or an old bare id) rather than a CLI? default_brain may hold one."
+    v = str(v or '').strip(); return v.startswith('connector:') or v.isdigit()
 
 def stale(store, name: str) -> bool:
     "A brain saved for the person - never picked by them - that is not ready here (ready_brains): it must not keep winning."
@@ -589,7 +593,7 @@ def resolve_brain(store, kind: str = 'general', cli_only: bool = False) -> str:
     name = BRAIN_SETTING.get(kind, 'assistant_ai')
     v = '' if stale(store, name) else str(store.get_setting(name) or '').strip()
     # ...a CLI's key, or an AI card the owner chose for coding (the owner, 2026-11-09: "coding tasks should run on hipaa, why not")
-    if v and name == 'default_brain' and not v.startswith('connector:') and not v.isdigit(): v = f'cli:{v}'
+    if v and name == 'default_brain' and not is_card(v): v = f'cli:{v}'
     if v.isdigit(): v = f'connector:{v}'
     # the person's own pick is taken at its word - one that does not start says so when it is started, never swapped behind them
     if v.startswith('cli:') and (picked(store, name) or v[4:] in dict(connection_brains(store))): return v
@@ -700,6 +704,25 @@ def cli_agent_options(store, preferred=(), coding_only: bool = False) -> list[di
     order = {str(k): i for i, k in enumerate(preferred or ()) if k}
     rows = sorted(connection_brains(store), key=lambda kc: (order.get(kc[0], len(order)), ))
     return [{'value': key, 'label': key, 'cli': key, 'ready': runs_here(conn)} for key, conn in rows]
+
+
+def coding_options(store) -> list[dict]:
+    """EVERY AI THAT CAN RUN A CODING TASK, as the pickers offer it (the owner, 2026-11-09: "fix the picker ... it should choose the
+    correct one"): each connected CLI, then each active AI card - a card runs coding through general.on_card, in the checkout a CLI
+    would open. `value` is the pick resolve_brain answers in (`cli:<key>` / `connector:<id>`), so the current one is found by equality."""
+    from . import words
+    from .llm import AI_TYPES
+    labels = {k['cmd']: k['label'] for k in clis_mod.KNOWN}
+    out = [{'value': f'cli:{k}', 'key': k, 'kind': 'cli', 'ready': runs_here(c), 'label': words.local(labels.get(cli_of(c, k)) or k)}
+           for k, c in connection_brains(store)]
+    for c in store.list_connectors():
+        if c['Type'] not in AI_TYPES or not c['Active'] or not (c['HasSecret'] or c['Type'] == 'ollama'): continue
+        try: cfg = json.loads(c.get('ConfigJson') or '{}')
+        except ValueError: cfg = {}
+        model = str(cfg.get('model') or cfg.get('deployment') or '')
+        out.append({'value': f"connector:{c['ConnectorId']}", 'connector': c['ConnectorId'], 'kind': 'card', 'ready': True,
+                    'label': ' · '.join(x for x in (c.get('Name') or c['Type'], model) if x)})
+    return out
 
 
 # The workers Taskuary ships, besides `coding`. A profile IS an agent row and its rules document is
@@ -855,7 +878,8 @@ def default_brain(store) -> str:
     Blank falls back to the CLI behind the legacy `default_agent` profile, so an install that has
     not been migrated keeps running exactly what it ran yesterday."""
     key = str(store.get_setting('default_brain') or '').strip()
-    if key: return key
+    # ...an AI card chosen for coding is no CLI: everything that reads this as a command key gets the CLI it would otherwise run
+    if key and not is_card(key): return key
     legacy = str(store.get_setting('default_agent') or '').strip()       # an install from before brains named tools
     return brain_key(store, f'cli:{legacy}') if legacy else next(iter(ready_brains(store)), '')
 
@@ -889,6 +913,7 @@ def default_pick(store) -> str:
     their back); one nobody chose - blank, or written by the startup migration - is used only when it starts,
     and otherwise gives way to an AI connector that can answer. '' when there is neither: no brain yet."""
     saved = str(store.get_setting('default_brain') or '').strip()
+    saved = '' if is_card(saved) else saved          # an AI card chosen for CODING says nothing of what a blank light job runs on
     key = saved or default_brain(store)
     brains = dict(connection_brains(store))
     conn = brains.get(key) if key else None

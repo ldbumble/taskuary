@@ -24,7 +24,7 @@ test("an item's box starts nothing by itself: its Start hands the words, the pic
   assert.match(ask, /data-tq-agent-start=\{coding \? "coding" : "general"\}\s[^>]*onClick=\{start\}/);
   assert.match(ask, /text: withImages\(text\.trim\(\), pics\.paths\) \|\| ""/);
   assert.match(ask, /agent: coding \? null : run\.agent \|\| null/);
-  assert.match(ask, /brain: coding \? run\.brain \|\| null : null, pick: coding \? null : run\.pick \|\| null, model: run\.model \|\| null/);
+  assert.match(ask, /brain: coding \? run\.brain \|\| null : null, pick: coding && run\.brain \? null : run\.pick \|\| null, model: run\.model \|\| null/);
   // ...the coding agent offered only where a coding tool is connected, the other kind one press away
   assert.match(ask, /const coding = canCode && !general;/);
   assert.match(ask, /\{canCode && <Button size="small" variant="outlined" disabled=\{busy\} onClick=\{\(\) => swap\(coding\)\}>/);

@@ -344,7 +344,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           // not start"). One reading of a dispatch answer, the same one every other surface uses.
           ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, { ...(general
             ? { kind: "general", agent: role || null, pick: pick || null, model: model || null }
-            : { agent: agent || null, brain: brain || null, model: model || null }), ...(line ? { said: line } : {}) }));
+            : { agent: agent || null, brain: brain || null, pick: brain ? null : pick || null, model: model || null }), ...(line ? { said: line } : {}) }));
         } catch (e) {
           // ...and the line says the task is there: "nothing started" over a task already filed sent the owner to press again
           throw { response: { data: { detail: `${data.ref} is filed but did not start - ${String(e?.response?.data?.detail || "the start was refused").replace(/\.$/, "")}. Press ${verb} to try it again.` } } };
@@ -500,6 +500,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
                   <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={agent} model={model}
                     brains={brainList} brainModels={brainModels} brain={brain} brainsRead={agentsRead} codingReady={codingReady}
+                    generalBrains={generalBrains} pick={pick} onPick={setPick}
                     onBrain={(b) => { setBrain(b); setModel(""); }}
                     onAgent={(a) => { setAgent(a); setModel(""); }} onModel={setModel} size={30} />
                 </Box>

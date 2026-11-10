@@ -9788,6 +9788,9 @@ def agents():
             # the brains a NON-coding hand-off may choose, one per installed CLI (general.py)
             'general_brains': _general.brain_options(store),
             'brain_list': brains_here,
+            # ...and the CODING picker's full list - every CLI and every active AI card - with what a start that names none runs
+            # (resolve_brain: chosen -> a ready CLI -> the only card), so the picker shows what will actually run
+            'coding_options': hub_agents.coding_options(store), 'coding_pick': hub_agents.resolve_brain(store, 'coding'),
             # ...and whether a coding agent can start at all - the fact terminal.start_on_task refuses on, so the pickers say the same
             'coding_ready': hub_agents.coding_ready(store),
             # ...and Developer mode itself: off, the New sheet draws no coding door at all, whatever CLI is connected

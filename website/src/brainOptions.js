@@ -24,3 +24,19 @@ export function normalizeBrainOptions(rows = [], agentModels = {}, selected = []
       models: row.models?.length ? row.models : (info.choices || []) }];
   });
 }
+
+// THE CODING PICKER LISTS EVERY AI THAT CAN CODE (the owner, 2026-11-09: "fix the picker ... it should choose the correct one"): each
+// connected CLI and each active AI card, from /api/agents' coding_options. A CLI is chosen as `brain` (its key), a card as `pick`
+// (`connector:<id>`) - the two fields the dispatch reads. Nothing chosen shows what a start would run: coding_pick, the server's own
+// resolve_brain answer. An old server without coding_options gets its CLI keys, as before.
+export function codingChoices({ options, brains = [], brain = "", pick = "", codingPick = "" } = {}) {
+  const list = options?.length ? options : brains.map((k) => ({ value: `cli:${k}`, key: k, kind: "cli", label: k }));
+  const chosen = brain ? `cli:${brain}` : String(pick || "").startsWith("connector:") ? pick : "";
+  const value = chosen || (list.some((o) => o.value === codingPick) ? codingPick : list[0]?.value || "");
+  // a brain the task names that is gone is still what it names - never silently the first entry
+  const gone = chosen && !list.some((o) => o.value === chosen)
+    ? [{ value: chosen, kind: chosen.startsWith("cli:") ? "cli" : "card", label: `${chosen.replace(/^cli:/, "")} · not connected` }] : [];
+  return { list: [...gone, ...list], value };
+}
+// what choosing one sends: { brain, pick } with the other cleared
+export const codingChoice = (v) => String(v).startsWith("cli:") ? { brain: String(v).slice(4), pick: "" } : { brain: "", pick: String(v) };

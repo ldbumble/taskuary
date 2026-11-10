@@ -82,7 +82,8 @@ class ResolveTests(unittest.TestCase):
 
     def test_the_coding_slot_reads_the_MAIN_model(self):
         s, cfg = _store(), _cfg(model='opus', light_model='haiku')
-        s.set_setting('default_brain', 'claude', 'o')
+        # the owner's own pick: the card shows what resolve_brain runs, which takes a chosen brain at its word (2026-11-09)
+        s.set_setting('default_brain', 'claude', 'owner')
         r = aidefaults.resolve(s, cfg, 'default_brain')
         self.assertEqual(r['model'], 'opus')                # not haiku
         # where it is saved is a PLACE the page can open (words.json): "agents" opened the Profiles shelf, where no
@@ -99,7 +100,10 @@ class ResolveTests(unittest.TestCase):
         with mock.patch.object(agents, 'connection_brains', agents.connection_brains.real), \
              mock.patch('taskuary.config.load', return_value=cfg):
             options = aidefaults.state(s, cfg)['agent_options']
-        self.assertEqual([(o['value'], o['label']) for o in options], [('claude', 'claude'), ('copilot', 'copilot')])
+        # ...valued as resolve_brain answers, named in plain words (the coding picker, 2026-11-09)
+        self.assertEqual([o['value'] for o in options], ['cli:claude', 'cli:copilot'])
+        self.assertEqual(options[0]['label'], 'Claude Code (on this computer)')
+        self.assertFalse(any('researcher' in o['label'] for o in options))
 
 
 class TheFifthSlotTests(unittest.TestCase):
@@ -287,3 +291,56 @@ class AliasTests(unittest.TestCase):
 
     def test_unknown_or_blank_has_no_efforts(self):
         self.assertEqual((aidefaults._efforts(self.cat, ''), aidefaults._efforts(self.cat, 'nope')), ([], []))
+
+
+class CodingPickerTests(unittest.TestCase):
+    """THE CODING PICKER CHOOSES THE CORRECT ONE (the owner, 2026-11-09: "fix the picker please"): Settings' coding card lists every
+    connected CLI AND every active AI card, shows what resolve_brain will actually run, and saves what the server reads."""
+
+    def setUp(self):
+        from taskuary import agents
+        self.agents, self.s = agents, MemoryStore()
+        self.cfg = {'cli_connections': {'claude': {'cmd': 'claude', 'model': 'opus'}}}
+        self.cid = self.s._exec("INSERT INTO connector (Type,Name,ConfigJson,Secret,Active) VALUES "
+                                "('hipaa_ai','HIPAA AI','{\"model\": \"claude-sonnet-5-5\"}','k',1)")
+        self.p = [mock.patch.object(agents, 'connection_brains', agents.connection_brains.real),
+                  mock.patch('taskuary.config.load', return_value=self.cfg), mock.patch('taskuary.agents.runs_here', lambda c: True)]
+        for x in self.p: x.start()
+
+    def tearDown(self):
+        for x in self.p: x.stop()
+
+    def test_options_for_coding_include_active_cards(self):
+        opts = aidefaults.state(self.s, self.cfg)['agent_options']
+        self.assertEqual([o['value'] for o in opts], ['cli:claude', f'connector:{self.cid}'])
+        self.assertEqual(opts[1]['label'], 'HIPAA AI · claude-sonnet-5-5')
+        # an inactive card is not a choice
+        self.s.save_connector({'ConnectorId': self.cid, 'Active': 0}, 't')
+        self.assertEqual([o['value'] for o in aidefaults.state(self.s, self.cfg)['agent_options']], ['cli:claude'])
+
+    def test_the_shown_default_is_what_resolve_brain_runs(self):
+        for setting in ('', 'claude', f'connector:{self.cid}'):
+            self.s.set_setting('default_brain', setting, 'owner')
+            r = aidefaults.resolve(self.s, self.cfg, 'default_brain')
+            self.assertEqual(r['value'], self.agents.resolve_brain(self.s, 'coding'), setting)
+        self.assertEqual(r['value'], f'connector:{self.cid}')
+        self.assertEqual(r['model'], 'claude-sonnet-5-5')
+        # ...and the picker on a task shows the same answer (/api/agents)
+        with mock.patch.object(server, 'store', self.s):
+            got = c.get('/api/agents').json()
+        self.assertEqual(got['coding_pick'], f'connector:{self.cid}')
+        self.assertIn(f'connector:{self.cid}', [o['value'] for o in got['coding_options']])
+
+    def test_saving_a_card_routes_a_coding_task_to_it_even_with_a_cli(self):
+        from taskuary import general
+        aidefaults.apply(self.s, self.cfg, 'default_brain', value=f'connector:{self.cid}')
+        self.assertEqual(self.agents.resolve_brain(self.s, 'coding'), f'connector:{self.cid}')
+        tid = self.s.create_task({'Title': 'fix add()', 'Summary': 'x', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        try: self.assertEqual(general.on_card(self.s, self.s.get_task(tid)), f'connector:{self.cid}')
+        finally: general.ON_CARD.discard(tid)
+        # a card chosen for coding is no CLI key: what reads default_brain as a command still gets the CLI
+        self.assertEqual(self.agents.default_brain(self.s), 'claude')
+        # ...and a CLI saved from the picker's `cli:` value is stored by its bare key, as every CLI reader expects
+        aidefaults.apply(self.s, self.cfg, 'default_brain', value='cli:claude')
+        self.assertEqual(self.s.get_setting('default_brain'), 'claude')
+        self.assertEqual(self.agents.resolve_brain(self.s, 'coding'), 'cli:claude')

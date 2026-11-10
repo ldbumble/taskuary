@@ -46,7 +46,8 @@ const Model = ({ slot, onSave, field = "model", label = "model", hint, locked })
 // typographic, and the line that matters most, "what will actually run", is the loudest thing
 // in the card rather than a caption under two dropdowns.
 const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
-  const isAgent = slot.key === "default_brain";     // the coding CLI: a tool, chosen from the connected CLIs
+  // the coding brain: a connected CLI or an active AI card (agents.coding_options), its value what resolve_brain answers
+  const isAgent = slot.key === "default_brain";
   // The judge is the one slot that may be pointed at a model which cannot write, so it is the one
   // picker that shows them. Its own blank row already means "auto" (the report's own brain), so
   // the brains' auto entry — same empty value — is dropped rather than offered twice.
@@ -70,14 +71,14 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
       <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Box>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>
-            {isAgent ? "which CLI" : isJudge ? "what decides" : "which brain"}
+            {isAgent ? "which AI" : isJudge ? "what decides" : "which brain"}
           </Typography>
-          <Select size="small" displayEmpty value={picked ? slot.value : ""}
+          <Select size="small" displayEmpty value={picked ? slot.value : ""} data-tq-slot-brain={slot.key}
             onChange={(e) => onSave({ value: e.target.value })}
             MenuProps={{ PaperProps: { sx: { maxHeight: 340 } } }}
             sx={{ minWidth: 250, fontSize: 12.5, bgcolor: "#fff" }}>
             {options.map((o) => (
-              <MenuItem key={o.value} value={o.value} disabled={o.ready === false} sx={{ fontSize: 12.5 }}>
+              <MenuItem key={o.value} value={o.value} disabled={o.ready === false} data-tq-brain-option={o.value} sx={{ fontSize: 12.5 }}>
                 {o.label}{o.ready === false ? " — no key saved" : ""}
               </MenuItem>
             ))}
@@ -125,7 +126,7 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
         alignItems: "baseline", flexWrap: "wrap" }}>
         <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600 }}>RUNS</Typography>
         <Typography sx={{ ...mono, fontSize: 12.5, color: INK, fontWeight: 600 }}>
-          {picked ? picked.label : "—"}{slot.ready && runs ? ` · ${runs}` : ""}{slot.ready && slot.resolved ? ` → ${slot.resolved}` : ""}{slot.effort ? ` · ${slot.effort}` : ""}
+          {picked ? picked.label : "—"}{slot.ready && runs && !picked?.label?.endsWith(` · ${runs}`) ? ` · ${runs}` : ""}{slot.ready && slot.resolved ? ` → ${slot.resolved}` : ""}{slot.effort ? ` · ${slot.effort}` : ""}
         </Typography>
         {slot.owner && (
           <Typography variant="caption" sx={{ color: FAINT }}>

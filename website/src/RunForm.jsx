@@ -63,7 +63,7 @@ export function AgentAsk({ coding: wantCoding = false, title, what, placeholder 
     try {
       await onStart?.({ verb: coding ? "coding_agent" : "regular_agent", kind: coding ? "coding" : "general",
         text: withImages(text.trim(), pics.paths) || "", agent: coding ? null : run.agent || null,
-        brain: coding ? run.brain || null : null, pick: coding ? null : run.pick || null, model: run.model || null });
+        brain: coding ? run.brain || null : null, pick: coding && run.brain ? null : run.pick || null, model: run.model || null });
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || "It did not start - press it again."); }
     finally { setBusy(false); }
   };
@@ -76,7 +76,7 @@ export function AgentAsk({ coding: wantCoding = false, title, what, placeholder 
         picker={<AgentPicker agents={agents} models={models} kinds={kinds} coding={coding} agent={run.agent} model={run.model}
           brains={brainList} brainModels={brainModels} brain={run.brain}
           generalBrains={generalBrains} brainsRead={agentsRead} codingReady={codingReady} pick={run.pick}
-          onPick={coding ? undefined : (p) => setRun((r) => ({ ...r, pick: p }))}
+          onPick={(p) => setRun((r) => ({ ...r, pick: p }))}
           onBrain={(b) => setRun((r) => ({ ...r, brain: b, model: "" }))}
           onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}
           onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />}

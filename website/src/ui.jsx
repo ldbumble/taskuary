@@ -65,6 +65,7 @@ import { personLine, runSearch, withFound } from "./peopleSearch.js";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
 import { AGENT_SHOWN, MESSAGE, shownAgent } from "./kinds.js";
+import { codingChoice, codingChoices } from "./brainOptions.js";
 // a waiting note the Assistant passed on keeps the owner's words and its own version apart (waitroom.SEP): the owner's are what is shown
 export const ownWords = (note) => String(note || "").split("\x1f")[0].trim();
 
@@ -818,9 +819,11 @@ const agentsOf = (data) => ({
   brains: data.brains || {}, brainList: data.brain_list || [], brainModels: data.brain_models || {},
   // the brains a NON-coding hand-off may choose: one per installed CLI, then the API connectors
   generalBrains: data.general_brains || [],
+  // ...and every AI a CODING task can run on - each CLI and each active AI card - with what a start naming none runs (resolve_brain)
+  codingOptions: data.coding_options || [], codingPick: data.coding_pick || "",
 });
 // agentsRead: [] read is "no AI connected"; [] not yet read is nothing yet. codingReady: a coding agent can start (agents.coding_ready)
-const AGENTS_UNREAD = { agents: [], models: {}, cmds: {}, kinds: {}, brains: {}, brainList: [], brainModels: {}, generalBrains: [], agentsRead: false, codingReady: false, devMode: false };
+const AGENTS_UNREAD = { agents: [], models: {}, cmds: {}, kinds: {}, brains: {}, brainList: [], brainModels: {}, generalBrains: [], codingOptions: [], codingPick: "", agentsRead: false, codingReady: false, devMode: false };
 export const useAgents = () => {
   const [v, setV] = useState(() => agentsLast || AGENTS_UNREAD);
   useEffect(() => {
@@ -886,12 +889,18 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
     ? agents.filter((a) => !["coding", "cli"].includes(String(kinds[a] || "").toLowerCase())) : agents;
   // A BRAIN THAT IS GONE IS STILL WHAT THIS TASK NAMES. `brains` is the installed list now, so a
   // value outside it used to select brains[0] silently - the picker showed a CLI nobody chose.
-  const list = coding ? (brain && !brains.includes(brain) ? [brain, ...brains] : brains) : roles;
-  const value = coding ? brain : agent;
+  const list = roles;
+  // A CODING TASK RUNS ON A CLI OR AN AI CARD (brainOptions.codingChoices): every one is listed, and blank shows what will run. A card
+  // reaches the start as `pick`, so a picker whose caller sends none (onPick) offers the CLIs alone.
+  const { codingOptions, codingPick } = useAgents();
+  const code = codingChoices({ options: (codingOptions || []).filter((o) => onPick || o.kind === "cli"), brains, brain, pick, codingPick });
+  const value = agent;
   // A HAND-OFF LEAVES THE PROFILE IT HAS: blank, and no picker asks (below).
   const handOff = !coding && !!onPick;
-  const selected = handOff ? value : (list.includes(value) ? value : (list[0] || value));
-  const info = (coding ? brainModels[selected] : models[selected]) || {};
+  const selected = coding ? code.value : handOff ? value : (list.includes(value) ? value : (list[0] || value));
+  const onCard = coding && String(selected).startsWith("connector:");
+  const card = onCard ? generalBrains.find((b) => b.pick === selected) || {} : {};
+  const info = (coding ? (onCard ? { models: card.models, default: card.model } : brainModels[String(selected).slice(4)]) : models[selected]) || {};
   const chosenBrain = generalBrains.find((b) => b.pick === pick) || {};
   // NO CODING TOOL CHOSEN, SAID IN PLACE OF A BLANK PICKER (owner-approved, 2026-10-21): the picker drew an empty box and the start
   // found a tool on the computer by itself. The server refuses that start too (terminal.start_on_task).
@@ -903,14 +912,19 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
           (triage's role, else the assistant's own), behind the scenes; the profiles themselves are kept in Docs -> Profiles. */}
       {/* ...each picker named for the Assistant (pageView.labelOf reads aria-label): unnamed, New's and the task's pickers were never on
           the view it was sent, and "use Claude Code for it" had nothing to pick (the audit of New, 2026-11-02) */}
-      {!handOff && <Select size="small" value={selected || ""} inputProps={{ "aria-label": coding ? "Coding tool" : "Profile" }}
-        onChange={(e) => (coding ? onBrain : onAgent)(e.target.value)}
+      {coding && <Select size="small" value={selected || ""} inputProps={{ "aria-label": "Coding tool" }} data-tq-coding-brain=""
+        onChange={(e) => { const c = codingChoice(e.target.value); onBrain?.(c.brain); onPick?.(c.pick); }}
         sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
-        {list.map((a) => (
-          <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>
-            {a}{coding && brainModels[a] && brainModels[a].installed === false ? " · not installed" : ""}
+        {code.list.map((o) => (
+          <MenuItem key={o.value} value={o.value} data-tq-coding-option={o.value} sx={{ fontSize: 12.5 }}>
+            {o.label}{o.kind === "cli" && brainModels[o.key] && brainModels[o.key].installed === false ? " · not installed" : ""}
           </MenuItem>
         ))}
+      </Select>}
+      {!coding && !handOff && <Select size="small" value={selected || ""} inputProps={{ "aria-label": "Profile" }}
+        onChange={(e) => onAgent(e.target.value)}
+        sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
+        {list.map((a) => <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>{a}</MenuItem>)}
       </Select>}
       {handOff && (
         <Select size="small" displayEmpty value={pick || ""} inputProps={{ "aria-label": "Brain" }} onChange={(e) => { onPick(e.target.value); onModel(""); }}
@@ -1066,9 +1080,10 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
   const [agentKind, setAgentKind] = useState("");
   const coding = agentKind === "coding";
   const [open, setOpen] = useState(false);
-  const { agents, models, kinds, brainList, brainModels } = useAgents();
+  const { agents, models, kinds, brainList, brainModels, generalBrains } = useAgents();
   const [agent, setAgent] = useState("");          // the coding profile, by kind; blank = the server finds it
   const [brain, setBrain] = useState("");          // WHICH CLI runs it; blank = the brain settings name
+  const [pick, setPick] = useState("");            // ...or which AI card (`connector:<id>`)
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1081,7 +1096,7 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
     setBusy(true); setErr("");
     try {
       const { data } = await api.post(`/api/messages/${messageId}/dispatch`,
-        { kind: agentKind, agent: coding ? (agent || null) : null, brain: coding ? (brain || null) : null,
+        { kind: agentKind, agent: coding ? (agent || null) : null, brain: coding ? (brain || null) : null, pick: coding && !brain ? (pick || null) : null,
           model: model || null, instruction: prompt.trim() || null });
       const outcome = outcomeOf(data);
       if (outcome.state === "needs_repo") { setRepoAsk({ taskId: data.taskId, agent: data.agent || agent }); }
@@ -1132,6 +1147,7 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
         <Box sx={{ flex: 1, minWidth: 8 }} />
         {coding && <AgentPicker agents={agents} models={models} agent={agent} model={model} coding
           brains={brainList} brainModels={brainModels} brain={brain} onBrain={(b) => { setBrain(b); setModel(""); }}
+          generalBrains={generalBrains} pick={pick} onPick={setPick}
           onAgent={setAgent} onModel={setModel} size={26} />}
       </Box>
       <Box sx={{ display: "flex", gap: 0.75, mb: agentKind ? 0.75 : 0, flexWrap: "wrap" }}>

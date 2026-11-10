@@ -2135,7 +2135,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // one shared dispatch for coding too (PW-216): the kind switch, the live-worker check (409), the unknown
       // agent (422) and the repository come from the same road the general button and the assistant use -
       // no Kind PATCH before a terminal, so a failed start never leaves a relabelled, unstarted task
-      const data = await runOperation(api, "dispatch.prepare", id, { kind: "coding", agent: run.agent || null, brain: run.brain || null,
+      const data = await runOperation(api, "dispatch.prepare", id, { kind: "coding", agent: run.agent || null, brain: run.brain || null, pick: run.brain ? null : run.pick || null,
         model: run.model || null, instructions: withImages(run.instruction.trim(), runPics.paths) || null });
       if (!stale(id)) setTerm(data?.session || null);
       if (!stale(id)) {

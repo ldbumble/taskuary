@@ -6,7 +6,7 @@ old, a finished turn woken again, Resume's words on a carry-on nobody pressed, "
 import json, shutil
 from unittest import mock
 
-from taskuary import agenttools, channels, config, general, hooks, ingest, outputs, server
+from taskuary import agenttools, channels, config, general, hooks, ingest, outputs, server, wrapup
 from taskuary.store import MemoryStore
 from test_carry_on import ingested, mail, store
 from test_freshness_walk import reads, stamp, teams_task
@@ -103,6 +103,30 @@ def test_a_draft_for_the_newest_message_is_not_called_earlier():
     s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Yes, keep posting here.'})
     said = general.latest_block(s, tid)
     assert 'written for this message - keep it or improve it' in said and 'BEFORE the newest message' not in said
+
+
+def test_a_draft_the_thread_moved_past_is_never_called_written_for_the_newest_message():
+    # the owner, 2026-11-10: the agent drafted on a chat, the owner answered there from the phone, a minute later the sender asked something
+    # new - the join re-pinned the old draft to the new line (its freshness marker), and the woken agent was told that draft was "written for
+    # this message - keep it", so the answer to the first ask stood as the answer to the second
+    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't'); s.remember_trust('whatsapp', 'whatsapp:15550001', 'You vouched')
+    wa = lambda ext, body, at: {'external_id': ext, 'channel': 'whatsapp', 'subject': 'Erin Blake', 'body': body, 'from_email': 'whatsapp:15550001',
+                                'from_name': 'Erin Blake', 'conversation_id': 'wa:erin', 'sent_at': at, 'source_name': 'Erin Blake', 'mail_meta': {'dm': True}}
+    llm = lambda sy, u, **k: json.dumps({'intent': 'reply_only', 'kind': 'task', 'why': 'w', 'asks_owner': True, 'title': 'Erin asks'})
+    with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude'}]):
+        tid = ingest.ingest_message(s, wa('w1', 'Are we still on for Thursday?', stamp(-600)), llm=llm)['task_id']
+        ingest.reply_to_agent(s, tid, s.pending_review(tid, kind='draft')['ReviewId'])          # the hand-over, as the spawn runs it
+        general.OPENING.discard(tid)
+        for who, kind, words in ((general.BRIEF_ACTOR, general.USER_TYPE, 'brief'), ('assistant', general.ASSISTANT_TYPE, 'Drafted it.')):
+            s._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', (stamp(-500), s.add_comment(tid, who, kind, words)))
+        rid = wrapup.agent_reply(s, tid, 'Hi Erin - yes, Thursday stands.', 'assistant')['review_id']
+        spawn.reset_mock()
+        try: ingest.ingest_message(s, wa('w2', 'great - and can you bring the budget sheet?', stamp(-60)), llm=llm)
+        finally: general.OPENING.discard(tid)
+    assert [c[0][0].__name__ for c in spawn.call_args_list] == ['_replan_general']           # the agent is woken to answer it
+    said = general.latest_block(s, tid)
+    assert 'THE NEWEST MESSAGE - from Erin Blake' in said and 'budget sheet' in said
+    assert f'THE DRAFT WAITING NOW (rv{rid}' in said and 'written for this message' not in said and 'BEFORE the newest message' in said
 
 
 # ── F6, F11: the to-do list and the owner's reminder ───────────────────────────────────────────────────────────────────────────────

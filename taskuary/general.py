@@ -831,8 +831,11 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         m = store.get_message(rv.get('AnswersMid') or rv.get('MessageId')) or {}
         # ...one WRITTEN FOR the newest message is not an earlier draft (the owner, 2026-11-09): the quick drafter answered it the same second,
         # and the agent withdrew that correct answer as "a stale copy" and drafted nothing
-        to, mine = m.get('FromName') or m.get('FromEmail') or '', bool(new and new.get('mid') and m.get('MessageId') == new['mid'])
-        before = not mine and not heard and bool(new) and at < new['at']
+        # ...and one the thread moved past is never that (the owner, 2026-11-10): the join re-pins a draft to the newest line as its freshness
+        # marker and marks it Stale - read by the pin alone, the old answer was handed to the woken agent as "written for this message - keep it"
+        to = m.get('FromName') or m.get('FromEmail') or ''
+        mine = bool(new and new.get('mid') and m.get('MessageId') == new['mid']) and not rv.get('Stale')
+        before = not mine and not heard and bool(new) and (bool(rv.get('Stale')) or at < new['at'])
         out.append(f"THE DRAFT WAITING NOW (rv{rv['ReviewId']}{', to ' + to if to else ''}, drafted at {clock(at)}"
                    f"{' - written for this message - keep it or improve it' if mine else ' - BEFORE the newest message' if before else ''}): "
                    f"{_quote(rv['DraftText'], 1500)}\n{selfclose.WITHDRAW_LINE}")

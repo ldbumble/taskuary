@@ -430,8 +430,8 @@ def keep_seed(tid: int, seed: str):
 # THE WAITING ROOM'S BATCH TYPED INTO A PTY (waitroom.batch) is Taskuary's head round the owner's notes: drawn whole it was their bubble, "While
 # you were working, the owner queued 1 note for you..." (the owner, 2026-11-09: only what they typed, or what came in on the thread, is an input)
 _QUEUED = re.compile(r'(?:While you were working, (?P<a>[\w ]+?) queued \d+ notes? for you\. Take them in order, after finishing the step you are on; '
-                     r'if one conflicts with work already done, say so instead of undoing it:|(?P<b>[\w ]+?) left \d+ notes? for you after the last '
-                     r'session ended\. Take them in order:)')
+                     r'if one conflicts with work already done, say so instead of undoing it:|(?P<b>[\w ]+?) left \d+ notes? for you(?: after the last '
+                     r'session ended)?\. Take them in order:)')
 _LEFT = re.compile(r'\s*\(\d+ more notes? waits? behind this one.*$', re.S)
 def queued(text):
     "[(k, text)] of a typed waiting-room batch - the owner's notes `you`, the rest `brief` - or None when `text` is not one."

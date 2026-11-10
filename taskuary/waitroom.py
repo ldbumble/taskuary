@@ -37,17 +37,18 @@ def said(note) -> str:
     return f'{o} ({extra})' if extra else o
 
 
-def batch(notes: list, after_restart: bool = False, remaining: int = 0, words: bool = True) -> str:
+def batch(notes: list, after_restart: bool = False, remaining: int = 0, words: bool = True, waited: bool = True) -> str:
     """The notes as one typed message. Flattened to one line: in a TUI a newline is Enter.
     `remaining` = notes still waiting behind these (the drip): the agent is told the next one
-    comes when it stops again, so it does not go looking for it. `words=False`: Taskuary's part alone, the notes left out."""
+    comes when it stops again, so it does not go looking for it. `words=False`: Taskuary's part alone, the notes left out.
+    `waited=False`: handed over the moment they were written, to an agent at rest - nothing was queued behind its work (_deliver)."""
     n = len(notes)
     # ...a message relayed from someone else (terminal.say_to_task, CreatedBy 'router') is not the owner's note: it names its own sender
     # ...and a teammate's words on a bound chat (agentchannels.py) are never "the owner's" - each one names its writer and its guard
     by = {x.get('CreatedBy') or 'owner' for x in notes}
     who = 'Taskuary' if 'router' in by else ('a teammate' if by == {TEAMMATE} else 'the owner and a teammate') if TEAMMATE in by else 'the owner'
-    head = (f'{who[0].upper() + who[1:]} left {n} note{"s" if n > 1 else ""} for you after the last session ended. Take them in order:'
-            if after_restart else
+    head = (f'{who[0].upper() + who[1:]} left {n} note{"s" if n > 1 else ""} for you{" after the last session ended" if after_restart else ""}. '
+            'Take them in order:' if after_restart or not waited else
             f'While you were working, {who} queued {n} note{"s" if n > 1 else ""} for you. Take them in order, '
             'after finishing the step you are on; if one conflicts with work already done, say so instead of undoing it:')
     tail = (f' ({remaining} more note{"s" if remaining > 1 else ""} wait{"" if remaining > 1 else "s"} behind this one - the next comes when you stop again; '
@@ -65,13 +66,13 @@ def general_relay() -> str:
 # A GENERAL AGENT'S CHAT SAYS WHO SAID WHAT (the overnight run, 2026-11-03): the batch typed into its conversation was filed whole as the
 # owner's, so YOU read "While you were working, the owner queued 1 note for you. Take them in order..." - Taskuary's words in the owner's
 # bubble. Taskuary's part is its brief (the grey line), each note its writer's own words, and the agent's turn is the batch, as it was
-def to_general(store, tid, session, notes: list, after_restart: bool = False, remaining: int = 0) -> None:
+def to_general(store, tid, session, notes: list, after_restart: bool = False, remaining: int = 0, waited: bool = True) -> None:
     from . import general
-    store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, batch(notes, after_restart, remaining, words=False))
+    store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, batch(notes, after_restart, remaining, words=False, waited=waited))
     for x in notes:
         store.add_comment(tid, 'owner' if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE) else general.BRIEF_ACTOR, general.USER_TYPE,
                           parts(x.get('Note'))[0])
-    threading.Thread(target=session.send_prompt, args=(batch(notes, after_restart, remaining),), kwargs={'kept': True, 'brief': True},
+    threading.Thread(target=session.send_prompt, args=(batch(notes, after_restart, remaining, waited=waited),), kwargs={'kept': True, 'brief': True},
                      daemon=True).start()
 
 
@@ -156,7 +157,7 @@ def add(store, tid: int, note: str, actor: str = 'owner', owner: str = None) -> 
     # The note is QUEUED the moment it is written; handing it over may not be possible right now
     # (no CLI on this machine, no provider, every slot taken). That is not a failure of the note -
     # it used to come back as a 422 with the note already in the room (2026-09-03).
-    try: return {'wid': wid, **deliver(store, tid)}
+    try: return {'wid': wid, **deliver(store, tid, new=wid)}
     except Exception as e:
         logger.warning(f'waitroom: {task_ref(tid)} kept the note but could not hand it over - {e}')
         return {'wid': wid, 'delivered': 0, 'state': 'held', 'why': str(e)[:200]}
@@ -176,16 +177,17 @@ def full_on_stranger(store, tid: int, t) -> bool:
 _DELIVERING, _DLOCK = {}, threading.Lock()
 
 
-def deliver(store, tid: int) -> dict:
+def deliver(store, tid: int, new: int = None) -> dict:
     """Hand this task's waiting notes over IF the agent has stopped. {'delivered': n, 'state': ...}
-    - 'held' states are the ones where nothing moved: working, asking, closed, full, owner_typing."""
+    - 'held' states are the ones where nothing moved: working, asking, closed, full, owner_typing.
+    `new`: the note written this moment (add) - handed to an agent at rest, it did not wait."""
     # ONE NOTE, ONE HANDOVER (2026-11-09): the owner's POST steered a line in, and before it marked the line handed over (a slow store:
     # 4 s) the turn ended and the clock's deliver read it as still waiting - the chat drew it twice. A task's deliveries take turns.
     with _DLOCK: lk = _DELIVERING.setdefault(tid, threading.RLock())
-    with lk: return _deliver(store, tid)
+    with lk: return _deliver(store, tid, new)
 
 
-def _deliver(store, tid: int) -> dict:
+def _deliver(store, tid: int, new: int = None) -> dict:
     from . import terminal as term, peers
     from .ingest import has_room
     pending = store.waiting_notes(tid)
@@ -197,6 +199,9 @@ def _deliver(store, tid: int) -> dict:
     # MID-TURN, INTO THE TURN (the owner, 2026-11-06): an ACP coding session whose adapter steers (acpcoding.steerable) takes the words now,
     # into the turn at work, rather than at its end - the parked road below, under every one of its holds
     steer = st == 'working' and t is not None and term.is_acp(t) and bool(getattr(t, 'steerable', lambda: False)())
+    # "WHILE YOU WERE WORKING" ONLY WHEN IT WAS (agent walk 2, 2026-11-10): a line typed to an agent at rest reached it as "While you were
+    # working, the owner queued 1 note for you ... after finishing the step you are on". Only a note that waited behind a turn says so
+    waited = steer or any(x['WId'] != new for x in notes)
     # A STRANGER'S WORDS NEVER REACH FULL TOOLS UNASKED (the Advisor design rev 2): a session started full on a task a stranger has written on
     # since - a batch's outside contributor among them - gets nothing typed in; the owner's Continue picks it up under the reviewer
     if (st in ('asking', 'parked') or steer) and full_on_stranger(store, tid, t):
@@ -234,16 +239,16 @@ def _deliver(store, tid: int) -> dict:
         return {'delivered': len(notes), 'state': 'answered', 'left': left}
     if st == 'parked' or steer:
         from . import general
-        if isinstance(t, general.GeneralSession): to_general(store, tid, t, notes, remaining=left); how = 'typed into'
+        if isinstance(t, general.GeneralSession): to_general(store, tid, t, notes, remaining=left, waited=waited); how = 'typed into'
         # ...an ACP coding session (acpcoding.py) takes it as its next prompt, the batch as Taskuary's brief and each of the owner's own notes
         # drawn as theirs in the coding chat - never "While you were working, the owner queued..." in the owner's bubble (to_general's rule)
         elif term.is_acp(t):
-            t.prompt(' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left)) if x),
+            t.prompt(' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left, waited=waited)) if x),
                      shown=[parts(x.get('Note'))[0] for x in notes if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)])
             how = 'sent into the running turn of' if steer else 'sent to'
         # ...with what other agents said since its last turn in front, framed as theirs (peers.py) - one turn, not two
         else:
-            said_ = ' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left)) if x)
+            said_ = ' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left, waited=waited)) if x)
             # ...Taskuary's own notes alone (an approval's result, a landing) are its brief in the record, never the owner's line: kept as a
             # seed (sessionrecord.mark_briefs); a batch carrying the owner's notes is split there into their lines and Taskuary's head
             if all((x.get('CreatedBy') or 'owner') == 'router' for x in notes):

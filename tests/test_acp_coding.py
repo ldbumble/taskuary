@@ -163,7 +163,7 @@ def test_a_note_from_the_waiting_room_is_drawn_as_the_owners_words(world):
     assert out['delivered'] == 1 and idle(t, 2)
     ups = [u for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'user_message_chunk']
     assert ups[-2]['content']['text'] == 'use the rounding helper' and '_meta' not in ups[-2]       # theirs
-    assert ups[-1]['_meta'] == {'taskuary': 'brief'} and 'queued' in ups[-1]['content']['text']   # Taskuary's framing, its brief
+    assert ups[-1]['_meta'] == {'taskuary': 'brief'} and 'left 1 note' in ups[-1]['content']['text']   # Taskuary's framing, its brief
 
 
 def test_a_resume_is_the_agents_own_conversation(world, monkeypatch):

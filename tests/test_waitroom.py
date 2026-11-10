@@ -188,6 +188,12 @@ class DeliveryTests(unittest.TestCase):
             time.sleep(0.5)
         self.assertEqual((out['delivered'], out['state']), (1, 'parked'))
         self.assertIn('export path', t.typed())
+        # ...and it was not working (agent walk 2, 2026-11-10: "While you were working, the owner queued 1 note ... after finishing the step
+        # you are on", to an agent at rest). The chat still reads the typed line as Taskuary's head and the owner's words (sessionrecord.queued)
+        self.assertNotIn('While you were working', t.typed()); self.assertNotIn('the step you are on', t.typed())
+        from taskuary import sessionrecord
+        self.assertEqual(sessionrecord.queued(t.typed()), [('brief', 'The owner left 1 note for you. Take them in order:'),
+                                                           ('you', 'now do the same for the export path')])
 
     def test_a_question_for_the_owner_is_answered_by_what_they_write_next(self):
         """An agent parked on a question is asking the OWNER: their next words are the answer and go
@@ -280,7 +286,7 @@ class GeneralTests(unittest.TestCase):
         self.assertEqual((out['delivered'], out['state']), (1, 'parked'))
         (brief, b), (who, note) = self.said(s, tid)
         self.assertEqual((brief, who, note), ('taskuary', 'owner', 'Also put Northwind Payroll on the list.'))
-        self.assertIn('While you were working', b); self.assertNotIn('Northwind Payroll', b)
+        self.assertIn('The owner left 1 note for you', b); self.assertNotIn('While you were working', b); self.assertNotIn('Northwind Payroll', b)
         [(turn, kw)] = ses.sent                                     # the agent's turn is the batch, filed here already
         self.assertIn('(1) Also put Northwind Payroll on the list.', turn); self.assertEqual(kw, {'kept': True, 'brief': True})
 

@@ -11,7 +11,7 @@ The step is read from real state (setup.py's own readers), never stored: a step 
 under each question are the Connections page's own (the owner, 2026-10-15: "Don't create new ui. keep the same as we have in
 connections but just show them/tell what to do next") - this file says which step, and the one line on top.
 """
-import json, re, threading
+import json, re, threading, weakref
 from . import buttons
 from loguru import logger
 from .timewords import plural
@@ -784,11 +784,13 @@ DRAFTS = ('job', 'workstreams', 'style', 'soul')
 # ...and WHAT YOU WORK ON (the owner, 2026-11-01: a one-screen "Here's what I think you work on" at first setup): six months of the mail
 # grouped into workstreams (wsboot.propose), its text the proposals as JSON - the screen renames, marks personal, or leaves one out.
 # Since 2026-11-06 it shares the job's screen, About your work, under the job description: one Next for both (keep_when_ready)
-_JOB, _LOCK = {}, threading.Lock()
+# ...kept by the store ITSELF, and gone with it: keyed by id(store), a store made where a dead one had been read that one's drafts - a new
+# home's job "failed" before anything had asked for it
+_JOB, _LOCK = weakref.WeakKeyDictionary(), threading.Lock()
 
 
 def _drafts(store) -> dict:
-    return _JOB.setdefault(id(store), {**{d: {'state': 'none', 'why': '', 'again': False} for d in DRAFTS}, '_q': [], '_on': False})
+    return _JOB.setdefault(store, {**{d: {'state': 'none', 'why': '', 'again': False} for d in DRAFTS}, '_q': [], '_on': False})
 
 
 def learn(store, ans: dict, wait: bool = False, docs=DRAFTS):
@@ -873,7 +875,7 @@ def workstreams_page(store) -> dict:
     """About you's list of what you work on - {state, why, text}: the kept ones ticked, any the mail proposed and nobody answered
     unticked, as the setup screen's rows. Running or failed while setup's grouping is."""
     from . import workstreams as W, wsboot
-    st = (_JOB.get(id(store)) or {}).get('workstreams') or {}
+    st = (_JOB.get(store) or {}).get('workstreams') or {}
     if st.get('state') in ('running', 'failed'): return {'state': st['state'], 'why': st.get('why') or '', 'text': ''}
     rows = [{'slug': w['slug'], 'name': w['name'], 'about': w['about'], 'personal': w['personal'], 'section': _sec(W.section(store, w['slug'])), 'kept': True}
             for w in W.streams(store)]
@@ -908,7 +910,7 @@ def _ws_text(store) -> str:
 
 def job_state(store, name: str = 'job') -> dict:
     """{state: none|running|ready|failed, why, text} - one draft as its setup screen shows it."""
-    st = (_JOB.get(id(store)) or {}).get(name) or {}
+    st = (_JOB.get(store) or {}).get(name) or {}
     if st.get('state') in ('running', 'failed'): return {'state': st['state'], 'why': st.get('why') or '', 'text': ''}
     text = _ws_text(store) if name == 'workstreams' else learned_job(store, name)
     return {'state': 'ready' if text else 'none', 'why': '', 'text': text}

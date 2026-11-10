@@ -32,7 +32,8 @@ Move it there?"), and wait: he moves it with **Change where the code is**.
   repo John trusts to act on its own) - then do it, check it is live, and finish. Otherwise commit locally and stop.
   When the ask is met only once the change is LIVE, that stop is John's button, never a question in words: call
   `propose_land` - `how` push and `deploy` the branch that deploys it (pr, merge or rebase for a branch of your own) - and
-  wait; no "go ahead?", no `--reply`, no `--done`. His press pushes it and tells you: check it is live, then finish.
+  say in one line what follows it (the reply to whoever asked); no "go ahead?", no `--reply` before it, no `--done`. His press
+  pushes it and wakes you: check it is live, then do that.
   A step Taskuary held is already his Approve: one line on what it waits on, never asking him to run it or printing it.
 - Never force-push. Never touch archived repositories. Never create new repositories.
 

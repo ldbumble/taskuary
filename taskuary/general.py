@@ -1337,14 +1337,16 @@ SOCIAL_LINE = HUB_LINE
 # nobody - "I'm waiting for the walkthrough to finish, then I'll write the brief" ended a researcher's turn (the owner, 2026-10-21)
 # ...said true (2026-11-09): a turn CAN be woken - their next message, a check-back (CHECK BACK LATER), a press it set up, the judge's WAKE -
 # but none of those is a result it may plan on, so the rule is the same
+# ...but THE PRESS IS ONE (the owner, 2026-11-10: "it shoudl prompt you, should i deploy and respond once deployed??? isnt' this the
+# goal?"): every press on a card it set up wakes it (approved), so a step that waits on the owner ends its turn on that card, saying what follows
 # WHAT ITS WORK IS, said once: general work - or, for a coding task on an AI card (on_card), the coding itself. That one was told "non-coding
 # work ... do not turn this into a coding task" over CODING.md's rules, a checkout and a shell (the agent map, 2026-11-10)
 GENERAL_WHO = ("Help complete research, planning, writing, marketing, operational, and other non-coding work. The task and source material "
                "below are authoritative. Be direct and useful. Do not turn this into a coding task or instruct a coding CLI.")
 CODING_WHO = ("This is coding work and you are the one doing it, with your own tools, in your working folder: read the code before you change "
               "it, make the change, and run what proves it. The task and source material below are authoritative. Be direct and useful.")
-FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets: you may be woken again - their next message, a "
-               "check-back you set (CHECK BACK LATER) - but never plan on it. Do not start "
+FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets. Only their next message, a check-back you set (CHECK "
+               "BACK LATER) or their press on a card you set up wakes you again: plan on nothing else. Do not start "
                "background work, sub-agents or jobs you would have to wait on, and never end with \"I'll get back to you\" or \"waiting for "
                "it to finish\" - wait for it now, or do it now, then answer. If part of it cannot be done, say which part and why.")
 # ...and a turn that ended on that anyway is woken once to finish it (GeneralSession.wake): what the judge says it still waits on, said back

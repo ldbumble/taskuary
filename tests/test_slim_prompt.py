@@ -62,7 +62,7 @@ def test_the_guide_is_a_tool_and_the_coding_tools_stay_with_coding():
 
 def test_each_rule_is_said_once_and_true():
     s = MemoryStore(); system = general._prompt(s, chat(s))[0]
-    assert 'nothing wakes you again' not in system and 'never plan on it' in general.FINISH_LINE
+    assert 'nothing wakes you again' not in system and 'plan on nothing else' in general.FINISH_LINE
     assert 'Several questions' not in selfclose.ASK_LINE and 'recommended answer' in selfclose.ASK_LINE
     assert "own artifact tool" not in system and 'Ask when a necessary fact is missing' not in system
     for once in ('Check each step by what the tool returned', 'Never the same failing call', 'Deliver one final file'):
@@ -84,3 +84,17 @@ def test_the_rarer_proposal_shapes_are_a_guide_away_not_in_every_tools_list():
     assert '`propose` topic' in d and 'jira_move' not in d
     got = agenttools.call(MemoryStore(), 1, 'guide', {'topic': 'propose'}, {})
     for want in ('linkedin_post', 'github_issue', 'jira_move', 'monday_', 'Post button'): assert want in got, want
+
+
+# A STEP THAT WAITS ON THE OWNER IS A CARD, AND ITS PRESS IS WHAT THE AGENT PLANS ON (the owner, 2026-11-10: "it shoudl prompt you, should i
+# deploy and respond once deployed??? isnt' this the goal?"): told "say what you would do and wait" and "ask for the go-ahead", a coding agent
+# asked to release a committed fix answered "releasing it is your decision" and drafted "I'll confirm once it is live" - no card, no press
+def test_a_step_that_waits_on_the_owner_is_set_up_as_its_card_and_says_what_follows_the_press():
+    s = MemoryStore(); system = general._prompt(s, chat(s))[0]
+    for gone in ('Say what you would do and wait', 'ask for the go-ahead and wait', 'when a step needs their say-so'): assert gone not in system, gone
+    assert 'never a question in words: set the step up as its card' in system
+    assert 'their press on a card you set up wakes you' in general.FINISH_LINE and 'say in one line what you will do once they press it' in system
+    # ...every press on its card wakes it (verdicts.decide -> general.approved): "send" is no longer a wake it has to ask for
+    assert '"send" (a draft' not in selfclose.SUMMARY_LINE and '"handoff"' in selfclose.SUMMARY_LINE
+    from pathlib import Path
+    assert 'say in one line what follows it' in (Path(general.__file__).parent / 'templates' / 'coding.md').read_text(encoding='utf-8')

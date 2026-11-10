@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { CATALOGUE, NOT_SET_UP, cardState, oneCardPerSystem } from "../src/connectorCatalog.js";
+import { CATALOGUE, NOT_SET_UP, WAYS, WAY_NAMES, cardState, oneCardPerSystem, waysOf, wayState } from "../src/connectorCatalog.js";
 
 const src = fs.readFileSync(path.join(process.cwd(), "src", "ConnectorsView.jsx"), "utf8");
 
@@ -46,5 +46,33 @@ test("every MCP entry the catalogue ties to a system ties to a working card of a
     assert.ok(c.mcp && n && !n.mcp && !n.planned, c.type);
   }
   assert.match(src, /const groups = oneCardPerSystem\(onceEach\(\[/);
-  assert.match(src, /\{page\}\{door\}/, "the MCP server is offered inside the system's card");
+  // ...Basecamp and Jira too: the MCP-only card of each is the same system under another name (the owner, 2026-11-10)
+  for (const [m, n] of [["basecamp", "basecamp_todos"], ["atlassian", "jira"]]) assert.equal(CATALOGUE.find((c) => c.type === m).system, n);
+  assert.ok(!CATALOGUE.some((c) => / MCP$/.test(c.title)), "no entry is named for its road");
+});
+
+// TWO WAYS IN, TWO EQUAL CHOICES (the owner, 2026-11-10: "it's mcp vs api for cards. there should be 2 options.. yes"): on a system's one card
+// its own connector and its vendor's MCP server, each with its own setup and state - not a section under Remove
+test("a system with both ways offers API and MCP at the top of its page, each its own setup and state; one way offers no choice", () => {
+  const api = { ConnectorId: 1, Type: "airtable", Name: "Airtable", Active: 0 }, mcp = { ConnectorId: 2, Type: "airtable_mcp", Name: "Airtable MCP", Active: 1 };
+  const byType = { airtable: api, airtable_mcp: mcp, linear: { ConnectorId: 3, Type: "linear" } };
+  assert.deepEqual(waysOf(api, byType), { API: api, MCP: mcp }, "opened by its own card");
+  assert.deepEqual(waysOf(mcp, byType), { API: api, MCP: mcp }, "opened by its MCP row");
+  assert.equal(waysOf({ Type: "slack" }, byType), null, "a system with one way has no choice");
+  assert.equal(waysOf(api, { airtable: api }), null, "no MCP row here: no choice");
+  assert.deepEqual([wayState("API", api), wayState("MCP", mcp)], [NOT_SET_UP, "set up"]);
+  assert.equal(wayState("API", { LastSyncAt: "2026-11-10 09:00:00" }), "set up", "a data card set up by its reads");
+  assert.deepEqual(WAY_NAMES, ["API", "MCP"]);
+  assert.ok(WAY_NAMES.every((w) => WAYS[w] && WAYS[w].split(/[.!?] /).length === 1), "one plain sentence under each");
+  // ...drawn with the page's own tabs, the chosen way's own page under them; choosing opens that way's row
+  assert.match(src, /const ways = waysOf\(conn, byType\);/);
+  assert.match(src, /onWay=\{\(w\) => setOpen\(\{ kind: "connector", id: ways\[w\]\.ConnectorId \}\)\}/);
+  assert.match(src, /\{choice\}\{page\}/, "the choice at the top, the chosen way's setup under it");
+  assert.match(src, /<UnderTabs tabs=\{WAY_NAMES\} value=\{at\}/);
+  assert.doesNotMatch(src, /McpDoor|For your agents/, "no section tucked under Remove");
+  // ...and the grid's one card reads connected when either way is
+  const draw = (a, m) => oneCardPerSystem([{ title: "x", cards: [{ key: "c1", type: "airtable", desc: a }, { key: "s2", channel: "airtable_mcp", desc: m }] }])[0].cards;
+  assert.equal(cardState(draw(NOT_SET_UP, "added · your agents can use it")[0]), "on");
+  assert.equal(cardState(draw("connection ✓ · 1 report (built under Reports)", NOT_SET_UP)[0]), "on");
+  assert.equal(cardState(draw(NOT_SET_UP, NOT_SET_UP)[0]), "off");
 });

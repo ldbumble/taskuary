@@ -38,7 +38,7 @@ import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import BrowserPane from "./BrowserPane.jsx";
 import { WAITING_META, waitingIn } from "./waitingMeta.js";
-import { CATALOGUE, NOT_SET_UP, PRESETS, cardState, matchCards, onceEach, oneCardPerSystem, oneOf, plannedFor, presetBody, presetOf, presetsLeft, repliesOf, repliesOn } from "./connectorCatalog.js";
+import { CATALOGUE, NOT_SET_UP, PRESETS, cardState, matchCards, onceEach, oneCardPerSystem, oneOf, plannedFor, presetBody, presetOf, presetsLeft, repliesOf, repliesOn, WAY_NAMES, WAYS, waysOf, wayState } from "./connectorCatalog.js";
 import { settingsOf } from "./actionCard.js";
 import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
@@ -2218,12 +2218,11 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     : AGENT_TOOLS.has(conn.Type) ? <AgentToolDetail key={conn.ConnectorId} {...shared} />
     : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
     : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} chatsAsk={chatsAsk} />;
-  // ...and the system's own MCP server, on the system's one card (connectorCatalog.oneCardPerSystem): this page is how Taskuary reads it,
-  // that server is how an agent acts in it from its CLI - two roads to one product, offered where the product is
-  const sib = conn && CATALOGUE.find((c) => c.mcp && c.system === conn.Type);
-  const sibRow = sib && (allOf(sib.type).find((c) => c.Active) || allOf(sib.type)[0]);
-  const door = sibRow && <McpDoor on={!!sibRow.Active} onOpen={() => setOpen({ kind: "connector", id: sibRow.ConnectorId })} />;
-  const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}><Box ref={setScope} data-tq-connector-scope="">{page}{door}</Box></AgentsDoor.Provider>;
+  // ...and A SYSTEM WITH TWO WAYS IN offers both, at the top of its one card (connectorCatalog.oneCardPerSystem; the owner, 2026-11-10: "it's mcp
+  // vs api for cards. there should be 2 options"): its own connector and its vendor's MCP server, each with its own setup and state, either or both
+  const ways = waysOf(conn, byType);
+  const choice = ways && <SystemWays ways={ways} at={ways.MCP === conn ? "MCP" : "API"} onWay={(w) => setOpen({ kind: "connector", id: ways[w].ConnectorId })} />;
+  const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}><Box ref={setScope} data-tq-connector-scope="">{choice}{page}</Box></AgentsDoor.Provider>;
   if (!browse) {
     if (detail) return detail;
     if (open?.kind === "connector") return null;
@@ -3289,16 +3288,13 @@ function DesktopDetail({ conn: savedConn, reload, onBack, onCreated }) {
 /* ── A tool for the agents: a vendor's MCP server added to the agent CLIs here (remotemcp.py), and/or a skill on disk (videotools.py) ── */
 const AGENT_TOOLS = new Set([...CATALOGUE.filter((c) => c.mcp).map((c) => c.type), "video_use"]);
 const toolDesc = (c) => (c.Active ? "added · your agents can use it" : NOT_SET_UP);
-// A SYSTEM'S MCP SERVER, INSIDE ITS ONE CARD (the owner, 2026-11-10: "why is there regualr and mcp"): the card above reads the system for
-// Taskuary - the rail, reports; the vendor's MCP server gives the agents its tools in their CLI. It opens the same page its own card did.
-const McpDoor = ({ on, onOpen }) => (
-  <Box data-tq-mcp-door="" sx={{ mt: 3, pt: 2, borderTop: `1px solid ${BORDER}` }}>
-    <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>For your agents</Typography>
-    <Typography variant="body2" sx={{ color: DIM, mt: 0.25, mb: 1 }}>
-      {on ? "Its own MCP server is added: your agents use its tools from their CLI."
-        : "Its own MCP server lets your agents act in it from their CLI. This card is how Taskuary reads it; the server is how an agent works in it."}
-    </Typography>
-    <Button size="small" variant="outlined" onClick={onOpen}>{on ? "Its MCP server" : "Set up its MCP server"}</Button>
+// A SYSTEM'S TWO WAYS IN, TWO EQUAL CHOICES (the owner, 2026-11-10: "it's mcp vs api for cards. there should be 2 options.. yes"): the page's
+// tabs, each saying what that way gives and whether it is set up; the chosen way's own page is drawn under them. A system with one way has no
+// choice (connectorCatalog.waysOf is null), and its card on the grid reads connected when either way is (oneCardPerSystem)
+const SystemWays = ({ ways, at, onWay }) => (
+  <Box data-tq-ways={at}>
+    <UnderTabs tabs={WAY_NAMES} value={at} onChange={(w) => w !== at && onWay(w)}
+      under={Object.fromEntries(WAY_NAMES.map((w) => [w, <>{WAYS[w]} <b data-tq-way-state={w}>{wayState(w, ways[w])}</b></>]))} />
   </Box>
 );
 function AgentToolDetail({ conn, reload, onBack, onCreated }) {

@@ -53,7 +53,7 @@ export const NOT_SET_UP = "not set up";
 
 // ONE CARD PER SYSTEM, BY THE CATALOGUE'S `system` (the owner, 2026-11-10: "why is there regualr and mcp"): a vendor's MCP entry that
 // names another card's type is not a card of its own - the native card stands for the system, and the MCP server is offered inside
-// it (ConnectorsView's McpDoor). Where the MCP route is the live one and the native card is not, the one card says so - a connection
+// it as one of its two ways in (waysOf below). Where the MCP route is the live one and the native card is not, the one card says so - a connection
 // made either way shows as that card connected. With no native card on the page, the MCP card stays, named for the system.
 export const oneCardPerSystem = (groups, cards = CATALOGUE) => {
   const sys = Object.fromEntries(cards.filter((c) => c.mcp && c.system).map((c) => [c.type, c.system]));
@@ -70,6 +70,18 @@ export const oneCardPerSystem = (groups, cards = CATALOGUE) => {
   };
   return groups.map((g) => ({ ...g, cards: g.cards.filter((c) => !(sys[key(c)] && native.has(sys[key(c)]))).map(one) }));
 };
+// ...and ON THAT ONE CARD'S PAGE, ITS TWO WAYS IN as two equal choices (the owner, 2026-11-10: "it's mcp vs api for cards. there should be 2
+// options.. yes"): the system's own connector and its vendor's MCP server, each row as it is - `byType` the page's pick of a row per type.
+// Null where the system has one way: no choice is drawn. Either way can be open; either or both set up
+export const WAY_NAMES = ["API", "MCP"];
+export const WAYS = { API: "Taskuary connects with its own sign-in or key: what it holds reaches your rail, reports and agents.",
+  MCP: "Its own MCP server, added to your agent CLI: your agents use the system's own tools." };
+export const waysOf = (conn, byType, cards = CATALOGUE) => {
+  const cat = conn && cards.find((c) => c.type === conn.Type);
+  const twin = cat && (cat.mcp ? cat.system : cards.find((c) => c.mcp && c.system === cat.type)?.type), row = twin && byType[twin];
+  return row ? (cat.mcp ? { API: row, MCP: conn } : { API: conn, MCP: row }) : null;
+};
+export const wayState = (w, c) => ((w === "MCP" ? c?.Active : c?.Active || c?.LastSyncAt) ? "set up" : NOT_SET_UP);
 // ONE CARD PER SYSTEM: a planned card is dropped where a card for the same type is already on the page - a live one anywhere, or
 // the same planned type earlier. The server's planned list (reports.PLANNED) and this catalogue are kept apart, and PointClickCare
 // drew twice: once by its catalogue name under Corporate systems, once as a bare "pointclickcare" under Everything else (2026-10-19 UI walk)

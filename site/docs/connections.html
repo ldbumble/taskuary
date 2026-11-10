@@ -822,16 +822,18 @@ app. Windows and browser speech may use their own online services. The microphon
 words on the card. These built-in services handle live dictation; voice-note files still use a
 transcription card. On a Mac, click in the box and press the Dictation key (or Fn twice).</p>
 <h2 id="a-vendors-own-mcp-server">A vendor&#39;s own MCP server<a class="anchor" href="#a-vendors-own-mcp-server" aria-label="Link to this section">#</a></h2>
-<p>Many cards — Atlassian, Dropbox, Figma,
+<p>Many cards — Dropbox, Figma,
 Cloudflare, Vercel, Supabase, Zapier, Canva, PostHog, and for money and people Xero, BILL, Expensify, Ramp, Brex,
 Mercury, Avalara, Deel, Greenhouse and Ashby, and about thirty more — are the vendor&#39;s own hosted MCP server,
 added to your agent CLI. <strong>Add</strong> registers it in Claude Code and Codex on this computer; <strong>Sign in</strong>
 opens the vendor&#39;s own sign-in page in your browser, once. Taskuary never holds that sign-in, so it
 cannot list the server&#39;s tools: adding the card is your word that your agents may use all of them.
-Where the same system has a card that brings its work in (Notion, Linear, Airtable, Monday.com, Todoist,
-Stripe, Sentry, Datadog and a dozen more), there is still one card for it: open it, and its MCP server is
-under <strong>For your agents</strong> at the bottom. That card is how Taskuary reads the system; the MCP server is how
-an agent acts in it from its CLI. Added either way, the one card shows as connected.</p>
+Where the same system has a card that brings its work in (Jira with Atlassian&#39;s server for Jira and Confluence,
+Basecamp, Notion, Linear, Airtable, Monday.com, Todoist, Stripe, Sentry, Datadog and a dozen more), there is still
+one card for it, and its page offers the two ways in at the top: <strong>API</strong> — Taskuary connects with the system&#39;s own
+sign-in or key, and its work reaches your rail, reports and agents — and <strong>MCP</strong> — the vendor&#39;s own MCP server in
+your agent CLI, so your agents use the system&#39;s own tools. Each says whether it is set up; set up either or both,
+and the one card shows as connected.</p>
 <p>A few servers sign in with a personal token instead — GitHub&#39;s, PagerDuty&#39;s, Smartsheet&#39;s and Wrike&#39;s.
 Paste the token on the card and press <strong>Add</strong>: it goes into Claude Code&#39;s own configuration as the
 header the vendor names. Codex reads such a token only from an environment variable, so these cards

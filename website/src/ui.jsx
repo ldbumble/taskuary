@@ -1395,15 +1395,17 @@ export const SideRail = ({ title, note, items, value, onChange, q, setQ, placeho
   </Box>
 );
 
-export const UnderTabs = ({ tabs, value, onChange }) => (
-  <Box sx={{ display: "flex", gap: 2.5, borderBottom: "1px solid var(--tq-border, #e1dcd5)", mb: 2, flexWrap: "wrap" }}>
+// `under`: a line under a tab's name, where each tab is a choice that needs saying (a system's two ways to connect, ConnectorsView.SystemWays)
+export const UnderTabs = ({ tabs, value, onChange, under = null }) => (
+  <Box role={under ? "tablist" : undefined} sx={{ display: "flex", gap: 2.5, borderBottom: "1px solid var(--tq-border, #e1dcd5)", mb: 2, flexWrap: "wrap" }}>
     {tabs.map((t) => (
-      <Box key={t} onClick={() => onChange(t)}
-        sx={{ pb: 1, cursor: "pointer", fontSize: 13, fontWeight: 600, mb: "-1px", flexShrink: 0,
+      <Box key={t} onClick={() => onChange(t)} role={under ? "tab" : undefined} aria-selected={under ? value === t : undefined} data-tq-tab={t}
+        sx={{ pb: 1, cursor: "pointer", fontSize: 13, fontWeight: 600, mb: "-1px", flexShrink: under ? 1 : 0, ...(under ? { flex: "1 1 220px", maxWidth: 360 } : {}),
           color: value === t ? "var(--tq-link, #55697a)" : DIM,
           borderBottom: `2px solid ${value === t ? "#55697a" : "transparent"}`,
           "&:hover": { color: "var(--tq-text, #2b2a26)" } }}>
         {t}
+        {under?.[t] && <Box component="span" sx={{ display: "block", fontWeight: 400, fontSize: 12.5, color: DIM, mt: 0.25 }}>{under[t]}</Box>}
       </Box>
     ))}
   </Box>

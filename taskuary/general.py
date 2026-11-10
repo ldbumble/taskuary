@@ -1374,6 +1374,15 @@ def left_unwritten(store, tid: int) -> str:
     if (rv := advisor._unwritten(store, {'tid': tid})).get('Kind') == 'draft':
         owed.insert(0, f"the reply to {wrapup.owed_to(store, rv.get('MessageId'), rv)}")
     return UNWRITTEN.format(what=' and '.join(owed)) if owed else ''
+# ...AND ONE THAT SAID NOTHING: an answer that was only markers (a draft block with no words, a summary with nothing in it) is filed empty, and
+# the chat drew the turn's steps over the task's standing emails as if they were its answer. With no card waiting on the owner either, it
+# answered nothing - woken once by the same wake
+SILENT = ("TASKUARY: your turn ended without a word to the owner and with nothing set up for them. Answer what they asked now - or, if you "
+          "need something only they know, ask them that one question.")
+def said_nothing(store, tid: int, reply: str) -> bool:
+    "A turn's filed answer with no words, and no card of any kind waiting on the owner on task `tid`."
+    return not str(reply or '').strip() and not store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status IN ('pending','held') "
+                                                          "AND IFNULL(DraftText,'')<>'' LIMIT 1", (int(tid),))
 # SEARCH BEFORE ASKING (the owner, 2026-11-05, from Hermes' session_search): a fact an earlier task already settled - found, confirmed, used
 # - is read from that task's ending (search.outcomes), never asked of the owner again. {where}: how this session reads them
 ASK_AFTER = ("SEARCH BEFORE YOU ASK: before asking the owner for a fact - a vendor id, a login route, the account they prefer - check whether "
@@ -2936,7 +2945,8 @@ class GeneralSession:
             try: path = sessionrecord.READERS['claude'][0](self.cli_sid) if self.cli_sid and self.pick.startswith('cli:') and _cli_of_pick(self.store, self.pick) == 'claude' else None
             except Exception as e: logger.debug(f'task {self.task_id}: its CLI log was not found - {e}'); path = None
             # ...and what it owes and left unwritten is said back first, from the task's own rows - no judge to ask (left_unwritten)
-            if (owed := left_unwritten(self.store, self.task_id)): self.wake('', said=owed)
+            if (owed := left_unwritten(self.store, self.task_id) or (SILENT if said_nothing(self.store, self.task_id, reply) else '')):
+                self.wake('', said=owed)
             else: hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ, jobs=background.left(self.trace, path))
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         # ...and the files this turn wrote, as it left them: a later turn rewrites them in place (outputs.keep_turn, the owner 2026-11-07)

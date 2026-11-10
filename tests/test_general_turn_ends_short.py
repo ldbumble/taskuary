@@ -214,6 +214,16 @@ class WhatATurnLeavesUnwrittenTests(unittest.TestCase):
         self.assertEqual(len(seen['prompts']), 2)
         self.assertIn('the reply to Erin Blake still unwritten', seen['prompts'][1])
 
+    def test_a_turn_with_no_words_and_nothing_set_up_is_woken_once_to_answer(self):
+        """An answer that was only a block with nothing in it is filed with no words: the chat drew the turn's steps and nothing else."""
+        s = MemoryStore(); a_claude(self); tid = researcher(s)
+        seen = turn(s, tid, '[[TASKUARY-DRAFT to="office@vendor.example" subject="Hello"]] [[/TASKUARY-DRAFT]]', judge=self.no_judge)
+        self.assertEqual(len(seen['prompts']), 2, 'once - the woken turn that says nothing again stands')
+        self.assertIn('without a word to the owner', seen['prompts'][1])
+        # ...and one whose only output is a card set up for the owner's press answered with it
+        s = MemoryStore(); a_claude(self); tid = researcher(s)
+        self.assertEqual(len(turn(s, tid, '[[TASKUARY-DRAFT to="office@vendor.example" subject="Hello"]]Hi - checking in.[[/TASKUARY-DRAFT]]')['prompts']), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

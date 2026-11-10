@@ -73,9 +73,20 @@ def test_a_held_push_is_the_owners_buttons_and_their_answer_is_the_answer(option
     perm = next(d for k, _n, d in ev if k == 'permission')
     assert perm['answer'] == (acpgate.ALLOWED if granted else acpgate.REFUSED)
     assert out[0].startswith('granted') == granted
+    # ...and their no is theirs on the step, never "Taskuary refused it: the owner said no" (the owner, 2026-11-10)
+    if not granted: assert perm['why'] == acpgate.YOU_REJECTED == 'You rejected this'
     # answered on the spot: no Approve card waits as well
     assert not s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
     assert not permissions.pending(tid, s)
+
+
+def test_the_step_says_whose_no_it_was():
+    opts = [{'optionId': 'y', 'kind': 'allow_once'}, {'optionId': 'n', 'kind': 'reject_once'}]
+    for said, reads in ((acpgate.YOU_REJECTED, 'You rejected this'), ('it writes off this machine', 'Taskuary refused it: it writes off this machine')):
+        held = {}
+        with mock.patch.object(acpgate, 'decide', return_value=(acpgate.REFUSED, said)):
+            acpgate.answerer({}, held=held)({'toolCall': {'toolCallId': 'c1', 'kind': 'execute'}, 'options': opts})
+        assert held == {'c1': reads}
 
 
 def test_the_owners_reject_reaches_the_agent_as_the_owners_no_and_their_allow_says_nothing():

@@ -119,6 +119,11 @@ def owner_asks(ctx: dict) -> bool:
     return ctx.get('store') is not None and str(ctx.get('task_id') or '').isdigit() and agents.developer_mode(ctx['store'])
 
 
+# THE OWNER'S OWN NO ON THE STEP, in their voice (the owner, 2026-11-10): it read "Taskuary refused it: the owner said no" - the app
+# taking the credit for their press
+YOU_REJECTED = 'You rejected this'
+
+
 def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
     "(answer, why) once the owner has answered a held call (permissions.ask) - or not: then the Approve card, and a refusal."
     from . import permissions, shellgate, workerstate as ws
@@ -132,7 +137,7 @@ def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
         if ws._live(tid):
             r = permissions.normal(req)
             shellgate.declined(store, tid, {'what': permissions.asked(r | permissions.held_for(r, str(ctx.get('cwd') or ''))), 'command': r['command']})
-        return REFUSED, 'the owner said no'
+        return REFUSED, YOU_REJECTED
     tc = (params or {}).get('toolCall') or {}
     raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
     t, cwd = tool_of(tc), str(raw.get('cwd') or ctx.get('cwd') or '')
@@ -152,7 +157,7 @@ def answerer(ctx: dict, trace=None, held: dict = None):
         if answer == HELD and asks: answer, why = put_to_owner(ctx, params, why)
         out = acp.pick(params.get('options'), answer == ALLOWED)
         iid = str(tc.get('toolCallId') or '')
-        if answer != ALLOWED and held is not None: held[iid] = why if answer in (HELD, CARD) else f'Taskuary refused it: {why}'
+        if answer != ALLOWED and held is not None: held[iid] = why if answer in (HELD, CARD) or why == YOU_REJECTED else f'Taskuary refused it: {why}'
         name = tool_of(tc)['name'] or str(tc.get('title') or 'tool')
         (logger.info if answer == ALLOWED else logger.warning)(f'acp permission: {name} {answer}' + (f' - {why}' if why else ''))
         if trace: trace('permission', name, {'tool_call_id': iid, 'answer': answer, 'why': why, 'title': str(tc.get('title') or '')[:200]})

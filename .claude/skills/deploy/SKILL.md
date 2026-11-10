@@ -55,6 +55,18 @@ is good"). On a red run it prints the failed tests and stops - no whole-job reru
 `--after <run-id>` alone lists what would rerun; `--dry-run` also prints the exact dispatch without pushing anything. A docker
 failure (or any job that is not tests/build-web/smoke) cannot be vouched for this way - fix it and use the full road.
 
+**Two duties, never traded against each other** (the owner, 2026-11-10: "i want it released fully as long as tests pass and you just rerun
+the failure one. But then after release rerun ci since it's fixed and get it green.. don't hold up releases but make sure it's green. 2
+things.."):
+
+1. **Release at once.** A red run is fixed and released on the targeted road above - never held for a full run, never restarted.
+2. **Then get master green.** After the release is out, the full `ci.yml` on master's head must end green on GitHub. The script's last
+   step waits for it and says `master is GREEN` or `GREEN IS STILL OWED` with the failing tests. If it is owed: fix forward on master
+   (test or code), push once, `gh run rerun <run-id> --failed`, and stay on it until the head is green. Land follow-up work in few
+   pushes - a pile of small pushes leaves cancelled runs, which GitHub shows as not green.
+
+The turn that ran a release is not finished until both are true: the version is on PyPI, and master's head is green.
+
 Run it in the background and report when it ends; do not babysit runs by hand.
 
 Its last step prints the **Advisor agreement** (lit button vs what the owner did, read-only on `~/.taskuary`) - report it with the release; `tools/advisor_agreement.py --replay` breaks it down.

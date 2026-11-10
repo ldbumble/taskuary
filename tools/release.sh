@@ -75,6 +75,16 @@ PY
     [ -n "$PREV" ] && python tools/advisor_agreement.py --home "$OH" --line --since "$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M:%S' "$PREV")" || true
     python tools/advisor_agreement.py --home "$OH" --line --days 7 || true
   fi
+
+  # THE RELEASE IS OUT; MASTER MUST STILL END GREEN (the owner, 2026-11-10: "i want it released fully as long as tests pass and you just
+  # rerun the failure one. But then after release rerun ci since it's fixed and get it green.. don't hold up releases but make sure it's
+  # green. 2 things.."). A release tagged on the targeted road never waited for the full suite - so the full ci.yml on master's head is
+  # read here, after everything else, and what it finds is said as the work still owed. Never fatal: the release is already done.
+  say "master must end green: the full ci.yml on master's head"
+  git fetch -q origin || true
+  if tools/ci-failures.sh --wait "$(git rev-parse origin/master)"; then say "master is GREEN after v$V"
+  else say "!! master is RED after v$V - GREEN IS STILL OWED: fix what is named above on master (decide test vs code), push, and rerun only the failed jobs (gh run rerun <run-id> --failed) until ci.yml on master's head is green"
+  fi
 }
 
 # THE TARGETED ROAD: rerun only what failed in run $AFTER (plus what the fix touched) on the fix commit, then tag it

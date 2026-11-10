@@ -50,8 +50,32 @@ class HeldStepsOneCard(unittest.TestCase):
         ids, out, ran, told, _ = self.run_all([0, 1, 0])
         self.assertFalse(out['ok']); self.assertEqual(out['failed']['step'], 2); self.assertEqual(out['failed']['review'], ids[1])
         self.assertEqual(len(ran), 2, 'the third step never ran'); self.assertEqual(out['left'], [ids[2]])
-        self.assertEqual([self.s.get_review(i)['Status'] for i in ids], ['approved', 'pending', 'pending'])
         [t] = told; self.assertIn('step 2 failed', t)
+
+    def test_a_step_that_failed_is_over_and_the_agents_never_a_card_still_lit(self):
+        # the owner, 2026-11-10 ("no idea what this is. it's broken"): "1 of 2 ran - the rest wait" with Approve lit under the failure; the agent,
+        # told they still waited, worked the failure while his next press ran the same step into it again
+        ids, out, ran, told, _ = self.run_all([0, 1, 0])
+        self.assertEqual([self.s.get_review(i)['Status'] for i in ids], ['approved', 'superseded', 'superseded'])
+        self.assertIn('The held step failed', self.s.get_review(ids[1])['ActError'])
+        self.assertIsNone(proposals.held_pending(self.s, self.tid), 'nothing on the card waits on him')
+        [t] = told; self.assertIn('Nothing on that card waits on the owner now', t); self.assertIn('held as a new card', t)
+        again = sg.approve_steps(self.s, ids[1:], verdicts.decide)                      # a second press on the old card runs nothing
+        self.assertFalse(again['ok']); self.assertEqual(len(ran), 2)
+
+    def test_the_failure_is_the_line_that_says_why_never_the_list_of_files(self):
+        said = 'U site/a.js\nU site/b.js\nerror: Merging is not possible because you have unmerged files.\nhint: Fix them up\nfatal: Exiting.'
+        self.assertEqual(sg.failed(said, 128), 'The held step failed: error: Merging is not possible because you have unmerged files.')
+        self.assertEqual(sg.failed('To example.com:org/app.git\n ! [rejected] master -> master (fetch first)\nerror: failed to push some refs', 1),
+                         'The held step failed: error: failed to push some refs')
+        self.assertEqual(sg.failed('', 3), 'The held step failed: exit 3')
+
+    def test_a_press_while_its_agent_works_in_that_folder_runs_nothing_and_says_so(self):
+        busy = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, busy=True)
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': busy}, clear=True):
+            ids, out, ran, told, _ = self.run_all([0, 0, 0])
+        self.assertFalse(out['ok']); self.assertEqual(out['busy'], sg.BUSY); self.assertEqual(ran, [])
+        self.assertEqual([self.s.get_review(i)['Status'] for i in ids], ['pending'] * 3); self.assertEqual(told, [])
 
     def test_one_dismiss_dismisses_them_all_and_the_agent_hears_once(self):
         ids, out, ran, told, _ = self.run_all([0, 0, 0], 'reject')

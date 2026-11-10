@@ -161,7 +161,7 @@ class Running(unittest.TestCase):
         self.assertEqual(sg.text('To northwind/ledger — done'.encode()), 'To northwind/ledger — done')
         self.assertEqual(sg.text(b'bad \xff byte'), 'bad \ufffd byte')
         self.assertEqual(sg.failed(sg.text(wsl.encode('utf-16-le')), 1),
-                         'The held step failed: Windows Subsystem for Linux has no installed distributions. / wsl.exe --install <Distro>')
+                         'The held step failed: Windows Subsystem for Linux has no installed distributions.')
         self.assertEqual(sg.failed('', 128), 'The held step failed: exit 128')
 
 

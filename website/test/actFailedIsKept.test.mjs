@@ -29,12 +29,25 @@ test("a held step that failed says which, and the card still waits with Approve"
   const bad = step(2, "gh pr create --fill", "Open the pull request", "pending", { ActError: "The held step failed: remote: Permission to northwind/ledger denied" });
   const c = heldCard([ran, bad, step(3, "gh pr comment 12 --body done", "Say it is up")]);
   assert.equal(c.pressed, null); assert.deepEqual(c.waiting, [2, 3]);
-  assert.equal(c.error, "Step 2 failed: The held step failed: remote: Permission to northwind/ledger denied");
-  assert.equal(heldCard([bad]).error, "The held step failed: remote: Permission to northwind/ledger denied", "one step needs no number");
+  assert.equal(c.error, "Step 2 failed: remote: Permission to northwind/ledger denied", "said once - never \"failed: The held step failed:\"");
+  assert.equal(heldCard([bad]).error, "It failed: remote: Permission to northwind/ledger denied", "one step needs no number");
   assert.equal(heldCard([ran, step(3, "x", "X")]).error, "");
   // a step that failed and then ran keeps the word on its row; the card no longer says it
   assert.equal(heldCard([{ ...ran, ActError: "The held step failed: exit 1" }]).error, "");
-  assert.match(read("HeldSteps.jsx"), /live && c\.error/);
+  assert.match(read("HeldSteps.jsx"), /\(live \|\| c\.pressed === "failed"\) && c\.error/);
+});
+
+// THE OWNER, 2026-11-10: "no idea what this is. it's broken" - "1 of 2 ran - the rest wait" with Approve lit under "Step 2 failed: The held
+// step failed: <raw git output>". A step whose press failed is settled (shellgate.approve_steps): the card is its record, never pressable
+test("a held step that failed is over: the card says which and why once, and that the agent has it", () => {
+  const ran = step(1, "git commit -am fix", "Commit the fix", "approved", { FinalText: JSON.stringify({ action: "shell_act", result: { said: "ok" } }) });
+  const bad = step(2, "git push origin master", "Push it", "superseded", { ActError: "The held step failed: error: failed to push some refs" });
+  const c = heldCard([ran, bad, step(3, "gh pr create", "Open the pull request", "superseded")]);
+  assert.equal(c.pressed, "failed"); assert.deepEqual(c.waiting, [], "nothing to press");
+  assert.deepEqual(c.steps.map((s) => s.state), ["ran", "failed", "dismissed"]);
+  assert.equal(c.said, "1 of 3 ran, step 2 failed - the agent was told and goes on from there");
+  assert.equal(c.error, "Step 2 failed: error: failed to push some refs");
+  assert.doesNotMatch(c.said, /the rest wait/);
 });
 
 test("a yes the page refused reads as not done, with the one plain line", () => {

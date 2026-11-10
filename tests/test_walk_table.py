@@ -208,6 +208,24 @@ def test_peek_says_what_next_reads(world):
     w.do('open R3'); w.do('next')
     assert w.on.startswith('fyis:') and railwalk.peek(s)['reads'], 'the batch Next put up is read by the next Next'
 
+def test_a_close_that_lands_after_another_row_was_opened_moves_nothing(world):
+    """Mark done on a working agent is answered when its write-up is in, a Send's close a beat after the send. A row the owner opened in
+    between is the one on his table: the close runs its act, and the walk - and so the table - stays on that row (`away`). It moved to
+    the row below the one closed, and the page drew that over the row he had just opened."""
+    from taskuary import railwalk
+    s, src = world
+    w = Walk(s, src)
+    w.do('open T1'); t1 = w.on
+    w.do('open T3'); t3 = w.on
+    out = railwalk.leave(s, t1, 'done', away=True)
+    assert out['item'] is None and out['away'] and t1 in out['read'] and 'kept' not in out
+    assert s.get_task(src['T1']['tid'])['Status'] == 'done', 'the act ran'
+    assert railwalk.on(s) == t3 == out['walk']['on'], 'the walk stays on the row he opened'
+    assert not any(walkworld.matches(r, src['T1']) for r in walkworld.rows(s))
+    assert railwalk.leave(s, w.key('T2'), 'next', away=True)['item'] is None and railwalk.on(s) == t3, "a hand-off's walk-on the same"
+    assert w.do('next')['item']['key'] == w.key('T4'), 'Next goes on from the row on the table'
+
+
 def test_next_says_what_it_read(world):
     """`read` on Next's answer: the rail rows that press read - the page took them off at the press and gives back only a row that is not
     there (a read that failed), never on the strength of a rail built before the read (the owner, 2026-11-02: a passed report stayed)."""

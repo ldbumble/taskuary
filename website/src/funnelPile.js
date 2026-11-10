@@ -340,6 +340,10 @@ export const sameRow = (a, b) => !!a && !!b && (answersTo(a, b.key) || answersTo
 // ...two keys naming one row: the same key, or one rail row (or the card on the table) answering to both
 export const sameKey = (items, a, b, card = null) => !!a && !!b
   && (a === b || [...(items || []), ...(card ? [card] : [])].some((r) => answersTo(r, a) && answersTo(r, b)));
+// A CLOSE THAT COMES IN AFTER THE OWNER OPENED ANOTHER ROW (the canvas audit, 2026-11-10): Mark done on a working agent is answered when its
+// write-up is in, a Send's close a beat after the send - and a rail row clicked in between was taken off the table again, by the row below
+// the one closed. Such a close runs its act and moves nothing: the table, and the walk, stay on the row the owner is on (railwalk.leave `away`)
+export const closedElsewhere = (rail, how, fromKey, card) => how === "leave" && !!fromKey && !!card?.key && !sameKey(rail, fromKey, card.key, card);
 // WHAT A WALK PRESS DRAWS AT ONCE (rule 7): the row the walk names below the one put down (walk.below - railwalk.peek, the same line `next`
 // walks), Back's row above, or a rail row pressed. `onIt`: the row put down is the walk's own, so its word holds. A walk older than the row on
 // the table names nothing - the press then draws its row when its answer comes, and moves from the row on screen all the same (from_key)

@@ -521,13 +521,19 @@ def _act(store, item: dict, how: str, actor: str, note: str = None, until: str =
     return {'closed': how != 'put_on_list', 'made': o.get('taskId') or o.get('task_id') or o.get('tid'), 'outcome': o}
 
 
-def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, note: str = None, until: str = None) -> dict:
+def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, note: str = None, until: str = None, away: bool = False) -> dict:
     """Mark done, Close with a note, a Send that closes, Remind me, Watch it, Not a task, Not ours, Remove on the row on screen: the act, and IN THE
     SAME CALL the row that was directly below it (rule 5). An act that did not close it - a Send that kept the task open - leaves the same
-    row on screen, re-presented. Put it on my list keeps the new task on the table; Next and Back still measure from the report's place."""
+    row on screen, re-presented. Put it on my list keeps the new task on the table; Next and Back still measure from the report's place.
+    `away`: the page's table is on ANOTHER row by now - the owner opened one while this close was on its way (a write-up being filed, a
+    send's beat). The act runs and nothing moves: the walk stays on the row he is on, and no row is presented over it."""
     with _LOCK:
         if (hit := _again(press)): return hit
-        if how in ('all_read', 'next'): return _remember(press, next(store, key, actor, rows=_known(store)))
+        if how in ('all_read', 'next'):
+            if not away: return _remember(press, next(store, key, actor, rows=_known(store)))
+            st, rows = state(store), _known(store)
+            read = _effect(store, st, rows, key, actor, _dock(store, actor))
+            return _remember(press, _answer(store, st, [r for r in rows if r['key'] not in set(read)], {'item': None, 'away': True, 'read': read}))
         # THE PRESS ANSWERS OFF THE RAIL ALREADY KNOWN (2026-11-09): the row, its place and the row below it come from the line in hand
         # (_known), and the rail is built again behind the answer - by the page's own read - never inside it
         st, rows = state(store), _known(store)
@@ -541,6 +547,11 @@ def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, no
         # ...the line as the close left it: the rows in hand without the row closed (and a batch's members), a kept-open row looked up again
         gone = {key, *members_of(key), *(item.get('aliases') or ())}
         rows = [r for r in rows if not any(_is(r, k) for k in gone)] if done.get('closed') and how != 'put_on_list' else _known(store)
+        if away:
+            closed = done.get('closed') and how != 'put_on_list'
+            return _remember(press, _answer(store, st, rows, {'item': None, 'away': True, 'read': sorted(gone) if closed else [],
+                                                              **({} if closed else {'kept': done.get('kept') or []}),
+                                                              **({'left': done['outcome']} if done.get('outcome') else {})}))
         if how == 'put_on_list' and done.get('made'):
             made = _lookup(store, f"task:{int(done['made'])}")
             if made:

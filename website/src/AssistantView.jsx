@@ -78,7 +78,7 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
-import { FYI_PAGE, ageHover, answersTo, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, rowKeys, sameRow, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -1481,7 +1481,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...the LIGHT answer (the owner, 2026-11-06: Next turns blue as soon as the move saves): the move and the walk's word, never the rail
     // rebuilt for it - that rail is read behind the answer (landed), and the press after it is free at once
     if (walkRoute) return (await api.post(`/api/walk/${walkRoute}`, { key: body.key || null, from_key: body.from_key || null, press: body.press || null,
-      read: body.read || [], fyi: fyiWant.current, light: true, ...(body.level ? { level: body.level } : {}), ...(body.how ? { how: body.how, note: body.note || null, until: body.until || null, pressed: body.pressed || null } : {}) })).data;
+      read: body.read || [], fyi: fyiWant.current, light: true, ...(body.level ? { level: body.level } : {}), ...(body.how ? { how: body.how, note: body.note || null, until: body.until || null, pressed: body.pressed || null } : {}),
+      ...(body.away ? { away: true } : {}) })).data;
     const stop = new AbortController(); stopRef.current = stop;
     const plain = async () => {
       const endpoint = body.mode === "open" ? "/api/concierge/open" : "/api/concierge/say";
@@ -2135,7 +2136,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // NEXT AND A CLOSE PUT THE TABLE DOWN AT ONCE (the owner, 2026-09-30): the row folds to its title line and the dots stand under it until
     // the answer draws (rule 7: never blank); a move that fails opens it again. Back folds nothing - it never reads or passes anything (rule 3)
     // ...but a close the page knows will be kept open (`stays`: a Send with work still live on it, 2026-11-01) puts nothing down: its row stays
-    const putDown = !key && (how === "next" || (how === "leave" && !left?.stays)) ? fromKey : null;
+    // ...nor does a close whose row is no longer the one on the table (closedElsewhere): the owner opened another while it was on its way
+    const away = closedElsewhere(pileRef.current?.items, how, fromKey, currentRef.current);
+    const putDown = !key && (how === "next" || (how === "leave" && !left?.stays && !away)) ? fromKey : null;
     if (putDown) { setExpanded(false); setFoldedKey(putDown); leftKey.current = putDown; setMovedTo((m) => dropHeld(m, currentRef.current)); }
     // ...AND A PAGE OPEN OVER THE TABLE GOES WITH IT (the owner, 2026-10-29), AND THE REPORT OPEN ON IT IS READ (2026-10-30: "i hit next on
     // reports on github reports and it did not mark it as read and disappear"): its rail rows go with the press, read by the server's Next
@@ -2167,7 +2170,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const belowItem = !below ? null : !fyis ? railNow.find((i) => i.key === below && !i.settling && !putDownRef.current.some((x) => x.tid && x.tid === i.tid)) || null : fyis.every(Boolean) ? { key: below, kind: "fyis",
       lane: "fyi", title: `${fyis.length} fyi`, who: "", when: fyis[0].when, since: fyis[0].since, channel: fyis[0].channel, why: "people told you things; nothing to do",
       items: fyis, members: fyis.map((r) => r.key) } : null;
-    const was = currentRef.current, off = () => rowsDrawn.current !== drawn0;
+    // ...`off`: the table is no longer this press's to draw on - a row the owner drew over it since, or (away) before it came in
+    const was = currentRef.current, off = () => away || rowsDrawn.current !== drawn0;
     // ...a row a rail click drew over the move before this one (pull) is this press's own line: filled in place, never drawn twice
     const pre = key ? [...msgsRef.current].reverse().find((x) => x.ahead && x.card?.key === key) : null;
     belowRef.current = pre ? { id: pre.id, key } : null;
@@ -2200,7 +2204,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     try {
       const press = `p${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
       data = await turn({ mode: key ? "next" : how, key: key || (how === "leave" ? fromKey : null), from_key: fromKey, press, ...(left || {}),
-        ...(pageReads.length ? { read: pageReads } : {}) });
+        ...(pageReads.length ? { read: pageReads } : {}), ...(away ? { away: true } : {}) });
       if (epoch !== chatEpoch.current) throw new Error("A new chat started.");
       // Back at the top moves nothing: what is on the table stays - and a row Back drew at its press comes down
       if (how === "back" && !data.item && data.top) { undraw(); if (data.pile) holdPile(data.pile); }

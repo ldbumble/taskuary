@@ -6294,6 +6294,7 @@ class RailWalkBody(BaseModel):
     note: str | None = None; until: str | None = None; read: list[str] = []; level: str | None = None; fyi: int | None = None
     pressed: str | None = None
     light: bool = False                 # the move's answer without the rail: the page reads it behind (NEXT TURNS BLUE AS THE MOVE SAVES)
+    away: bool = False                  # a close whose row is no longer the one on the page's table: the act, and no move (railwalk.leave)
 class ConciergeSayBody(BaseModel):
     text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None; images: list[str] = []
     view: dict | None = None; react: str = ''
@@ -6597,7 +6598,7 @@ def walk_open(body: RailWalkBody):
 def walk_leave(body: RailWalkBody):
     from . import railwalk
     if not body.key or not body.how: raise HTTPException(422, 'a key and how it is left are required')
-    try: out = railwalk.leave(store, body.key, body.how, ACTOR, press=body.press, note=body.note, until=body.until)
+    try: out = railwalk.leave(store, body.key, body.how, ACTOR, press=body.press, note=body.note, until=body.until, away=body.away)
     except LookupError as e: raise HTTPException(404, str(e))
     except ValueError as e: raise HTTPException(422, _refused(e))
     except RuntimeError as e: raise HTTPException(409, str(e))

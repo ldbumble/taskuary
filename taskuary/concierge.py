@@ -4547,7 +4547,7 @@ def present_turn(store, item: dict, actor: str = 'owner', picked: bool = False, 
                        card_for(item) | {'chips': chips})
     # ...and the one move its row fills, on the desk's card as the rail's item on the table carries it (server._pile_payload)
     from . import rulebook
-    rec = {'recommended': rulebook.recommended(store, item)} if routes() and item.get('kind') != 'idea' else {}
+    rec = {'recommended': rulebook.recommended(store, item, unlit=True)} if routes() and item.get('kind') != 'idea' else {}
     return {'item': item | {'chips': chips} | rec, 'say': say, 'options': options, 'chips': chips, 'left': left}
 
 

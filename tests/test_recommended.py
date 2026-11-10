@@ -244,3 +244,20 @@ def test_a_row_with_no_agent_is_walked_as_before(s):
     asked = []
     concierge.present_turn(s, it, llm=lambda *a, **k: asked.append(a) or 'Erin wants badge access.', record=True)
     assert asked, 'the walk words it as it did'
+
+
+def test_a_row_with_nothing_lit_carries_the_line_the_phone_says(s):
+    """A row with nothing lit says why on the desk too (the owner, 2026-11-10: "if it's consistent do it"): what the desk's row reads
+    (the task's own read, the rail's item on the table) carries the very sentence advisor.decide gives the phone, with no verb."""
+    tid = agent_task(s, kind='coding')
+    line = 'Stopped mid-work: the test database was not reachable.'
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'stopped', 'line': line}), \
+         mock.patch.object(advisor, 'offered', return_value=verbs('close', 'reply')):
+        phone = advisor.decide(s, f'task:{tid}', preread=False, off=False)
+        assert (phone['verb'], phone['line']) == (None, line)
+        assert rulebook.recommended(s, item(tid)) is None, 'the plain read still fills nothing'
+        desk = rulebook.recommended(s, item(tid), unlit=True)
+        assert (desk['verb'], desk['why'], desk['state']) == (None, line, 'stopped')
+        assert rulebook.recommended_task(s, tid)['why'] == phone['line'], 'the task page reads the same words'
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'stopped', 'line': ''}):
+        assert rulebook.recommended(s, item(tid), verbs('close'), unlit=True) is None, 'no line, nothing to say'

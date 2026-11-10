@@ -45,7 +45,7 @@ test("a typed turn draws no proposal card and runs nothing: it lights, opens a p
   // "send Erin the answer": the draft lands in the item's own reply box, and its Send is lit - drafting is not sending
   assert.match(view, /setLit\(\{ verb: "approve", label: btn\("approve"\), line: "", key: `review:\$\{data\.reviewId\}`/);
   // the lit act outranks the Advisor's line, which would name another button; any press puts it out
-  assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\}( hold=\{[^}]*\})?( early=\{[^}]*\})? \/>/);
+  assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\}( hold=\{[^}]*\})?( early=\{[^}]*\})?( says=\{.*?\})? \/>/);
   assert.match(view, /const shownAdvice = table\.speaks && !litNow \?/);
   assert.match(src("advice.js"), /pick: lit \|\| \(noAi \? \{ none: "no_ai", for: key \} : shown \|\| quiet\)/, "the light first, then no AI's way out, then the Advisor's decision, then Next (advice.stripWord)");
   assert.match(view, /useEffect\(\(\) => onPressed\(\(\) => setLit\(null\)\), \[\]\);/);
@@ -69,7 +69,7 @@ test("a lit button says no line, in the chat or over the row", () => {
   assert.match(view, /else if \(winOnRef\.current && !data\.context_update && !data\.decision\) \{ const r = actReceipt\(data, tableKey \|\| current\); receipt\(r\.text, r\.status\); \}/);
   assert.doesNotMatch(view, /Thinking about this one/, "no Thinking under it - or anywhere (the owner, 2026-10-23)");
   assert.match(view, /lit: litNow,/);
-  assert.match(src("CanvasItem.jsx"), /<ActionRow inline advised=\{pick\} \/>/);
+  assert.match(src("CanvasItem.jsx"), /<ActionRow inline advised=\{pick\}( says=\{.*?\})? \/>/);
 });
 
 // A TYPED PUT-DOWN WAS PRESSED (concierge._put_down): the card wears the button's badge (and a Close with a note its note), and on the table

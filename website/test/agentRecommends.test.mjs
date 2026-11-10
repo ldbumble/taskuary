@@ -97,3 +97,19 @@ test("a lit Chase is drawn on the task's row, only while it is the recommended m
   assert.match(page, /\.\.\.\(rec\?\.verb === "chase" && !liveSession \? \[\{ id: "chase", group: "decide"/);
   assert.match(page, /runOperation\(api, "task\.chase", t\.TaskId, \{ key: `task:\$\{t\.TaskId\}` \}\)/, "the slipped card's own road, keyed by the task");
 });
+
+// A ROW WITH NOTHING LIT SAYS WHY ON THE DESK TOO (the owner, 2026-11-10: "if it's consistent do it"): the server's sentence for it, as the
+// phone says it, on the row's own line - the dock's and the narrow window's - and nothing filled
+test("a row with nothing lit draws the server's line on its own line, and fills nothing", async () => {
+  const { rowWhy, unlitWhy } = await import("../src/railStatus.js");
+  const { adviceShown } = await import("../src/advice.js");
+  const rec = { verb: null, label: "", why: "Stopped mid-work: the test database was not reachable.", state: "stopped" };
+  const pick = ownPick(rec, "task:4");
+  assert.equal(pick.why, rec.why); assert.equal(pick.verb, "");
+  assert.equal(adviceShown(pick, { key: "task:4", lane: "stopped" }, false), null, "nothing is lit by it");
+  assert.equal(rowWhy({ recommended: pick }), rec.why); assert.equal(unlitWhy({ verb: "close", why: "Finished." }), "", "a lit move says its own");
+  assert.equal(rowWhy({ why: "An agent is working on this" }), "An agent is working on this", "the rail's own line where nothing is said");
+  assert.match(src("ActionRow.jsx"), /why = row\.why \|\| says/);
+  assert.match(src("AssistantView.jsx"), /says=\{!litNow && !setupLit \? rowWhy\(\{ recommended: tableAdvice \}\) : ""\}/);
+  assert.match(src("CanvasItem.jsx"), /says=\{lit \? "" : rowWhy\(\{ recommended: read \}\)\}/);
+});

@@ -6354,7 +6354,7 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     if current:
         from . import rulebook
         cur = funnel.next_item(store, current, items=funnel.full_items(store))
-        p = {**p, 'current': {**cur, 'recommended': rulebook.recommended(store, cur)} if cur and cur.get('kind') != 'idea' else cur}
+        p = {**p, 'current': {**cur, 'recommended': rulebook.recommended(store, cur, unlit=True)} if cur and cur.get('kind') != 'idea' else cur}
     try: walk = railwalk.peek(store, ACTOR)
     except Exception as e: logger.debug(f'no walk beside the rail: {e}'); walk = None
     p['walk'] = walk

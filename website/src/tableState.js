@@ -3,6 +3,7 @@
 // their own, so a folded task kept its Advisor strip and its dark button acting on what nobody could see (re-audit item 4).
 import { foldsAs } from "./funnelPile.js";
 import { ASK_ASSISTANT } from "./kinds.js";
+import { unlitWhy } from "./railStatus.js";
 
 // ...SETUP IS QUIET ONLY WHILE IT IS IN VIEW: a task opened over it by its link or by Search (`over`, AssistantView's setupCard) is the
 // item in front of the owner, and it drew its row with nothing lit and no line while the same task in the walk had both (the memory
@@ -47,7 +48,9 @@ export function adviceRead(data, key) {
 // the Advisor's row read as a task's - nothing asked, nothing lit. A bare key is an idea only where it says so (idea:4, opened by name)
 export const isIdea = (o) => (o && typeof o === "object" ? o.kind === "idea" || isIdea(o.key) : /^idea:/.test(String(o || "")));
 export const ownPick = (rec, key) => (rec?.verb && key
-  ? { verb: rec.verb, label: rec.label || "", state: rec.state || "", why: rec.why || "", line: "", by: "agent", for: key, key } : null);
+  ? { verb: rec.verb, label: rec.label || "", state: rec.state || "", why: rec.why || "", line: "", by: "agent", for: key, key }
+  // ...and with nothing lit, the state's own sentence alone (railStatus.unlitWhy): no verb, so nothing is filled - the row says it
+  : unlitWhy(rec) && key ? { verb: "", label: "", state: rec.state || "", why: unlitWhy(rec), line: "", by: "agent", for: key, key } : null);
 
 // THE ADVISOR'S EVENT NAMES ITS ITEM BY THE RAIL'S KEY, and a task opened by name sits on the table as `task:N` - so the line for a
 // Board-opened task landed and was never read (re-audit: "a task opened by name never gets its Advisor line"). The event's own

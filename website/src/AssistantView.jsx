@@ -3956,7 +3956,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           <div className="tq-dock-line">
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
-          <ActionRow advised={stripPick || setupLit} hold={rowHold} early={rowEarly} />
+          <ActionRow advised={stripPick || setupLit} hold={rowHold} early={rowEarly} says={!litNow && !setupLit ? rowWhy({ recommended: tableAdvice }) : ""} />
           {!chatApart && composeBox}
           </div>
           </div>

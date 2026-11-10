@@ -65,7 +65,7 @@ function Cluster({ g, btn, act = press }) {
 }
 
 // the row says what to do, by type - not which task or how long it waited: the card above says both (the owner, 2026-10-13)
-export default function ActionRow({ inline = false, advised: given = null, hold = false, early = true }) {
+export default function ActionRow({ inline = false, advised: given = null, hold = false, early = true, says = "" }) {
   // `hold` (actionRow.useRowHold, its number): the new row is not whole yet - the row drawn last stays up as it was, and its presses do
   // nothing, until it is; with none drawn yet (a reload) there is no row until then. Never hidden, never drawn twice - and a held button
   // that would do nothing is greyed while it would (heldRow)
@@ -110,7 +110,8 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   // nothing - its button still named the card that drew it before the task page's card was registered again, and press found no verb there)
   const spineBy = verbs === now ? held : Object.fromEntries(Object.entries(held).map(([k, vs]) => [k, vs.map((v) => ({ ...v, of: liveOf(v.id)?.of ?? v.of }))]));
   useEffect(() => { putSpineVerbs(spineBy); });
-  const { ref, decide, agent, more, next, back, why } = row;
+  // ...the row's line: a greyed head's reason, else - nothing lit - the state's own sentence (`says`, railStatus.rowWhy)
+  const { ref, decide, agent, more, next, back } = row, why = row.why || says;
   // ...a phone's row is Nav, Mark done, as many moves as fit and one ▾ (foldsOf.phone) - the width the page calls a phone (AssistantView)
   const phone = useMediaQuery("(max-width:600px)");
   // the card's own move, advised, is lit on the card (rowOf's `lit`); only the row that is drawn says which

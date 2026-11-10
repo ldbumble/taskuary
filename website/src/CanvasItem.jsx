@@ -12,6 +12,7 @@ import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
 import { adviceShown, stripWord } from "./advice.js";
 import { TableVerbs, useHost, useVerbs } from "./actionRow.js";
 import { isIdea } from "./tableState.js";
+import { rowWhy } from "./railStatus.js";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
 
 // the height the view takes: the chat body's own, less its padding - the same in both states (see above). Said in CSS,
@@ -177,7 +178,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
           the row's own Connect an AI. Only the Advisor's own row - an idea - joins a move the row lacks (AdvisorNext), as on the desk */}
       {phone && <div className="tq-docked">
         {isIdea(card) && <AdvisorNext advice={noAi ? null : advised} onPropose={onPropose} />}
-        <ActionRow inline advised={pick} /></div>}
+        <ActionRow inline advised={pick} says={lit ? "" : rowWhy({ recommended: read })} /></div>}
     </Box>
     </>
   );

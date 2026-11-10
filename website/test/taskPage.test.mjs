@@ -141,7 +141,7 @@ test("the task's own recommended move fills the Tasks tab's bar and a narrow win
   assert.match(page, /<RemindMe task=\{t\} sx=\{filled\("defer"\) \? primaryBtn : barBtn\} lit=\{filled\("defer"\)\}/);
   // ...a narrow window's row at the view's foot, with no line over it (2026-10-26, as the desk): only the Advisor's own row - an idea -
   // joins a move the row lacks
-  assert.match(item, /\{phone && <div className="tq-docked">\s*\{isIdea\(card\) && <AdvisorNext advice=\{noAi \? null : advised\} onPropose=\{onPropose\} \/>\}\s*<ActionRow inline advised=\{pick\} \/><\/div>\}/);
+  assert.match(item, /\{phone && <div className="tq-docked">\s*\{isIdea\(card\) && <AdvisorNext advice=\{noAi \? null : advised\} onPropose=\{onPropose\} \/>\}\s*<ActionRow inline advised=\{pick\}( says=\{.*?\})? \/><\/div>\}/);
   assert.match(item, /const advised = lit \? null : adviceShown\(read, \{ key: card\.key, lane: card\.lane \}, busy\)/);
   // ...lit by the page's own read of the same item (a narrowed window kept its lit move), and it asks nothing of its own
   assert.match(item, /const read = phone && advice\?\.for === card\.key \? advice : null;/);

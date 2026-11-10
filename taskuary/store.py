@@ -419,13 +419,19 @@ _PROMISE_NOW = ('- A reply goes when what it says is true. Never promise a later
 # goes in the drafted reply - the owner's Send is the decision - never the conversation. AGENT.md and ASSISTANT.md ride on a STRANGER's task
 # too, so neither carries it: general.GOAL_LINE, on the owner's own tasks only, is its one home. An edited copy stops tracking its template,
 # so the login lines an earlier wording put in it come out where they still read word for word (login_rule_in_code). {name: (froms, to)}
+# ...whose own line then said "say what you would do and wait" (_THEIRS_HELD): theirs to decide BY A PRESS, the step set up as its card
+# (_THEIRS_NOW, the owner, 2026-11-10) - the login lines come out to today's wording, and an edited copy that holds the earlier one takes it
+_THEIRS_HELD = ('- Money, legal, HR, credentials, permissions, production configuration, deletions and anything\n'
+                '  irreversible are theirs to decide. Say what you would do and wait.\n')
+_THEIRS_NOW = ('- Money, legal, HR, credentials, permissions, production configuration, deletions and anything\n'
+               '  irreversible are theirs to decide - by a press, never a question in words: set the step up as its card and say in\n'
+               '  one line what you will do once they press it; their press wakes you to do it.\n')
 _LOGIN_RULES = {
     'agent': (('- Money, legal, HR, credentials, permissions, production configuration, deletions and anything\n'
                '  irreversible are theirs to decide. Say what you would do and wait. A login or key the thread asks\n'
                '  {{owner_first}} to supply, kept in their own files, is decided by their Send: find it and put it in the\n'
                '  reply you draft, never in the conversation, your steps, a summary, a comment or a log.\n',),
-              '- Money, legal, HR, credentials, permissions, production configuration, deletions and anything\n'
-              '  irreversible are theirs to decide. Say what you would do and wait.\n'),
+              _THEIRS_NOW),
     # ...and the wording before it, whose "never paste a secret into the conversation or a draft" forbids the draft the ruling asks for
     'assistant': (('  searching the disk. A file such as an .env holds settings: read the value the job needs.\n'
                    '- When the thread asks {{owner}} to supply a login, a key or other details their own files hold, find\n'
@@ -1800,7 +1806,7 @@ class SQLiteStore:
             # ...and WHAT FOLLOWS THE PRESS IS SAID WITH THE CARD (_DEPLOY_HELD -> _DEPLOY_NOW, _PROMISE_HELD -> _PROMISE_NOW): into an edited
             # CODING.md / AGENT.md where the earlier wording still reads as shipped, once
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='guide_says_what_follows_the_press'").fetchone():
-                for name, was, now in (('coding', _DEPLOY_HELD, _DEPLOY_NOW), ('agent', _PROMISE_HELD, _PROMISE_NOW)):
+                for name, was, now in (('coding', _DEPLOY_HELD, _DEPLOY_NOW), ('agent', _PROMISE_HELD, _PROMISE_NOW), ('agent', _THEIRS_HELD, _THEIRS_NOW)):
                     row = self.cx.execute('SELECT Content FROM doc WHERE Name=?', (name,)).fetchone()
                     body = (row['Content'] or '') if row else ''
                     if '\r\n' in body: was, now = was.replace('\n', '\r\n'), now.replace('\n', '\r\n')

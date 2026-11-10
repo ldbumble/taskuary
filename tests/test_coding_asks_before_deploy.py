@@ -51,11 +51,12 @@ class ShippedWordingTests(unittest.TestCase):
         path = Path(tempfile.mkdtemp()) / 'taskuary.db'
         s = SQLiteStore(str(path))
         s.save_doc('coding', 'MY RULE.\r\n' + store_mod._DEPLOY_HELD.replace('\n', '\r\n') + '\r\nlast.', 'owner')
-        s.save_doc('agent', 'MINE.\n' + store_mod._PROMISE_HELD + store_mod._PROMISE_AT + ' - say it.', 'owner')
+        s.save_doc('agent', 'MINE.\n' + store_mod._THEIRS_HELD + store_mod._PROMISE_HELD + store_mod._PROMISE_AT + ' - say it.', 'owner')
         s.cx.execute("DELETE FROM setting WHERE Name='guide_says_what_follows_the_press'"); s.cx.commit()
         again = SQLiteStore(str(path)); c, a = again.get_doc('coding'), again.get_doc('agent')
         self.assertIn(store_mod._DEPLOY_NOW.replace('\n', '\r\n'), c); self.assertTrue(c.startswith('MY RULE.') and c.endswith('last.'))
         self.assertIn(store_mod._PROMISE_NOW + store_mod._PROMISE_AT, a); self.assertNotIn('ask for the go-ahead and wait', a)
+        self.assertIn(store_mod._THEIRS_NOW, a); self.assertNotIn('Say what you would do and wait', a)
 
     def test_agent_md_never_promises_a_later_step(self):
         sec = AGENT.split('## Progress and completion', 1)[1]

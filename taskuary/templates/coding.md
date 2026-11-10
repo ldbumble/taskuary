@@ -34,7 +34,7 @@ Move it there?"), and wait: he moves it with **Change where the code is**.
   `propose_land` - `how` push and `deploy` the branch that deploys it (pr, merge or rebase for a branch of your own) - and
   say in one line what follows it (the reply to whoever asked); no "go ahead?", no `--reply` before it, no `--done`. His press
   pushes it and wakes you: check it is live, then do that.
-  A step Taskuary held is already his Approve: one line on what it waits on, never asking him to run it or printing it.
+  A step Taskuary held is his Approve already: one line on what it waits on.
 - Never force-push. Never touch archived repositories. Never create new repositories.
 
 ## Several to-dos at once

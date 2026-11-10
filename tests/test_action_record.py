@@ -85,6 +85,33 @@ class EveryPressOfTheOwnersIsSaidInWords(Acts):
         self.assertEqual(bare, [])
 
 
+
+class AMarkThatWasRefusedIsHeard(Acts):
+    """A mark in an answer is read once its turn is over, so nothing answers the agent that wrote it. A refused one was a line on the task
+    it never saw - under an answer reading "Proposed - it waits on the task for your yes" (the stress round, 2026-11-10)."""
+    MARK = proposals.MARK + ' ' + json.dumps({'action': 'open_pr', 'why': 'the fix is ready'})
+    WHY = 'open_pr is not permitted - the owner has that switch off'
+
+    def test_its_reason_goes_back_to_the_caller_and_into_the_agents_next_turn(self):
+        self.answered(); miss = []
+        self.assertEqual(proposals.collect(self.s, self.tid, f'The fix is in. {self.MARK}', 'assistant', miss), [])
+        self.assertEqual(miss, [self.WHY])
+        self.assertEqual(proposals.unheard(self.s, self.tid), [('open_pr', self.WHY)])
+        block = general.latest_block(self.s, self.tid)
+        self.assertIn('WAS NOT PUT ON A CARD', block); self.assertIn(proposals.refusal_line(self.WHY), block)
+
+    def test_one_the_tool_already_answered_is_not_said_again(self):
+        self.answered(); miss = []
+        self.assertIsNone(proposals.queue(self.s, self.tid, {'action': 'open_pr', 'why': 'the fix is ready'}, 'agent', refused=miss))
+        self.assertEqual((miss, proposals.unheard(self.s, self.tid)), ([self.WHY], []))
+        self.assertNotIn('NOT PUT ON A CARD', general.latest_block(self.s, self.tid))
+
+    def test_one_that_was_taken_says_nothing(self):
+        self.answered(); self.s.set_setting('agent_push_enabled', '1', 't'); miss = []
+        self.assertEqual(len(proposals.collect(self.s, self.tid, f'The fix is in. {self.MARK}', 'assistant', miss)), 1)
+        self.assertEqual((miss, proposals.unheard(self.s, self.tid)), ([], []))
+
+
 class APressThatFailed(Acts):
     WHY = 'GitHub refused it: the token may not comment on northwind/ledger'
     def fail(self, rv, why=None):

@@ -244,15 +244,30 @@ def validate(store, p: dict) -> tuple:
     return True, words
 
 
-def collect(store, task_id: int, transcript: str, actor='agent') -> list:
+def collect(store, task_id: int, transcript: str, actor='agent', refused: list | None = None) -> list:
     """Turn an agent's proposals into pending reviews. Returns what was queued; refusals are
-    recorded on the task so a refused proposal is visible, not silently dropped."""
+    recorded on the task so a refused proposal is visible, not silently dropped.
+    ...AND HEARD (the stress round, 2026-11-10): a mark is read once its turn is over, so the agent that wrote it got no answer - a
+    refused one was a line on the task it never saw, under an answer that said "Proposed - it waits on the task for your yes". Each
+    refusal is kept as one its agent has not heard (unheard) for its next turn, and appended to `refused` for the caller's own words."""
     from . import landing                         # ...a git act is the landing card's buttons where the task has work to land
     def one(p):
-        try: return None if landing.from_proposal(store, task_id, p) else queue(store, task_id, p, actor)    # the card is the review
+        try: return None if landing.from_proposal(store, task_id, p) else queue(store, task_id, p, actor, refused, unheard=True)    # the card is the review
         except ValueError as e:                   # ...said on the task, never dropped silently
-            store.add_comment(task_id, 'taskuary', 'agent', f"The {p.get('action')} proposal was not put on the card: {e}"); return None
+            store.add_comment(task_id, 'taskuary', 'agent', f"The {p.get('action')} proposal was not put on the card: {e}")
+            store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': str(e), 'unheard': True})
+            if refused is not None: refused.append(str(e))
+            return None
     return [m for p in parse(transcript) for m in [one(p)] if m]
+
+
+def unheard(store, tid: int, since: str = '') -> list:
+    "[(action, why)] of the proposals refused on task `tid` from `since` on that their agent was never answered about (collect), oldest first."
+    def d(r):
+        try: return json.loads(r.get('Detail') or '{}') or {}
+        except ValueError: return {}
+    rows = store._rows("SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Action='proposal_refused' AND CreatedAt>=? ORDER BY Id", (int(tid), since or ''))
+    return [(x.get('action') or 'the proposal', x.get('why') or '') for x in map(d, rows) if x.get('unheard')]
 
 
 # WHAT A TOOL RUN WILL DO, in words (the owner, 2026-10-21): the card said "run one query/script through a tool connection" over the
@@ -306,9 +321,9 @@ def tool_words(store, p: dict) -> str:
     return f"{verb} {what}" + (f" on {on}" if on else '')
 
 
-def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = None) -> dict | None:
+def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = None, unheard: bool = False) -> dict | None:
     """ONE proposal through the gate: a pending review when it validates, a recorded refusal (None) when not - its reason appended to
-    `refused`, so the agent that proposed it is told why and can fix it (refusal_line)."""
+    `refused`, so the agent that proposed it is told why and can fix it (refusal_line). `unheard`: no answer goes back to it now (collect)."""
     from . import trackers
     # an agent's comment or move on "the ticket" means the item this task came from: named on the proposal, so the card says which
     if p.get('action') == 'run_tool' and p.get('type') in trackers.TYPES and not str(p.get('item') or '').strip():
@@ -342,7 +357,7 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         if miss: ok, why = False, miss
     if not ok:
         store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
-        store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why})
+        store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why, **({'unheard': True} if unheard else {})})
         if refused is not None: refused.append(why)
         return None
     # a close-out is not the agent's ask ("proposes to merge the pull request this task opened" was said of a stranger's PR), and

@@ -810,7 +810,9 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         from . import workerstate as ws
         asked = [r['text'] for r in ws.status(store, tid)['requests'] if r.get('kind') == 'input_needed' and r.get('text')]
     except Exception: asked = []
-    if not (rv or sent or answered or others or handed or did or own or asked or nowhere): return ''
+    from . import proposals
+    refused = proposals.unheard(store, tid, last_turn_began(store, tid) or '') if answers else []
+    if not (rv or sent or answered or others or handed or did or own or asked or nowhere or refused): return ''
     out = [selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE]
     if new: out.append(f"{'THE LAST MESSAGE, WHICH YOU ANSWERED' if heard else 'THE NEWEST MESSAGE'} - from {new['who']}, at {clock(new['at'])}: "
                        f"{_quote(new['words'], 600)}")
@@ -828,6 +830,8 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         f"- rv{x['rid']}: {x['what']}" for x in others)
         + ('' if rv else f'\n{selfclose.WITHDRAW_LINE}'))
     if nowhere: out.append('AN EMAIL YOU DRAFTED HAS NO ADDRESS:\n' + '\n'.join(f'- rv{r}: {slots.to_missing(w)}' for r, w in nowhere))
+    if refused: out.append('WHAT YOU PROPOSED IN YOUR LAST TURN WAS NOT PUT ON A CARD - the owner has no button for it:\n' + '\n'.join(
+        f'- {a}: {proposals.refusal_line(why)}' for a, why in refused))
     if sent: out.append('ALREADY SENT ON THIS TASK - never draft these again:\n' + '\n'.join(
         f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
     if asked: out.append('YOUR QUESTION STILL WAITING FOR THE OWNER - it stays on their screen until they answer; never ask it again:\n'
@@ -2829,9 +2833,11 @@ class GeneralSession:
         # the way a coding session's proposals do (wrapup.finish)
         from . import proposals
         if proposals.MARK in reply and self.store.get_setting('proposals_enabled', '1') == '1':
-            try: proposals.collect(self.store, self.task_id, reply, 'assistant')
+            miss = []
+            try: proposals.collect(self.store, self.task_id, reply, 'assistant', miss)
             except Exception as e: logger.warning(f'proposal collection failed for task {self.task_id}: {e}')
-            reply = proposals.strip(reply).strip() or 'Proposed - it waits on the task for your yes.'
+            # ...and an answer that was only the mark never says "it waits for your yes" over one that was refused (its next turn hears why)
+            reply = proposals.strip(reply).strip() or (f'What I proposed was not put on a card: {miss[0]}' if miss else 'Proposed - it waits on the task for your yes.')
         # the page the turn ended on is where a restarted session's browser reopens (browserview.keep_page)
         if browser_tools:
             from . import browserview

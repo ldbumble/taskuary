@@ -178,6 +178,54 @@ def test_definite_failure_remains_retryable_and_success_sends_it(s, outgoing):
     assert s.get_task(tid)['Status'] == 'open'
 
 
+def owner_did_after(s, tid):
+    from taskuary import general
+    return ' | '.join(general.owner_did(s, tid))
+
+
+@pytest.mark.parametrize('outgoing', [False, True])
+def test_a_send_refused_once_then_sent_is_told_to_its_agent_as_sent(s, outgoing):
+    # the agent walk, 2026-11-09: one refused send, then a good one - the agent's next turn was told "approved (Not sent: the mail
+    # server said no)", answered "not sent" and offered to set the mail up again: one yes from sending it twice
+    from taskuary import general
+    tid, mid, rid = make_review(s, outgoing)
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Set up the answer to Erin.')
+    s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
+    with mock.patch(provider(outgoing), side_effect=RuntimeError('fixture provider refused (403)')):
+        verdicts.decide(s, s.get_review(rid), 'approve')
+    did = owner_did_after(s, tid)
+    assert f'pressed Send on rv{rid} and IT DID NOT GO' in did and 'still waits' in did, did      # a refused send is the agent's to know too
+    with mock.patch(provider(outgoing), return_value=SENT):
+        verdicts.decide(s, s.get_review(rid), 'approve')
+    did = owner_did_after(s, tid)
+    assert f'approved and sent rv{rid}' in did and 'not sent' not in did.lower() and 'DID NOT GO' not in did, did
+    assert not s.get_review(rid).get('Reason')
+
+
+def test_the_agent_hears_what_went_when_the_owner_changed_its_text(s):
+    # ...and the same walk: the owner reworded the mail on its card, the first press was refused (which keeps their words as the draft),
+    # the second went as a plain approval - and the agent was never told its text was not the one that went
+    from taskuary import general
+    tid, mid, rid = make_review(s, True)
+    cid = s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Set up the answer to Erin.')
+    s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
+    s.snap_draft(rid, cid)
+    changed = BODY + ' The totals also match.'
+    with mock.patch(provider(True), side_effect=RuntimeError('fixture provider refused (403)')):
+        verdicts.decide(s, s.get_review(rid), 'approve', changed)
+    with mock.patch(provider(True), return_value=SENT):
+        assert verdicts.decide(s, s.get_review(rid), 'approve')['status'] == 'approved'
+    did = owner_did_after(s, tid)
+    assert 'they changed your text first' in did and 'The totals also match.' in did, did
+    # ...and a text that went as the agent wrote it says nothing of the kind
+    tid2, mid2, rid2 = make_review(s, True)
+    cid2 = s.add_comment(tid2, 'assistant', general.ASSISTANT_TYPE, 'Set up the answer to Erin.')
+    s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE CommentId=?", (cid2,))
+    s.snap_draft(rid2, cid2)
+    with mock.patch(provider(True), return_value=SENT): verdicts.decide(s, s.get_review(rid2), 'approve')
+    assert 'changed your text' not in owner_did_after(s, tid2)
+
+
 @pytest.mark.parametrize('outgoing', [False, True])
 @pytest.mark.parametrize('receipt', [None, {}, {'to': ['erin@example.com']}])
 def test_missing_provider_receipt_is_unknown_not_success(s, outgoing, receipt):

@@ -5607,8 +5607,12 @@ class SQLiteStore:
                     except (TypeError, ValueError, KeyError): pass
                 env['delivery'] = state
                 if attempted: env['attempted_at'] = attempted
-                self.cx.execute('UPDATE review SET DeliveryState=?, DeliveryClaim=?, DeliveryEnvelope=?, DeliveryAttemptedAt=?, Deliver=? WHERE ReviewId=? AND Status=\'pending\' AND DeliveryClaim IS NULL',
-                                (state, token, saved, attempted, json.dumps(env), rid))
+                # ...and WHY THE LAST ATTEMPT DID NOT GO is that attempt's, not this one's: every attempt that does not send writes its own
+                # reason (finish_review_delivery), so one that does send must not leave "Not sent: ..." on a sent mail (the agent walk,
+                # 2026-11-09: refused once, sent on the retry, and its agent was told "not sent" and offered to send it again)
+                self.cx.execute('UPDATE review SET DeliveryState=?, DeliveryClaim=?, DeliveryEnvelope=?, DeliveryAttemptedAt=?, Deliver=?, '
+                                'Reason=CASE WHEN ? THEN NULL ELSE Reason END WHERE ReviewId=? AND Status=\'pending\' AND DeliveryClaim IS NULL',
+                                (state, token, saved, attempted, json.dumps(env), bool(previous), rid))
                 self.cx.commit(); self._writes += 1
                 _DELIVERY_CLAIMS.add(token)
                 claimed = {'token': token, 'previous': previous, 'snapshot': json.loads(saved)}

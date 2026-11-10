@@ -599,10 +599,24 @@ def owner_did(store, tid: int) -> list:
     if not since: return []
     who = ','.join('?' * len(OWNER_ACTORS))
     out = [(at, what) for _, at, what, *_r in presses(store, tid, since)]
-    out += [(r['DecidedAt'], f"{DECIDED[r['Status']]} rv{r['ReviewId']}" + (f" ({' '.join(str(r['Reason']).split())[:120]})" if r.get('Reason') else ''))
+    out += [(r['DecidedAt'], _decided(store, r))
             for r in store._rows(f"SELECT * FROM review WHERE TaskId=? AND DecidedBy IN ({who}) AND DecidedAt>?", (tid, *OWNER_ACTORS, since))
-            if r['Status'] in DECIDED]
+            if r['Status'] in DECIDED or (r['Status'] == 'pending' and r.get('DeliveryState') in NOT_GONE)]
     return [f'{clock_of(at)}: {what}' for at, what in sorted(out, key=lambda x: str(x[0]))]
+# WHAT BECAME OF A SEND IS THE AGENT'S TO KNOW, AS IT ENDED (the agent walk, 2026-11-09): a send the server refused was not told to it at
+# all, one that went on the second press was told as "approved (Not sent: ...)" - it answered "not sent" and offered to set the mail up
+# again, one yes from sending it twice - and a text the owner changed before sending went out without the agent ever seeing what went
+NOT_GONE = {'failed': 'pressed Send on {n} and IT DID NOT GO ({why}) - it still waits for their Send; never set it up again',
+            'unknown': 'pressed Send on {n} and it MAY have gone ({why}) - never send it or set it up again unless they ask'}
+def _decided(store, r) -> str:
+    "One review the owner pressed, in words for its agent: what became of it - and what went, when they changed its text first."
+    n, state, why = f"rv{r['ReviewId']}", r.get('DeliveryState') or '', ' '.join(str(r.get('Reason') or '').split())[:160]
+    if r['Status'] == 'pending': return NOT_GONE[state].format(n=n, why=why or 'no reason was given')
+    was = (store._one('SELECT Text FROM draft_snapshot WHERE ReviewId=? ORDER BY Id DESC LIMIT 1', (r['ReviewId'],)) or {}).get('Text')
+    went = str(r.get('FinalText') or '')
+    changed = state == 'sent' and bool(went.split()) and (was.split() != went.split() if was else r['Status'] == 'edited')
+    return (f"{'approved and sent' if state == 'sent' and r['Status'] == 'approved' else DECIDED[r['Status']]} {n}" + (f' ({why[:120]})' if why else '')
+            + (f' - they changed your text first; what went: {_quote(went, 600)}' if changed else ''))
 # A PRESS THE AGENT SAID IT WAITS ON WAKES IT, ONCE (the owner, 2026-11-08): a press is otherwise a line it hears with the owner's next one -
 # but a turn that asked for Send or a hand-off and said it would follow up (its summary's `after_press`) is started again by that press
 FOLLOW_UP = ('The owner just pressed what your last turn waited on (see what the owner did since your last answer). Carry on from there as '

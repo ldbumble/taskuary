@@ -586,6 +586,17 @@ def below(text: str, own: str) -> str:
 CHAIN_HEAD = '--- quoted under it, the chain they wrote on top of (their ask is ABOVE this line)'
 
 
+def both_ends(text: str, budget: int) -> str:
+    """Their own words when they run past the budget: the top AND the end, the middle marked as left out. A long mail's ask is as often
+    its last line ("...so please approve by Friday") as its first, and a cut from the end handed every reader - triage, the reply
+    writer, the agent's thread - the half that led up to it (the stress run, 2026-11-10). A third of the room goes to the end."""
+    if len(text) <= budget: return text
+    gap = f'{NL}[... {len(text) - budget} characters of this same message are left out here ...]{NL}'
+    keep = budget - len(gap)
+    if keep < 300: return text[:budget]                  # no room for two ends worth reading
+    return text[:keep - keep // 3].rstrip() + gap + text[-(keep // 3):].lstrip()
+
+
 def sender_body(text: str, own: str = None, budget: int = None, known: set = None) -> tuple:
     """(what one message should look like to a model, whether the budget cut anything).
 
@@ -607,7 +618,7 @@ def sender_body(text: str, own: str = None, budget: int = None, known: set = Non
     # them, and the signature and legal footer under somebody else's mail are boilerplate there too.
     if chain: chain = strip_boilerplate(dedupe_quoted(chain, (), known=known if known is not None else set()))
     room = budget - len(head) - len(CHAIN_HEAD) - 2
-    if not chain or room < 200: return head[:budget], len(head) > budget or bool(chain)
+    if not chain or room < 200: return both_ends(head, budget), len(head) > budget or bool(chain)
     return f'{head}{NL}{CHAIN_HEAD}{NL}{chain[:room]}', len(chain) > room
 
 

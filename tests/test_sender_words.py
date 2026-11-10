@@ -35,6 +35,16 @@ class SenderBodyTests(unittest.TestCase):
         self.assertTrue(cut)
         self.assertLessEqual(len(body), 900)
 
+    def test_their_own_long_message_keeps_its_last_lines(self):
+        # a long status mail whose ask is its closing line: the cut came off the end, so triage read the lead-up and never the ask
+        notes = chr(10).join(f'Site {k}: receivables tied out, nothing open.' for k in range(400))
+        long = f'Alex - the month-end notes, site by site.{chr(10)}{notes}{chr(10) * 2}So: can you approve the Payworth accrual by Friday?'
+        body, cut = triage.sender_body(long, budget=1500)
+        self.assertTrue(body.startswith('Alex - the month-end notes'))
+        self.assertIn('can you approve the Payworth accrual by Friday?', body)
+        self.assertIn(f'[... {len(long) - 1500} characters of this same message are left out here ...]', body)
+        self.assertTrue(cut); self.assertLessEqual(len(body), 1500)
+
     def test_a_message_with_no_chain_is_its_own_words_whole(self):
         plain = 'The payroll export failed again overnight - same KeyError as last week.'
         self.assertEqual(triage.sender_body(plain), (plain, False))

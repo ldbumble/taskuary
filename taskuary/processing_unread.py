@@ -703,7 +703,9 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
     from . import funnel, terminal
     now = now or datetime.now()
     keep = None if keys is None else (lambda item, want=frozenset(keys): not want.isdisjoint(names(item)))
-    live_state = terminal.live_sessions(tail=6) if live_state is None else live_state
+    # the light road (funnel.observe): a card reads a session's state and its last lines, never its files - `git status` ran once per
+    # live session on every build
+    live_state = funnel.observe() if live_state is None else live_state
     query = query_for(store, only, history=not full_history)
     for attempt in (1, 2):
         processing_all.wait_settled(store)

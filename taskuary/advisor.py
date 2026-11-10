@@ -14,7 +14,7 @@ everything and all tools in progressive fashion"); code only checks what it prop
 Gates are on WHEN the model runs, never on whether: only on a state change (the revision), once per item per revision,
 a per-hour cap, the standard model (advisor_model: light to save), the bigger read only for the item on the table.
 """
-import hashlib, json, re, threading
+import contextlib, contextvars, hashlib, json, re, threading
 from datetime import datetime, timedelta
 from loguru import logger
 from . import buttons, calibrate, concierge, words
@@ -287,10 +287,13 @@ WANT['properties']['look'] = {'type': ['object', 'null'], 'properties': {'kind':
 _EV = re.compile(r'^(out|mem|rv|task|msg|fs|sv|idea|lrn)\d+$')   # ...and the owner's own acts the usual is counted from (usual.py), and a memory line
 
 
-def _item(store, target_kind, target_id, key: str = None):
+def _item(store, target_kind, target_id, key: str = None, build: bool = True):
     """The card the rail would show for this target - the one keyed `key` when asked for an item (keys_of), else found by its task
     or message id, since the rail's key spelling is the processing inventory's (`processing:...`) in a real install and a legacy
-    alias in a bare store."""
+    alias in a bare store.
+    `build=False`: a task's own read (rulebook.recommended_task), made again on every live write while its agent works - the rail as it
+    last stood, else the card built from the task's own rows; never a build of any size, since even the keyed one takes the rail's lock
+    and opening a task waited 15 s behind a restart's first build (stage G, 2026-11-10)."""
     from . import funnel
     if target_kind == 'task':
         t = store.get_task(target_id) or {}
@@ -301,14 +304,14 @@ def _item(store, target_kind, target_id, key: str = None):
     # one and nobody is building it; else the card the rail would show, built for this one key (no lock, a few rows)
     full, pile = funnel.full_items(store), funnel.cached_pile(store)
     if pile is None: full, pile = funnel.known_full(store), funnel.known(store)
-    if pile is None and not funnel.building():
+    if pile is None and build and not funnel.building():
         try: pile, full = funnel.pile(store, quiet=True), funnel.full_items(store)
         except Exception as e: logger.debug(f'advisor: no rail for {key} - {e}')
     items = [*(full or ()), *((pile or {}).get('items') or ())]        # read items kept: the one on the table is often read
     f = 'tid' if target_kind == 'task' else 'idea' if target_kind == 'idea' else 'mid'
     mine = [i for i in items if i.get(f) == int(target_id)]
     hit = next((i for i in mine if key and key in keys_of(i)), None) or next(iter(mine), None)
-    if hit: return hit
+    if hit or not build: return hit or funnel.item_for_key(store, key_of(target_kind, target_id))
     # (the window's keyed build only - next_item's full-history fallback reads every root, seconds on a big home)
     k = key or key_of(target_kind, target_id)
     try:
@@ -457,9 +460,25 @@ def hollow(store, item: dict, tgt, says: str, ev) -> bool:
         logger.debug(f"advisor: no hollow check for {(item or {}).get('key')} - {e}"); return False
 
 
+_READ = contextvars.ContextVar('advisor_reading', default=None)
+
+
+@contextlib.contextmanager
+def reading(seed: dict = None):
+    """One look at an item reads its task's messages once: {tid: messages} for the block. rulebook.state asked for them three times a
+    look - 1,000 lines each on a long chat, most of what the look cost. `seed`: what the caller holds already (a task's own read)."""
+    if _READ.get() is not None and not seed: yield; return
+    tok = _READ.set({**(_READ.get() or {}), **(seed or {})})
+    try: yield
+    finally: _READ.reset(tok)
+
+
 def _msgs(store, item, target_kind, target_id) -> list:
     """The item's messages, oldest first: the task's own, else the message's thread - any channel, a chat's as much as a mail's."""
-    if target_kind == 'task': ms = store.list_messages(int(target_id))
+    if target_kind == 'task':
+        held, tid = _READ.get(), int(target_id)
+        ms = held[tid] if held is not None and tid in held else store.list_messages(tid)
+        if held is not None: held[tid] = ms
     else:
         m = store.get_message(int(target_id)) or {}
         try: ms = store.thread_messages(m['ConversationId'], m.get('Subject'), limit=12) if m.get('ConversationId') else [m]
@@ -1117,7 +1136,7 @@ def delivery_fix(store, item: dict) -> dict | None:
 NOT_MOVES = frozenset({'priority', 'change_kind', 'pick_repo', 'attach', 'close_note', 'next'})
 
 
-def offered(store, item: dict) -> list:
+def offered(store, item: dict, known: dict = None) -> list:
     """THE ITEM'S REAL BUTTONS, AND NOTHING IT CANNOT DO: the verbs its row carries minus Next - chips_for, which already drops
     what this install cannot do (capabilities.py: no Send on a draft whose channel cannot send, no coding agent with no
     coding tool) - plus the row's own fix when a send failed and named the place that fixes it, under that place's own name.
@@ -1129,7 +1148,7 @@ def offered(store, item: dict) -> list:
     the row's moves count: its pickers (who does it, priority, assignee, the code's place), Attach and Close with a note set a field or
     add to a move, and are never the move. Chase joins on a wait with somebody to write to (rulebook.adds); Next is added by the callers."""
     from . import rulebook
-    verbs = [buttons.chip(b['verb']) | {'label': b['label']} for b in concierge.row_buttons(store, item) if b['verb'] not in NOT_MOVES]
+    verbs = [buttons.chip(b['verb']) | {'label': b['label']} for b in concierge.row_buttons(store, item, known) if b['verb'] not in NOT_MOVES]
     # ...in the item's own order (its vocabulary, chips_for - a draft's Send first), the row's other moves after it
     first = [c['verb'] for c in concierge.chips_for(store, item)]
     verbs.sort(key=lambda v: first.index(v['verb']) if v['verb'] in first else len(first))

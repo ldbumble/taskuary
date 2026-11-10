@@ -5,15 +5,17 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from taskuary import demo
+from taskuary import advisor, demo
 from taskuary.store import SQLiteStore
 
 
 def test_private_fixture_edits_preserve_all_production_demo_refusals(tmp_path, monkeypatch):
     monkeypatch.setenv('TASKUARY_DEMO', '1')
     monkeypatch.setenv('TASKUARY_HOME', str(tmp_path))
-    # Record the original function so pytest restores it after fixture installation.
+    # Record the original functions so pytest restores them after fixture installation: a scripted advisor.decide left in place
+    # answered /api/advice for whichever test files shared its run (2026-11-10).
     monkeypatch.setattr(demo, 'refuse', demo.refuse)
+    monkeypatch.setattr(advisor, 'decide', advisor.decide)
     cases = [(method, path) for method in ('GET', 'POST', 'PATCH', 'PUT', 'DELETE')
              for path in ('/api/ingest/push', '/api/sync', '/api/tools/run',
                           '/api/reviews/1/decide', '/api/reviews/1', '/api/terminals',

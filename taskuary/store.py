@@ -6605,8 +6605,10 @@ class SQLiteStore:
         # console. Working carries the agent's name so the chip can say who.
         live, parked = {r['TaskId']: SHOWN for r in self.running_runs()}, {}       # Taskuary, never the profile (kinds.shown)
         try:
-            from . import terminal as hub_term
-            observed_live = hub_term.live_sessions(tail=0) if live_state is _LIVE_UNSET else live_state
+            # the light road: a feed row reads who works a task, never the session's files - one feed read ran `git status` in
+            # every live session's checkout, and a task's own read makes one (funnel.item_for_key)
+            from . import funnel
+            observed_live = funnel.observe(0) if live_state is _LIVE_UNSET else live_state
             for t in observed_live:
                 if not t.get('taskId'): continue
                 live[t['taskId']] = shown_agent(t)

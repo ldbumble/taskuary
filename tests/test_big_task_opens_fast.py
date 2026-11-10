@@ -160,5 +160,7 @@ def test_a_long_trusted_group_the_walk_lands_on_draws_its_card_in_a_beat(tmp_pat
         for _ in range(3):                                   # ...read again and again while its agent works
             took = time.perf_counter(); r = c.get(f'/api/tasks/{tid}'); took = time.perf_counter() - took
             assert r.status_code == 200 and r.json()['origin']['origin'] == 'trusted' and took < OPEN, f'the card took {took:.1f}s'
-        assert n[0] < 3 * 1000 / 10, f'{n[0]} reads for three reads of 1,000 lines'
+        # ...a question per line would be 1,000 a read. What a read asks is the task's own facts, the same few at any length: 150, the
+        # bound the 1,500-line read above keeps (was 100, before the read carried the task's own move - rulebook.recommended_task)
+        assert n[0] < 3 * 150, f'{n[0]} reads for three reads of 1,000 lines'
     finally: s.close()

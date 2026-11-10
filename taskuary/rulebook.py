@@ -471,18 +471,26 @@ def _recommended(store, it: dict, verbs: list | None, f: dict | None) -> dict | 
 def recommended(store, item: dict, verbs: list = None, f: dict = None) -> dict | None:
     """{verb, label, why, state} - the one move the item's row fills - or None for nothing filled. `verbs`: the row's buttons where the
     caller read them already (advisor.offered); `f`: its facts. Never raises: a row that cannot be read fills nothing."""
-    try: return _recommended(store, item or {}, verbs, f) if item else None
+    from . import advisor
+    try:
+        with advisor.reading(): return _recommended(store, item or {}, verbs, f) if item else None
     except Exception as e:
         logger.warning(f"rulebook: no recommended move for {(item or {}).get('key')} - {e}"); return None
 
 
-def recommended_task(store, tid) -> dict | None:
-    "The same for a task by its id (the task page's own payload): its card as the rail last stood, never a rail build."
+def recommended_task(store, tid, known: dict = None) -> dict | None:
+    """The same for a task by its id (the task page's own payload): its card as the rail last stood, never a rail build. `known`: what
+    the page's read holds of the task already (concierge._shows, and its `messages`) - that read is made on every live write while an
+    agent works."""
     from . import advisor
-    try: item = advisor._item(store, 'task', int(tid))
-    except Exception as e:
-        logger.debug(f'rulebook: no card for task {tid} - {e}'); item = None
-    return recommended(store, item)
+    known = dict(known or {})
+    with advisor.reading({int(tid): known.pop('messages')} if 'messages' in known else None):
+        try:
+            item = advisor._item(store, 'task', int(tid), build=False)
+            verbs = advisor.offered(store, item, known) if item and item.get('kind') != 'idea' else None
+        except Exception as e:
+            logger.debug(f'rulebook: no card for task {tid} - {e}'); item = verbs = None
+        return recommended(store, item, verbs)
 
 
 def chase_thread(store, item: dict) -> dict | None:

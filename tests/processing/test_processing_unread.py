@@ -179,9 +179,12 @@ def test_the_message_an_idea_rides_into_triage_on_is_never_a_row(store):
     all_rows, unread = both(store)
     assert vehicle not in {r['row'].get('MessageId') for r in all_rows}, 'the vehicle is not a row in All'
     assert vehicle not in {i.get('mid') for i in unread['items']}, 'nor in work'
-    # ...and what it carried still speaks, beside the mail it is about
-    assert sorted(i['kind'] for i in unread['items']) == ['fyi', 'idea']
-    assert next(i for i in unread['items'] if i['kind'] == 'idea')['idea'] == idea['IdeaId']
+    # ...and what it carried still speaks - behind the mail it is about while that is unread (processing_unread.rail_of), then as the row
+    [mail] = unread['items']
+    assert (mail['kind'], mail['mid']) == ('fyi', source)
+    funnel.settle(store, mail['key'], 'surfaced', read=True)
+    [line] = [i for i in both(store)[1]['items'] if i['kind'] == 'idea']
+    assert line['idea'] == idea['IdeaId']
 
 
 def test_the_task_an_ideas_vehicle_carries_is_still_a_row_while_an_agent_works_it(store):

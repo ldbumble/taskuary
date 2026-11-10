@@ -134,11 +134,11 @@ class AskingForOneLaterTests(unittest.TestCase):
             r = client.post(f'/api/tasks/{tid}/assistant/browser')
             launched = thread.call_args.kwargs                 # while bv.start is still the patched one
             start.assert_not_called()                          # it is launched on the thread, not inline
+            launched['target'](*launched.get('args', ()))      # ...where a computer with no browser yet fetches Taskuary's own first
+            start.assert_called_once_with('sid-1')
         self.assertEqual(r.status_code, 200)
         self.assertTrue(bv.wanted(s.get_task(tid)), 'the press IS the mark on the task')
         self.assertTrue(live.browser_wanted, 'and the running session hands its next turn the brief')
-        self.assertIs(launched['target'], start)
-        self.assertEqual(launched['args'], ('sid-1',))
 
     def test_with_no_session_yet_it_still_marks_the_task(self):
         from taskuary import general

@@ -955,7 +955,7 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
     out = []
     fresh_setup = ((now or datetime.now()) - timedelta(minutes=SETUP_GRACE_MIN)).strftime('%Y-%m-%d %H:%M:%S')
     if live_state is _LIVE_UNSET:
-        try: live = term.live_sessions(tail=6)
+        try: live = observe()
         except Exception: return out
     else:
         live = live_state
@@ -1152,7 +1152,7 @@ def working_tids(store, live_state=_LIVE_UNSET, now: datetime = None) -> set:
     out = {r['TaskId'] for r in store.running_runs()
            if r.get('TaskId') and str(r.get('UpdatedAt') or r.get('StartedAt') or '') >= fresh}
     try:
-        live = term.live_sessions(tail=0) if live_state is _LIVE_UNSET else live_state
+        live = observe(0) if live_state is _LIVE_UNSET else live_state
         for t in live:
             if not t.get('taskId'): continue
             waiting = t.get('waiting') if t.get('waiting') is not None else (t.get('idle') or 0) >= term.IDLE_WAITING
@@ -1208,11 +1208,11 @@ def workers_signature(live_state) -> str | None:
     return hashlib.sha256('\n'.join(rows).encode()).hexdigest()
 
 
-def observe():
+def observe(tail: int = 6):
     """The live sessions as the pile's checks read them: the light road - no `git status` per session, no witness (SCREEN_ONLY)."""
     from . import terminal as term
-    try: return term.live_sessions(tail=6, details=False)
-    except TypeError: return term.live_sessions(tail=6)          # a stand-in that predates `details`
+    try: return term.live_sessions(tail=tail, details=False)
+    except TypeError: return term.live_sessions(tail=tail)       # a stand-in that predates `details`
 
 
 def _fresh_tails(p: dict, observed) -> dict:
@@ -1457,7 +1457,7 @@ def agent_states(store) -> dict:
     """Every task an agent has, or had: what it is doing now. {tid: (state, agent)}"""
     from . import terminal as term
     out = {}
-    try: live = term.live_sessions(tail=6)
+    try: live = observe()
     except Exception: live = []
     for t in live:
         tid = t.get('taskId')

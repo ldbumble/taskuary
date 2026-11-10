@@ -2106,12 +2106,12 @@ def task_detail(task_id: int):
     from . import assistant, concierge, general, origin, workflows
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
-    memo, sigs = {}, {}
+    memo, sigs, here = {}, {}, {m['MessageId']: m for m in d.get('messages') or []}
     from .ingest import DRAFTING
     for r in d.get('reviews') or []:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Connect'] = _review_connect(memo, r)
-        r['Signature'] = signatures.for_review(store, r, memo=sigs)     # what goes under it: the reply box shows it
+        r['Signature'] = signatures.for_review(store, r, here.get(r.get('MessageId')), memo=sigs)     # what goes under it: the reply box shows it
         r['Drafting'] = r['ReviewId'] in DRAFTING                         # its draft is being written: the box waits, never "nothing yet"
     # the owner's own mail has nobody behind it to answer (wrapup.from_owner): the page's Reply doors read this, never a guess
     from .ingest import own_addresses, row_recipients
@@ -2139,7 +2139,8 @@ def task_detail(task_id: int):
     # THE ONE MOVE ITS ROW FILLS (rulebook.recommended: its agent's own turn and the task's facts) - the same field the rail's item on the
     # table carries (_pile_payload), so the task page and the canvas light one button and neither asks the Advisor
     from . import rulebook
-    return {**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])}, 'recommended': rulebook.recommended_task(store, task_id),
+    known = {'task': d['task'], 'story': story, 'judged': judged, 'ended': ran, 'messages': msgs}       # ...and asks nothing this read knows
+    return {**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])}, 'recommended': rulebook.recommended_task(store, task_id, known),
             'origin': {**o,                                                                  # who's words are on it (origin.py)
                        # ...and the presses that trust them, in the same words as the held box's (senders.trust_offer)
                        **({'trust': _trust_offer(task_id, msgs)} if o['origin'] == 'stranger' else {}),

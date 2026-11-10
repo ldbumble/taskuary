@@ -1218,42 +1218,51 @@ def _story(store, t: int):
     except Exception: return None
 
 
-def _shows(store, it: dict, b: str) -> bool:
-    """The task page's own button for `b` (buttons.json `row`) is drawn on this item now - the few whose being there turns on state."""
-    if b == 'reopen': return bool(it.get('closed')) or str((store.get_task(int(it['tid'])) or {}).get('Status') or '') in ('done', 'dropped')
-    if b == 'stop_agent': return _agent_running(it['tid'])
+def _shows(store, it: dict, b: str, known: dict = None) -> bool:
+    """The task page's own button for `b` (buttons.json `row`) is drawn on this item now - the few whose being there turns on state.
+    `known`: what the row's reader holds of the task already ({task, story, judged, ended, saved, ai}) and what its other buttons read
+    here - a row asks each once. Nine buttons each asking again made a task's read 49 questions heavier, its agent's story told twice."""
+    known = {} if known is None else known
+    once = lambda k, f: known[k] if k in known else known.setdefault(k, f())
+    tid = it.get('tid')
+    task = lambda: once('task', lambda: store.get_task(int(tid)) or {})
+    saved = lambda: once('saved', lambda: store.resumable_session(tid))
+    story = lambda: once('story', lambda: _story(store, int(tid)))
+    if b == 'reopen': return bool(it.get('closed')) or str(task().get('Status') or '') in ('done', 'dropped')
+    if b == 'stop_agent': return _agent_running(tid)
     # the task page draws it only on an open task whose agent failed or whose reader was unsure (brainroute.strong_offered)
     if b == 'strong_again':
         from . import brainroute, workerstate
-        t = int(it['tid'])
-        return not it.get('closed') and brainroute.strong_offered(store.get_task(t), brainroute.judged(store, t), workerstate.ended(store, t),
-                                                                  _story(store, t))
-    if b == 'continue': return bool(store.resumable_session(it['tid'])) and not _general(store, it)
+        return not it.get('closed') and brainroute.strong_offered(task() or None, once('judged', lambda: brainroute.judged(store, int(tid))),
+                                                                  once('ended', lambda: workerstate.ended(store, int(tid))), story())
+    if b == 'continue': return bool(saved()) and not _general(store, it)
     # ...Run another agent only where one ever ran (the owner, 2026-11-09): a task held for a new sender is an agent's, and nothing ran on it
-    if b == 'run_another': return _agent_running(it['tid']) or bool(store.resumable_session(it['tid']) or store.last_transcript(it['tid'])
-                                                                      or store.list_runs(int(it['tid'])) or (_story(store, int(it['tid'])) or {}).get('kind') not in (None, 'held', 'idle', 'queued', 'none'))
-    if b in ('review_changes', 'share'): return _agent_holds(store, it) or bool(store.resumable_session(it['tid']))
+    if b == 'run_another': return _agent_running(tid) or bool(saved() or store.last_transcript(tid) or store.list_runs(int(tid))
+                                                              or (story() or {}).get('kind') not in (None, 'held', 'idle', 'queued', 'none'))
+    if b in ('review_changes', 'share'): return _agent_holds(store, it) or bool(saved())
     # Share stands on a task's row whenever no agent is at work on it (TaskPage: a Result to share, or a summary to email)
     if b == 'share_result': return not _agent_running(it['tid'])
     if b == 'attach': return bool(it.get('rid'))
     # Copy is a draft's that cannot be sent from here (ReviewDecision, the owner 2026-10-22) - it stood on every task's list of buttons
     if b == 'copy': return bool(it.get('rid')) and cannot(it, 'approve', store)
-    if b == 'pick_repo': return str((store.get_task(int(it['tid'])) or {}).get('Kind') or '').lower() == 'coding'
+    if b == 'pick_repo': return str(task().get('Kind') or '').lower() == 'coding'
     # NO REPLY OR HAND OFF ON THE BAR (the owner, 2026-11-08): the agent does them from the chat ("reply saying...", "hand this to Erin"), its
     # card's Send sends - only with no AI connected do they stand, folded, so the owner is never stuck
     if b in ('reply', 'forward'):
         from . import capabilities
-        return not capabilities.has_ai(store)
+        return not once('ai', lambda: capabilities.has_ai(store))
     return b != 'fix'                  # a failure's own way out, with its own words - never a button to light from the chat
 
 
 TASK_VIEW_NOT = frozenset({'proposal', 'setup', 'walk', 'brief', 'fyis', 'meeting'})      # kinds never drawn as a task view (showsTask)
 
 
-def row_buttons(store, it: dict) -> list:
+def row_buttons(store, it: dict, known: dict = None) -> list:
     """THE BUTTONS THIS ITEM'S ROW DRAWS, as {verb, label}: on an item drawn as its task's view, the task page's own verbs (buttons.json
     `row`) it can carry now; on any other, the chips under the line; and a close-out's Approve. What the Assistant may light is one of these, and nothing else: "Press Not ours"
-    was said over a task whose row and menus had no Not ours, lit nothing, and the model was never told (verify, 2026-10-19)."""
+    was said over a task whose row and menus had no Not ours, lit nothing, and the model was never told (verify, 2026-10-19).
+    `known`: what the caller read of the task already (_shows)."""
+    known = {} if known is None else known
     # an item with a task behind it is drawn as the task's own view (CanvasItem.showsTask), whose row is the task page's verbs - the chips under
     # the line are not drawn there: TQ-0001's chips had Not ours, its row did not, and "Press Not ours" lit nothing (verify, 2026-10-19)
     if it.get('tid') and it.get('kind') not in TASK_VIEW_NOT and store is not None:
@@ -1261,7 +1270,7 @@ def row_buttons(store, it: dict) -> list:
         # page's `owed`); only Reply reads it, so filing or forwarding never reaches the owner's sent mail on another task
         owed = it if it.get('mid') else it | {'mid': funnel.reply_to(store, int(it['tid']))}
         out = [{'verb': v, 'label': buttons.label(v)} for v, d in buttons.VERBS.items()
-               if d.get('row') and not cannot(owed if v == 'reply' else it, v, store) and _shows(store, it, v) and not (v == 'regular_agent' and _agent_holds(store, it))]
+               if d.get('row') and not cannot(owed if v == 'reply' else it, v, store) and _shows(store, it, v, known) and not (v == 'regular_agent' and _agent_holds(store, it))]
     else: out = [{'verb': c['verb'], 'label': c['label']} for c in chips_for(store, it) if c.get('verb') and c['verb'] != 'next']
     # ...and a report's or a dashboard's Share, which its card draws on the row while it is the item (ReportCard, DashboardCard) - a run
     # that failed has nothing to share. Seen here so the Advisor knows the row has it; no rule lights it (rulebook: report_ok, dashboard)

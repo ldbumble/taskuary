@@ -381,11 +381,19 @@ _DEPLOY_ASKED = ("- Push, deploy, publish or release only when the brief or John
 # ...and that question, asked in words, left the owner typing "yes" under a card with no button (2026-11-09, the ~20th time: "i thought
 # actions should be cards/buttons???"). The stop is propose_land now - the landing card's Push / Push & deploy (landing.py) - and a repo
 # trusted to act on its own is pushed and deployed without stopping at all.
+_DEPLOY_HELD = ("- Push, deploy, publish or release when the brief or John's Continue says to, or your prompt says you may push and deploy (a\n"
+                '  repo John trusts to act on its own) - then do it, check it is live, and finish. Otherwise commit locally and stop.\n'
+                "  When the ask is met only once the change is LIVE, that stop is John's button, never a question in words: call\n"
+                '  `propose_land` - `how` push and `deploy` the branch that deploys it (pr, merge or rebase for a branch of your own) - and\n'
+                '  wait; no "go ahead?", no `--reply`, no `--done`. His press pushes it and tells you: check it is live, then finish.')
+# ...AND IT SAYS WHAT FOLLOWS THE PRESS (the owner, 2026-11-10: "it should prompt you, should i deploy and respond once deployed"):
+# the card, one line on what the agent does after it, and the press wakes it to do that (_DEPLOY_HELD -> _DEPLOY_NOW)
 _DEPLOY_NOW = ("- Push, deploy, publish or release when the brief or John's Continue says to, or your prompt says you may push and deploy (a\n"
                '  repo John trusts to act on its own) - then do it, check it is live, and finish. Otherwise commit locally and stop.\n'
                "  When the ask is met only once the change is LIVE, that stop is John's button, never a question in words: call\n"
                '  `propose_land` - `how` push and `deploy` the branch that deploys it (pr, merge or rebase for a branch of your own) - and\n'
-               '  wait; no "go ahead?", no `--reply`, no `--done`. His press pushes it and tells you: check it is live, then finish.')
+               '  say in one line what follows it (the reply to whoever asked); no "go ahead?", no `--reply` before it, no `--done`. His press\n'
+               '  pushes it and wakes you: check it is live, then do that.')
 # A coding agent started in the wrong repository found the job was not there and closed the task "Nothing to do" (the owner,
 # 2026-10-27: "coding agent should be able to at least ask can I change repos"). CODING.md now says to ask; an edited copy takes
 # the section under the line it follows, where that line still reads as shipped (coding_asks_to_move).
@@ -403,8 +411,10 @@ _FANOUT_NOW = ('\n## Several to-dos at once\n'
                "done means. Review each one's work, tick it once it checks out, and run the tests once at the end.\n"
                'To-dos that depend on each other stay in order.\n')
 _PROMISE_AT = '- "Nothing to do here" is also an ending'
+_PROMISE_HELD = ('- A reply goes when what it says is true. Never promise a later step ("I\'ll let you know when it\'s live"): do\n'
+                 '  it, or ask for the go-ahead and wait. If something is genuinely left, say plainly what, and who does it.\n')
 _PROMISE_NOW = ('- A reply goes when what it says is true. Never promise a later step ("I\'ll let you know when it\'s live"): do\n'
-                '  it, or ask for the go-ahead and wait. If something is genuinely left, say plainly what, and who does it.\n')
+                '  it, or set up the press it waits on and write the reply once it is true. If something is genuinely left, say plainly what, and who does it.\n')
 # THE LOGIN RULE LIVES IN CODE (the owner, 2026-11-04, and the Task 3.4 review): a login the thread asks for and the owner's own files hold
 # goes in the drafted reply - the owner's Send is the decision - never the conversation. AGENT.md and ASSISTANT.md ride on a STRANGER's task
 # too, so neither carries it: general.GOAL_LINE, on the owner's own tasks only, is its one home. An edited copy stops tracking its template,
@@ -1787,6 +1797,15 @@ class SQLiteStore:
                 was, now = _DEPLOY_ASKED.replace('\n', nl), _DEPLOY_NOW.replace('\n', nl)
                 if body.count(was) == 1: self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='coding'", (body.replace(was, now), _now()))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_proposes_push', '1', 'migration')")
+            # ...and WHAT FOLLOWS THE PRESS IS SAID WITH THE CARD (_DEPLOY_HELD -> _DEPLOY_NOW, _PROMISE_HELD -> _PROMISE_NOW): into an edited
+            # CODING.md / AGENT.md where the earlier wording still reads as shipped, once
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='guide_says_what_follows_the_press'").fetchone():
+                for name, was, now in (('coding', _DEPLOY_HELD, _DEPLOY_NOW), ('agent', _PROMISE_HELD, _PROMISE_NOW)):
+                    row = self.cx.execute('SELECT Content FROM doc WHERE Name=?', (name,)).fetchone()
+                    body = (row['Content'] or '') if row else ''
+                    if '\r\n' in body: was, now = was.replace('\n', '\r\n'), now.replace('\n', '\r\n')
+                    if body.count(was) == 1: self.cx.execute('UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=?', (body.replace(was, now), _now(), name))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('guide_says_what_follows_the_press', '1', 'migration')")
             # ...and WORK IN ANOTHER REPOSITORY IS A QUESTION (_ELSEWHERE_NOW), into an edited CODING.md the same way, once
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_asks_to_move'").fetchone():
                 row = self.cx.execute("SELECT Content FROM doc WHERE Name='coding'").fetchone()

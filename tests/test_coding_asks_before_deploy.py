@@ -20,7 +20,8 @@ CODING, AGENT = [(T / f'{n}.md').read_text(encoding='utf-8') for n in ('coding',
 class ShippedWordingTests(unittest.TestCase):
     def test_coding_md_asks_before_a_deploy_and_does_not_close(self):
         sec = CODING.split('## Editing, testing, committing', 1)[1].split('##', 1)[0]
-        for s in ('only once the change is LIVE', 'no `--reply`, no `--done`', 'check it is live, then finish', "the brief or John's Continue says to"):
+        for s in ('only once the change is LIVE', 'no `--reply` before it, no `--done`', 'say in one line what follows it', 'check it is live, then do that',
+                  "the brief or John's Continue says to"):
             self.assertIn(s, sec, s)
         self.assertNotIn(store_mod._DEPLOY_WAS, CODING); self.assertNotIn(store_mod._DEPLOY_ASKED, CODING)
         self.assertIn("not waiting on John's go-ahead", CODING.split('## Closing out', 1)[1].split('##', 1)[0])
@@ -45,6 +46,16 @@ class ShippedWordingTests(unittest.TestCase):
         c = SQLiteStore(str(path)).get_doc('coding')
         self.assertIn(store_mod._DEPLOY_NOW.replace('\n', '\r\n'), c); self.assertNotIn('go ahead?", and wait', c)
         self.assertTrue(c.startswith('MY RULE.') and c.endswith('last.'))
+
+    def test_an_edited_copy_with_the_earlier_wording_says_what_follows_the_press(self):
+        path = Path(tempfile.mkdtemp()) / 'taskuary.db'
+        s = SQLiteStore(str(path))
+        s.save_doc('coding', 'MY RULE.\r\n' + store_mod._DEPLOY_HELD.replace('\n', '\r\n') + '\r\nlast.', 'owner')
+        s.save_doc('agent', 'MINE.\n' + store_mod._PROMISE_HELD + store_mod._PROMISE_AT + ' - say it.', 'owner')
+        s.cx.execute("DELETE FROM setting WHERE Name='guide_says_what_follows_the_press'"); s.cx.commit()
+        again = SQLiteStore(str(path)); c, a = again.get_doc('coding'), again.get_doc('agent')
+        self.assertIn(store_mod._DEPLOY_NOW.replace('\n', '\r\n'), c); self.assertTrue(c.startswith('MY RULE.') and c.endswith('last.'))
+        self.assertIn(store_mod._PROMISE_NOW + store_mod._PROMISE_AT, a); self.assertNotIn('ask for the go-ahead and wait', a)
 
     def test_agent_md_never_promises_a_later_step(self):
         sec = AGENT.split('## Progress and completion', 1)[1]

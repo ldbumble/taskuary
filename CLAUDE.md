@@ -128,6 +128,9 @@ owner sees, what a press does, what the agent is told after. A round is not fini
   channel that waits - each must queue, light a move, or say why.
 - A bug the owner reports from the live app is added to the round as its shape, with invented
   people, before it is fixed - and first check which build the running app is on.
+- **Every on-screen scenario is recorded and watched** (`website/browser/recorder.mjs`), before and
+  after a fix: a flicker, a jump, a thing that appears then moves, or a blank beat is a finding even
+  where every assertion passed.
 
 Then the same pass for the code: duplicate roads folded, dead code deleted, fixed rules that judge
 meaning and model calls that plain data could answer listed with file and line.

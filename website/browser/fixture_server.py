@@ -72,6 +72,51 @@ def _install_fresh_routes(app, store):
         threading.Thread(target=escalate, daemon=True).start()
         return {"opening": True}
 
+    @app.post("/api/fixture/coding")
+    def fixture_coding(body: dict = Body(...)):
+        """A coding task on a repository of the home's own, its agent the stand-in ACP adapter (tests/fake_acp_server.py), Developer mode on -
+        what the Connections and New screens would make, without driving them (browser/coding-line-timeline)."""
+        import json, subprocess
+        from taskuary import agents
+        repo = Path(os.environ["TASKUARY_HOME"]) / "ledger"; repo.mkdir(exist_ok=True)
+        (repo / "totals.py").write_text("def total(a, tax):\n    return a + tax\n", encoding="utf-8")
+        git = lambda *a: subprocess.run([body.get("git") or "git", "-C", str(repo), *a], check=True, capture_output=True)
+        git("init", "-q"); git("config", "user.name", "Alex Doyle"); git("config", "user.email", "alex@northwind.example"); git("add", "."); git("commit", "-qm", "start")
+        store.set_setting(agents.DEV_MODE, "1", "owner")
+        fake = str(Path(__file__).resolve().parents[2] / "tests" / "fake_acp_server.py")
+        store.upsert_agent("coding", "coding", "cli", json.dumps({"cmd": "claude", "acp_cmd": [sys.executable, fake], "cwd": str(repo)}))
+        tid = store.create_task({"Title": body.get("title") or "Comment the ledger totals", "Kind": "coding", "Status": "in_progress"}, "owner")
+        return {"taskId": tid, "repo": str(repo)}
+
+    @app.post("/api/fixture/mail-task")
+    def fixture_mail_task(body: dict = Body(...)):
+        """A task from a mail of Erin Blake's with a reply already drafted for it - the arrival road's draft, waiting (browser/cards-in-their-turn).
+        `kind`: the task's kind (general by default; `coding` on the stand-in ACP agent, after /api/fixture/coding)."""
+        # ...the owner named, so a colleague on his own domain is no stranger (senders.own_domains)
+        store.set_setting("owner_name", "Alex Doyle", "owner"); store.set_setting("owner_email", "alex@northwind.example", "owner")
+        tid = store.create_task({"Title": "Vendor review for Erin", "Kind": body.get("kind") or "general", "Status": "open",
+                                 "Summary": "Erin Blake asks for our review of the vendor tool"}, "owner")
+        mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-{tid}", "Channel": "email", "FromName": "Erin Blake", "FromEmail": "erin@northwind.example",
+                                 "ToEmail": "alex@northwind.example", "Subject": "Your review of the tool?", "SentAt": "2026-11-10 08:00:00",
+                                 "BodyText": "Hi Alex, could you send me your review of the tool? Thanks, Erin", "Status": "routed"})
+        rid = store.add_review({"TaskId": tid, "MessageId": mid, "Kind": "draft_reply", "Status": "pending", "Channel": "email",
+                                "DraftText": body.get("draft") or "Hi Erin, here is a long review of every flaw we found in the tool, one by one. Alex"})
+        return {"taskId": tid, "reviewId": rid, "messageId": mid}
+
+    @app.post("/api/fixture/session")
+    def fixture_session(body: dict = Body(...)):
+        "The task's live session put where time would put it: `ended` (closed, forgotten) or `idled` (closed quietly, the next line wakes it)."
+        from taskuary import terminal
+        tid = int(body["taskId"]); t = general._live_of(tid)
+        if t is None: return {"ok": False, "why": "no live session"}
+        if body.get("state") == "idled":
+            t.last -= 10 ** 6; was = general.idle_for; general.idle_for = lambda: 0
+            try: ok = t.idle_out()
+            finally: general.idle_for = was
+            return {"ok": ok, "why": t.idle_why()}
+        t.close(); general.drop_session(tid); terminal.SESSIONS.pop(t.sid, None)
+        return {"ok": True}
+
 
 async def run() -> None:
     # asyncio's Windows wakeup socket exists by the time this coroutine runs. The

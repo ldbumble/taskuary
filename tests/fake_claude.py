@@ -24,6 +24,7 @@ T0 = time.time()
 args = sys.argv[1:]
 def arg(k): return args[args.index(k) + 1] if k in args and args.index(k) + 1 < len(args) else None
 def env(k, d): return float(os.environ.get(k) or d)
+if '--version' in args: print('2.1.300 (Claude Code)'); sys.exit(0)       # new enough for a stranger's task (origin.py)
 if '--help' in args:                     # an older claude has no --setting-sources: FAKE_CLAUDE_OLD=1
     print('Usage: claude [options]\n  -p, --print\n' + ('' if os.environ.get('FAKE_CLAUDE_OLD') else '  --setting-sources <sources>\n')); sys.exit(0)
 SPAWN, THINK, PREFILL, TPS = env('FAKE_CLAUDE_SPAWN', 2.5), env('FAKE_CLAUDE_THINK', 0.7), env('FAKE_CLAUDE_PREFILL', 0.25), env('FAKE_CLAUDE_TPS', 70)
@@ -41,13 +42,26 @@ def log(ev, **kw):
 def out(j): sys.stdout.write(json.dumps(j) + '\n'); sys.stdout.flush()
 
 
+def act(p: dict):
+    """A rule's `post`: what the real agent's shell would run - `taskuary --reply ...` and kin - as the CLI sends it, on the session's own
+    task and token (cli._post): {"path": "/api/agent/reply", "body": {...}} - task_id is filled in (browser/cards-in-their-turn)."""
+    import urllib.request
+    base = f"http://127.0.0.1:{os.environ.get('TASKUARY_PORT') or 7787}"
+    body = {'task_id': int(os.environ.get('TASKUARY_TASK') or 0), **p.get('body', {})}
+    hdr = {'Content-Type': 'application/json', 'X-Taskuary-Token': os.environ.get('TASKUARY_TOKEN') or '',
+           **({'X-Taskuary-Task-Token': os.environ['TASKUARY_TASK_TOKEN']} if os.environ.get('TASKUARY_TASK_TOKEN') else {})}
+    try: got = urllib.request.urlopen(urllib.request.Request(base + p['path'], json.dumps(body).encode(), hdr), timeout=60).read().decode()
+    except Exception as e: got = f'failed: {e}'
+    log('post', path=p['path'], got=got[:400])
 def answer(prompt: str) -> str:
     then = 'You looked up ' in prompt or 'You asked Taskuary for ' in prompt
     m = re.search(r'^(?:The owner (?:says|asked)|FROM THE OWNER): (.*)$', prompt, re.M)
     said = m.group(1).strip() if m else prompt.strip().splitlines()[-1] if prompt.strip() else ''
     for r in script:
-        if not re.search(r['when'], said, re.I): continue
+        # ...`anywhere`: the rule reads the whole prompt - a task's turn names the owner's words its own way
+        if not re.search(r['when'], prompt if r.get('anywhere') else said, re.I): continue
         if r.get('exit') is not None: log('exit', code=r['exit']); sys.exit(r['exit'])   # a CLI that dies mid-turn (website/browser/agent-journey)
+        for p in r.get('post') or []: act(p)
         return r.get('then' if then else 'first') or r.get('first') or 'Ok.'
     return 'Ok.'
 

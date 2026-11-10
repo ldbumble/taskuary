@@ -62,7 +62,7 @@ function loggedProcess(command, args, options) {
   const child = spawn(command, args, { ...options, shell: false, windowsHide: true });
   let output = "";
   let spawnError = null;
-  const save = (chunk) => { output = (output + chunk.toString()).slice(-12000); };
+  const save = (chunk) => { output = (output + chunk.toString()).slice(-400000); };   // ...enough of a scenario's log to read what the server did (recorder.mjs)
   child.stdout?.on("data", save);
   child.stderr?.on("data", save);
   child.on("error", (error) => { spawnError = error; save(`${error.message}\n`); });

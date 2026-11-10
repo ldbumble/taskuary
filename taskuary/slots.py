@@ -112,14 +112,17 @@ def _left(store, tid: int, said: str, actor: str) -> bool:
     return False
 
 
+DROPPED = 'dropped - this email is not owed'
 def drop(store, tid: int, slot_id: str, actor: str) -> bool:
     """The owner lets one email go: its waiting draft is rejected (never sent) and the slot ticked - the task stays open.
-    Not taught as a rejected reply - nothing about the sender's mail was judged."""
+    Not taught as a rejected reply - nothing about the sender's mail was judged. A press of theirs like any other: a line in the
+    chat, heard by the task's agent with their next one (general.PRESSES) - drafted or not, by who it was to."""
     hit = next((i for i in all_(store, tid) if i['id'] == slot_id), None)
     if not hit: return False
     rv = store.get_review(hit['rid']) if hit.get('rid') else None
-    if rv and rv.get('Status') == 'pending': store.decide_review(rv['ReviewId'], 'rejected', None, actor, 'dropped - this email is not owed')
+    if rv and rv.get('Status') == 'pending': store.decide_review(rv['ReviewId'], 'rejected', None, actor, DROPPED)
     mark(store, tid, slot_id, done=True, actor=actor)
+    store.audit('task', tid, 'slot_dropped', actor, detail={'to': hit['out'].get('name') or hit['out'].get('to'), 'kind': hit['out'].get('kind') or 'email'})
     return _left(store, tid, f"Dropped: {hit['text']}.", actor)
 
 

@@ -3,7 +3,7 @@ import { Box, Button, Typography } from "@mui/material";
 import ReviewDecision from "./ReviewDecision.jsx";
 import { ACCENT2, BORDER, FAINT, INK, label } from "./theme.jsx";
 import api from "./api";
-import { bulkSendable, slotReviews, slotState } from "./taskLifecycle.js";
+import { bulkSendable, slotReviews, slotState, slotTally } from "./taskLifecycle.js";
 
 // The emails that close this task (slots.py, spec 2026-10-05): each one with its own draft, approved on its own; the task
 // closes when the last is sent or dropped. A name with no address yet wears a "?" - it is never guessed into one.
@@ -29,7 +29,7 @@ export default function SlotList({ taskId, checklist = [], reviews = [], onChang
     <Box sx={{ mt: 1.5, maxWidth: 900 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.6 }}>
         <Typography sx={{ ...label }}>
-          {`Closes when sent · ${items.filter((i) => i.done).length} of ${items.length}`}
+          {`Closes when sent · ${slotTally(items, reviews)}`}
         </Typography>
         {waiting.length > 1 && <Button size="small" disabled={busy} onClick={approveAll}>{busy ? "Sending…" : `Approve all (${waiting.length})`}</Button>}
       </Box>

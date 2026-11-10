@@ -27,6 +27,18 @@ test("each email says where it stands", async () => {
   assert.equal(slotState({ done: true }, undefined), "dropped");
 });
 
+test("the count is of the emails still owed: a dropped one is not a sent one", async () => {
+  // the agent walk, 2026-11-09: three emails, one sent, one dropped, one not drafted - the block read "2 of 3"
+  const { slotTally } = await import("../src/taskLifecycle.js");
+  const items = [{ id: "a", done: false, out: { to: "Ray Colton" } }, { id: "b", rid: 9, done: true, out: { to: "ray@northwind.example" } },
+    { id: "c", rid: 10, done: true, out: { to: "paula@northwind.example" } }];
+  const reviews = [{ ...slot, Status: "approved" }, { ...slot, ReviewId: 10, Status: "rejected" }];
+  assert.equal(slotTally(items, reviews), "1 of 2 · 1 dropped");
+  assert.equal(slotTally(items.slice(0, 2), reviews), "1 of 2");
+  assert.equal(slotTally(items.slice(2), reviews), "1 dropped");
+  assert.match(readFileSync(new URL("../src/SlotList.jsx", import.meta.url), "utf8"), /Closes when sent · \$\{slotTally\(items, reviews\)\}/);
+});
+
 test("Approve all never sweeps up an email the agent added, or one with no address", async () => {
   const { bulkSendable } = await import("../src/taskLifecycle.js");
   const items = [{ rid: 9, out: { to: "a@x.example" } }, { rid: 10, out: { to: "b@x.example", by: "agent" } }, { rid: 11, out: { to: "Gail" } }];

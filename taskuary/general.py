@@ -552,6 +552,9 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if 
            'set_repo': lambda d: 'changed where its code lives', 'set_workstream': lambda d: 'changed its workstream',
            'not_coding': lambda d: 'said it is not coding work', 'funnel_later': lambda d: 'put it for later',
            'close_from_assistant': lambda d: 'marked it done',      # every surface's close (concierge.close_task) writes this one row
+           # ...one of the task's emails let go (slots.drop), by who it was to - drafted or not (the agent walk, 2026-11-09: told "turned down
+           # rv3", or nothing, the agent went on saying the dropped one "waits for Send")
+           'slot_dropped': lambda d: f"dropped the {'email' if d.get('kind', 'email') == 'email' else d.get('kind') + ' message'} to {d.get('to') or 'them'} - it will not be sent",
            'offer': lambda d: f"accepted the offer: {_cut(' '.join(str(d.get('offer') or '').split()), 200)}".rstrip(': '),
            # ...and the answer on an agent's permission card, said with what it allowed ("You permission answered." told nobody anything)
            'permission_answered': lambda d: f"{ANSWERED.get(d.get('answer'), 'answered')}: {d.get('asked') or 'what the agent asked'}",
@@ -595,18 +598,29 @@ def press_lines(store, tid: int) -> list:
     # ...but an approved held step is its CARD in the turn, pressed (the owner, 2026-11-09: "leave the approval card in the agent turn as well
     # with approved") - and stays so after the owner writes again ("compact the land": it gave way to this line), drawn there (TaskPage
     # turnCards), so never a second time as a line
-    return [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at}
-            for i, at, what, *x in presses(store, tid) if not x]
+    own = [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at}
+           for i, at, what, *x in presses(store, tid) if not x]
+    return sorted(own + agent_set(store, tid), key=lambda m: int(m['id'].split('-')[1]))        # as they happened: one audit chain numbers both
+# ...and WHAT THE AGENT SET FOR THEM BY TOOL is a line at its time too (the agent walk, 2026-11-09: a reminder it set stood nowhere on the page
+# but in its own prose) - the page's alone: its own act is never told back to it
+AGENT_SET = {'remind': lambda d: f"Reminder set for you: {clock_of(d.get('to'))}" if d.get('to') else 'Your reminder was taken off'}
+def agent_set(store, tid: int) -> list:
+    from .processing_unread import OWNER_ACTORS
+    rows = store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Action IN ({','.join('?' * len(AGENT_SET))}) "
+                       f"AND Actor NOT IN ({','.join('?' * len(OWNER_ACTORS))}) ORDER BY Id", (tid, *AGENT_SET, *OWNER_ACTORS))
+    return [{'id': f"set-{r['Id']}", 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f"{AGENT_SET[r['Action']](_detail(r))}."}],
+             'createdAt': r['CreatedAt']} for r in rows]
 def owner_did(store, tid: int) -> list:
     "The owner's presses on task `tid` since its agent last answered, oldest first: ['<time>: <what>']. [] before any answer."
     from .processing_unread import OWNER_ACTORS
+    from .slots import DROPPED          # an email let go is said by its press (PRESSES.slot_dropped), never again as its draft turned down
     since = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE)) or {}).get('at')
     if not since: return []
     who = ','.join('?' * len(OWNER_ACTORS))
     out = [(at, what) for _, at, what, *_r in presses(store, tid, since)]
     out += [(r['DecidedAt'], _decided(store, r))
             for r in store._rows(f"SELECT * FROM review WHERE TaskId=? AND DecidedBy IN ({who}) AND DecidedAt>?", (tid, *OWNER_ACTORS, since))
-            if r['Status'] in DECIDED or (r['Status'] == 'pending' and r.get('DeliveryState') in NOT_GONE)]
+            if (r['Status'] in DECIDED and r.get('DecideNote') != DROPPED) or (r['Status'] == 'pending' and r.get('DeliveryState') in NOT_GONE)]
     return [f'{clock_of(at)}: {what}' for at, what in sorted(out, key=lambda x: str(x[0]))]
 # WHAT BECAME OF A SEND IS THE AGENT'S TO KNOW, AS IT ENDED (the agent walk, 2026-11-09): a send the server refused was not told to it at
 # all, one that went on the second press was told as "approved (Not sent: ...)" - it answered "not sent" and offered to set the mail up

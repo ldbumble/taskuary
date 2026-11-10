@@ -174,6 +174,37 @@ def test_the_owners_presses_since_the_last_turn_are_in_the_turns_context():
     assert all(m['role'] == 'user' for m in lines) and not [m for m in general.history(s, tid) if m.get('press')]
 
 
+def test_an_email_the_owner_dropped_is_told_to_its_agent_and_is_a_line_in_the_chat():
+    # the agent walk, 2026-11-09: "Don't send" on one of two emails - its agent heard "turned down rv3 (<its own caption>)", or nothing at
+    # all for an email not drafted yet, and went on saying the dropped one "waits for Send"
+    from taskuary import slots
+    s = MemoryStore(); tid = s.create_task({'Title': 'Trainly rollout', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant'}, 'owner')
+    slots.add(s, tid, [{'to': 'Ray Colton', 'about': 'the new date'}, {'to': 'paula@northwind.example', 'about': 'the licence count'}], 'triage')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Drafted Paula an email.')
+    rid = slots.draft(s, tid, 'Hi Paula', to='paula@northwind.example', agent='assistant')['review_id']
+    s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
+    for i in slots.open_(s, tid): slots.drop(s, tid, i['id'], 'owner')
+    did = [x.split(': ', 1)[1] for x in general.owner_did(s, tid)]
+    assert did == ['dropped the email to Ray Colton - it will not be sent', 'dropped the email to paula@northwind.example - it will not be sent'], did
+    lines = [m['content'][0]['text'] for m in general.shown_history(s, tid) if m.get('press')]
+    assert lines == ['You dropped the email to Ray Colton - it will not be sent.', 'You dropped the email to paula@northwind.example - it will not be sent.'], lines
+    assert s.get_review(rid)['Status'] == 'rejected'
+
+
+def test_a_reminder_the_agent_set_is_a_line_in_the_chat():
+    # the agent walk, 2026-11-09: asked to "remind me Wednesday", the agent set it by tool and the page showed it nowhere but in its prose
+    from taskuary import remind
+    s = MemoryStore(); tid = s.create_task({'Title': 'Trainly rollout', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'On it.')
+    remind.set_reminder(s, tid, '2099-11-11 09:00', 'assistant', agent=True)
+    at = s.get_task(tid)['RemindAt']
+    lines = [m for m in general.shown_history(s, tid) if m.get('press')]
+    assert [m['content'][0]['text'] for m in lines] == [f'Reminder set for you: {general.clock_of(at)}.'], lines
+    assert general.owner_did(s, tid) == [] and not [m for m in general.history(s, tid) if m.get('press')]       # the agent's own act: never told back to it
+    remind.set_reminder(s, tid, None, 'owner')                                                              # ...the owner's own stays theirs
+    assert [m['content'][0]['text'] for m in general.shown_history(s, tid) if m.get('press')][-1] == 'You took the reminder off.'
+
+
 def test_a_question_still_waiting_is_in_the_turns_context_and_a_wake_does_not_clear_it():
     # the night run, 2026-11-09: every line on the thread woke the agent, the wake read as the owner speaking and cleared its question,
     # so it asked "who runs the portal?" on six turns running to keep it on screen

@@ -126,7 +126,7 @@ The "Answer it" button: answer the agent waiting on the owner.
 
 ### `stop_agent`
 
-The "Stop and save" button: save and end the agent's session on the item.
+The "Stop and save" button: stop the agent working on the item now - on the desk the x on its running turn, at once; on a phone the yes-or-no that ends its session.
 
 <p class="runs">Brings up its button for you to press.</p>
 
@@ -433,7 +433,7 @@ Tell the agent WORKING on a task something new, as the owner's next prompt ("tel
 
 ### `agent.stop`
 
-Save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which. Several at once is agents.stop.
+Stop the agent working on a task now - the x on its running turn: the one on the table, or the task `ref` names; never a guess at which. On the desk it stops at once and typing to it carries it on; on a phone it is the yes-or-no that ends its session. Several at once is agents.stop.
 
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 

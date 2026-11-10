@@ -1046,6 +1046,19 @@ class ActTests(unittest.TestCase):
         concierge.propose_direct(s, 'mine', key, table=True)                       # ...the phone's pick keeps its record
         self.assertEqual([r['ActorType'] == general.USER_TYPE for r in general.chat_rows(s, dock)[before:]][:1], [True])
 
+    def test_a_desk_press_refused_before_anything_ran_says_why_to_the_page_and_nothing_in_the_chat(self):
+        """The owner, 2026-11-10: "the agents don't tell the assistant anything" - a refused press wrote its reason into the Assistant's
+        chat and the window opened over the row. The reason goes back to the press; the phone's refused pick keeps its line."""
+        s, i, key = self._idea()
+        dock = general.dock_task(s, 'owner')[0]['TaskId']
+        before = len(general.chat_rows(s, dock))
+        with mock.patch.object(concierge, 'propose_for', side_effect=ValueError('there is nothing to send yet')):
+            out = concierge.propose_direct(s, 'mine', key, table=True, press=True)
+            self.assertEqual((out['id'], out['say']), (None, 'There is nothing to send yet.'))
+            self.assertEqual(len(general.chat_rows(s, dock)), before, 'a refused desk press wrote into the chat')
+            concierge.propose_direct(s, 'mine', key, table=True)
+        self.assertIn('There is nothing to send yet.', [r['Body'].split('\n')[0] for r in general.chat_rows(s, dock)[before:]])
+
 
 class ApiTests(unittest.TestCase):
     def test_the_page_reads_the_pile_pulls_the_next_and_lists_its_chats(self):

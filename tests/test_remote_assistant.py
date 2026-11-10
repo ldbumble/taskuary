@@ -483,6 +483,8 @@ class InterruptionsReachThePhoneTests(unittest.TestCase):
         self.assertIn('Say TQ-0412 to take it now', sent)                            # a ref lookup() can find
         rows = general.chat_rows(store, general.dock_task(store)[0]['TaskId'])
         self.assertTrue(any('By the way' in (r['Body'] or '') for r in rows))        # answerable next turn
+        # ...and the phone's line alone: the desk's Assistant chat never shows it (the owner, 2026-11-10: "the agents don't tell the assistant anything")
+        self.assertFalse(any('By the way' in m['text'] for m in concierge.history(store, general.dock_task(store)[0]['TaskId'])))
 
     def test_nothing_is_sent_when_the_walk_is_at_the_desk(self):
         store, _connector = armed_store()

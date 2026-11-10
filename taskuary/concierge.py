@@ -5029,8 +5029,10 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
         # THE PRESS IS ANSWERED: its line was already in the conversation, and a refusal went to an error banner only - the
         # chat showed "Stop and save" with nothing under it until the owner typed Next (2026-09-25). The reason
         # is said there, with what this item CAN do instead.
+        # ...in the phone's conversation only: a desk press says it on the row it was pressed on, and the Assistant's chat hears nothing
+        # (the owner, 2026-11-10: "the agents don't tell the assistant anything unless you can assistant questions")
         way = [c for c in chips_for(store, item) if c['verb'] != verb]
-        record_related(store, tid, item, 'assistant', f"{str(e)[:1].upper()}{str(e)[1:]}.", {'kind': 'words', 'key': None, 'chips': way})
+        if not press: record_related(store, tid, item, 'assistant', f"{str(e)[:1].upper()}{str(e)[1:]}.", {'kind': 'words', 'key': None, 'chips': way})
         return {'id': None, 'failed': True, 'say': f"{str(e)[:1].upper()}{str(e)[1:]}.", 'chips': way, 'key': key}
     prop['settles'] = bool(table and PROPOSALS[verb][2])
     if press or (table and verb in AUTO): prop.update(auto=True, say_card=prop.get('note') or '', say=f"{prop['label']} - {_where(item)}." + (f" {prop['note']}" if prop.get('note') else ''))

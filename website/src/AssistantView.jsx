@@ -175,6 +175,9 @@ const errText = (e) => {
 // red with "Report this bug" under it, as if the app had broken. setErr below routes any sentence in this set to the chat - the set every
 // refusal lands in as it is answered (apiError.DEMO_SAID), so a card's own catch passing one on is the demo's line too.
 const demoNo = (e) => (e?.response?.status === 403 && e.response.data?.demo ? String(e.response.data.detail || "This is the demo - nothing is sent.") : "");
+// a press the server answered with a reason and no proposal fails as a refused request does: every catch that draws a row's or a card's
+// own line (errText, failOf, proposeFailed) reads its `detail`
+const refusedPress = (say) => Object.assign(new Error(say || "That did not go through."), { response: { data: { detail: say || "That did not go through." } } });
 // what an empty rail offers: the same doors as the welcome block (runChip knows these three)
 // NOTHING ON THE TABLE: the bar's one exception to Back and Next (the owner, 2026-11-10: "even these should just be shortcut to new... that's
 // it and myabe change my setup. don't like that many buttons") - the sidebar's own New (sideNav), which starts a task, a report or a routine,
@@ -2638,11 +2641,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // the pill carries the stamp it was judged at, and a moved item refuses it (409); the plain road is unchanged
     const { data } = revision ? await api.post("/api/concierge/propose", { verb, key, table, revision, press: true })
       : await api.post("/api/concierge/propose", { verb, key, table, press: true });
-    // refused before any proposal existed: the reason and this item's other words, as a line of its own (no card to confirm)
-    if (!data.id) {
-      setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: [], refused: true, card: { kind: "words", chips: data.chips || [] } }]);
-      return data;
-    }
+    // refused before any proposal existed: the reason goes back to the press, said on the row or card it was made on - never a line in
+    // the Assistant's chat opening its window (the owner, 2026-11-10: "the agents don't tell the assistant anything unless you can
+    // assistant questions"; errors inline, never in another place)
+    if (!data.id) throw refusedPress(data.say);
     // a move the server runs AT ONCE (concierge.AUTO: Not ours, Mark done, Stop) draws no card: its caller runs it on the spot, and the
     // card it drew stood with Cancel and its own From now on until the run came back (remove-undo.test's race, 2026-10-23)
     if (data.auto) { await runProposal(data); return { ...data, ran: true }; }

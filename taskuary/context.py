@@ -598,7 +598,7 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
     sent = store._rows("SELECT * FROM review WHERE TaskId=? AND Kind NOT IN ('action','slot') AND (DeliveryState='sent' OR (DeliveryState IS NULL "
                        "AND Status IN ('approved','edited','sent'))) AND COALESCE(NULLIF(FinalText,''), DraftText, '')<>'' "
                        'ORDER BY IFNULL(DecidedAt, CreatedAt) DESC LIMIT 3', (tid,))
-    if sent: parts.append('## Replies already SENT on this task (newest first - these went out; none of them is waiting)\n' + '\n\n'.join(
+    if sent: parts.append(f'{SENT_HEAD} (newest first - these went out; none of them is waiting)\n' + '\n\n'.join(
         f"--- to {sent_to(store, r)} · sent {clock(r.get('DecidedAt'))}\n{_short(r.get('FinalText') or r.get('DraftText'), 1500)}" for r in sent))
     if general: return '\n\n'.join(parts) if len(parts) > 1 else ''
     if docs := documents(store, tid): parts.append(docs)
@@ -641,6 +641,7 @@ def render_goals(gs: list) -> str:
 
 
 GENERAL_CHARS = 8_000    # the general prompt's share of MAX_CONTEXT (24K): the thread and the conversation keep the rest
+SENT_HEAD = '## Replies already SENT on this task'
 
 
 def for_prompt(store, tid: int, chars: int = GENERAL_CHARS) -> str:
@@ -652,7 +653,13 @@ def for_prompt(store, tid: int, chars: int = GENERAL_CHARS) -> str:
     except Exception as e: logger.debug(f'context: the general read skipped - {e}'); return ''
     if not text: return ''
     body = text.split('\n', 2)[-1].strip()          # past the file's heading and its "written for" line: the prompt names it itself
-    return body if len(body) <= chars else body[:chars].rsplit('\n', 1)[0] + '\n[...cut to fit]'
+    if len(body) <= chars: return body
+    # WHAT ALREADY WENT OUT IS NEVER THE PART CUT. It is the read's last section and the cut is from the end, so on a task with a long
+    # history above it - the sender's past work, memory, knowledge - the agent lost exactly the lines that stop it writing the same
+    # answer again (build), and only there
+    head, mark, sent = body.rpartition(f'\n\n{SENT_HEAD}')
+    kept = mark + sent if mark and len(mark + sent) < chars else ''
+    return (head if kept else body)[:chars - len(kept)].rsplit('\n', 1)[0] + '\n[...cut to fit]' + kept
 
 
 CONTEXT_FILE_CHARS = (1500, 3000)     # per file, per message: the path is right above it, so this is the gist, not the file

@@ -130,6 +130,17 @@ class TheAgentIsTold(Base):
         self.assertLess(len(seed.encode()), 1024, 'the seed rides a tty command line')
         self.assertIn('## Replies already SENT on this task', text); self.assertIn(FIRST, text)
 
+    def test_a_read_cut_to_fit_keeps_what_already_went(self):
+        from taskuary import context
+        text = ('# Context\nwritten for the agent\n## Past work with this sender\n' + 'an older task, closed\n' * 400
+                + f'\n{context.SENT_HEAD} (newest first)\n--- to Gail Moreno\n{FIRST}')
+        with mock.patch.object(context, 'build', return_value=text), mock.patch('taskuary.origin.of_task', return_value=('owner', '')):
+            cut = context.for_prompt(self.s, self.tid, chars=1000)
+            whole = context.for_prompt(self.s, self.tid, chars=len(text))
+        self.assertIn(FIRST, cut); self.assertIn('[...cut to fit]\n\n' + context.SENT_HEAD, cut)
+        self.assertLessEqual(len(cut), 1000 + len('\n[...cut to fit]'))
+        self.assertNotIn('cut to fit', whole)
+
     def test_new_mail_since_the_send_is_news_not_a_sent_line(self):
         mail(self.s, self.tid, 'g-2', 'One more - can you also add September?', '18:00:00')
         self.assertEqual(continuity.sent_block(self.s, self.tid), '')

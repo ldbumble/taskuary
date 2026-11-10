@@ -3011,7 +3011,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <IconButton size="small" sx={{ color: "var(--tq-danger, #7a2f3c)" }} onClick={notATask}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
-                      <RemindMe task={t} compact onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession} />
+                      <RemindMe task={t} compact onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} />
                       <Tooltip title={`${labelOfRow("watch", watching ? "on" : null)} - ${hintOfRow("watch", watching ? "on" : null)}`}>
                         <IconButton size="small" sx={{ color: "var(--tq-link, #55697a)" }} onClick={watchIt} data-tq-verb="watch">
                           <VisibilityOutlinedIcon sx={{ fontSize: 15 }} /></IconButton>
@@ -3573,7 +3573,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       sx={filled("remove") ? primaryBtn : { ...barBtn, color: "var(--tq-danger, #7a2f3c)", borderColor: "var(--tq-border, #e0c6cb)" }} data-tq-bar-item="nat" style={bar.shown("nat") ? undefined : HIDE}
                       title={NAT_TITLE}
                       onClick={notATask}>{labelOfRow("nat")}</Button>
-                    <RemindMe task={t} sx={filled("defer") ? primaryBtn : barBtn} lit={filled("defer")} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession} said={saidDay} />
+                    <RemindMe task={t} sx={filled("defer") ? primaryBtn : barBtn} lit={filled("defer")} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} said={saidDay} />
                     <Button size="small" variant={filled("watch") ? "contained" : "outlined"} disableElevation sx={filled("watch") ? primaryBtn : barBtn}
                       data-tq-bar-item="watch" data-tq-verb="watch" style={bar.shown("watch") ? undefined : HIDE}
                       startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 15, color: filled("watch") ? "inherit" : "var(--tq-link, #55697a)" }} />}
@@ -3715,7 +3715,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         onDrafted={() => { setEmailOpen(false); loadDetail(selected); loadTasks(); onChanged?.(); setOpenStage("reply"); }} />}
       {t && <ContinueBox task={t} anchor={continueAt} asked={leftAsking} signin={(!term?.alive && detail?.leftSignin) || ""} onClose={() => setContinueAt(null)} onDone={continued} />}
       {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
-      {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession}
+      {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay}
         said={remindSaid} />}
       {calAsk && slotAt && <SlotPicker mid={calAsk.mid} act={slotAt.act} anchor={slotAt.at} onClose={() => setSlotAt(null)}
         onRefused={(data) => { setErr(data?.say || ""); setStartFail({ text: data?.say || "", fix: data?.fix || null, retry: false }); }}

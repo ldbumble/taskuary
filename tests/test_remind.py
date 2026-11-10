@@ -129,34 +129,43 @@ class ToolTests(unittest.TestCase):
 
 
 class LiveAgentTests(unittest.TestCase):
-    """Remind me on a task whose agent session is still open put it away anyway, and the row sat on under "agent waiting
-    on you" (press audit, 2026-10-01). The owner: warn that the agent is open and has to be saved and ended first - and
-    do not defer it. Every door refuses the same way; bringing it back stays allowed."""
-    LIVE = {'sid': 'abc', 'alive': True}
-
-    def test_set_reminder_refuses_while_the_agent_is_open_and_leaves_the_task_as_it_was(self):
+    """REMIND ME WORKS LIKE SEND (the owner, 2026-11-10: "remind me should be like send. it will show on the card what happened. but yes it
+    should show reminded for now and closing for now"): it was refused while an agent's session was open. Now, whatever the agent is doing,
+    the day is set, the task is off the rail, the chat has its one line saying so, and the agent is put to rest - a running turn stopped
+    as the x stops it, then the session idled out quietly."""
+    def press(self, sess, door='task'):
+        from types import SimpleNamespace
+        from taskuary import general
         s = store(); t = asked(s)
-        with mock.patch('taskuary.terminal.for_task', return_value=self.LIVE):
-            with self.assertRaisesRegex(remind.AgentOpen, 'the x on its turn'): remind.set_reminder(s, t, '2 weeks')
-            self.assertFalse(remind.waiting(s.get_task(t)))
-            self.assertIsNone(remind.set_reminder(s, t, 'none')['remindAt'], 'bringing it back is never refused')
+        sync = lambda target=None, **k: SimpleNamespace(start=target)
+        with mock.patch.object(general, 'session_for', return_value=sess), mock.patch('threading.Thread', sync), \
+             mock.patch('taskuary.terminal.session_for', return_value=None):
+            if door == 'task':
+                with mock.patch.object(server, 'store', s): r = TestClient(server.app).post(f'/api/tasks/{t}/remind', json={'until': '1 week'})
+                self.assertEqual(r.status_code, 200, r.text)
+            else:
+                with mock.patch.object(server, 'store', s): server._run_operation({'kind': 'task.defer', 'target': t, 'params': {'until': '2 weeks'}}, None)
+        self.assertTrue(remind.waiting(s.get_task(t)), 'put away: off the rail until the day')
+        lines = [what for _, _, what, *_ in general.presses(s, t)]
+        self.assertEqual(len(lines), 1, lines); self.assertIn('put away until then', lines[0])
+        return s, t
 
-    def test_the_task_page_door_answers_409_with_the_reason(self):
-        s = store(); t = asked(s)
-        with mock.patch.object(server, 'store', s), mock.patch('taskuary.terminal.for_task', return_value=self.LIVE):
-            r = TestClient(server.app).post(f'/api/tasks/{t}/remind', json={'until': '1 week'})
-        self.assertEqual(r.status_code, 409, r.text)
-        self.assertIn('the x on its turn', r.json()['detail'])
-        self.assertFalse(remind.waiting(s.get_task(t)))
+    def session(self, busy):
+        sess = mock.Mock(busy=busy)
+        def stop(): sess.busy = False
+        sess.stop.side_effect = stop
+        return sess
 
-    def test_the_operation_door_refuses_the_same_way(self):
-        s = store(); t = asked(s)
-        with mock.patch.object(server, 'store', s), mock.patch('taskuary.terminal.for_task', return_value=self.LIVE):
-            with self.assertRaises(server.HTTPException) as e:
-                server._run_operation({'kind': 'task.defer', 'target': t, 'params': {'until': '2 weeks'}}, None)
-        self.assertEqual(e.exception.status_code, 409)
-        self.assertIn('the x on its turn', e.exception.detail)
-        self.assertFalse(remind.waiting(s.get_task(t)))
+    def test_with_the_agent_at_rest_it_is_set_and_the_session_idles_out(self):
+        sess = self.session(False); self.press(sess)
+        sess.stop.assert_not_called(); sess.idle_out.assert_called_once()
+
+    def test_with_a_turn_running_the_turn_is_stopped_then_the_session_idles_out(self):
+        sess = self.session(True); self.press(sess, door='operation')
+        sess.stop.assert_called_once(); sess.idle_out.assert_called_once()
+
+    def test_with_no_agent_it_is_simply_set(self):
+        self.press(None)
 
 
 class WhatOutranksTheDayTests(unittest.TestCase):

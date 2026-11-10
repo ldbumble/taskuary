@@ -103,9 +103,9 @@ test("the day typed with Remind me rides the light into the picker as its first 
   assert.equal(litPick(lightOf({ verb: "defer", key: "task:4", tid: 4 }), { key: "task:4" }).day, undefined);
   assert.match(src("CanvasItem.jsx"), /saidDay=\{lit\?\.verb === "defer" \? lit\.day \|\| null : null\}/);
   assert.match(src("TaskPage.jsx"), /const remindHere = \(at\) => \{ setRemindSaid\(saidRef\.current\); setRemindAt\(at\); \};/);
-  assert.match(src("TaskPage.jsx"), /live=\{liveSession\}\n\s+said=\{remindSaid\} \/>/);
+  assert.match(src("TaskPage.jsx"), /onStay=\{onStay\}\n\s+said=\{remindSaid\} \/>/);
   assert.match(src("RemindMe.jsx"), /\{said\?\.until && said\?\.day && !away && \(/, "the said day leads the picker, before the learned day");
-  assert.match(src("AssistantView.jsx"), /live: agentOpen\(item\), said: litDayRef\.current \}\); return; \}/, "the walk's own picker too");
+  assert.match(src("AssistantView.jsx"), /said: litDayRef\.current \}\); return; \}/, "the walk's own picker too");
 });
 
 // HAND IT TO A PERSON, ASKED FOR IN WORDS (the owner, 2026-11-03: "This should be sent to <an address>" did nothing): the light carries who

@@ -18,9 +18,6 @@ export const localStamp = (d = new Date()) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 export const remindWaiting = (t, now = localStamp()) =>
   !!t?.RemindAt && !["done", "dropped"].includes(t.Status) && String(t.RemindAt) > now;
-// ...and not while an agent session is still open on it: the server refuses (409), so the walk's card says it first.
-// A live session's card carries its sid; a paused, saved or stopped one has nothing open to save and end.
-export const agentOpen = (i) => !!i?.sid && i.kind === "agent" && !i.paused && !["stopped", "saved"].includes(i.lane);
 // an agent is running on it right now - no Send to agent then, its own session is the way in (the owner, 2026-10-01)
 export const agentRuns = (i) => !!i && (!!i.working || (!!i.sid && !i.paused && !["stopped", "saved"].includes(i.lane)));
 export const remindDay = (at) => {

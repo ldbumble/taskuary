@@ -126,18 +126,37 @@ def waiting(task: dict, now: datetime = None) -> bool:
 
 
 class AgentOpen(ValueError):
-    """Remind me on a task whose agent session is still open: the doors answer 409 with this."""
+    """No longer raised - Remind me acts whatever its agent is doing (rest). Kept for the phone's `except`, which names it."""
 
 
-# ...said by the one stop there is (the owner, 2026-11-10: "no need for stop and save button"): the x on its running turn; an idle one closes by itself
-OPEN_SAYS = 'An agent is still open on this task - stop it with the x on its turn, or let it go idle, then put it away.'
-
-
-def agent_open(tid: int) -> bool:
-    """A live session on the task (the same truth Mark done's "Stop the agent and mark done?" reads)."""
-    from . import terminal as term
-    try: return bool(term.for_task(tid, details=False))
-    except Exception: return False
+# REMIND ME WORKS LIKE SEND (the owner, 2026-11-10: "remind me should be like send. it will show on the card what happened. but yes it should
+# show reminded for now and closing for now"): it was refused while an agent's session was open, pointing at a stop button that is gone. Now
+# the reminder is set and the task's agent is put to rest by the roads that already do it - a turn at work stopped as the x stops it, the
+# session then idled out quietly (general.idle_out: its conversation kept, the next line starts it again); its line in the chat says so
+REST_WAIT = 10.0
+def rest(store, tid: int) -> None:
+    "Task `tid`'s agent put to rest in the background: its turn stopped (the x's road), then its session idled out (the idle road)."
+    import threading, time
+    from . import general, terminal as term
+    def go():
+        g = general.session_for(tid)
+        if g:
+            if g.busy: g.stop()
+            end = time.time() + REST_WAIT
+            while g.busy and time.time() < end: time.sleep(0.1)
+            g.idle_out(time.time() + general.idle_for() + 1)
+            return
+        live = term.session_for(tid)
+        if not live or not getattr(live, 'alive', False): return
+        if term.is_acp(live):
+            live.cancel(); end = time.time() + REST_WAIT
+            while getattr(live, 'busy', False) and time.time() < end: time.sleep(0.1)
+            live.idle_out(time.time() + general.idle_for() + 1)
+        else: live.write('\x1b')                    # a terminal's turn stops on its CLI's own key; the session rests at its prompt
+    def safe():
+        try: go()
+        except Exception as e: logger.debug(f'task {tid}: its agent was not put to rest after Remind me - {e}')
+    threading.Thread(target=safe, daemon=True, name=f'remind-rest-{tid}').start()
 
 
 def set_reminder(store, tid: int, until, actor: str = 'owner', agent: bool = False) -> dict:
@@ -158,9 +177,8 @@ def set_reminder(store, tid: int, until, actor: str = 'owner', agent: bool = Fal
             raise ValueError('your calendar shows no more meetings today - say a time ("today 3pm")')
         until = free['until']
     at, prev = parse(until), t.get('RemindAt') or None
-    # Put away with an agent still open, it was deferred anyway and its row stayed under "agent waiting on you" (press
-    # audit, 2026-10-01). The owner: the agent is open - save and end it first. Bringing it back is never refused.
-    if at and not agent and agent_open(tid): raise AgentOpen(OPEN_SAYS)
+    # ...and its agent at rest, whatever it was doing (rest): its own remind tool sets it from inside its turn, which goes on
+    if at and not agent: rest(store, tid)
     # ...one road back at a time: a day set ends a watch (watch.py)
     store.update_task(tid, {'RemindAt': at or '', **({'WatchedAt': '', 'WatchBack': ''} if at and (t.get('WatchedAt') or t.get('WatchBack')) else {})}, actor)
     if at:

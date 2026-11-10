@@ -581,7 +581,8 @@ HANDED_OFF = 'Handed off to '
 # Reopen, a send or a take-back on its cards, a share - read off the audit chain and the reviews, one line each. Words for the presses the
 # agent must read right; any other owner press is said by its own name
 # ...each said in the owner's voice, so one phrase serves both: "You set a reminder for ..." on the page, "set a reminder for ..." to the agent
-PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if d.get('to') else 'took the reminder off',
+# ...Remind me says what it did and where the task is now, as Send and close does (the owner, 2026-11-10: "it should show reminded for now")
+PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - put away until then" if d.get('to') else 'took the reminder off',
            'watch': lambda d: 'chose Watch it - it waits quietly for a reply', 'unwatch': lambda d: 'stopped watching it',
            'priority': lambda d: f"changed its priority from {d.get('from')} to {d.get('to')}",
            'handoff': lambda d: f"handed this to {d.get('to')} by {d.get('channel')}", 'reopened': lambda d: 'reopened it', 'reopen': lambda d: 'reopened it',

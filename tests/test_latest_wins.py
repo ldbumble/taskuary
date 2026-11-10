@@ -185,7 +185,7 @@ def test_the_owners_presses_since_the_last_turn_are_in_the_turns_context():
     s.audit('task', tid, 'priority', 'owner', detail={'from': 'regular', 'to': 'urgent'})
     s.audit('task', tid, 'continue-work', 'owner'); s.audit('task', tid, 'woke', 'assistant')      # the turn itself; not the owner's
     did = [x.split(': ', 1)[1] for x in general.owner_did(s, tid)]
-    monday = f"set a reminder for {general.clock_of('2026-11-10 09:00:00')}"
+    monday = f"set a reminder for {general.clock_of('2026-11-10 09:00:00')} - put away until then"
     assert sorted(did) == sorted([f'approved (sent, if it sends) rv{rid} (the email to Gail)', monday,
                                   'changed its priority from regular to urgent']), did
     assert 'WHAT THE OWNER DID SINCE YOUR LAST TURN' in general.latest_block(s, tid, resumed=True)

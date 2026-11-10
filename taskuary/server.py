@@ -1647,7 +1647,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'task.defer':
         from . import remind
         try: return remind.set_reminder(store, tid, p.get('until'), ACTOR)
-        except ValueError as e: raise HTTPException(409 if isinstance(e, remind.AgentOpen) else 422, str(e))
+        except ValueError as e: raise HTTPException(422, str(e))
     # Watch it (watch.py): kept open under Watching, walked after Tasks - nothing is sent; `off` is the same button pressed on a watched task
     if kind == 'task.watching':
         from . import watch
@@ -2663,7 +2663,7 @@ def remind_task(task_id: int, body: RemindBody):
     except Exception as e:
         logger.debug(f'on_table failed for a reminder on {task_id}: {e}'); table = False
     try: out = remind.set_reminder(store, task_id, body.until, ACTOR)
-    except ValueError as e: raise HTTPException(409 if isinstance(e, remind.AgentOpen) else 404 if 'not found' in str(e) else 422, str(e))
+    except ValueError as e: raise HTTPException(404 if 'not found' in str(e) else 422, str(e))
     op = operations.record_direct(store, 'task.defer', task_id, {'until': body.until or 'none'}, ACTOR, out)
     if op and table:
         try: out = {**out, 'receipt': concierge.receipt_turn(store, op, ACTOR, table=True, press=True)['say']}; live_bus.emit(live_bus.CHAT)

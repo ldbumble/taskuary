@@ -70,7 +70,6 @@ import { openBugReport, shownError } from "./bugReportOpen.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { SlotPicker } from "./CalendarPick.jsx";
-import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
 import { AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
@@ -2776,7 +2775,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...an Advisor idea's own day when it has no task: the idea sleeps until then (C5, 2026-09-27)
     if (c.verb === "defer" && item?.kind === "idea" && item?.idea) { setRemindOn({ task: { TaskId: `idea-${item.idea}` }, path: `/api/assistant/ideas/${item.idea}/snooze`, anchor: anchor || null, ref: item.ref }); return; }
     // ...and with its agent still open the picker says to Stop and save first, instead of offering days (2026-10-01)
-    if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, key: item.key, anchor: anchor || null, ref: item.ref, live: agentOpen(item), said: litDayRef.current }); return; }
+    if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, key: item.key, anchor: anchor || null, ref: item.ref, said: litDayRef.current }); return; }
     if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
     if ((c.verb === "accept_invite" || c.verb === "decline_invite") && item?.mid) { await calendarAnswer(item, c.verb === "accept_invite" ? "accept" : "decline"); return; }
     if ((c.verb === "propose_time" || c.verb === "find_time") && item?.mid) { setSlotsOn({ item, act: c.verb === "propose_time" ? "propose" : "schedule", anchor: anchor || null }); return; }
@@ -3763,7 +3762,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         {headPencil && newChatIcon("data-tq-new-chat-head")}
         {!iconsInPill && ownIcons}
       </div>
-      {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} said={remindOn.said} onClose={() => setRemindOn(null)}
+      {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} said={remindOn.said} onClose={() => setRemindOn(null)}
         act={remindOn.key ? async (until) => { const { error, data } = await leave(remindOn.key, "remind", { until }); if (error) throw error; return data?.left || { remindAt: until }; } : null}
         onDone={(out) => remindReceipt(out, remindOn.path ? null : remindOn.task.TaskId, remindOn.ref, remindOn.key)} />}
       {howOn && <Menu open anchorEl={howOn.at} onClose={() => setHowOn(null)} data-tq-how-far=""

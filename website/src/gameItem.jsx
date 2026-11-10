@@ -16,7 +16,7 @@ import { Md, looksMd } from "./md.jsx";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { AgentAsk } from "./RunForm.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
-import { agentOpen, agentRuns } from "./taskFilter.js";
+import { agentRuns } from "./taskFilter.js";
 import { cardFor, laneMeta } from "./funnelPile.js";
 import { afterExecute, proposalOf } from "./proposalCard.js";
 import { closeoutOf } from "./reviewProposal.js";
@@ -237,7 +237,7 @@ export function Moves({ item, covers = [], busy, play, onRepo, onAgent, given = 
       <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
         {shown.map((c) => <Btn key={c.verb} disabled={!!busy || !!prop} onClick={(e) => pick(c, e?.currentTarget)} title={c.hint}>{c.label}</Btn>)}
       </Box>
-      {remindAt && <RemindPicker task={{ TaskId: item.tid || `idea-${item.idea}`, RemindAt: "" }} anchor={remindAt} live={agentOpen(item)} onClose={() => setRemindAt(null)}
+      {remindAt && <RemindPicker task={{ TaskId: item.tid || `idea-${item.idea}`, RemindAt: "" }} anchor={remindAt} onClose={() => setRemindAt(null)}
         path={item.kind === "idea" && item.idea ? `/api/assistant/ideas/${item.idea}/snooze` : undefined}
         onDone={(out) => out?.remindAt && play("later", item.key, async () => out)} />}
       {prop && (

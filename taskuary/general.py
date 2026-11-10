@@ -14,6 +14,7 @@ from loguru import logger
 
 from . import llm as llm_mod, words, wrapup
 from .buttons import label as L          # the action card's buttons by their one name (buttons.json)
+from .timewords import plural
 
 
 USER_TYPE = 'assistant_user'
@@ -594,6 +595,10 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if 
            'land_held': lambda d: f"pressed Not now on the {d.get('what') or 'push'} - nothing went out, and it is not to be asked for again unprompted",
            # ...and the press that LANDED it: with no phrase of its own the line read "You landed." (agent walk 2, 2026-11-10)
            'landed': lambda d: f"pressed {_land_how(d)} on the agent's work - it went through" + (f" ({d['sha'][:7]})" if d.get('sha') else ''),
+           # ...and the task's own Publish (server /land), which writes ci's rows in their name: "You pr opened." (the stress round, 2026-11-10)
+           'pr_opened': lambda d: f"opened draft pull request {d.get('repo')}#{d.get('number')}",
+           'pushed_direct': lambda d: f"pushed {plural(int(d.get('commits') or 0), 'commit')} straight onto {d.get('base') or 'the default branch'}"
+                                      + (f" ({str(d['sha'])[:7]})" if d.get('sha') else ''),
            # ...one of the task's emails let go (slots.drop), by who it was to - drafted or not (the agent walk, 2026-11-09: told "turned down
            # rv3", or nothing, the agent went on saying the dropped one "waits for Send")
            'slot_dropped': lambda d: f"dropped the {'email' if d.get('kind', 'email') == 'email' else d.get('kind') + ' message'} to {d.get('to') or 'them'} - it will not be sent",
@@ -655,7 +660,7 @@ def presses(store, tid: int, since: str = '') -> list:
     out = [(r['Id'], r['CreatedAt'], (PRESSES.get(r['Action']) or (lambda d, a=r['Action']: a.replace('_', ' ').replace('-', ' ')))(_detail(r)),
             *((_held_result(_detail(r)),) if r['Action'] in HELD_DONE else ()))
            for r in store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id",
-                                (tid, *OWNER_ACTORS, since or '')) if r['Action'] not in QUIET]
+                                (tid, *OWNER_ACTORS, since or '')) if r['Action'] not in QUIET and not _detail(r).get('review')]   # a card's own act: said by its card (proposals.execute)
     out += [(r['Id'], r['CreatedAt'], f"shared it ({r['Action']})") for r in store._rows(
         f"SELECT * FROM audit WHERE EntityType='share' AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id", (*OWNER_ACTORS, since or ''))
         if _detail(r).get('task') == tid]

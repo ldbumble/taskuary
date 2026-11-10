@@ -665,6 +665,26 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']
     if a in HELD_ACTS and rv.get('ReviewId'): _PRESSED[rv['ReviewId']] = time.time()     # proposals.moved_past leaves it to this press
+    before = (store._one('SELECT MAX(Id) AS n FROM audit') or {}).get('n') or 0
+    out = _run(store, rv, p, tid, a, actor, edited, skip_checks)
+    # ONE PRESS, SAID ONCE (the stress round, 2026-11-10): the code an act runs writes its own rows on the task in the presser's name - a split,
+    # a pull request opened - and each was a second line beside the pressed card, and a second "the owner did" for its agent. They are the
+    # card's: marked with it, and said by it (general.presses)
+    if tid and rv.get('ReviewId'):
+        store._exec("UPDATE audit SET Detail=json_set(IFNULL(NULLIF(Detail,''),'{}'),'$.review',?) WHERE Id>? AND EntityType='task' AND EntityId=? AND Actor=?",
+                    (rv['ReviewId'], before, tid, actor))
+    if tid: store.add_comment(tid, actor, 'human', f'APPROVED PROPOSAL ({a}): {json.dumps(out)[:600]}')   # a task-less one has no card to say it on
+    store.audit('review', rv['ReviewId'], 'proposal_executed', actor, detail={'action': a, 'result': out})
+    # a workflow run that stopped for this yes goes on from that step (flow.resume) - on its own thread, as a run starts: a last
+    # agent step's first turn would otherwise hold the owner's click for as long as the agent works
+    if isinstance(p.get('flow_run'), dict) and a in ('run_tool', 'repair_workflow'):
+        from . import flow, workflows
+        workflows._spawn(lambda: flow.resume(store, p['flow_run'], out if a == 'run_tool' else None))
+    return out
+
+
+def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks: bool) -> dict:
+    "The act itself, for execute."
     if a in ('land', 'open_pr', 'push_direct'):
         from . import ci
         fn = {'land': ci.land, 'open_pr': ci.open_for_task, 'push_direct': ci.push_direct}[a]
@@ -763,11 +783,4 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
             if why := picture_why(tid, p): raise RuntimeError(f'{why} - nothing was posted')
             cfg['image_path'] = str(outputs.named(int(tid), p['image']))
         out = _ran(REGISTRY[p['type']](resolve_cfg(store, {**cfg, '_write': True})))
-    if tid: store.add_comment(tid, actor, 'human', f'APPROVED PROPOSAL ({a}): {json.dumps(out)[:600]}')   # a task-less one has no card to say it on
-    store.audit('review', rv['ReviewId'], 'proposal_executed', actor, detail={'action': a, 'result': out})
-    # a workflow run that stopped for this yes goes on from that step (flow.resume) - on its own thread, as a run starts: a last
-    # agent step's first turn would otherwise hold the owner's click for as long as the agent works
-    if isinstance(p.get('flow_run'), dict) and a in ('run_tool', 'repair_workflow'):
-        from . import flow, workflows
-        workflows._spawn(lambda: flow.resume(store, p['flow_run'], out if a == 'run_tool' else None))
     return out

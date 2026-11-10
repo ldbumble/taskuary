@@ -68,6 +68,19 @@ class EveryPressOfTheOwnersIsSaidInWords(Acts):
         q = proposals.queue(self.s, self.tid, {'action': 'break_out', 'title': 'Renew the Trainly seats', 'messages': [f'm{mid}'], 'why': 'another matter'}, 'agent')
         with mock.patch.object(general, 'approved'): out = verdicts.decide(self.s, self.s.get_review(q['reviewId']), 'approve')
         self.assertEqual(self.lines(out['result']['task']), [f'You made this task from part of {task_ref(self.tid)}.'])
+        # ...ONE PRESS, SAID ONCE (the stress round, 2026-11-10): on the task it was pressed on, the split the card ran wrote its own row in the
+        # owner's name - a second line beside the pressed card, and told twice in the agent's next turn ("split part of it off" and "pressed
+        # Approve on rv1"). What a card's press did is that card's
+        self.assertEqual(self.lines(), [], 'the pressed card says it - no line of its own beside it')
+        self.answered()
+        [did] = general.owner_did(self.s, self.tid)
+        self.assertIn(f"pressed Approve on rv{q['reviewId']} and it was done", did)
+
+    def test_a_pull_request_opened_or_a_push_made_by_their_own_press_says_what_it_was(self):
+        "The task's own Publish (server /land) writes ci's rows in the owner's name: with no phrase they read \"You pr opened.\"."
+        self.s.audit('task', self.tid, 'pr_opened', 'owner', detail={'repo': 'northwind/ledger', 'number': 12})
+        self.s.audit('task', self.tid, 'pushed_direct', 'owner', detail={'repo': 'northwind/ledger', 'base': 'main', 'sha': 'abc1234def', 'commits': 2})
+        self.assertEqual(self.lines(), ['You opened draft pull request northwind/ledger#12.', 'You pushed 2 commits straight onto main (abc1234).'])
 
     def test_their_own_typed_line_and_a_close_out_that_went_are_no_line_of_their_own(self):
         from taskuary import waitroom
@@ -243,7 +256,9 @@ class APartThatIsAnotherJob(Acts):
         self.assertEqual([m['MessageId'] for m in self.s.list_messages(self.tid)], [self.fix])
         self.assertEqual(([i['id'] for i in self.s.task_checklist(new)], [i['id'] for i in self.s.task_checklist(self.tid)]), (['b2'], ['a1']))
         self.assertEqual(self.s.get_task(new)['Title'], 'Renew the parking permits')
-        self.assertTrue(any('split part of it off' in what for _, _, what, *_ in general.presses(self.s, self.tid)), 'its agent hears the press')
+        self.answered()
+        self.assertEqual([d.split(': ', 1)[1].split(' (')[0] for d in general.owner_did(self.s, self.tid)], [f"pressed Approve on rv{rv['ReviewId']} and it was done"],
+                         'its agent hears the press - once, by its card')
 
     def test_what_is_not_on_the_task_is_refused_with_the_way_on(self):
         for kw, said in (({'messages': ['m99999'], 'items': []}, 'not on this task'), ({'messages': [], 'items': []}, 'needs what goes'),

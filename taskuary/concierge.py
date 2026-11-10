@@ -915,6 +915,10 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         inv, meet = calendar_asks(store, item)
         if not (meet if verb == 'find_time' else inv):
             return f"There's no {'ask for a time' if verb == 'find_time' else 'invite waiting on your answer'} on {what}."
+    # A HELD STEP IS NOT A DRAFT (the agent walk, 2026-11-09): what waits is the agent's own step, run as it stands or not at all - no
+    # AI writes it again. Its row offered Redraft beside the step, and the Assistant could light it over a command
+    if verb == 'redraft' and item.get('kind') == 'action':
+        return f"There is no draft on {what} to write again - what waits there is a step for your {buttons.label('approve', 'action')}."
     # a calendar answer's note is the owner's line - no AI redrafts an RSVP (calwrite.py)
     if verb == 'redraft' and item.get('rid') and store is not None:
         from . import calwrite
@@ -1278,8 +1282,10 @@ def row_buttons(store, it: dict, known: dict = None) -> list:
     # ...and Pause this report on a report run drawn as its task's view too, so the Advisor may light it there (the owner, 2026-10-27)
     if it.get('kind') == 'report' and not cannot(it, 'report_off', store): out.append({'verb': 'report_off', 'label': buttons.label('report_off')})
     if it.get('closeout'): out.insert(0, {'verb': 'approve', 'label': closeout_label(it)})
-    # ...a step held for the owner's yes on a row with no draft is Approved, never Sent (cannot lets it on)
-    elif not it.get('rid'): out = [b | {'label': buttons.label('approve', 'action')} if b['verb'] == 'approve' else b for b in out]
+    # ...a step held for the owner's yes on a row with no draft is Approved, never Sent (cannot lets it on) - and so is the step that
+    # IS the row: a task with no mail of its own wears its held step as its card (kind `action`), and its row read Send over a command
+    elif not it.get('rid') or it.get('kind') == 'action':
+        out = [b | {'label': buttons.label('approve', 'action')} if b['verb'] == 'approve' else b for b in out]
     seen = set()
     return [b for b in out if not (b['verb'] in seen or seen.add(b['verb']))]
 

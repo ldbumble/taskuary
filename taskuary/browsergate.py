@@ -629,7 +629,14 @@ def owner_said(store, tid: int, sid: str, text: str) -> str:
         return (f"THE OWNER SPOKE WHILE {h.get('btn') or 'the button'} WAITED FOR THEIR PRESS, after Taskuary had stopped watching the page - "
                 "it cannot say whether they pressed it. Look at the page as it is now before anything else; never press it yourself.")
     store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h.get('site'), 'why': 'answered in words'})
+    # ...AND NOTHING WAITS ON THEM NOW, said so (the owner, 2026-11-10: "i cant see the screen"): told only that it was not pressed, the agent
+    # answered that Save was "held for your press in the browser pane beside this chat" - no card, no pane, "agent done", Mark done lit
     return (f"THE OWNER ANSWERED IN WORDS INSTEAD OF PRESSING {h.get('btn') or 'the button'} on the page you handed them. As far as Taskuary "
-            "saw, it was NOT pressed - the page is as you left it. Do what they say; never press it yourself.")
+            f"saw, it was NOT pressed - the page is as you left it, and nothing waits for their press now. Do what they say. {AGAIN_HOLD}")
+
+
+# how a step comes back in front of the owner: the only road, and the only time the agent may say it waits on them
+AGAIN_HOLD = ('If the step is still wanted, run the same command again - Taskuary holds it again as a card for their press. Never say it is '
+              'held or waiting until Taskuary has said so, never ask them in words to click it, and never press it another way.')
 
 

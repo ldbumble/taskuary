@@ -258,6 +258,18 @@ class HandingOver(unittest.TestCase):
         self.assertIn('NOT pressed', note); self.assertIn('"Pay $42.00"', note)
         self.hand(); self.assertEqual(bg.owner_said(self.s, self.tid, 'run1', browserview.TURN_BACK), '')     # their Done is theirs, as it is
 
+    def test_words_instead_of_the_press_leave_nothing_waiting_and_the_agent_hears_so(self):
+        # the owner, 2026-11-10: "i cant see the screen" closed the hand-over; the agent, told only "NOT pressed", answered that Save was
+        # "held for your press in the browser pane beside this chat" - the chip read "agent done" and Mark done was lit, which was the truth
+        from taskuary import taskstate
+        self.hand()
+        note = bg.owner_said(self.s, self.tid, 'run1', 'i cant see the screen')
+        self.ws.record(self.s, self.tid, 'run1', 'working', source='api')             # his line is the agent's next turn
+        self.assertIsNone(bg.handing(self.s, self.tid, 'run1')); self.assertIsNone(taskstate.open_question(self.s, self.tid))
+        self.assertIn('nothing waits for their press now', note)
+        self.assertIn('run the same command again', note); self.assertIn('never ask them in words to click it', note)
+        self.hand(); self.assertIsNotNone(bg.handing(self.s, self.tid, 'run1'))      # ...and that brings it back in front of him
+
     def test_a_pane_answered_in_words_hears_it_was_not_done(self):
         pane = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, cli='claude')
         with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': pane}, clear=True):

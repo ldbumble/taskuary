@@ -381,7 +381,7 @@ function HeldBar({ held: h, onDecided }) {
 }
 
 // THE OWNER'S TURN (browserview.your_turn): the page is theirs to click and type on (yourTurn hands it over), and Done hands it back -
-// the agent's next message, so it looks at the page and goes on.
+// their press, never words in their name: Taskuary tells the agent, which looks at the page and goes on (browsergate.done).
 function TurnBar({ turn, onHandBack }) {
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const back = async () => {

@@ -568,15 +568,29 @@ def pressed(store, tid: int, rid: str, now: dict) -> bool:
     title = ' '.join(str(now.get('title') or '').split())[:160]
     shows = f'"{title}" ({now.get("href")})' if title else str(now.get('href') or 'another page')
     if h.get('kind') == 'turn':
-        _trigger(store, tid, h['sid'], f"Did it on {h['site']}.")
         _tell(store, tid, f"The owner did the step you handed them ({h.get('what') or 'on the page'}) and the page moved on; it now shows {shows}. "
                           "Look at it and continue.")
         store.add_comment(tid, 'owner', 'agent', f"You did the step on {h['site']} - the agent goes on.")
     else:
-        _trigger(store, tid, h['sid'], f"Pressed {h['btn']} on {h['site']}.")
         _tell(store, tid, f"The owner pressed {h['btn']} on the page themselves; the page now shows {shows}. Look at it and continue.")
         store.add_comment(tid, 'owner', 'agent', f"You pressed {h['btn']} on {h['site']} - the agent goes on.")
-    store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site']})
+    # ...and the chat says it once, as their press (general.PRESSES): it read "You browser act pressed." under a line by Taskuary saying the same
+    store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '' if h.get('kind') == 'turn' else h['btn'], 'by': 'page'})
+    return True
+
+
+def done(store, tid: int, rid: str) -> bool:
+    """THE VIEW'S DONE IS THE OWNER'S PRESS (the spine audit, 2026-11-09). It went to a chat as words typed in their name - a bubble they
+    never wrote, a turn of its own, known here only by matching those words. It closes the hand-over as the page moving on does, and the
+    agent is told by Taskuary that they SAY it is done: nothing saw the page move, so it looks first. A resting agent is started on it.
+    False when the hand-over was closed already (a second press, or the watch got there first)."""
+    h = _close(store, tid, rid, 'Done')
+    if not h: return False
+    turn = h.get('kind') == 'turn' or not str(rid).startswith(PRESS)
+    step = f"the step you handed them ({h.get('what') or 'on the page'})" if turn else f"pressing {h['btn']}"
+    store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '' if turn else h['btn'], 'by': 'done'})
+    _tell(store, tid, f"The owner pressed Done: they say they finished {step} on the page. Taskuary did not see the page move - "
+                      "look at it as it is now and continue.", wake=True)
     return True
 
 
@@ -610,10 +624,3 @@ def owner_said(store, tid: int, sid: str, text: str) -> str:
             "saw, it was NOT pressed - the page is as you left it. Do what they say; never press it yourself.")
 
 
-def _trigger(store, tid: int, sid: str, line: str) -> None:
-    "A chat shows what woke the agent's next answer, as a sign-in's does (signin._continue): one short line by Taskuary."
-    from . import terminal as term
-    try:
-        from .general import BRIEF_ACTOR, USER_TYPE
-        if hasattr(term.SESSIONS.get(str(sid)), 'send_prompt'): store.add_comment(tid, BRIEF_ACTOR, USER_TYPE, line)
-    except Exception as e: logger.debug(f'browsergate: the trigger line for task {tid} was not filed - {e}')

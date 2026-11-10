@@ -3,8 +3,8 @@
 // a LinkedIn post with its picture, who sees it and post now or save as a draft; a Bluesky or Mastodon post; a comment on a tracker item;
 // a new GitHub issue - its repository, title and labels, its words editable, Create issue (2026-11-06). Its
 // words are editable while it waits, its choices too where declared, pre-filled from the connection's defaults (Connections). The press is the
-// one decide road every proposal takes (/api/reviews/{id}/decide, verdicts.decide -> proposals.execute): nothing goes before it. Live only on
-// the newest turn; older turns keep theirs read-only, in their own words. Once it went it says so, with the link.
+// one decide road every proposal takes (/api/reviews/{id}/decide, verdicts.decide -> proposals.execute): nothing goes before it. Live for as
+// long as it waits, on the turn that set it up - a line typed after it left it read-only with no way to send. Once it went it says so, with the link.
 import React, { useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";

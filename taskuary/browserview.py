@@ -444,8 +444,9 @@ def last_frame(tid) -> dict | None:
 
 # A STEP ONLY THE OWNER CAN DO ON THE PAGE - a CAPTCHA, a sign-in or a code the agent cannot type, a card number. The agent ends its turn
 # with [[TASKUARY-YOURTURN: <what>]] (selfclose.turn_marker); the request it raises is drawn ON the browser view as "Your turn", the page
-# handed to the owner's mouse and keys, and their Done goes back to the agent as its next message. A chat's agent gets Done as a press;
-# a terminal CLI's choices are a chooser answered by number, so its ask carries none and the view sends the words (TURN_BACK).
+# handed to the owner's mouse and keys. Their Done on the view is a press (browsergate.done): Taskuary tells the agent, chat or terminal alike.
+# A chat's ask carries Done as a choice for where no view is drawn; a terminal CLI's choices are a chooser answered by number, so its ask
+# carries none. TURN_BACK: the words a page left open from an older build still sends - read as their Done (browsergate.owner_said).
 TURN_PREFIX = 'yourturn:'
 TURN_DONE = 'Done'
 TURN_BACK = 'Done - I finished that in the browser. Look at the page as it is now and continue.'

@@ -562,13 +562,20 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if 
            'permission_answered': lambda d: f"{ANSWERED.get(d.get('answer'), 'answered')}: {d.get('asked') or 'what the agent asked'}",
            # ...an APPROVED HELD STEP is the owner's press too, said with what it did (the owner, 2026-11-09: "once i approve it should say sent")
            'shell_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_done': lambda d: f"approved: {_held_what(d)} - it ran on the page",
-           'desktop_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_refused': lambda d: 'approved it - the page did not take it'}
+           'desktop_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_refused': lambda d: 'approved it - the page did not take it',
+           # ...and a step the agent handed them ON ITS PAGE - a captcha, the last button of a checkout: the page moved on, or they pressed Done
+           'browser_act_pressed': lambda d: _on_page(d)}
+def _on_page(d) -> str:
+    site, btn = d.get('site') or 'the page', d.get('btn')
+    if d.get('by') == 'done': return f"pressed Done: {f'{btn} on {site} is pressed' if btn else f'the step on {site} is finished'}"
+    return f'pressed {btn} on {site}' if btn else f'did the step on {site}'
 ANSWERED = {'allow_once': 'allowed', 'allow_always': 'allowed, from now on', 'reject_once': 'refused', 'reject_always': 'refused, from now on'}
 def _held_what(d) -> str: return _cut(' '.join(str(d.get('about') or d.get('what') or '').split()), 120) or 'the held step'
 # ...and what it said back, kept with the line: its link, the command folded under it
 HELD_DONE = ('shell_act_done', 'browser_act_done', 'desktop_act_done')
 QUIET = {'chat', 'continue', 'continue-work', 'continue-session', 'create', 'judged', 'kind_by_typing', 'reopened_by_typing',
-         'waitroom_image', 'stay_open', 'funnel_pin', 'worker_answer'}       # the turn itself, or said by it (an answer is their bubble, or its card's line)
+         'waitroom_image', 'stay_open', 'funnel_pin', 'worker_answer',       # the turn itself, or said by it (an answer is their bubble, or its card's line)
+         'browser_act_not_pressed'}      # nothing was pressed: the agent hears it from Taskuary (browsergate.not_pressed), or with their own words
 DECIDED = {'approved': 'approved (sent, if it sends)', 'edited': 'edited and sent', 'rejected': 'turned down', 'closed_unsent': 'closed, unsent',
            'no_reply': 'said no reply is needed for'}
 def clock_of(at) -> str:

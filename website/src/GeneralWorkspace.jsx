@@ -53,7 +53,7 @@ import ActionCard from "./ActionCard.jsx";
 import CopyCorner from "./CopyCorner.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
-import { heldOn, isTurn, needsOwner, TURN_BACK, waitsOnPage } from "./browserSplit.js";
+import { heldOn, isTurn, needsOwner, waitsOnPage } from "./browserSplit.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import { level } from "./priority.js";
 import "./generalWorkspace.css";
@@ -69,7 +69,7 @@ import { openAppLink } from "./appLinks.js";
 import ConnectAi from "./ConnectAi.jsx";
 import { withoutAsked } from "./askOnce.js";
 import ReviewDecision from "./ReviewDecision.jsx";
-import { heldActsLine, proposalFrom } from "./reviewProposal.js";
+import { heldActsLine, proposalFrom, reviewText } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import AgentSummary, { OneBox, StaleDrafts } from "./AgentSummary.jsx";
 import { cardTurn, codingDrafts, turnAnswered, foldedSummaries, freshNext, hasReply, lastAnswerSummed, withTurns } from "./agentSummary.js";
@@ -475,12 +475,12 @@ const AssistantMessage = () => {
   // ...the live draft card sits on the turn that wrote it (agentSummary.cardTurn), never on whichever turn is newest; no such turn shown: the newest
   const home = useAuiState((s) => work ? cardTurn(work.reviews, s.thread.messages.map((m) => m.id)) : null), holds = home ? home === id : newest;
   // WHAT THIS TURN MADE AND SET UP, IN IT (the owner, 2026-11-05): in a chat, the files it made inline, and an act it proposed drawn as its
-  // connector declares it (a post as the post, ActionCard) under its Next steps - live on the newest turn, read-only (gone, or not) before
+  // connector declares it (a post as the post, ActionCard) under its Next steps - live while it waits (a line typed after it left it "not sent", unsendable), read-only once answered
   const posts = work && chat ? (work.cards || []).filter((p) => p.after === id) : [];
   const made = at && chat ? turnFiles({ listed: at.listed, id, words, did: custom?.summary?.did, tid: at.tid,
     skip: (work?.cards || []).map((p) => p.post?.image).filter(Boolean) }) : [];
   const madeNames = new Set(made.map((f) => f.name));
-  const lead = posts.length ? posts.map((p) => <ActionCard key={p.ReviewId} row={p} tid={at?.tid} live={newest} onChanged={work.refresh} />) : null;
+  const lead = posts.length ? posts.map((p) => <ActionCard key={p.ReviewId} row={p} tid={at?.tid} onChanged={work.refresh} />) : null;
   const files = made.length ? <TurnFiles files={made} /> : null;
   const { rest: shownRest } = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown);
   // ...nor a picture its post card already carries (the owner saw the chart twice: shown by the turn, and on the post)
@@ -531,15 +531,6 @@ const mentioned = (messages, kind) => {
 
 const reviewTarget = (r) => r.FromName && r.FromEmail ? `${r.FromName} <${r.FromEmail}>`
   : r.FromName || r.FromEmail || r.ConversationId || "this conversation";
-const reviewDraft = (r) => {
-  if (r.Kind === "action") {
-    try {
-      const proposal = JSON.parse(r.DraftText || "");
-      if ((proposal?.action === "write_playbook" || proposal?.action === "amend_playbook") && proposal.text) return proposal.text;
-    } catch { /* ordinary reply text */ }
-  }
-  return r.DraftText || "";
-};
 
 export function DockActions({ messages, expanded = false, onNavigate, onChanged }) {
   const [reviews, setReviews] = useState([]);
@@ -587,7 +578,10 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
   const decide = async (r, verb) => {
     const key = `review-${r.ReviewId}-${verb}`; setBusy(key); setError(""); setReceipt("");
     try {
-      const finalText = edits[r.ReviewId] ?? reviewDraft(r);
+      // AN ACT'S BOX SHOWS ITS WORDS, as every other card of it does (reviewText) - it showed the proposal's JSON, and sent that back. It goes
+      // as proposed unless they changed the words
+      const shown = reviewText(r), typed = edits[r.ReviewId];
+      const finalText = r.Kind === "action" ? (typed != null && typed !== shown ? typed : null) : typed ?? shown;
       const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`, {
         verb, final_text: verb === "approve" ? finalText : null, note: null,
       });
@@ -644,7 +638,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
           {review.TaskId && <Button size="small" onClick={() => openTask(review.TaskId)}>Open task</Button>}
         </div>
         <TextField fullWidth multiline minRows={expanded ? 3 : 2} maxRows={expanded ? 10 : 5}
-          value={edits[review.ReviewId] ?? reviewDraft(review)}
+          value={edits[review.ReviewId] ?? reviewText(review)}
           onChange={(e) => setEdits((old) => ({ ...old, [review.ReviewId]: e.target.value }))}
           placeholder="No draft yet — choose Draft with AI"
           sx={{ mt: 0.75, "& textarea": { fontSize: 12.5, lineHeight: 1.48 } }} />
@@ -655,7 +649,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
             <Button size="small" variant="outlined" color="error" disabled={!!busy} onClick={() => decide(review, "reject")}>Dismiss</Button>
           </> : <>
             {!draftCanSend(caps, review) ? null : (
-              <Button size="small" variant="contained" disabled={!!busy || !(edits[review.ReviewId] ?? reviewDraft(review)).trim()}
+              <Button size="small" variant="contained" disabled={!!busy || !(edits[review.ReviewId] ?? reviewText(review)).trim()}
                 startIcon={<SendRoundedIcon />} onClick={() => decide(review, "approve")}>
                 {busy.includes("approve") ? "Sending…" : btn("approve")}
               </Button>
@@ -1386,6 +1380,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // through the worker's answer road (workerstate.answer), and the card's state clears with the `answered` it records
   const answerAsk = async (text) => {
     const req = asking;
+    if (isTurn(req) && (req.choices || []).includes(text)) return handBack();      // the Done of a step on the page: a press wherever it is drawn
     // ...and a chat agent's question kept after its process idled out (`resting`): the answer is its next turn, which starts it again
     if (req.resting || (session?.sid && String(req.sid) === String(session.sid))) { setOwnPrompt({ id: `ask:${req.request_id}`, text }); setAnswered(req.request_id); return; }
     await api.post(`/api/tasks/${task.TaskId}/worker/answer`, { request_id: req.request_id, text });
@@ -1400,7 +1395,14 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const actsHere = (viewShown ? (data?.browserActs || []).filter((r) => !heldOn(r, session?.sid)) : data?.browserActs || []).filter((r) => proposalFrom(r)?.action !== "shell_act");
   // Approve runs the act and tells the agent on a thread of its own (browsergate._tell): its next turn starts a moment after the press
   const decidedOnView = () => { refresh(); setTimeout(refresh, 2000); };
-  const handBack = () => answerAsk(TURN_BACK);
+  // THE VIEW'S DONE IS THEIR PRESS (the spine audit, 2026-11-09): it went in as words typed in their name - a bubble they never wrote. The
+  // server closes the hand-over and tells the agent itself (workerstate.answer `press`, browsergate.done); the chat reads one quiet line
+  const handBack = async () => {
+    const req = asking;
+    try { await api.post(`/api/tasks/${task.TaskId}/worker/answer`, { request_id: req.request_id, text: "", press: true }); }
+    catch (e) { if (e?.response?.status !== 409) throw e; }      // closed already: the page moved on first, and the agent was told that
+    setAnswered(req.request_id); onAnswered?.(); decidedOnView();
+  };
   const promptUsed = (id) => { if (ownPrompt?.id === id) setOwnPrompt(null); else onPromptUsed?.(id); };
   const placed = placeShown(data?.published, shownMessages);     // no hook: this sits below the loading return
   // the task's checklist where the page has not handed it in: the row carries it (store.list_tasks selects t.*)

@@ -2000,7 +2000,7 @@ def message_discuss(mid: int, body: DiscussBody):
 
 
 # ── the worker's own word on its state (workerstate.py) ────────────────────────────────────────
-class WorkerAnswerBody(BaseModel): request_id: str; text: str
+class WorkerAnswerBody(BaseModel): request_id: str; text: str = ''; press: bool = False      # `press`: Done on the browser view - no words
 class WorkerAnswersBody(BaseModel): answers: dict
 
 @app.get('/api/tasks/{task_id}/worker')
@@ -2017,7 +2017,7 @@ def worker_answer(task_id: int, body: WorkerAnswerBody):
     resolved already or the run changed; 422 when there is no live worker or delivery failed."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     from . import workerstate as ws
-    try: out = ws.answer(store, task_id, body.request_id, body.text, ACTOR)
+    try: out = ws.answer(store, task_id, body.request_id, body.text, ACTOR, press=body.press)
     except ValueError as e: raise HTTPException(422, str(e))
     if not out['delivered']:
         raise HTTPException(409 if out['state'] in ('resolved', 'stale') else 422, f"{out['state']}: {out.get('why') or ''}")

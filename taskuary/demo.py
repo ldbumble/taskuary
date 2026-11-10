@@ -1278,7 +1278,9 @@ def seed_agent_day(store, f) -> int:
     said(t, 168.7, 'turn', None,
          {'about': 'Paying PhishGuard invoice INV-3391.', 'did': 'Filled the payment for INV-3391, $4,860.00 on the card ending 4417. '
           'Your turn on the page: press Pay.'})
-    said(t, 165, 'brief', 'Pressed Pay on the page')
+    # ...the press on the page is theirs, said as every press of theirs is (browsergate.pressed, general.PRESSES) - never a line by Taskuary
+    store.audit('task', t, 'browser_act_pressed', 'owner', 'human', {'site': 'portal.phishguard.example', 'btn': '"Pay"', 'by': 'page'})
+    store._exec('UPDATE audit SET CreatedAt=? WHERE Id=(SELECT MAX(Id) FROM audit)', (_at(165),))
     said(t, 164.2, 'turn', None,
          {'about': 'Paying PhishGuard invoice INV-3391.', 'did': 'Paid: **INV-3391, $4,860.00**, confirmation **PG-77120**. PhishGuard shows the '
                  'invoice as paid and sends its receipt to accounts payable. The browser is closed.',

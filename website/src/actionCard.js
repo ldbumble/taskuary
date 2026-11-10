@@ -32,7 +32,7 @@ export const wordsOf = (act, values = {}) => {
 export const changed = (act, p, values) => Object.fromEntries((act?.fields || [])
   .filter((f) => f.edit && f.type === "choice" && String(values?.[f.key]) !== String(p?.[f.key] ?? f.default))
   .map((f) => [f.key, values[f.key]]));
-// where the card stands: waiting on the press (live only on the newest turn), gone with its words and link, or not gone
+// where the card stands: waiting on the press, gone with its words and link, or not gone (`live` false: a caller that only reads it)
 export const stateOf = (row, live = true) => {
   const s = row?.Status, act = actionFor(row?.post?.type), w = wordsOf(act, row?.post || {});
   if (s === "approved" || s === "edited") return { done: true, said: w.done, url: row?.post?.result?.url || "" };

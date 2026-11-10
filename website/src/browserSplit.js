@@ -192,8 +192,6 @@ export const isTurn = (asking) => String(asking?.request_id || "").startsWith(TU
 // press is the approval, and Taskuary sees it land
 export const PRESS_PREFIX = "yourturn:press:";
 export const isPress = (asking) => String(asking?.request_id || "").startsWith(PRESS_PREFIX);
-// what the owner's Done tells the agent (browserview.TURN_BACK)
-export const TURN_BACK = "Done - I finished that in the browser. Look at the page as it is now and continue.";
 
 // A HELD BROWSER ACT of THIS session's browser (browsergate.py), as the view draws it - null for anything else (a shell step, another
 // session's act: those stay on their card in the conversation)

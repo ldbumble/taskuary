@@ -471,13 +471,14 @@ def split_answers(text: str, qs: list) -> dict:
     return {q['request_id']: got.get(q['request_id'], words) for q in qs}
 
 
-def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', owner: str = None) -> dict:
+def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', owner: str = None, press: bool = False) -> dict:
     """Deliver the owner's answer to ONE outstanding request of the run that asked it (PW-139/141): once,
     to that run, and say what happened - delivered, resolved already, stale (the run changed),
-    disconnected (no live worker: open the workspace), or failed."""
-    from . import terminal as term
-    text = ' '.join(str(text or '').split())
-    if not text: raise ValueError('say something')
+    disconnected (no live worker: open the workspace), or failed. `press`: the Done on the browser view for a step handed to the owner
+    on the page - their press, with no words of theirs (browsergate.done)."""
+    from . import browsergate, browserview, terminal as term
+    text, press = ' '.join(str(text or '').split()), press and str(request_id).startswith(browserview.TURN_PREFIX)
+    if not text and not press: raise ValueError('say something')
     if (held := _stranger_held(store, tid, [request_id])): return held
     # the request is looked up across every run of the task: one that belongs to a run that is no longer the
     # task's is STALE, not silently forwarded to whatever worker has the task now (PW-139)
@@ -489,6 +490,12 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', ow
     h = HELD.get(group_of(request_id) or '')
     if h and h['tid'] == tid: return _answer_held(store, tid, h, {request_id: text}, actor)
     sess = _live(tid)
+    # THE VIEW'S DONE closes the hand-over and Taskuary tells the agent - the one that asked, or none running (it is started on it). A
+    # different run on the task is never handed it: stale, below
+    if press and (not sess or str(sess.sid) == str(req['sid'])):
+        return ({'delivered': True, 'state': 'delivered'} if browsergate.done(store, tid, request_id)
+                else {'delivered': False, 'state': 'resolved', 'why': 'that request is no longer outstanding'})
+    text = text or browserview.TURN_DONE
     if not sess:
         store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - could not be delivered: no live worker on this task. Open the workspace to continue.')
         return {'delivered': False, 'state': 'disconnected', 'why': 'no live worker on this task'}
@@ -506,7 +513,6 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', ow
     send = text
     # ...and a press handed over on the page, answered in words: the agent hears that it was not pressed (browsergate.owner_said). A chat
     # hears it from its own send_prompt, which every owner word to it passes through
-    from . import browsergate
     if str(request_id).startswith(browsergate.PRESS) and not hasattr(sess, 'send_prompt'):
         if (note := browsergate.owner_said(store, tid, req['sid'], text)): send = f'{text} ({note})'     # one line: a newline typed into a CLI's prompt is its Enter
     # a codex question asked in WORDS is answered through its own queue - a chooser or an approval is still a keystroke

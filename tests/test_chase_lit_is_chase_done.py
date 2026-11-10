@@ -37,6 +37,18 @@ def test_chase_is_offered_only_where_it_can_go_and_the_gate_agrees():
     assert rulebook.chase_thread(s, it)['mid'], 'their own mail on the task is what the chase answers'
 
 
+def test_a_chase_never_goes_to_a_machine_that_wrote_on_the_thread_since():
+    # the stress round, 2026-11-10 (the owner the same day: "github emails are not supposed to be respodned to"): the owner asked a colleague,
+    # then a signing service's "your envelope was viewed" and a list's digest were filed on the task - and Chase named the newest of them
+    s = MemoryStore(); f = Factory(s)
+    t = f.task(title='Signed contract', kind='task', status='waiting')
+    ray = f.message(task_id=t, subject='Contract', body='I will sign it this week.', from_name='Ray Colton', from_email=RAY, sent_at=at(d=9))
+    for who, cls, d in (('noreply@sign.example', 'automated', 6), ('news@list.example', 'bulk', 5)):
+        mid = f.message(task_id=t, subject='Contract', body='Your envelope was viewed.', from_name='Notices', from_email=who, sent_at=at(d=d))
+        s._exec("UPDATE message SET Status='filed', SenderClass=? WHERE MessageId=?", (cls, mid))
+    assert rulebook.chase_thread(s, {'key': f'task:{t}', 'kind': 'todo', 'lane': 'theirs', 'tid': t}) == {'tid': t, 'who': RAY, 'mid': ray}
+
+
 def test_pressing_the_lit_chase_drafts_a_message_to_them_and_sends_nothing():
     s = MemoryStore()
     t, it = _waiting(s, 7)

@@ -518,9 +518,12 @@ def chase_thread(store, item: dict) -> dict | None:
     tid = int(t['TaskId'])
     held = next((str(x).split(':', 1)[-1] for x in (t.get('WaitingOn'), t.get('Assignee')) if '@' in str(x or '')), '').strip().lower()
     me = str(store.get_setting('owner_email') or '').strip().lower()
-    m = store._one("SELECT MessageId, FromEmail FROM message WHERE TaskId=? AND IFNULL(Direction,'in')<>'out' AND Status!='context' "
-                   "AND IFNULL(FromEmail,'')<>'' AND lower(FromEmail)<>? AND (?='' OR lower(FromEmail)=?) ORDER BY IFNULL(SentAt,CreatedAt) DESC LIMIT 1",
-                   (tid, me, held, held))
+    # ...from somebody who reads a reply (wrapup.reads_replies, the stress round 2026-11-10): a signing service's "viewed" or a list's digest
+    # filed on the task since was the newest mail, and Chase named the machine
+    from .wrapup import reads_replies
+    m = next((x for x in store._rows("SELECT MessageId, FromEmail, Channel, SenderClass, Status FROM message WHERE TaskId=? AND IFNULL(Direction,'in')<>'out' "
+                                     "AND Status!='context' AND IFNULL(FromEmail,'')<>'' AND lower(FromEmail)<>? AND (?='' OR lower(FromEmail)=?) "
+                                     'ORDER BY IFNULL(SentAt,CreatedAt) DESC LIMIT 50', (tid, me, held, held)) if reads_replies(x)), None)
     who = str((m or {}).get('FromEmail') or held or '').lower()
     return {'tid': tid, 'who': who, 'mid': int(m['MessageId']) if m else None} if '@' in who else None
 

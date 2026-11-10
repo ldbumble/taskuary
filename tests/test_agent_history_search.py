@@ -3,7 +3,7 @@ topic and brief the owner, a general agent wrote code of its own to go and find 
 had no way in. Now it has one - `taskuary --search` / `--message`, over GET /api/agent/messages on its own task - and its brief says
 to use it first and never to script its way into a mailbox or the database. A stranger's task is told nothing of it and is refused it.
 """
-import unittest
+import json, unittest
 from unittest import mock
 
 from fastapi.testclient import TestClient
@@ -63,6 +63,16 @@ class TheSearchTests(unittest.TestCase):
         m = mailsearch.message(s, mid)
         self.assertIn('three-year term', m['body'])
         self.assertEqual([x['from'].split(' <')[0] for x in m['messages']], ['Gail Moreno', 'Alex Doyle'])
+
+    def test_one_message_comes_with_the_addresses_behind_its_words(self):
+        # "the renewal form is here": the mail's HTML put the address behind a word, the stored text kept the word, and an agent that
+        # read the message whole still had no link to open (the stress run, 2026-11-10)
+        s = MemoryStore()
+        mid = mail(s, body='The renewal form is here. Sign it before Thursday.')
+        s._exec('UPDATE message SET MailMetaJson=? WHERE MessageId=?', (json.dumps({'links': [['here', 'https://forms.vendor.example/f/9'],
+                ['run me', 'javascript:alert(1)']]}), mid))
+        self.assertEqual(mailsearch.message(s, mid)['links'], [['here', 'https://forms.vendor.example/f/9']])
+        self.assertEqual(mailsearch.message(s, mail(s, body='No link in this one.'))['links'], [])
 
 
 class TheRouteTests(unittest.TestCase):

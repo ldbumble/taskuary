@@ -601,6 +601,20 @@ def mail_links(html, cap: int = 40) -> list:
     return out[:cap]
 
 
+def links_meta(html) -> dict:
+    "{'links': [[words, address]]} for a message's mail_meta, {} when its HTML puts none behind words - each connector's one line."
+    return {'links': ln} if (ln := mail_links(html)) else {}
+
+
+def kept_links(m: dict | None) -> list:
+    """The links a stored message keeps behind words, read back ([[words, address]]) - web and mail addresses only, checked again here
+    so nothing else stored there ever becomes one. ONE READER: the screens, the Assistant on an item and - which had none - read_message
+    and the agent's context each read MailMetaJson their own way, so "the invoice is at the link" reached an agent as the words alone."""
+    try: got = (json.loads((m or {}).get('MailMetaJson') or '{}') or {}).get('links') or []
+    except (ValueError, TypeError, AttributeError): return []
+    return [[str(w), str(h)] for w, h in (x for x in got if isinstance(x, list) and len(x) == 2) if re.match(r'(?i)(https?://|mailto:)', str(h))]
+
+
 # A MAIL THAT IS ONLY A PICTURE had no words, so it was stored, triaged and shown as nothing (the owner, 2026-11-03: "in a fyi email where
 # entire email was a image it showed nothing"). Its pictures become stand-ins - what the alt says, else the file's name - so triage reads
 # something and the screens know what to draw: "[image: ...]" is a picture carried with the mail (cid:, drawn from its attachments),
@@ -1535,7 +1549,9 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         if org is None and tenant and user.get('tenantId'): org = teams_internal(user, tenant, users.get(('guest', user['id']), False))
         meta = {**({'dm': True} if kind == 'oneOnOne' else {}), **({'internal': org} if org is not None else {}),
                 # ...and which organisation they are in, whenever Graph says: what "Trust their organisation" is matched on
-                **({'tenant': str(user['tenantId']).lower()} if user.get('tenantId') else {})}
+                **({'tenant': str(user['tenantId']).lower()} if user.get('tenantId') else {}),
+                # ...and the addresses a chat line puts behind words ("the form is here"), as a mail's are: _clean keeps only the words
+                **links_meta((m.get('body') or {}).get('content'))}
         if meta: common['mail_meta'] = meta
         if org and user['id'] != me: store.remember_trust('teams', (addr or f"teams:{user['id']}").lower(), ORG_REASON)
         if user['id'] == me:                       # your own chat lines are context, never work
@@ -2178,7 +2194,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                             'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
                                           'flag': (m.get('flag') or {}).get('flagStatus'),
                                           'invite': inv, **({'cal': cal_} if cal_ else {}), **att_marks(atts),
-                                          **({'links': ln} if (ln := mail_links((m.get('body') or {}).get('content'))) else {})}}, llm=llm)
+                                          **links_meta((m.get('body') or {}).get('content'))}}, llm=llm)
                         if atts and out.get('message_id') and out['status'] != 'duplicate':
                             try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")
                             except Exception as e: logger.warning(f"saving attachments for {m['id']} failed: {e}")

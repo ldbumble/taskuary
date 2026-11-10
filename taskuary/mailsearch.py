@@ -68,7 +68,9 @@ def message(store, mid) -> dict | None:
     m = store.get_message(message_id(mid))
     if not m or m.get('Channel') == 'assistant': return None
     thread = store.thread_messages(m.get('ConversationId'), m.get('Subject'), 40) or [m]
-    return {**_hit(m), 'body': str(m.get('BodyText') or ''), 'to': str(m.get('RecipientsJson') or ''),
+    # ...with the addresses its words carry (channels.kept_links): "pay at the link below" was read whole and still had no link in it
+    from .channels import kept_links
+    return {**_hit(m), 'body': str(m.get('BodyText') or ''), 'to': str(m.get('RecipientsJson') or ''), 'links': kept_links(m),
             'messages': [_hit(x) for x in thread if x.get('Channel') != 'assistant']}
 
 

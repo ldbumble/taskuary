@@ -233,10 +233,9 @@ def _body_and_attachments(msg) -> tuple:
 
 def html_links(msg) -> dict:
     "{'links': [[words, address]]} of the mail's HTML part (channels.mail_links), {} when it has none."
-    from .channels import mail_links
+    from .channels import links_meta
     part = next((p for p in msg.walk() if not p.is_multipart() and p.get_content_type() == 'text/html' and not p.get_filename()), None)
-    links = mail_links(_decode(part.get_payload(decode=True) or b'', part)) if part else []
-    return {'links': links} if links else {}
+    return links_meta(_decode(part.get_payload(decode=True) or b'', part)) if part else {}
 
 
 def _decode(payload: bytes, part) -> str:

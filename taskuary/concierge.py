@@ -5974,9 +5974,8 @@ def item_whole(store, item: dict | None) -> str:
     th = store.message_thread(int(item['mid'])) if m else None
     if th: out.append('TRIAGE READ IT AS: ' + ' | '.join(f'{k}: {_cut(v, 300)}' for k, v in (('what it says', th.get('asking')),
                       ('what matters to the owner', th.get('your_part')), ('on the owner', '; '.join(th.get('on_you') or []))) if v))
-    try: links = [l for l in (json.loads((m or {}).get('MailMetaJson') or '{}') or {}).get('links') or [] if isinstance(l, list) and len(l) == 2]
-    except (ValueError, TypeError, AttributeError): links = []
-    if links: out.append('ITS LINKS: ' + '; '.join(f'{_cut(w, 80)} -> {_cut(h, 200)}' for w, h in links[:12]))
+    from .channels import kept_links
+    if links := kept_links(m): out.append('ITS LINKS: ' + '; '.join(f'{_cut(w, 80)} -> {_cut(h, 200)}' for w, h in links[:12]))
     return _cut('\n\n'.join(out), 9000)
 
 

@@ -214,6 +214,23 @@ class TwoTeamsCards(unittest.TestCase):
         rows = {m['ConversationId']: m['SourceName'] for m in store.feed() if m['Channel'] == 'teams'}
         self.assertEqual(rows, {'teams:19:tok:rt-teams-northwind': A, 'teams:19:tok:rt-teams-contoso': B})
 
+    def test_a_chat_line_keeps_the_address_behind_its_words(self):
+        # "the form is here" in a chat is a link behind a word, as in a mail - and only the mail roads kept its address
+        store, first, _second = two_teams()
+        line = {'id': 'm-form', 'chatId': '19:forms', 'messageType': 'message', 'createdDateTime': '2026-10-20T10:00:00Z',
+                'from': {'user': {'id': 'u-erin', 'displayName': 'Erin Blake'}},
+                'body': {'content': '<p>the form is <a href="https://forms.vendor.example/f/9">here</a>, can you sign it today?</p>'}}
+        with mock.patch.object(channels, 'graph_token', side_effect=fake_token), \
+             mock.patch.object(channels, '_teams_user_delta', return_value=[line]), \
+             mock.patch.object(channels, '_chat_meta', return_value=('', 'oneOnOne')), \
+             mock.patch.object(channels, '_graph_user', return_value=('Erin Blake', 'erin@vendor.example')), \
+             mock.patch.object(channels, 'hosted_images', return_value=[]), \
+             mock.patch.object(channels.requests, 'get', return_value=R(200, {'id': 'u-me'})):
+            channels._poll_one(store, store.get_connector(first), True, 0, None, False)
+        row = store.get_message(next(m for m in store.feed() if m['Channel'] == 'teams')['MessageId'])
+        self.assertIn('the form is here', ' '.join(row['BodyText'].split()))
+        self.assertEqual(json.loads(row['MailMetaJson']).get('links'), [['here', 'https://forms.vendor.example/f/9']])
+
     def test_a_reply_leaves_through_the_card_that_owns_the_chat(self):
         store, _first, _second = two_teams()
         self.assertTrue(outbound.can_reply(store, 'teams'), 'a person signed in may answer in their chats')

@@ -4,7 +4,7 @@ FAILS returns the review to the queue wearing the error, so nothing looks finish
 never left the machine. The corrections feed LEARNED.md (an edit shows how the owner
 writes, a reject what should never have been drafted).
 """
-import hashlib, json, re
+import hashlib, json, re, threading
 from pathlib import Path
 
 from loguru import logger
@@ -183,6 +183,24 @@ def _detach(store, rid: int, name: str, actor: str = 'owner') -> dict:
 def _envelope(rv: dict) -> dict:
     try: return json.loads(rv.get('Deliver') or '{}') or {}
     except (TypeError, ValueError): return {}
+
+
+_RUNNING, _RUNNING_LOCK = set(), threading.Lock()   # action reviews whose act is running right now (one server process per home)
+
+
+def _claim_act(store, rid) -> bool:
+    """This press may run the act: no other press is running it and its row still waits. A reply's send is claimed in the store before it
+    leaves (claim_review_delivery); an action ran first and was marked answered after, so a double click - or the desk and the phone -
+    ran one post, push or merge twice."""
+    with _RUNNING_LOCK:
+        if rid in _RUNNING or (store.get_review(rid) or {}).get('Status') not in ('pending', 'held'): return False
+        _RUNNING.add(rid); return True
+
+
+def _act_busy(store, rid):
+    "The answer to a press that lost the claim: already answered says so, still running says nothing ran again."
+    out = _delivery_busy(store, rid)
+    return out if out.get('already') else {**out, 'send_error': 'This is already being done; nothing was run again.'}
 
 
 def _delivery_busy(store, rid):
@@ -682,30 +700,33 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
         return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': 'only a pull request close-out can be closed or merged that way'}
     if rv.get('Kind') == 'action':
         from . import proposals
-        if verb == 'close_pr':
-            try: out = proposals.close_pr(store, rv, actor)
-            except Exception as e:
-                store.add_comment(rv['TaskId'], actor, 'human', f'CLOSING THE PULL REQUEST FAILED: {str(e)[:300]}')
-                return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300]}
-            if not store.decide_review(rid, 'rejected', None, actor, 'closed the pull request without merging'): return _delivery_busy(store, rid)
-            proposals.settle(store, rv, 'approve', actor)       # answered, like a merge - the task stays open for Mark done
-            return {'ok': True, 'status': 'rejected', 'sent': None, 'send_error': None, 'result': out}
-        if verb in ('approve', 'edit', 'merge_anyway'):
-            try:
-                out = proposals.execute(store, rv, actor, final, skip_checks=verb == 'merge_anyway', fields=fields)
-            except Exception as e:
-                store.add_comment(rv['TaskId'], actor, 'human', f'PROPOSAL FAILED: {str(e)[:300]}')
-                return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300],
-                        **({'offers': e.offers, 'refused': True} if isinstance(e, proposals.ChecksRed) else {}),
-                        # a grant the token lacks (github.Refused.needs): the owner's to add - a retry only repeats it
-                        **({'needs': e.needs} if getattr(e, 'needs', '') else {})}
-            if not store.decide_review(rid, VERB2STATUS['approve'], proposals.receipt(rv, final, out, fields), actor, note): return _delivery_busy(store, rid)
-            proposals.settle(store, rv, 'approve' if verb == 'merge_anyway' else verb, actor)   # runs only the act: the task stays open
-            return {'ok': True, 'status': 'approved', 'sent': None, 'send_error': None, 'result': out}
-        if not store.decide_review(rid, VERB2STATUS[verb], None, actor, note): return _delivery_busy(store, rid)
-        store.add_comment(rv['TaskId'], actor, 'human', f'Proposal {VERB2STATUS[verb]} - nothing was done.')
-        proposals.settle(store, rv, verb, actor)
-        return {'ok': True, 'status': VERB2STATUS[verb], 'sent': None, 'send_error': None}
+        if not _claim_act(store, rid): return _act_busy(store, rid)   # every verb: a No over a running Yes would mark a merged pull request rejected
+        try:
+            if verb == 'close_pr':
+                try: out = proposals.close_pr(store, rv, actor)
+                except Exception as e:
+                    store.add_comment(rv['TaskId'], actor, 'human', f'CLOSING THE PULL REQUEST FAILED: {str(e)[:300]}')
+                    return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300]}
+                if not store.decide_review(rid, 'rejected', None, actor, 'closed the pull request without merging'): return _delivery_busy(store, rid)
+                proposals.settle(store, rv, 'approve', actor)       # answered, like a merge - the task stays open for Mark done
+                return {'ok': True, 'status': 'rejected', 'sent': None, 'send_error': None, 'result': out}
+            if verb in ('approve', 'edit', 'merge_anyway'):
+                try:
+                    out = proposals.execute(store, rv, actor, final, skip_checks=verb == 'merge_anyway', fields=fields)
+                except Exception as e:
+                    store.add_comment(rv['TaskId'], actor, 'human', f'PROPOSAL FAILED: {str(e)[:300]}')
+                    return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300],
+                            **({'offers': e.offers, 'refused': True} if isinstance(e, proposals.ChecksRed) else {}),
+                            # a grant the token lacks (github.Refused.needs): the owner's to add - a retry only repeats it
+                            **({'needs': e.needs} if getattr(e, 'needs', '') else {})}
+                if not store.decide_review(rid, VERB2STATUS['approve'], proposals.receipt(rv, final, out, fields), actor, note): return _delivery_busy(store, rid)
+                proposals.settle(store, rv, 'approve' if verb == 'merge_anyway' else verb, actor)   # runs only the act: the task stays open
+                return {'ok': True, 'status': 'approved', 'sent': None, 'send_error': None, 'result': out}
+            if not store.decide_review(rid, VERB2STATUS[verb], None, actor, note): return _delivery_busy(store, rid)
+            store.add_comment(rv['TaskId'], actor, 'human', f'Proposal {VERB2STATUS[verb]} - nothing was done.')
+            proposals.settle(store, rv, verb, actor)
+            return {'ok': True, 'status': VERB2STATUS[verb], 'sent': None, 'send_error': None}
+        finally: _RUNNING.discard(rid)
     # A BLANK LEFT IN IT (the owner, 2026-10-30): "[REASON]" went out as written. The one door refuses it, so the phone and the
     # assistant meet the same "Fill in [REASON] first" the Send button does - nothing is decided, the draft stays as it is
     # ...but a send already attempted is checked as attempted (Check delivery), its text frozen - never a new refusal over it

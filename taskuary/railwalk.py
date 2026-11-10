@@ -53,7 +53,7 @@ def _rows(store) -> list:
     the chat, the walk's place) emptied the pile's cache, and the next press rebuilt the whole rail for them - 0.5-0.7 s a press on a
     real home of 5,600 rows, twice a Next (2026-10-31). Spec 7.3: the walk reads the rail, it never builds it."""
     # ...and no older than the pile's own cache may be: a Later row comes due with nothing written
-    if _HAND.get('store') is store and _HAND.get('mark') is not None and time.time() - _HAND['at'] < funnel.PILE_EVERY             and _mark(store) == _HAND['mark']: return list(_HAND['rows'])
+    if _HAND.get('store') is store and _HAND.get('mark') is not None and time.time() - _HAND['at'] < funnel.PILE_EVERY and _mark(store) == _HAND['mark']: return list(_HAND['rows'])
     return list(funnel.pile(store)['items'])
 
 

@@ -80,12 +80,9 @@ def _channels_of(c: dict) -> set:
 
 
 def _rank_connectors(store) -> list:
-    """Every ACTIVE connector switched to rank, read once."""
-    out = []
-    for c in store.list_connectors():
-        full = store.get_connector(c['ConnectorId']) or {}
-        if c.get('Active') and _cfg(full).get('bulk') == 'rank': out.append({**full, 'Type': c.get('Type') or full.get('Type')})
-    return out
+    """Every ACTIVE connector switched to rank - one read: the list carries each card's config (store._CONN_SAFE), and a second read
+    of every card for it was two thirds of a rail build's queries."""
+    return [c for c in store.list_connectors() if c.get('Active') and _cfg(c).get('bulk') == 'rank']
 
 
 def build_rank_llm(store):

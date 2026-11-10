@@ -552,14 +552,24 @@ def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: st
                            envelope=envelope, send_fn=post)
 
 
-def decide(store, rv: dict, verb_in: str, *a, **kw) -> dict:
-    """_decide, and a yes that went wakes the task's agent where its last turn said it waits on that Send (general.follow_up)."""
+def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dict:
+    """_decide, and a yes that went wakes the task's agent where its last turn said it waits on that Send (general.follow_up).
+    `closes`: Send and close - the task's close, through its one gate, as the send went (out['shut'])."""
     out = _decide(store, rv, verb_in, *a, **kw)
     if verb_in in ('approve', 'edit', 'merge_anyway') and out.get('ok') and not out.get('send_error') and rv.get('TaskId'):
         from . import general, proposals
+        actor = a[2] if len(a) > 2 else kw.get('actor', 'owner')
+        # SEND AND CLOSE CLOSES BEFORE ITS AGENT IS TOLD (the agent walk, 2026-11-10): the close came a beat after the send, by the page's
+        # own call - and by then the send had woken the agent parked on the task, so the gate found it working and kept the task open:
+        # "Sent. Kept open: The agent session on it is still open", every time an agent had run. The owner said close: an agent at rest
+        # is stopped (concierge.close_after_send), never woken to be; one kept open for a reason of its own hears the send as before
+        if closes and (out.get('reply') or {'ok': rv.get('Kind') != 'action'}).get('ok'):
+            from . import concierge
+            try: out['shut'] = concierge.close_after_send(store, rv['TaskId'], actor)
+            except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the send went, its close did not run - {e}")
         # ...EVERY yes that went, not only one its turn said it waits on (the owner, 2026-11-09) - a held step's own road tells its agent
-        if proposals._action(rv) not in proposals.HELD_ACTS:
-            try: general.approved(store, rv['TaskId'], *pressed(rv, out), a[2] if len(a) > 2 else kw.get('actor', 'owner'))
+        if proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed'):
+            try: general.approved(store, rv['TaskId'], *pressed(rv, out), actor)
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it went - {e}")
     return out
 

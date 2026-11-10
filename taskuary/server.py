@@ -533,6 +533,7 @@ class DecideBody(BaseModel):
     bcc: list[str] | None = None     # the email card's BCC and subject, as the owner left them (verdicts._deliver_review)
     subject: str | None = None
     fields: dict | None = None       # an action card's choices the owner changed (who sees a post, now or a draft): connectorcatalog.owner_edits
+    closes: bool = False             # Send and close: the task's close as the send goes, before its agent is told (verdicts.decide)
 class CodeBody(BaseModel):
     repo: str | None = None; agent: str | None = None
     model: str | None = None; instruction: str | None = None
@@ -1773,7 +1774,8 @@ def _run_kind(op: dict, background: BackgroundTasks):
         from . import proposals
         rv = store.get_review(tid)
         closeout = rv.get('Kind') == 'action' and proposals._action(rv) in proposals.CLOSEOUT
-        out = decide(tid, DecideBody(verb='approve', reply_text='' if closeout else None, anyway=bool(p.get('anyway'))), background)
+        out = decide(tid, DecideBody(verb='approve', reply_text='' if closeout else None, anyway=bool(p.get('anyway')), closes=bool(p.get('close'))),
+                     background)
         # ...with what the failure knows about the way on - GitHub's own offers (Update branch, Re-run checks) and a grant the
         # token lacks - which the chat and the phone draw as its choices (concierge.recover); a bare RuntimeError dropped both
         if not out.get('ok'):
@@ -1792,7 +1794,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # went, through the one gate (concierge.close_after_send) - kept open, and said why, while an agent or anything else on it waits
         if p.get('close') and rv.get('TaskId') and not out.get('reply_error'):
             from . import concierge
-            out = {**out, **concierge.close_after_send(store, int(rv['TaskId']), ACTOR)}
+            out = {**out, **(out.pop('shut', None) or concierge.close_after_send(store, int(rv['TaskId']), ACTOR))}
         return out
     if kind == 'agent.answer':
         # the exact outstanding request of the run that asked (PW-138/139); nothing asked = the waiting room (PW-140)
@@ -5043,7 +5045,7 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
                                       else f"Press {buttons.label('redraft')} to write it with the latest context before approving."))}
     return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
                 learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway, fields=body.fields,
-                blanks_ok=body.blanks_ok, bcc=body.bcc, subject=body.subject)
+                blanks_ok=body.blanks_ok, bcc=body.bcc, subject=body.subject, closes=body.closes)
 
 class StepsBody(BaseModel):
     ids: list[int]; verb: str = 'approve'

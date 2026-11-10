@@ -1336,7 +1336,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (!liveWork) onLeave?.();
       // ...and the walk is told it stays (`stays`), so it draws no row below at the press: the next row stood on the table until the kept
       // answer brought this one back, a beat on a quick server and seconds on a slow one
-      try { const d = await walkLeave("sent", liveWork ? { stays: true } : {}); if (d?.kept) onStay?.(); } catch (e) { onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
+      // ...and kept open, the sent line says why - it went on saying "closing the task" over a task that stayed (the agent walk, 2026-11-10)
+      try { const d = await walkLeave("sent", liveWork ? { stays: true } : {}); if (d?.kept) { if (said) setSentHere((h) => h && { ...h, closing: false, kept: d.kept.join("; ") }); onStay?.(); } } catch (e) { onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
       loadDetail(selected); loadTasks(); onChanged?.(); return;
     }
     if (closes) {

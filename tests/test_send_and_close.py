@@ -84,6 +84,43 @@ class Server(unittest.TestCase):
         self.assertEqual(out['outcome']['kept_open'], ['the agent session on it is still open'])
         self.assertIn('Sent. Kept open: The agent session on it is still open.', [c['Body'] for c in self.s.list_comments(self.tid)])
 
+    def test_it_closes_before_the_agent_parked_on_it_is_woken(self):
+        """A send that went wakes the agent that set it up. The close came after, by the page's own call: the parked agent was working
+        again, and the task read "Sent. Kept open: The agent session on it is still open" every time an agent had run on it."""
+        from taskuary import general, verdicts
+        ses = term.SESSIONS['g1'] = SimpleNamespace(sid='g1', task_id=self.tid, alive=True, mode='assistant', busy=False)
+        woke = []
+        def wake(store, tid, *a, **k): woke.append(tid); ses.busy = True; return 'told'
+        with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT), mock.patch.object(general, 'approved', wake), \
+             mock.patch.object(concierge, 'save_live', lambda *a, **k: True):
+            out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', None, None, 'owner', closes=True)
+            self.assertTrue(out['shut']['closed']); self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
+            self.assertEqual(woke, [], 'an agent the close stops is not woken to be stopped')
+            again = concierge.close_after_send(self.s, self.tid, 'owner')          # the page's walk asks a beat later: closed already
+        self.assertEqual((again['status'], again['kept_open']), ('done', []))
+
+    def test_kept_open_is_said_once_in_words_and_its_agent_hears_the_send(self):
+        from taskuary import general, verdicts
+        term.SESSIONS['g1'] = SimpleNamespace(sid='g1', task_id=self.tid, alive=True, mode='assistant', busy=True)
+        woke = []
+        with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT), \
+             mock.patch.object(general, 'approved', lambda store, tid, *a, **k: woke.append(tid) or 'told'):
+            out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', None, None, 'owner', closes=True)
+            again = concierge.close_after_send(self.s, self.tid, 'owner')
+        why = 'the agent session on it is still open'
+        self.assertEqual((out['shut']['closed'], out['shut']['kept_open'], again['kept_open'], woke), (False, [why], [why], [self.tid]))
+        self.assertEqual([c['Body'] for c in self.s.list_comments(self.tid)].count('Sent. Kept open: The agent session on it is still open.'), 1)
+        said = [x[2] for x in general.presses(self.s, self.tid)]
+        self.assertEqual([x for x in said if 'open' in x], [f'asked to close it with that send - it stays open: {why}'])
+
+    def test_a_plain_send_closes_nothing_and_wakes_as_before(self):
+        from taskuary import general, verdicts
+        woke = []
+        with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT), \
+             mock.patch.object(general, 'approved', lambda store, tid, *a, **k: woke.append(tid) or 'told'):
+            out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', None, None, 'owner')
+        self.assertNotIn('shut', out); self.assertEqual((self.s.get_task(self.tid)['Status'], woke), ('open', [self.tid]))
+
     def test_a_send_that_failed_closes_nothing(self):
         with mock.patch('taskuary.outbound.reply_to_message', side_effect=RuntimeError('the mailbox refused it')):
             out = self.run_op(self.s, self.rid, close=True).json()

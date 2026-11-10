@@ -4312,6 +4312,7 @@ def owed_items(store, tid: int, asks: bool = True) -> list:
     return out
 
 
+SAME_PRESS = 30       # seconds in which a second ask about a send's close is the same press asking (close_after_send)
 def close_after_send(store, tid: int, actor: str = 'owner') -> dict:
     """THE ONE GATE on "the reply that went closes the task" (the Close out Send, 2026-10-29): closed only when nothing on it still waits
     on the owner (waiting_on_owner); otherwise it stays open and says why on the task. {'status', 'closed', 'kept_open'}."""
@@ -4328,6 +4329,11 @@ def close_after_send(store, tid: int, actor: str = 'owner') -> dict:
     if ws.LIVE_SESSION in kept and parked: kept = [k for k in kept if k != ws.LIVE_SESSION]
     if not kept: return {'status': 'done', 'closed': close_task(store, tid, actor), 'kept_open': []}
     said = '; '.join(kept)
+    # ...said ONCE a press: the send's own close says it (verdicts.decide `closes`), and the page's walk asks again a beat later
+    last = store._one("SELECT Detail, CreatedAt FROM audit WHERE EntityType='task' AND EntityId=? AND Action='send_kept_open' ORDER BY Id DESC LIMIT 1", (tid,))
+    if last and (json.loads(last['Detail'] or '{}').get('kept') == kept
+                 and str(last['CreatedAt']) >= (datetime.now() - timedelta(seconds=SAME_PRESS)).isoformat(sep=' ', timespec='seconds')):
+        return {'status': t.get('Status') or 'open', 'closed': False, 'kept_open': kept}
     store.add_comment(tid, actor, 'human', f'Sent. Kept open: {said[0].upper()}{said[1:]}.')
     store.audit('task', tid, 'send_kept_open', actor, detail={'kept': kept})
     funnel.invalidate()

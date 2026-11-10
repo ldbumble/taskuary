@@ -580,6 +580,8 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if 
            'set_repo': lambda d: 'changed where its code lives', 'set_workstream': lambda d: 'changed its workstream',
            'not_coding': lambda d: 'said it is not coding work', 'funnel_later': lambda d: 'put it for later',
            'close_from_assistant': lambda d: 'marked it done',      # every surface's close (concierge.close_task) writes this one row
+           # ...a Send and close that sent and did not close (concierge.close_after_send): it read "You send kept open." on the page and to the agent
+           'send_kept_open': lambda d: f"asked to close it with that send - it stays open: {'; '.join(d.get('kept') or []) or 'something on it still waits'}",
            # ...one of the task's emails let go (slots.drop), by who it was to - drafted or not (the agent walk, 2026-11-09: told "turned down
            # rv3", or nothing, the agent went on saying the dropped one "waits for Send")
            'slot_dropped': lambda d: f"dropped the {'email' if d.get('kind', 'email') == 'email' else d.get('kind') + ' message'} to {d.get('to') or 'them'} - it will not be sent",

@@ -329,7 +329,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     setBusy(true); setErr(""); setSendErr(""); setCoFail(null);
     try {
       const out = await press(api, closeout.ReviewId,
-        { verb, reply_text: verb !== "reject" && sendable && words.trim() ? value : null, cc: sendable ? ccNow : null, blanks_ok: blanksOk }), data = out.data;
+        { verb, reply_text: verb !== "reject" && sendable && words.trim() ? value : null, cc: sendable ? ccNow : null, blanks_ok: blanksOk,
+          ...(closesIt && close && verb !== "reject" ? { closes: true } : {}) }), data = out.data;
       // no answer in a minute: the review's own delivery state says where it stands (press.js `unknown`) - never a line of ours
       if (!data) { if (out.kind === "unknown") onChanged?.(); else setErr(out.why || "That didn't go through - nothing was sent. Try the button again."); setBusy(false); return; }
       if (data.blanks?.length) { setFillIn(true); if (!blanks.length) setErr(data.send_error); }
@@ -368,7 +369,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       const out = await press(api, r.ReviewId,
         { verb, final_text: verb === "approve" && !delivery.frozen ? value : null,
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
-          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk, ...envelopeEdits(verb) }), data = out.data;
+          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk, ...envelopeEdits(verb),
+          // ...Send and close says so WITH the send: the server closes as it goes, before the task's agent is told it went - told first, a
+          // parked agent was working again by the time the page asked for the close, and the task stayed open (the agent walk, 2026-11-10)
+          ...(closesIt && shut && verb === "approve" ? { closes: true } : {}) }), data = out.data;
       // NO ANSWER IN A MINUTE is not "nothing was sent": the server may be sending still. The card reads the review again and its
       // DeliveryState draws Sending… or Check delivery (reviewDeliveryState) - the check it already has, not a line of ours
       if (!data) { if (out.kind === "unknown") onChanged?.(); else setErr(out.why || "That didn't go through - nothing was sent. Try the button again."); setBusy(false); return; }

@@ -57,7 +57,7 @@ test("a pressed card - held steps approved, a reply sent - is drawn in the turn 
   assert.match(page, /const turnCards = \[\.\.\.pressedHeld\.map\(\(g\) =>/);
   assert.match(page, /node: <SentCard id=\{r\.ReviewId\}/);
   assert.match(page, /turnCards=\{turnCards\}/);
-  assert.match(chat, /after: turnOf\(messages, c\.at\)/, "placed in the turn that began at or before it");
+  assert.match(chat, /const placed = React\.useMemo\(\(\) => placeCards\(turnCards, messages, turns\), \[turnCards, messages, turns\]\);/, "placed in the turn that raised it (agentSummary.placeCards)");
   assert.match(chat, /\{pressed\.map\(\(c\) => <React\.Fragment key=\{c\.key\}>\{c\.node\}<\/React\.Fragment>\)\}/);
 });
 

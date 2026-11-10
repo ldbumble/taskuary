@@ -104,7 +104,7 @@ import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
   AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
-import { closeoutOf, splitHeld } from "./reviewProposal.js";
+import { askNote, closeoutOf, splitHeld } from "./reviewProposal.js";
 import SentCard from "./SentCard.jsx";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
@@ -2706,15 +2706,22 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const { asks: askCards, past: pressedHeld } = splitHeld(allReviews, asks), kept = askCards.flatMap((g) => (g.held ? g.reviews : [])).filter((r) => r.Status !== "pending");
   // ...AND ONCE THE OWNER WRITES AGAIN EACH PRESSED CARD STAYS IN ITS TURN (the owner, 2026-11-09: "leave the card in the turn with the pressed
   // button"): the held steps it approved, and every reply that went - drawn by the chat in the turn that set it up (GeneralWorkspace turnCards)
-  const turnCards = [...pressedHeld.map((g) => ({ key: g.key, at: g.at,
-      node: <HeldSteps reviews={g.reviews} onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /> })),
+  const liveAsks = askCards.filter((g) => g.reviews.some((r) => r.Status === "pending")).length;
+  const asksBelow = !!(pendingReview || moreDrafts.length || owesEmails || (handInPane && handoff) || calAsk?.invite);
+  // ...AND SO DOES EACH CARD THAT STILL WAITS (the spine audit, 2026-11-09): a held step, a browser act, a drafted playbook rode one block under
+  // whichever turn was newest, and the last two stood again at the chat's foot with a second Approve. Each is drawn once, in the turn that
+  // raised it (`rid`: the chat's payload names that turn). A to-do no agent has touched has no turns: its cards stay over its box (chatBody)
+  const inTurns = !solo && !["done", "dropped"].includes(t?.Status), decided = () => { loadDetail(selected); loadTasks(); onChanged?.(); };
+  const turnCards = [...pressedHeld.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
+      node: <HeldSteps reviews={g.reviews} onChanged={decided} /> })),
+    ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),
+      node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
+        : <ReviewDecision review={g.reviews[0]} toRow={inRow && !pendingReview && proposals.length === 1} onChanged={decided} /> })),
     ...allReviews.filter((r) => r.Kind !== "action" && r.Kind !== "slot" && ["approved", "edited", "sent"].includes(r.Status) && r.ReviewId !== sentHere?.id)
-      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", node: <SentCard id={r.ReviewId} text={r.FinalText || r.DraftText} channel={r.Channel || ""}
+      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard id={r.ReviewId} text={r.FinalText || r.DraftText} channel={r.Channel || ""}
         to={replyContext(r)} subject={deliverySubject(r)} at={r.DecidedAt} /> }))];
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
   const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
-  const liveAsks = askCards.filter((g) => g.reviews.some((r) => r.Status === "pending")).length;
-  const asksBelow = !!(pendingReview || moreDrafts.length || owesEmails || (handInPane && handoff) || calAsk?.invite);
   const chatBody = () => <>
       {/* HAND IT TO A PERSON, IN THE CHAT (the owner, 2026-10-29: "you click the button and the matching UI opens in its pane"): on
           the canvas the hand-off is a compose card here - who, the forward the AI drafts, and Send it - where the drawer stood;
@@ -2891,17 +2898,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               taking a fourth stage: lanes.json has one `approve` lane for a reply and an
               action alike, and one lane on the rail is one section on the page. */}
           {/* ...in the chat an act with its card is drawn in the turn that set it up (GeneralWorkspace, ActionCard) - never a second time here */}
-          {askCards.length > 0 && (
+          {/* ...and where the chat has turns each stands in its own (turnCards) - here only over a to-do's box, which has none */}
+          {!inTurns && askCards.length > 0 && (
             <Box sx={{ mt: 1.4, pt: liveAsks ? 1.1 : 0, borderTop: liveAsks ? `1px solid ${BORDER}` : 0 }}>
               {/* ..."Also" only under something else waiting above it (the owner, 2026-11-09: one stale ask read "Also" over nothing) */}
               {liveAsks > 0 && <Typography sx={{ ...label, display: "block", mb: 0.5 }}>
                 {`${asksBelow ? "Also waiting on you" : "Waiting on you"}${liveAsks > 1 ? ` · ${liveAsks}` : ""}`}
               </Typography>}
               {askCards.map((g) => g.held
-                ? <HeldSteps key={g.key} reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1}
-                    onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
-                : <ReviewDecision key={g.key} review={g.reviews[0]} toRow={inRow && !pendingReview && proposals.length === 1}
-                  onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
+                ? <HeldSteps key={g.key} reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
+                : <ReviewDecision key={g.key} review={g.reviews[0]} toRow={inRow && !pendingReview && proposals.length === 1} onChanged={decided} />   /* the list's row moves too (T19) */
               )}
             </Box>
           )}
@@ -2910,10 +2916,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     </>;
   // ...only where it holds something (an empty Next steps said nothing), and marked while it waits on the owner: a resting Result keeps the chat
   // that holds it on screen (`data-tq-waits`, the agent room's :has)
-  const waits = !!(pendingReview || moreDrafts.length || proposals.length || owesEmails || handoff);
+  // ...the asks drawn in their turns are not this block's: with nothing else to hold it is not drawn (a "Next steps" over nothing)
+  const waits = !!(pendingReview || moreDrafts.length || proposals.length - (inTurns ? asks.length : 0) || owesEmails || handoff);
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
-  const chatCards = sentHere ? <SentCard {...sentHere} /> : !["done", "dropped"].includes(t?.Status) && (waits || kept.length || upFailed
+  const chatCards = sentHere ? <SentCard {...sentHere} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed
     || chatReplyShown({ replyMessage, pendingReview, sentReview: null, unsentReview: null }) || calAsk?.invite) ? <Box ref={cardsRef} data-tq-chat-cards="" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{chatBody()}</Box> : null;
   return (

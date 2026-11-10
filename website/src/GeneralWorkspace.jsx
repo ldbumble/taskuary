@@ -54,7 +54,7 @@ import CopyCorner from "./CopyCorner.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
 import { heldOn, isTurn, needsOwner, waitsOnPage } from "./browserSplit.js";
-import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
+import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, label as LABEL, mono } from "./theme.jsx";
 import { level } from "./priority.js";
 import "./generalWorkspace.css";
 import "./agentStepRows.css";
@@ -69,10 +69,10 @@ import { openAppLink } from "./appLinks.js";
 import ConnectAi from "./ConnectAi.jsx";
 import { withoutAsked } from "./askOnce.js";
 import ReviewDecision from "./ReviewDecision.jsx";
-import { heldActsLine, proposalFrom, reviewText } from "./reviewProposal.js";
+import { askNote, heldActsLine, proposalFrom, reviewText } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import AgentSummary, { OneBox, StaleDrafts } from "./AgentSummary.jsx";
-import { cardTurn, codingDrafts, turnAnswered, foldedSummaries, freshNext, hasReply, lastAnswerSummed, withTurns } from "./agentSummary.js";
+import { cardTurn, codingDrafts, turnAnswered, foldedSummaries, freshNext, hasReply, lastAnswerSummed, placeCards, turnOf, withTurns } from "./agentSummary.js";
 import { asUtc, dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
@@ -340,12 +340,16 @@ const LandingCtx = React.createContext(null);
 // ...AND SO IS EVERY PRESSED CARD (the owner, 2026-11-09: "leave the card in the turn with the pressed button"): a held steps' card approved, a
 // reply sent - each in the turn that set it up, whatever came after: [{key, after, node}] (TaskPage turnCards, placed by turnOf)
 const TurnCardsCtx = React.createContext([]);
-// ...its turn: the newest agent turn begun at or before it - the thread's times are Dates (toMessage), the server's stamps read as they are
-const msOf = (x) => (x instanceof Date ? +x : +(String(x).includes("Z") ? new Date(x) : asUtc(String(x))));
-export const turnOf = (messages, at) => {
-  const turns = (messages || []).filter((m) => m?.role === "assistant" && m.id), t = msOf(at);
-  return turns.length ? (turns.filter((m) => m.createdAt && msOf(m.createdAt) <= t).at(-1) || turns.at(-1)).id : null;
-};
+// ...AND SO IS EVERY CARD THAT STILL WAITS (the spine audit, 2026-11-09): a held step, a browser act, a drafted playbook - each in the turn that
+// raised it, under one "Waiting on you". They rode one block under whichever turn was newest, and an act or a playbook stood a second time at
+// the chat's foot with a second Approve. `also`: something else waits over them in the same place. Marked as waiting for the agent room's
+// rest, which keeps a chat that holds one on screen (data-tq-waits, TaskPage's :has)
+const TurnAsks = ({ cards, also = false, sx = null }) => !cards.length ? null : (
+  <Box data-tq-turn-asks="" data-tq-waits="" sx={{ mt: 1.25, ...sx }}>
+    <Typography sx={{ ...LABEL, display: "block", mb: 0.5 }}>{`${also ? "Also waiting on you" : "Waiting on you"}${cards.length > 1 ? ` · ${cards.length}` : ""}`}</Typography>
+    {cards.map((c) => <React.Fragment key={c.key}>
+      {!!c.note && <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 1, mb: 0.5 }}>{c.note}</Typography>}{c.node}</React.Fragment>)}
+  </Box>);
 // what a turn's Next steps count against (agentSummary.nextSteps): the task's reviews and checklist. Null in the dock, which has no turns
 // of an agent's to sum up and draws its steps as ever
 const WorkCtx = React.createContext(null);
@@ -465,7 +469,7 @@ const RanFor = () => {
 };
 const AssistantMessage = () => {
   const id = useAuiState((s) => s.message.id), shown = React.useContext(ShownCtx)[id], at = useTurnOutputs(id), work = React.useContext(WorkCtx);
-  const landing = React.useContext(LandingCtx), pressed = React.useContext(TurnCardsCtx).filter((c) => c.after === id);
+  const landing = React.useContext(LandingCtx), mine = React.useContext(TurnCardsCtx).filter((c) => c.after === id), pressed = mine.filter((c) => !c.waits);
   const words = useAuiState((s) => textOf(s.message)), custom = useAuiState((s) => s.message.metadata?.custom), chat = React.useContext(ChatCtx);
   // the turn is the chat's last entry AND has answered: it carries its card - a turn still at work never takes the one before it's draft (the owner,
   // 2026-11-05: "email draft is being shown below the new prompt ... it's connected to the prior agent taskuary thing")
@@ -516,6 +520,7 @@ const AssistantMessage = () => {
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded && !(home && holds)} reviews={work.reviews} checklist={work.checklist}
           acts={work.acts} next={(home ? !holds : custom.folded) || !freshNext(work.reviews) ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} turnId={id} answered={answered} />}
         {pressed.map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}
+        <TurnAsks cards={mine.filter((c) => c.waits)} also={holds && !!work?.next && freshNext(work.reviews) && mine.some((c) => c.also)} />
         {landing?.after === id && landing.node}
       </div>
     </MessagePrimitive.Root>
@@ -736,7 +741,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onAttachBack,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false, waiting = [], box = "",
-  onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, queued = null, heldStart = null, hint = "", placeholder = "",
+  onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, turns = null, queued = null, heldStart = null, hint = "", placeholder = "",
   empty = "", stopShown = false, seed = null }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
@@ -942,7 +947,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const [landState, setLandState] = useState(null);
   const landAt = landing ? turnOf(messages, landState?.at || "") : null;
   const landNode = landing ? React.cloneElement(landing, { onState: setLandState }) : null;
-  const placed = React.useMemo(() => (turnCards || []).map((c) => ({ ...c, after: turnOf(messages, c.at) })), [turnCards, messages]);
+  const placed = React.useMemo(() => placeCards(turnCards, messages, turns), [turnCards, messages, turns]);
+  // ...the chat's cards stand at the foot (no turn has summed it up, none holds the draft): what waits beside them there is "Also"
+  const footNext = !dock && nextAt?.next && freshNext(nextAt.reviews) && !summed && !working && !cardTurn(nextAt.reviews, (messages || []).map((m) => m.id)) && (!chat || messages?.at(-1)?.role !== "assistant");
   const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : "Answer the agent's question…";
   const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} began={began} starting={starting} />;
   // ...a turn a press asked for counts from the press, and says it is starting until the agent is at work
@@ -995,16 +1002,17 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               the answer needed */}
           {/* A PLAYBOOK DRAFTED HERE IS APPROVED HERE (the owner, 2026-10-21): Close out, where it also waits, is hidden while the
               conversation is live - Approve was reachable only after a Stop and save nothing said to press */}
-          {!dock && !!drafts?.length && (
+          {/* ...where the page places the task's cards itself (`turnCards`, the task's chat) each is drawn ONCE, in its turn: these two boxes drew a
+              playbook and a held act a second time, with a second Approve (the spine audit, 2026-11-09). A walk's chat, a journey's: here still */}
+          {!dock && !turnCards && !!drafts?.length && (
             <Box data-tq-playbook-drafts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }}>
-              <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>
-                Approve saves this playbook to Reports → Playbooks, and triage starts matching new mail against its when line. Nothing is sent to anyone.</Typography>
+              <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>{askNote(drafts[0])}</Typography>
               {drafts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}
             </Box>
           )}
           {/* ...AND A BROWSER ACT HELD HERE IS APPROVED HERE (2026-10-25): its card waited in the hidden Close out, and Stop and save, the
               only road to it, closed the very browser Approve runs in. The same card, where the owner already looks. */}
-          {!dock && !!acts?.length && (
+          {!dock && !turnCards && !!acts?.length && (
             <Box data-tq-browser-acts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }}>
               <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>{heldActsLine(acts)}</Typography>
               {acts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}
@@ -1028,12 +1036,14 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {/* ...a chat no turn has summed up yet: its cards (TaskPage's chatCards), under the thread */}
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
           {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}
-          {!dock && nextAt?.next && freshNext(nextAt.reviews) && !summed && !working && !cardTurn(nextAt.reviews, (messages || []).map((m) => m.id)) && (!chat || messages?.at(-1)?.role !== "assistant") && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
+          {footNext && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
             <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>{hasReply(nextAt.reviews) ? "Suggested reply" : "Next steps"}</Typography>{nextAt.next}</Box>}
           {/* ...the branch's landing, where the task works in a checkout (landing.has_checkout): in its turn (LandingCtx), here only before any */}
           {!dock && !landAt && landNode}
           {/* ...a pressed card with no agent turn to stand in yet stands here */}
-          {!dock && placed.filter((c) => !c.after).map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}
+          {!dock && placed.filter((c) => !c.after && !c.waits).map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}
+          {/* ...and one that waits, raised by a turn that has not answered yet */}
+          {!dock && <TurnAsks cards={placed.filter((c) => !c.after && c.waits)} also={!!footNext && placed.some((c) => c.also)} sx={{ mx: { xs: 1, sm: 2 } }} />}
           {/* ...A START HELD FOR A NEW SENDER says so under what came in, with its Run anyway (HeldStart, the owner, 2026-11-09) */}
           {!dock && heldStart}
           {/* ...A START WAITING FOR A SLOT is the agent's own line in the chat, not a strip over it (the owner, 2026-11-08) */}
@@ -1429,7 +1439,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""} queued={chat && !dock ? queued : null} heldStart={chat && !dock ? heldStart : null}
-        road={road} cards={codingCards} landing={chat && !dock ? landing : null} turnCards={chat && !dock ? turnCards : null} stopShown={coding && acp && !!cc.live?.working}
+        road={road} cards={codingCards} landing={chat && !dock ? landing : null} turnCards={chat && !dock ? turnCards : null} turns={coding ? null : data?.turns} stopShown={coding && acp && !!cc.live?.working}
         placeholder={coding ? (closedTask ? "Write to pick it back up…" : cc.live ? MESSAGE : "Write to pick the session back up…") : ""}
         hint={!coding ? "" : acp ? (cc.live.working ? "Enter sends it when this turn ends · Shift+Enter adds a line" : "Enter sends it to the agent · Shift+Enter adds a line")
           : cc.live ? "Enter types it into the running agent · Shift+Enter adds a line" : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}

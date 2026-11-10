@@ -1,5 +1,6 @@
 // WHERE THE OWNER STANDS AFTER A TURN (general.SUMMARY_TYPE, Task 3.5): each answer may carry `summary` = {about, did, on_you, nothing_left},
-// drawn as "What this is about" / "What I did" / "Next steps" (AgentSummary.jsx). Dependency-free so it runs under bare node.
+// drawn as "What this is about" / "What I did" / "Next steps" (AgentSummary.jsx). No React, so it runs under bare node.
+import { asUtc } from "./dates.js";
 
 // a reply drafted and not yet sent - an action (a playbook, a held browser act) or a slot email is not one
 const isDraft = (r) => !!r && r.Kind !== "action" && r.Kind !== "slot" && r.Status === "pending";
@@ -86,6 +87,19 @@ export const codingDrafts = (reviews, messages) => {
     return { review: r.ReviewId, turn: turn ? String(turn.id) : null, at, stale, before: stale ? later : null };
   });
 };
+// EVERY OTHER CARD OF THE TASK IN THE TURN THAT RAISED IT (TaskPage's turnCards: a held steps' card, a reply that went, an ask that waits).
+// On a coding chat that is the newest agent turn begun at or before it (`turnOf` - the thread's times are Dates, the server's stamps read as
+// they are). IN A GENERAL CHAT THE SERVER NAMES IT (the payload's `turns`, by the review `rid`; the spine audit, 2026-11-09): an answer there
+// is stamped when its turn ENDS, so that rule read a step held while the second turn worked into the first. Named with no answer yet: null,
+// the chat's foot. A coding chat's payload names none, and an answer the thread does not draw is no place to stand - turnOf
+const msOf = (x) => (x instanceof Date ? +x : +(String(x).includes("Z") ? new Date(x) : asUtc(String(x))));
+export const turnOf = (messages, at) => {
+  const turns = (messages || []).filter((m) => m?.role === "assistant" && m.id), t = msOf(at);
+  return turns.length ? (turns.filter((m) => m.createdAt && msOf(m.createdAt) <= t).at(-1) || turns.at(-1)).id : null;
+};
+export const placeCards = (cards, messages, turns) => { const ids = new Set((messages || []).map((m) => m.id));
+  return (cards || []).map((c) => { const named = turns && c.rid != null ? turns[c.rid] ?? null : undefined;
+    return { ...c, after: named === undefined || (named && !ids.has(named)) ? turnOf(messages, c.at) : named }; }); };
 // ...the payload's `drafts` (general.draft_turns: {review, turn, at, stale, before}) read onto the reviews they name
 export const withTurns = (reviews, drafts) => (drafts?.length ? (reviews || []).map((r) => { const d = drafts.find((x) => x?.review === r?.ReviewId);
   return d ? { ...r, turn: d.turn, stale: !!d.stale, drafted_at: d.at, before: d.before } : r; }) : reviews || []);

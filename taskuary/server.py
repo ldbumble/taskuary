@@ -2336,8 +2336,16 @@ def _assistant_payload(task_id: int, session=None):
                       'network': _proposals.POSTS.get(p['type']) or (_cat.by_type(act['card']) or {}).get('title') or act['card'],
                       'as': who or (c or {}).get('Name') or '',
                       'connect': outbound.connect_fix(store, act['card']) if r.get('Status') == 'pending' else None})
+    # ...AND SO IS EVERY OTHER CARD OF THE TASK (the spine audit, 2026-11-09): a held step, a proposal, a reply waiting or gone - each named
+    # with the answer it stands in, by that one rule. The page placed these itself, reading an answer's stamp as when its turn BEGAN: a step
+    # held while the second turn worked stood in the first. A reply's turn is the one that last left it (wrapup.left_by); None: no answer yet
+    from . import wrapup
+    turns = {}
+    for r in store._rows("SELECT ReviewId, Kind, CreatedAt FROM review WHERE TaskId=? AND Kind<>'slot' ORDER BY ReviewId", (task_id,)):
+        left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])
+        turns[str(r['ReviewId'])] = f"comment-{left['CommentId']}" if left else at_turn(r.get('CreatedAt'))
     return {'messages': messages,
-            'cards': cards,
+            'cards': cards, 'turns': turns,
             # WHICH TURN EACH PENDING DRAFT IS (general.draft_turns, 2026-11-06): drawn under its own turn - a stale one (made before the newest
             # message, left untouched by the turn that answered it) with its time, never as the newest turn's Next steps
             'drafts': general.draft_turns(store, task_id),

@@ -62,6 +62,10 @@ export const reviewText = (review) => {
   return PAGES.has(proposal?.action) && proposal.text ? proposal.text : review?.DraftText || "";
 };
 
+// WHAT A WAITING CARD SAYS OVER ITSELF IN THE CHAT - what its Approve does, in one line: a drafted playbook's, a held act's. Said with the one
+// card, wherever that card stands (a turn of the task's chat, the foot of a walk's)
+const PAGE_NOTE = "Approve saves this playbook to Reports → Playbooks, and triage starts matching new mail against its when line. Nothing is sent to anyone.";
+export const askNote = (r) => { const a = proposalFrom(r)?.action; return PAGES.has(a) ? PAGE_NOTE : ["browser_act", "desktop_act"].includes(a) ? heldActsLine([r]) : ""; };
 // THE LINE OVER A HELD STEP'S CARD IN THE CHAT, said for what was held: a held delete read "The agent's browser waits for your yes" (2026-11-03)
 export const heldActsLine = (reviews = []) => {
   const kinds = new Set(reviews.map((r) => proposalFrom(r)?.action));

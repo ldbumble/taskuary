@@ -212,5 +212,23 @@ class OwnerControlsTests(Base):
         self.assertEqual((q['state'], q['attempts']), ('failed', 1)); self.assertIn('unknown agent', q['lastError'])
 
 
+class FreedSlotTests(Base):
+    """The stress round, 2026-11-10: a turn queued behind a full house of assistants (ingest.queue_turn) waited for a CODING session to end,
+    a quick call to finish or a retry timer - an assistant's turn ending or idling out freed its slot and started nothing - and after a restart
+    only a start backing off from a failure was re-armed, so what waited for a slot waited for an unrelated event."""
+    def test_an_assistant_turn_ending_runs_what_waited_for_its_slot(self):
+        busy, waits = self.task('busy', 'general'), self.task('waits', 'general')
+        self.s.enqueue_dispatch(waits, None, 'assistant', 'slot', brief='THE THREAD CHANGED', turn='replan')
+        with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')): sess = general.GeneralSession(self.s, busy)
+        with mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: 'Done.'), mock.patch.object(bb, 'drain_later') as dl:
+            sess.send_prompt('look at it')
+        dl.assert_called()
+
+    def test_a_restart_runs_what_waited_for_a_slot(self):
+        tid = self.task('waits', 'general'); self.s.enqueue_dispatch(tid, None, 'assistant', 'slot', brief='THE THREAD CHANGED', turn='replan')
+        bb.schedule_due(self.s, startup=True)                                     # what the lifespan does on restart
+        self.timer.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -453,9 +453,17 @@ def record_failure(store, tid: int, err, agent: str = '', label: str = 'The agen
     return row
 
 
-def schedule_due(store):
+def freed(store):
+    """A slot came free - an assistant's turn ended or it idled out: what waits in the queue starts now (the stress round, 2026-11-10: a turn
+    queued behind a full house of assistants waited for a coding session to end), never on the freeing session's own thread."""
+    if store.queued_dispatches(): drain_later(store, 0.5)
+
+
+def schedule_due(store, startup: bool = False):
     """Arm the next retry from what is persisted - what the app does on startup, so a backoff that was
-    running when it closed neither vanishes nor restarts from zero (PW-085/088). Returns the delay."""
+    running when it closed neither vanishes nor restarts from zero (PW-085/088). Returns the delay.
+    `startup`: and what waited for a slot when it closed is drained now - nothing else would start it (freed)."""
+    if startup and any(q.get('State') != 'retrying' for q in store.queued_dispatches()): drain_later(store, 5.0)
     nxt = [q['NextAt'] for q in store.queued_dispatches() if q.get('State') == 'retrying' and q.get('NextAt')]
     if not nxt: return None
     from datetime import datetime

@@ -249,7 +249,7 @@ async def _lifespan(_app):
     except Exception as e: logger.warning(f'AI-use tiles not added: {e}')
     learn.note_verdicts(store)     # an older install's notes table, written into LEARNED.md once and dropped (memorylines.migrate)
     _fold_habits()                 # one habit card each, folded into the one habits row (habits.py, 2026-11-01)
-    try: blackboard.schedule_due(store)   # a retry that was backing off when the app closed is re-armed, not reset (PW-085)
+    try: blackboard.schedule_due(store, startup=True)   # a retry backing off when the app closed is re-armed, not reset (PW-085), and a slot wait runs
     except Exception as e: logger.warning(f'retry scheduling skipped: {e}')
     try:                           # historical triage failures stored as filed become retriable errors, once (PW-040)
         n = store.upgrade_triage_failures()

@@ -2750,6 +2750,10 @@ class GeneralSession:
                 sessionrecord.drop_live(self.task_id)
             self._emit('\x1b[1;34myou>\x1b[0m ')
             self._lock.release()
+            # ...and the slot it held is free: what waits in the queue starts (blackboard.freed) - unless a line of its own takes the turn next
+            if not getattr(self, 'waiting_turns', 0):
+                from . import blackboard
+                blackboard.freed(self.store)
 
 
     def _end_soon(self, **kw):

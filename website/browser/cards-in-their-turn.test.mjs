@@ -56,7 +56,9 @@ const look = (page, oldId, said) => page.evaluate((oldId, said) => {
   const mine = [...(pane?.querySelectorAll(".tq-aui-user-bubble") || [])].filter((e) => e.innerText.includes(said)).pop();
   const ext = [...(pane?.querySelectorAll("[data-tq-file-card], [data-tq-show-file]") || [])].filter((e) => e.getBoundingClientRect().height > 0).length;
   return { cards, old: cards.filter((c) => c.id === String(oldId)), bubble: mine ? { top: y(mine.getBoundingClientRect()), bottom: y({ top: mine.getBoundingClientRect().bottom }) } : null,
-    text: pane?.innerText || "", files: ext, recs: [...(pane?.querySelectorAll("[data-tq-replaced]") || [])].map((e) => [y(e.getBoundingClientRect()), e.getBoundingClientRect().height, e.parentElement?.closest("[data-tq-row-cards], [data-tq-chat-line]")?.outerHTML.slice(0, 90)]) };
+    text: pane?.innerText || "", files: ext,
+    // ...the head of the turn his line began: the first turn head under his line
+    head: mine ? [...pane.querySelectorAll("[data-tq-ran]")].map((e) => y(e.getBoundingClientRect())).find((t) => t > y(mine.getBoundingClientRect())) ?? null : null };
 }, oldId, said);
 
 async function rewrite(t, w, page, { tid, rid, name }) {
@@ -94,6 +96,7 @@ async function rewrite(t, w, page, { tid, rid, name }) {
     const others = s.cards.filter((c) => c.id !== String(rid));
     if (s.cards.filter((c) => c.live).length > 1) why.push("two live cards");
     for (const c of others) if (s.bubble && c.top < s.bubble.bottom) why.push(`a new card (${c.id}) above his line`);
+    for (const c of others) if (s.head != null && c.top < s.head) why.push(`a new card (${c.id}) over the turn's head`);
     if (s.files) why.push(`${s.files} file preview card(s)`);
     if (/Files are in [A-Z]:\\/.test(s.text)) why.push("a 'Files are in C:\\...' line");
     if (why.length) { bad.push(`${at}: ${why.join("; ")}`); if (shot < 4) await page.screenshot({ path: path.join(out, `item3c-${name}-wrong-${shot++}.png`) }); }
@@ -103,9 +106,10 @@ async function rewrite(t, w, page, { tid, rid, name }) {
   await new Promise((r) => setTimeout(r, 1500));
   const end = await look(page, rid, said);
   await page.screenshot({ path: path.join(out, `item3c-${name}-end.png`) });
+  // ...the recording ends before the test scrolls the record into view for its own picture: that scroll is not the page's
+  await rec.stop();
   await page.evaluate(() => document.querySelector("[data-tq-replaced]")?.scrollIntoView({ block: "center" }));
   await page.screenshot({ path: path.join(out, `item3c-${name}-end-record.png`) });
-  await rec.stop();
   await writeFile(path.join(dir, "samples.json"), JSON.stringify({ before: { ...before, text: undefined }, samples }, null, 1));
   await copyFile(w.log, path.join(dir, "agent.jsonl")).catch(() => {});
   await writeFile(path.join(dir, "server.log"), w.backend.output());

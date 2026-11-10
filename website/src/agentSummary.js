@@ -98,8 +98,11 @@ export const placeCards = (cards, messages, turns) => { const ids = new Set((mes
 // THE ROW A DRAFT STANDS AFTER, BY TIME (the owner, 2026-11-10: "i asked it to rewrite a email, it reqrote in place then put it under the prompt"):
 // the last row of the chat - the mail come in, a line of his, an answer - drawn at or before it. A reply drafted on arrival stood at the chat's
 // foot, so the line he typed went over it and the card jumped under his line; under the mail it answers it stays where it was
-export const rowOf = (messages, at) => { const t = msOf(at);
-  return (messages || []).filter((m) => m?.id && m.createdAt && msOf(m.createdAt) <= t).at(-1)?.id ?? null; };
+// ...a row with no time yet - the turn at work, drawn before its answer is filed - is as old as the row before it: a draft written while it works
+// is its own, never his line's (the recorded walk, 2026-11-10: the new card stood under his line, over the turn's head, then jumped into the turn)
+export const rowOf = (messages, at) => { const t = msOf(at); let was = -Infinity, id = null;
+  for (const m of messages || []) { if (!m?.id) continue; was = m.createdAt ? msOf(m.createdAt) : was; if (was <= t) id = m.id; }
+  return id; };
 const waitingDraft = (reviews) => (reviews || []).filter(pendingReply).sort((a, b) => a.ReviewId - b.ReviewId).at(-1) || null;
 // ...the waiting draft's place: the turn that wrote it where the chat draws that turn, else its row by time
 export const draftHome = (reviews, messages) => {

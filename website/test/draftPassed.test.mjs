@@ -20,6 +20,10 @@ test("a draft no turn wrote stands under the row it came after, by time - never 
   // ...a turn the server named holds its own draft
   assert.equal(draftHome([{ ...draft, turn: "a7" }], [mail, { id: "a7", role: "assistant", createdAt: "2026-11-10 08:05:00" }, line]), "a7");
   assert.equal(draftHome([], [mail]), null);
+  // ...and the NEW draft, written while the turn his line began is at work (drawn before its answer is filed, no time of its own yet), is that
+  // turn's - under his line it stood over the turn's head, then jumped down into the turn (the recorded walk, 2026-11-10)
+  const at = { id: "live-1", role: "assistant" }, mine = { ...line, createdAt: "2026-11-10 09:00:00" };
+  assert.equal(draftHome([{ ...draft, ReviewId: 2, CreatedAt: "2026-11-10 09:00:05" }], [mail, mine, at]), "live-1");
 });
 
 test("the draft is passed from the paint his line is drawn in - his own line in the thread, or one held on the page", () => {

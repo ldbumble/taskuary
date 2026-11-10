@@ -258,14 +258,16 @@ def _pending(store, tid: int, sid: str, cmd: str):
     return None
 
 
-def asks(store, t) -> bool:
-    """Can the owner answer this session's own permission prompt? Only a CLI pane of ours (argv: a terminal, not a headless chat),
-    started 'full' (a stranger's task runs 'auto' and its permit door is the owner's), whose CLI's hook answers `ask`, on a task that
-    is not a workflow's run (nobody sits at a scheduled run's pane). Everything else is held for the task's Approve."""
-    if not getattr(t, 'argv', None) or getattr(t, 'mode', 'full') != 'full': return False
-    from . import clis
-    if clis._base(getattr(t, 'cli', '') or t.argv[0]) not in ASKS: return False
-    return (store.get_task(t.task_id) or {}).get('Source') != 'workflow'
+def asks(store, t) -> str:
+    """WHERE the owner answers this session's own permission prompt - '' where nobody can. Only a CLI pane of ours (argv: a terminal, not a
+    headless chat), started 'full' (a stranger's task runs 'auto' and its permit door is the owner's), whose CLI's hook answers `ask`, on a
+    task that is not a workflow's run (nobody sits at a scheduled run's pane). Everything else is held for the task's Approve.
+    'terminal': the CLI's own prompt in its pane. 'chat': the same CLI over ACP has no terminal - its ask comes back to Taskuary's own
+    gate (acpgate.answerer), which draws the landing card, the owner's buttons or the Approve card itself."""
+    if not getattr(t, 'argv', None) or getattr(t, 'mode', 'full') != 'full': return ''
+    from . import clis, terminal
+    if clis._base(getattr(t, 'cli', '') or t.argv[0]) not in ASKS or (store.get_task(t.task_id) or {}).get('Source') == 'workflow': return ''
+    return 'chat' if terminal.is_acp(t) else 'terminal'
 
 
 # A TRUSTED REPO'S OWN STEPS GO THROUGH (the owner, 2026-11-05, a coding agent's push and deploy promote stopped by the ask: "i thought for
@@ -306,9 +308,9 @@ def trusted(store, cwd: str, todo: list) -> str:
     return repo if all(a.get('what') in ok and a.get('why') == OUT for a in todo) else ''
 
 
-def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool = False, about: str = '') -> dict:
-    """The hook's answer for one shell command: {} lets it run; `ask` hands it to the CLI's own prompt (never an allow); else a refusal
-    holds it and puts the step on the task. ONE step holds the whole command - the line is the agent's, and half of it is not what it asked.
+def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool | str = False, about: str = '') -> dict:
+    """The hook's answer for one shell command: {} lets it run; `ask` (asks) hands it to the CLI's own prompt (never an allow); else a
+    refusal holds it and puts the step on the task. ONE step holds the whole command - the line is the agent's, and half of it is not what it asked.
     `about`: the agent's own words for the call (a CLI's shell tool takes a `description`) - the card leads with them (the owner, 2026-11-09)"""
     todo = acts(cmd, cwd)
     if not todo: return {}
@@ -319,7 +321,9 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
         return {}
     if ask:
         store.audit('task', tid, 'shell_act_asked', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
-        store.add_comment_once(tid, 'taskuary', 'agent', f"The agent asked to {what}: `{str(cmd)[:300]}` - its terminal asks you to allow it.")
+        # ...said only where a terminal does ask (agent walk 2, 2026-11-10: the line stood on a task whose agent has no terminal, over a
+        # push its own gate had already answered with the landing card)
+        if ask != 'chat': store.add_comment_once(tid, 'taskuary', 'agent', f"The agent asked to {what}: `{str(cmd)[:300]}` - its terminal asks you to allow it.")
         return {'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'ask',
                                        'permissionDecisionReason': f'Taskuary asks you first: {what} ({why}).'}}
     from . import landing

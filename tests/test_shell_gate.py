@@ -176,6 +176,15 @@ class Hook(unittest.TestCase):
         self.assertTrue(any(a['Action'] == 'shell_act_asked' for a in self.s._rows('SELECT * FROM audit')))
         self.assertIn('git push origin main', self.s.list_comments(self.tid)[-1]['Body'])
 
+    def test_an_agent_with_no_terminal_is_not_said_to_have_one_asking(self):
+        """Agent walk 2, 2026-11-10: "The agent asked to push ... - its terminal asks you to allow it" on a coding agent that talks ACP. It
+        has no terminal: the ask goes back to Taskuary's own gate, which had answered the push with the landing card."""
+        d = self.hook(self.push, acp=True)['hookSpecificOutput']
+        self.assertEqual(d['permissionDecision'], 'ask', "still the CLI's ask: acpgate answers it")
+        self.assertEqual([c['Body'] for c in self.s.list_comments(self.tid) if 'terminal' in c['Body']], [])
+        self.assertTrue(any(a['Action'] == 'shell_act_asked' for a in self.s._rows('SELECT * FROM audit')))
+        self.assertEqual(self.held(), [])
+
     def test_where_nobody_answers_the_cli_it_is_held_for_approve(self):
         for why, pane in (("a stranger's task", {'mode': 'auto'}), ('a CLI whose hook cannot ask', {'cli': 'devin', 'argv': ['claude']})):
             self.assertEqual(self.hook(self.push, **pane)['hookSpecificOutput']['permissionDecision'], 'deny', why)

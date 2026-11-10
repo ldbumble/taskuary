@@ -104,15 +104,18 @@ def waiting(store, tid: int, t=None) -> list:
     # and more, they were on no screen but the one that sent them (the owner, 2026-11-10)
     from .outcomes import owner_split
     lines = lambda text, brief, shown: shown or ([w] if brief and (w := owner_split(text)[0]) else [])
-    return out + [{'id': f'q{i}', 'text': w['text'], 'at': None, 'line': w.get('line')} if isinstance(w, dict) else {'id': f'q{i}', 'text': w, 'at': None}
+    # ...each named as the page knows it (`line`, the name it was sent under - as a kept row is named), its kept row's id beside it (`kept`): named
+    # by that id, the page drew the line twice while the session held it (the browser walk, 2026-11-10)
+    return out + [{'id': f'q{i}', 'text': w['text'], 'at': None, 'kept': w.get('line'), **({'line': w['name']} if w.get('name') else {})}
+                  if isinstance(w, dict) else {'id': f'q{i}', 'text': w, 'at': None}
                   for i, (_t, _b, shown, _d) in enumerate(held) for w in lines(_t, _b, shown)]
 
 
 def _once(waiting: list, sessions: list) -> list:
     "Each owner's line once: a kept row the session holds too, or one its record already draws, is drawn there - not twice."
     drawn = {(u.get('_meta') or {}).get('line') for s in sessions for u in s.get('updates') or []} - {None}
-    held = {w.get('line') for w in waiting if str(w['id']).startswith('q')} - {None}
-    return [w for w in waiting if (w.get('line') if str(w['id']).startswith('q') else w['id']) not in drawn | (set() if str(w['id']).startswith('q') else held)]
+    held = {w.get('kept') for w in waiting if str(w['id']).startswith('q')} - {None}
+    return [w for w in waiting if (w.get('kept') if str(w['id']).startswith('q') else w['id']) not in drawn | (set() if str(w['id']).startswith('q') else held)]
 
 
 # ...each step's time in the server's own zone, as every stamp the page reads (store.norm_stamp): a CLI log stamps UTC, and the turn read

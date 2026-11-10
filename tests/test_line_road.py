@@ -167,3 +167,17 @@ def test_a_typed_line_is_his_once_and_at_work_from_the_press_to_the_answer(world
     if state == 'closed':
         acts = [r['Action'] for r in s._rows("SELECT Action FROM audit WHERE EntityType='task' AND EntityId=?", (tid,))]
         assert 'reopened_by_typing' in acts and 'continue-session' not in acts, acts     # one reopen, by one rule, whichever agent
+
+
+@pytest.mark.parametrize('world', ['acp'], indirect=True)
+def test_a_coding_line_waiting_is_named_by_the_page_s_own_id_wherever_it_waits(world, monkeypatch):
+    # the browser walk, 2026-11-10: a line typed after a coding session ended stood twice on the page, both "held" - while the session held it for
+    # its next turn the payload named it by its kept row's id (`line`: 6), where the page knows a line by the name it sent it under (line_id)
+    kind, s, tid, c = world
+    put_in('ended', kind, s, tid, c, monkeypatch)
+    threading.Thread(target=lambda: c.post(f'/api/tasks/{tid}/assistant/messages', json={'text': LINE, 'line_id': 'held-7'}, timeout=120), daemon=True).start()
+    seen, end = [], time.time() + 60
+    while time.time() < end and not answered(r := read(kind, c, tid)):
+        seen += [w for w in c.get(f'/api/tasks/{tid}/coding-chat').json()['data']['waiting'] if w['text'] == LINE]
+        time.sleep(0.05)
+    assert seen and all(w.get('line') == 'held-7' for w in seen), {str(w.get('id'))[:1] + ':' + str(w.get('line')) for w in seen}

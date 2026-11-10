@@ -190,10 +190,11 @@ def deliver(store, tid: int, new: int = None) -> dict:
 
 def _lines(store, tid: int) -> list:
     """THE OWNER'S LINES KEPT FOR A CODING AGENT (general.take_line), as notes - all of them one turn, as a chat's turn takes them (send_prompt),
-    each naming its kept row (`line`). A chat's own turn takes its lines itself (say_line): none here for one."""
+    each naming its kept row (`line`) and the name the page sent it under (`name`, general.wait_line). A chat's own turn takes its lines
+    itself (say_line): none here for one."""
     from . import general
     if general.handles(store.get_task(tid) or {}): return []
-    return [{'WId': None, 'line': w['id'], 'CreatedBy': 'owner', 'CreatedAt': w['at'],
+    return [{'WId': None, 'line': w['id'], **({'name': w['line']} if w.get('line') else {}), 'CreatedBy': 'owner', 'CreatedAt': w['at'],
              'Note': w['text'] + (f"\n\n{general.files_head(w['files'])} (read these files)\n" + '\n'.join(w['files']) if w['files'] else '')}
             for w in general.waiting_lines(store, tid)]
 
@@ -209,7 +210,7 @@ def _handed(store, tid: int, notes: list, how: str):
 
 def _shown(notes: list) -> list:
     "The owner's own words a prompt carries, drawn as his - each with its kept row's id where it has one."
-    return [{'text': parts(x.get('Note'))[0], 'line': x['line']} if x.get('line') else parts(x.get('Note'))[0]
+    return [{'text': parts(x.get('Note'))[0], 'line': x['line'], **({'name': x['name']} if x.get('name') else {})} if x.get('line') else parts(x.get('Note'))[0]
             for x in notes if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)]
 
 

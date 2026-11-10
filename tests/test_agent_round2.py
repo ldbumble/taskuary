@@ -104,7 +104,7 @@ class PlaybookMenuTests(unittest.TestCase):
     def test_a_menu_is_short_and_absent_when_off(self):
         s = MemoryStore()
         self.assertLess(len(playbooks.agent_menu(None, s)), 700)
-        playbooks.set_on('w9', False); self.assertNotIn('w9', playbooks.agent_menu(None, s))
+        playbooks.set_on('w9', False); self.assertNotIn('- w9:', playbooks.agent_menu(None, s))     # its line - the folder's own name is random letters
         s.set_setting('playbooks_enabled', '0', 't'); self.assertNotIn('PLAYBOOKS - ', general._prompt(s, owner_task(s))[0])
 
     def test_a_brain_with_no_hands_is_handed_the_matched_one_whole(self):

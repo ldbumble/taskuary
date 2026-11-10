@@ -3,7 +3,7 @@ linkedin post and asking me if i want to post it ... I have linkedin connected")
 task folder; nothing reaches LinkedIn until Approve; the press uploads the picture (initializeUpload, then the bytes), posts with it, and
 the review keeps what went and where. The general agent is told the roads THIS owner has connected, from the store.
 """
-import json, unittest
+import json, shutil, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import config, general, guard, linkedin, outputs, proposals, server, verdicts
@@ -60,7 +60,9 @@ class OnePress(unittest.TestCase):
                           'ConfigJson': json.dumps({'member_name': 'Alex Doyle'})}, 'linkedin')
         f = outputs.folder(self.tid); f.mkdir(parents=True, exist_ok=True); (f / 'gas-prices.png').write_bytes(PNG)
 
-    def tearDown(self): server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0}, 'test')
+    def tearDown(self):
+        server.store.save_connector({'ConnectorId': self.card['ConnectorId'], 'Active': 0}, 'test')
+        shutil.rmtree(outputs.folder(self.tid), ignore_errors=True)       # the home is shared: another test's task of this number would offer the picture
 
     def propose(self, **kw):
         return c.post('/api/agent/propose', headers=agent(self.tid), json={

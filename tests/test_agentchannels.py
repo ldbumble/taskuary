@@ -99,7 +99,9 @@ def test_a_teammate_cannot_answer_a_permission_whatever_they_type(w):
     w.bind()
     box = []
     req = {'tool': 'Bash', 'kind': 'execute', 'command': 'npm test -- money'}
-    t = threading.Thread(target=lambda: box.append(perm.ask(w.s, w.tid, req, wait=5)), daemon=True); t.start()
+    # the ask waits long past anything this test does: at 5 s a slow machine let it time out between a teammate's lines, and the
+    # test read the timeout as the teammate having answered it (CI's macOS, 2026-11-10)
+    t = threading.Thread(target=lambda: box.append(perm.ask(w.s, w.tid, req, wait=120)), daemon=True); t.start()
     for _ in range(200):
         if perm.pending(w.tid, w.s): break
         time.sleep(0.02)

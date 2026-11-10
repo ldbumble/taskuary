@@ -1969,7 +1969,7 @@ class GeneralSession:
     blocks_on_owner = False              # a turn that ended holds nothing up: no prompt to park at (PW-226)
     quick = False                        # answered in one call (quickwork): takes no desk until a real turn runs on it
     argv = []
-    cwd = ''
+    _cwd, dirty0, _files = '', None, ([], 0.)
     label = 'Agent'                     # how a task's agent is named everywhere (kinds.SHOWN)
     agent = 'assistant'
     cli = 'taskuary'
@@ -2108,7 +2108,21 @@ class GeneralSession:
         """
         return None
     def idle(self): return round(time.time() - self.last, 1)
-    def files(self): return []
+    @property
+    def cwd(self) -> str:
+        """THE CHECKOUT A CODING TASK ON AN AI CARD WORKS IN - where its work started (place_coding), or the one its agent took with use_repo:
+        what makes it a peer there, as a CLI's pane is (peers.working, blackboard.peers, landing). '' for general work, and for one still
+        in its task's own folder."""
+        if self.task_id not in ON_CARD: return ''
+        from . import landing
+        return self._cwd or landing.record(self.store, self.task_id).get('cwd') or ''
+    @cwd.setter
+    def cwd(self, path): self._cwd = str(path or '')
+    def files(self):
+        "What it has changed in that checkout so far, counted as a pane's is (Term.files): dirty now, less what was dirty as its first turn began."
+        if not self.cwd or self.dirty0 is None: return []
+        from .terminal import Term
+        return Term.files(self)
     def phase(self): return 'working' if self.busy else 'parked'
     # ...and a session OPENED for a turn that has not taken yet is not waiting either (OPENING): the header read "answered / waiting on
     # you" eight seconds into a start, while the run was only about to begin (email walk 2026-10-29)
@@ -2507,8 +2521,9 @@ class GeneralSession:
             # ...and WHAT ANOTHER AGENT WROTE TO THIS ONE since its last turn (peers.py): a coding agent on a card hears it on its next turn, as
             # a CLI's is typed it at its prompt - they were kept for a pane it does not have, and never read
             if self.task_id in ON_CARD:
-                from . import peers
+                from . import blackboard as bb, peers
                 if (heard := peers.take(self.store, self.task_id)): user, whole = f'{heard}\n\n{user}', f'{heard}\n\n{whole}'
+                if self.dirty0 is None and self.cwd: self.dirty0 = bb.dirty(self.cwd)      # what is its own is counted from here (files)
             # Paths are harmless context to an API brain and essential if its CLI backup takes
             # over after a quota failure. The source message already names its files too; this
             # line also carries images attached directly in the composer.

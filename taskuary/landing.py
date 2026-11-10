@@ -97,7 +97,7 @@ def _alone(tid, cwd) -> bool:
     "No other task's live session works in this checkout."
     from . import peers
     from .blackboard import norm
-    return not any(t.task_id != tid and norm(t.cwd) == norm(cwd) for t in peers._cli_sessions())
+    return not any(t.task_id != tid and norm(t.cwd) == norm(cwd) for t in peers.working())
 
 
 def _stat(cwd, a, b) -> list:
@@ -574,7 +574,7 @@ def revert(store, tid: int, picks: list, actor: str = 'owner') -> dict:
     cwd, br = s['cwd'], s['branch']
     start = _fork(cwd, s['base'], br, record(store, tid).get('start'))           # the parts as the card's diff numbered them (state)
     if (head := head_branch(cwd)) != br: raise Refused(f'reverting a part needs {br} checked out in {cwd}; it is on {head or "a detached HEAD"} - nothing changed')
-    if any(norm(t.cwd) == norm(cwd) for t in peers._cli_sessions()):
+    if any(norm(t.cwd) == norm(cwd) for t in peers.working(at_rest=False)):
         raise Refused('an agent is working in this checkout - stop it or let it finish first; nothing changed')
     by = {}
     for p in picks: by.setdefault(str(p.get('path') or ''), []).append(p)

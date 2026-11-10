@@ -31,8 +31,19 @@ def _cli_sessions() -> list:
             and getattr(t, 'quick', False) is not True and getattr(t, 'argv', None)]
 
 
+def working(at_rest: bool = True) -> list:
+    """EVERY LIVE AGENT IN A CHECKOUT: the CLI panes, and a coding task's agent on an AI card (general.ON_CARD) - no pane, the same checkout.
+    It was nobody's peer: an agent beside it was not told it was in those files, a part of its work could be reverted under its hands, and
+    its own note to 'repo' had no checkout to read. `at_rest` False leaves out one between its turns: a pane is a process that holds its
+    checkout while it lives, an agent on a card holds nothing once its turn has ended."""
+    from . import terminal as term
+    return _cli_sessions() + [t for t in list(term.SESSIONS.values()) if getattr(t, 'alive', False) and getattr(t, 'task_id', None)
+                              and getattr(t, 'quick', False) is not True and not getattr(t, 'argv', None) and getattr(t, 'cwd', '')
+                              and (at_rest or getattr(t, 'busy', False))]
+
+
 def _cwd_of(tid) -> str:
-    return next((t.cwd for t in _cli_sessions() if t.task_id == tid), '')
+    return next((t.cwd for t in working() if t.task_id == tid), '')
 
 
 def _stranger(store, tid) -> bool:
@@ -51,7 +62,7 @@ def repo_label(cwd: str) -> str:
 def targets(store, frm: int, to: str) -> tuple:
     """(scope, [task ids], repo label) a note `to` reaches: a TQ ref, 'repo' (every live agent in the sender's checkout) or 'all'."""
     to, me = str(to or '').strip(), _cwd_of(frm)
-    live = [(t.task_id, t.cwd) for t in _cli_sessions() if t.task_id != frm]
+    live = [(t.task_id, t.cwd) for t in working() if t.task_id != frm]
     if to.lower() in ALL: return 'all', list(dict.fromkeys(i for i, _ in live)), ''
     if to.lower() in REPO:
         if not me: raise ValueError("'repo' means the agents in your checkout, and Taskuary sees no live session of yours to read it from - "

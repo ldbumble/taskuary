@@ -693,6 +693,36 @@ class CodingOnACardTests(unittest.TestCase):
             self.g._prompt(self.s, self.tid)
             read.assert_called_once()                                                      # the overlap read is the opening's, not every turn's
 
+    def test_it_is_a_peer_in_its_checkout_as_a_pane_is(self):
+        import tempfile
+        from taskuary import blackboard, landing, peers, terminal
+        repo, other = tempfile.mkdtemp(), self.s.create_task({'Title': 'sub() adds', 'Summary': 'fix it', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        self.s.update_task(self.tid, {'Tags': 'repo:northwind/ledger'}, 'owner')
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cwd_map': {'northwind/ledger': repo}}))
+        session = self.g.GeneralSession(self.s, self.tid)
+        terminal.SESSIONS[session.sid] = session
+        try:
+            self.assertEqual(session.cwd, '')                                           # general work is in nobody's checkout
+            self.assertNotIn(session, peers.working())
+            self.g.ON_CARD.add(self.tid)
+            with mock.patch('taskuary.landing.sha', return_value='abc123'), mock.patch('taskuary.landing.head_branch', return_value='main'):
+                self.g.place_coding(self.s, self.tid)
+            self.assertEqual(session.cwd, repo)
+            self.assertEqual([p['tid'] for p in blackboard.peers(self.s, repo, exclude_tid=other)], [self.tid])
+            self.assertFalse(landing._alone(other, repo)); self.assertTrue(landing._alone(self.tid, repo))
+            self.assertEqual(peers.targets(self.s, other, 'all')[1], [self.tid])
+            self.assertEqual(peers.targets(self.s, self.tid, 'repo')[0], 'repo')        # its own note to 'repo' has a checkout to read
+            self.assertNotIn(session, peers.working(at_rest=False))                     # ...between its turns it holds nothing
+            session.busy = True
+            self.assertIn(session, peers.working(at_rest=False))
+            with mock.patch('taskuary.blackboard.dirty', return_value={'ledger.py'}):
+                self.assertEqual(session.files(), [])                                   # before its first turn nothing is counted as its own
+                session.dirty0 = set()
+                self.assertEqual(session.files(), ['ledger.py'])
+            session.cwd = 'elsewhere'                                                   # use_repo moved it (repochoice.use)
+            self.assertEqual(session.cwd, 'elsewhere')
+        finally: terminal.SESSIONS.pop(session.sid, None)
+
     def test_a_note_another_agent_sent_it_is_heard_on_its_next_turn(self):
         from taskuary import llm as llm_mod
         other = self.s.create_task({'Title': 'sub() adds', 'Summary': 'fix it', 'Kind': 'coding', 'Status': 'open'}, 'owner')

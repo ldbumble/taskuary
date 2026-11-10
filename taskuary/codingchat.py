@@ -167,6 +167,9 @@ def chat(store, tid: int) -> dict:
     return {'task': int(tid), 'sessions': ss, 'mails': mails(store, tid), 'live': live_of(t),
             'checkout': has_checkout(store, tid, getattr(t, 'cwd', '') or ''),
             **general.line_state(store, int(tid), _once(w, ss)),
+            # ...and the owner's presses, each one quiet line at its time - the general chat's own (general.press_lines): a coding task's Remind me
+            # or Push left no line in its chat at all (the audit, 2026-11-10)
+            'presses': general.press_lines(store, int(tid)),
             'permissions': permissions.pending(int(tid), store)}         # what the agent waits on the owner's button for
 
 

@@ -165,3 +165,15 @@ def test_a_checkout_on_another_branch_or_with_an_agent_in_it_moves_nothing(repo)
 def test_reverting_is_the_owners_door():
     assert guard.classify('POST', '/api/tasks/7/landing/revert')[0] == 'deny'
     assert guard.classify('GET', '/api/tasks/7/coding-chat')[0] == 'read'
+
+
+def test_a_press_on_a_coding_task_is_a_line_in_its_chat_as_in_a_general_one(home, server):
+    """The audit, 2026-11-10: Remind me or Push on a coding task left no line in its chat - the general chat draws each press as one quiet
+    line in the owner's voice (general.press_lines); the coding chat's payload carries the same lines, from the same function."""
+    from taskuary import general, remind
+    srv, c = server
+    tid = Factory(srv.store).task(title='Budget total misses tax', kind='coding')
+    remind.set_reminder(srv.store, tid, 'friday', 'owner')
+    got = c.get(f'/api/tasks/{tid}/coding-chat').json()['data']['presses']
+    assert [m['content'][0]['text'] for m in got] == [m['content'][0]['text'] for m in general.press_lines(srv.store, tid)]
+    assert len(got) == 1 and got[0]['content'][0]['text'].startswith('You set a reminder for')

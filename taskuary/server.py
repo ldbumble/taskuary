@@ -2207,7 +2207,9 @@ def task_detail(task_id: int):
                       | {'reviewed': bool(i.get('Sha')), 'canFix': True} for i in batch_rows] or None,
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
-            'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None}
+            'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None,
+            # ...and a coding task running on an AI card is a chat, as a general task's is (general.on_card)
+            'onCard': _gen_on_card(task_id)}
 
 
 def _task_state(task_id: int, d: dict, session=None):
@@ -2927,7 +2929,7 @@ def continue_work(task_id: int, body: ContinueBody = None):
     coding agent reopens its own CLI session by the id its CLI gave it, or - where there is none to reopen - a fresh
     one seeded with the handover. The owner's note, when there is one, is the first thing it hears."""
     from . import general as _g
-    if (t := store.get_task(task_id)) and (why := _brainless(not _g.handles(t))): raise HTTPException(422, why)
+    if (t := store.get_task(task_id)) and not _g.on_card(store, t) and (why := _brainless(not _g.handles(t))): raise HTTPException(422, why)
     from . import asks
     asks.mark(store, task_id)          # the owner picked it up again: it reports back like an ask
     from . import continuity, general
@@ -4372,6 +4374,8 @@ def _no_brain(task: dict | None, body: DispatchBody, kind: str = '') -> str:
     from . import general
     req = str(body.kind or kind or '').lower()
     if req == 'coding' and str((task or {}).get('Kind') or '').lower() != 'coding' and not hub_agents.developer_mode(store): req = 'general'
+    # ...a coding task the owner put on an AI card - or this home's only AI - needs no command-line AI (general.on_card)
+    if task and general.on_card(store, {**task, 'Kind': req or task.get('Kind')}, body.pick, body.brain): return ''
     return _brainless(req == 'coding' if req else not (task and general.handles(task)))
 
 
@@ -4412,7 +4416,8 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         raise HTTPException(422, 'kind must be general or coding')
     # DEVELOPER MODE OFF, a coding hand-off is a general agent's (the owner, 2026-11-02) - a task already coding keeps its kind
     if requested == 'coding' and task_kind != 'coding' and not hub_agents.developer_mode(store): requested = 'general'
-    if why := _no_brain(task, body): raise HTTPException(422, why)
+    card = general.on_card(store, {**task, 'Kind': requested or task_kind}, body.pick, body.brain)    # a coding task on an AI card
+    if not card and (why := _no_brain(task, body)): raise HTTPException(422, why)
 
     # NO SECOND HAND-OFF WHILE AN AGENT RUNS (the owner, 2026-10-01: Send to agent is not offered then - Continue
     # instead). Another dispatch on a live session either started a second worker or typed into the first unasked; every
@@ -4434,7 +4439,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         task = store.get_task(tid)
         task_kind = requested
 
-    regular = general.handles(task)
+    regular = general.handles(task) or bool(card)
 
     if regular:
         had_session = general.session_for(tid) is not None
@@ -4442,15 +4447,18 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         # `agent:<name>` is where general.assigned_role already reads it from to seed PROFILE RULES -
         # so choosing one needs no new column and no migration (the owner, 2026-09-18). A CODING
         # profile named here would seed CODING.md into a chat, so it is refused rather than obeyed.
-        if body.agent and body.agent != general.assigned_role(store, task):
+        if body.agent and not card and body.agent != general.assigned_role(store, task):
             if str((store.get_agent(body.agent) or {}).get('Kind') or '').lower() in ('coding', 'cli'):
                 raise HTTPException(422, f'{body.agent} is a coding profile - it cannot run a non-coding task')
             store.update_task(tid, {'Assignee': f'agent:{body.agent}'}, ACTOR)
             task = store.get_task(tid)
         # ...and Run another agent starts a NEW conversation: without it this resumed the stopped one and, nothing typed, sent nothing
         if body.fresh and not had_session: general.new_run(store, tid, ACTOR)
+        if card:                                    # ...a coding task on an AI card works in the checkout its CLI would have
+            try: general.place_coding(store, tid)
+            except ValueError as e: raise HTTPException(422, str(e))
         try:
-            session = general.start_session(store, tid, model=body.model, pick=body.pick or None, actor=ACTOR)
+            session = general.start_session(store, tid, model=body.model, pick=body.pick or card or None, actor=ACTOR)
         except (ValueError, RuntimeError) as e:
             raise HTTPException(422, str(e))
         # The source messages and their files are injected by GeneralSession.send_prompt.  On a
@@ -11200,6 +11208,12 @@ def _wrap_task(tid: int, close: bool, sid: str = None, no_reply: bool = False, b
             return writeup.start(store, tid, close=then_close, actor=ACTOR, no_reply=no_reply, sid=sid)
         return end_task(store, tid, close, ACTOR, sid, no_reply=no_reply)
     except ValueError as e: raise HTTPException(422, str(e))
+
+
+def _gen_on_card(tid: int) -> bool:
+    "Does this coding task run on an AI card - as started, saved, or as its next start would (general.on_card)?"
+    from . import general
+    return bool(general.on_card(store, store.get_task(tid)))
 
 
 def _pause_task(tid: int, sid: str = None):

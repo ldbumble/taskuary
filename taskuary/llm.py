@@ -845,11 +845,7 @@ def _chatgpt_llm(cfg: dict, refresh_token: str):
     if not refresh_token: raise RuntimeError('not signed in - click "Sign in with ChatGPT" on the ChatGPT card')
     picked = {}
     def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None, web=False):
-        tok = ca.access_token(cfg, refresh_token)
-        if 'model' not in picked:
-            listed = [s for s, _ in ca.models(tok)] if not cfg.get('model') else []
-            picked['model'] = cfg.get('model') or (listed[0] if listed else '')
-            if not picked['model']: raise RuntimeError('the ChatGPT plan lists no models this account can use')
+        tok = ca.access_token(cfg, refresh_token); model_of(tok)
         # images and web search are both in the plan preview "when the model accepts them" - asked for, and dropped
         # one at a time only when the plan answers that it cannot serve them
         try: return ca.complete(tok, picked['model'], system, user, max_tokens, want, images=images, web=web)
@@ -861,6 +857,22 @@ def _chatgpt_llm(cfg: dict, refresh_token: str):
             if not images: raise
             note = f'[{len(images)} attached image(s) not shown - this model reads text only]\n\n{user}'
             return ca.complete(tok, picked['model'], system, note, max_tokens, want)
+    def model_of(tok):
+        if 'model' not in picked:
+            listed = [s for s, _ in ca.models(tok)] if not cfg.get('model') else []
+            picked['model'] = cfg.get('model') or (listed[0] if listed else '')
+            if not picked['model']: raise RuntimeError('the ChatGPT plan lists no models this account can use')
+        return picked['model']
+    # A TOOL LOOP ON THE PLAN (apiagent.py) through its Responses API, the conversation carried in the OpenAI chat shape like every card
+    def chat(messages, tools, max_tokens=MAX_TOKENS, tool_choice=None, **_):
+        tok = ca.access_token(cfg, refresh_token)
+        system, items, fns = to_responses(messages, tools)
+        try: return from_responses(ca.respond(tok, model_of(tok), system, items, fns, **({'tool_choice': tool_choice} if tool_choice else {})))
+        except ca.Unsupported as e: raise RuntimeError(f'chatgpt error 400: {e}') from e
+    def search(question, max_tokens=2000):
+        tok = ca.access_token(cfg, refresh_token)
+        return ca.complete(tok, model_of(tok), SEARCH_ASK, question, max_tokens, web=True)
+    llm.chat, llm.search = chat, search
     llm.takes_want = llm.takes_web = True
     return llm
 
@@ -1009,6 +1021,21 @@ def make_llm(t, cfg: dict, key: str):
                 call = next((b for b in r.content if b.type == 'tool_use'), None)
                 if call is not None: return json.dumps(call.input)
             return next((b.text for b in r.content if b.type == 'text'), '')
+        # ONE STEP OF A TOOL LOOP (apiagent.py) on the Messages API: the conversation and tools arrive in the OpenAI shape every other
+        # card speaks and go back in it, so the loop, its gate and its tools are the one road (to_anthropic / from_anthropic)
+        def chat(messages, tools, max_tokens=MAX_TOKENS, tool_choice=None, **_):
+            system, msgs, fns = to_anthropic(messages, tools)
+            kw = {'tools': fns, **({'tool_choice': {'type': tool_choice}} if tool_choice in ('none', 'auto', 'any') else {})} if fns else {}
+            try: r = ask(model=model, max_tokens=max_tokens, messages=msgs, **({'system': system} if system else {}), **kw)
+            except anthropic.BadRequestError as e: raise RuntimeError(f'anthropic error 400: {str(e)[:300]}') from e
+            if r.stop_reason == 'refusal': raise RuntimeError('model refused the request')
+            return from_anthropic(r.content)
+        # ...and its OWN web search: Anthropic's server tools, on a call of its own as on every card (the CLI's WebSearch)
+        def search(question, max_tokens=2000):
+            got = _anthropic_web(ask, model, SEARCH_ASK, [{'type': 'text', 'text': question}], max_tokens)
+            if not (got or '').strip(): raise RuntimeError('anthropic: web search is not available on this model')
+            return got
+        llm.chat, llm.search = chat, search
         llm.takes_want = llm.takes_web = True
         return llm
     if t == 'openai':
@@ -1178,7 +1205,13 @@ def make_llm(t, cfg: dict, key: str):
     # web_search_options is Google Search grounding for a Gemini model and Anthropic's web search for a Claude one. Asked on a call of its
     # own - beside function tools it is ignored (Gemini called the other tool, Claude said it could not search; verified live 2026-11-09)
     def search(question, max_tokens=2000):
-        body = {'messages': [{'role': 'user', 'content': f'Search the web and answer, naming each source with its address: {question}'}],
+        # each provider's own search where it has one: OpenAI's and Azure's Responses `web_search` (what a plain question already used,
+        # LOOKING THINGS UP below), Google Search grounding on Google's own Gemini API - the gateway's web_search_options otherwise
+        if t in ('openai', 'azure_openai'):
+            got = _responses_web(t, cfg, headers, model, SEARCH_ASK, question, None, max(max_tokens, 4000), effort if ek not in _NO_EFFORT else '')
+            if (got or '').strip(): return got
+        if g := _google_url(t, cfg, model): return _google_search(g, headers, question)
+        body = {'messages': [{'role': 'user', 'content': f'{SEARCH_ASK} {question}'}],
                 'max_tokens': max_tokens, 'web_search_options': {'search_context_size': 'medium'}, **({'model': model} if model else {})}
         r = post_retrying(urls[0], headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
         if budget_spent(r): raise BudgetSpent(BUDGET_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t))
@@ -1189,7 +1222,9 @@ def make_llm(t, cfg: dict, key: str):
         said = said_text(m).strip()
         if not said: raise RuntimeError('the search came back empty')
         return said + ('\n\nSOURCES\n' + '\n'.join(c for c in cites if c) if any(cites) else '')
-    llm.search = search
+    # ...only where the card HAS a search of its own: a model asked with an option it ignores answers from memory as if it had looked
+    # (groq, mistral, a local model); without one apiagent's web_search goes to a connected search card and says when there is none
+    if t in NATIVE_SEARCH: llm.search = search
     llm.takes_want = True
     llm.takes_web = t in ('openai', 'azure_openai')
     return llm
@@ -1219,6 +1254,114 @@ def _saw(kind, name, detail):
     if not t: return
     try: t(kind, name, detail)
     except Exception: pass                      # a watcher that fails never fails the answer
+
+
+SEARCH_ASK = 'Search the web and answer, naming each source with its address:'
+# the cards whose model searches the web itself (llm.search): the Responses API's web_search, Google Search grounding, Anthropic's server
+# tool, LiteLLM's web_search_options on a gateway (HIPAA AI, OpenRouter), and Perplexity, whose every answer is a search
+NATIVE_SEARCH = ('openai', 'azure_openai', 'hipaa_ai', 'openrouter', 'perplexity', 'gemini', 'vertex_ai')
+
+
+def _args(a) -> dict:
+    if isinstance(a, dict): return a
+    try: return json.loads(a or '{}') or {}
+    except ValueError: return {}
+
+
+def _anthropic_parts(c) -> list:
+    "A chat message's content as Messages API blocks: its text, and a data-url picture as an image block."
+    if not isinstance(c, list): return [{'type': 'text', 'text': str(c)}] if str(c or '').strip() else []
+    out = []
+    for p in c:
+        if not isinstance(p, dict): continue
+        u = str((p.get('image_url') or {}).get('url') or '') if p.get('type') == 'image_url' else ''
+        if u.startswith('data:') and ';base64,' in u:
+            ct, b64 = u[5:].split(';base64,', 1)
+            out.append({'type': 'image', 'source': {'type': 'base64', 'media_type': ct, 'data': b64}})
+        elif str(p.get('text') or '').strip(): out.append({'type': 'text', 'text': p['text']})
+    return out
+
+
+def to_anthropic(messages: list, tools: list) -> tuple:
+    """An OpenAI-shaped conversation and its function tools as the Messages API takes them: (system, messages, tools). A tool's answer is a
+    tool_result block in the next user turn; turns of one role in a row are one turn (the API alternates)."""
+    sys, out = [], []
+    def add(role, blocks):
+        if out and out[-1]['role'] == role: out[-1]['content'] += blocks
+        else: out.append({'role': role, 'content': blocks})
+    for m in messages:
+        r, c = m.get('role'), m.get('content')
+        if r == 'system': sys.append(str(c or '')); continue
+        if r == 'tool': add('user', [{'type': 'tool_result', 'tool_use_id': m.get('tool_call_id') or '', 'content': str(c or '')}]); continue
+        blocks = _anthropic_parts(c) + [{'type': 'tool_use', 'id': x.get('id') or '', 'name': (x.get('function') or {}).get('name') or '',
+                                         'input': _args((x.get('function') or {}).get('arguments'))} for x in m.get('tool_calls') or []]
+        if blocks: add('assistant' if r == 'assistant' else 'user', blocks)
+    fns = [{'name': f['name'], 'description': f.get('description') or '', 'input_schema': f.get('parameters') or {'type': 'object', 'properties': {}}}
+           for x in tools or [] for f in [x.get('function') or x]]
+    return '\n\n'.join(x for x in sys if x.strip()), out, fns
+
+
+def from_anthropic(blocks) -> dict:
+    "The Messages API's answer as the chat message apiagent reads: its words, and each tool_use as a tool_call."
+    g = lambda b, k: b.get(k) if isinstance(b, dict) else getattr(b, k, None)
+    calls = [{'id': g(b, 'id'), 'type': 'function', 'function': {'name': g(b, 'name'), 'arguments': json.dumps(g(b, 'input') or {})}}
+             for b in blocks or [] if g(b, 'type') == 'tool_use']
+    said = '\n\n'.join(g(b, 'text') or '' for b in blocks or [] if g(b, 'type') == 'text').strip()
+    return {'role': 'assistant', 'content': said, **({'tool_calls': calls} if calls else {})}
+
+
+def to_responses(messages: list, tools: list) -> tuple:
+    "The same conversation as Responses API input items: (instructions, items, tools)."
+    sys, items = [], []
+    for m in messages:
+        r, c = m.get('role'), m.get('content')
+        if r == 'system': sys.append(str(c or '')); continue
+        if r == 'tool': items.append({'type': 'function_call_output', 'call_id': m.get('tool_call_id') or '', 'output': str(c or '')}); continue
+        if r == 'assistant':
+            if (said := said_text({'content': c})).strip(): items.append({'role': 'assistant', 'content': said})
+            items += [{'type': 'function_call', 'call_id': x.get('id') or '', 'name': (x.get('function') or {}).get('name') or '',
+                       'arguments': (x.get('function') or {}).get('arguments') or '{}'} for x in m.get('tool_calls') or []]
+            continue
+        parts = c if isinstance(c, list) else [{'type': 'text', 'text': str(c or '')}]
+        items.append({'role': 'user', 'content': [{'type': 'input_image', 'image_url': p['image_url']['url']} if p.get('type') == 'image_url'
+                                                  else {'type': 'input_text', 'text': str(p.get('text') or '')} for p in parts if isinstance(p, dict)]})
+    fns = [{'type': 'function', 'name': f['name'], 'description': f.get('description') or '',
+            'parameters': f.get('parameters') or {'type': 'object', 'properties': {}}}
+           for x in tools or [] for f in [x.get('function') or x]]
+    return '\n\n'.join(x for x in sys if x.strip()), items, fns
+
+
+def from_responses(items: list) -> dict:
+    "Responses output items as the chat message apiagent reads."
+    calls = [{'id': o.get('call_id') or o.get('id'), 'type': 'function', 'function': {'name': o.get('name'), 'arguments': o.get('arguments') or '{}'}}
+             for o in items or [] if o.get('type') == 'function_call']
+    said = '\n\n'.join(c.get('text') or '' for o in items or [] if o.get('type') == 'message'
+                        for c in o.get('content') or [] if c.get('type') == 'output_text').strip()
+    return {'role': 'assistant', 'content': said, **({'tool_calls': calls} if calls else {})}
+
+
+def _google_url(t, cfg, model) -> str:
+    """Google's own generateContent for a Gemini model on Google's API - where Google Search grounding lives; the OpenAI-compatible surface
+    has no search. '' for a card that reaches Gemini some other way (a gateway in front of it keeps web_search_options)."""
+    if t == 'gemini' and not (cfg.get('base_url') or '').strip():
+        return f"https://generativelanguage.googleapis.com/v1beta/models/{(model or '').removeprefix('models/')}:generateContent"
+    if t == 'vertex_ai' and model.startswith('google/'):
+        loc = (cfg.get('location') or 'global').strip()
+        host = 'aiplatform.googleapis.com' if loc == 'global' else f'{loc}-aiplatform.googleapis.com'
+        return f"https://{host}/v1/projects/{cfg['project'].strip()}/locations/{loc}/publishers/{model.replace('/', '/models/', 1)}:generateContent"
+    return ''
+
+
+def _google_search(url, headers, question) -> str:
+    h = {'x-goog-api-key': headers.get('x-goog-api-key') or headers.get('Authorization', '').removeprefix('Bearer ')}
+    body = {'contents': [{'role': 'user', 'parts': [{'text': f'{SEARCH_ASK} {question}'}]}], 'tools': [{'google_search': {}}]}
+    r = post_retrying(url, h, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
+    if r.status_code != 200: raise RuntimeError(f'google search error {r.status_code}: {r.text[:300]}')
+    c = (r.json().get('candidates') or [{}])[0]
+    said = ''.join(p.get('text') or '' for p in (c.get('content') or {}).get('parts') or []).strip()
+    cites = list(dict.fromkeys(str((g.get('web') or {}).get('uri') or '') for g in (c.get('groundingMetadata') or {}).get('groundingChunks') or []))
+    if not said: raise RuntimeError('the search came back empty')
+    return said + ('\n\nSOURCES\n' + '\n'.join(x for x in cites if x) if any(cites) else '')
 
 
 ANTHROPIC_WEB = ([{'type': 'web_search_20260209', 'name': 'web_search', 'max_uses': 5},

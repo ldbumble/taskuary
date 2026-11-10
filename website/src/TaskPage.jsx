@@ -1293,7 +1293,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
 
   // the pane shows the selected task or nothing - never the previous one while this loads
   const t = detail?.task?.TaskId === selected ? detail.task : null;
-  const isGeneral = isGeneralKind(t?.Kind);
+  const isGeneral = isGeneralKind(t?.Kind) || !!detail?.onCard;     // ...a coding task on an AI card runs as a chat (general.on_card)
 
   // Closing it is this view's; what comes NEXT is the page around it (TasksView moves to the next live row, the canvas
   // walks on) - `onFinish(status, close)` runs the close itself so the list can pre-record the state it is about to see.

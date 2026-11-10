@@ -588,7 +588,8 @@ def resolve_brain(store, kind: str = 'general', cli_only: bool = False) -> str:
     """'cli:<key>', 'connector:<id>' or '' - see above. `cli_only` for a run that cannot exist without a terminal."""
     name = BRAIN_SETTING.get(kind, 'assistant_ai')
     v = '' if stale(store, name) else str(store.get_setting(name) or '').strip()
-    if v and name == 'default_brain': v = f'cli:{v}'
+    # ...a CLI's key, or an AI card the owner chose for coding (the owner, 2026-11-09: "coding tasks should run on hipaa, why not")
+    if v and name == 'default_brain' and not v.startswith('connector:') and not v.isdigit(): v = f'cli:{v}'
     if v.isdigit(): v = f'connector:{v}'
     # the person's own pick is taken at its word - one that does not start says so when it is started, never swapped behind them
     if v.startswith('cli:') and (picked(store, name) or v[4:] in dict(connection_brains(store))): return v

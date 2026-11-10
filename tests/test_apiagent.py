@@ -284,6 +284,182 @@ class TheHandsTests(unittest.TestCase):
         finally: apiagent.OFFERED.pop((self.tid, 'sid-h'), None); apiagent.TOOLBOX.pop((self.tid, 'sid-h'), None)
 
 
+class EveryCardTests(unittest.TestCase):
+    """Every AI card runs the same agent (the owner, 2026-11-09: "check all APIs like Azure work the same way as Claude CLI and HIPAA"): the
+    one tool loop, the one gate, and each provider's OWN web search - recorded request and answer shapes for the cards not proven live."""
+    LOOP = [{'role': 'system', 'content': 'You are an agent.'}, {'role': 'user', 'content': 'Compare the two quotes.'},
+            {'role': 'assistant', 'content': 'Reading both.', 'tool_calls': [
+                {'id': 't1', 'type': 'function', 'function': {'name': 'file_read', 'arguments': '{"path": "a.csv"}'}},
+                {'id': 't2', 'type': 'function', 'function': {'name': 'file_read', 'arguments': '{"path": "b.csv"}'}}]},
+            {'role': 'tool', 'tool_call_id': 't1', 'content': 'Payworth,4200'}, {'role': 'tool', 'tool_call_id': 't2', 'content': 'Trainly,3900'},
+            {'role': 'user', 'content': 'You are out of steps for this turn.'}]
+    CFG = {'azure_openai': {'endpoint': 'https://res.example', 'deployment': 'gpt-x'}, 'vertex_ai': {'project': 'p1'},
+           'ollama': {'model': 'llama3'}, 'hipaa_ai': {'base_url': 'https://gateway.example'}}
+
+    def test_every_card_type_gets_the_tool_loop(self):
+        import types
+        fake = types.SimpleNamespace(Anthropic=lambda **k: None, BadRequestError=Exception)
+        with mock.patch.dict('sys.modules', {'anthropic': fake}):
+            for t in llm.AI_TYPES:
+                with self.subTest(t): self.assertTrue(apiagent.can(llm.make_llm(t, self.CFG.get(t, {}), 'k')))
+
+    def test_only_a_card_with_its_own_search_says_it_searches(self):
+        for t in ('groq', 'mistral', 'ollama', 'deepseek', 'cerebras'):
+            with self.subTest(t): self.assertFalse(hasattr(llm.make_llm(t, self.CFG.get(t, {}), 'k'), 'search'))
+        for t in ('openai', 'azure_openai', 'gemini', 'hipaa_ai', 'openrouter', 'perplexity'):
+            with self.subTest(t): self.assertTrue(callable(llm.make_llm(t, self.CFG.get(t, {}), 'k').search))
+
+    def test_the_loop_reads_as_the_messages_api_takes_it(self):
+        system, msgs, fns = llm.to_anthropic(self.LOOP, apiagent.FILES)
+        self.assertEqual(system, 'You are an agent.')
+        self.assertEqual([m['role'] for m in msgs], ['user', 'assistant', 'user'])
+        self.assertEqual([b['type'] for b in msgs[1]['content']], ['text', 'tool_use', 'tool_use'])
+        self.assertEqual(msgs[1]['content'][1]['input'], {'path': 'a.csv'})
+        self.assertEqual([b['type'] for b in msgs[2]['content']], ['tool_result', 'tool_result', 'text'])     # results first, as the API wants
+        self.assertEqual(fns[1]['name'], 'file_read'); self.assertIn('properties', fns[1]['input_schema'])
+
+    def test_an_anthropic_card_runs_the_loop_on_the_messages_api(self):
+        import types
+        sent = []
+        class Msgs:
+            def create(self, **kw):
+                sent.append(kw)
+                return types.SimpleNamespace(stop_reason='tool_use', usage=None, content=[
+                    types.SimpleNamespace(type='text', text='Writing it.'),
+                    types.SimpleNamespace(type='tool_use', id='tu1', name='file_write', input={'path': 'x.txt', 'text': 'hi'})])
+        fake = types.SimpleNamespace(Anthropic=lambda **k: types.SimpleNamespace(messages=Msgs()), BadRequestError=type('B', (Exception,), {}))
+        with mock.patch.dict('sys.modules', {'anthropic': fake}), mock.patch.object(llm.aiusage, 'anthropic'):
+            brain = llm.make_llm('anthropic', {'model': 'claude-x'}, 'k')
+            got = brain.chat(self.LOOP, apiagent.WRITE)
+            brain.chat(self.LOOP, apiagent.WRITE, tool_choice='none')
+        self.assertEqual(got['content'], 'Writing it.')
+        self.assertEqual(got['tool_calls'][0]['function'], {'name': 'file_write', 'arguments': '{"path": "x.txt", "text": "hi"}'})
+        self.assertEqual(sent[0]['system'], 'You are an agent.'); self.assertEqual(sent[0]['tools'][0]['name'], 'file_write')
+        self.assertEqual(sent[1]['tool_choice'], {'type': 'none'})
+
+    def test_an_anthropic_card_searches_with_its_own_server_tool(self):
+        with mock.patch.object(llm, '_anthropic_web', return_value='Python 3.15.2 - https://python.example/') as web, \
+             mock.patch.dict('sys.modules', {'anthropic': mock.MagicMock()}):
+            self.assertIn('python.example', llm.make_llm('anthropic', {}, 'k').search('latest python'))
+        self.assertEqual(web.call_args.args[1], llm.PROVIDER_DEFAULT['anthropic'])
+
+    def test_openai_and_azure_search_through_the_responses_api(self):
+        for t, cfg, where in (('openai', {}, 'https://api.openai.com/v1/responses'),
+                              ('azure_openai', self.CFG['azure_openai'], 'https://res.example/openai/v1/responses')):
+            sent = []
+            def post(url, headers, body, timeout):
+                sent.append((url, body))
+                return _R({'output': [{'type': 'web_search_call', 'id': 'ws1', 'status': 'completed', 'action': {'type': 'search', 'query': 'python'}},
+                                      {'type': 'message', 'content': [{'type': 'output_text', 'text': 'Python 3.15.2 (python.example)'}]}]})
+            with self.subTest(t), mock.patch.object(llm, 'post_retrying', side_effect=post), mock.patch.object(llm.aiusage, 'openai'):
+                self.assertIn('3.15.2', llm.make_llm(t, cfg, 'k').search('latest python'))
+                self.assertEqual(sent[0][0], where); self.assertEqual(sent[0][1]['tools'], [{'type': 'web_search'}])
+
+    def test_gemini_on_googles_api_searches_with_google_search_grounding(self):
+        sent = []
+        def post(url, headers, body, timeout):
+            sent.append((url, headers, body))
+            return _R({'candidates': [{'content': {'parts': [{'text': 'Python 3.15.2'}]},
+                                       'groundingMetadata': {'groundingChunks': [{'web': {'uri': 'https://python.example/'}}]}}]})
+        with mock.patch.object(llm, 'post_retrying', side_effect=post):
+            said = llm.make_llm('gemini', {'model': 'gemini-x'}, 'k').search('latest python')
+        self.assertTrue(sent[0][0].endswith('/models/gemini-x:generateContent'))
+        self.assertEqual(sent[0][1], {'x-goog-api-key': 'k'}); self.assertEqual(sent[0][2]['tools'], [{'google_search': {}}])
+        self.assertIn('SOURCES\nhttps://python.example/', said)
+
+    def test_a_vertex_gemini_searches_on_its_publisher_model(self):
+        url = llm._google_url('vertex_ai', {'project': 'p1', 'location': 'us-central1'}, 'google/gemini-x')
+        self.assertEqual(url, 'https://us-central1-aiplatform.googleapis.com/v1/projects/p1/locations/us-central1/publishers/google/models/gemini-x:generateContent')
+        self.assertEqual(llm._google_url('vertex_ai', {'project': 'p1'}, 'meta/llama'), '')
+
+    def test_a_card_with_no_search_of_its_own_goes_to_a_search_card(self):
+        s = MemoryStore(); apiagent.BRAINS[(1, 'g')] = llm.make_llm('groq', {}, 'k')
+        cards = [{'Type': 'tavily', 'Active': 1, 'HasSecret': 1, 'ConnectorId': 5}]
+        try:
+            with mock.patch.object(s, 'list_connectors', return_value=cards), mock.patch.object(apiagent, 'call_taskuary', return_value='[1] Payworth'):
+                self.assertEqual(apiagent.run_tool(s, 1, 'g', 'web_search', {'query': 'payroll'}), '[1] Payworth')
+            with self.assertRaisesRegex(ValueError, 'no search service is connected'): apiagent.run_tool(s, 1, 'g', 'web_search', {'query': 'payroll'})
+        finally: apiagent.BRAINS.pop((1, 'g'), None)
+
+    def test_the_chatgpt_plan_runs_the_loop_on_its_responses_api(self):
+        from taskuary import chatgptauth as ca
+        out = [{'type': 'function_call', 'call_id': 'fc1', 'name': 'run_command', 'arguments': '{"command": "git status", "why": "see"}'}]
+        with mock.patch.object(ca, 'access_token', return_value='tok'), mock.patch.object(ca, 'respond', return_value=out) as asked:
+            got = llm.make_llm('chatgpt', {'model': 'gpt-x'}, 'rt').chat(self.LOOP, apiagent.SHELL)
+        self.assertEqual(got['tool_calls'][0]['id'], 'fc1')
+        tok, model, instructions, items, fns = asked.call_args.args
+        self.assertEqual((model, instructions), ('gpt-x', 'You are an agent.'))
+        self.assertEqual([i.get('type') or i['role'] for i in items], ['user', 'assistant', 'function_call', 'function_call',
+                                                                     'function_call_output', 'function_call_output', 'user'])
+        self.assertEqual(fns[0]['name'], 'run_command'); self.assertEqual(fns[0]['type'], 'function')
+
+    def test_the_plan_stream_hands_back_its_function_calls(self):
+        from taskuary import chatgptauth as ca
+        ev = [{'type': 'response.output_item.done', 'item': {'type': 'function_call', 'call_id': 'fc1', 'name': 'file_read', 'arguments': '{}'}},
+              {'type': 'response.completed', 'response': {'usage': {}}}]
+        class Resp:
+            status_code, encoding = 200, 'utf-8'
+            def iter_lines(self, decode_unicode=True): return [f'data: {json.dumps(e)}' for e in ev]
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+        with mock.patch.object(ca.requests, 'post', return_value=Resp()), mock.patch('taskuary.aiusage.openai'):
+            self.assertEqual(ca.respond('tok', 'gpt-x', 'sys', [], [])[0]['name'], 'file_read')
+
+    def test_one_gate_whatever_the_card(self):
+        "The tools a turn is offered and the gate its commands pass never ask which card runs it."
+        import inspect
+        self.assertNotIn('brain', inspect.signature(apiagent.tools_for).parameters)
+        self.assertIn('hooks.command_gate', inspect.getsource(apiagent._hands))
+
+
+class CodingOnACardTests(unittest.TestCase):
+    """A coding task runs on an AI card the way a general task does (the owner, 2026-11-09: "coding tasks should run on hipaa, why not"):
+    when the owner chose that card for coding, picked it on the task, or it is the only AI here. A CLI chosen for coding still runs it."""
+
+    def setUp(self):
+        from taskuary import general
+        self.g, self.s = general, MemoryStore()
+        self.cid = self.s._exec("INSERT INTO connector (Type,Name,ConfigJson,Secret,Active) VALUES ('hipaa_ai','Org AI','{}','k',1)")
+        self.tid = self.s.create_task({'Title': 'add() subtracts', 'Summary': 'fix it', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        self.task = self.s.get_task(self.tid)
+
+    def tearDown(self): self.g.ON_CARD.discard(self.tid)
+
+    def test_the_card_chosen_for_coding_runs_it(self):
+        self.s.set_setting('default_brain', f'connector:{self.cid}', 'owner')
+        self.assertEqual(self.g.on_card(self.s, self.task), f'connector:{self.cid}')
+        self.assertTrue(self.g.handles(self.task))
+
+    def test_a_cli_chosen_for_coding_keeps_it_in_a_terminal(self):
+        with mock.patch('taskuary.agents.resolve_brain', return_value='cli:claude'):
+            self.assertEqual(self.g.on_card(self.s, self.task), '')
+        self.assertFalse(self.g.handles(self.task))
+        self.assertEqual(self.g.on_card(self.s, self.task, brain='claude'), '')       # the owner's CLI pick at the picker
+
+    def test_a_pick_on_the_task_and_a_home_with_no_cli(self):
+        self.assertEqual(self.g.on_card(self.s, self.task, pick=f'connector:{self.cid}'), f'connector:{self.cid}')
+        with mock.patch('taskuary.agents.resolve_brain', return_value=f'connector:{self.cid}'):
+            self.assertEqual(self.g.on_card(self.s, self.task), f'connector:{self.cid}')
+
+    def test_a_general_task_is_never_on_card(self):
+        t = self.s.get_task(self.s.create_task({'Title': 'q', 'Summary': 'q', 'Kind': 'general', 'Status': 'open'}, 'owner'))
+        self.assertEqual(self.g.on_card(self.s, t, pick=f'connector:{self.cid}'), '')
+
+    def test_it_works_in_the_checkout_its_cli_would(self):
+        import tempfile
+        repo = tempfile.mkdtemp()
+        self.s.update_task(self.tid, {'Tags': 'repo:northwind/ledger'}, 'owner')
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cwd_map': {'northwind/ledger': repo}}))
+        with mock.patch('taskuary.landing.sha', return_value='abc123'), mock.patch('taskuary.landing.head_branch', return_value='main'):
+            self.assertEqual(self.g.place_coding(self.s, self.tid), repo)
+        self.assertEqual(Path(apiagent.workdir(self.s, self.tid)).resolve(), Path(repo).resolve())
+
+    def test_a_named_repo_with_no_checkout_refuses_as_the_cli_does(self):
+        self.s.update_task(self.tid, {'Tags': 'repo:northwind/portal'}, 'owner')
+        with mock.patch('taskuary.terminal.find_checkout', return_value=None), self.assertRaisesRegex(ValueError, 'no local path'):
+            self.g.place_coding(self.s, self.tid)
+
+
 def config_home():
     from taskuary import config
     return config.home()

@@ -66,8 +66,8 @@ WRITE = [
         _S({'path': _PATH, 'old': {'type': 'string'}, 'new': {'type': 'string'}}, ['path', 'old', 'new'])),
 ]
 WEB = [
-    _fn('web_search', "Search the web - the AI's own search (Google Search for Gemini, Anthropic's for Claude) - and read pages it finds, "
-        'with their sources.', _S({'query': {'type': 'string', 'description': 'what to find out; a URL in it is read'}}, ['query'])),
+    _fn('web_search', "Search the web - the AI's own search (OpenAI's, Google's, Anthropic's), else a connected search service - and read pages "
+        'it finds, with their sources.', _S({'query': {'type': 'string', 'description': 'what to find out; a URL in it is read'}}, ['query'])),
     _fn('web_fetch', 'Read one public web page or file by its address, as text (no sign-in, nothing clicked - browser_open is for that).',
         _S({'url': {'type': 'string'}}, ['url'])),
 ]
@@ -218,7 +218,7 @@ BRAINS = {}                    # (tid, sid) -> the brain this turn runs on: web_
 
 
 def _search(store, tid: int, sid: str, q: str) -> str:
-    "The model's OWN web search (llm `search`: LiteLLM's web_search_options); a connected search card where the gateway refuses it."
+    "The model's OWN web search (llm `search`, each provider's own); a connected search card where the card has none or refuses it."
     brain = BRAINS.get((tid, sid))
     if callable(getattr(brain, 'search', None)):
         try: return _cut(brain.search(q))

@@ -220,8 +220,41 @@ def full_hands(store) -> bool:
 
 
 def handles(task: dict | None) -> bool:
-    """Kinds that belong to the conversational agent rather than a coding or reply workflow."""
-    return str((task or {}).get('Kind') or 'general').lower() in GENERAL_KINDS
+    """Kinds that belong to the conversational agent rather than a coding or reply workflow - and a coding task on an AI card (on_card)."""
+    return str((task or {}).get('Kind') or 'general').lower() in GENERAL_KINDS or (task or {}).get('TaskId') in ON_CARD
+
+
+# A CODING TASK ON AN AI CARD (the owner, 2026-11-09: "coding tasks should run on hipaa, why not"): where the owner chose an API card for
+# coding - the coding brain setting, or this task's own pick - or it is the only AI here (a HIPAA-only install), the task runs as this
+# module's session through apiagent's loop: in its checkout (apiagent.workdir), its commands under hooks.command_gate as a CLI's are,
+# git by run_command, the push as propose_land's card, and CODING.md for its rules. A CLI chosen for coding still runs it in a terminal.
+ON_CARD = set()                # task ids of coding tasks running on an AI card - handles() is a pure read of the task, so it is told here
+
+
+def on_card(store, task: dict | None, pick=None, brain=None) -> str:
+    "The `connector:<id>` a coding task runs on, '' where a CLI runs it - remembered for handles() once said."
+    from . import agents
+    if not task or str(task.get('Kind') or '').lower() not in agents.CODING_KINDS or brain: return ''
+    saved = '' if pick else str((store.saved_session(task['TaskId']) or {}).get('Pick') or '')
+    p = str(pick or '') or (saved if saved.startswith('connector:') or task['TaskId'] in ON_CARD else '') or agents.resolve_brain(store, 'coding')
+    (ON_CARD.add if p.startswith('connector:') else ON_CARD.discard)(task['TaskId'])
+    return p if p.startswith('connector:') else ''
+
+
+def place_coding(store, tid: int) -> str:
+    """THE CHECKOUT a coding task on an AI card works in - the one its CLI would open in (terminal.guess_repo, the coding profile's map, else
+    a search of the code folders), else the task's own folder. Marked as where its work starts (landing.mark_start), which is what
+    apiagent.workdir and the LAND card read. Refuses a named repo with no checkout, as the CLI's start does."""
+    from . import agents, landing, repochoice, terminal
+    if (landing.record(store, tid) or {}).get('cwd'): return landing.record(store, tid)['cwd']
+    role = agents.default_agent(store)
+    profile = json.loads((store.get_agent(role) or {}).get('Config') or '{}') if role else {}
+    repo, _why = terminal.guess_repo(store, tid, profile)
+    cwd = ((profile.get('cwd_map') or {}).get(repo) or terminal.find_checkout(repo, profile)) if repo else ''
+    if repo and not cwd: raise ValueError(f'no local path for {repo} - pick the repository on the task, then start it again')
+    cwd = str(cwd or repochoice.scratch(tid))
+    landing.mark_start(store, tid, cwd)
+    return cwd
 
 
 def provider_options(store) -> list:
@@ -1556,6 +1589,10 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # settings: the two no longer travel together (the 2026-09-16 spec).
     # ...and general work triage gave NO role is the assistant's own (ASSISTANT.md) - never a worker with no profile at all
     role = assigned_role(store, task) or ('' if dock or not store.get_agent('assistant') else 'assistant')
+    # ...and a coding task on an AI card works by the coding profile's rules (CODING.md), as its CLI would
+    if task.get('TaskId') in ON_CARD and not assigned_role(store, task):
+        from .agents import default_agent
+        role = default_agent(store) or role
     if role:
         from .agents import ensure_profile_document
         doc = ensure_profile_document(store, role)

@@ -237,6 +237,19 @@ def complete(token: str, model: str, system: str, user: str, max_tokens: int, wa
     if web: body['tools'] = [{'type': 'web_search'}]
     if want: body['text'] = {'format': {'type': 'json_schema', 'name': want.get('name') or 'answer',
                                         'schema': want.get('schema') or want, 'strict': True}}
+    return _streamed(token, model, body, timeout)[0]
+
+
+def respond(token: str, model: str, instructions: str, items: list, tools: list, timeout: int = 180, **extra) -> list:
+    """ONE STEP OF A TOOL LOOP on the plan (apiagent.py): the Responses `input` items so far and the function tools, in; the output
+    items - a message, function_call items - out. The plan's model calling Taskuary's tools, as an API card's does through `chat`."""
+    body = {'model': model, 'instructions': instructions, 'store': False, 'stream': True, 'input': items,
+            **({'tools': tools} if tools else {}), **extra}
+    return _streamed(token, model, body, timeout)[1]
+
+
+def _streamed(token: str, model: str, body: dict, timeout: int) -> tuple:
+    "(the answer's text, its output items) for one streamed call, an optional field the plan refuses taken out and asked again."
     # An OPTIONAL field the plan names as unsupported is taken out and the question asked again - the schema then
     # lives in the prompt, as it does for every brain that cannot carry one. `tools` is the caller's to drop.
     for _ in range(3):
@@ -252,7 +265,7 @@ def complete(token: str, model: str, system: str, user: str, max_tokens: int, wa
         raise RuntimeError(_CALL_ERRORS.get(code) or f'ChatGPT plan call failed ({r.status_code}): {_err(r)}')
     with r:
         if r.status_code != 200: raise RuntimeError(f'ChatGPT plan call failed ({r.status_code}): {_err(r)}')
-        out, done = [], False
+        out, items, done = [], [], False
         # requests decodes only when the response names a charset, and the plan's text/event-stream names none: every
         # line came back as bytes and "startswith first arg must be bytes" failed every triage (2026-10-06)
         r.encoding = getattr(r, 'encoding', None) or 'utf-8'
@@ -265,6 +278,7 @@ def complete(token: str, model: str, system: str, user: str, max_tokens: int, wa
             except ValueError: continue
             kind = ev.get('type')
             if kind == 'response.output_text.delta': out.append(ev.get('delta') or '')
+            elif kind == 'response.output_item.done' and isinstance(ev.get('item'), dict): items.append(ev['item'])
             elif kind == 'response.completed':
                 from . import aiusage
                 aiusage.openai({'model': model, **(ev.get('response') or {})}); done = True; break
@@ -272,7 +286,7 @@ def complete(token: str, model: str, system: str, user: str, max_tokens: int, wa
                 err = (ev.get('response') or {}).get('error') or ev.get('error') or {}
                 raise RuntimeError(_CALL_ERRORS.get(err.get('code')) or f"ChatGPT plan call failed: {err.get('message') or err.get('code') or kind}")
     if not done: raise RuntimeError('the ChatGPT plan answer stopped before it finished - try again')
-    return ''.join(out)
+    return ''.join(out), items
 
 
 def _code(r) -> str:

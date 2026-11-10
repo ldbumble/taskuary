@@ -2872,10 +2872,9 @@ def owes_owner(v: dict | None) -> bool:
 # takes) and so is the owner's own address: where nobody reads a reply, the ask is the agent's work (a question in it, asks_owner) or nothing
 def reads_reply(store, msg: dict, v: dict | None) -> bool:
     "Does somebody read a reply to this arriving message: a person sent it (the verdict's class, else the headers'), and not the owner."
-    from .wrapup import from_owner, reads_replies
-    row = {'Channel': msg.get('channel'), 'SenderClass': (v or {}).get('sender_class') or msg.get('sender_class'), 'FromEmail': msg.get('from_email'),
-           'auto_reply': msg.get('auto_reply')}
-    return reads_replies(row) and not from_owner(store, row)
+    from .wrapup import reads_reply_row
+    return reads_reply_row(store, {'Channel': msg.get('channel'), 'SenderClass': (v or {}).get('sender_class') or msg.get('sender_class'),
+                                   'FromEmail': msg.get('from_email'), 'auto_reply': msg.get('auto_reply')})
 
 
 def owed_reply(store, msg: dict, v: dict | None) -> dict | None:

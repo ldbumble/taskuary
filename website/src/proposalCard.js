@@ -85,14 +85,9 @@ export function afterExecute(p, res) {
 //
 // A HAND-OFF THAT STARTED is "watch": its task opens on the table with the agent working in it, and the walk waits for Next
 // (the owner, 2026-10-01: "it should open the task and I can see the agent doing its work, why did it just close it?").
-// NOT OURS ACTS AT ONCE, AS JUST THIS ONCE (the owner, 2026-10-21: no "are you sure"): the card's question - how far? - is asked
-// after, as a chip under the receipt that goes further ("From now on", "No more ideas like this"). A hard rule in Settings stays a
-// page of its own, not a chip. Each carries its own operation on the same message (or idea): the item is filed and off the pile by
-// the time it is pressed, so it cannot be looked up there again.
-const FURTHER = { not_ours_sender: (p) => ({ kind: "preference.exclude_sender", target: p.target, params: { scope: "sender" } }),
-  not_ours_kind: (p) => ({ kind: "idea.act", target: p.target, params: { ...(p.params || {}), verb: "dismiss_kind" } }) };
-export const followUps = (p, out) => (out?.status === "done" && p?.verb === "not_ours" && p.target != null
-  ? (p.alts || []).filter((a) => FURTHER[a.verb]).map((a) => ({ verb: a.verb, label: a.label, follow: FURTHER[a.verb](p) })) : []);
+// NOT OURS ACTS AT ONCE, AS JUST THIS ONCE (the owner, 2026-10-21: no "are you sure"). How far - Ignore this sender, No more ideas like
+// this - is the item's own button beside it (concierge.CHIPS), never a chip under the receipt: that one rode onto the NEXT item's bar,
+// an idea's put-down offered over an FYI batch (the owner, 2026-11-10: "who asked you to add this to fyi???")
 
 export function afterConfirm(p, out, current) {
   if (out?.handoff && out.tid) return "watch";

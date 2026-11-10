@@ -1055,3 +1055,9 @@
 .tq-model-pick > span { overflow: hidden; text-overflow: ellipsis; }
 .tq-model-pick:hover { background: #f4f1ec; color: #292824; }
 .tq-model-pick:focus-visible { outline: 2px solid #55697a; outline-offset: 1px; }
+
+/* THE ITEM'S OWN ROW (AssistantView ItemMoves, the owner 2026-11-10: the bar under the chat is Back and Next only): over the card on the table,
+   one line, its overflow in its ▾ - and under a receipt or a bare line when nothing is on the table */
+.tq-item-moves { display: flex; min-width: 0; margin: 0 0 8px; }
+.tq-item-moves:empty { display: none; }
+.tq-msg .body > .tq-item-moves:last-child, .tq-msg.receipt .tq-item-moves { margin: 8px 0 0; }

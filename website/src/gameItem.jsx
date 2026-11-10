@@ -343,7 +343,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
       {item.summary && <Reading text={item.summary} cap={100} />}
       {item.tid && <FinalReport tid={item.tid} />}
       <Row>
-        {card === "agentdone" && item.mid && <Btn kind="gold" disabled={!!busy} onClick={() => play("draft", item.key, () => openReply(api, item.mid))}
+        {card === "agentdone" && item.mid && item.replies && <Btn kind="gold" disabled={!!busy} onClick={() => play("draft", item.key, () => openReply(api, item.mid))}
           title="Drafts an answer to the sender from what the agent found - nothing is sent">✍ {btn("reply")} · +20</Btn>}
         {item.tid && <Btn onClick={() => open(item.tid)}>Open {item.ref}</Btn>}
       </Row>
@@ -365,7 +365,8 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
       {item.mid ? <MessageText mid={item.mid} /> : item.preview && <Reading text={item.preview} cap={90} />}
       {item.lane === "unjudged" && <Row><Btn kind="gold" disabled={!!busy} onClick={() => play("sort", item.key, () => api.post(`/api/messages/${item.mid}/retriage`, {}))}>🔁 {btn("retriage")} · +10</Btn></Row>}
       {asks && item.mid && <Row>
-        <Btn kind={m.verb === "draft" ? "gold" : "ghost"} disabled={!!busy} onClick={() => play("draft", item.key, () => openReply(api, item.mid))}>✍ {btn("reply")} · +20</Btn>
+        {/* ...a reply only where somebody reads one (the server's `replies`, 2026-11-10) */}
+        {item.replies && <Btn kind={m.verb === "draft" ? "gold" : "ghost"} disabled={!!busy} onClick={() => play("draft", item.key, () => openReply(api, item.mid))}>✍ {btn("reply")} · +20</Btn>}
         {/* not while an agent runs on it - its session is the way in (2026-10-01) */}
         {!agentRuns(item) && <Btn kind={m.verb === "dispatch" ? "gold" : "ghost"} disabled={!!busy} onClick={() => setAsk(coding)}>🤖 {btn(coding ? "coding_agent" : "regular_agent")} · +45</Btn>}
         <Btn disabled={!!busy} onClick={() => setMine((v) => v == null ? "" : null)}>✎ Write it myself</Btn>

@@ -146,6 +146,16 @@ def reads_replies(m: dict) -> bool:
     "Is somebody behind this message who reads a reply: it came on a channel someone writes on, from a person, not a machine (categories.automated)."
     from .categories import automated
     return not no_one_behind((m or {}).get('Channel')) and not automated(m or {})
+def reads_reply_row(store, m: dict, own: set = None) -> bool:
+    "Somebody other than the owner reads a reply to this row: a person on a channel someone writes on (reads_replies), never the owner's own mail."
+    return bool(m) and reads_replies(m) and not from_owner(store, m, own)
+# THE BUTTONS ARE THE ITEM'S ACTIONS (the owner, 2026-11-10: "reply by itself makes no sense on github ... fix this globally"): Reply stands
+# only where somebody reads one - the one fact the row's buttons (concierge.cannot), the cards (funnel's `replies`) and the doors all ask
+def replies_on(store, item: dict) -> bool:
+    "Does anybody read a reply on this item: its task's reply target is somebody (no_correspondent), else its own message is (reads_reply_row)."
+    it = item or {}
+    if it.get('tid'): return not no_correspondent(store, int(it['tid']))
+    return bool(it.get('mid')) and reads_reply_row(store, store.get_message(int(it['mid'])) or {})
 def no_correspondent(store, task_id: int) -> bool:
     "Nobody but the owner, or a machine, is behind the task: a reply would have no one to read it (the reply tools are not offered on it)."
     from .categories import automated

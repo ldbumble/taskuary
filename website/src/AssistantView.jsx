@@ -26,6 +26,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import api from "./api.js";
 import { DEMO_SAID } from "./apiError.js";
 import { runOperation } from "./taskOps.js";
+import { SIDE_NAV } from "./sideNav.js";
 import { draftJob, openReply, rewriteReceipt } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import { lazyView } from "./lazyView.jsx";
@@ -76,8 +77,8 @@ import { AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { handToItem } from "./ItemSections.jsx";
-import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
+import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
@@ -107,6 +108,7 @@ import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 const GeneralWorkspace = lazyView(loadGeneral);
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask, wordsCap } from "./CanvasItem.jsx";
+import { PaneMoves } from "./TaskPage.jsx";
 import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
 import { floorOf } from "./inView.js";
 const CanvasBrowse = lazyView(() => import("./CanvasBrowse.jsx"));
@@ -176,7 +178,11 @@ const errText = (e) => {
 // refusal lands in as it is answered (apiError.DEMO_SAID), so a card's own catch passing one on is the demo's line too.
 const demoNo = (e) => (e?.response?.status === 403 && e.response.data?.demo ? String(e.response.data.detail || "This is the demo - nothing is sent.") : "");
 // what an empty rail offers: the same doors as the welcome block (runChip knows these three)
-const IDLE_CHIPS = [{ verb: "newtask", label: btn("new_task") }, { verb: "setupask", label: "Set something up" }, { verb: "tour", label: "Change my setup" }];   // not a second "set up" beside "Set something up" (U14)
+// NOTHING ON THE TABLE: the bar's one exception to Back and Next (the owner, 2026-11-10: "even these should just be shortcut to new... that's
+// it and myabe change my setup. don't like that many buttons") - the sidebar's own New (sideNav), which starts a task, a report or a routine,
+// and Change my setup. `bar`: they stand on the bar, where nothing else but the walk does (actionRow.splitRow)
+const NEW_DOOR = SIDE_NAV.find((n) => n.key === "new");
+const IDLE_CHIPS = [{ verb: "newtask", label: NEW_DOOR.label, hint: NEW_DOOR.hint, bar: true }, { verb: "tour", label: "Change my setup", bar: true }];
 // the presses that start an agent on an item: each opens the agent box first (askAgent) - `coder` is coding_agent's old name
 const AGENT_VERBS = ["coding_agent", "regular_agent", "coder"];
 const speakOn = () => { try { return localStorage.getItem("taskuary_speak") === "1"; } catch { return false; } };
@@ -910,11 +916,15 @@ function Pressed({ label, note = "" }) {
   return <><span className="tq-pressed" data-tq-pressed={label} title={note || undefined}>✓ {label}</span>
     {note && <span className="tq-pressed-note" data-tq-pressed-note="" title={note}>{note}</span>}</>;
 }
+// THE ITEM'S OWN ROW, ON THE ITEM (the owner, 2026-11-10: "on bottom the only buttons should be nav. all other buttons should be on task"):
+// what nothing laid out carries - an FYI batch's, a message's or a proposal's moves, a receipt's Open and Report this bug - is drawn over the
+// card on the table, or under the line that holds them when nothing is on it (actionRow.splitRow `item`). One line; the rest fold into its ▾
+const ItemMoves = () => <div className="tq-item-moves" data-tq-item-moves=""><PaneMoves sec="item" name="This one" /></div>;
 function BarVerbs({ owner, chips, busy, onChip, quiet = false }) {
   // the item's key in the id: the end of the walk offers one "open" chip per item, and one id kept only the last - "Open TQ-0001" opened
   // TQ-0010. The verb stays LAST so isDone's /:done$/ still finds a done chip
   useVerbs(owner, chips.map((c, i) => ({ id: `chat:${c.key ? `${c.key}:` : ""}${c.verb || c.label}`, label: c.label, group: c.verb === "next" ? "next" : "decide",
-    tone: i === 0 && c.verb !== "next" && !quiet ? "p" : "s", title: c.hint || "", disabled: busy, run: () => onChip(c) })), chips.length > 0);
+    tone: i === 0 && c.verb !== "next" && !quiet && !c.bar ? "p" : "s", title: c.hint || "", disabled: busy, ...(c.bar ? { bar: true } : {}), run: () => onChip(c) })), chips.length > 0);
   return null;
 }
 
@@ -950,7 +960,7 @@ function RetryVerbs({ item, failed, onSaid, onDone }) {
 const dockCannot = (i) => (i.image ? "" : "read only by an AI on this computer");
 // ...and its chips ride the box's own line, beside the paperclip, never a row over it (the owner, 2026-11-06: every box, chips left of the words)
 const DOCK_CHIPS = { flex: "0 1 auto", maxWidth: 220, minWidth: 0, pb: 0 };
-function Line({ m, lastBrief = false, live, last, further = false, actions, fresh, tableChips = [], barHolds = false, pageOver = false, canvas = null }) {
+function Line({ m, lastBrief = false, live, last, moves = false, actions, fresh, tableChips = [], barHolds = false, pageOver = false, canvas = null }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
       s.url ? <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid #ddd6cb" }} />
@@ -978,13 +988,12 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
           ...and its Open and Report this bug go there too: a button in the line is against "no button in line ever" (2026-10-06),
           and an Open TQ-x and a Report this bug link stood in the chat under a failure (the walk click-through, 2026-10-17) */}
       {last && <BarVerbs owner={`line:${m.id}`} chips={receiptChips(m)} busy={actions.busy} onChip={actions.chip} />}
-      {/* ...and its From now on, past it, on the next item's row (furtherIndex) - never lit there: the row's one lit button is that item's */}
-      {!last && further && <BarVerbs owner={`line:${m.id}`} chips={chipsOf(m).filter((c) => c.follow)} busy={actions.busy} onChip={actions.chip} quiet />}
+      {moves && <ItemMoves />}
     </div></div>);
   // THE END OF THE WALK SAYS NOTHING (the owner, 2026-10-23: "yes remove the sentence, just the button"): a line with no words and no item
   // is only its buttons - Walk me through my tasks and its Opens - on the row by the prompt, never an empty bubble wearing the mark
   if (m.role === "assistant" && (!m.card || m.card.kind === "words") && !m.proposal && !String(m.text || "").trim() && !pressedOf(m))
-    return last ? <BarVerbs owner={`line:${m.id}`} chips={barHolds ? [] : chipsOf(m)} busy={actions.busy} onChip={actions.chip} /> : null;
+    return last ? <><BarVerbs owner={`line:${m.id}`} chips={barHolds ? [] : chipsOf(m)} busy={actions.busy} onChip={actions.chip} />{moves && <ItemMoves />}</> : null;
   // The funnel deliberately renames msg:<mid> to agent:<tid> when somebody takes the task. Follow
   // the task identity across that rename; matching only the old key left a live agent displayed as
   // "nobody on it" until a new chat line happened to replace the card.
@@ -1054,6 +1063,7 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
   const bare = live && !foldedNow && (c?.kind === "connection" || ITEM_CARDS.has(kind));
   if (live && canvas && m.card && showsTask(c, kind) && !foldedNow) return (
     <div className="tq-canvas-live">
+      {moves && <ItemMoves />}
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
         onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onWalkLeave={(how, x) => actions.leave(c.key, how, x)}
         onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)} onReminded={(out) => actions.reminded(out, c)}
@@ -1123,12 +1133,14 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
               {pressedOf(m) && <Pressed label={pressedOf(m)} note={pressedNoteOf(m)} />}
             </div>
           )}
+          {moves && card && !foldedNow && <ItemMoves />}
           {card && !foldedNow && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
           {/* The action words, in the assistant's own line - one place to look, chosen by the server from
               the item's kind and already filtered to what this one can carry (concierge.chips_for). A
               strip over the composer and a second row under the bubble said the same things twice and
               neither was where the sentence was (the owner, 2026-09-07). */}
           {last && <BarVerbs owner={`line:${m.id}`} chips={strip} busy={actions.busy} onChip={actions.chip} />}
+          {moves && !(card && !foldedNow) && <ItemMoves />}
         </div>
       </div>
     </>
@@ -1192,7 +1204,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [walk, setWalk] = useState(null);
   const [msgs, setMsgs] = useState([]);
   const msgsRef = useRef(msgs); msgsRef.current = msgs;      // what is on screen, for a read to tell what it ADDED
-  const caps = useCapabilities(), canCode = caps.coding;   // coding is mentioned only where a coding tool is connected
+  const caps = useCapabilities();
   const [pile, setPile] = useState(null);
   // NOT READ YET IS NOT EMPTY (the owner, 2026-10-20): until the first pile read lands the welcome says it is loading, in the
   // place of "Nothing is waiting on you", and a Walk press made then is kept and run when the rows are in (walkQueued)
@@ -2602,7 +2614,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // (the repositories stay on the proposal card's own picker here - the chat has them only where there is no card)
       // ...and a SEND that went carries its own (concierge.sent_chips): Mark done and Next - the item stays on the table
       const chips = (out.status !== "done" || p.kind === "review.approve") && res?.chips?.length ? res.chips.filter((c) => !(out.repo && c.verb === "repo"))
-        : step === "offer" || out.status !== "done" ? [{ verb: "next", label: btn("next") }] : followUps(p, out);
+        : step === "offer" || out.status !== "done" ? [{ verb: "next", label: btn("next") }] : [];
       // A PRESS THAT WENT THROUGH IS A BADGE ON ITS CARD, never "Done - Mark done · TQ-0001." under it (the owner, 2026-10-22: "we don't
       // need that text ever"). A line stays only where it carries a way on (a send's Mark done and Next, Not ours taken further, a
       // sweep's Next) - and a press that did NOT go through is said, as a failure
@@ -2752,19 +2764,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (c.verb === "opentask" && c.tid) { openTaskRef.current?.({ tid: c.tid }); return; }
     // ...and the app's own trouble the chat could not fix (troubleshoot.chips): drafted from what it found, not the page's last error
     if (c.verb === "bug") { openBugReport(c.report || shownError(c.text)); return; }
-    if (c.verb === "setupask") { askSetup(); return; }
     // ...and the end of the walk's way to walk again: the day card's own button and handler, on the row (the owner, 2026-10-22)
     if (c.verb === "walk") { start(null); return; }
-    // ...a Not ours taken further, under its receipt (followUps): the item it names, whatever is on the table now - run at once
-    if (c.follow?.kind) {
-      setBusy(true); setErr("");
-      try {
-        await runOperation(api, c.follow.kind, c.follow.target, c.follow.params);
-        setMsgs((m) => pressChip(m, c));          // its badge on the line it was under, not "<word> - done." (2026-10-22)
-        onChanged?.();
-      } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
-      return;
-    }
     if (c.verb === "tour") { await setup(); return; }
     const item = currentRef.current || currentItem;
     const key = item?.key || current;
@@ -2917,9 +2918,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // connection, an automation - is the assistant's own walk-through of a thing you describe. The
   // scripted walk inherited the identifier `setup` and with it the welcome block's button, so the
   // chip still reading "Set up a report or workflow" opened the fourteen-stop tour of the app.
-  const askSetup = () => setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: "Tell me what to set up - a report, a connection, an automation - and I'll take you through it here; nothing changes until you say so."
-      + (canCode ? " If something has to be built, say send it to the coding agent." : ""),   // coding is offered only where a coding tool is connected
-    card: { key: "setup", kind: "setup", lane: "report", title: "Set something up" }, options: [] }]);
   const [walking, setWalking] = useState(false);        // guards the chip against a double-click
   const setup = async () => {
     if (walking) return;
@@ -3490,7 +3488,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const lastCardIdx = useMemo(() => { const i = tableCardIndex(shown, old ? null : current || cardKey), c = shown[i]?.card;
     // ...the canvas's own fallback (the newest card in the chat) included: a durable line about a closed task landing after Next drew it
     return i; }, [shown, old, current, cardKey]);
-  const lastSaidIdx = useMemo(() => lastActIndex(shown), [shown]), furtherIdx = useMemo(() => furtherIndex(shown), [shown]);
+  const lastSaidIdx = useMemo(() => lastActIndex(shown), [shown]);
+  // ...and the item's own moves are drawn on the item: over the card on the table, else under the line that holds them (ItemMoves)
+  const movesIdx = lastCardIdx >= 0 ? lastCardIdx : lastSaidIdx;
   // a reloaded answer is text only: the item still on the table lends it its verbs, so Next is never gone
   // ONE ROW OF WORDS (the owner, 2026-10-05: "why is there buttons both places?"): a task on the table is drawn as its task view,
   // and that view registers its words in the row under the chat (layout B). A bare line under it then borrowed the same item's
@@ -3846,7 +3846,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           </div>}
           {firstRun ? state && <div data-tq-setup-under={setupCovered.current ? "hidden" : ""} style={setupCovered.current ? { display: "none" } : undefined}>{welcome()}</div>
             : state && !shown.some((m) => !inWin.has(m.id)) && (!busy || popOpen) && !starting && welcome()}
-          {!firstRun && shown.map((m, i) => inWin.has(m.id) ? null : <Line key={keyOf.get(m.id)} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
+          {!firstRun && shown.map((m, i) => inWin.has(m.id) ? null : <Line key={keyOf.get(m.id)} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} moves={!old && i === movesIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (
@@ -3937,7 +3937,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               )}
               <div className="tq-chat-pop-body" ref={popBodyRef}>
                 {!winLines.length && !popPending && !popErr && <p className="tq-chat-pop-empty">{browsing ? "Ask about this page, or anything on your list." : currentItem?.ref ? `Ask about ${currentItem.ref}, or anything on your list.` : "Ask about anything on your list."}</p>}
-                {winLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
+                {winLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={!old && i === lastSaidIdx} moves={!old && i === movesIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
                   actions={actions} fresh={currentItem} canvas={canvasState} />)}
                 {popPending && pendingLine}
                 {popOpen && errLine}

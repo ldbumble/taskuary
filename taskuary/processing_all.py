@@ -319,7 +319,9 @@ def message_row(message, item, threads, now, *, full=False, leads=frozenset()):
         'ConversationId', 'SourceLink', 'TaskId', 'Direction',
         # what triage named it and what it read the words as trying to make an AI do (message.Danger): the rail and card say both -
         # a phishing mail triage caught wore its own subject and no warning (B3, 2026-10-29)
-        'TriageTitle', 'Danger', 'DangerAim')}
+        'TriageTitle', 'Danger', 'DangerAim',
+        # ...and who sent it, as stored (categories.automated): whether a reply is read on it is asked of this row (funnel's `replies`)
+        'SenderClass')}
     row.update(IngestedAt=message.get('CreatedAt'), Preview=_preview(message.get('BodyText'), 4000 if full else 400, _wrapper(routes),
                                                                  message.get('OwnText'), leads),
                MsgStatus=message.get('Status'), Title=task.get('Title'), TaskStatus=task.get('Status'), Assignee=task.get('Assignee'),

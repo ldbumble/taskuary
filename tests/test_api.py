@@ -1065,6 +1065,17 @@ class ApiTests(unittest.TestCase):
                     if r['MessageId'] == push2['message_id'])
         self.assertTrue(row2['CanSend'])                       # email always has a road
 
+    def test_a_reply_door_on_a_machines_notice_puts_nothing_on_the_table(self):
+        """The owner, 2026-11-10: "reply by itself makes no sense on github". The row offers no Reply on a notice a machine sent
+        (concierge.cannot), and the door says the same words to a page that still pressed one - nothing is drafted, nothing is held."""
+        mid = server.store.add_message({'ExternalId': 'notice-reply', 'Channel': 'email', 'Subject': 'Run failed: CI - main', 'BodyText': 'The run failed.',
+                                        'FromName': 'Code host', 'FromEmail': 'builds@codehost.example', 'Status': 'routed', 'SenderClass': 'automated'})
+        before = len(server.store.list_reviews('pending'))
+        r = c.post(f'/api/messages/{mid}/reply', json={'draft': False})
+        self.assertEqual(r.status_code, 422)
+        self.assertIn('Nobody reads a reply', r.json()['detail'])
+        self.assertEqual(len(server.store.list_reviews('pending')), before)
+
     def test_opening_a_reply_on_a_closed_thread_shows_the_draft_where_the_yes_happens(self):
         """TQ-0426: the last reply closed the task, the owner opened another on the same message -
         and the card asking for the yes said "already handled", because a pending review whose task

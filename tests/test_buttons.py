@@ -226,4 +226,61 @@ class Counsel(unittest.TestCase):
         self.assertEqual(counsel.migrate(st), 'unchanged')
 
 
+
+def _mail(s, sender, tid=None, channel='email', who='erin@northwind.example'):
+    # sender: the class triage (or the headers) stored on the message - a machine is never read off its address
+    return s.add_message({'TaskId': tid, 'ExternalId': f'x{who}{tid}', 'Channel': channel, 'Subject': 'Run failed: CI - main', 'FromEmail': who,
+                          'SentAt': '2026-11-10 09:00:00', 'BodyText': 'The run failed.', 'Status': 'routed', 'SenderClass': sender})
+
+
+class AVerbOnlyWhereItBelongs(unittest.TestCase):
+    """THE BUTTONS ARE THE ACTIONS THIS ITEM HAS (the owner, 2026-11-10: "github task resolutions is not email so it should not have reply
+    ... THe buttons should reflect the actions on this type of task of course.. fix this globally"). Each verb's precondition is a fact of the
+    item, checked in one place (concierge.cannot) that the row's buttons, the chips and the routes that act all ask."""
+    def task(self, sender, channel='email'):
+        s = MemoryStore(); tid = s.create_task({'Title': 'CI failed on main', 'Kind': 'general', 'Status': 'open'}, 't')
+        mid = _mail(s, sender, tid, channel); return s, {'kind': 'task', 'key': f'task:{tid}', 'title': 'CI failed on main', 'tid': tid, 'mid': mid}
+
+    def row(self, s, it):
+        with mock.patch('taskuary.capabilities.has_ai', return_value=False), mock.patch.object(concierge, '_agent_running', return_value=False):
+            return {b['verb'] for b in concierge.row_buttons(s, it)}
+
+    def test_reply_only_where_somebody_reads_one(self):
+        s, person = self.task('person')
+        self.assertEqual(concierge.cannot(person, 'reply', s), '')
+        self.assertIn('reply', self.row(s, person))         # no AI: the row's own Reply stands, folded (concierge._shows)
+        for sender in ('automated', 'bulk'):
+            s, notice = self.task(sender)
+            why = concierge.cannot(notice, 'reply', s)
+            self.assertTrue(why and 'nobody' in why.lower(), why)
+            self.assertNotIn('reply', self.row(s, notice))
+            self.assertNotIn('reply', {c['verb'] for c in concierge.chips_for(s, notice | {'kind': 'asked'}, first='reply')})
+        # ...nor on the owner's own note: nobody but the owner is behind it
+        s = MemoryStore(); tid = s.create_task({'Title': 'Renew the lease', 'Kind': 'general', 'Status': 'open'}, 't')
+        own = _mail(s, None, tid, channel='own')
+        self.assertTrue(concierge.cannot({'kind': 'task', 'tid': tid, 'mid': own, 'title': 'Renew the lease'}, 'reply', s))
+
+    def test_a_message_with_no_task_the_same(self):
+        s = MemoryStore()
+        for sender, owed in (('person', True), ('automated', False)):
+            it = {'kind': 'asked', 'key': 'msg:1', 'title': 'Can you look?', 'mid': _mail(s, sender, who=f'{sender}@vendor.example')}
+            self.assertEqual(not concierge.cannot(it, 'reply', s), owed, sender)
+
+    def test_the_rail_item_says_whether_a_reply_is_read(self):
+        """The cards draw their own Reply from the item (an FYI batch's line, a message card): the server says it, the page only reads it."""
+        s = MemoryStore(); funnel.invalidate(); funnel.forget_states(); funnel._CACHE.update(cands_at=0.0, cands=[])
+        p, n = _mail(s, 'person', who='erin@northwind.example'), _mail(s, 'automated', who='builds@codehost.example')
+        for mid in (p, n): s.add_route(mid, None, 'file', None, 'for your information', [], 'triage')
+        items = {i.get('mid'): i for i in funnel.build(s)['items']}
+        self.assertEqual((items[p].get('replies'), items[n].get('replies')), (True, False))
+
+    def test_an_idea_verb_never_on_an_fyi_batch(self):
+        """The owner, 2026-11-10, over an FYI batch whose bar read "No more ideas like this": an idea's own put-down belongs to an idea."""
+        batch = {'kind': 'fyis', 'key': 'fyis:msg:1,msg:2', 'title': '2 fyi', 'items': [{'key': 'msg:1', 'mid': 1}, {'key': 'msg:2', 'mid': 2}]}
+        idea = {'kind': 'idea', 'key': 'idea:1', 'title': 'Chase Ray about the lease', 'idea': 1}
+        self.assertTrue(concierge.cannot(batch, 'not_ours_kind'))
+        self.assertEqual(concierge.cannot(idea, 'not_ours_kind'), '')
+        self.assertNotIn('not_ours_kind', {c['verb'] for c in concierge.chips_for(None, batch, first='not_ours_kind')})
+        self.assertNotIn('not_ours_kind', {c['verb'] for c in advisor.offered(None, batch)})
+
 if __name__ == '__main__': unittest.main()

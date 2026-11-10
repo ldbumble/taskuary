@@ -13,7 +13,7 @@ import { label as bLabel, hint as bHint } from "./buttons.js";
 import { plainError } from "./apiError.js";
 import SearchEverything, { OPEN_SEARCH, searchPicked } from "./SearchEverything.jsx";
 import { fadeBand } from "./timelineFade.js";
-import { syncFace, syncPhaseLabel } from "./syncTiming.js";
+import { syncFace, syncLine, syncPhaseLabel } from "./syncTiming.js";
 import { observeSync } from "./syncObserver.js";
 import { onWrote } from "./wrote.js";
 import { availablePickerChannels, channelsForCategory } from "./feedFilters.js";
@@ -365,6 +365,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const [bgSync, setBgSync] = useState(false);     // the startup catch-up - rows stay readable
   const [syncWhat, setSyncWhat] = useState("");
   const [syncPhase, setSyncPhase] = useState("");
+  const [syncNums, setSyncNums] = useState({});      // {landed, back} of the running sync, and `brought` for a moment after it (syncLine)
   const [syncUnknown, setSyncUnknown] = useState(false);
   // A REFUSED SYNC SAYS SO IN THE CLOCK'S OWN SLOT (the UX walk, 2026-10-22): it read as "status unavailable". It is the line's
   // status, not a receipt - gone at the next press or clean status. A CONNECTION that failed is not the sync's: it rings the bell
@@ -411,11 +412,17 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     const what = data.status?.what || data.ingest?.what || "";
     setSyncUnknown(false);
     setSyncPhase(data.status?.phase || "");
+    // what the sync that just ended brought in stays a moment, then the clock comes back - only this sync's (`at` on the server's clock)
+    const brought = data.brought && data.now - data.brought.at < 15 ? data.brought : null;
     if (running) {
       clearTimeout(completionTimer.current);
-      setBgSync(true); setSyncWhat(what);
+      setBgSync(true); setSyncWhat(what); setSyncNums({ landed: data.status?.landed || 0, back: data.status?.back || 0 });
+    } else if ((wasRunning.current || completedBetweenChecks) && brought) {
+      setBgSync(false); setSyncWhat(""); setSyncNums({ brought }); load(rowsLen.current);
+      clearTimeout(completionTimer.current);
+      completionTimer.current = setTimeout(() => setSyncNums({}), 6000);
     } else if (wasRunning.current) {
-      setBgSync(false); setSyncWhat(""); load(rowsLen.current);
+      setBgSync(false); setSyncWhat(""); setSyncNums({}); load(rowsLen.current);
     } else if (completedBetweenChecks) {
       setBgSync(true); setSyncWhat("check finished"); load(rowsLen.current);
       clearTimeout(completionTimer.current);
@@ -602,8 +609,9 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             <Typography variant="caption" noWrap data-tq-sync-line="" title={syncErr || undefined}
               sx={{ color: syncErr ? ALERT_INK : syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, minWidth: 0, textAlign: "center" }}>
               {syncErr ? `✗ ${syncErr}` : syncUnknown ? "Sync status unavailable — rechecking"
-                : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted,
-                    terse: !(syncing || bgSync) })} />}
+                : !(syncing || bgSync) && syncNums.brought ? syncLine({ brought: syncNums.brought })
+                : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted,
+                    what: (bgSync && syncLine({ busy: true, phase: syncPhase, what: syncWhat, ...syncNums })) || syncWhat, terse: !(syncing || bgSync) })} />}
             </Typography>
             <Button size="small" variant="text" disabled={!syncUnknown && (syncing || bgSync)} onClick={() => syncNow(false)}
               title={syncing || bgSync ? syncWhat : bHint("sync_now", syncUnknown ? "unknown" : undefined)}

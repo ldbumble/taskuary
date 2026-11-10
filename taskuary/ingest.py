@@ -5,7 +5,7 @@ Pipeline per message: dedup -> deterministic policy -> route to a task -> intent
 (task / reply_only / fyi) -> file or create. Real tasks NEVER get an auto reply-draft:
 answering is the responder's job (reply_only), doing is the coding agent's.
 """
-import contextlib, hashlib, json, re, threading, time
+import contextlib, contextvars, hashlib, json, re, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
 from . import kinds as task_kinds
@@ -88,6 +88,7 @@ _DEFER_DEPTH = 0
 _DEFER_LOCK = threading.Lock()
 _PENDING = {}        # MessageId -> the message as it arrived (images, no_auto...), for drain in this process
 _PENDING_LOCK = threading.Lock()
+LANDING = contextvars.ContextVar('landing', default=None)     # set by a poll reader's thread: called once per message it brings in
 
 
 @contextlib.contextmanager
@@ -822,6 +823,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     # A CHAT BOUND TO AN AGENT is never the inbox's (agentchannels.py): its pollers route it first, and this catches any other road
     from . import agentchannels
     if fresh and agentchannels.swallows(store, msg): return {'status': 'agent_channel', 'task_id': None, 'message_id': None}
+    if fresh and (count := LANDING.get()): count()      # the running poll's tally: the sync line's "bringing in 37…" (channels._Tally)
     if fresh and file_only:
         mid = store.add_message({**_fields(msg, None), 'Status': 'feed'})
         # a voice note nothing could transcribe is filed too - and the reason says so, not "a feed"

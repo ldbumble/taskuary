@@ -4,7 +4,7 @@ live probe (token/chat-read/repo-discovery); poll_channels is the scheduled inge
 funnels mail and chats through the same triage as everything else. Credentials left blank
 fall back to AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET env vars.
 """
-import base64, contextlib, hashlib, json, math, os, queue, re, threading, time
+import base64, contextlib, contextvars, hashlib, json, math, os, queue, re, threading, time
 from concurrent.futures import ThreadPoolExecutor
 from html import unescape
 from datetime import datetime, timedelta
@@ -2002,13 +2002,34 @@ POLL_OVERLAP = timedelta(minutes=5)
 STARTUP_OVERLAP = timedelta(hours=1)
 
 
-def _since(s, backfill_hours: float = 0):
+def _since(s, backfill_hours: float = 0, first_hours: float = 24):
     """How far back to ask this source for. `backfill_hours` WIDENS the window without moving the
     watermark - what the app does on startup, because whatever arrived while it was shut down was
-    never polled by anyone, and 'since I last ran' is the wrong question after a weekend off."""
+    never polled by anyone, and 'since I last ran' is the wrong question after a weekend off.
+    A source with no watermark yet is a first read and goes back `first_hours` (first_read_hours)."""
     last = (datetime.fromisoformat(s['LastPolledAt'].replace(' ', 'T')) - POLL_OVERLAP
-            if s.get('LastPolledAt') else datetime.now() - timedelta(days=1))
+            if s.get('LastPolledAt') else datetime.now() - timedelta(hours=first_hours))
     return min(last, datetime.now() - timedelta(hours=backfill_hours)) if backfill_hours else last
+
+
+# A FIRST READ GOES BACK THE CATCH-UP WINDOW, whatever started it (the owner, 2026-11-10: "it says connected but it's not going
+# back whatever the period is to sync it"). Only startup passed a window; Sync now and a new card's own first read passed none, so
+# a source with no watermark fell to a fixed day and an IMAP box with no UID cursor to SINCE yesterday. One rule for every reader.
+SINCELESS = ('telegram', 'whatsapp', 'imessage')     # these ask for what is pending, never for a date: nothing to go back on
+
+
+def first_read_hours(store) -> float:
+    """The window a never-read source is asked for: the catch-up window the owner set (Settings > Sync & startup), a day when off."""
+    try: days = int(store.get_setting('startup_sync_days') or 0)
+    except (TypeError, ValueError): days = 0
+    return days * 24 if days > 0 else 24
+
+
+def reads_back(store, c) -> bool:
+    """Whether the next read of card `c` is a first read that goes back the window: a source of its own with no watermark yet."""
+    if c['Type'] in SINCELESS or c['Type'] not in CH2SRC: return False
+    mine = [s for s in store.list_sources() if s['Channel'] == CH2SRC[c['Type']] and s.get('ConnectorId') == c['ConnectorId']]
+    return any(not s.get('LastPolledAt') for s in mine) or (not mine and c['Type'] in PER_CONNECTOR)
 
 
 class _Writer:
@@ -2088,10 +2109,11 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
     arrival order because a connector is one worker."""
     n, errors = 0, []      # errors: folders a mailbox could not finish - the card shows them, the poll goes on
     full = store.get_connector(c['ConnectorId'], with_secret=True)
+    first = first_read_hours(store)        # how far back a source with no watermark yet goes
     try:
         if c['Type'] == 'teams' and teamsweb.personal(full):       # Teams free: the card's browser, never Graph (teamsweb.py)
             mine = [x for x in store.list_sources() if x['Channel'] == 'teams' and x.get('ConnectorId') == c['ConnectorId']]
-            n += teamsweb.poll(store, full, _since(mine[0] if mine else {}, backfill_hours), llm, file_only)
+            n += teamsweb.poll(store, full, _since(mine[0] if mine else {}, backfill_hours, first), llm, file_only)
             for s in mine: store.touch_source(s['SourceId'])
             store.touch_connector(c['ConnectorId'])
             return n
@@ -2110,7 +2132,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
             mine = [x for x in store.list_sources()
                     if x['Channel'] == CH2SRC[c['Type']]
                     and (not x.get('ConnectorId') or x['ConnectorId'] == c['ConnectorId'])]
-            since = _since(mine[0] if mine else {}, backfill_hours)
+            since = _since(mine[0] if mine else {}, backfill_hours, first)
             if c['Type'] in ('telegram', 'whatsapp'):
                 from . import messengers
                 poll = messengers.poll_telegram if c['Type'] == 'telegram' else messengers.poll_whatsapp
@@ -2145,7 +2167,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
             # channel 'email', and without this the Graph poller tried the Gmail address.
             # (Orphans are adopted at startup, so ownership is always present now.)
             if s.get('ConnectorId') and s['ConnectorId'] != c['ConnectorId']: continue
-            since = _since(s, backfill_hours)
+            since = _since(s, backfill_hours, first)
             if c['Type'] == 'outlook':
                 since_iso = since.astimezone().isoformat()
                 identity = _mail_identity(s)
@@ -2290,7 +2312,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                 # one poll per connector (the UID watermark lives there); its own source only
                 from . import imapmail
                 if s['ConnectorId'] != c['ConnectorId']: continue
-                n += imapmail.poll_imap(store, full, [s], llm, file_only, math.ceil(backfill_hours / 24))
+                n += imapmail.poll_imap(store, full, [s], llm, file_only, math.ceil(max(backfill_hours, first) / 24))
             elif c['Type'] in CLOUD:
                 # per SOURCE: each discovered object carries its own mode, and 'report'
                 # (the default) means the Reports tab may use it but nothing is polled.
@@ -2395,39 +2417,81 @@ def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) ->
     def _say(kind, so_far, st):
         if not progress: return
         try:
-            st.do(lambda: progress(kind, so_far)) if hasattr(st, 'do') else progress(kind, so_far)
+            st.do(lambda: progress(kind, so_far)) if hasattr(st, 'do') and threading.get_ident() != st.ident else progress(kind, so_far)
         except Exception:
             pass
 
+    tally = _Tally()
     if len(jobs) == 1:
         c, file_only = jobs[0]
         _say(c['Type'], 0, store)
-        return _file_after(store, _poll_one(store, c, file_only, backfill_hours, llm, read_it))
+        with _first_read(store, c, backfill_hours), tally.on(lambda n: _say(c['Type'], n, store)):
+            n = _poll_one(store, c, file_only, backfill_hours, llm, read_it)
+        _say(c['Type'], tally.n, store)           # the whole count, never one the once-a-second say left behind
+        return _file_after(store, n)
 
     # said as it happens, not at the end: the timeline is refreshing while this runs, so
     # "reading Outlook" beside rows that are already arriving beats a spinner and a wait
     writer = _Writer(store)
-    tally, tally_lock = [0], threading.Lock()
     try:
         def run(c, file_only):
             from . import ingest as ingest_mod
-            with tally_lock: so_far = tally[0]
-            _say(c['Type'], so_far, writer)
+            _say(c['Type'], tally.n, writer)
             # inherit the poll thread's deferred(): our threading.local is off, and without
             # this wrap we would triage in parallel - the thing drain exists to prevent
-            with ingest_mod.deferred() if ingest_mod._parent_deferring() else contextlib.nullcontext():
-                added = _poll_one(writer, c, file_only, backfill_hours, llm, read_it)
-            with tally_lock: tally[0] += added
-            return added
+            with ingest_mod.deferred() if ingest_mod._parent_deferring() else contextlib.nullcontext(),                  _first_read(writer, c, backfill_hours), tally.on(lambda n: _say(c['Type'], n, writer)):
+                return _poll_one(writer, c, file_only, backfill_hours, llm, read_it)
         with ThreadPoolExecutor(max_workers=min(8, len(jobs)), thread_name_prefix='poll') as pool:
             futs = [pool.submit(run, c, fo) for c, fo in jobs]
             n = 0
             for f in futs:
                 try: n += f.result()
                 except Exception as e: logger.warning(f'channel poll worker failed: {e}')
+            _say(jobs[-1][0]['Type'], tally.n, writer)
             return _file_after(store, n)
     finally:
         writer.close()
+
+
+class _Tally:
+    """What one poll has brought in so far, counted where ingest takes a message in (ingest.LANDING) and said at most once a
+    second: the sync line's "bringing in 37…" (the owner, 2026-11-10: "next to the word sync show brin[g]ing in emails count").
+    It counted a connector only once it had FINISHED, so a first read of three days sat on "reading outlook" with no number."""
+    def __init__(self): self.n, self.lock, self.at = 0, threading.Lock(), 0.0
+
+    @contextlib.contextmanager
+    def on(self, say):
+        from .ingest import LANDING
+        def count():
+            mine = LANDING_HERE.get()
+            if mine is not None: mine[0] += 1          # ...and the one card's own, for its first-read line (_first_read)
+            with self.lock:
+                self.n += 1
+                n, due = self.n, time.monotonic() - self.at >= 1
+                if due: self.at = time.monotonic()
+            if due: say(n)
+        tok = LANDING.set(count)
+        try: yield
+        finally: LANDING.reset(tok)
+
+
+LANDING_HERE = contextvars.ContextVar('landing_here', default=None)
+
+
+@contextlib.contextmanager
+def _first_read(store, c, backfill_hours):
+    """A card read for the first time keeps what that read did on its own config - how far back it went and how many it brought
+    in - so its card says that instead of only "Connected" (the owner, 2026-11-10). Kept only once the read moved the watermark:
+    a first read that failed half-way is still a first read, and says nothing yet."""
+    first = reads_back(store, c)
+    got = [0]
+    tok = LANDING_HERE.set(got)
+    try: yield
+    finally: LANDING_HERE.reset(tok)
+    if first and not reads_back(store, c):
+        try: store.merge_connector_config(c['ConnectorId'], {'first_read': {
+            'hours': max(first_read_hours(store), backfill_hours), 'n': got[0], 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}})
+        except Exception as e: logger.warning(f"could not keep {c['Type']}'s first read on its card: {e}")
 
 
 def _file_after(store, n: int) -> int:

@@ -10297,6 +10297,7 @@ _FETCH_CV = threading.Condition()
 _STATUS_LOCK = threading.Lock()
 _STATUS_OWNERS = {}             # store id -> {token: {lane, what, at, store}}
 _STATUS_SEQ = [0]
+_BROUGHT = {}                   # store id -> what the last sync that brought anything brought: {n, hours, at} (_status_end)
 _DRAIN_WORKERS = {}             # store id -> DrainWorker which captured that exact store
 _DRAIN_WORKERS_LOCK = threading.Lock()
 _DRAIN_CLOSED = weakref.WeakSet()  # stores shutting down reject a late poll's drain submission
@@ -10335,7 +10336,8 @@ def _visible_status(owners):
     full = [x for x in owners.values() if x['lane'] == 'full']
     chosen = max(full or list(owners.values()), key=lambda x: x['seq'])
     return {'state': 'running', 'what': chosen['what'], 'at': chosen['at'],
-            'phase': chosen['phase'], 'lane': chosen['lane']}
+            'phase': chosen['phase'], 'lane': chosen['lane'],
+            **{k: chosen[k] for k in ('landed', 'back') if chosen.get(k)}}
 
 
 def _status_write(target_store, owners):
@@ -10361,12 +10363,16 @@ def _status_begin(target_store, lane, what):
     return token
 
 
-def _status_progress(target_store, token, what, *, phase=None):
+def _status_progress(target_store, token, what, *, phase=None, landed=None, back=None):
+    """`landed` is how many messages this sync has brought in so far, `back` the hours a first read reaches back (0 when no
+    connection is read for the first time): the numbers the line beside Sync now says (syncTiming.syncLine)."""
     with _STATUS_LOCK:
         owners = _STATUS_OWNERS.get(id(target_store), {})
         if token not in owners: return
         owners[token]['what'] = what
         if phase is not None: owners[token]['phase'] = phase
+        if landed is not None: owners[token]['landed'] = landed
+        if back is not None: owners[token]['back'] = back
         owners[token]['at'] = datetime.now().isoformat(sep=' ', timespec='seconds')
         _status_write(target_store, owners)
 
@@ -10374,7 +10380,11 @@ def _status_progress(target_store, token, what, *, phase=None):
 def _status_end(target_store, token):
     with _STATUS_LOCK:
         owners = _STATUS_OWNERS.get(id(target_store), {})
-        owners.pop(token, None)
+        done = owners.pop(token, None) or {}
+        # ...and what it brought, said for a moment once it is over ("brought in 212 from the last 3 days") - kept BEFORE the idle
+        # write, which is what tells the page to look; a sync that brought nothing and went back nowhere leaves the last one be
+        if done.get('landed') or done.get('back'):
+            _BROUGHT[id(target_store)] = {'n': done.get('landed') or 0, 'hours': done.get('back') or 0, 'at': time.time()}
         _status_write(target_store, owners)
         if not owners: _STATUS_OWNERS.pop(id(target_store), None)
 
@@ -10746,6 +10756,18 @@ def _quick_due() -> list:
             due.append(c['Type'])
     return due
 
+def _reading(target_store, status, what, types, backfill_hours: float = 0):
+    """A sync's progress as its status carries it: what it is reading, how many it has brought in (channels._Tally), and - when a
+    connection is read for the first time - how far back that read goes (channels.first_read_hours). The owner, 2026-11-10: "we
+    need the app to say how far back it's going and next to the word sync show brin[g]ing in emails count"."""
+    from .channels import _poll_jobs, first_read_hours, reads_back
+    try: back = max(first_read_hours(target_store), backfill_hours) if any(reads_back(target_store, c) for c, _ in _poll_jobs(target_store, types)) else 0
+    except Exception as e: back = 0; logger.warning(f'could not tell whether a first read is due: {e}')
+    if status is not None: _status_progress(target_store, status, what, back=back)
+    def say(kind, so_far): _status_progress(target_store, status, f'{what} · reading {kind}', landed=so_far)
+    return say
+
+
 def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
                   only=None, wait: bool = False, on_fetched=None):
     """The full lane; `only` hands the call to the chat lane (_poll_quick) instead."""
@@ -10783,9 +10805,8 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
         # before the catch-up it would summarize yesterday while today sat in the mailbox
         from .channels import poll_channels, _poll_jobs
         # the ORIGINAL what is kept and appended to: "catching up on the last 3 day(s)" is
-        # the context, "reading outlook · 12 in so far" is the progress, and replacing the
-        # first with the second loses why the poll is running at all
-        def _say(kind, so_far): _status_progress(target_store, status, f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
+        # the context, "reading outlook" is the progress (its count rides `landed`: _reading), and
+        # replacing the first with the second loses why the poll is running at all
         # show first, judge next: the poll stores every message as it reads it (the timeline
         # shows them at once, wearing 'triaging'), and the AI calls come afterwards, in order
         from . import ingest as ingest_mod
@@ -10793,6 +10814,7 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
         mine = list(dict.fromkeys(c['Type'] for c, _ in _poll_jobs(target_store)))
         with _claim_fetch(mine, 'full') as types:
             try:
+                _say = _reading(target_store, status, what, types, backfill_hours)
                 with ingest_mod.deferred():
                     added = poll_channels(target_store, backfill_hours, progress=_say, only=types) if types else 0
                 # "checked" means every source was read: a type the chat lane held this cycle was not,
@@ -10927,11 +10949,10 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
                     from .channels import CH2SRC, poll_channels
                     from . import ingest as ingest_mod
                     fresh_channels = list(dict.fromkeys(CH2SRC[t] for t in types if t in CH2SRC))
-                    def _say(kind, so_far):
-                        _status_progress(target_store, status, f'{what} · reading {kind}' + (f' · {so_far} in so far' if so_far else ''))
+                    _say = None if quiet else _reading(target_store, status, what, types)    # the doorway's read never asks
                     t_read = time.monotonic()
                     with ingest_mod.deferred():
-                        added = poll_channels(target_store, 0, progress=None if quiet else _say, only=types)
+                        added = poll_channels(target_store, 0, progress=_say, only=types)
                     if quiet and added: status = _status_begin(target_store, 'quick', f"{what} · reading {', '.join(types)}")
                     # a slow read is the whole latency of a phone turn: the doorway cannot hand the
                     # owner's line to the assistant until this returns (the owner, 2026-09-20:
@@ -11198,6 +11219,8 @@ def ingest_status():
     # can count down instead of asserting a cadence nobody could check
     return {'status': st, 'everyMinutes': every, 'lastPollAt': _LAST_POLL[0],
             'lastFetchCompletedAt': fetched_at,
+            # what the last sync brought in ({n, hours, at}): the line says it for a moment after (syncTiming.syncLine)
+            'brought': _BROUGHT.get(id(store)),
             # a source whose last read failed, so "checked 7:09" never covers for it (its card has the why)
             'failed': sorted({c['Type'] for c in store.list_connectors() if c.get('Active') and c.get('LastError')}),
             'nextPollAt': (_LAST_POLL[0] + every * 60) if every > 0 else None, 'now': time.time(),

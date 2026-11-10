@@ -55,6 +55,7 @@ import SavedSignins from "./SavedSignins.jsx";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
 import { noun, placeName } from "./words.js";
 import { plural } from "./timeWords.js";
+import { broughtLine } from "./syncTiming.js";
 import { openAppLink } from "./appLinks.js";
 import { LIT, lightField, lightStep } from "./connectorStep.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
@@ -1907,8 +1908,11 @@ export const ConnCard = ({ c }) => {
 // THE SAME CARD IN PLAIN WORDS (`plain`, the first run's questions): "off · trigger + tool · 0/0 chat jids" is the catalogue's
 // shorthand for someone who has set connections up before; a first-time owner gets the state itself (the owner, 2026-10-15)
 const SIGNED_OUT = /sign-in has lapsed|signed out|sign in again|expired/i;
+// ...and what its first read did - how far back it went, how many it brought in - not only "Connected" (the owner, 2026-11-10: "it
+// says connected but it's not going back"). channels._first_read keeps it on the card once that read moved the watermark.
+const firstRead = (c) => { try { const f = JSON.parse(c.ConfigJson || "{}").first_read; return f ? ` · ${broughtLine(f.n || 0, f.hours || 0)}` : ""; } catch { return ""; } };
 const plainState = (c, srcs) => (c.LastError ? (SIGNED_OUT.test(c.LastError) ? ["failing", "Needs sign-in"] : ["failing", "Not answering - click to fix it"])
-  : c.Active && (c.HasSecret || c.LastSyncAt || (srcs || []).some((s) => s.Active)) ? ["on", c.LastSyncAt ? `Connected · checked ${timeAgo(c.LastSyncAt)}` : "Connected"]
+  : c.Active && (c.HasSecret || c.LastSyncAt || (srcs || []).some((s) => s.Active)) ? ["on", c.LastSyncAt ? `Connected${firstRead(c)} · checked ${timeAgo(c.LastSyncAt)}` : "Connected"]
   : ["off", "Not set up"]);
 
 // A connector's card as the catalogue draws it - its status line said one way, wherever the card is shown (the first run's
@@ -1925,7 +1929,7 @@ export const connCardOf = (c, sources, go, plain = false) => {
       : c.HasSecret ? " · key saved"
         : ["ollama", "local_whisper"].includes(c.Type) ? " · local — no key needed"
         : c.Type === "stt_server" ? " · your server — key optional" : " · no key yet")
-    + (c.LastError ? " · last test failed" : c.LastSyncAt ? ` · ok ${timeAgo(c.LastSyncAt)}` : "");
+    + (c.LastError ? " · last test failed" : c.LastSyncAt ? `${firstRead(c)} · ok ${timeAgo(c.LastSyncAt)}` : "");
   const [state, said] = plain ? plainState(c, srcs) : [undefined, status];
   // the product's own logo wins over the channel glyph: five AI cards sharing one sparkle,
   // or Jira and Linear both wearing 'boards', tells you nothing about which is which

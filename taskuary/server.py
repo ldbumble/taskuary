@@ -2381,9 +2381,11 @@ def _assistant_payload(task_id: int, session=None):
             # the files the agent made for this task (outputs.py): listed on the canvas, and a chip where an answer names one
             # ...each under the answer of the turn that made it (`after`, as a published page), so the turn shows what it made
             # ...by the turn that wrote it where that turn kept it (outputs.made_by), else by when it was made
-            'outputs': [{**o, 'after': by.get(o['path']) or at_turn(o.get('at'))} for by in [outputs.made_by(task_id)] for o in outputs.listing(task_id)],
+            # ...never a file a card carries: it is drawn on that card (outputs.on_cards)
+            'outputs': [{**o, 'after': by.get(o['path']) or at_turn(o.get('at'))} for by, cards in [(outputs.made_by(task_id), outputs.on_cards(store, task_id))]
+                        for o in outputs.listing(task_id) if o.get('name') not in cards],
             # ...and each EARLIER turn's own version of a file a later turn changed (outputs.turn_versions): drawn under that turn instead
-            'turnOutputs': outputs.turn_versions(task_id),
+            'turnOutputs': [o for cards in [outputs.on_cards(store, task_id)] for o in outputs.turn_versions(task_id) if o.get('name') not in cards],
             # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker
             # profile, so five profiles on Claude read as five brains (the owner, 2026-09-18).
             'providers': general.brain_options(store, keep=general.default_pick(store, task)),

@@ -64,3 +64,19 @@ def test_an_email_owed_is_no_card_of_a_turn():
     s = MemoryStore(); tid, a1, a2 = chat(s)
     slot = act(s, tid, '2026-11-05 09:01:00', 'Hi Ray,', kind='slot')
     assert slot not in turns(s, tid)
+
+
+def test_a_file_a_draft_carries_is_drawn_on_its_card_never_as_a_preview_of_its_own():
+    # the owner, 2026-11-10: "it should have drafted email not show me the file and the privew of the file. don't need preview need the email
+    # acion card" - the sheet the agent attached to its reply stood under its answer as a file preview; a file it made for its own sake still does
+    import shutil
+    from taskuary import outputs
+    s = MemoryStore(); tid, a1, a2 = chat(s)
+    d = outputs.folder(tid); d.mkdir(parents=True, exist_ok=True)
+    (d / 'tool review.xlsx').write_bytes(b'PK'); (d / 'notes.txt').write_text('notes')
+    rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Short version attached.'})
+    s._exec('UPDATE review SET Deliver=? WHERE ReviewId=?', (json.dumps({'kind': 'reply', 'to': ['paula@vendor.example'], 'attachments': [{'name': 'tool review.xlsx'}]}), rid))
+    try:
+        with mock.patch.object(server, 'store', s): got = server._assistant_payload(tid)
+        assert [o['name'] for o in got['outputs']] == ['notes.txt']
+    finally: shutil.rmtree(d, True)

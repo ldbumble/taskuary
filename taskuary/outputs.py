@@ -142,6 +142,19 @@ def keep_turn(tid: int, turn: int, since: float) -> list:
     return got
 
 
+# A FILE A CARD CARRIES IS DRAWN ON THAT CARD ONLY (the owner, 2026-11-10: "it should have drafted email not show me the file and the privew of
+# the file. don't need preview need the email acion card"): the file the agent attached to its reply stood under its answer as a preview card
+# of its own, read there as the thing it made. `show` still draws what the agent chose to show (agenttools.show_files) - never a card's file
+def on_cards(store, tid: int) -> set:
+    "The names of the files a draft or card of task `tid` carries (its delivery envelope's attachments)."
+    out = set()
+    for r in store._rows("SELECT Deliver FROM review WHERE TaskId=? AND IFNULL(Deliver,'')<>''", (int(tid),)):
+        try: d = json.loads(r['Deliver']) or {}
+        except (TypeError, ValueError): continue
+        out |= {str(a['name']) for a in (d.get('attachments') or []) if isinstance(a, dict) and a.get('name')} if isinstance(d, dict) else set()
+    return out
+
+
 def turns_made(tid: int) -> list:
     "[(turn, [what keep_turn kept])], oldest turn first - [] for a task none kept."
     base, out = turns_folder(tid), []
@@ -355,7 +368,8 @@ def brief(tid: int) -> str:
     return (f'FILES YOU MAKE FOR THE OWNER (a spreadsheet, a document, a PDF, a chart): save each one in {d} . Every file there shows on '
             'this task with Preview and Download, so the owner opens it from the chat. To point at one, write its full path in your '
             'answer. Never write a URL or a link to it - Taskuary serves that folder itself, and an address you make up leads nowhere. '
-            'Asked to send it "here", it already is: name the file.')     # ...one final file per thing: AGENT.md's Files you make (with_fence_rule)
+            'Asked to send it "here", it already is: name the file. A file you attach to a reply or an email rides on that card - name it '
+            'there by its name, never its path.')     # ...one final file per thing: AGENT.md's Files you make (with_fence_rule)
 
 
 # ...and a TERMINAL session is told the same by its environment (terminal.session_env: TASKUARY_OUTPUTS) and its standing rules

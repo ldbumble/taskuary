@@ -340,7 +340,7 @@ def test_a_verb_the_row_does_not_carry_is_dropped(s, monkeypatch):
 
 def test_the_next_two_are_read_ahead_whatever_their_state(s, monkeypatch):
     items = [{'key': f'k{n}', 'kind': 'asked' if n % 2 else 'report', 'lane': 'asked', 'tid': n} for n in range(5)]
-    monkeypatch.setattr(funnel, 'pile', lambda store, quiet=False: {'items': items})
+    monkeypatch.setattr(funnel, 'known', lambda store: {'items': items})       # the read ahead reads the rail as it stands, never builds it
     monkeypatch.setattr(advisor, 'target_of', lambda store, key: ('task', int(key[1:])))
     got = []
     monkeypatch.setattr(advisor, 'notice', lambda store, ev, tk, ti, **kw: got.append((ti, kw.get('tier'), kw.get('key'))))

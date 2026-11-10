@@ -61,6 +61,7 @@ DENIED = (
     (r'POST|DELETE', r'^/api/agent-channels(/\d+)?$', "which chats reach an agent - and hear it - is the owner's to open and close"),
     # anything that puts a message in front of a human somewhere else
     (r'POST', r'^/api/reviews/\d+/decide$', 'approving a reply sends it - that is the owner\'s'),
+    (r'POST', r'^/api/reviews/steps$', 'approving a turn\'s held steps runs them - that is the owner\'s'),
     (r'POST', r'^/api/tasks/\d+/handoff$', 'handing work to a person sends them a message'),
     (r'POST', r'^/api/outbox$', 'starting an outbound message is the owner\'s door, not an agent\'s'),
     (r'POST', r'^/api/messages/\d+/reply$', 'opening a reply is the first half of sending one'),

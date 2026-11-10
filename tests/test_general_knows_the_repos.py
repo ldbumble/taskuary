@@ -65,12 +65,23 @@ class AssistantProfileTests(unittest.TestCase):
         s.upsert_agent('researcher', 'research', 'cli', json.dumps({'kind': 'research'}))
         plain = s.create_task({'Title': 'Draft the month-end note', 'Kind': 'general', 'Status': 'open'}, 'o')
         system = general._prompt(s, plain)[0]
-        self.assertIn('PROFILE RULES (ASSISTANT.md)', system)
-        self.assertLess(system.index('RULES (AGENT.md'), system.index('PROFILE RULES (ASSISTANT.md)'))
-        self.assertIn("general assistant's additions", s.doc(agents.profile_document(s, 'assistant')))
+        self.assertIn('PROFILE RULES (the file ASSISTANT.md)', system)
+        self.assertLess(system.index('RULES (AGENT.md'), system.index('PROFILE RULES (the file ASSISTANT.md)'))
+        self.assertIn("additions for general work", s.doc(agents.profile_document(s, 'assistant')))
         named = s.create_task({'Title': 'Compare two vendors', 'Kind': 'research', 'Status': 'open', 'Assignee': 'agent:researcher'}, 'o')
         system = general._prompt(s, named)[0]
-        self.assertIn('PROFILE RULES (RESEARCHER.md)', system); self.assertNotIn('ASSISTANT.md', system)
+        self.assertIn('PROFILE RULES (the file RESEARCHER.md)', system); self.assertNotIn('ASSISTANT.md', system)
+
+    def test_a_tasks_agent_is_called_the_agent_never_the_assistant(self):
+        """The agent walk, 2026-11-10: a task's agent read "You are the Taskuary general-work assistant" over "ASSISTANT STYLE", and its
+        profile called it "the general assistant" - the Assistant is the owner's own chat; on a task it is the agent. The file keeps its name."""
+        s = MemoryStore()
+        s.upsert_agent('assistant', 'general', 'cli', json.dumps({'kind': 'general'}))
+        tid = s.create_task({'Title': 'Draft the month-end note', 'Kind': 'general', 'Status': 'open'}, 'o')
+        system = general._prompt(s, tid)[0]
+        self.assertIn('You are the agent on this task', system); self.assertIn('PROFILE RULES (the file ASSISTANT.md)', system)
+        flat = ' '.join(system.split())      # ...a document wraps its lines where it likes
+        for was in ('general-work assistant', 'ASSISTANT STYLE', 'general assistant'): self.assertNotIn(was, flat)
 
     def test_it_is_a_shipped_profile(self):
         from taskuary import agents

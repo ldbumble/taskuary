@@ -22,6 +22,15 @@ class AskMarker(unittest.TestCase):
     def test_the_prompt_line_teaches_the_marker_and_only_for_a_real_blocker(self):
         self.assertIn(selfclose.ASK_MARKER, selfclose.ASK_LINE); self.assertIn('real blocker', selfclose.ASK_LINE)
 
+    def test_the_ask_is_a_question_never_permission_for_what_a_card_asks(self):
+        """The agent walk, 2026-11-10: one line said a draft's Send card IS the confirmation, the ask line offered the marker for anything
+        the agent "cannot continue without", and a third called the marker the way to "offer choices" - so an ask for leave to send stood
+        over the card that already asked it."""
+        ask, summary = selfclose.ASK_LINE, selfclose.SUMMARY_LINE
+        self.assertIn('a fact or a decision only they can give', ask); self.assertIn('never for permission to do what a card already asks', ask)
+        self.assertIn('IS the confirmation', summary); self.assertNotIn('offer choices', summary)
+        self.assertIn(f'(through {selfclose.ASK_MARKER}) only the question you cannot go on without', summary)
+
 
 class ApiWorkerSignals(unittest.TestCase):
     def setUp(self):

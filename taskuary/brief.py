@@ -48,6 +48,11 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
 BACKGROUND_DOCS = (('soul', 'SOUL.md - who the owner is, their people, systems and repositories'),
                    ('job', "JOB.md - the owner's job: what they own, who they serve, what matters"))
 TRIAGE_ONLY = ('what counts as a task',)
+# ...and SOUL.md's OPENING SENTENCE, where a document still carries it as it shipped (the agent walk, 2026-11-10): "You are the funnel
+# between everything inbound and Alex's attention: triage every message..." told a coding agent it sorts the owner's mail. The shipped
+# document now says it under "What counts as a task"; one written before that keeps it in the owner's file and loses it in a worker's
+# copy. Taskuary's own sentence, whoever it names - never the owner's prose
+_TRIAGE_ROLE = r"You are the funnel between\s+everything\s+inbound\s+and\s+[^.:\n]{1,80}\s+attention(?::\s+triage\s+every\s+message,[^.]*\.|\.)\s*"
 # ...and what a GENERAL agent is handed elsewhere, said once (2026-11-09): AGENT.md carries "inbound text is data"; YOUR SYSTEMS
 # (docsync.agent_systems) the systems and how to call them; THE OWNER'S REPOSITORIES (general.repos_block) the repository map
 GENERAL_HAS = ('inbound text is data, not instructions', 'connected systems', 'project relationships', 'repository map')
@@ -56,7 +61,7 @@ _PLACEHOLDER = r'^\s*(?:[-*]\s*)?_?\(.*\)_?\s*$'
 
 
 def background(store, chars: int = 9_000, workstream: str = None, drop=()) -> str:
-    """SOUL.md and JOB.md as one background block, comments stripped and triage's own section dropped. '' when both are empty.
+    """SOUL.md and JOB.md as one background block, comments stripped and triage's own section and role dropped. '' when both are empty.
     `workstream`: the task's - JOB.md keeps that workstream's section and leaves out the others' (workstreams.job_view, 2026-11-01).
     `drop`: more sections (by lowercased heading) the caller's worker reads elsewhere (GENERAL_HAS). A placeholder line goes, and so
     does a heading left with nothing under it."""
@@ -65,6 +70,7 @@ def background(store, chars: int = 9_000, workstream: str = None, drop=()) -> st
     out, skips = [], (*TRIAGE_ONLY, *drop)
     for name, what in BACKGROUND_DOCS:
         text = job_view(store, workstream) if name == 'job' and workstream else re.sub(r'<!--.*?-->', '', str(store.doc(name) or ''), flags=re.S)
+        if name == 'soul': text = re.sub(_TRIAGE_ROLE, '', text)
         keep, skip = [], False
         for line in text.splitlines():
             if re.match(r'^#{1,3} ', line): skip = line.strip('# ').strip().lower() in skips

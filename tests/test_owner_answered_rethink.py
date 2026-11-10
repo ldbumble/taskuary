@@ -29,6 +29,17 @@ def test_the_agent_is_told_to_recommend_the_close_never_to_make_it():
     assert 'recommend they close the task' in selfclose.OWNER_ANSWERED_LINE and selfclose.MARKER not in selfclose.OWNER_ANSWERED_LINE
 
 
+def test_an_older_mail_of_theirs_that_joined_the_task_after_the_ask_is_no_answer():
+    """The agent walk, 2026-11-10: a colleague's ask opened the task, and a minute later the owner's own mail on that thread - written ten
+    days BEFORE the ask - was put on it as part of the work. Last to join read as newest, and the agent was told the owner had answered."""
+    s = MemoryStore(); tid = _task(s)
+    s._exec("UPDATE message SET CreatedAt='2026-11-05 09:01:00' WHERE TaskId=?", (tid,))
+    s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Badge list', 'FromName': 'You', 'FromEmail': 'alex@northwind.example',
+                   'BodyText': 'Who keeps the badge list these days?', 'Status': 'context', 'Direction': 'out', 'SentAt': '2026-10-26 14:00:00'})
+    assert not general.owner_answered_last(s, tid)
+    assert selfclose.OWNER_ANSWERED_LINE not in general._prompt(s, tid)[0]
+
+
 def test_a_chat_that_opens_on_an_answer_opens_on_the_mail_that_started_it_first():
     """The owner, 2026-11-05: "input should always be first?" - a conversation picked back up opened on an answer with nothing above it."""
     s = MemoryStore(); tid = _task(s)

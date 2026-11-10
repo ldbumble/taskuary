@@ -132,6 +132,21 @@ class TheSessionTests(unittest.TestCase):
         self.assertEqual(names.count('show'), 1, "the server's show, never a second")
         self.assertTrue({'search_messages', 'propose_reply', 'browser_open'} <= set(names))
 
+    def test_a_card_with_the_email_tool_hears_the_tool_and_one_that_refuses_tools_the_block(self):
+        # the agent walk, 2026-11-10: one road for an email by what the session has - and a model that would not take tools is asked the
+        # plain way with the plain way's road, where it used to be left with the name of a tool it had just refused
+        from taskuary import selfclose
+        seen = []
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): seen.append(msgs[0]['content']); return {'content': 'ok'}
+        self._turn(Brain(), toolbox=('search_messages', 'propose_email', 'show'))
+        self.assertIn('propose_reply / propose_email', seen[0]); self.assertNotIn(selfclose.DRAFT_OPEN, seen[0])
+        class Refuses:
+            def __call__(self, system, user, **kw): seen.append(system); return 'Here is what I can do.'
+            def chat(self, *a, **kw): raise RuntimeError('hipaa_ai error 400 at https://gateway.example: tools are not supported')
+        self._turn(Refuses(), toolbox=('search_messages', 'propose_email', 'show'))
+        self.assertIn(selfclose.DRAFT_LINE, seen[1]); self.assertNotIn('propose_email', seen[1])
+
     def test_no_browser_but_a_toolbox_still_loops_and_says_set_the_browser_up(self):
         seen = []
         class Brain:

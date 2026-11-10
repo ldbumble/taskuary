@@ -232,7 +232,7 @@ class TriageNamesNoProfileTests(unittest.TestCase):
             tid = workflows.run(s, s.get_source(sid))['task_id']
         self.assertEqual(s.get_task(tid)['Assignee'], 'agent:analyst')
         system, _ = general._prompt(s, tid)
-        self.assertIn('PROFILE RULES (ANALYST.md)', system)
+        self.assertIn('PROFILE RULES (the file ANALYST.md)', system)
         self.assertIn('our own figures only', system)
 
 

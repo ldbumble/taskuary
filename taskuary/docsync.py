@@ -94,7 +94,7 @@ def data_cards(store) -> list:
     return [c for c, _ in tool_cards(store) if c['Type'] != 'handbook']
 
 
-def agent_systems(store) -> str:
+def agent_systems(store, tooled: bool = True) -> str:
     """The owner's systems a WORKING agent may use, each with its Authority, and the call that reaches them. SOUL.md's
     list is triage's; a general agent never read it, so it was told to use /api/tools/run and shown nothing to use it on
     (2026-10-05). '' when no connection is an agent tool."""
@@ -108,8 +108,10 @@ def agent_systems(store) -> str:
     # gmail" (TQ-1354) - a mailbox is sent FROM with propose_email, named below
     tools = tool_cards(store)
     boxes = mailboxes(store)
+    # ...said by the one road the session has (the agent walk, 2026-11-10): the tool and the command stood side by side
+    how = 'propose_email with `from` set to one' if tooled else '`taskuary --draft "<text>" --to <address> --subject "<subject>" --from <one of them>`'
     mail = ('MAILBOXES you can send FROM (an email waits for the owner\'s Send): ' + ', '.join(f"{m['address']} ({m['kind']})" for m in boxes)
-            + ' - propose_email with `from` set to one (taskuary --draft ... --from <address>); they are not run_system tools.') if boxes else ''
+            + f' - {how}; they are not run_system tools.') if boxes else ''
     if not tools: return mail
     lines = [f"- {c['Name'] or c['Type']} (connector_id {c['ConnectorId']}, authority {scopes.scope_of(c)}) - tools: {', '.join(k)}"
              for c, k in tools]

@@ -519,9 +519,11 @@ JOINED = ("SELECT m.*, MAX(m.CreatedAt, IFNULL((SELECT MAX(r.CreatedAt) FROM rou
 
 
 def owner_answered_last(store, tid: int) -> bool:
-    "The newest message on the task's thread is the owner's own: they answered it themselves, outside Taskuary."
+    """The message SENT last on the task's thread is the owner's own: they answered it themselves, outside Taskuary.
+    Sent, not joined (the agent walk, 2026-11-10): a mail of theirs written ten days before the ask was put on the task a minute after it - part
+    of the work - and, last to join, read as their answer to a question it came before."""
     rows = store._rows(JOINED, (tid,))
-    return bool(rows) and bool(rows[-1].get('Own'))
+    return bool(rows) and bool(max(rows, key=lambda m: (str(m.get('SentAt') or m.get('JoinedAt') or ''), m['MessageId'])).get('Own'))
 # LATEST MESSAGE WINS (the owner, 2026-11-06): corrected after a draft was waiting, the agent answered the thread's first ask again and the
 # draft it had left - mostly a reply already sent - stood under the newest turn as the answer. Each turn now hears which message is newest,
 # the draft waiting and when it was made, and what already went (selfclose.LATEST_LINE); the chat is told which turn a draft is (draft_turns)
@@ -1360,8 +1362,8 @@ _GOAL = ("YOUR ONE GOAL: take as much of the work as you can off the owner's han
           "TRIAGE READ IT first when the brief has it, and check it against the mail: what is asked, the owner's part, who already "
           "handled what. Do the work yourself{look}; ask only what you cannot find, all in one short question. Come back with results "
           "ready to act on: drafts, filled forms, links that work, the one decision left. Search and read before opening a browser - open "
-          "a page only when the job needs one (a sign-in, a form, a booking). Draft every email the job needs through your reply and draft "
-          "tools, never as text in the conversation. {login}When anything on the thread changes - someone else answered, plans moved, the "
+          "a page only when the job needs one (a sign-in, a form, a booking). Draft every email the job needs, each set up for the owner's "
+          "one press. {login}When anything on the thread changes - someone else answered, plans moved, the "
           "facts changed - re-plan: it may now need no reply, new research, corrected or added drafts, or nothing at all. You never send, "
           "book, pay or close anything yourself: the owner's press does that.")
 LOOK_CLAUSE = (", and look in THE OWNER'S REPOSITORIES and the folders you can read before saying a thing cannot be found - a file "
@@ -1389,13 +1391,13 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO. Be the helpful assistant: whatever 
            "handing it back. When the work calls for an act - an email, a post, a payment, a form, a report - set it up through Taskuary's "
            "own roads, done up to the one press that sends it; it shows under Next steps as what it is (the email with its Send, the post "
            "as a post with its Post button, the form filled up to its last button), and nothing goes before the owner presses:\n"
-           "- a reply or an email: propose_reply / propose_email, with any file it carries in `attach`. WHO HEARS IT IS YOURS TO DECIDE: "
+           "- a reply or an email: {mail}. WHO HEARS IT IS YOURS TO DECIDE: "
            "address it to the people who need to know what is being answered, not by habit to everyone on the thread. Something "
            "sensitive (pay, health, a complaint, a person's own situation) goes to that one person only (`only`), and you say so. When the "
            "right next step answers an earlier mail in the thread rather than the newest, reply to that one (`answers`), and say so. Your "
            "summary's next steps tell the owner whom it goes to and why whenever it is not the plain reply to everyone on the newest mail. "
            "No address on record for a colleague: never hold the email or the meeting invite back for it - put your best guess on it (their first name at "
-           "the company's domain) and name it in `guessed` (on a reply, in `why_to`): the card says it is guessed, and the owner's Send "
+           "the company's domain) and {guess}, and the owner's Send "
            "is the check. `to` is always an email ADDRESS, never a name: for an organisation (a bank, a vendor), search the owner's "
            "mail for someone at it and use their address\n"
            "- a post, send or order on a connected system: propose {{\"action\": \"run_tool\", \"type\": ..., \"connector_id\": ..., ...}} "
@@ -1518,9 +1520,20 @@ def takes(tool) -> str:
         f"; {' and '.join(theirs)} come from the owner's defaults - name one only when the owner asked for it" if theirs else '')
 
 
-def action_line(store) -> str:
+# ONE ROAD FOR A DRAFT, BY THE TOOLS THE SESSION HAS (the agent walk, 2026-11-10): the marked block, the tool and the shell command were
+# all handed to one agent, which then wrote an email twice. Every chat is told the block (it is read from any answer); by_tool swaps in
+# the tool's words for a session Taskuary's tools are wired into - select, never both. [0] the block, [1] the tool
+_MAIL = ('write it in its marked block, as said above', 'propose_reply / propose_email, with any file it carries in `attach`')
+_GUESS = ('say in your answer that the address is a guess', 'name it in `guessed` (on a reply, in `why_to`): the card says it is guessed')
+def action_line(store, tools: bool = False) -> str:
     r = roads(store)
-    return _ACTION.format(roads=f'Connected for this owner: {r}.' if r else 'Nothing that posts or sends is connected for this owner yet.')
+    return _ACTION.format(mail=_MAIL[tools], guess=_GUESS[tools],
+                          roads=f'Connected for this owner: {r}.' if r else 'Nothing that posts or sends is connected for this owner yet.')
+def by_tool(system: str) -> str:
+    "`system` for a session that has Taskuary's reply and email tools: the tools' words in place of the marked blocks'."
+    from . import selfclose as sc
+    return (system.replace(f'\n\n{sc.REPLY_LINE}', '').replace(sc.DRAFT_LINE, sc.DRAFT_TOOL_LINE)
+            .replace(_MAIL[0], _MAIL[1]).replace(_GUESS[0], _GUESS[1]))
 READING_CHARS = 1_500
 
 
@@ -1596,7 +1609,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         (f'{owner_bg}\n\n' if owner_bg else '') + (f'{known}\n\n' if known else '') +
         # ...and said once (2026-11-09): "never claim a tool did what it did not" is AGENT.md's Honest reporting, and "ask when a fact is
         # missing" fought WORK_LINE's keep-working - the one question is AGENT.md's When to ask
-        "You are the Taskuary general-work assistant. Help complete research, planning, writing, "
+        # ...and WHO IT IS (the agent walk, 2026-11-10): on a task it is the agent - "the assistant" is the owner's own chat, the dock
+        f"You are {'the Taskuary general-work assistant' if dock else 'the agent on this task in Taskuary'}. Help complete research, planning, writing, "
         "marketing, operational, and other non-coding work. The task and source material below are "
         "authoritative. Be direct and useful. Do not turn this into a coding task or instruct a coding CLI.\n"
         # Work that no repository can carry lands here rather than stalling as a held coding task.
@@ -1614,7 +1628,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{NUMBER_LINE}\n\n' if docsync.data_cards(store) else '')
         + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\n"
         # ...and the override only for a copy of AGENT.md that still says what it overrides: the shipped one no longer does (2026-11-09)
-        + (f'{GENERAL_OVER}\n\n' if '--done' in agent_rules else '') + f"ASSISTANT STYLE\n{counsel}"
+        + (f'{GENERAL_OVER}\n\n' if '--done' in agent_rules else '') + f"WRITING STYLE\n{counsel}"
     )
     # ...and none on a connector card's walk: it edits no code and has no repository to look in (aisetup.WALK_REF)
     repos = '' if outsider or task.get('SourceRef') == 'connector:setup' else repos_block(store)
@@ -1632,7 +1646,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         from .agents import ensure_profile_document
         doc = ensure_profile_document(store, role)
         profile_rules = _cut(_brief.rules(store, doc, 10**9), DOC_CHARS)      # THE profile number (doclimits), cut out loud
-        if profile_rules: system += f'\n\nPROFILE RULES ({doc.upper()}.md)\n{profile_rules}'
+        if profile_rules: system += f'\n\nPROFILE RULES (the file {doc.upper()}.md)\n{profile_rules}'
     # THE PLAYBOOKS AS A MENU (the owner, 2026-11-05): every one's `when` and its file, read whole by the agent when it says one applies
     # (playbooks.agent_menu). A stranger's task still gets only triage's match, flattened (playbooks.seed_block, PW-206): its session is never
     # pointed at the owner's files - and a brain with no hands, which cannot open the file, is handed that one whole too (send_prompt)
@@ -1679,6 +1693,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     from . import origin
     stranger = origin.of_task(store, tid)[0] == 'stranger'   # the reviewer reads this as the owner's words: theirs go in a file
     mails = detail.get('messages') or []
+    if not stranger: mails = with_thread(store, mails)
     # ...each by its id, so a mail cut here is one the agent can open whole
     if len(mails) > SOURCE_MAILS: sources.append(compacted_mail(mails[:-SOURCE_MAILS]))
     for m in mails[-SOURCE_MAILS:]:
@@ -1689,7 +1704,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
             for a in files[:8])) if files else ''
         long = len(str(m.get('BodyText') or '')) > SOURCE_CHARS
         body = _cut(m.get('BodyText'), SOURCE_CHARS) + (f" - read_message m{m['MessageId']} reads it whole" if long else '')
-        sources.append(f"FROM {who} ({m.get('SentAt') or ''}) [m{m['MessageId']}]\n{body}{file_line}")
+        sources.append(f"FROM {who} ({m.get('SentAt') or ''}) [m{m['MessageId']}]{EARLIER if m.get('_earlier') else ''}\n{body}{file_line}")
     turns, said = [], chat_rows(store, tid, run=True)
     for c in said[-TURNS:]:
         role = 'ASSISTANT' if c.get('ActorType') == ASSISTANT_TYPE else 'USER'
@@ -1736,7 +1751,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     elif nobody and not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system = system + '\n\n' + wrapup.OWN_ASK
     if owed and (miss := wrapup.refused_line(store, tid)): system = system + '\n\n' + miss      # a file its reply does not carry (wrapup._told)
     from . import slots
-    if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
+    acts = not dock and not stranger and task.get('SourceRef') not in ('connector:setup', SETUP_REF)   # ...the action line rides: an email of its own
+    if slots.all_(store, tid) or acts: system = system + '\n\n' + selfclose.DRAFT_LINE
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF):
         system += (f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}\n\n{SHORT_LINE}')
                    + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}' + ('' if stranger else f'\n\n{LESSON_LINE}\n\n{CHECK_BACK_LINE}'))
@@ -1746,7 +1762,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # ...the LATEST facts ride in the TURN, never the system prompt: they change every turn, and a CLI's system prompt is its process's
     # command line (a hashed --append-system-prompt-file), so in the system prompt each turn started a new process (clipool's one per chat)
     lb = turn_facts(store, tid, task)
-    md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
+    md = store.checklist_markdown(tid, ids=True, shell=False) if hasattr(store, 'checklist_markdown') else ''    # the slot's id: its road is in the brief (by_tool)
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
     from .terminal import TICK_HEAD, _tickable
     chk = f"CHECKLIST - what was asked for, as triage read it{f' ({TICK_HEAD})' if _tickable(md) else ''}:\n{md}\n" if md else ''
@@ -1833,6 +1849,21 @@ def compacted_turns(store, tid: int, rows) -> str:
         lines.append(f"- you did: {_flat(s.get('did'))}" + (f' | left on the owner: {left}' if left else '') + (' | nothing left' if s.get('nothing_left') else ''))
     return _lines_fit(f'EARLIER IN THIS CONVERSATION, COMPACTED - {len(rows)} older turns, one line each (the full turns are kept on the '
                       'task; a resumed session still holds them):', lines)
+
+
+# THE THREAD A TASK WAS BUILT FROM (the agent walk, 2026-11-10): a reply task held the one mail that asked for the figures, and the two
+# earlier mails that held them - same conversation, kept as `history` on no task when the thread was completed (chains._keep) - were not
+# in its material: the agent searched the mailbox for what triage, the drafter and the task page had all read. They ride as the task's
+# mail under the one window, oldest first, each as what its sender wrote - the chain quoted under it is the rows before it. By the
+# conversation's own id, never a subject; and not in a stranger's session, which reads its own task's rows alone (guard.STRANGER_TASK_READS)
+EARLIER = ' - earlier on this thread, what they wrote'
+def with_thread(store, mails: list) -> list:
+    from .triage import own_words
+    have = {m['MessageId'] for m in mails}
+    past = [{**m, 'BodyText': m.get('OwnText') or own_words(str(m.get('BodyText') or '')) or m.get('BodyText'), '_earlier': True}
+            for c in sorted({m['ConversationId'] for m in mails if m.get('ConversationId')})
+            for m in store.thread_messages(c) if m.get('Status') == 'history' and m['MessageId'] not in have]
+    return sorted(mails + past, key=lambda m: str(m.get('SentAt') or '')) if past else mails
 
 
 def compacted_mail(mails) -> str:
@@ -2292,11 +2323,14 @@ class GeneralSession:
             if not hands and self.store.task_checklist(self.task_id): system = f'{system}\n\n{_sc.TICK_CHAT_LINE}'
             # ...ONE WAY TO WRITE A REPLY (2026-11-09): a session with Taskuary's own tools (agenttools.session_args: Claude and Codex, with
             # hands) writes it with propose_reply - the marker line rode beside it and the agent was told two ways at once (audit3 #3)
-            if hands and _cli_of_pick(self.store, self.pick) in REPLY_TOOL_CLIS: system = system.replace(f'\n\n{_sc.REPLY_LINE}', '')
+            # ...and an email the same (by_tool, 2026-11-10). Never a stranger's session: llm.for_agent wires it no tools, and with the
+            # marker line gone too it had no way left to write the reply
+            tooled = hands and _cli_of_pick(self.store, self.pick) in REPLY_TOOL_CLIS and _origin_of(self.store, self.task_id) != 'stranger'
+            if tooled: system = by_tool(system)
             systems = ''
             if hands:
                 from . import docsync
-                systems = docsync.agent_systems(self.store)
+                systems = docsync.agent_systems(self.store, tooled)
                 if systems: system = f'{system}\n\n{systems}'
             # ...and the owner's own mail, which a stranger's task never reads (the route refuses it too: server._owner_history): searched
             # by the session itself where it has hands, else for it
@@ -2369,7 +2403,7 @@ class GeneralSession:
             brain = llm_mod.build_llm(self.store, **build_args, job='general')
             if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
             from . import apiagent
-            looped, api_tools = False, None
+            looped, api_tools, api_tooled = False, None, False
             if api_hands:
                 # THE CLI'S TOOLBOX ON AN API CARD (the owner, 2026-11-09: "make sure hipaa thing matches capabilities of claude cli"): Taskuary's
                 # own tools through the same gated server a CLI session reaches (apiagent.tools_for), and the browser on the owner's own task.
@@ -2388,8 +2422,9 @@ class GeneralSession:
                     looped = any(t['function']['name'] != 'show' for t in api_tools)
                 if looped:
                     system = f'{system}\n\n{apiagent.TOOLS_BRIEF}\n\n{apiagent.where_line(self.store, self.task_id)}'
-                    # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose_reply, not the marker line beside it
-                    if 'propose_reply' in apiagent.TOOLBOX.get((self.task_id, self.sid), ()): system = system.replace(f'\n\n{_sc.REPLY_LINE}', '')
+                    # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose_reply, not the marker line beside it. Swapped
+                    # where the turn is asked, never here: a card that then refuses tools is asked the plain way, and needs the block
+                    api_tooled = bool({'propose_reply', 'propose_email'} & set(apiagent.TOOLBOX.get((self.task_id, self.sid), ())))
                 if browser:
                     browser_tools, browser_offer = True, not browserview.state(self.sid, fresh=True).get('open')
                     system = f'{system}\n\n{apiagent.BRIEF}'
@@ -2411,8 +2446,8 @@ class GeneralSession:
             try:
                 limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
                 if looped:
-                    try: reply = str(apiagent.turn(brain, self.store, self.task_id, self.sid, system, user, limit, trace=visible, cancel=cancel,
-                                                   images=_images(paths), tools=api_tools) or '').strip()
+                    try: reply = str(apiagent.turn(brain, self.store, self.task_id, self.sid, by_tool(system) if api_tooled else system, user, limit,
+                                                   trace=visible, cancel=cancel, images=_images(paths), tools=api_tools) or '').strip()
                     except apiagent.ToolsRefused as e:
                         logger.info(f'task {self.task_id}: {self.provider} took no tools - asked the plain way ({str(e)[:160]})')
                         looped, system = False, f"{system.replace(apiagent.BRIEF, '').replace(apiagent.TOOLS_BRIEF, '')}\n\n{apiagent.no_tools_line()}"
@@ -2431,7 +2466,7 @@ class GeneralSession:
                 self.resume_notice = 'The original session could not be resumed. Restored from the saved conversation.'
                 self._remember_session()
                 system, user = _prompt(self.store, self.task_id)
-                if hands and _cli_of_pick(self.store, self.pick) in REPLY_TOOL_CLIS: system = system.replace(f'\n\n{_sc.REPLY_LINE}', '')
+                if tooled: system = by_tool(system)
                 if not as_owner: user += '\n\n' + text
                 if delivery_instructions:
                     system = f'{system}\n\n{str(delivery_instructions).strip()}'

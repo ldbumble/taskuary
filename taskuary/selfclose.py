@@ -311,7 +311,11 @@ def owner_closes_line() -> str:
             # conversation may still name another screen - the page they were written for is gone
             f'WHERE YOUR DRAFTS ARE: this task is one chat. Every email or reply you draft shows as a card under your answer, with its own '
             f'{label("approve")} - say it is "below" or "ready to send". There is no other screen or tab for it; never send the owner '
-            f'anywhere else, even where an earlier turn of this conversation did.')
+            f'anywhere else, even where an earlier turn of this conversation did. '
+            # ...and SAID ONCE (the agent walk, 2026-11-10): each draft stood twice - its subject and body quoted in the answer, over the
+            # card that showed the same words
+            f'After you set up a reply or an email, say in one line what you set up and for whom, and any assumption you made in it (an '
+            f'address you guessed, a date you picked) - never repeat the draft\'s words in your answer: the card shows them.')
 
 
 # THE ONE ENDING THE AGENT SAYS (the owner, 2026-11-05: "it should trigger a new taskuary chat ... saying i saw you reply so i will close the
@@ -332,7 +336,9 @@ _WHO_RE = re.compile(r'(to|answers|only|cc|why)\s*=\s*(?:"([^"]*)"|(\S+))', re.I
 REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who asked will get, put exactly that '
               f'text between {REPLY_OPEN} and {REPLY_CLOSE}. It becomes the reply waiting on the owner\'s approval, '
               f'in your words - nothing is sent until they approve it. The owner reads it as its own card under Next steps, after your answer, never '
-              f'in it: say the reply is drafted and waits for their Send, under your answer - never on another screen or tab, which a task does not have. A file it sends rides only if you name it on its own '
+              f'in it: the block IS the draft, so its words are written once, there, and nowhere else in your answer. Say the reply is '
+              f'drafted and waits for their Send, under your answer - never on another screen or tab, which a task does not have. A file '
+              f'it sends rides only if you name it on its own '
               f'line: [[TASKUARY-ATTACH: <full path>]] - a file you made in your working folder, or one listed under '
               f'ATTACHED FILES. Never say a file is attached unless you named it that way. Who hears it is yours to decide, in the opening '
               f'marker: [[TASKUARY-REPLY answers=<the mail number it replies to, when an earlier one> only=yes (its sender alone, nobody '
@@ -358,8 +364,8 @@ SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"abou
                 f'already its own card with Send under Next steps, and so is a post or any act you proposed; a question you ask is shown on its own: none '
                 f'is ever an on_you step - on_you is only what is truly the owner\'s, with why. A draft\'s Send card IS the confirmation: never '
                 f'also ask "shall I send?", "anyone else to copy?" or "does this look right?". When you '
-                f'need the owner, say what you got and what you are unsure about in one or two plain sentences above it; offer choices '
-                f'(through [[TASKUARY-ASK]]) only when there are real ones. When the owner\'s newest message CORRECTS you, add "corrections": '
+                f'need the owner, say what you got and what you are unsure about in one or two plain sentences above it; ask '
+                f'(through [[TASKUARY-ASK]]) only the question you cannot go on without. When the owner\'s newest message CORRECTS you, add "corrections": '
                 f'[{{"kind": "redraft" (their words for the draft) or "ask" (you read what the task wants wrongly), "review": <the draft\'s id or null>, '
                 f'"said": "<what they corrected, in their words where you can>"}}] - never show them as anything. The three parts are for a real ask. '
                 f'When what came in needs nothing from you or the owner - you judge that from the thread, not from its wording alone; in a group chat '
@@ -524,10 +530,19 @@ def show_markers(text: str) -> tuple:
 DRAFT_OPEN, DRAFT_CLOSE = '[[TASKUARY-DRAFT', '[[/TASKUARY-DRAFT]]'
 _DRAFT_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?DRAFT\b([^\]]*)\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?DRAFT\s*\]\]', re.I | re.S)
 _ATTR_RE = re.compile(r'(slot|to|subject)\s*=\s*(?:"([^"]*)"|(\S+))', re.I)
-DRAFT_LINE = ('EMAILS THAT CLOSE THIS TASK: the checklist lines marked "-> email to" are emails this task owes. Write each one as '
-              f'{DRAFT_OPEN} slot=<id> subject="<subject>"]]<the email>{DRAFT_CLOSE} (to=<address> in place of slot for one that is not '
-              'listed). The subject is written for its reader, never the title of this task; to someone who mailed on this task, "Re: " their subject. '
+# ONE ROAD A SESSION (the agent walk, 2026-11-10): a chat was told the block, the tool and `taskuary --slot` at once, and wrote "an email to
+# Ray Colton" a second time beside the checklist line that asked for it. The block is how a session with none of Taskuary's tools writes an
+# email - one the checklist owes or one the work turned up; a session with the tools hears DRAFT_TOOL_LINE in its place (general.by_tool)
+DRAFT_LINE = (f'EMAILS THIS TASK NEEDS: write each email as {DRAFT_OPEN} slot=<id> subject="<subject>"]]<the email>{DRAFT_CLOSE} - the one '
+              'way you draft an email here, and the block IS the draft: its words are written once, there, and nowhere else in your answer. '
+              'A checklist line marked "-> email to" is an email this task already owes, and `slot` is the id on that line: your email to '
+              'that person fills that line, never a second email beside it. An email the checklist does not list takes to=<address> in '
+              'place of slot - and beside slot, when the line names a person and you found their address. '
+              'The subject is written for its reader, never the title of this task; to someone who mailed on this task, "Re: " their subject. '
               "Each waits for the owner's approval - nothing is sent until they approve it.")
+DRAFT_TOOL_LINE = ('EMAILS THIS TASK ALREADY OWES: a checklist line marked "-> email to" is an email the task is waiting for, and the id on '
+                   'that line is its `slot`. When the email you write is that line\'s email, call propose_email with `slot` set to that id: '
+                   'it fills the line, never a second email beside it. Leave `slot` out only for an email the checklist does not list.')
 
 
 def draft_markers(text: str) -> tuple:
@@ -564,12 +579,15 @@ def tick_markers(text: str) -> tuple:
 # owner's answer is bound to (workerstate.answer). A marker, again, not a judge reading prose for a '?'.
 # ...and the question is plain words, answered in the box under it (the owner, 2026-11-03): option chips are only for a CLI's own
 # question tool or its on-screen chooser, so the line no longer offers `| choice | choice` - and one written anyway stays text.
+# ...and A QUESTION, NEVER PERMISSION (the agent walk, 2026-11-10): "cannot continue without their answer" read as leave to ask "shall I send
+# it?" over the Send card that already asks it, while the summary line said the card IS the confirmation - the two now say one thing
 ASK_MARKER = '[[TASKUARY-ASK]]'
 _ASK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?\s*(.*)', re.I | re.S)
-ASK_LINE = (f'ASKING THE OWNER: when you cannot continue without their answer, end your reply with a final line: '
+ASK_LINE = (f'ASKING THE OWNER: when you cannot continue without their answer - a fact or a decision only they can give - end your reply with a final line: '
             f'{ASK_MARKER} <the exact question>. The owner answers it in their own words. One a turn: the question the rest hangs on, '
             f'with your recommended answer in it. Taskuary shows it as a question waiting for them and brings their answer back to you. '
-            f'Only for a real blocker, never for a rhetorical question - and never after you have answered: a part you could not '
+            f'Only for a real blocker, never for a rhetorical question, and never for permission to do what a card already asks: a draft\'s '
+            f'Send, a post\'s Post, an Approve is that question, asked once. And never after you have answered: a part you could not '
             f'do is said in the answer (what you could not check and what would let you), not asked as a question.')
 
 

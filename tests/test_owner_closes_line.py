@@ -20,3 +20,18 @@ def test_a_task_someone_wrote_in_about_is_closed_by_the_owner_too():
                    'FromEmail': 'gail@northwind.example', 'BodyText': 'Can you check the March batch?', 'Status': 'routed'})
     system, _ = general._prompt(s, t)
     assert selfclose.CHAT_LINE not in system and selfclose.owner_closes_line() in system
+
+
+def test_a_draft_is_said_in_a_line_and_its_words_are_the_cards():
+    """The agent walk, 2026-11-10: each draft was said twice - subject and body quoted in the answer, over the card that showed them."""
+    s = MemoryStore()
+    t = s.create_task({'Title': 'March invoice batch', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_message({'TaskId': t, 'Channel': 'email', 'Subject': 'March invoice batch', 'FromName': 'Gail Moreno',
+                   'FromEmail': 'gail@northwind.example', 'BodyText': 'Can you check the March batch?', 'Status': 'routed'})
+    line = selfclose.owner_closes_line()
+    assert 'say in one line what you set up and for whom' in line and "never repeat the draft's words" in line and 'assum' in line
+    marked = general._prompt(s, t)[0]; tooled = general.by_tool(marked)
+    for system in (marked, tooled): assert system.count("never repeat the draft's words") == 1
+    # ...a session that drafts by marked block writes the words once, in the block: there the block IS the draft
+    assert 'the block IS the draft' in selfclose.REPLY_LINE and 'the block IS the draft' in selfclose.DRAFT_LINE
+    assert 'the block IS the draft' not in tooled and 'never as text in the conversation' not in marked

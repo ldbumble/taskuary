@@ -2042,10 +2042,12 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # The job, spelled out. An agent handed a bare task description went looking for the ticket
     # it came from - Taskuary's own API, its database, the mailbox - and spent its first minute
     # re-fetching what is already in this paragraph.
+    # ...and THE TASK is what is not looked up, never the API (the agent walk, 2026-11-10): the line read "Do NOT call the Taskuary
+    # API" over a context file that says to POST to it for the owner's systems, and beside `taskuary` commands and tools that ARE it
     issues_ok, push_ok = store.github_permissions()
     parts.append('WHAT TO DO: work it from THIS message alone - diagnose, fix it if it is fixable, else say plainly '
-                 'what the problem is and what it would take. Do NOT call the Taskuary API, read its database or '
-                 'hunt for this task elsewhere - everything known about it is above' + (' and in the context file. ' if cpath else '. ')
+                 'what the problem is and what it would take. Do NOT look this task up again - in Taskuary, its database '
+                 'or the mailbox: everything known about it is above' + (' and in the context file. ' if cpath else '. ')
                  + ('GitHub is the issue tracker here: open and update issues for the work as the team expects. '
                     if issues_ok else
                     'Do NOT create GitHub issues, PRs or other tracker items unless this message asks for one - '

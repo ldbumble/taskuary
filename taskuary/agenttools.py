@@ -149,14 +149,18 @@ TOOLS = {
                               "correct a reply, just propose the new one; an email IN PLACE of another is the new one's `replaces` - "
                               "one call, one Send left.",
                        _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
-    'propose_email': ('propose', "Draft one more email this task needs. `subject` is the line its reader sees - never this task's "
+    # ...`slot` (the agent walk, 2026-11-10): triage had put "an email to Ray Colton" on the task, to draft; this tool took an address and
+    # no slot, so the agent's email stood as a second card beside the empty one. The agent names the line it fills - no name is matched here
+    'propose_email': ('propose', "Draft an email this task needs. `slot`: the id of the checklist line this email is (\"-> email to ..., "
+                                 "slot <id>\") - it fills that line, never a second email beside it; leave it out only for an email the "
+                                 "checklist does not list. `to` is the address either way. `subject` is the line its reader sees - never this task's "
                                  "title (the owner's own label); back to someone who mailed on this task, their subject with \"Re: \". "
                                  "It waits with the owner's Send - nothing is sent. `cc`: addresses copied. `from`: a connected "
                                  "mailbox (list_systems names them; never a run_system tool) - else the one this task's mail came in "
                                  "on, else the first. `replaces`: the review id (or recipient) of an unsent email, reply or post this"
                                  " takes the place of, withdrawn in the same call. `guessed`: any address on it you guessed (none on "
                                  "record) - the card says so, for the owner to check before Send.",
-                      _S({'to': _STR, 'subject': _STR, 'text': _STR, 'cc': {'type': 'array', 'items': _STR}, 'from': _STR, 'attach': _ATTACH, 'replaces': _STR,
+                      _S({'to': _STR, 'subject': _STR, 'text': _STR, 'slot': _STR, 'cc': {'type': 'array', 'items': _STR}, 'from': _STR, 'attach': _ATTACH, 'replaces': _STR,
                           'guessed': {'type': 'array', 'items': _STR}},
                          ('to', 'subject', 'text')),
                       ('POST', '/api/agent/draft')),
@@ -345,7 +349,8 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'propose_email':
         was = verdicts.unsent(store, tid)
         out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(tid, a.get('attach')),
-                            a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}))
+                            a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}),
+                            **({'slot': str(a['slot']).strip()} if a.get('slot') else {}))
         return _j(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place"))
     if name == 'sign_form':
         out = doors['sign'](tid, a)

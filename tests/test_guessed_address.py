@@ -29,4 +29,6 @@ def test_a_rewrite_with_the_address_known_clears_the_mark():
 
 
 def test_the_agent_is_told_to_guess_and_mark_rather_than_hold_the_email():
-    assert 'guessed' in general._ACTION and 'never hold the email or the meeting invite back' in general._ACTION
+    told = general.action_line(MemoryStore(), tools=True)      # ...a session with the email tool: `guessed` is the tool's own word
+    assert '`guessed`' in told and 'never hold the email or the meeting invite back' in told
+    assert 'is a guess' in general.action_line(MemoryStore()) and '`guessed`' not in general.action_line(MemoryStore())

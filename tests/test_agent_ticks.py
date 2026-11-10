@@ -104,6 +104,22 @@ class AChatWithNoShellTicksByAMarkTests(unittest.TestCase):
         self.assertIn(selfclose.TICK_MARKER, self._turn('ok', 'look'))
         self.assertNotIn(selfclose.TICK_MARKER, self._turn('ok', 'cli'))
 
+    def test_a_chat_is_told_one_road_for_an_email_by_the_tools_it_has(self):
+        """The agent walk, 2026-11-10: one agent was handed the propose_email tool, the [[TASKUARY-DRAFT]] block and `taskuary --slot ...
+        --draft` for the same email, and wrote it as a second email beside the line that asked for it. A session with Taskuary's tools
+        hears the tool, one without hears the block - and both read the id of the line the email fills."""
+        vendor = self.ids['Confirm the renewal with the vendor']
+        self.s.add_message({'TaskId': self.tid, 'Channel': 'email', 'Subject': 'Trainly renewal', 'FromName': 'Gail Moreno',
+                            'FromEmail': 'gail@northwind.example', 'BodyText': 'Can you renew Trainly this week?', 'Status': 'routed'})
+        with mock.patch('taskuary.origin.of_task', return_value=('trusted', 'a colleague')): tooled, plain = self._turn('ok', 'cli'), self._turn('ok', 'look')
+        for said in (tooled, plain):
+            self.assertIn(f'-> email to sales@vendor.example, slot {vendor} - to draft', said)
+            for shell in ('taskuary --slot', 'taskuary --draft', 'taskuary --reply "'): self.assertNotIn(shell, said)
+        self.assertIn('propose_reply / propose_email', tooled); self.assertIn(selfclose.DRAFT_TOOL_LINE, tooled)
+        for mark in (selfclose.DRAFT_OPEN, selfclose.REPLY_OPEN): self.assertNotIn(mark, tooled)
+        self.assertIn(selfclose.DRAFT_LINE, plain); self.assertIn(selfclose.REPLY_LINE, plain)
+        for tool in ('propose_email', 'propose_reply'): self.assertNotIn(tool, plain)
+
     def test_the_mark_ticks_the_box_and_leaves_the_reply(self):
         seats, vendor = self.ids['Check the seat count'], self.ids['Confirm the renewal with the vendor']
         self._turn(f'Twelve seats are in use.\n[[TASKUARY-TICK: {seats}]]\n[[ taskuary_tick {vendor} ]]\n[[TASKUARY-TICK: nope1234]]', 'look')

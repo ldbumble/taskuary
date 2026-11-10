@@ -36,7 +36,7 @@ class Consumers(unittest.TestCase):
 
     def test_the_worker_prompt_carries_the_whole_voice_section_uncut(self):
         out = _general_prompt(self.st)
-        self.assertIn('ASSISTANT STYLE', out)
+        self.assertIn('WRITING STYLE', out)
         self.assertEqual(out.count('- Long voice rule.'), 400, 'the 3,000-character cut is gone')
         self.assertNotIn('I SURFACE', out)
 

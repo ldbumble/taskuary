@@ -141,9 +141,10 @@ def _plain(answers: dict, ctx: dict) -> str:
     a = lambda k: str(answers.get(k) or '').strip()
     owner = a('who') or ctx.get('owner') or 'the owner'
     lines = ["# SOUL.md - the operator's document", '',
-             f"You work for **{owner}**. You are the funnel between everything inbound and their "
-             f"attention. **Nothing sends or ships without {owner.split(',')[0]}'s approval.**", '',
-             '## What counts as a task', f"- {a('task') or 'A concrete request to do something.'}",
+             f"You work for **{owner}**. **Nothing sends or ships without {owner.split(',')[0]}'s approval.**", '',
+             # ...the sorter's own role sits under the heading only the sorter reads (brief.TRIAGE_ONLY, 2026-11-10)
+             '## What counts as a task', 'You are the funnel between everything inbound and their attention.', '',
+             f"- {a('task') or 'A concrete request to do something.'}",
              (f"- What reaches this person: {a('work')}" if a('work') else None), '',
              '## How we respond', f"- {a('voice') or 'Plain, brief, and warm-professional.'}", '',
              '## Escalate (a human decides) when',

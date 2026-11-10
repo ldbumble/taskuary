@@ -652,10 +652,10 @@ class OneGoalTests(unittest.TestCase):
         # nothing a stranger writes may point the agent at credentials or the owner's files: the goal stays, the login and where-to-look go
         s = self._store(); tid = general_task(s); self._mail(s, tid)
         s.cx.execute("UPDATE task SET OriginBase='stranger' WHERE TaskId=?", (tid,)); s.cx.commit()
-        s.upsert_agent('assistant', 'general', 'cli', json.dumps({'kind': 'general'}))     # PROFILE RULES (ASSISTANT.md) ride as on an install
+        s.upsert_agent('assistant', 'general', 'cli', json.dumps({'kind': 'general'}))     # PROFILE RULES (the file ASSISTANT.md) ride as on an install
         system, user = general._prompt(s, tid)
         for want in ("off the owner's hands", 'only what you cannot find', 're-plan', 'never send'): self.assertIn(want, system, want)
-        self.assertIn('PROFILE RULES (ASSISTANT.md)', system)
+        self.assertIn('PROFILE RULES (the file ASSISTANT.md)', system)
         flat = ' '.join(f'{system}\n{user}'.split())
         for gone in ('put it in the reply you draft', 'goes only in the reply you draft', 'A login or secret', 'A login or key',
                      'supply a login', '.env', 'folders you can read'):

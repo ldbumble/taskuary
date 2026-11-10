@@ -668,13 +668,30 @@ class TerminalTests(unittest.TestCase):
                                   'BodyText': 'files with adjustments import in the wrong month'})
         seed = terminal.seed_text(server.store, tid, 'use the payroll date', 'northwind/Census', 'C:/src/Census')
         for s in ['payroll import month is wrong', 'Dana Reyes', 'wrong month', 'use the payroll date',
-                  'REPO: northwind/Census', 'Do NOT call the Taskuary API', 'fix it if it is fixable',
+                  'REPO: northwind/Census', 'Do NOT look this task up again', 'fix it if it is fixable',
                   'Do NOT create GitHub issues']:
             self.assertIn(s, seed)
         self.assertIn('CODING RULES (CODING.md)', seed)                  # CODING.md rides along (PW-185: one labelled block)
         self.assertIn('RULES (AGENT.md', seed)                          # ...on top of the rules every worker shares (PW-182)
         self.assertIn('Work ONLY in the repository', seed)
         self.assertNotIn('\\n', seed)                                   # one line - a newline submits
+
+    def test_the_seed_and_the_file_it_points_to_agree_on_taskuarys_api(self):
+        """The agent walk, 2026-11-10: the seed closed on "Do NOT call the Taskuary API" while the file it says to read FIRST tells the
+        agent how a connected system is reached - a POST to that API - and its `taskuary` commands and tools are that API too. What
+        the line was ever for is the task it already holds: THAT is not looked up again, anywhere."""
+        from taskuary import context, docsync
+        from taskuary.store import MemoryStore
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')
+        hub = s.get_connector_by_type('handbook'); s.save_connector({'ConnectorId': hub['ConnectorId'], 'Active': 1}, 'owner')
+        docsync.sync_connections(s)
+        tid = s.create_task({'Title': 'payroll import month is wrong', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        s.add_message({'TaskId': tid, 'ExternalId': 'graph:PAY2', 'Channel': 'email', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                       'Subject': 'Payroll file imports', 'SentAt': '2026-08-19 15:03', 'BodyText': 'files with adjustments import in the wrong month'})
+        seed, told = terminal.seed_text(s, tid, repo='northwind/ledger', cwd=None), context.build(s, tid)
+        self.assertIn('/api/tools/run', told)                           # the file says how a system is reached...
+        self.assertNotIn('call the Taskuary API', seed)                 # ...and the seed does not forbid that call
+        self.assertIn('Do NOT look this task up again', seed); self.assertIn('everything known about it is above', seed)
 
     def test_no_repo_is_guessed_from_the_task_words(self):
         """The task's words are never scored against the SOUL.md map (2026-10-11, "everything should be ai"), and triage names no
@@ -717,7 +734,7 @@ class TerminalTests(unittest.TestCase):
             return Fake()
         with mock.patch.object(terminal, 'open_session', side_effect=fake_open):
             self.assertEqual(c.post('/api/terminals', json={'agent': 'coding', 'task_id': tid, 'seed': True}).status_code, 200)
-        for s in ('imports in the wrong month', 'dreyes@northwind.example', 'Do NOT call the Taskuary API', 'fix it if it is fixable'):
+        for s in ('imports in the wrong month', 'dreyes@northwind.example', 'Do NOT look this task up again', 'fix it if it is fixable'):
             self.assertIn(s, Fake.seeded)
 
     def test_the_prompt_is_sent_not_just_typed(self):
@@ -881,7 +898,7 @@ class TerminalTests(unittest.TestCase):
             self.assertNotIn('Levitating', seen[0])
             self.assertNotIn('esc to interrupt', seen[0])
             # ...and not the prompt WE typed in, echoed back by the pty as if the agent said it
-            self.assertNotIn('Do NOT call the Taskuary API', seen[0])
+            self.assertNotIn('Do NOT look this task up again', seen[0])
         finally:
             terminal.close(ses['sid'])
 
@@ -1430,7 +1447,7 @@ class SeedCompletenessTests(unittest.TestCase):
         seed = terminal.seed_text(s, tid)
         self.assertIn('truncated here', seed)                          # it did trim something
         # the closing instructions and the rules survive WHOLE, not clipped mid-sentence
-        self.assertIn('Do NOT call the Taskuary API, read its database or hunt for this task elsewhere', seed)
+        self.assertIn('Do NOT look this task up again - in Taskuary, its database or the mailbox', seed)
         self.assertIn('Missing required detail? Change nothing: ask one concrete question here, '
                       'say if the sender must answer, and wait.', seed)
         # the cut is IN the message, strictly ahead of the rules it must never reach

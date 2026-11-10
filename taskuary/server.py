@@ -5963,7 +5963,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'remind': lambda tid, until: agent_remind(AgentRemindBody(task_id=tid, until=until), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),
-             'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='', guessed=(): agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files), cc=list(cc), mailbox=mailbox, guessed=list(guessed)), request),
+             'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='', guessed=(), slot='': agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, slot=slot, files=list(files), cc=list(cc), mailbox=mailbox, guessed=list(guessed)), request),
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request),
              'answer_invite': lambda tid, a: agent_answer_invite(AgentInviteBody(**{**a, 'task_id': tid}), request),

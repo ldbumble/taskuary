@@ -49,3 +49,18 @@ def test_an_email_to_the_same_person_that_replaces_its_own_draft_stands():
         by_who = json.loads(call(tid, 'propose_email', to=PAULA, subject='Q4 review', text='It starts at 4pm.', replaces=PAULA)[0])
     assert by_id['ok'] and by_who['ok'] and waiting(s, tid) == [('slot', old['review_id'])]
     assert 'not_replaced' not in by_id and 'starts at 4pm' in s.get_review(old['review_id'])['DraftText']
+
+
+def test_the_agents_email_fills_the_slot_it_names_rather_than_adding_another():
+    """The agent walk, 2026-11-10: triage had read "an email to Ray Colton" off the ask and the task showed it, to draft. The agent's tool
+    took an address and no slot, so its email stood as a second card ("added by the agent") beside the empty one. The agent names the slot
+    it fills - nobody's name is matched to an address here."""
+    s = MemoryStore(); tid = own_task(s, 'general')
+    sid = slots.add(s, tid, [{'to': 'Ray Colton', 'about': 'The badge list'}], 'owner')[0]['id']
+    with mock.patch.object(server, 'store', s):
+        out = json.loads(call(tid, 'propose_email', to='ray.colton@northwind.example', subject='The badge list', text='Hi Ray - the list.', slot=sid)[0])
+    owed = slots.all_(s, tid)
+    assert out['ok'] and [(i['id'], i.get('rid')) for i in owed] == [(sid, out['review_id'])]
+    assert deliver(s, out['review_id'])['to'] == ['ray.colton@northwind.example'] and waiting(s, tid) == [('slot', out['review_id'])]
+    from taskuary import agenttools
+    assert 'slot' in agenttools.TOOLS['propose_email'][2]['properties'] and 'slot' not in agenttools.TOOLS['propose_email'][2]['required']

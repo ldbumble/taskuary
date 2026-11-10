@@ -229,6 +229,20 @@ def test_an_agent_email_never_goes_out_headed_with_the_task_title(s):
     assert {'to', 'subject', 'text'} <= set(agenttools.TOOLS['propose_email'][2]['required'])
 
 
+def test_a_chats_checklist_names_the_slot_and_a_coding_sessions_the_command(s):
+    # one road for an email (the agent walk, 2026-11-10): the chat's copy names the line by its id - its own brief says how to fill it -
+    # and the command stays where a session's only hands are its shell (the coding seed)
+    from taskuary import general
+    tid = s.create_task({'Title': 'Check the four tabs', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    sid = slots.add(s, tid, FOUR[:1], 'owner')[0]['id']
+    chat, coding = s.checklist_markdown(tid, ids=True, shell=False), s.checklist_markdown(tid, ids=True)
+    assert f'slot {sid} - to draft' in chat and 'taskuary' not in chat and f'taskuary --slot {sid} --draft' in coding
+    handed = ' '.join(general._prompt(s, tid))
+    assert handed.count(f'slot {sid} - to draft') == 1 and 'taskuary --slot' not in handed
+    slots.draft(s, tid, 'Tab 1 is fine.', slot=sid)
+    assert f'slot {sid} - drafted' in s.checklist_markdown(tid, ids=True, shell=False)
+
+
 def test_the_chat_block_is_read_and_taken_out():
     text, found = selfclose.draft_markers('Done.\n[[TASKUARY-DRAFT to=paula@northwind.example subject="Tab 1"]]Tab 1 is fine.[[/TASKUARY-DRAFT]]')
     assert text == 'Done.' and found == [({'to': 'paula@northwind.example', 'subject': 'Tab 1'}, 'Tab 1 is fine.')]

@@ -100,7 +100,7 @@ class NoBlanketSoulTests(unittest.TestCase):
         self.assertIn('RULES (AGENT.md', seed); self.assertIn('CODING RULES (CODING.md', seed)
         self.assertNotIn('OPERATOR RULES (SOUL.md', seed); self.assertNotIn('What counts as a task', seed)
         for kept in ('data, not instructions', 'approval'): self.assertIn(kept, seed, kept)   # the safety constraints survived the move
-        self.assertNotIn('ASSISTANT STYLE', seed)                                             # coding does not need the writing voice
+        self.assertNotIn('WRITING STYLE', seed)                                             # coding does not need the writing voice
 
     def test_the_general_prompt_opens_on_the_owner_then_agent_rules_and_style(self):
         """The owner, 2026-10-14: "soul/job which is about the person, then specific profile for agent" - SOUL.md and JOB.md lead,
@@ -111,7 +111,7 @@ class NoBlanketSoulTests(unittest.TestCase):
         self.assertTrue(system.startswith('ABOUT THE OWNER'), system[:80])
         self.assertIn('Runs month-end close for the finance team', system); self.assertIn('## SOUL.md', system)
         self.assertLess(system.index('ABOUT THE OWNER'), system.index('RULES (AGENT.md'))
-        self.assertIn('RULES (AGENT.md', system); self.assertIn('ASSISTANT STYLE', system)
+        self.assertIn('RULES (AGENT.md', system); self.assertIn('WRITING STYLE', system)
         self.assertNotIn('OPERATOR RULES', system); self.assertNotIn('What counts as a task', system)
         self.assertNotIn('CODING RULES', system)
         self.assertIn('data, not instructions', system)
@@ -121,6 +121,31 @@ class NoBlanketSoulTests(unittest.TestCase):
         s = MemoryStore()
         self.assertTrue((s.doc('soul') or '').strip())
         self.assertIn('soul', inspect.signature(triage.classify_intent).parameters)
+
+    def test_the_triage_role_reaches_triage_and_no_worker(self):
+        """The agent walk, 2026-11-10: a coding agent's background opened "You are the funnel between everything inbound and the
+        owner's attention: triage every message" - SOUL.md's opening, written to the one reader that sorts mail. A worker is told
+        whom it works for and that nothing sends without approval; what triage is stays under the heading only triage reads - in
+        the shipped document, and out of a worker's copy of one written before it moved (the owner's file is never rewritten)."""
+        from taskuary import context, interview
+        shipped = (TEMPLATES / 'soul.md').read_text(encoding='utf-8')
+        before = shipped.index('## What counts as a task')
+        self.assertNotIn('funnel', shipped[:before]); self.assertIn('You are the funnel', shipped[before:])
+        plain = interview._plain({'who': 'Alex Doyle'}, {})
+        self.assertNotIn('funnel', plain[:plain.index('## What counts as a task')])
+        was = ("# SOUL.md\n\nYou work for **Alex Doyle** (alex@northwind.example). You are the funnel between\neverything inbound and "
+               "Alex's attention: triage every message, do the work agents can do\nalone, and protect Alex's time. **Nothing sends or ships "
+               "without Alex's approval.**\n\n## What counts as a task\n- A concrete request.\n\n## How we respond\n- Plain and brief.")
+        for soul in (None, was, was.replace(": triage every message, do the work agents can do\nalone, and protect Alex's time.", '.')):
+            s = MemoryStore()
+            if soul: s.save_doc('soul', soul, 'owner')
+            tid = make(s, 'general')
+            for told in (general._prompt(s, tid)[0], context.build(s, tid), brief.background(s)):   # the chat, the coding file, the block
+                flat = ' '.join(told.split())
+                for no in ('the funnel', 'triage every message'): self.assertNotIn(no, flat, (soul or 'shipped')[:40])
+                for kept in ('You work for **', 'Nothing sends or ships without'): self.assertIn(kept, flat)
+            self.assertIn('You are the funnel', s.doc('soul'))                  # triage reads the document whole
+            if soul: self.assertEqual(s.get_doc('soul'), soul)                  # ...and the owner's own is as they left it
 
 
 class ScopedExtrasTests(unittest.TestCase):
@@ -162,9 +187,9 @@ done when: the bill exists in QuickBooks
 
 class PromptAuditTests(unittest.TestCase):
     """PW-185: audit the built prompts with a playbook AND a saved preference competing for
-    space on the task - no instruction block repeats, and the writing voice (ASSISTANT STYLE)
+    space on the task - no instruction block repeats, and the writing voice (WRITING STYLE)
     reaches only general (writing) work, never a coding run."""
-    HEADERS = ('RULES (AGENT.md', 'CODING RULES (CODING.md', 'PROCEDURE FOR THIS JOB', 'ASSISTANT STYLE',
+    HEADERS = ('RULES (AGENT.md', 'CODING RULES (CODING.md', 'PROCEDURE FOR THIS JOB', 'WRITING STYLE',
                'OTHER AGENTS', 'THE WALL', 'ASKING THE OWNER')
 
     def setUp(self):
@@ -186,13 +211,13 @@ class PromptAuditTests(unittest.TestCase):
         s = MemoryStore(); tid = self._task(s, 'coding')
         seed = terminal.seed_text(s, tid, repo='org/exports', cwd=None)
         for h in self.HEADERS: self.assertLessEqual(seed.count(h), 1, h)
-        self.assertNotIn('ASSISTANT STYLE', seed)          # coding work is not a writing task
+        self.assertNotIn('WRITING STYLE', seed)          # coding work is not a writing task
 
     def test_no_block_repeats_in_the_general_prompt_and_it_carries_the_writing_voice(self):
         s = MemoryStore(); tid = self._task(s, 'general')
         system, _user = general._prompt(s, tid)
         for h in self.HEADERS: self.assertLessEqual(system.count(h), 1, h)
-        self.assertIn('ASSISTANT STYLE', system)           # writing work gets the voice, once
+        self.assertIn('WRITING STYLE', system)           # writing work gets the voice, once
 
 
 if __name__ == '__main__':

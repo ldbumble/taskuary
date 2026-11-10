@@ -2503,14 +2503,19 @@ class SQLiteStore:
             hit[0]['done'] = bool(done)
             self._write_checklist(task_id, items, actor)
         return True
-    def checklist_markdown(self, task_id, ids: bool = False) -> str:
+    def checklist_markdown(self, task_id, ids: bool = False, shell: bool = True) -> str:
         """`ids`: the agent's copy - each box an agent may tick carries its id, for `taskuary --tick <id>` (the owner, 2026-10-22:
-        agents tick the to-dos they finish). An email box ticks when its email goes and a goal's step when its task closes."""
+        agents tick the to-dos they finish). An email box ticks when its email goes and a goal's step when its task closes.
+        `shell`: a slot's line says the command that fills it - a session whose hands are its shell (the coding seed). A chat's copy names
+        the slot by its id instead, and its brief says the one way it fills it (general.by_tool): told the command, the tool and the marked
+        block at once, an agent wrote "an email to Ray Colton" a second time beside the line that asked for it (the agent walk, 2026-11-10)."""
         # a slot says where it goes and how to fill it: the seed line is byte-capped, so the command rides here (slots.py)
         def line(i):
             o = i.get('out') if isinstance(i.get('out'), dict) else None
-            maybe = f" (could be {' or '.join(o['candidates'][:3])} - fill with --to)" if o and o.get('candidates') else ''
-            tail = (f" -> email to {o.get('to')}{maybe}, " + ('drafted' if i.get('rid') else f"fill with `taskuary --slot {i['id']} --draft \"<text>\"`")) if o else ''
+            maybe = f" (could be {' or '.join(o['candidates'][:3])} - {'fill with --to' if shell else 'say which in `to`'})" if o and o.get('candidates') else ''
+            how = 'drafted' if i.get('rid') else f"fill with `taskuary --slot {i['id']} --draft \"<text>\"`"
+            if not shell: how = f"slot {i['id']} - {'drafted' if i.get('rid') else 'to draft'}"
+            tail = f" -> email to {o.get('to')}{maybe}, {how}" if o else ''
             tag = f" [{i['id']}]" if ids and agent_tickable(i) else ''
             return f"- [{'x' if i.get('done') else ' '}] {i['text']}{tag}{tail}" + (f" (note: {i['note']})" if i.get('note') else '')
         return '\n'.join(line(i) for i in self.task_checklist(task_id))

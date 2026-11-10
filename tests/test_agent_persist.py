@@ -93,6 +93,35 @@ def test_older_mail_is_compacted_by_id():
     assert f'[m{ids[3]}]\nmail 3 body' in user
 
 
+def test_the_thread_a_task_was_built_from_is_in_its_material():
+    """The agent walk, 2026-11-10: a reply task held the one mail that asked for the figures, and the two earlier mails that HELD them -
+    same conversation, kept as `history` on no task when the thread was completed - were not in what the agent was handed. It searched
+    the mailbox for what triage, the drafter and the task page had all read. They ride as the task's mail, oldest first, each as what
+    its sender wrote; another conversation's history does not, and a stranger's session is handed its own task's rows as before."""
+    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't'); tid = task(s)
+    row = lambda ext, who, at, body, conv='<pay-root@northwind.example>', **kw: s.add_message({
+        'ExternalId': ext, 'TaskId': None, 'Status': 'history', 'Channel': 'email', 'ConversationId': conv, 'Subject': 'Payroll figures',
+        'FromName': who, 'FromEmail': f'{who.split()[0].lower()}@northwind.example', 'SentAt': at, 'BodyText': body, **kw})
+    first = 'The October run came to 48,210.55 across 212 staff.'
+    g1 = row('h1', 'Gail Moreno', '2026-11-02 09:00:00', first)
+    g2 = row('h2', 'Gail Moreno', '2026-11-03 09:00:00', 'Corrected: the adjustment file adds 1,904.00, so 50,114.55 in all.\n\n'
+             f'From: Gail Moreno <gail@northwind.example>\nSent: Monday, November 2, 2026 9:00 AM\nTo: Erin Blake\nSubject: Payroll figures\n\n{first}')
+    other = row('h3', 'Paula Vance', '2026-11-03 10:00:00', 'The Trainly seats renew in March.', conv='<seats@northwind.example>')
+    ask = row('a1', 'Erin Blake', '2026-11-04 09:00:00', 'Alex - can you confirm the final October figure to Payworth?', TaskId=tid, Status='sent')
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Answer her')
+    user = general._prompt(s, tid)[1]
+    src = user[user.index('SOURCE MATERIAL'):user.index('CONVERSATION\n')]
+    assert f'[m{g1}]' in src and '48,210.55' in src and f'[m{g2}]' in src and '50,114.55' in src           # the figures are in the material...
+    assert src.index(f'[m{g1}]') < src.index(f'[m{g2}]') < src.index(f'[m{ask}]')                          # ...in the order they were written
+    assert src.count('48,210.55') == 1                                                                 # each mail's own words, once
+    assert f'[m{other}]' not in user and 'Trainly' not in user
+    with mock.patch.object(general, 'SOURCE_MAILS', 1): few = general._prompt(s, tid)[1]                  # one window: the oldest are the lines
+    assert 'COMPACTED - 2 older messages' in few and f'- [m{g1}] Gail Moreno' in few and f'[m{ask}]' in few
+    with mock.patch('taskuary.origin.of_task', return_value=('stranger', '')), mock.patch('taskuary.origin.stranger_file', return_value='f.md') as wrote:
+        general._prompt(s, tid)
+    assert '50,114.55' not in '\n'.join(wrote.call_args[0][2])
+
+
 # ── the draft filter takes only the draft ───────────────────────────────────────────────────
 LETTER = 'Hi Gail,\n\nThe three-year term works for us at a 6% uplift. I will send the signed copy on Friday.\n\nThanks, Gail.'
 

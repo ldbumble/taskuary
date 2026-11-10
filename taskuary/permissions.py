@@ -195,6 +195,23 @@ def answer(store, tid: int, pid: str, option: str, actor: str = 'owner') -> dict
     return {'ok': True, 'answer': o, 'says': said}
 
 
+SET_ASIDE_SAID = 'Set aside when you moved on - the agent was refused: it {}. Ask it to bring it back if it is still wanted.'
+def set_aside(store, tid: int) -> list:
+    """The conversation on task `tid` moved on past its waiting permission cards (proposals.move_on, the owner 2026-11-10: "once youa re passed
+    it, it should stay where it is with buttons grayed out"): each is refused - never allowed on nobody's press - and the line stays in its place."""
+    from . import agentchannels, workerstate as ws
+    with _LOCK: ps = [p for p in PENDING.values() if p['tid'] == int(tid) and p['store'] is store]
+    out = []
+    for p in ps:
+        if not (h := ws.HELD.get(p['g'])): continue
+        ws._answer_held(store, int(tid), h, {p['rid']: _pick(p['req'], False)}, 'taskuary')
+        said = SET_ASIDE_SAID.format(line(p['req']))
+        store.add_comment(int(tid), 'taskuary', 'agent', said); out.append(p['id'])
+        try: agentchannels.permission_done(store, int(tid), p['id'], said)
+        except Exception as e: logger.debug(f'permission on {task_ref(tid)}: set-aside line not posted - {e}')
+    return out
+
+
 # A REQUEST WHOSE ASKER IS GONE (the agent walk, 2026-11-09). PENDING is this process's own: Taskuary killed while an agent waited on the
 # owner's Allow, the next run found the request open in the worker's record with nothing holding it - no card, no line, and the step it
 # had asked for stood in the transcript as the last thing the agent did. A clean close says the request was refused (ask's own ending);

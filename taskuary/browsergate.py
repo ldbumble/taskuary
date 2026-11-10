@@ -651,7 +651,7 @@ def owner_said(store, tid: int, sid: str, text: str) -> str:
     """The owner answered an open hand-over in words - the chat's box, a pane's answer - and it closes. What Taskuary adds for the agent: for
     their Done nothing (it looks at the page); for anything else what Taskuary saw - it was not pressed. '' when no hand-over is open. Their
     words are the agent's to read, never matched against a list here."""
-    from . import browserview
+    from . import browserview, proposals
     req = handing(store, tid, sid)
     if not req: return ''
     words = ' '.join(str(text or '').split()).rstrip('.!')
@@ -665,11 +665,6 @@ def owner_said(store, tid: int, sid: str, text: str) -> str:
     # ...AND NOTHING WAITS ON THEM NOW, said so (the owner, 2026-11-10: "i cant see the screen"): told only that it was not pressed, the agent
     # answered that Save was "held for your press in the browser pane beside this chat" - no card, no pane, "agent done", Mark done lit
     return (f"THE OWNER ANSWERED IN WORDS INSTEAD OF PRESSING {h.get('btn') or 'the button'} on the page you handed them. As far as Taskuary "
-            f"saw, it was NOT pressed - the page is as you left it, and nothing waits for their press now. Do what they say. {AGAIN_HOLD}")
-
-
-# how a step comes back in front of the owner: the only road, and the only time the agent may say it waits on them
-AGAIN_HOLD = ('If the step is still wanted, run the same command again - Taskuary holds it again as a card for their press. Never say it is '
-              'held or waiting until Taskuary has said so, never ask them in words to click it, and never press it another way.')
+            f"saw, it was NOT pressed - the page is as you left it, and nothing waits for their press now. Do what they say. {proposals.AGAIN}")
 
 

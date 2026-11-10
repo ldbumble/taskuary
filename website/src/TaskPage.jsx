@@ -104,7 +104,8 @@ import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
   AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
-import { askNote, closeoutOf, splitHeld } from "./reviewProposal.js";
+import { askNote, closeoutOf, heldGroups, splitHeld } from "./reviewProposal.js";
+import PassedCard, { isPassed } from "./PassedCard.jsx";
 import SentCard from "./SentCard.jsx";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
@@ -2718,7 +2719,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...an act with its card (a post, a tracker comment) is drawn in the turn that set it up (GeneralWorkspace, ActionCard) - never here again
   const asks = proposals.filter((p) => !isCardReview(p));
   // ...a turn's held steps are ONE card, and a pressed one stays in the turn, pressed (heldGroups, keptHeld; the owner, 2026-11-09)
-  const { asks: askCards, past: pressedHeld } = splitHeld(allReviews, asks), kept = askCards.flatMap((g) => (g.held ? g.reviews : [])).filter((r) => r.Status !== "pending");
+  // ...A CARD THE CONVERSATION MOVED PAST stays in its turn, greyed (PassedCard; proposals.move_on, the owner 2026-11-10: "it should stay where
+  // it is with buttons grayed out") - never a pressed card's "Dismissed"
+  const passedCards = heldGroups(allReviews.filter(isPassed)).map((g) => ({ key: `passed:${g.reviews[0].ReviewId}`, at: g.reviews[0].CreatedAt || "",
+    rid: g.reviews[0].ReviewId, node: <PassedCard reviews={g.reviews} /> }));
+  const { asks: askCards, past: pressedHeld } = splitHeld(allReviews.filter((r) => !isPassed(r)), asks), kept = askCards.flatMap((g) => (g.held ? g.reviews : [])).filter((r) => r.Status !== "pending");
   // ...AND ONCE THE OWNER WRITES AGAIN EACH PRESSED CARD STAYS IN ITS TURN (the owner, 2026-11-09: "leave the card in the turn with the pressed
   // button"): the held steps it approved, and every reply that went - drawn by the chat in the turn that set it up (GeneralWorkspace turnCards)
   const liveAsks = askCards.filter((g) => g.reviews.some((r) => r.Status === "pending")).length;
@@ -2727,7 +2732,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // whichever turn was newest, and the last two stood again at the chat's foot with a second Approve. Each is drawn once, in the turn that
   // raised it (`rid`: the chat's payload names that turn). A to-do no agent has touched has no turns: its cards stay over its box (chatBody)
   const inTurns = !solo && !["done", "dropped"].includes(t?.Status), decided = () => { loadDetail(selected); loadTasks(); onChanged?.(); };
-  const turnCards = [...pressedHeld.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
+  const turnCards = [...passedCards, ...pressedHeld.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
       node: <HeldSteps reviews={g.reviews} onChanged={decided} /> })),
     ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),
       node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
@@ -2796,6 +2801,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
             <Box data-tq-review={pendingReview.ReviewId}>
             <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend liveWork={liveWork} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
               onEmailInstead={() => setEmailOpen(true)} why={rec?.state === "draft_ready" ? rec.why || "" : ""}
+              replanning={agentState === AGENT.working && !!pendingReview}
               onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box>   {/* the list's row moves too (T19) */}
             <MoreDrafts reviews={moreDrafts} messages={storedMessages} onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
           </>) : (

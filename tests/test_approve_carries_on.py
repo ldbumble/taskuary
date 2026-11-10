@@ -253,4 +253,75 @@ class InputsAreTypedOrCameIn(unittest.TestCase):
         self.assertEqual([x['k'] for x in sessionrecord.mark_briefs(424242, [{'k': 'you', 'text': mine}])], ['brief'])
 
 
+
+# A CARD YOU HAVE MOVED PAST IS OLD NEWS (the owner, 2026-11-10: "no once youa re passed it, it should stay where it is with buttons grayed out.
+# You can ask the agent to bring it back?"). Every kind of action card, every kind of agent: raised in a turn, then the owner writes on the task
+# - through each agent's own road - and the card is passed: still there at its place, not pressable from any press road, its agent told once it
+# is old news; asked again, the agent raises it again and that is a new live card after the old one.
+import pytest
+from taskuary import acpcoding, hooks
+
+CARDS = {'shell_act': {'action': 'shell_act', 'sid': 'run1', 'command': 'git push origin main', 'what': 'Push the fix', 'cwd': HELD},
+         'browser_act': {'action': 'browser_act', 'sid': 'run1', 'what': 'Press Save on the vendor form', 'site': 'vendor.example'},
+         'desktop_act': {'action': 'desktop_act', 'sid': 'run1', 'what': 'Click Submit in the payroll app'},
+         'break_out': {'action': 'break_out', 'title': 'Chase the August invoice', 'what': 'Move the invoice chase to its own task'},
+         'save_routine': {'action': 'save_routine', 'title': 'Weekly export check', 'what': 'Keep the export check as a routine'},
+         'run_tool': {'action': 'run_tool', 'tool': 'export', 'what': 'Run the August export'},
+         'comment_issue': {'action': 'comment_issue', 'repo': 'northwind/ledger', 'number': 12, 'text': 'Fixed in main', 'what': 'Comment on the issue'}}
+
+
+def _raised(s, tid, p):
+    rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': p['what']})
+    s._exec("UPDATE review SET CreatedAt='2026-01-01 09:00:01' WHERE ReviewId=?", (rid,))
+    return rid
+
+
+def _line(s, tid, agent, said):
+    "The owner's next line on the task, through `agent`'s own road; what that agent is told next."
+    if agent == 'general':                        # the chat's agent (an API card's too: the same session, its brain an API)
+        heard = []
+        with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')):
+            sess = general.GeneralSession(s, tid)
+        with mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: heard.append(user) or 'On it.'):
+            sess.send_prompt(said)
+        return '\n'.join(heard)
+    if agent == 'acp':                            # a coding agent over ACP: its next prompt
+        a = acpcoding.ACPCoding.__new__(acpcoding.ACPCoding)
+        a.store, a.task_id, a.alive, a._qlock, a._q, a._wake = s, tid, True, threading.Lock(), [], threading.Event()
+        a.steerable = lambda: False
+        assert a.prompt(said)
+        return a._q[-1][0]
+    told = []                                     # a coding agent in a terminal: its prompt hook, then Taskuary's next line
+    with mock.patch.object(general, 'tell', lambda st, t, note, actor='owner': told.append(note) or 'told'):
+        hooks._events(SimpleNamespace(store=s, task_id=tid, sid='run1', bg={}), {'hook_event_name': 'UserPromptSubmit', 'prompt': said})
+    return '\n'.join(told)
+
+
+@pytest.mark.parametrize('agent', ['general', 'acp', 'pty'])
+@pytest.mark.parametrize('kind', list(CARDS))
+def test_a_card_the_owner_moved_past_stays_greyed_in_its_place_and_its_agent_raises_it_again(kind, agent):
+    s = MemoryStore(); tid = Factory(s).task('Fix the August export'); proposals._PRESSED.clear()
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I set it up - it waits for your press.')
+    s._exec("UPDATE comment SET CreatedAt='2026-01-01 09:00:00' WHERE TaskId=?", (tid,))
+    rid = _raised(s, tid, CARDS[kind])
+    heard = _line(s, tid, agent, 'Leave that - first tell me what the export failed on.')
+    rv = s.get_review(rid)
+    assert proposals.passed(rv), rv
+    assert rv['CreatedAt'] == '2026-01-01 09:00:01', 'it stays where its turn raised it'
+    out = verdicts.decide(s, rv, 'approve')
+    assert (out['ok'], out['send_error']) == (False, proposals.PASSED_SAID), out
+    assert proposals.PASSED_TOLD in heard and f'rv{rid}' in heard, heard
+    assert s.get_review(rid)['Status'] == 'superseded', 'the refused press ran nothing'
+    # ...and "bring it back": the agent raises it again - a new live card after the old one, which stays passed
+    again = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(CARDS[kind]), 'Reason': CARDS[kind]['what']})
+    assert again > rid and s.get_review(again)['Status'] == 'pending' and proposals.passed(s.get_review(rid))
+
+
+def test_a_reply_draft_is_the_agents_to_redecide_never_passed_by_the_line_itself():
+    s = MemoryStore(); tid = Factory(s).task('Answer the vendor')
+    rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Thursday works.'})
+    s._exec("UPDATE review SET CreatedAt='2026-01-01 09:00:01' WHERE ReviewId=?", (rid,))
+    assert proposals.move_on(s, tid) == [] and s.get_review(rid)['Status'] == 'pending'
+
+
 if __name__ == '__main__': unittest.main()

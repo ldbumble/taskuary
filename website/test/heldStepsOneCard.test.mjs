@@ -54,7 +54,7 @@ test("pressed, the card stays in the turn with the press it took and what came o
 
 test("a pressed card - held steps approved, a reply sent - is drawn in the turn that set it up, whatever came after", () => {
   const page = read("TaskPage.jsx"), chat = read("GeneralWorkspace.jsx");
-  assert.match(page, /const turnCards = \[\.\.\.pressedHeld\.map\(\(g\) =>/);
+  assert.match(page, /const turnCards = \[\.\.\.passedCards, \.\.\.pressedHeld\.map\(\(g\) =>/);
   assert.match(page, /node: <SentCard id=\{r\.ReviewId\}/);
   assert.match(page, /turnCards=\{turnCards\}/);
   assert.match(chat, /const placed = React\.useMemo\(\(\) => placeCards\(turnCards, messages, turns\), \[turnCards, messages, turns\]\);/, "placed in the turn that raised it (agentSummary.placeCards)");
@@ -63,7 +63,7 @@ test("a pressed card - held steps approved, a reply sent - is drawn in the turn 
 
 test("the task page draws a turn's held steps as one HeldSteps card, one Approve through the batch door", () => {
   const page = read("TaskPage.jsx"), card = read("HeldSteps.jsx");
-  assert.match(page, /const \{ asks: askCards, past: pressedHeld \} = splitHeld\(allReviews, asks\)/);
+  assert.match(page, /const \{ asks: askCards, past: pressedHeld \} = splitHeld\(allReviews\.filter\(\(r\) => !isPassed\(r\)\), asks\)/);
   assert.match(page, /g\.held\s*\n?\s*\? <HeldSteps/);
   assert.match(card, /pressSteps\(api, c\.waiting, verb\)/);          // the batch door, through the one press (press.js)
   assert.equal((card.match(/data-tq-held-approve/g) || []).length, 1, "one Approve on the card");

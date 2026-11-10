@@ -481,25 +481,66 @@ def held_pending(store, tid) -> dict | None:
     return None
 
 
-# A HELD STEP THE AGENT HAS MOVED PAST WAITS ON NOBODY (the owner, 2026-11-09): a coding agent's run of a command, held, was declined in its
-# chat - the agent said so and asked something else - and "Approve runs: <the command>" stood on as the one thing waiting on them. Once the
-# owner speaks to that session again its next turn is under way, and the held step from before it is settled as superseded, never run late.
-MOVED_PAST = 'the agent went on past it'
-# ...never the one being run on the owner's press right now: Approve tells the agent, and its told turn's prompt can land before the yes is kept
+# A CARD YOU HAVE MOVED PAST IS OLD NEWS (the owner, 2026-11-10: "no once youa re passed it, it should stay where it is with buttons grayed
+# out. You can ask the agent to bring it back?" - "check this code everywhere so actions both genral/coding agents are part of prompt that is
+# old news once you move on to next one"). ONE RULE, every card kind and every agent: a card waiting for the owner's press is live from the turn
+# that raised it until the conversation moves on - the owner's next line on the task, or the agent's next turn begun for anything but that
+# card's own press. Then it is settled as passed: kept where it stood as its record, never pressable again, and its agent told once
+# (passed_since) that it is old news and to raise it again if the step is still wanted. Each kind had its own road or none: a held step
+# went past only on a pty's prompt hook, a page hand-over on the owner's words, and a proposal, a post or an agent's routine stayed
+# pressable for ever under turns that had moved on.
+# A REPLY OR EMAIL DRAFT IS THE AGENT'S TO RE-DECIDE (496eefb72 wakes it on the owner's line): it keeps, replaces or withdraws it in that
+# turn (general.latest_block's WITHDRAW_LINE), and the page greys it while that turn runs - only actions are passed by the line itself.
+# Nor the task's own finish (its close-out, its playbook): Taskuary raises those when the work ends, no turn of the agent's does
+SET_ASIDE = 'set aside when you moved on'
+PASSED_SAID = 'This was set aside when you moved on - ask the agent to bring it back.'
+# ...never the one being run on the owner's press right now: Approve tells the agent, and its told turn can begin before the yes is kept
 _PRESSED, PRESS_HOLD = {}, 300
 
 
-def moved_past(store, tid, sid) -> int:
-    "Every pending held step of session `sid` on the task, settled as superseded; how many."
-    n = 0
-    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (int(tid),)):
-        try: p = json.loads(r.get('DraftText') or '{}') or {}
-        except (TypeError, ValueError): continue
-        if time.time() - _PRESSED.get(r['ReviewId'], 0) < PRESS_HOLD: continue
-        if isinstance(p, dict) and p.get('action') in HELD_ACTS and str(p.get('sid') or '') == str(sid):
-            n += store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', MOVED_PAST)
-    if n: store.audit('task', tid, 'held_step_moved_past', 'taskuary', 'system', {'sid': str(sid), 'n': n})
-    return n
+def passed(rv: dict | None) -> bool:
+    "Whether review `rv` is a card the conversation moved past (move_on) - not pressable, and its press route says so (PASSED_SAID)."
+    return bool(rv) and rv.get('Status') == 'superseded' and rv.get('DecideNote') == SET_ASIDE
+
+
+def move_on(store, tid, before: str = None) -> list:
+    """THE CONVERSATION ON TASK `tid` MOVED ON: every action card still waiting, raised before `before` (now), is passed - and so is a
+    permission the agent waits on (permissions.set_aside). The ids passed."""
+    if not tid: return []
+    from .store import _now
+    before, out = before or _now(), []
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' AND CreatedAt<=?", (int(tid), before)):
+        if _action(r) in (*PLAYBOOKS, *CLOSEOUT) or time.time() - _PRESSED.get(r['ReviewId'], 0) < PRESS_HOLD: continue
+        if store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', SET_ASIDE): out.append(r['ReviewId'])
+    try:
+        from . import permissions
+        permissions.set_aside(store, int(tid))
+    except Exception as e: logger.debug(f'task {tid}: a permission waiting was not set aside - {e}')
+    if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out})
+    return out
+
+
+# what its agent is told of a card it raised that the conversation moved past - ONE sentence for every kind and both agent kinds
+AGAIN = ('If a step is still needed, raise it again as a new card (a step held for their press: run it again - Taskuary holds it anew); never '
+         'say it still waits on them, and never ask them in words to press it.')
+PASSED_TOLD = ('THE OWNER MOVED ON PAST THESE CARDS OF YOURS WITHOUT PRESSING THEM - they are old news and nothing waits on the owner for '
+               f'them now. {AGAIN}')
+def _passed_line(r: dict) -> str:
+    try: p = json.loads(r.get('DraftText') or '{}') or {}
+    except (TypeError, ValueError): p = {}
+    return f"- rv{r['ReviewId']}: " + ' '.join(str(p.get('what') or p.get('command') or r.get('Reason') or p.get('action') or 'a card').split())[:200]
+
+
+def passed_since(store, tid: int, since: str) -> list:
+    "The cards of task `tid` passed since `since` (its agent's last answer), as lines for its prompt: '- rv<n>: <what>'."
+    return [_passed_line(r) for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='superseded' AND DecideNote=? AND DecidedAt>? "
+                                                 "ORDER BY ReviewId", (int(tid), SET_ASIDE, since or ''))]
+
+
+def passed_note(store, rids: list) -> str:
+    "PASSED_TOLD with the cards `rids` - for a coding agent, whose next prompt is the line that passed them; '' with none."
+    rows = [r for r in (store.get_review(int(x)) for x in rids or []) if r]
+    return f"{PASSED_TOLD}\n" + '\n'.join(_passed_line(r) for r in rows) if rows else ''
 
 
 def owed(store, tid: int) -> bool:
@@ -664,7 +705,7 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']
-    if a in HELD_ACTS and rv.get('ReviewId'): _PRESSED[rv['ReviewId']] = time.time()     # proposals.moved_past leaves it to this press
+    if rv.get('ReviewId'): _PRESSED[rv['ReviewId']] = time.time()     # move_on leaves it to this press
     before = (store._one('SELECT MAX(Id) AS n FROM audit') or {}).get('n') or 0
     out = _run(store, rv, p, tid, a, actor, edited, skip_checks)
     # ONE PRESS, SAID ONCE (the stress round, 2026-11-10): the code an act runs writes its own rows on the task in the presser's name - a split,

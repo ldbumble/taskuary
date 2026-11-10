@@ -289,6 +289,12 @@ class ACPCoding:
         drawn as its brief; `shown`: the owner's own lines it carries, drawn as theirs. `done(ok)` hears whether the agent took it."""
         text = str(text or '').strip()
         if not text or not self.alive: return False
+        # ...the conversation moves on: every card before this prompt is old news (proposals.move_on - the one rule, every agent kind)
+        if self.store and self.task_id:
+            from . import proposals
+            try:          # ...and said to it in this prompt, the next it reads
+                if (note := proposals.passed_note(self.store, proposals.move_on(self.store, self.task_id))): text = f'{text}\n\n{note}'
+            except Exception as e: logger.debug(f'task {self.task_id}: the cards before this prompt stayed live - {e}')
         item = (text, brief, list(shown or []), done)
         if self.steerable(): threading.Thread(target=self._steer, args=(item,), daemon=True).start(); return True
         with self._qlock: self._q.append(item)

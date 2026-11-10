@@ -690,6 +690,9 @@ def agent_set(store, tid: int) -> list:
                        f"AND Actor NOT IN ({','.join('?' * len(OWNER_ACTORS))}) ORDER BY Id", (tid, *AGENT_SET, *OWNER_ACTORS))
     return [{'id': f"set-{r['Id']}", 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f"{AGENT_SET[r['Action']](_detail(r))}."}],
              'createdAt': r['CreatedAt']} for r in rows]
+def _last_answer(store, tid: int) -> str:
+    "When task `tid`'s agent last answered - '' before any answer."
+    return (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE)) or {}).get('at') or ''
 def owner_did(store, tid: int) -> list:
     "The owner's presses on task `tid` since its agent last answered, oldest first: ['<time>: <what>']. [] before any answer."
     from .processing_unread import OWNER_ACTORS
@@ -821,7 +824,9 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     except Exception: asked = []
     from . import proposals
     refused = proposals.unheard(store, tid, last_turn_began(store, tid) or '') if answers else []
-    if not (rv or sent or answered or others or handed or did or own or asked or nowhere or refused): return ''
+    # ...and the cards it raised that the conversation moved past (proposals.move_on): old news, said once in the turn after
+    passed = proposals.passed_since(store, tid, _last_answer(store, tid)) if answers else []
+    if not (rv or sent or answered or others or handed or did or own or asked or nowhere or refused or passed): return ''
     out = [selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE]
     if new: out.append(f"{'THE LAST MESSAGE, WHICH YOU ANSWERED' if heard else 'THE NEWEST MESSAGE'} - from {new['who']}, at {clock(new['at'])}: "
                        f"{_quote(new['words'], 600)}")
@@ -860,6 +865,7 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
                    'take it as said:\n' + '\n'.join(f"- {clock(x.get('SentAt') or x.get('CreatedAt'))} on {channel_name(x.get('Channel')) or 'another channel'}{on(x)}: "
                                                       f"{_quote(mail_row(store, x)['words'], 600)}" for x in own))
     if did: out.append('WHAT THE OWNER DID SINCE YOUR LAST TURN - take it as said; never undo it:\n' + '\n'.join(f'- {x}' for x in did))
+    if passed: out.append(proposals.PASSED_TOLD + '\n' + '\n'.join(passed))
     if handed: out.append('THE OWNER HANDED THIS TO A PERSON - it is theirs now; never send them what they were already sent:\n' + '\n'.join(
         f"- {clock(c['CreatedAt'])}: {c['Body'].partition(chr(10))[0].rstrip(':')} - {_quote(c['Body'].partition(chr(10))[2], 400)}" for c in handed))
     return '\n\n'.join(out)
@@ -2422,6 +2428,10 @@ class GeneralSession:
                 self.trace = []; self.trace_revision += 1
                 # ...in plain words: the AI CLI agents page's own name read "CLI agent" on the failed card (the 2026-10-21 audit, R2)
                 raise RuntimeError(f"{NO_AI} - connect one on {words.name('ai')} to run this task")
+            # ...A TURN BEGINS: every card the conversation moved past is old news (proposals.move_on - the one rule, every agent kind)
+            from . import proposals
+            try: proposals.move_on(self.store, self.task_id)
+            except Exception as e: logger.debug(f'task {self.task_id}: the cards before this turn stayed live - {e}')
             # ...a press handed to the owner on its page (browsergate.hand_over) that they answered in words instead: the agent hears it was
             # not pressed. Before `working`, which overtakes the hand-over
             if as_owner:

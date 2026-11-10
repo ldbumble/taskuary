@@ -620,6 +620,9 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
     store.recover_review_deliveries(rv['ReviewId'])
     rv = store.get_review(rv['ReviewId']) or rv
     if rv.get('DeliveryClaim'): return _delivery_busy(store, rv['ReviewId'])
+    # A CARD THE CONVERSATION MOVED PAST presses nothing, from any page or phone however stale (proposals.move_on, the owner 2026-11-10)
+    from . import proposals
+    if proposals.passed(rv): return {'ok': False, 'status': rv['Status'], 'sent': None, 'passed': True, 'send_error': proposals.PASSED_SAID}
     if rv.get('Status') == 'pending' and verb_in in ('approve', 'edit'):
         def content_envelope(row):
             return {k: v for k, v in _envelope(row).items() if k not in ('delivery', 'attempted_at', 'attempts')}

@@ -100,12 +100,14 @@ class Holding(unittest.TestCase):
             self.assertRaisesRegex(RuntimeError, 'folder it was held in is gone', sg.perform, self.s, self.tid, json.loads(rv['DraftText']))
 
     # the owner, 2026-11-09: a held run declined in the agent's chat stood on as "Approve runs: ..." after the agent had asked something else
+    # ...and the owner, 2026-11-10: "once youa re passed it, it should stay where it is with buttons grayed out" - the conversation moving on
+    # passes every card of the task (proposals.move_on), whichever session held it
     def test_the_owner_speaking_to_that_session_again_settles_its_held_step(self):
         self.held(); sg.check(self.s, self.tid, 'other', 'git push origin other', 'Bash', r'C:\work\ledger')
-        self.assertEqual(proposals.moved_past(self.s, self.tid, 'run1'), 1)
-        [left] = self.pending(); self.assertEqual(json.loads(left['DraftText'])['sid'], 'other', "another session's step still waits")
+        self.assertEqual(len(proposals.move_on(self.s, self.tid)), 2)
+        self.assertEqual(self.pending(), [])
         gone = self.s._one("SELECT * FROM review WHERE TaskId=? AND Status='superseded'", (self.tid,))
-        self.assertEqual((gone['DecideNote'], json.loads(gone['DraftText'])['sid']), (proposals.MOVED_PAST, 'run1'))
+        self.assertEqual(gone['DecideNote'], proposals.SET_ASIDE); self.assertTrue(proposals.passed(gone))
 
     def test_the_prompt_hook_moves_past_it_and_a_step_being_approved_is_not_touched(self):
         self.held(); [rv] = self.pending()

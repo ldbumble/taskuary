@@ -386,9 +386,12 @@ def _events(t, p: dict) -> None:
             from .background import is_wake
             ws.record(st, tid, sid, 'working', text=ws.WAKE if is_wake(p.get('prompt')) else '', source='hook')
             if not is_wake(p.get('prompt')):                # ...and the owner's words are their next move after a stop (outcomes.py)
-                try:                                         # ...past any step held before it (proposals.moved_past, 2026-11-09)
+                try:                                         # ...past every card raised before it (proposals.move_on, 2026-11-10)
                     from . import proposals
-                    proposals.moved_past(st, tid, sid)
+                    # ...said to it as Taskuary's next line: the prompt that passed them is already in (general.tell, the one road)
+                    if (note := proposals.passed_note(st, proposals.move_on(st, tid))):
+                        from . import general
+                        general.tell(st, tid, note)
                 except Exception as e: logger.debug(f'task {tid}: a held step stayed pending - {e}')
                 try:
                     from . import outcomes

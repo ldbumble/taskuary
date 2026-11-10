@@ -267,7 +267,7 @@ class HandingOver(unittest.TestCase):
         self.ws.record(self.s, self.tid, 'run1', 'working', source='api')             # his line is the agent's next turn
         self.assertIsNone(bg.handing(self.s, self.tid, 'run1')); self.assertIsNone(taskstate.open_question(self.s, self.tid))
         self.assertIn('nothing waits for their press now', note)
-        self.assertIn('run the same command again', note); self.assertIn('never ask them in words to click it', note)
+        self.assertIn(proposals.AGAIN, note)   # the one sentence every passed card's agent hears (proposals.move_on)
         self.hand(); self.assertIsNotNone(bg.handing(self.s, self.tid, 'run1'))      # ...and that brings it back in front of him
 
     def test_a_pane_answered_in_words_hears_it_was_not_done(self):

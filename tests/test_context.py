@@ -3,6 +3,7 @@ home and pointed at from the seed - history, past work, the thread. Offline; the
 calendar is off and TASKUARY_HOME is the temp home conftest forces.
 """
 import json, os, unittest
+from unittest import mock
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -149,3 +150,107 @@ class SameRunTests(unittest.TestCase):
     def test_no_shared_id_changes_nothing(self):
         self.assertEqual(context.ids_of('a run at 2026-10-14 16:18:39, 7 failures, code 401'), set())
         self.assertEqual(context.ids_of('runId 1001769 and ticket #3856864'), {'1001769', '3856864'})
+
+
+ALEX, ERIN, GAIL = 'alex@northwind.example', 'erin@northwind.example', 'gail@northwind.example'
+
+class WhatCameInTests(unittest.TestCase):
+    """What is on file about each message and no read of a task carried (the stress run, 2026-11-10): whom it went to, the addresses
+    behind its words, and - where a task's messages did not all come as one thread - what triage called each and the road it came by."""
+    def setUp(self):
+        s = self.s = _store()
+        s.set_setting('owner_email', ALEX, 't')
+        self.tid = s.create_task({'Title': 'Approve the renewal', 'Kind': 'general', 'OriginBase': 'owner'}, 't')
+
+    def mail(self, n, body, subject='Renewal', conv='c-renewal', to=(ALEX,), cc=(), links=None, frm=ERIN, channel='email'):
+        return self.s.add_message({'TaskId': self.tid, 'ExternalId': f'w{n}', 'ConversationId': conv, 'Channel': channel, 'SourceName': ALEX, 'Subject': subject,
+                                   'FromName': frm.split('@')[0].title(), 'FromEmail': frm, 'SentAt': f'2026-11-0{n} 09:00:00', 'BodyText': body, 'Status': 'routed',
+                                   'RecipientsJson': json.dumps({'to': list(to), 'cc': list(cc)}) if to or cc else None,
+                                   'MailMetaJson': json.dumps({'links': links}) if links else None})
+
+    def test_a_plain_thread_to_the_owner_alone_adds_nothing(self):
+        self.mail(1, 'Can you approve the renewal?'); self.mail(2, 'Any news on this?', subject='RE: Renewal')
+        self.assertEqual(context.came_in(self.s, self.tid), '')
+        self.assertNotIn(context.CAME_HEAD, context.build(self.s, self.tid))
+
+    def test_the_address_behind_a_word_and_who_else_it_went_to_reach_both_reads(self):
+        wrapped = 'https://eur01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fportal.vendor.example%2Fapprove%3Fid%3D88&data=05'
+        mid = self.mail(1, 'Please approve the renewal here before Friday.', to=(GAIL,), cc=(ALEX, 'ray@northwind.example'),
+                        links=[['here', wrapped], ['Unsubscribe', 'https://t.vendor.example/u/1']])
+        self.mail(2, 'Thanks all.', subject='RE: Renewal')
+        for text in (context.build(self.s, self.tid), context.for_prompt(self.s, self.tid)):
+            self.assertIn(f'[m{mid}] Erin · 2026-11-01 09:00:00 · email · "Renewal"', text)
+            self.assertIn(f'to: {GAIL} · cc: {ALEX}, ray@northwind.example', text)                      # the owner was only copied
+            self.assertIn('"here" -> https://portal.vendor.example/approve?id=88', text)                # the mail system's wrapper is not the link
+            self.assertNotIn('triage called it', text)                                                  # one thread: nothing to tell apart
+        self.assertEqual(context.came_in(self.s, self.tid).count(chr(10) + '[m'), 1, 'the second mail lost nothing, so it is not listed')
+
+    def test_a_subject_with_no_body_under_it_is_listed(self):
+        mid = self.mail(1, '', subject='Call me re: the Payworth contract')
+        self.assertIn(f'[m{mid}] Erin · 2026-11-01 09:00:00 · email · "Call me re: the Payworth contract"', context.came_in(self.s, self.tid))
+
+    def test_a_long_thread_keeps_the_newest_and_says_what_it_left_out(self):
+        for n in range(1, 10): self.mail(n, 'See the link.', links=[['the sheet', f'https://portal.vendor.example/{n}/' + 'x' * 400]])
+        text = context.came_in(self.s, self.tid)
+        self.assertLess(len(text), context.CAME_CHARS + 400)
+        self.assertIn('https://portal.vendor.example/9/', text); self.assertNotIn('https://portal.vendor.example/1/', text)
+        self.assertRegex(text, r'\d older not listed')
+
+
+class TwoMattersOnOneTaskTests(unittest.TestCase):
+    """A task is one matter only as far as each road onto it was right. The roads are on file (route.Reason, the verdict, each message's
+    own triage title); the agent working the task saw one flat list of bodies. Arrivals go through the real ingest, the model is a stub."""
+    def setUp(self):
+        s = self.s = _store()
+        s.set_setting('owner_email', ALEX, 't')
+
+    def come(self, msgs, script):
+        from taskuary import ingest
+        n = [0]
+        def llm(system, user, **k):
+            x = script[min(n[0], len(script) - 1)]; n[0] += 1
+            return json.dumps({'intent': 'task', 'kind': 'task', 'why': 'scripted', 'summary': 'scripted', **x})
+        llm.takes_want = True
+        with mock.patch.object(ingest, '_spawn'): return [ingest.ingest_message(self.s, m, llm=llm) for m in msgs]
+
+    def chat(self, n, body):
+        return {'external_id': f'w{n}', 'channel': 'whatsapp', 'from_email': 'erin@wa.example', 'from_name': 'Erin Blake', 'conversation_id': 'wa:erin',
+                'subject': 'Erin Blake', 'body': body, 'sent_at': f'2026-11-09 1{n}:00:00', 'source_name': 'Erin Blake', 'mail_meta': {'dm': True}}
+
+    def mailed(self, n, body, subject, conv, frm=ERIN, name='Erin Blake'):
+        return {'external_id': f'e{n}', 'channel': 'email', 'from_email': frm, 'from_name': name, 'conversation_id': conv, 'subject': subject,
+                'body': body, 'sent_at': f'2026-11-09 1{n}:00:00', 'to': [ALEX], 'cc': []}
+
+    def test_a_one_to_one_line_joined_because_triage_was_unsure_says_so(self):
+        a, b = self.come([self.chat(1, 'the portal is down, it says 502'), self.chat(2, 'btw did payroll go out for Marcus?')],
+                         [{'relationship': 'new', 'title': 'Portal is down'}, {'relationship': 'uncertain', 'title': 'Did payroll go out for Marcus'}])
+        self.assertEqual((b['status'], b['task_id']), ('attached', a['task_id']), 'the widest door: unsure joins in a one-to-one chat')
+        rows = context.joins(self.s, a['task_id'])
+        self.assertEqual([(r['mid'], r['title'], r['joined'], r['doubt']) for r in rows],
+                         [(a['message_id'], 'Portal is down', False, False), (b['message_id'], 'Did payroll go out for Marcus', True, True)])
+        text = context.build(self.s, a['task_id'], general=True)
+        self.assertIn('2 messages from 1 thread or chat, 1 of them joined with nothing sure it continues the task', text)
+        self.assertIn(f"[m{b['message_id']}] Erin Blake", text)
+        self.assertIn('triage called it "Did payroll go out for Marcus" · joined this task: unsure whether it continues', text)
+        self.assertIn('triage called it "Portal is down" · opened this task', text)
+
+    def test_two_threads_on_one_task_are_told_apart(self):
+        a, b = self.come([self.mailed(1, 'Please approve PO-5512.', 'PO-5512', 'c-po'),
+                          self.mailed(2, 'A reminder about the Trainly renewal quote.', 'Trainly renewal', 'c-trainly', GAIL, 'Gail Moreno')],
+                         [{'title': 'Approve PO-5512'}, {'title': 'Trainly renewal quote', 'same_as': 1}])
+        self.assertEqual((b['status'], b['task_id']), ('routed', a['task_id']))
+        text = context.came_in(self.s, a['task_id'])
+        self.assertIn('2 messages from 2 threads or chats - each line ends', text)
+        self.assertIn(f"[m{b['message_id']}] Gail Moreno · 2026-11-09 12:00:00 · email · \"Trainly renewal\"", text)
+        self.assertRegex(text, r'triage called it "Trainly renewal quote" · joined this task: triage: .*the same as TQ-0001, joined to it')
+        # ...and the coding read's thread names each message by the same id
+        self.assertIn(f"· email · m{b['message_id']}\n", context.build(self.s, a['task_id']))
+
+    def test_a_thread_whose_subject_moved_on_is_two_threads(self):
+        a, b = self.come([self.mailed(1, 'Please approve PO-5512.', 'PO-5512', 'c-po'),
+                          self.mailed(2, 'Separately - can you set up a laptop for the new starter?', 'Laptop for the new starter', 'c-po')],
+                         [{'title': 'Approve PO-5512'}, {'title': 'Set up a laptop for the new starter'}])
+        self.assertEqual((b['status'], b['task_id']), ('attached', a['task_id']), 'its own thread: joined unless triage says new_job')
+        text = context.came_in(self.s, a['task_id'])
+        self.assertIn('2 messages from 2 threads or chats', text)
+        self.assertIn('triage called it "Set up a laptop for the new starter" · joined this task: attached: same conversation thread', text)

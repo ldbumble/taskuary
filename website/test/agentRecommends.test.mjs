@@ -89,3 +89,11 @@ test("the Assistant's pill never grows over a task's view", () => {
   assert.match(view, /const popOn = !phone && !old && !walk && !firstRun && lastCardIdx >= 0 && barHolds;/);
   assert.match(view, /const grow = chatApart && !boxWide && !popOn && \(hover \|\| !!text\.trim\(\)\);/);
 });
+
+// A LATE ANSWER NO AGENT WAS WOKEN FOR (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible"): the server lights
+// Chase (rulebook.LATE), and the task's row draws Chase only then - its own verb, so the row fills it like any recommended move
+test("a lit Chase is drawn on the task's row, only while it is the recommended move, and drafts on the chase road", () => {
+  const page = src("TaskPage.jsx");
+  assert.match(page, /\.\.\.\(rec\?\.verb === "chase" && !liveSession \? \[\{ id: "chase", group: "decide"/);
+  assert.match(page, /runOperation\(api, "task\.chase", t\.TaskId, \{ key: `task:\$\{t\.TaskId\}` \}\)/, "the slipped card's own road, keyed by the task");
+});

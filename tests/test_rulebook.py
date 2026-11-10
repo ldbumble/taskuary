@@ -48,7 +48,7 @@ def _decide(s, syn, item, key=None):
 
 # (case, the state the facts name, the one move its row fills, whether a line is said beside it). NO MODEL DECIDES ANY OF IT (the owner,
 # 2026-11-09): a draft that waits fills its Send, a run that is over fills Mark done, a failed run fills its own Try again - and an ask, a
-# wait, a report, an FYI and an agent at work or asking fill nothing
+# report, an FYI and an agent at work or asking fill nothing, and a late wait no agent was woken for fills Chase
 MATRIX = [
     ('Badge access for the new AP clerk', 'asked', None, False),
     ('did the overnight import finish', 'unsendable', None, False),
@@ -66,9 +66,9 @@ MATRIX = [
     ('agent stopped-saved (coding)', 'stopped', None, False),
     ('Close the August books', 'done_list', 'close', False),
     ('Move payroll to Payworth', 'goal', None, False),
-    ('Migrate the census export', 'goal_late', None, False),
-    ('Ray: schema sign-off', 'waiting_overdue', None, False),
-    ('Vendor W-9 for the new supplier', 'waiting_late', None, False),
+    ('Migrate the census export', 'goal_late', 'chase', False),     # a late answer no agent was woken for is chased (2026-11-10)
+    ('Ray: schema sign-off', 'waiting_overdue', 'chase', False),
+    ('Vendor W-9 for the new supplier', 'waiting_late', 'chase', False),
 ]
 
 

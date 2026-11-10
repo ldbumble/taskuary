@@ -217,6 +217,29 @@ class CheckBackTests(unittest.TestCase):
         self.assertEqual(len(prompts), 1); self.assertTrue(prompts[0][1].get('brief'))
         self.assertIn('the payment to Payworth cleared', prompts[0][0]); self.assertTrue(prompts[0][0].startswith('TASKUARY: the check-back'))
 
+    def test_a_wait_gone_late_wakes_its_agent_once_on_the_same_clock(self):
+        """Ray has not answered the W-9 for a week (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible. it
+        shoudl prompt you"): nothing woke the task's agent. Now the reminders' clock hands it one turn saying who is late on what - once per
+        lateness, through the check-back road - and never where the owner's own line could not wake it (the switch, no conversation)."""
+        from taskuary import advisor, rulebook
+        s = MemoryStore(); tid = owner_task(s, 'Vendor W-9', Status='waiting')
+        s._exec("UPDATE task SET WaitingOn='ray.colton@northwind.example' WHERE TaskId=?", (tid,))
+        s.add_message({'TaskId': tid, 'Direction': 'out', 'Subject': 'W-9?', 'Body': 'Could you send the W-9?', 'Channel': 'email',
+                       'SentAt': f'{datetime.now() - timedelta(days=7):%Y-%m-%d %H:%M:%S}', 'Status': 'routed'})
+        it = {'key': f'task:{tid}', 'kind': 'todo', 'lane': 'theirs', 'tid': tid}
+        fired = []
+        with mock.patch.object(advisor, '_item', lambda *a, **k: it), mock.patch.object(checkback, 'fire', side_effect=lambda st, t, what: fired.append((t, what))), \
+             mock.patch('taskuary.ingest._spawn', lambda fn, *a: fn(*a)), mock.patch('taskuary.ingest.has_room', return_value=True), \
+             mock.patch.object(general, 'provider_options', return_value=[{'pick': 'api:x', 'type': 'api'}]):
+            remind.tick(s); self.assertEqual(fired, [], 'no conversation of its agent to wake')
+            with mock.patch.object(general, 'history', return_value=[{'role': 'user', 'text': 'x'}]):
+                s.set_setting('general_auto_enabled', '0', 'owner'); remind.tick(s); self.assertEqual(fired, [], 'the switch is off')
+                s.set_setting('general_auto_enabled', '1', 'owner'); remind.tick(s); remind.tick(s)
+        self.assertEqual(len(fired), 1); self.assertEqual(fired[0][0], tid)
+        self.assertIn('Ray Colton', fired[0][1]); self.assertIn('chase', fired[0][1])
+        self.assertTrue(checkback.woke(s, tid)); self.assertFalse(s.get_task(tid).get('CheckBackAt'))
+        self.assertIsNone(rulebook.recommended(s, it), 'its woken agent speaks for it: no Chase lit over its turn')
+
     def test_the_door_the_tool_and_the_cli_flag(self):
         s = MemoryStore(); tid = owner_task(s)
         srv, c = config.load()['server'], TestClient(server.app)

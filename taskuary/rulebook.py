@@ -17,7 +17,7 @@ from loguru import logger
 from . import words
 
 RULES = words.ADVICE_RULE
-CHASE_DAYS = 3           # a wait past 3 working days is NAMED late (waiting_late) - a fact the model weighs, never a button lit by itself
+CHASE_DAYS = 3           # a wait past 3 working days is late (waiting_late): its agent is woken to chase (checkback.late), else Chase is lit
 # a failure is the fact whatever is lit: its sentence stands on the strip where the model's own line is empty (advisor._out)
 FAILED = frozenset({'failed', 'failed_cause', 'report_failed'})
 EV = '_evidence'         # a fact's own ids (usual.py), carried beside the line's facts and handed on as the decision's evidence
@@ -432,6 +432,8 @@ def facts(store, item: dict, verbs: list) -> dict:
 # An agent at work or asking fills nothing: its own pane is the way on.
 OVER = frozenset({'agent_done', 'stopped_done', 'answered', 'done_list', 'watch_handled'})
 QUIET = frozenset({'closed', 'working', 'agent_asking'})
+# an answer owed to the owner gone late: its agent is woken once to draft the chase (checkback.late), and where none was, Chase is lit
+LATE = frozenset({'waiting_late', 'waiting_overdue', 'waiting_late_usual', 'goal_late', 'watch_quiet'})
 NOTHING_LEFT = 'Its agent said nothing is left to do'
 
 
@@ -449,7 +451,7 @@ def agent_word(store, tid) -> str | None:
 
 
 def _recommended(store, it: dict, verbs: list | None, f: dict | None) -> dict | None:
-    from . import advisor
+    from . import advisor, checkback
     if it.get('kind') == 'idea': return None                # an idea is the Advisor's own row, and its light the Advisor's
     verbs = advisor.offered(store, it) if verbs is None else verbs
     f = f or facts(store, it, verbs)
@@ -465,6 +467,9 @@ def _recommended(store, it: dict, verbs: list | None, f: dict | None) -> dict | 
     elif lead == 'fix' or st in FAILED: v = pick(lead) if lead in ('fix', 'continue') else None
     elif st == 'draft_ready' or ((w := store.waiting_on_owner(int(tid)) if tid else None) and (w.get('FinalText') or w.get('DraftText'))):
         v = None if advisor.unconnected(store, it) else pick('send_close', 'approve')
+    # ...a late answer no agent was woken for is chased from the row (the owner, 2026-11-10: "job of agent is to be helpful and do as much as
+    # possible") - over an older turn's word too; one that was woken says itself what it did about it
+    elif st in LATE and not (tid and checkback.woke(store, tid)): v = pick('chase')
     # ...the agent's own word decides wherever it wrote one: a turn that said neither fills nothing, whatever the facts read
     elif tid and (said := agent_word(store, tid)) is not None: v, why = (pick('close'), NOTHING_LEFT) if said == 'nothing_left' else (None, '')
     else: v = pick('close') if st in OVER else None
@@ -548,10 +553,10 @@ def quiet_watch(store, item: dict) -> bool:
 
 
 def adds(store, item: dict) -> list:
-    """The verbs the row draws only when the Advisor names them: Chase on every waiting lane and goal with somebody to write to (the
-    design's "Chase (offered on every waiting lane)" and "(added to goals)") - whether it is time to chase is the model's to read from the
-    days waited, never a threshold here; Let it go on a watch back after a quiet week. The row draws the advised move in its type
-    (ActionRow.AdvisorNext); the phone already carries it on the slipped lane."""
+    """The verbs the row draws only when they are its lit move: Chase on every waiting lane and goal with somebody to write to (the
+    design's "Chase (offered on every waiting lane)" and "(added to goals)") - lit once the wait is late (LATE) and no agent was woken to
+    chase it; Let it go on a watch back after a quiet week. The task's row draws a lit Chase (TaskPage's `chase` verb); the phone already
+    carries it on the slipped lane."""
     it = item or {}
     lane, kind = it.get('lane'), str(it.get('kind') or '')
     if it.get('tid') and quiet_watch(store, it): return (['chase'] if chase_thread(store, it) else []) + ['let_go']

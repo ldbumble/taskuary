@@ -4,6 +4,7 @@ facts (rulebook.recommended) - the same for a general agent, an API-card agent, 
 judges it: the Advisor reads its own idea rows and nothing else. The task page and the rail's item on the table carry the same field, and
 the walk onto a row whose task has an agent asks the Assistant for no line about it. Invented Northwind people only (CLAUDE.md)."""
 import json
+from datetime import datetime, timedelta
 from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
@@ -83,9 +84,31 @@ def test_a_run_that_is_over_fills_mark_done_where_no_summary_was_written(s):
             r = rulebook.recommended(s, item(tid), verbs('close', 'defer'))
             assert (r['verb'], r['why'], r['state']) == ('close', 'Finished at 10:02; nothing since.', st)
     # ...and where it is not over - stopped mid-work, work not pushed, an ask, a wait - nothing is filled
-    for st in ('stopped', 'unpushed', 'asked', 'asked_late', 'waiting_late', 'own', 'untouched', 'fyi', 'report_ok'):
+    for st in ('stopped', 'unpushed', 'asked', 'asked_late', 'own', 'untouched', 'fyi', 'report_ok'):
         with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': ''}):
             assert rulebook.recommended(s, item(tid), verbs('close', 'continue', 'reply', 'review_changes')) is None, st
+
+
+def late_wait(s, d=7):
+    tid = s.create_task({'Title': 'Vendor W-9', 'Kind': 'general', 'Status': 'waiting'}, 'owner')
+    s._exec("UPDATE task SET WaitingOn='ray.colton@northwind.example' WHERE TaskId=?", (tid,))
+    Factory(s).message(task_id=tid, subject='W-9?', direction='out', sent_at=f'{datetime.now() - timedelta(days=d):%Y-%m-%d %H:%M:%S}')
+    return tid, {'key': f'task:{tid}', 'kind': 'todo', 'lane': 'theirs', 'tid': tid}
+
+
+def test_a_late_answer_no_agent_was_woken_for_fills_chase_with_its_fact(s):
+    """Somebody has not answered and it is late (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible"): it lit
+    nothing. Where no agent was woken to chase it, Chase is the move - over an older turn's word too - and once one was, its own turn says."""
+    tid, it = late_wait(s)
+    r = rulebook.recommended(s, it)
+    assert (r['verb'], r['label'], r['state']) == ('chase', 'Chase them', 'waiting_late') and r['why'].startswith('Ray Colton: ')
+    s.add_comment(tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'about': 'W-9', 'did': 'Asked Ray'}))
+    assert rulebook.recommended(s, it)['verb'] == 'chase', 'a turn from before the wait went late'
+    for st in sorted(rulebook.LATE):
+        with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': 'Ray Colton: 2 days late.'}):
+            assert rulebook.recommended(s, it, verbs('chase', 'defer'))['verb'] == 'chase', st
+    s.audit('task', tid, 'check_back', 'late', 'agent', {'state': 'waiting_late'})
+    assert rulebook.recommended(s, it) is None, 'its woken agent said what it did about it'
 
 
 def test_a_failed_run_fills_its_own_way_past_it_and_never_the_send_that_failed(s):

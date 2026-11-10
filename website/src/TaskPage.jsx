@@ -2449,6 +2449,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       setOpenStage("reply"); loadDetail(selected); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || "That could not be drafted."); }
   };
+  // A LATE ANSWER NO AGENT WAS WOKEN FOR IS CHASED FROM THE ROW (the owner, 2026-11-10: "job of agent is to be helpful and do as much as
+  // possible"): the task's recommended move lights Chase (rulebook.LATE) - a move its row draws only when it is the lit one. It drafts the
+  // nudge on the thread for the owner's Send (server task.chase), nothing goes out
+  const [chasing, setChasing] = useState(false);
+  const chase = async () => {
+    setChasing(true); setErr("");
+    try { await runOperation(api, "task.chase", t.TaskId, { key: `task:${t.TaskId}` }); setOpenStage("reply"); loadDetail(t.TaskId); onChanged?.(); }
+    catch (e) { setErr(opError(e, "The chase was not drafted - press it again.")); }
+    setChasing(false);
+  };
   // ...and once a calendar card waits in the chat its press and its other answers are ON it: the bar holds them only while none does
   const calCard = !!pendingReview && deliveryMeta(pendingReview).kind === "calendar";
   const calVerbs = !calAsk || calCard ? [] : calAsk.invite ? [
@@ -2499,6 +2509,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       disabled: reopening === selected, why: "it is reopening", title: hintOfRow("reopen") }]
     : [
       ...calVerbs,
+      ...(rec?.verb === "chase" && !liveSession ? [{ id: "chase", group: "decide", label: chasing ? "Drafting…" : rec.label || btn("chase"), disabled: chasing,
+        run: chase, title: btnHint("chase") }] : []),
       // ...an invite is answered by the calendar, not by an email back (calwrite.py)
       // NO REPLY OR HAND OFF ON THE BAR (the owner, 2026-11-08): the agent does them from the chat ("reply saying...", "hand this to Erin") and
       // its card's Send sends - only with no AI connected they stand, folded in the ▾, so the owner is never stuck (concierge._shows, the same)

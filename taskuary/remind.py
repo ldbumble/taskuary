@@ -283,6 +283,8 @@ def tick(store, now: datetime = None) -> int:
         except Exception as e: logger.warning(f'quiet watches not checked: {e}')
         # ...and the check-backs agents set on their own tasks, on this clock too - no daemon of their own (the owner, 2026-11-05)
         from . import checkback
+        try: checkback.late(store, now)                  # ...a wait gone late among them, set due now (checkback.late)
+        except Exception as e: logger.warning(f'late waits not checked: {e}')
         try: n += checkback.due(store, now)
         except Exception as e: logger.warning(f'check-backs not checked: {e}')
     return n

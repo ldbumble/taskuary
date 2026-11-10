@@ -109,7 +109,10 @@ def sources(store) -> list:
     try: names = set(setup_mod._inbound(store))
     except Exception as e: logger.debug(f'setup: sources not listed - {e}'); names = set()
     others = [{'address': c.get('Name') or c['Type'], 'type': c['Type'], 'title': (cat.by_type(c['Type']) or {}).get('title') or c['Type']}
-              for c in store.list_connectors() if c['Type'] not in MAIL_TYPES and (c.get('Name') or c['Type']) in names]
+              # ...never a vendor's MCP server, a tool for the agents that brings nothing in: named for its system now (no " MCP", 2026-11-10),
+              # it took the name of that system's own card
+              for c in store.list_connectors() if c['Type'] not in MAIL_TYPES and not (cat.by_type(c['Type']) or {}).get('mcp')
+              and (c.get('Name') or c['Type']) in names]
     return [{**m, 'title': 'Email'} for m in _mailboxes(store)] + others
 
 

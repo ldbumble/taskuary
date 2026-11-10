@@ -138,13 +138,16 @@ class TheTableIsTheCatalogue(unittest.TestCase):
         by_title = {c['title'].lower(): c['type'] for c in cards if not c.get('mcp')}
         for c in cards:
             if not c.get('mcp'): self.assertNotIn('system', c, c['type']); continue
+            # ...named for the system at the source, never for its road (the owner, 2026-11-10): the type is the CLI's server name
+            self.assertFalse(c['title'].endswith(' MCP'), c['type'])
             base = c['type'][:-4] if c['type'].endswith('_mcp') else None
-            same = base if base in by_type else by_title.get(c['title'].lower().removesuffix(' mcp')) if c['title'].endswith(' MCP') else None
-            self.assertEqual(c.get('system'), same, c['type'])
-            if same: self.assertFalse(by_type[same].get('mcp') or by_type[same].get('planned'), same)
+            if (same := base if base in by_type else by_title.get(c['title'].lower())): self.assertEqual(c.get('system'), same, c['type'])
+            if c.get('system'): self.assertFalse(by_type[c['system']].get('mcp') or by_type[c['system']].get('planned'), c['type'])
+        # ...and a system under two names is one card too (the owner, 2026-11-10: "yes merge basecampe with mcp")
+        self.assertEqual((by_type['basecamp']['system'], by_type['atlassian']['system']), ('basecamp_todos', 'jira'))
         systems = [c['system'] for c in cards if c.get('system')]
         self.assertEqual(len(systems), len(set(systems)), 'one MCP entry per system')
-        self.assertGreaterEqual(len(systems), 20)
+        self.assertGreaterEqual(len(systems), 22)
 
     def test_no_entry_is_connected_without_a_connection_row(self):
         "The catalogue says what a card IS, never that it is on: connected is read off the owner's own row, and a seeded one is off."
@@ -179,7 +182,7 @@ class TheTableIsTheCatalogue(unittest.TestCase):
         s = MemoryStore(); cid = s.get_connector_by_type('notion_mcp')['ConnectorId']
         with Machine(claude={'notion_mcp'}, codex={'notion_mcp'}):
             out = channels.test_connector(s, cid)
-        self.assertTrue(out['ok'], out); self.assertIn('Notion MCP is ready in Claude Code, Codex', out['detail'])
+        self.assertTrue(out['ok'], out); self.assertIn('Notion is ready in Claude Code, Codex', out['detail'])
         native = connectorcatalog.by_type('notion')
         self.assertFalse(native.get('mcp') or native['planned'])          # the Notion feed card stays as it was, beside its server
 

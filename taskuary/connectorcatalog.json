@@ -1964,7 +1964,7 @@
     {
       "type": "sentry_mcp",
       "system": "sentry",
-      "title": "Sentry MCP",
+      "title": "Sentry",
       "group": "Developer",
       "planned": false,
       "desc": "Sentry's own MCP server in your agent CLI — agents read issues, stack traces and releases and run Seer on a bug. You sign in once with Sign in.",
@@ -2037,7 +2037,7 @@
     {
       "type": "github_mcp",
       "system": "github",
-      "title": "GitHub MCP",
+      "title": "GitHub",
       "group": "Developer",
       "planned": false,
       "desc": "GitHub's own MCP server in Claude Code — agents read and work on repositories, issues, pull requests and Actions with your token. You paste a personal token on the card once; Add puts it in Claude Code.",
@@ -2053,7 +2053,7 @@
     {
       "type": "pagerduty_mcp",
       "system": "pagerduty",
-      "title": "PagerDuty MCP",
+      "title": "PagerDuty",
       "group": "Developer",
       "planned": false,
       "desc": "PagerDuty's own MCP server in Claude Code — agents look up incidents, services, schedules and on-call. You paste a personal token on the card once; Add puts it in Claude Code.",
@@ -2082,6 +2082,7 @@
     },
     {
       "type": "basecamp",
+      "system": "basecamp_todos",
       "title": "Basecamp",
       "group": "Project management",
       "planned": false,
@@ -2124,7 +2125,7 @@
     {
       "type": "smartsheet_mcp",
       "system": "smartsheet",
-      "title": "Smartsheet MCP",
+      "title": "Smartsheet",
       "group": "Project management",
       "planned": false,
       "desc": "Smartsheet's own MCP server in Claude Code — agents read and update sheets, rows and reports. You paste a personal token on the card once; Add puts it in Claude Code.",
@@ -2154,7 +2155,7 @@
     {
       "type": "airtable_mcp",
       "system": "airtable",
-      "title": "Airtable MCP",
+      "title": "Airtable",
       "group": "Project management",
       "planned": false,
       "desc": "Airtable's own MCP server in your agent CLI — agents look up and update what is there. You sign in once with Sign in.",
@@ -2183,7 +2184,7 @@
     {
       "type": "wrike_mcp",
       "system": "wrike",
-      "title": "Wrike MCP",
+      "title": "Wrike",
       "group": "Project management",
       "planned": false,
       "desc": "Wrike's own MCP server in Claude Code — agents find, create and update tasks, projects and comments. You paste a personal token on the card once; Add puts it in Claude Code.",
@@ -2229,7 +2230,7 @@
     {
       "type": "notion_mcp",
       "system": "notion",
-      "title": "Notion MCP",
+      "title": "Notion",
       "group": "Project management",
       "planned": false,
       "desc": "Notion's own MCP server in your agent CLI — agents search, read and write your Notion pages and databases. You sign in once with Sign in.",
@@ -2244,7 +2245,7 @@
     {
       "type": "linear_mcp",
       "system": "linear",
-      "title": "Linear MCP",
+      "title": "Linear",
       "group": "Project management",
       "planned": false,
       "desc": "Linear's own MCP server in your agent CLI — agents find, create and update Linear issues, projects and comments. You sign in once with Sign in.",
@@ -2258,6 +2259,7 @@
     },
     {
       "type": "atlassian",
+      "system": "jira",
       "title": "Atlassian (Jira & Confluence)",
       "group": "Project management",
       "planned": false,
@@ -2276,7 +2278,7 @@
     {
       "type": "monday_mcp",
       "system": "monday",
-      "title": "Monday.com MCP",
+      "title": "Monday.com",
       "group": "Project management",
       "planned": false,
       "desc": "Monday.com's own MCP server in your agent CLI — agents read and update boards, items and updates (your monday admin installs the monday MCP app once). You sign in once with Sign in.",
@@ -2291,7 +2293,7 @@
     {
       "type": "todoist_mcp",
       "system": "todoist",
-      "title": "Todoist MCP",
+      "title": "Todoist",
       "group": "Project management",
       "planned": false,
       "desc": "Todoist's own MCP server in your agent CLI — agents add, find and complete your Todoist tasks. You sign in once with Sign in.",
@@ -2632,7 +2634,7 @@
     {
       "type": "stripe_mcp",
       "system": "stripe",
-      "title": "Stripe MCP",
+      "title": "Stripe",
       "group": "Corporate systems",
       "planned": false,
       "desc": "Stripe's own MCP server in your agent CLI — agents look up customers, payments and invoices and create payment links. You sign in once with Sign in.",
@@ -3027,7 +3029,7 @@
     {
       "type": "mercury_mcp",
       "system": "mercury",
-      "title": "Mercury MCP",
+      "title": "Mercury",
       "group": "Markets & finance",
       "planned": false,
       "match": [
@@ -3139,7 +3141,7 @@
     {
       "type": "datadog_mcp",
       "system": "datadog",
-      "title": "Datadog MCP",
+      "title": "Datadog",
       "group": "Observability",
       "planned": false,
       "desc": "Datadog's own MCP server in your agent CLI — agents query logs, metrics, monitors and incidents (the US1 site). You sign in once with Sign in.",
@@ -3351,7 +3353,7 @@
     {
       "type": "paypal_mcp",
       "system": "paypal",
-      "title": "PayPal MCP",
+      "title": "PayPal",
       "group": "Everything else",
       "planned": false,
       "desc": "PayPal's own MCP server in your agent CLI — agents look up and update what is there. You sign in once with Sign in.",
@@ -3410,7 +3412,7 @@
     {
       "type": "calendly_mcp",
       "system": "calendly",
-      "title": "Calendly MCP",
+      "title": "Calendly",
       "group": "Everything else",
       "planned": false,
       "desc": "Calendly's own MCP server in your agent CLI — agents look up and update what is there. You sign in once with Sign in.",
@@ -3440,7 +3442,7 @@
     {
       "type": "intercom_mcp",
       "system": "intercom",
-      "title": "Intercom MCP",
+      "title": "Intercom",
       "group": "Project management",
       "planned": false,
       "desc": "Intercom's own MCP server in your agent CLI — agents look up and update what is there. You sign in once with Sign in.",
@@ -3532,7 +3534,7 @@
     {
       "type": "helpscout_mcp",
       "system": "helpscout",
-      "title": "Help Scout MCP",
+      "title": "Help Scout",
       "group": "Project management",
       "planned": false,
       "match": [
@@ -3547,7 +3549,7 @@
     {
       "type": "gorgias_mcp",
       "system": "gorgias",
-      "title": "Gorgias MCP",
+      "title": "Gorgias",
       "group": "Project management",
       "planned": false,
       "match": [
@@ -3858,7 +3860,7 @@
     {
       "type": "aircall_mcp",
       "system": "aircall",
-      "title": "Aircall MCP",
+      "title": "Aircall",
       "group": "Everything else",
       "planned": false,
       "match": [
@@ -3873,7 +3875,7 @@
     {
       "type": "typeform_mcp",
       "system": "typeform",
-      "title": "Typeform MCP",
+      "title": "Typeform",
       "group": "Everything else",
       "planned": false,
       "match": [
@@ -3888,7 +3890,7 @@
     {
       "type": "jotform_mcp",
       "system": "jotform",
-      "title": "Jotform MCP",
+      "title": "Jotform",
       "group": "Everything else",
       "planned": false,
       "match": [
@@ -3903,7 +3905,7 @@
     {
       "type": "tally_mcp",
       "system": "tally",
-      "title": "Tally MCP",
+      "title": "Tally",
       "group": "Everything else",
       "planned": false,
       "match": [

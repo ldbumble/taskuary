@@ -341,7 +341,10 @@ class BrowserSignInTests(unittest.TestCase):
              mock.patch.object(msauth, 'me', return_value={'account': self.who, 'name': 'Erin Blake'}), mock.patch.object(server, '_poll_reports'):
             self.assertIn('Signed in', self._back(q).text)
             again = self._back(q, code='C2')
-        self.assertIn('already used', again.text); self.assertEqual(p.call_count, 1, 'a reused state redeems nothing')
+        # ...counted as REDEMPTIONS of a code: the sign-in that went through starts a sync on its own thread, and that sync refreshing the
+        # new card's token is a post too - on a slow machine it landed inside this block and read as a second redemption
+        redeemed = [k for k in p.call_args_list if (k[1].get('data') or {}).get('grant_type') == 'authorization_code']
+        self.assertIn('already used', again.text); self.assertEqual(len(redeemed), 1, 'a reused state redeems nothing')
 
     def test_a_wrong_or_missing_state_is_refused_and_the_real_round_still_waits(self):
         cid = self._card(); d, q = self._start(cid)

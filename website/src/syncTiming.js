@@ -37,6 +37,10 @@ export const syncFace = ({ busy = false, what = "", every = 10, lastAt = null, n
 // `landed` = how many came in so far (server._reading). A first read says how far back it goes; any sync its count once it has one;
 // and the count it ended on stays a moment after (`brought`). '' = nothing of its own to say, and the clock's words stand.
 const lastOf = (h) => span(h * 60, true).replace(/^1 /, "");      // "the last 3 days", "the last day"
+// HOW FAR BACK A NEW CONNECTION'S FIRST SYNC GOES, its card's own choice (the owner, 2026-11-10: "first sync should be 3 days.. or you can
+// make drop down"): these, and the window the server says it will use now (`ReadsBack`, channels.first_read_hours) where that is another
+export const FIRST_DAYS = [1, 3, 7, 14, 30];
+export const backChoices = (now = 0) => [...new Set([...FIRST_DAYS, Number(now) || 0])].filter((d) => d > 0).sort((a, b) => a - b).map((d) => [d, span(d * 1440, true)]);
 export const broughtLine = (n, hours) => (hours ? `brought in ${n} from the last ${lastOf(hours)}` : n ? `brought in ${n}` : "");
 export const syncLine = ({ busy = false, phase = "", what = "", landed = 0, back = 0, brought = null } = {}) => {
   if (!busy) return brought ? broughtLine(brought.n || 0, brought.hours || 0) : "";

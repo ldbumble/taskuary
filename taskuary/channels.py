@@ -2018,18 +2018,27 @@ def _since(s, backfill_hours: float = 0, first_hours: float = 24):
 SINCELESS = ('telegram', 'whatsapp', 'imessage')     # these ask for what is pending, never for a date: nothing to go back on
 
 
-def first_read_hours(store) -> float:
-    """The window a never-read source is asked for: the catch-up window the owner set (Settings > Sync & startup), a day when off."""
-    try: days = int(store.get_setting('startup_sync_days') or 0)
-    except (TypeError, ValueError): days = 0
-    return days * 24 if days > 0 else 24
+# ...AND HOW FAR IS THE CONNECTION'S OWN CHOICE (the owner, 2026-11-10: "first sync should be 3 days.. or you can make drop down"): its card's
+# "How far back to bring in" (`first_days` on its config) while its first read is due, else the catch-up window the owner set
+FIRST_DAYS, FIRST_DEFAULT = (1, 3, 7, 14, 30), 3
+def first_read_hours(store, c=None) -> float:
+    """The window a never-read source of card `c` is asked for: the card's own choice, else the catch-up window the owner set (Settings >
+    Sync & startup, 3 days as shipped), and 3 days when that is off - a first sync is 3 days (the owner, 2026-11-10)."""
+    days = 0
+    for raw in ((lambda: _cfg(c).get('first_days')) if c else (lambda: 0), lambda: store.get_setting('startup_sync_days')):
+        try: days = int(raw() or 0)
+        except (TypeError, ValueError): days = 0
+        if days > 0: break
+    return (days if days > 0 else FIRST_DEFAULT) * 24
 
 
-def reads_back(store, c) -> bool:
-    """Whether the next read of card `c` is a first read that goes back the window: a source of its own with no watermark yet."""
+def reads_back(store, c, sources=None, unsourced: bool = False) -> bool:
+    """Whether the next read of card `c` is a first read that goes back the window: a source of its own with no watermark yet.
+    `sources`: the sources already read, for a caller asking of every card at once. `unsourced`: a card still being connected, with
+    no mailbox or chat of its own yet, counts too - its first read is still ahead (the card's How far back)."""
     if c['Type'] in SINCELESS or c['Type'] not in CH2SRC: return False
-    mine = [s for s in store.list_sources() if s['Channel'] == CH2SRC[c['Type']] and s.get('ConnectorId') == c['ConnectorId']]
-    return any(not s.get('LastPolledAt') for s in mine) or (not mine and c['Type'] in PER_CONNECTOR)
+    mine = [s for s in (store.list_sources() if sources is None else sources) if s['Channel'] == CH2SRC[c['Type']] and s.get('ConnectorId') == c['ConnectorId']]
+    return any(not s.get('LastPolledAt') for s in mine) or (not mine and (unsourced or c['Type'] in PER_CONNECTOR))
 
 
 class _Writer:
@@ -2109,7 +2118,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
     arrival order because a connector is one worker."""
     n, errors = 0, []      # errors: folders a mailbox could not finish - the card shows them, the poll goes on
     full = store.get_connector(c['ConnectorId'], with_secret=True)
-    first = first_read_hours(store)        # how far back a source with no watermark yet goes
+    first = first_read_hours(store, full)  # how far back a source with no watermark yet goes
     try:
         if c['Type'] == 'teams' and teamsweb.personal(full):       # Teams free: the card's browser, never Graph (teamsweb.py)
             mine = [x for x in store.list_sources() if x['Channel'] == 'teams' and x.get('ConnectorId') == c['ConnectorId']]
@@ -2490,7 +2499,7 @@ def _first_read(store, c, backfill_hours):
     finally: LANDING_HERE.reset(tok)
     if first and not reads_back(store, c):
         try: store.merge_connector_config(c['ConnectorId'], {'first_read': {
-            'hours': max(first_read_hours(store), backfill_hours), 'n': got[0], 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}})
+            'hours': max(first_read_hours(store, c), backfill_hours), 'n': got[0], 'at': datetime.now().isoformat(sep=' ', timespec='seconds')}})
         except Exception as e: logger.warning(f"could not keep {c['Type']}'s first read on its card: {e}")
 
 

@@ -53,6 +53,32 @@ class FirstReadTests(unittest.TestCase):
             self.press()                                                  # an ordinary read now: from the watermark
         self.assertEqual(self.subjects(), sorted(f'mail {h}' for h in AGES if h < 72))
 
+    # HOW FAR BACK IS THE CARD'S OWN CHOICE (the owner, 2026-11-10: "first sync should be 3 days.. or you can make drop down"): a week chosen
+    # on the card while it is connected reaches its first read; unset, the catch-up window (3 days as shipped)
+    def test_the_cards_chosen_period_reaches_its_first_read_and_unset_it_is_the_catch_up_window(self):
+        o = self.s.get_connector_by_type('outlook')
+        self.s.save_connector({'ConnectorId': o['ConnectorId'], 'Active': 1, 'Secret': 'S', 'Roles': 'feed',
+                               'ConfigJson': json.dumps({'tenant_id': 'T', 'client_id': 'C'})}, 't')
+        card = lambda: next(c for c in self.client.get('/api/connectors').json()['data'] if c['ConnectorId'] == o['ConnectorId'])
+        self.assertEqual(card()['ReadsBack'], 3, 'unset: the catch-up window, while the card is still being connected')
+        self.s.set_setting('startup_sync_days', '0', 't')        # the catch-up window turned off
+        self.assertEqual((channels.first_read_hours(self.s, card()), card()['ReadsBack']), (72, 3), 'nothing chosen and no catch-up window: a first sync is 3 days')
+        self.s.merge_connector_config(o['ConnectorId'], {'first_days': 7})
+        self.assertEqual(card()['ReadsBack'], 7)
+        self.s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'ConnectorId': o['ConnectorId'], 'Active': 1}, 't')
+        now = datetime.now(timezone.utc)
+        fake = FakeGraph({'inbox': [graph_mail(h, now - timedelta(hours=h)) for h in AGES]})
+        with mock.patch.object(channels, 'graph_token', return_value='T'), mock.patch.object(channels, '_mail_msgs', fake), \
+             mock.patch.object(channels.requests, 'get', fake.history_get), \
+             mock.patch.object(channels, '_body', side_effect=lambda m: m['body']['content']), mock.patch.object(channels, '_addrs', return_value=[]):
+            self.press()
+        self.assertEqual(self.subjects(), sorted(f'mail {h}' for h in AGES if h < 7 * 24))
+        self.assertEqual(json.loads(self.s.get_connector(o['ConnectorId'])['ConfigJson'])['first_read']['hours'], 7 * 24, 'the card says a week')
+        self.assertEqual(card()['ReadsBack'], 0, 'read: the choice is over')
+        # ...and a reader not asked by date has none to make
+        tg = self.s.get_connector_by_type('telegram')
+        self.assertEqual(next(c for c in self.client.get('/api/connectors').json()['data'] if c['ConnectorId'] == tg['ConnectorId'])['ReadsBack'], 0)
+
     def test_the_sync_line_hears_how_far_back_and_how_many_over_the_life_of_a_first_sync_and_an_ordinary_one(self):
         """The status the page already polls carries the numbers: `back` from the start of a first read, `landed` as messages land,
         then `brought` once it is over - and an ordinary sync says only a count, and only when it has one."""

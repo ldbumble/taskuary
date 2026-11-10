@@ -55,7 +55,7 @@ import SavedSignins from "./SavedSignins.jsx";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
 import { noun, placeName } from "./words.js";
 import { plural } from "./timeWords.js";
-import { broughtLine } from "./syncTiming.js";
+import { backChoices, broughtLine } from "./syncTiming.js";
 import { openAppLink } from "./appLinks.js";
 import { LIT, lightField, lightStep } from "./connectorStep.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
@@ -2907,6 +2907,14 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             </>}
             <TestLine test={saveSaid} mt={0} />
           </>
+        )}
+        {/* HOW FAR BACK ITS FIRST SYNC GOES, until that sync has run (`ReadsBack`, channels.first_read_hours) - a reader asked for what is
+            pending, not by date (Telegram, WhatsApp, Apple Messages), has none. Saved as it is picked, like every box here */}
+        {conn.ReadsBack > 0 && !isAI && (
+          <TextField select size="small" label="How far back to bring in" value={String(cfg.first_days || conn.ReadsBack)} data-tq-first-days=""
+            onChange={(e) => setCfg({ ...cfg, first_days: Number(e.target.value) })} InputProps={{ endAdornment: boxes.tick("first_days") }}
+            sx={{ bgcolor: "var(--tq-panel, #fff)", maxWidth: 260 }} helperText="Its first sync brings this much in; after that it keeps up from there.">
+            {backChoices(conn.ReadsBack).map(([d, l]) => <MenuItem key={d} value={String(d)} sx={{ fontSize: 13 }}>{l}</MenuItem>)}</TextField>
         )}
       </Box>
     )},

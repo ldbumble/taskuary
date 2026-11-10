@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { broughtLine, syncFace, syncLine, syncStatusDelay } from "../src/syncTiming.js";
+import fs from "node:fs";
+import path from "node:path";
+import { FIRST_DAYS, backChoices, broughtLine, syncFace, syncLine, syncStatusDelay } from "../src/syncTiming.js";
 
 test("sync status checks quietly when the scheduled refresh is far away", () => {
   assert.equal(syncStatusDelay({ nextAt: 600_000, now: 0 }), 30_000);
@@ -52,4 +54,17 @@ test("an ordinary sync says a count only when it has one, and nothing of its own
   assert.equal(syncLine({ brought: { n: 3, hours: 0 } }), "brought in 3");
   assert.equal(syncLine({}), "");
   assert.equal(broughtLine(0, 0), "");
+});
+
+// HOW FAR BACK A NEW CONNECTION'S FIRST SYNC GOES (the owner, 2026-11-10: "first sync should be 3 days.. or you can make drop down"): a choice
+// on its card while that sync is due, saved as it is picked; none on a reader not asked by date, nor once the first sync ran (ReadsBack 0)
+test("a new connection's card offers how far back its first sync goes, in the period words, until that sync has run", () => {
+  assert.deepEqual(backChoices(3), [[1, "1 day"], [3, "3 days"], [7, "7 days"], [14, "14 days"], [30, "30 days"]]);
+  assert.deepEqual(backChoices(5).map(([d]) => d), [1, 3, 5, 7, 14, 30], "a catch-up window of its own is offered as it is");
+  const py = fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "channels.py"), "utf8");
+  assert.ok(py.includes(`FIRST_DAYS, FIRST_DEFAULT = (${FIRST_DAYS.join(", ")}), 3`), "the server's list is the page's");
+  const src = fs.readFileSync(path.join(process.cwd(), "src", "ConnectorsView.jsx"), "utf8");
+  assert.match(src, /\{conn\.ReadsBack > 0 && !isAI && \(/, "shown only while the first sync is due, on a reader asked by date");
+  assert.match(src, /label="How far back to bring in" value=\{String\(cfg\.first_days \|\| conn\.ReadsBack\)\}/, "unset, the window the server will use");
+  assert.match(src, /onChange=\{\(e\) => setCfg\(\{ \.\.\.cfg, first_days: Number\(e\.target\.value\) \}\)\} InputProps=\{\{ endAdornment: boxes\.tick\("first_days"\) \}\}/, "saved as it is picked - no Save");
 });

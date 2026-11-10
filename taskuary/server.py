@@ -7514,6 +7514,11 @@ def connectors(request: Request):
     # GatewayBuiltIn: this build ships the organisation gateway's address, so its card's address field is optional (llm.gateway_base)
     from .llm import OPENAI_COMPATIBLE
     rows = [c | {'GatewayBuiltIn': bool(OPENAI_COMPATIBLE['hipaa_ai'][0])} if c['Type'] == 'hipaa_ai' else c for c in rows]
+    # ReadsBack: the days this card's first read will go back while that read is still due - its "How far back to bring in", 0 for a
+    # reader that is not asked by date or has been read (channels.reads_back)
+    from .channels import first_read_hours, reads_back
+    srcs = store.list_sources()
+    rows = [c | {'ReadsBack': round(first_read_hours(store, c) / 24) if reads_back(store, c, srcs, unsourced=True) else 0} for c in rows]
     # PeopleMissing: the contacts/people permissions this card's sign-in predates - the card says signing in again adds them
     from .peoplesearch import missing
     rows = [c | {'PeopleMissing': missing(c.get('ConfigJson'), c['Type'])} if c['Type'] in ('outlook', 'teams', 'gmail') else c
@@ -10758,8 +10763,10 @@ def _reading(target_store, status, what, types, backfill_hours: float = 0):
     connection is read for the first time - how far back that read goes (channels.first_read_hours). The owner, 2026-11-10: "we
     need the app to say how far back it's going and next to the word sync show brin[g]ing in emails count"."""
     from .channels import _poll_jobs, first_read_hours, reads_back
-    try: back = max(first_read_hours(target_store), backfill_hours) if any(reads_back(target_store, c) for c, _ in _poll_jobs(target_store, types)) else 0
+    # ...each first read its own card's window (channels.first_read_hours): the line says the farthest of them
+    try: back = max([first_read_hours(target_store, c) for c, _ in _poll_jobs(target_store, types) if reads_back(target_store, c)] or [0])
     except Exception as e: back = 0; logger.warning(f'could not tell whether a first read is due: {e}')
+    back = max(back, backfill_hours) if back else 0
     if status is not None: _status_progress(target_store, status, what, back=back)
     def say(kind, so_far): _status_progress(target_store, status, f'{what} · reading {kind}', landed=so_far)
     return say

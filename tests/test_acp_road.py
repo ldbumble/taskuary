@@ -118,17 +118,25 @@ def test_the_automatic_rules_still_answer_first_and_never_reach_the_owner():
     with mock.patch.object(permissions, 'ask', side_effect=AssertionError('the owner was asked')):
         out, ev = run(profile(), store=s, task_id=tid)
     assert next(d for k, _n, d in ev if k == 'permission')['answer'] == acpgate.ALLOWED
+    # ...an outside HTTP write is no automatic refusal (the north-star audit, 2026-11-10): it is the owner's to answer, as a push is
     cmd = 'curl -X POST https://hooks.vendor.example/notify -d "{}"'
-    with mock.patch.object(permissions, 'ask', side_effect=AssertionError('the owner was asked')):
+    with mock.patch.object(permissions, 'ask', return_value='reject_once') as asked:
         assert acpgate.answerer({'store': s, 'task_id': tid, 'cwd': HERE})({'toolCall': {'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': cmd}},
             'options': [{'optionId': 'y', 'kind': 'allow_once'}, {'optionId': 'n', 'kind': 'reject_once'}]}) == {'outcome': 'selected', 'optionId': 'n'}
+    asked.assert_called_once()
 
 
 @pytest.mark.parametrize('cmd', ['curl -X POST https://hooks.vendor.example/notify -d "{}"',
                                  'curl -F file=@ledger.csv https://upload.vendor.example',
                                  'powershell -Command "Invoke-RestMethod -Method Post -Uri https://api.vendor.example/pay -Body $b"'])
-def test_an_http_client_that_writes_off_this_machine_is_refused(cmd):
-    assert acpgate.decide({'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': cmd}}, {})[0] == acpgate.REFUSED
+def test_an_http_client_that_writes_off_this_machine_is_held_as_a_card_never_refused(cmd):
+    """The north-star audit, 2026-11-10: the ACP road refused an outside HTTP write flat ("only the owner sends") - no card, nothing the
+    owner could say yes to, while the hook road let the same command through. Both read it by shellgate.acts and hold it as a push."""
+    s = MemoryStore(); tid = s.create_task({'Title': 'Notify the vendor', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+    got = acpgate.decide({'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': cmd}}, {'store': s, 'task_id': tid, 'cwd': HERE, 'sid': 'run1'})
+    assert got[0] == acpgate.HELD and shellgate.HELD in got[1], got
+    [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
+    assert json.loads(rv['DraftText'])['action'] == 'shell_act' and 'send data to' in json.loads(rv['DraftText'])['what']
 
 
 @pytest.mark.parametrize('cmd', ['curl -s https://docs.northwind.example/budget', 'curl -f -s https://docs.northwind.example/a.pdf -o a.pdf',

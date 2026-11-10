@@ -20,13 +20,15 @@ class Reading(unittest.TestCase):
                           ('gh release delete v1.2', 'delete a release'), ('glab mr merge 4', 'merge a merge request'), ('npm publish', 'publish'),
                           ('twine upload dist/*', 'publish'), ('docker push northwind/portal:1.0', 'publish'),
                           ('Send-MailMessage -To erin@northwind.example -Subject x', 'email'), ('bash -c "git push origin main"', 'push'),
-                          ('FOO=1 git push', 'push')):
+                          ('FOO=1 git push', 'push'), ('curl -X POST https://hooks.vendor.example/notify -d "{}"', 'send data to hooks.vendor.example'),
+                          ('powershell -Command "Invoke-RestMethod -Method Post -Uri https://api.vendor.example/pay -Body $b"', 'send data')):
             got = sg.acts(cmd)
             self.assertTrue(got, cmd); self.assertIn(what, got[0]['what'], cmd)
 
     def test_looking_and_working_locally_pass(self):
         for cmd in ('git status', 'git commit -m "push the fix"', 'git log --grep push', 'gh pr view 12', 'gh api repos/northwind/ledger',
-                    'echo git push', 'npm install', 'pytest -q', 'rm -rf build', 'git pull', 'git fetch origin', 'gh pr list'):
+                    'echo git push', 'npm install', 'pytest -q', 'rm -rf build', 'git pull', 'git fetch origin', 'gh pr list',
+                    'curl -s https://docs.northwind.example/budget', 'curl -s -X POST http://127.0.0.1:7787/api/agent/tick -d "{}"'):
             self.assertEqual(sg.acts(cmd), [], cmd)
 
 
@@ -47,6 +49,16 @@ class Holding(unittest.TestCase):
         end = time.time() + 5
         while not self.told and time.time() < end: time.sleep(.01)
         return self.told
+
+    def test_an_http_write_off_this_machine_is_held_like_a_push_on_the_hook_road(self):
+        """The north-star audit, 2026-11-10: a CLI's `curl -X POST` to an outside host went out unseen on the hook road - only the ACP road
+        read HTTP writes, and refused them flat. One reading of the command (shellgate.acts) now, the same Approve card a push gets."""
+        cmd = 'curl -X POST https://hooks.vendor.example/notify -d "{}"'
+        d = hooks.command_gate(self.s, self.tid, 'run1', cmd, 'Bash', r'C:\work\ledger')['hookSpecificOutput']
+        self.assertEqual(d['permissionDecision'], 'deny'); self.assertIn('held this for the owner', d['permissionDecisionReason'])
+        [rv] = self.pending(); p = json.loads(rv['DraftText'])
+        self.assertEqual((p['action'], p['command']), ('shell_act', cmd)); self.assertIn('send data to hooks.vendor.example', p['what'])
+        self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', 'curl -s -X POST http://127.0.0.1:7787/api/agent/tick -d "{}"', 'Bash', ''), {})
 
     def test_a_push_is_refused_and_put_on_the_task_once(self):
         d = self.held()['hookSpecificOutput']

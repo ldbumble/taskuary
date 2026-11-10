@@ -19,8 +19,14 @@ never a judgement over words, and never the words of a mail. Everything else pas
 
 What this does not cover, said plainly: Codex, Devin and Copilot sessions (their hooks report, they cannot refuse a call - and Codex's
 PreToolUse parses `ask` without supporting it yet); a session whose hook could not reach Taskuary (the call runs - the same as the
-browser hook); and a step reached some other way than these tools by name (a script that pushes, an HTTP call made by hand). This
-gates the commands agents use, not every road there is.
+browser hook); and a step reached some other way than these tools by name (a script that pushes). This gates the commands agents use,
+not every road there is.
+
+AN HTTP CLIENT THAT WRITES OFF THIS MACHINE GOES OUT TOO (the north-star audit, 2026-11-10 - the owner: "it shoudl prompt you, should i deploy
+and respond once deployed??? isnt' this the goal?"): `curl -X POST`, `-d`, `Invoke-RestMethod -Method Post` to a host that is not this
+computer is one of the steps `acts` returns, read by each client's own flags. The ACP road refused it flatly ("only the owner sends") and the
+hook road never looked, so a CLI's POST went out unseen; both read it here now and hold it as any push is held - the owner's one press.
+Taskuary's own API on this machine is not a step out.
 
 A DELETE ON THE OWNER'S COMPUTER WAITS TOO (the same ruling's "delete"; the desktop stress test, 2026-11-03: asked to remove the folder it
 had just unzipped into Downloads, a general agent ran `Remove-Item -Recurse -Force` at once - gone for good, not in the Recycle Bin). What
@@ -36,10 +42,10 @@ HELD = 'Taskuary held this for the owner'
 # ...said to the agent the hold covers, as the browser's hold is (browserview.HOLD_LINE): told nothing, a general agent asked "Should I delete
 # it?" in words, the owner said yes, and the delete was held for a second yes on the task (the overnight run, 2026-11-03)
 HOLD_LINE = ("A DELETE ON THE OWNER'S COMPUTER outside your working folder, and a step that leaves the machine (a push, a merge, a publish, "
-             "a mail from a script), is HELD for the owner's press: Taskuary refuses it with \"held for the owner\", puts it on the task, runs "
-             "it once they approve and tells you what happened. So never ask the owner in words whether to delete - run the command, end your "
-             "turn when it is held, and say in one line what waits for their Approve. The held step IS the owner's button: never ask \"will you "
-             "run these\", never print the commands for them to copy. Draft no reply that says it is done while it waits: the reply is "
+             "a mail from a script, data sent to a web address), is HELD for the owner's press: Taskuary refuses it with \"held for the owner\", "
+             "puts it on the task, runs it once they approve and tells you what happened. So never ask the owner in words whether to delete - "
+             "run the command, end your turn when it is held, and say in one line what waits for their Approve. The held step IS the owner's "
+             "button: never ask \"will you run these\", never print the commands for them to copy. Draft no reply that says it is done while it waits: the reply is "
              "written once Taskuary tells you the step ran.")
 ASKS = {'claude'}       # the CLIs whose PreToolUse hook can answer `ask` with their own prompt (measured: Claude 2.1.312 honours it)
 # each tool's own words for a step that goes out, as (what it does, in the owner's words): its subcommand, or (subcommand, action)
@@ -58,6 +64,12 @@ GLAB = {('mr', 'merge'): 'merge a merge request', ('mr', 'create'): 'open a merg
 PUBLISH = {'npm', 'pnpm', 'yarn', 'cargo', 'poetry', 'gem', 'dotnet', 'nuget'}             # `<tool> publish` / `nuget push` publish a package
 MAIL = {'sendmail': 'send an email', 'mailx': 'send an email', 'mutt': 'send an email', 'msmtp': 'send an email', 'send-mailmessage': 'send an email'}
 _WRITES = {'post', 'put', 'patch', 'delete'}
+HTTP = {'curl', 'wget', 'http', 'https', 'xh', 'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm'}
+# curl's short flags are case-sensitive (-F is a form post, -f is --fail); the long ones and PowerShell's -Body / -InFile are not
+_SHORT = ('-d', '-F', '-T')
+_DATA = ('--data', '--data-raw', '--data-binary', '--data-urlencode', '--json', '--form', '--upload-file', '-body', '-infile',
+         '--post-data', '--post-file', '--body-data', '--body-file')
+_LOCAL = re.compile(r'^https?://(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(/|$)', re.I)
 _PREFIX = ('&', 'npx', 'command', 'call', 'exec', 'sudo', 'time', 'nohup')
 
 
@@ -79,6 +91,19 @@ def _words(argv: list) -> tuple:
     for t in rest[j:]:
         if not t.startswith('-'): out.append(t)
     return tool, out
+
+
+def _http_write(argv: list) -> str:
+    "'' unless this HTTP client writes to a host off this machine - then what it does, in words. Taskuary's own API answers its own guard."
+    a = [str(t) for t in argv[1:]]
+    urls = [t for t in a if re.match(r'^https?://', t, re.I)]
+    if urls and all(_LOCAL.match(u) for u in urls): return ''
+    meth = next((a[i + 1] for i, t in enumerate(a[:-1]) if t.lower() in ('-x', '--request', '-method')), '')
+    meth = meth or next((t[2:] for t in a if t.startswith('-X') and len(t) > 2), '')
+    data = any(t in _SHORT or t.lower().split('=', 1)[0] in _DATA or (t.startswith('-d') and not t.startswith('--') and len(t) > 2) for t in a)
+    if meth.lower() not in _WRITES and not data: return ''
+    host = re.sub(r'^https?://([^/?#]+).*', r'\1', urls[0]) if urls else 'a web address'
+    return f'send data to {host} ({_name(argv[0])})'
 
 
 def _api_writes(argv: list) -> bool:
@@ -227,7 +252,8 @@ def _outward(cmd: str) -> list:
     these tools is one step - held, never let through for being hard to read."""
     raw = str(cmd or '')
     low = raw.lower()
-    if not any(w in low for w in ('git', 'gh', 'glab', 'publish', 'push', 'upload', 'mail', 'mutt', 'msmtp')): return []      # the cheap test first
+    if not any(w in low for w in ('git', 'gh', 'glab', 'publish', 'push', 'upload', 'mail', 'mutt', 'msmtp', 'http', 'curl', 'wget', 'xh', 'iwr', 'irm',
+                                  'invoke-')): return []      # the cheap test first
     segs = _segments(raw)
     if segs is None:
         import re
@@ -246,6 +272,7 @@ def _outward(cmd: str) -> list:
                 or (tool == 'docker' and w[:1] == ['push']) else MAIL.get(tool))
         if not what and tool in ('gh', 'glab') and w[:1] == ['api'] and _api_writes(argv): what = 'change something on the code host through its API'
         if not what and tool == 'git' and w[:1] == ['push']: what = GIT['push']
+        if not what and tool in HTTP: what = _http_write(argv)
         if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400]})
     return out
 

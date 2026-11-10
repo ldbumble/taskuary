@@ -11,7 +11,8 @@ the agent ASKS (clis.ADAPTERS sets the mode that makes it ask) and the answer is
     "never sent without the owner's press" outranks keeping a tool, as it does there.
   - A shell step that goes out or deletes outside the agent's folder is HELD (shellgate.check: on the task as a proposal for the
     owner's Approve), and so is an HTTP client that writes to a host off this machine (curl -X POST, -d, Invoke-RestMethod -Method
-    Post...) - by each tool's own grammar, never by words in a mail.
+    Post...) - by each tool's own grammar, never by words in a mail. The hook road reads the same command by the same function
+    (shellgate.acts), so one command is held alike on both.
   - Everything else - reads, edits in its folder, searches, a page fetched - is allowed, as the bypass allowed it.
 
 THE OWNER'S BUTTONS (step 3, permissions.py). With Developer mode on, what these rules HOLD is put to the owner as it happens: Allow once
@@ -28,13 +29,6 @@ from . import acp
 OWN = 'taskuary'
 ALLOWED, REFUSED, HELD = 'allowed', 'refused', 'held'
 CARD = 'card'           # held, and already the owner's button (the landing card's Push): never asked a second time with Allow once / Reject
-_HTTP = {'curl', 'wget', 'http', 'https', 'xh', 'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm'}
-_WRITE_METHOD = re.compile(r'^(post|put|patch|delete)$', re.I)
-# curl's short flags are case-sensitive (-F is a form post, -f is --fail); the long ones and PowerShell's -Body / -InFile are not
-_SHORT = ('-d', '-F', '-T')
-_DATA = ('--data', '--data-raw', '--data-binary', '--data-urlencode', '--json', '--form', '--upload-file', '-body', '-infile',
-         '--post-data', '--post-file', '--body-data', '--body-file')
-_LOCAL = re.compile(r'^https?://(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(/|$)', re.I)
 
 
 def tool_of(tc: dict) -> dict:
@@ -64,29 +58,6 @@ def _mcp(store, cli: str, server: str, tool: str) -> tuple:
     return REFUSED, f'{server} is not a server the send filter knows'
 
 
-def http_writes(cmd: str) -> str:
-    "'' unless an HTTP client in the line writes to a host off this machine - then what it does, in words."
-    from .browsergate import _segments
-    from .shellgate import _words, _name
-    for argv in _segments(cmd) or []:
-        tool, _w = _words(argv)
-        if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):
-            inner = next((http_writes(t) for t in argv[1:] if ' ' in t.strip() and http_writes(t)), '')
-            if inner: return inner
-            continue
-        if tool not in _HTTP: continue
-        a = [str(t) for t in argv[1:]]
-        urls = [t for t in a if re.match(r'^https?://', t, re.I)]
-        if urls and all(_LOCAL.match(u) for u in urls): continue                       # Taskuary's own API: the guard answers there
-        meth = next((a[i + 1] for i, t in enumerate(a[:-1]) if t.lower() in ('-x', '--request', '-method')), '')
-        meth = meth or next((t[2:] for t in a if t.startswith('-X') and len(t) > 2), '')
-        data = any(t in _SHORT or t.lower().split('=', 1)[0] in _DATA or (t.startswith('-d') and not t.startswith('--') and len(t) > 2) for t in a)
-        if _WRITE_METHOD.match(meth) or data:
-            host = re.sub(r'^https?://([^/?#]+).*', r'\1', urls[0]) if urls else 'a web address'
-            return f'send data to {host} ({_name(argv[0])})'
-    return ''
-
-
 def decide(tc: dict, ctx: dict) -> tuple:
     """(answer, why) for one toolCall. ctx: store, task_id, cli, cwd, sid."""
     t, store = tool_of(tc), ctx.get('store')
@@ -94,7 +65,6 @@ def decide(tc: dict, ctx: dict) -> tuple:
     if not t['command']: return ALLOWED, ''
     from . import shellgate
     cwd = str((tc.get('rawInput') or {}).get('cwd') or ctx.get('cwd') or '') if isinstance(tc.get('rawInput'), dict) else str(ctx.get('cwd') or '')
-    if (out := http_writes(t['command'])): return REFUSED, f'{out} - it leaves this computer, and only the owner sends'
     if not shellgate.acts(t['command'], cwd): return ALLOWED, ''
     tid = ctx.get('task_id')
     if store is None or not str(tid or '').isdigit():

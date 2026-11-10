@@ -2,6 +2,15 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.32 - 2026-11-09
+
+- A steered line is drawn before it is sent, and a module's calendar stays in that module
+- An AI card's three model boxes fill themselves from what it lists
+- The land card is one line and stays pressed; a sent reply and approved steps stay in their turn
+- A Teams card can read a personal account's chats through the browser
+- An approved action runs once, and a rail build reads the connectors once
+- The Teams personal sign-in line counts its chats with the shared plural
+
 ## 0.3.11.31 - 2026-11-09
 
 - While the next task loads, a held button is drawn greyed, and live again the moment a press works

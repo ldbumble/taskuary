@@ -172,57 +172,38 @@ class TheTurnsOwnRecordAnswersFirstTests(unittest.TestCase):
         self.assertEqual(woke, ['the walkthrough'])
 
 
-class WhatATurnLeavesUnwrittenTests(unittest.TestCase):
+class AnOwnersAskAnsweredWithNothingTests(unittest.TestCase):
     """The owner, 2026-11-10: "it created reply with nothing in it. that's dumb. if you have nothing to reply just ask what should i reply?" -
-    a task from a mail owed an email to someone on the thread (triage's slot), the owner asked the agent to respond, and its turn ended with the
-    email still "to draft": no words in it, no card, no question, and only Drop beside it. Each way a turn can end so: told once to write it or
-    ask, never by a judge (the rows say it), and after that the row lights its start with one line."""
-    def no_judge(self, *a, **k): raise AssertionError('the rows already say what is owed')
+    a task from a mail listed an email to someone on the thread, the owner asked the agent to respond, and its turn ended with no words, no
+    card and no question. The agent is asked once to answer what he asked; if it says nothing again, its one question is "I could not draft
+    anything for that. What should I say, or what should I do?". An email nobody wrote is no debt the app chases ("goal is to help user not to
+    do action"): a turn that answered leaves it alone."""
+    EMPTY = '[[TASKUARY-DRAFT to="office@vendor.example" subject="Hello"]] [[/TASKUARY-DRAFT]]'
+    def no_judge(self, *a, **k): raise AssertionError('the rows already say the turn said nothing')
 
-    def owing(self, s):
+    def test_it_is_woken_once_to_answer_and_an_empty_turn_again_asks_its_one_question(self):
+        s = MemoryStore(); a_claude(self); tid = researcher(s)
+        seen = turn(s, tid, self.EMPTY, judge=self.no_judge)
+        self.assertEqual(len(seen['prompts']), 2, 'once - never a loop')
+        self.assertIn('without a word to the owner', seen['prompts'][1]); self.assertIn('ask them your one question', seen['prompts'][1])
+        said = [c['Body'] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE]
+        self.assertEqual(said[-1], general.COULD_NOT, 'in the chat, in its own name')
+        asked = s.last_worker_event(tid, skip=ws.NOTES)
+        self.assertEqual((asked['Kind'], asked['Text']), ('input_needed', general.COULD_NOT), 'the normal ask: the agent waits on the owner')
+
+    def test_a_woken_turn_that_answers_keeps_its_own_words(self):
+        s = MemoryStore(); a_claude(self); tid = researcher(s)
+        seen = turn(s, tid, [self.EMPTY, 'I could not tell what to say to the vendor - keep the 12 seats, or change them?'], judge=self.no_judge)
+        said = [c['Body'] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE]
+        self.assertEqual(len(seen['prompts']), 2); self.assertIn('keep the 12 seats', said[-1]); self.assertNotIn(general.COULD_NOT, said)
+
+    def test_a_turn_that_answered_or_set_up_a_card_is_not_woken_whatever_the_task_lists(self):
         from taskuary import slots
-        tid = researcher(s); slots.add(s, tid, [{'to': 'office@vendor.example', 'about': 'the renewal'}], 'triage')
-        return tid
-
-    def test_a_slot_left_to_draft_wakes_the_agent_once_to_write_it_or_ask(self):
-        from taskuary import rulebook
-        for said in ('Done.', '[[TASKUARY-DRAFT to="office@vendor.example" subject="Renewal"]]  [[/TASKUARY-DRAFT]]'):
+        for said in ('Done.', '[[TASKUARY-DRAFT to="office@vendor.example" subject="Hello"]]Hi - checking in.[[/TASKUARY-DRAFT]]'):
             with self.subTest(said[:20]):
-                s = MemoryStore(); a_claude(self); tid = self.owing(s)
-                seen = turn(s, tid, said, judge=self.no_judge)
-                self.assertEqual(len(seen['prompts']), 2, 'told once - the woken turn that left it again is not told twice')
-                self.assertIn('email to office@vendor.example (slot ', seen['prompts'][1])
-                self.assertIn('ask them that one question', seen['prompts'][1])
-                f = rulebook.facts(s, {'tid': tid, 'kind': 'task', 'key': f'task:{tid}'}, [])
-                self.assertEqual(f, {'state': 'needs_agent', 'line': 'Email to office@vendor.example unwritten - waits on your word'})
-
-    def test_a_turn_that_wrote_it_or_asked_is_not_woken(self):
-        for said in ('[[TASKUARY-DRAFT to="office@vendor.example" subject="Renewal"]]Hi - the renewal terms are fine by us.[[/TASKUARY-DRAFT]]',
-                     '[[TASKUARY-ASK]] What should the email to the vendor say about the price?'):
-            with self.subTest(said[:20]):
-                s = MemoryStore(); a_claude(self); tid = self.owing(s)
+                s = MemoryStore(); a_claude(self); tid = researcher(s)
+                slots.add(s, tid, [{'to': 'gail@vendor.example', 'about': 'the renewal'}], 'owner')     # an email nobody wrote: not chased
                 self.assertEqual(len(turn(s, tid, said)['prompts']), 1)
-
-    def test_a_reply_owed_and_left_unwritten_wakes_it_the_same_way(self):
-        from taskuary.testing import Factory
-        from taskuary import origin
-        s = MemoryStore(); a_claude(self); tid = researcher(s); f = Factory(s)
-        p = mock.patch.object(origin, '_claude_version', return_value=origin.MIN_CLAUDE); p.start(); self.addCleanup(p.stop)
-        f.review(tid, f.message(tid, from_email='erin@northwind.example', from_name='Erin Blake', subject='Renewal', body='Can you confirm?'),
-                 kind='draft', draft='')
-        seen = turn(s, tid, 'Looked into it.', judge=self.no_judge)
-        self.assertEqual(len(seen['prompts']), 2)
-        self.assertIn('the reply to Erin Blake still unwritten', seen['prompts'][1])
-
-    def test_a_turn_with_no_words_and_nothing_set_up_is_woken_once_to_answer(self):
-        """An answer that was only a block with nothing in it is filed with no words: the chat drew the turn's steps and nothing else."""
-        s = MemoryStore(); a_claude(self); tid = researcher(s)
-        seen = turn(s, tid, '[[TASKUARY-DRAFT to="office@vendor.example" subject="Hello"]] [[/TASKUARY-DRAFT]]', judge=self.no_judge)
-        self.assertEqual(len(seen['prompts']), 2, 'once - the woken turn that says nothing again stands')
-        self.assertIn('without a word to the owner', seen['prompts'][1])
-        # ...and one whose only output is a card set up for the owner's press answered with it
-        s = MemoryStore(); a_claude(self); tid = researcher(s)
-        self.assertEqual(len(turn(s, tid, '[[TASKUARY-DRAFT to="office@vendor.example" subject="Hello"]]Hi - checking in.[[/TASKUARY-DRAFT]]')['prompts']), 1)
 
 
 if __name__ == '__main__':

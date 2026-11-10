@@ -237,8 +237,10 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
     not silence."""
     cut = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
     out, away, seen, rows = [], None, set(), []
-    # ...a promise that is already a TASK on the owner (store.task_for_promise) is a row on the rail, not a line here
-    if 'promise' in want: rows += [('promise', r) for r in store.open_promises(_since(DAYS), cut) if not store.promise_task(r['MessageId'])]
+    # ...a promise that is already a TASK on the owner (store.task_for_promise), or kept on the open task it was made from
+    # (sentjudge.keep_on), is a row on the rail, not a line here
+    def rowed(r): return store.promise_task(r['MessageId']) or (r.get('TaskId') and (store.get_task(r['TaskId']) or {}).get('Status') not in ('done', 'dropped'))
+    if 'promise' in want: rows += [('promise', r) for r in store.open_promises(_since(DAYS), cut) if not rowed(r)]
     if 'followup' in want:
         rows += [('followup', r) for r in store.owner_last_words(_since(DAYS), cut) if (store.sent_verdict(r['MessageId']) or {}).get('AsksThem')]
     for kind, r in sorted(rows, key=lambda kr: _ts(kr[1].get('SentAt')), reverse=True):

@@ -85,3 +85,48 @@ class PromiseContextTests(unittest.TestCase):
         t = s.get_task(s.task_for_promise(m1, 'run the tests', None))
         self.assertEqual(t['Summary'], f"You told Gail Moreno on {_ago(3)[:10]} you would run the tests.")
         self.assertEqual(s.get_message(m1)['TaskId'], t['TaskId'])
+
+
+class PromiseStaysOnItsTaskTests(unittest.TestCase):
+    """The owner, 2026-11-10: a promise in their own reply "stays on the task it was sent from" - a check-back there, no second task.
+    The reply to an open ask had become a second row on the rail, owing the same thing as the ask it answered."""
+    def on(self, s, conv, **task):
+        tid = s.create_task({'Title': 'Revised budget for Gail', 'Kind': 'general', 'Status': 'open', 'Assignee': 'owner', **task}, 't')
+        ask, m1 = _theirs(s, 'Can I have the revised budget?', 4, conv), _mine(s, "I'll send the revised budget Friday", 3, conv)
+        s._exec('UPDATE message SET TaskId=? WHERE MessageId IN (?,?)', (tid, ask, m1))
+        return tid, m1
+
+    def judge(self, s): judged(s, {'revised budget Friday': {'promise': True, 'what': 'send the revised budget', 'due': _day(2)}})
+
+    def test_a_reply_sent_from_an_open_task_keeps_its_promise_there(self):
+        s = _store(); tid, m1 = self.on(s, 'c7'); self.judge(s)
+        self.assertIsNone(s.promise_task(m1)); self.assertEqual([t['TaskId'] for t in s.list_tasks()], [tid])
+        t = s.get_task(tid)
+        self.assertEqual((t['DueAt'], t['CheckBackAt'][:10]), (_day(2), _day(2)))
+        self.assertIn('the promise to Gail Moreno to send the revised budget', t['CheckBackWhat'])
+        self.assertEqual(assistant.followups(s, 24, want=('promise',)), [])       # one thing, one place: it is that task's row
+        # ...and sending it leaves the agent nothing to look for that morning
+        _mine(s, 'Here is the revised budget, attached.', 1, 'c7')
+        judged(s, {'attached': {'delivers': [f'm{m1}']}})
+        self.assertFalse(s.get_task(tid).get('CheckBackAt'))
+
+    def test_the_agents_own_check_back_is_left_alone(self):
+        from taskuary import checkback
+        s = _store(); tid, m1 = self.on(s, 'c8')
+        checkback.set_check(s, tid, _day(1), 'Gail Moreno confirmed the budget meeting', 'agent')
+        self.judge(s)
+        self.assertIsNone(s.promise_task(m1))
+        self.assertEqual(s.get_task(tid)['CheckBackWhat'], 'Gail Moreno confirmed the budget meeting')
+        self.assertTrue(any('You told Gail Moreno you would send the revised budget' in c['Body'] and 'the one you answered from' in c['Body']
+                            for c in s.list_comments(tid)))
+
+    def test_a_task_no_agent_works_gets_the_day_and_a_note(self):
+        s = _store(); tid, m1 = self.on(s, 'c9', Kind='coding'); self.judge(s)
+        t = s.get_task(tid)
+        self.assertEqual((s.promise_task(m1), t['DueAt'], t.get('CheckBackAt') or ''), (None, _day(2), ''))
+        self.assertTrue(any('Kept on this task, the one you answered from' in c['Body'] for c in s.list_comments(tid)))
+
+    def test_a_reply_on_a_closed_task_is_still_a_task_of_its_own(self):
+        s = _store(); tid, m1 = self.on(s, 'c10', Status='done'); self.judge(s)
+        self.assertEqual(s.promise_task(m1)['Title'], 'Send the revised budget')
+        self.assertFalse(s.get_task(tid).get('CheckBackAt'))

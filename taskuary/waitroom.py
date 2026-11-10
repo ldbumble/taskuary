@@ -243,7 +243,7 @@ def _deliver(store, tid: int, new: int = None) -> dict:
         # ...an ACP coding session (acpcoding.py) takes it as its next prompt, the batch as Taskuary's brief and each of the owner's own notes
         # drawn as theirs in the coding chat - never "While you were working, the owner queued..." in the owner's bubble (to_general's rule)
         elif term.is_acp(t):
-            t.prompt(' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left, waited=waited)) if x),
+            t.prompt(' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left, waited=waited)) if x), brief=True,
                      shown=[parts(x.get('Note'))[0] for x in notes if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)])
             how = 'sent into the running turn of' if steer else 'sent to'
         # ...with what other agents said since its last turn in front, framed as theirs (peers.py) - one turn, not two

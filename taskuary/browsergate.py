@@ -422,6 +422,9 @@ def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False) ->
             woke = wake and general.tell(store, tid, text)
         except Exception as e: woke = logger.warning(f'browsergate: task {tid} - its resting agent was not started - {e}')
         return None if woke else store.add_comment(tid, 'taskuary', 'agent', f'{text} (No agent is running on this task to tell.)')
+    # ...A LIVE ONE IS TOLD HERE, NOT BY THE WAITING ROOM (general.tell's road for everything else): a press on the page is one quiet line
+    # and nothing more (the spine audit, 2026-11-09: "said once: no second line by Taskuary above it") - the waiting room draws its note in
+    # a chat as a line of Taskuary's own
     if term.stranger_now(store, tid, sess): return None           # the task says why nothing went in
     def go():
         try:

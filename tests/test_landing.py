@@ -27,6 +27,7 @@ class LandingTests(unittest.TestCase):
         commit(self.cwd, 'ledger.py', 'one\ntwo\nthree\n', 'start')
         self.s = MemoryStore(); self.tid = Factory(self.s).task(title='Fix the ledger rounding', kind='coding')
         landing.mark_start(self.s, self.tid, self.cwd)
+        self.s.add_transcript(self.tid, 'run1', 'Fixed the rounding.', 'claude', self.cwd)     # the agent that worked it: what landing tells
 
     def tearDown(self):
         try: self.tmp.cleanup()

@@ -744,11 +744,17 @@ def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None) ->
 # landing its own (landing._landed)
 APPROVED = 'The owner pressed {press} on what you set up, and it went through: {what}. '
 def tell(store, tid: int, said: str, actor: str = 'owner') -> str:
-    """Hand task `tid`'s agent Taskuary's words `said`: 'told' a live (or resting coding) agent as its next prompt, 'woke' a resting
-    general agent that has answered on it, '' where no agent ever worked it."""
+    """Hand task `tid`'s agent Taskuary's words `said` - THE ONE ROAD every word of Taskuary's to an agent takes (an approval, a held step's
+    result, a landing): 'told' through the waiting room (its holds: the owner typing, a stranger, a question) to a live agent, a resting
+    coding one, or a coding one whose session ended - reopened on its own run; 'woke' a resting general agent that has answered on it;
+    '' where no agent ever worked it."""
     from . import acpcoding, waitroom, workerstate as ws
-    if ws._live(int(tid)) or acpcoding.idled(int(tid), store): waitroom.add(store, int(tid), said, 'router'); return 'told'
     t = store.get_task(int(tid))
+    # ...A CODING AGENT WHOSE SESSION ENDED HEARS IT TOO (the north-star audit, 2026-11-10 - the owner: "it shoudl prompt you, should i deploy
+    # and respond once deployed??? isnt' this the goal?"): an approved merge or comment was told nobody, and nothing said so, while a
+    # landing's word reached the same agent by the waiting room
+    if ws._live(int(tid)) or acpcoding.idled(int(tid), store) or (t and not handles(t) and store.last_transcript(int(tid))):
+        waitroom.add(store, int(tid), said, 'router'); return 'told'
     return 'woke' if t and handles(t) and follow_up(store, tid, 'send', actor, said=said) else ''
 def approved(store, tid: int, press: str, what: str, actor: str = 'owner') -> str:
     "Hand task `tid`'s agent the approval that went, as `tell` hands anything: 'told', 'woke' or ''."

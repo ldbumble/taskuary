@@ -117,11 +117,51 @@ class EveryYesCarriesOn(unittest.TestCase):
     def test_no_agent_ever_on_it_wakes_nothing(self):
         self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), '')
 
+    def test_a_live_coding_chat_hears_an_approval_as_taskuarys_brief(self):
+        """The north-star audit, 2026-11-10: the waiting room handed an ACP coding session Taskuary's own note (an approval, a landing) with
+        no owner line in it and `brief` unset - drawn in the coding chat as a "You" bubble, the 2026-11-09 complaint ("i hit approve why was
+        this then an input on the right side??") on the one road every approval now takes."""
+        got = []
+        sess = SimpleNamespace(sid='run1', acp=True, alive=True, task_id=self.tid, waiting=lambda: True, status_tail=lambda n=8: [],
+                               prompt=lambda text, brief=False, shown=None, done=None: got.append((text, brief, shown)))
+        rv = self.action({'action': 'comment_issue', 'body': 'Fixed.'})
+        with mock.patch.dict(term.SESSIONS, {'run1': sess}, clear=True), \
+             mock.patch.object(proposals, 'execute', return_value={'commented': 'northwind/ledger#7', 'url': SAID}):
+            self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
+        [(text, brief, shown)] = got
+        self.assertTrue(brief, "Taskuary's brief, never the owner's bubble"); self.assertEqual(shown, []); self.assertIn('pressed Approve', text)
+
+    def ended(self):
+        "A coding task whose agent worked it and whose session has ended (its transcript filed, nothing live, not idled out)."
+        tid = Factory(self.s).task('Fix the export', kind='coding'); self.s.add_transcript(tid, 'run1', 'Fixed the export.', 'claude', HELD)
+        return tid
+
     def test_a_branch_landed_is_handed_back_to_its_agent(self):
+        tid = self.ended()
         with mock.patch.object(landing, 'record', return_value={}), mock.patch.object(landing, '_save'), mock.patch('taskuary.waitroom.deliver', return_value={}):
-            landing._landed(self.s, self.tid, 'pr', 'Pushed fix-export and opened pull request #12 into main: ' + SAID, 'owner')
-        [n] = self.s.waiting_notes(self.tid)
+            landing._landed(self.s, tid, 'pr', 'Pushed fix-export and opened pull request #12 into main: ' + SAID, 'owner')
+        [n] = self.s.waiting_notes(tid)
         self.assertEqual(n['CreatedBy'], 'router'); self.assertIn('Open a PR', n['Note'])
+
+    def test_an_approval_reaches_a_coding_agent_whose_session_ended(self):
+        """The north-star audit, 2026-11-10: an approved merge or comment on a coding task whose session had ended was told nobody, and
+        nothing said so - while a landing on the same task reopened its agent through the waiting room. One road (general.tell) now."""
+        tid = self.ended()
+        rid = Factory(self.s).review(tid, kind='action', reason='The agent asks', draft=json.dumps({'action': 'comment_issue', 'body': 'Fixed.'}))
+        rv = self.s.get_review(rid if isinstance(rid, int) else rid['ReviewId'])
+        with mock.patch.object(proposals, 'execute', return_value={'commented': 'northwind/ledger#7', 'url': SAID}), \
+             mock.patch('taskuary.waitroom.deliver', return_value={'delivered': 1, 'state': 'restarted'}) as reopened:
+            self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
+        [n] = self.s.waiting_notes(tid)
+        self.assertEqual(n['CreatedBy'], 'router'); self.assertIn('pressed Approve', n['Note']); self.assertIn(SAID, n['Note'])
+        reopened.assert_called()
+
+    def test_a_landing_no_agent_worked_says_so_and_starts_nobody(self):
+        with mock.patch.object(landing, 'record', return_value={}), mock.patch.object(landing, '_save'), mock.patch('taskuary.waitroom.deliver') as went:
+            landing._landed(self.s, self.tid, 'merge', 'Merged fix-export into main.', 'owner')
+        went.assert_not_called(); self.assertEqual(self.s.waiting_notes(self.tid), [])
+        said = [c for c in self.s.list_comments(self.tid) if 'none was told' in c['Body']]
+        self.assertEqual(len(said), 1, said)
 
 
 class ParkedOnItsOwnQuestion(unittest.TestCase):

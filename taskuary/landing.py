@@ -506,16 +506,22 @@ class Refused(RuntimeError): pass
 
 def _conflict(store, tid: int, s: dict, how: str, files: list) -> dict:
     """Aborted, so nothing landed half-done - and the conflict is the agent's next turn."""
-    from . import waitroom
     names = ', '.join(files[:30]) or 'files git did not name'
     text = (f"LANDING CONFLICT: {HOW[how]} of {s['branch']} onto {s['base']} stopped on conflicts in {names}. It was aborted - nothing "
             f"landed and the checkout is as it was. Resolve these conflicts on {s['branch']} (rebase it onto {s['base']}, or merge "
             f"{s['base']} into it), commit, then say done - the owner lands it again.")
     store.add_comment(tid, 'router', 'agent', f"{HOW[how]} stopped on conflicts in {names} - aborted, nothing landed; the agent has it now.")
     store.audit('task', tid, 'land_conflict', 'router', 'agent', {'how': how, 'files': files[:30]})
-    try: waitroom.add(store, tid, text, 'router')
-    except Exception as e: logger.warning(f'{task_ref(tid)}: the landing conflict could not be handed to the agent - {e}')
+    _hand_back(store, tid, text)
     return {'ok': False, 'conflict': files, 'says': f"Conflicts in {names} - nothing landed. The agent is resolving them."}
+
+
+def _hand_back(store, tid, text):
+    "Taskuary's words to the task's agent by the one road (general.tell) - and where none ever worked it, the task says so, once."
+    from . import general
+    try: told = general.tell(store, tid, text, 'router')
+    except Exception as e: told = logger.warning(f'{task_ref(tid)}: the landing was not handed back to the agent - {e}')
+    if not told: store.add_comment_once(tid, 'taskuary', 'agent', 'No agent has worked this task, so none was told what landed.')
 
 
 def _ff(cwd, base, br):
@@ -666,11 +672,8 @@ def _landed(store, tid, how, said_, actor, at_sha='', **extra) -> dict:
     # ...AND THE AGENT GOES ON, as it does after a push (_push): a branch landed or a pull request opened was the press its turn waited on
     # (the owner, 2026-11-09: "when you hit approve the agent continues and says what it did and what the next steps are")
     if how not in PUSH_HOW:
-        try:
-            from . import waitroom
-            from .browsergate import NEXT
-            waitroom.add(store, tid, f"{said_} The owner pressed {HOW[how]} on your branch. {NEXT}", 'router')
-        except Exception as e: logger.debug(f'{task_ref(tid)}: the landing was not handed back to the agent - {e}')
+        from .browsergate import NEXT
+        _hand_back(store, tid, f"{said_} The owner pressed {HOW[how]} on your branch. {NEXT}")
     return {'ok': True, 'how': how, 'says': said_, **extra}
 
 
@@ -693,11 +696,8 @@ def _push(store, tid, s, how, actor) -> dict:
                                'url': f"https://github.com/{s['repo']}/commit/{tip}" if s['repo'] else '', 'checks': None, 'checked_at': None}, actor)
     said_ = f"Pushed {plural(p['ahead'], 'commit')} to origin/{base} ({tip[:7]})" + (f" and deployed it to {p['deploy']}." if how == 'deploy' else '.')
     out = _landed(store, tid, how, said_, actor, tip, **({'deploy': p['deploy']} if how == 'deploy' else {}))
-    try:                                          # ...the press was the go-ahead the agent waits on: its next turn checks it and finishes
-        from . import waitroom
-        waitroom.add(store, tid, f"{said_} The owner pressed {HOW[how]} on your proposal. " + ("Check it is live, then finish."
-                     if how == 'deploy' else "Finish the task."), 'router')
-    except Exception as e: logger.debug(f'{task_ref(tid)}: the push was not handed back to the agent - {e}')
+    # ...the press was the go-ahead the agent waits on: its next turn checks it and finishes
+    _hand_back(store, tid, f"{said_} The owner pressed {HOW[how]} on your proposal. " + ("Check it is live, then finish." if how == 'deploy' else "Finish the task."))
     return out
 
 

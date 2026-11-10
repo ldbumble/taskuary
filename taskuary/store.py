@@ -138,7 +138,7 @@ def _fold(value):
     return str(value or '').casefold()
 
 
-REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
+REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver', 'Origin')
 EMPTY_DRAFT = 'the draft came back empty'     # update_review_draft's refusal: the card's plain line reads it (sendState.draftState)
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active', 'Mailbox')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
@@ -513,7 +513,7 @@ CREATE TABLE IF NOT EXISTS run (RunId INTEGER PRIMARY KEY, TaskId INTEGER, Agent
   SessionId TEXT, DiffText TEXT, DispatchedBy TEXT, StartedAt TEXT, UpdatedAt TEXT, FinishedAt TEXT);
 CREATE TABLE IF NOT EXISTS review (ReviewId INTEGER PRIMARY KEY, TaskId INTEGER, MessageId INTEGER,
   RunId INTEGER, Kind TEXT, DraftText TEXT, FinalText TEXT, Status TEXT DEFAULT 'pending',
-  Reason TEXT, DecidedBy TEXT, DecidedAt TEXT, DecideNote TEXT, CreatedAt TEXT, Deliver TEXT);
+  Reason TEXT, DecidedBy TEXT, DecidedAt TEXT, DecideNote TEXT, CreatedAt TEXT, Deliver TEXT, Origin TEXT);
 CREATE TABLE IF NOT EXISTS policy (PolicyId INTEGER PRIMARY KEY, Name TEXT, Kind TEXT, Pattern TEXT,
   Action TEXT, Reason TEXT, SortOrder INTEGER DEFAULT 100, Active INTEGER DEFAULT 1, CreatedBy TEXT, Mailbox TEXT);
 CREATE TABLE IF NOT EXISTS source (SourceId INTEGER PRIMARY KEY, Channel TEXT, Address TEXT,
@@ -1248,6 +1248,12 @@ class SQLiteStore:
             if 'ActError' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ActError TEXT')
             # ...and the agent's word that the reply is NO LONGER NEEDED (someone else answered, the owner already did) - kept as the why
             if 'NotNeeded' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN NotNeeded TEXT')
+            # ...and WHAT FILED IT ('triage': a reply triage owes; 'chase': the owner's chase), where its kind does not say. It was read off
+            # the first words of Reason - the line the card shows the owner, which a redraft rewrites (the spine audit, 2026-11-09). The rows
+            # filed under those words are marked once, here
+            if 'Origin' not in rvcols:
+                self.cx.execute('ALTER TABLE review ADD COLUMN Origin TEXT')
+                for mark, origin in (('needs a reply:%', 'triage'), ('chase:%', 'chase')): self.cx.execute('UPDATE review SET Origin=? WHERE Reason LIKE ?', (origin, mark))
             # ...which retires the draft now (verdicts.not_needed, 2026-11-09). One marked under the old rule still sat pending with Send under it:
             # it goes where a withdrawn draft goes - closed unsent, under Not sent, Bring it back still sends it
             self.cx.execute("UPDATE review SET Status='closed_unsent', DecidedBy='agent', DecidedAt=?, DecideNote='withdrawn - '||NotNeeded "
@@ -5501,7 +5507,7 @@ class SQLiteStore:
         # person can deliberately ask for a follow-up draft after their last sent message; that
         # new instruction must stay pending. Once any draft is already pending, the normal sync
         # path in channels.py still retires it when a newer owner reply arrives.
-        triage_reply = str(fields.get('Reason') or '').startswith('needs a reply:')
+        triage_reply = fields.get('Origin') == 'triage'
         if fields.get('Status') == 'pending' and triage_reply and fields.get('MessageId'):
             target = self.get_message(fields['MessageId']) or {}
             conv, after = target.get('ConversationId'), target.get('SentAt')

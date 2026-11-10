@@ -1716,12 +1716,16 @@ def _run_kind(op: dict, background: BackgroundTasks):
             n = (sum(1 for r in outcomes.rows_for(store, 'task', tid_) if _json.loads(r.get('FactsJson') or '{}').get('chase')) if tid_ else 0) + 1
             cc = outcomes.chase_cc(store, who) if who else None
             instr = f'a short chase to {who or "them"}, in my voice: no answer yet, what I need and by when' + (f'; copy {cc}, who gets them to answer' if cc else '')
+            # ITS MARK IS ITS OWN FIELD (review.Origin), its reason words: the card drew "chase:2 cc:<address>" under the draft, and the
+            # ledger knew a chase by that line's first six letters (the spine audit, 2026-11-09)
+            def mark(rid): store._exec('UPDATE review SET Reason=?, Origin=? WHERE ReviewId=?', (
+                'chase' + (f' {n}' if n > 1 else '') + ': no answer yet' + (f' · copying {cc}' if cc else ''), 'chase', rid))
             if ct and not mid:
                 # nothing of theirs on it to answer: a new message to them from the task, waiting for the owner's yes like any draft
                 from . import outbox
                 try: got = outbox.task_email(store, tid_, who, instr, cc=[cc] if cc else None, actor=ACTOR)
                 except ValueError as e: raise HTTPException(422, str(e))
-                store._exec('UPDATE review SET Reason=? WHERE ReviewId=?', (f'chase:{n}' + (f' cc:{cc}' if cc else ''), got['review_id']))
+                mark(got['review_id'])
                 return {'reviewId': got['review_id'], 'taskId': tid_, 'draft': got['draft'], 'drafting': not got['draft'], 'cc': cc}
             if a.get('type') == 'followup': out = open_reply(mid, OpenReplyBody(instruction=instr, app_words=True))     # their thread: its newest line is theirs
             else:
@@ -1729,11 +1733,11 @@ def _run_kind(op: dict, background: BackgroundTasks):
                 # open_reply would re-target to the newest line, and the chase would go to the wrong person
                 from . import responder
                 rv = store.pending_review(tid_) if tid_ else None
-                rid = rv['ReviewId'] if rv and rv.get('MessageId') == mid else store.add_review({'TaskId': tid_, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': f'chase:{n}'})
+                rid = rv['ReviewId'] if rv and rv.get('MessageId') == mid else store.add_review({'TaskId': tid_, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'chase'})
                 try: draft = responder.write_draft(store, tid_, rid, actor=ACTOR, nudge=instr)
                 except Exception as e: logger.warning(f'chase draft on {task_ref(tid_)} not written: {e}'); draft = ''
                 out = {'reviewId': rid, 'taskId': tid_, 'draft': draft, 'drafting': not draft}
-            store._exec('UPDATE review SET Reason=? WHERE ReviewId=?', (f'chase:{n}' + (f' cc:{cc}' if cc else ''), out['reviewId']))
+            mark(out['reviewId'])
             return {**out, 'cc': cc}
         # Let it go is a turn-down on the follow-up; answered elsewhere is a done. Only a step somebody OWES is dropped or closed -
         # a thread's own task is never touched for its follow-up (the review, 2026-10-12)

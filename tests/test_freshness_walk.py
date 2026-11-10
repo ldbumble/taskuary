@@ -157,7 +157,7 @@ def mail_task(s):
     first = s.add_message({'TaskId': tid, 'ExternalId': 'm:first', 'ConversationId': 'AAQk-m', 'Channel': 'email', 'SourceName': 'me@northwind.example',
                            'Subject': 'August export', 'FromName': 'Dana', 'FromEmail': 'dana@vendor.example', 'SentAt': stamp(-60),
                            'BodyText': 'Could you send me the August export?', 'Status': 'routed'})
-    rid = s.add_review({'TaskId': tid, 'MessageId': first, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Here it is.', 'Reason': 'needs a reply: asked'})
+    rid = s.add_review({'TaskId': tid, 'MessageId': first, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Here it is.', 'Reason': 'needs a reply: asked', 'Origin': 'triage'})
     return tid, first, rid
 
 

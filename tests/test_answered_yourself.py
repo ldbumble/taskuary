@@ -68,7 +68,7 @@ class AnsweringItYourself(unittest.TestCase):
         """Worker ordering cannot resurrect a draft after the real-world reply already landed."""
         _line(self.s, 'You', 'sent this morning', '2026-08-31 12:44:00', status='context')
         rid = self.s.add_review({'MessageId': self.mid, 'Kind': 'draft', 'Status': 'pending',
-                                 'Reason': 'needs a reply: question for you'})
+                                 'Reason': 'needs a reply: question for you', 'Origin': 'triage'})
         self.assertEqual(self.s.get_review(rid)['Status'], 'superseded')
         self.assertEqual(_row(self.s, self.mid)['NeedsYou'], 0)
 

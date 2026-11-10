@@ -125,7 +125,8 @@ def test_a_chase_opens_a_draft_on_the_thread_with_the_ledgers_cc(s):
         r = run(s, 'task.chase', card)
     assert r.status_code == 200, r.text
     body = r.json(); rv = s.get_review(body['outcome']['reviewId'])
-    assert rv['Reason'].startswith('chase:') and body['outcome']['cc'] == 'omar@northwind.example'
+    assert rv['Origin'] == 'chase' and body['outcome']['cc'] == 'omar@northwind.example'
+    assert rv['Reason'] == 'chase: no answer yet · copying omar@northwind.example'
     assert 'omar' in (wd.call_args.kwargs.get('nudge') or '')
 
 def test_a_chase_with_no_thread_is_refused_plainly(s):

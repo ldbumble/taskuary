@@ -1150,7 +1150,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # - anything else that is real work queues as needs-you, for you to route
             # ...an invite's answer is not an email: its row's Accept, Decline and Propose a new time draft it (calwrite.draft)
             if f['kind'] == 'reply' and not intent.get('invite'):
-                new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+                new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage',
                                                   'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"
                                                             + (f' · {unsendable}' if unsendable else '')})
                 _spawn(_auto_draft, store, tid, rid)        # always drafted (PW-043)
@@ -1610,7 +1610,7 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         # a fresh question on an existing task is reply-needed there: one pending review for
         # this message, drafted at once, whatever the channel can carry (PW-043)
         unsendable = send_block(store, msg.get('channel'))
-        rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
+        rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage',
                                 'Reason': f"needs a reply: {v.get('why') or 'question for you'}" + (f' · {unsendable}' if unsendable else '')})
         _spawn(_auto_draft, store, tid, rid)
     # the classic round trip: the agent asked something, the hub asked the person, and

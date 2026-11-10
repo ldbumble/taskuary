@@ -334,7 +334,7 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
                             facts={'cid': (msg or {}).get('ConversationId'), 'mid': rv.get('MessageId'), 'review': rid, 'verb': verb, 'closed': closed,
                                    # the person facts (build step 4): whom, who was copied, and whether this was a chase (task.chase marks its review)
                                    'who': str((msg or {}).get('FromEmail') or '').lower(), 'cc': [str(a).lower() for a in (sent.get('cc') or [])],
-                                   'chase': str(rv.get('Reason') or '').startswith('chase:')})   # task.chase's own mark, with its colon
+                                   'chase': rv.get('Origin') == 'chase'})      # task.chase's own mark (review.Origin)
         except Exception as e: logger.warning(f'review {rid}: the outcome row was not written - {e}')
         # A reply that ASKED them something keeps watching for the answer, even once the task is marked done (asks.py) -
         # whether it asked is the model's to read, off this thread: the button never waits on it

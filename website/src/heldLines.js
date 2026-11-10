@@ -51,9 +51,12 @@ export const notShown = (held, thread) => stillHeld(held, thread, "drawn");
 // ...BY ITS NAME where it has one (lineOf): this page's own held line is the kept line that carries its name, and no other - two windows
 // that each sent "ok" both draw both. A kept line with no name (the thread's own first line, streamed) is this screen's by its words, and
 // each of this screen's copies stands for ONE kept line: the words were a set, so "ok" kept twice drew once, or not at all
+// ...and a coding chat's held line (not `named`: its conversation never echoes the name) is sent under its id all the same: the kept copy that
+// carries it is that line, and it stands for no other (the browser walk, 2026-11-10: a line typed after a coding session ended stood twice)
 export function waitingShown(waiting, held, thread, messages) {
-  const kept = (messages || []).filter((m) => m?.role === "user").length, ids = new Set((held || []).filter((l) => l.named).map((l) => l.id));
-  const own = [...(held || []).filter((l) => !l.named).map((l) => same(l.text)), ...(thread || []).filter((m) => m?.role === "user").slice(kept).filter((m) => !lineOf(m)).map((m) => same(words(m)))];
+  const kept = (messages || []).filter((m) => m?.role === "user").length, ids = new Set((held || []).map((l) => l.id));
+  const tagged = new Set((waiting || []).map((w) => w.line).filter(Boolean));
+  const own = [...(held || []).filter((l) => !l.named && !tagged.has(l.id)).map((l) => same(l.text)), ...(thread || []).filter((m) => m?.role === "user").slice(kept).filter((m) => !lineOf(m)).map((m) => same(words(m)))];
   return (waiting || []).filter((w) => {
     if (w.line) return !ids.has(w.line);
     const i = own.indexOf(same(w.text));

@@ -72,6 +72,10 @@ test("a kept line is this page's own by its name; unnamed, each of the page's co
   // ...its thread streamed one "ok" of its own, with no name: one kept line is that one, not both
   assert.deepEqual(waitingShown(waiting, [], [...server, said("ok")], server).map((w) => w.id), [7, 8, 10]);
   assert.deepEqual(waitingShown(waiting, [{ id: "c1", text: "ok" }], server, server).map((w) => w.id), [7, 8, 10], "nor an unnamed held line for more than one");
+  // ...A CODING CHAT'S HELD LINE (named: false - its conversation never echoes the name) is still sent under its id, and the kept copy carries it:
+  // that copy is this held line, drawn once (the browser walk, 2026-11-10: a line typed after a coding session ended stood twice, both "held")
+  const coding = [{ id: 11, text: "check the tax line", line: "c2" }, { id: 12, text: "check the tax line" }];
+  assert.deepEqual(waitingShown(coding, [{ id: "c2", text: "check the tax line" }], server, server).map((w) => w.id), [12], "its own kept copy, by its id; the phone's, by nothing");
 });
 
 test("the chat sends a held line under its name, and the thread keeps the name the server gives back", async () => {

@@ -208,7 +208,7 @@ say "commit and push"
 git add -A
 git commit -q --allow-empty -m "Release $V
 
-Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+Co-Authored-By: Claude <noreply@anthropic.com>"
 git push -q origin HEAD:master
 SHA=$(git rev-parse HEAD); echo "pushed $SHA"
 [ -d "$MAIN/.git" ] || [ -f "$MAIN/.git" ] && (cd "$MAIN" && [ -z "$(git status --porcelain)" ] && git fetch -q origin && git merge --ff-only -q origin/master && echo "main checkout -> $(git rev-parse --short HEAD)") || true

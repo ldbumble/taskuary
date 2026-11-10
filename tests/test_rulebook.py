@@ -53,7 +53,7 @@ MATRIX = [
     ('Badge access for the new AP clerk', 'asked', 'regular_agent', False),     # no agent took it: Send to agent (2026-11-10)
     ('did the overnight import finish', 'unsendable', None, False),
     ('AP cutover - Thursday?', 'draft_ready', 'send_close', False),
-    ('Lease renewal for the Elm Street office', 'failed_cause', None, False),     # a send the server refused is never lit to go again
+    ('Lease renewal for the Elm Street office', 'failed_cause', None, True),      # a send the server refused is never lit to go again - said why
     ('Q3 accruals file', 'answered', 'close', False),            # the owner's reply went and nothing came since
     ('Helpdesk tickets by day', 'report_ok', None, False),
     ('Vendor portal maintenance', 'fyi', None, False),
@@ -62,7 +62,7 @@ MATRIX = [
     ('agent finished (general)', 'agent_done', 'close', False),
     ('agent finished (coding)', 'agent_done', 'close', False),
     ('agent failed (general)', 'failed_cause', 'continue', True),       # ...its failure's Try again, said by the run's own line
-    ('agent failed (coding)', 'failed_cause', None, False),             # its row leads with New task: nothing is filled
+    ('agent failed (coding)', 'failed_cause', None, True),              # its row leads with New task: nothing is filled, the failure said
     ('agent stopped-saved (coding)', 'stopped', 'continue', False),    # its work unfinished: carried on (2026-11-10)
     ('Close the August books', 'done_list', 'close', False),
     ('Move payroll to Payworth', 'goal', None, False),
@@ -310,21 +310,6 @@ def test_a_draft_says_what_leaves_with_it(s):
     s.set_setting('owner_email', 'alex@northwind.example', 'test')
     set_env({'channel': 'email', 'to': ['paula@northwind.example'], 'cc': ['alex@northwind.example']})
     assert rulebook.facts(s, it, V)['line'] == 'Goes to paula@northwind.example - new to this thread.'
-
-
-def test_a_task_left_sitting_is_named_untouched_and_fills_nothing(s):
-    """UNTOUCHED TOO LONG (the design rev 2): an open task of the owner's that nothing moved for UNTOUCHED_DAYS working days is named so,
-    and crossing the line moves its revision - and no button is filled over it: what is still owed is the owner's to say."""
-    t = Factory(s).task(title='Sign the Elm Street lease', kind='task')
-    old = (datetime.now() - timedelta(days=12)).strftime('%Y-%m-%d %H:%M:%S')
-    it = {'key': f'task:{t}', 'kind': 'own', 'lane': 'mine', 'tid': t, 'title': 'Sign the Elm Street lease'}
-    assert rulebook.state(s, it, [])[0] == 'own'
-    rev = advisor.revision(s, 'task', t)
-    s._exec('UPDATE task SET CreatedAt=?, UpdatedAt=? WHERE TaskId=?', (old, old, t))
-    assert rulebook.untouched(s, s.get_task(t)) >= rulebook.UNTOUCHED_DAYS
-    assert advisor.revision(s, 'task', t) != rev, 'crossing the line is read again'
-    verbs = _verbs('close', 'defer', 'reply')
-    assert rulebook.facts(s, it, verbs) == {'state': 'untouched', 'line': ''} and rulebook.recommended(s, it, verbs) is None
 
 
 def test_what_leaves_stands_beside_the_drafts_send(s):

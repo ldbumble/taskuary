@@ -106,7 +106,7 @@ def test_a_run_that_is_over_fills_mark_done_where_no_summary_was_written(s):
             r = rulebook.recommended(s, item(tid), verbs('close', 'defer'))
             assert (r['verb'], r['why'], r['state']) == ('close', 'Finished at 10:02; nothing since.', st)
     # ...and where it is not over - stopped mid-work, work not pushed, an ask, a wait - nothing is filled
-    for st in ('own', 'untouched', 'fyi', 'report_ok'):
+    for st in ('own', 'fyi', 'report_ok'):
         with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': ''}):
             assert rulebook.recommended(s, item(tid), verbs('close', 'continue', 'reply', 'review_changes')) is None, st
 
@@ -155,6 +155,17 @@ def test_an_agent_stopped_with_its_work_unfinished_fills_continue(s):
     with mock.patch.object(rulebook, 'facts', return_value={'state': 'stopped', 'line': ''}):
         assert rulebook.recommended(s, item(tid, lane='stopped'), verbs('continue', 'close', 'review_changes'))['verb'] == 'continue'
         assert rulebook.recommended(s, item(tid, lane='stopped'), verbs('close', 'regular_agent')) is None
+
+
+def test_a_row_with_nothing_lit_says_why_in_its_states_one_sentence(s):
+    """Plain buttons and no word stood over a late wait whose agent was woken, a first mail from a stranger, a landing card that asks
+    (the owner, 2026-11-10): the line was dropped unless something failed or a draft was ready. Wherever nothing is lit it is said now."""
+    tid, it = late_wait(s)
+    s.audit('task', tid, 'check_back', 'late', 'agent', {'state': 'waiting_late'})
+    with mock.patch.object(advisor, '_item', lambda *a, **k: it):
+        d = advisor.decide(s, f'task:{tid}')
+    assert d['verb'] is None and d['state'] == 'waiting_late' and d['line'].startswith('Ray Colton: ') and d['line'].endswith('no answer.')
+    assert not hasattr(rulebook, 'UNTOUCHED_DAYS') and 'untouched' not in rulebook.RULES, 'a state with no line, no move and no wake is gone'
 
 
 def test_a_failed_run_fills_its_own_way_past_it_and_never_the_send_that_failed(s):

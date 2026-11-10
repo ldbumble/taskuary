@@ -2315,9 +2315,9 @@ def reply_to_agent(store, tid, rid, msg: dict = None) -> bool:
     agent, by itself where it may start (auto_start_ok), else the task says why it did not: it works out the answer and sets the reply up
     as its Send card, or asks the owner the one thing it lacks. The review waits meanwhile as a reply owed, with no draft.
     A row on the owner's own list is given to the agent the same way: the reply on it is still the agent's to write.
-    A coding task, an agent live on it, or a general conversation already open is left as it is: the line reaches that agent by its own
-    road (_carry_on, thread_moved) or the owner's Continue picks it up, never a second start - and where no road took it, the task says
-    so (not_started): a reply owed that nobody is writing never looks as if somebody were. True when an agent was set going.
+    An agent live on it, or a general conversation already open, is left as it is: the line reaches that agent by its own road
+    (thread_moved), never a second start; a coding task's stopped agent is carried on with it (_carry_on). Where no road took it, the
+    task says so (not_started): a reply owed that nobody is writing never looks as if somebody were. True when an agent was set going.
     `msg`: the message as it arrived, where the caller holds it - with what triage read on its way in (danger) and its channel's own
     hold (no_auto), which the row alone does not carry back."""
     from . import general
@@ -2332,9 +2332,14 @@ def reply_to_agent(store, tid, rid, msg: dict = None) -> bool:
         if t.get('Kind') not in ('reply', 'task') and (ran or started(store, tid) or not general.handles(t)):
             # ...a start set going a beat ago with nothing to show yet is that agent on its way: a burst's second line starts no second
             if not ran and started(store, tid): return False
+            # ...AND A TASK ANOTHER KIND OF AGENT WORKS - a coding task whose agent has stopped - CARRIES THAT AGENT ON (the owner,
+            # 2026-11-10: "job of agent is to be helpful and do as much as possible"): "is this live yet?" on a fixed bug sat with no
+            # reply and nobody writing one until the owner pressed Continue. The question is that agent's next turn, by the road new
+            # work takes (_carry_on: its session reopened, or a first start, where one may start by itself - else the task says why)
+            if not general.handles(t):
+                return _carry_on(store, tid, msg, m['MessageId'], {'intent': 'task', 'kind': t.get('Kind'), 'why': rv.get('Reason') or ''}, 'triage')
             # ...its conversation's own road said why where it refused (thread_moved); only what that road keeps quiet is said here
-            why = ((w if (w := wake_why(store, tid, msg, m['MessageId'], None)) in _QUIET_WAKE else '') if general.handles(t)
-                   else f"the reply is {task_kinds.worker(t.get('Kind'))}'s to write, and none is running on it")
+            why = w if (w := wake_why(store, tid, msg, m['MessageId'], None)) in _QUIET_WAKE else ''
             if why: not_started(store, tid, f'{why} - {general.carry_on(t)}')
             return False
         try: return agent_on_reply(store, tid, msg, m['MessageId'], {'intent': 'task', 'kind': 'general', 'why': rv.get('Reason') or ''}, 'triage', opening=True)

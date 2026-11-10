@@ -257,14 +257,23 @@ def test_a_reply_owed_that_no_road_takes_to_an_agent_says_so():
     assert any(x.startswith('No agent started: passing lines to the agent is switched off - ') for x in lines(s, tid))
 
 
-def test_a_question_on_a_coding_task_whose_agent_is_not_running_says_whose_the_reply_is():
-    "No coding agent is started for a question by itself - and the task says so, never a reply owed that looks as if somebody were on it."
+def test_a_question_on_a_coding_task_whose_agent_stopped_carries_that_agent_on():
+    """The owner, 2026-11-10: "job of agent is to be helpful and do as much as possible". Ray asks "which branch will it land on?" on a bug
+    the coding agent fixed and left: the question is that agent's next turn - its session reopened by itself - never a reply owed with
+    nobody writing it. Where no agent may start by itself, the task says why."""
     s = store(coding_auto_enabled='0')
     out, went = arrived(s, mail(body='late_fee in northwind/ledger is wrong - fix it.'), says(intent='task', kind='coding')); tid = out['task_id']
     assert s.get_task(tid)['Kind'] == 'coding' and went == []
-    _o, went = arrived(s, mail(**{**WORK, 'body': 'Which branch will it land on?'}), says(intent='reply_only', kind='task', refines=False))
-    assert went == ['reply_to_agent'] and s.get_task(tid)['Kind'] == 'coding' and s.pending_review(tid, kind='draft')
-    assert any(x.startswith("No agent started: the reply is the coding agent's to write, and none is running on it - ") for x in lines(s, tid))
+    arrived(s, mail(**{**WORK, 'body': 'Which branch will it land on?'}), says(intent='reply_only', kind='task', refines=False))
+    assert s.get_task(tid)['Kind'] == 'coding' and s.pending_review(tid, kind='draft')
+    _rv, went, ok = handed(s, tid)
+    assert not ok and went == [] and [x for x in lines(s, tid) if x.startswith('No agent started: ')], lines(s, tid)
+    s.set_setting('coding_auto_enabled', '1', 't')
+    with mock.patch.object(ingest, '_resumable_coding', return_value=(True, '')), mock.patch.object(ingest, 'has_room', return_value=True):
+        try: _rv, went, ok = handed(s, tid)
+        finally: ingest.CODING_OPENING.discard(tid)          # the start is mocked away, so nothing lets go of it
+    assert ok and went == ['_continue_coding'], (went, lines(s, tid))
+    assert any('the coding agent reopens its own session here by itself' in x for x in lines(s, tid))
 
 
 def test_a_second_line_while_the_first_start_is_on_its_way_starts_no_second_agent():
@@ -342,13 +351,20 @@ def test_a_reply_owed_on_a_general_task_starts_the_assistant_once_told_the_reply
     assert ingest.first_ask(s, tid).startswith('THIS TASK IS A REPLY OWED to Ray Colton')
 
 
-@pytest.mark.parametrize('case', ['coding', 'live'])
-def test_a_reply_owed_on_a_coding_task_or_under_a_live_agent_starts_nothing_new(case):
-    s = store(); tid = general_ask(s, kind='coding' if case == 'coding' else 'general')
-    if case == 'live': general.OPENING.add(tid)
+def test_a_reply_owed_under_a_live_agent_starts_nothing_new():
+    s = store(); tid = general_ask(s, kind='general')
+    general.OPENING.add(tid)
     try: _rv, spawned, went = handed(s, tid)
     finally: general.OPENING.discard(tid)
     assert not went and spawned == [] and not s.task_has_tag(tid, ingest.REPLY_TAG)
+
+
+def test_a_reply_owed_on_a_coding_task_nothing_ran_on_starts_its_coding_agent():
+    "A coding task stays coding: the question goes to a coding agent, started as a fresh task's would be - never the general one beside it."
+    s = store(); tid = general_ask(s, kind='coding')
+    try: _rv, spawned, went = handed(s, tid)
+    finally: ingest.CODING_OPENING.discard(tid); general.OPENING.discard(tid)
+    assert went and spawned == ['_auto_code'] and s.get_task(tid)['Kind'] == 'coding', (spawned, lines(s, tid))
 
 
 def test_the_hand_over_keeps_a_general_kind_and_holds_the_start_against_a_second_one():

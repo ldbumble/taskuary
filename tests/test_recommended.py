@@ -84,7 +84,7 @@ def test_a_run_that_is_over_fills_mark_done_where_no_summary_was_written(s):
             r = rulebook.recommended(s, item(tid), verbs('close', 'defer'))
             assert (r['verb'], r['why'], r['state']) == ('close', 'Finished at 10:02; nothing since.', st)
     # ...and where it is not over - stopped mid-work, work not pushed, an ask, a wait - nothing is filled
-    for st in ('stopped', 'asked', 'asked_late', 'own', 'untouched', 'fyi', 'report_ok'):
+    for st in ('asked', 'asked_late', 'own', 'untouched', 'fyi', 'report_ok'):
         with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': ''}):
             assert rulebook.recommended(s, item(tid), verbs('close', 'continue', 'reply', 'review_changes')) is None, st
 
@@ -124,6 +124,15 @@ def test_work_left_unpushed_fills_review_changes_unless_its_landing_card_asks(s)
             assert rulebook.recommended(s, item(tid), verbs('review_changes', 'close')) is None, "the card's Push is the lit move"
         with mock.patch.object(landing, 'asked', return_value=True):
             assert rulebook.recommended(s, item(tid), verbs('review_changes', 'close')) is None, 'the agent proposed how it lands'
+
+
+def test_an_agent_stopped_with_its_work_unfinished_fills_continue(s):
+    """It had work and is gone, and nothing was lit ("no default verb"): Continue is the move wherever its row draws one - a general
+    agent's row has none (its chat box is the way on), and then nothing is filled."""
+    tid = agent_task(s, kind='coding')
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'stopped', 'line': ''}):
+        assert rulebook.recommended(s, item(tid, lane='stopped'), verbs('continue', 'close', 'review_changes'))['verb'] == 'continue'
+        assert rulebook.recommended(s, item(tid, lane='stopped'), verbs('close', 'regular_agent')) is None
 
 
 def test_a_failed_run_fills_its_own_way_past_it_and_never_the_send_that_failed(s):

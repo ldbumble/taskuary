@@ -63,7 +63,7 @@ MATRIX = [
     ('agent finished (coding)', 'agent_done', 'close', False),
     ('agent failed (general)', 'failed_cause', 'continue', True),       # ...its failure's Try again, said by the run's own line
     ('agent failed (coding)', 'failed_cause', None, False),             # its row leads with New task: nothing is filled
-    ('agent stopped-saved (coding)', 'stopped', None, False),
+    ('agent stopped-saved (coding)', 'stopped', 'continue', False),    # its work unfinished: carried on (2026-11-10)
     ('Close the August books', 'done_list', 'close', False),
     ('Move payroll to Payworth', 'goal', None, False),
     ('Migrate the census export', 'goal_late', 'chase', False),     # a late answer no agent was woken for is chased (2026-11-10)

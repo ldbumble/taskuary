@@ -264,8 +264,8 @@ def state(store, item: dict, verbs: list) -> tuple:
     if kind == 'agent' or (tid and lane in ('stopped', 'saved')):
         at = last_word(store, tid) if tid else None
         # ...A STOPPED RUN THAT FINISHED ITS WORK is put down, not picked up (the Advisor audit, 2026-10-28: on a stopped agent the owner
-        # pressed Continue 3 of 16 times and Mark done 11) - and a plain stop lights nothing (NO DEFAULT VERB, the owner, 2026-10-28): its
-        # Continue comes only from the finish check, with what it dropped said beside it
+        # pressed Continue 3 of 16 times and Mark done 11) - and one stopped with its work unfinished is carried on: its Continue is lit
+        # (rulebook.MOVES; the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible")
         return ('stopped_done', {'when': finished_quiet(store, tid, at)}) if tid and left_result(store, tid) else ('stopped', {'ago': ago(at)})
     if lane == 'forgotten':
         who, days = slipped(store, it, t)
@@ -436,8 +436,9 @@ QUIET = frozenset({'closed', 'working', 'agent_asking'})
 LATE = frozenset({'waiting_late', 'waiting_overdue', 'waiting_late_usual', 'goal_late', 'watch_quiet'})
 NOTHING_LEFT = 'Its agent said nothing is left to do'
 # THE MOVE A STATE'S OWN FACT NAMES (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible. it shoudl prompt you,
-# should i deploy"): these lit nothing, and their line was hidden too - work left unpushed is looked at
-MOVES = {'unpushed': ('review_changes',)}
+# should i deploy"): these lit nothing, and their line was hidden too - work left unpushed is looked at, an agent stopped with its work
+# unfinished is carried on
+MOVES = {'unpushed': ('review_changes',), 'stopped': ('continue',)}
 
 
 def landing_asks(store, tid) -> bool:

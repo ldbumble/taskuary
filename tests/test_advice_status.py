@@ -25,7 +25,7 @@ class StatusTests(_Rail):
             s._exec('DELETE FROM advice')
             advisor._write(s, target_kind='task', target_id=t, key=f'task:{t}', event=advisor.SHOWN, revision=rev, dropped=dropped)
             with mock.patch.object(advisor, 'notice'): got = advisor.status(s, f'task:{t}')
-            self.assertEqual((got['verb'], 'none' in got), (None, False), dropped)      # a plain stop lights nothing
+            self.assertEqual((got['verb'], 'none' in got), ('continue', False), dropped)  # a stop with work unfinished lights Continue (2026-11-10)
 
     def test_an_agent_at_work_lights_nothing_no_model_is_asked_and_the_switch_is_the_advisors_alone(self):
         from taskuary import workerstate as ws

@@ -130,8 +130,9 @@ def reply_target(store, task_id: int):
     joined onto the task (the End of day checkup) became the newest row, so the session's reply to the colleague who had
     written again went to "nobody" and was filed as a result (2026-10-13). Only a task with nobody behind any row gets one."""
     # ...and never the owner's own mail: a self-forward ("sign me up?") drafted "Hi Alex" back to the owner (the email walk, 2026-10-29)
+    # ...and a person before a machine: a code host's notice on the thread is nobody to answer while someone on it is (reads_replies)
     rows = [m for m in reversed(store.list_messages(task_id)) if m.get('Status') not in ('context', 'skipped') and not from_owner(store, m)]
-    own = next((m['MessageId'] for m in rows if not no_one_behind(m.get('Channel'))), None)
+    own = next((m['MessageId'] for m in rows if reads_replies(m)), None)
     # ...and a promise task answers the owner's own mail it was made from: whom they promised is who waits (store.promised_in). Only
     # where nobody on the task's own rows is: a line that came in on it since is the newer ask
     return own or (store.promised_in(store.get_task(task_id)) or {}).get('MessageId') or (rows[0]['MessageId'] if rows else None)
@@ -140,10 +141,24 @@ def reply_target(store, task_id: int):
 # THE OWNER'S OWN ASK HAS NOBODY TO REPLY TO (the owner, 2026-11-06: "What is this? doesn't make any sense" - an agent saved a reply on a task
 # they made themselves, and narrated the refusal to them). Said in its first prompt, and the reply tools are not offered on it
 OWN_ASK = "This task is your owner's own ask - there is nobody to reply to; answer in the chat."
+# AN AUTOMATED SENDER IS NOBODY TO REPLY TO EITHER (the owner, 2026-11-10: "it's replying to a no reply email ... github emails are not supposed
+# to be respodned to"): a finished run on a code host's failure notice set its write-up up as a reply to the notifier, Send and all
+NOTICE = ('This task came from an automated notice - nobody reads a reply to it, so there is none to write. Your write-up is for your owner, '
+          'here on the task; if a person should hear of it, propose_email to that person.')
+def reads_replies(m: dict) -> bool:
+    "Is somebody behind this message who reads a reply: it came on a channel someone writes on, from a person, not a machine (categories.automated)."
+    from .categories import automated
+    return not no_one_behind((m or {}).get('Channel')) and not automated(m or {})
 def no_correspondent(store, task_id: int) -> bool:
-    "Nobody but the owner is behind the task: a reply would have no one to go to (agent_reply keeps it as the result instead)."
+    "Nobody but the owner, or a machine, is behind the task: a reply would have no one to read it (the reply tools are not offered on it)."
+    from .categories import automated
+    mid = reply_target(store, task_id); m = (store.get_message(mid) or {}) if mid else {}
+    return not mid or automated(m) or (not store.held_review(task_id) and no_one_behind(m.get('Channel')))
+def nobody_line(store, task_id: int) -> str:
+    "What the agent is told where nobody reads a reply: the notice's line where a machine sent it, else the owner's own ask's."
+    from .categories import automated
     mid = reply_target(store, task_id)
-    return not mid or (not store.held_review(task_id) and no_one_behind((store.get_message(mid) or {}).get('Channel')))
+    return NOTICE if mid and automated(store.get_message(mid) or {}) else OWN_ASK
 
 
 def answers_for(store, task_id: int, mid: int, to: str = '') -> int | None:
@@ -163,7 +178,7 @@ def _people(store, task_id: int) -> list:
     "Everyone who wrote in on this task, newest first, one row each: (address, name, their newest message)."
     seen, out = set(), []
     for m in reversed(store.list_messages(task_id)):
-        if m.get('Status') in ('context', 'skipped') or str(m.get('Direction') or 'in') == 'out' or from_owner(store, m) or no_one_behind(m.get('Channel')): continue
+        if m.get('Status') in ('context', 'skipped') or str(m.get('Direction') or 'in') == 'out' or from_owner(store, m) or not reads_replies(m): continue
         k = str(m.get('FromEmail') or m.get('FromName') or '').strip().lower()
         if k and k not in seen: seen.add(k); out.append((k, str(m.get('FromName') or '').strip(), m))
     return out
@@ -419,6 +434,10 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         mid = hit['MessageId']
         if held and _person(store, held.get('MessageId')) != _person(store, mid): held = {}
     else: mid = reply_target(store, task_id) or held.get('MessageId')
+    # ...and a machine reads no reply (NOTICE): refused at the door, saying what to do instead - nothing is kept as a result, the write-up is
+    # the agent's own last words to the owner
+    if mid and nobody_waiting(store, mid):
+        return {'ok': False, 'no_reply': True, 'why': f'{NOTICE} Nothing was saved.'}
     # ...and `answers` names the mail that holds the ask when the owner means one triage did not pick: it must be somebody's mail on this task
     if answers:
         a = store.get_message(answers) or {}
@@ -526,17 +545,13 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
 # PhishGuard training reminder, not an engineering or repo issue, so I closed it as FYI with no
 # further action" - our own internal wrap-up, in our own internal words, posted to the robot that
 # sent the notice (TQ-0252). Nothing about that was a reply to the sender.
-def nobody_waiting(store, mid: int, rep: dict) -> bool:
-    """Did this run end with nothing done, for a sender who is not waiting to hear anything back?
-    Then there is no reply to write and the notice is simply filed with its report.
-
-    BOTH halves are required, and the second is the one that keeps this honest. "Nothing to do"
-    said to a PERSON who asked is still the answer they are owed - "I looked, the import is fine"
-    is a reply, and swallowing it would be the worse bug. "Nothing to do" on an automated notice
-    is a mailer's inbox, and whatever we write there is only ever about ourselves."""
-    if rep.get('outcome') != 'nothing_to_do': return False
-    from .categories import sender_class, team_domains_of
-    return sender_class(store.get_message(mid) or {}, team_domains_of(store.get_settings())) != 'person'
+def nobody_waiting(store, mid: int) -> bool:
+    """Is the message a reply would answer from a machine? Then there is no reply to write, whatever the run found, and the result is
+    simply filed with its report. "Nothing to do" said to a PERSON who asked is still the answer they are owed - "I looked, the import is
+    fine" is a reply. On an automated notice it is a mailer's inbox - and so is "fixed it" (the owner, 2026-11-10: "it's replying to a no
+    reply email"): whatever we write there is read by nobody."""
+    from .categories import automated
+    return automated(store.get_message(mid) or {})
 
 
 # The server installs its conversation refresh here (PW-235): called as REFRESH(store, task_id, mid)
@@ -724,10 +739,11 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'age
     if mid and not held and not own_draft(store, task_id) and (why := put_down(store, task_id, mid)):
         store.add_comment(task_id, actor, 'agent', f"The reply was put down as not needed ({why.rstrip('.')}) - no reply drafted.")
         mid = None
-    # a held draft is proof somebody IS waiting on an answer, so it is never quietly dropped here
-    if mid and not held and not own_draft(store, task_id) and nobody_waiting(store, mid, rep):
-        store.add_comment(task_id, actor, 'agent', 'Nothing needed doing here and the sender is not waiting on an '
-                                                   'answer - filed with the report, no reply drafted.')
+    # a held draft is proof somebody IS waiting on an answer - unless a machine sent what it answers: one held there is retired with it
+    if mid and nobody_waiting(store, mid):
+        if held: store.decide_review(held['ReviewId'], 'no_reply', None, actor, 'an automated sender reads no reply'); held = {}
+        store.add_comment(task_id, actor, 'agent', 'An automated system sent this, and nobody reads a reply to it - the result is filed '
+                                                   'with the report, no reply drafted.')
         mid = None
     # refresh first, draft second (PW-235): an answer the owner already sent means none is owed; a newer
     # ask is the one the reply answers; a failed refresh is shown, not assumed away

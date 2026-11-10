@@ -83,6 +83,13 @@ def sender_class(r: dict, team_domains=()) -> str:
     return sc if sc in SENDER_CLASSES else 'person'
 
 
+def automated(r: dict) -> bool:
+    """A machine sent it, so nobody reads a reply to it: the row's stored class (the verdict's, else the headers') is not a person - and a
+    row with no class is one only where the mail system itself marked it an auto-reply (autoreply.is_auto). Never read off the address."""
+    from .autoreply import is_auto
+    return sender_class(r or {}) != 'person' or is_auto(r or {})
+
+
 def category_of(r: dict, team_domains=()) -> str:
     """One category for a feed row (store.feed columns: MsgStatus, RouteReason, TaskKind…)."""
     st, reason = r.get('MsgStatus') or r.get('Status') or '', (r.get('RouteReason') or '').lower()

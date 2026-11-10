@@ -2065,10 +2065,10 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # how this session ENDS. Without it the only ending is a person clicking Done, so a task
     # finished overnight produced no report and the sender got no answer (selfclose.py).
     from . import selfclose
-    from .wrapup import OWN_ASK, no_correspondent
+    from .wrapup import no_correspondent, nobody_line
     if not stranger and no_correspondent(store, tid):
         # an owner-opened session still hears it is theirs to end (STAY_LINE's mark), just without STAY_LINE's reply road
-        parts.append(f"{OWN_ASK} No `taskuary --reply` or propose_reply here. " + (
+        parts.append(f"{nobody_line(store, tid)} No `taskuary --reply` or propose_reply here. " + (
                      'THE OWNER OPENED THIS SESSION: `taskuary --done` is refused. Summarize, then wait.' if selfclose.stays_open(store, tid) else
                      'WHEN FINISHED: run `taskuary --done "<one sentence>" --no-reply`.' if selfclose.mode(store) != 'off' else ''))
     elif selfclose.stays_open(store, tid): parts.append(selfclose.STAY_LINE)

@@ -57,6 +57,39 @@ def test_a_reply_saved_anyway_reads_back_as_a_fact_never_a_refusal():
     assert 'refused' not in out['says'] and s.list_reviews('pending') == []
 
 
+def notice_task(s, kind='coding'):
+    "A task made from a code host's failure notice: the class triage stored on it says a machine sent it."
+    tid = s.create_task({'Title': 'CI failed on main', 'Kind': kind, 'Status': 'in_progress'}, 'owner')
+    s.add_message({'TaskId': tid, 'ExternalId': 'n-1', 'ConversationId': 'c-9', 'Channel': 'email', 'FromName': 'Code host',
+                   'FromEmail': 'notifications@codehost.example', 'Subject': 'Run failed: CI - main', 'SenderClass': 'automated',
+                   'BodyText': 'The run failed on main in northwind/ledger.', 'SentAt': '2026-11-10 07:00:00', 'Status': 'routed'})
+    return tid
+
+
+def test_an_automated_notice_has_nobody_to_reply_to_on_every_road():
+    """The owner, 2026-11-10: "it's replying to a no reply email ... github emails are not supposed to be respodned to". The agent is told
+    so, the reply tools are not offered, a reply asked for at the door is refused with what to do instead, and a person who writes on the
+    thread is still the one answered."""
+    s = MemoryStore(); tid, gen = notice_task(s), notice_task(s, 'general')
+    assert wrapup.no_correspondent(s, tid) and wrapup.nobody_line(s, tid) == wrapup.NOTICE
+    with mock.patch('taskuary.origin.of_task', return_value=('trusted', 'the code host the owner set up')):     # its notices are the owner's own
+        assert wrapup.NOTICE in terminal.seed_text(s, tid, 'fix the build')
+        assert wrapup.NOTICE in general._prompt(s, gen)[0] and 'REPLYING FOR THE OWNER' not in general._prompt(s, gen)[0]
+    with mock.patch.object(wrapup, 'REFRESH', None): out = wrapup.agent_reply(s, tid, 'Fixed the import test; CI is green.', 'coding')
+    assert not out['ok'] and out['why'].startswith(wrapup.NOTICE) and 'propose_email' in out['why'] and s.list_reviews('pending') == []
+    names = lambda t: {x['name'] for x in c.post(f'/api/mcp?task={t}', headers=hdr(t),
+                                                json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}).json()['result']['tools']}
+    with mock.patch.object(server, 'store', s): assert not names(tid) & set(agenttools.REPLY_TOOLS)
+    # ...and once a person writes on the same thread, they are the one a reply answers
+    pid = s.add_message({'TaskId': tid, 'ExternalId': 'n-2', 'ConversationId': 'c-9', 'Channel': 'email', 'FromName': 'Gail Moreno',
+                         'FromEmail': 'gail@northwind.example', 'Subject': 'Re: Run failed', 'BodyText': 'Is main fixed?',
+                         'SentAt': '2026-11-10 07:30:00', 'Status': 'routed'})
+    s.add_message({'TaskId': tid, 'ExternalId': 'n-3', 'ConversationId': 'c-9', 'Channel': 'email', 'FromName': 'Code host',
+                   'FromEmail': 'notifications@codehost.example', 'Subject': 'Run failed again', 'SenderClass': 'automated',
+                   'BodyText': 'The run failed again.', 'SentAt': '2026-11-10 08:00:00', 'Status': 'routed'})
+    assert wrapup.reply_target(s, tid) == pid and not wrapup.no_correspondent(s, tid)
+
+
 def test_the_reply_tools_are_not_offered_on_the_owners_own_ask():
     s = MemoryStore(); own, mailed = own_task(s), mailed_task(s)
     names = lambda tid: {t['name'] for t in c.post(f'/api/mcp?task={tid}', headers=hdr(tid),

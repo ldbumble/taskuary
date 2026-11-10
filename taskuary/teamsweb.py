@@ -22,6 +22,7 @@ from datetime import datetime
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 from loguru import logger
+from .timewords import plural
 
 HOME = 'https://teams.live.com/v2/'
 SITE = 'teams.live.com'
@@ -279,7 +280,7 @@ def probe(c, page=None) -> str:
     "The card's Test: the page read once, said in words. Raises SignedOut / Changed like the poll."
     snap = (page or Page(c['ConnectorId'])).chats(); _check(snap)
     k = len(parse_chats(snap.get('list')))
-    return f'signed in to Teams (personal) - {k} chat{"" if k == 1 else "s"} in the list'
+    return f"signed in to Teams (personal) - {plural(k, 'chat')} in the list"
 
 
 def send(store, chat: str, body: str, connector_id=None, page=None) -> dict:

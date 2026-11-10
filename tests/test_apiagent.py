@@ -217,6 +217,22 @@ class TheSessionTests(unittest.TestCase):
             session.send_prompt('log into the scheduling portal and read the denials', echo=False)
         return s, tid
 
+    def test_a_turn_stopped_while_the_card_answered_files_nothing(self):
+        """The audit, 2026-11-10: Remind me (or the x) set the stop while a card's one call was out; its answer came back after it and was
+        filed as the turn - a CLI is killed under it, a call cannot be. Stopped is stopped: no answer filed, the turn ends stopped."""
+        from taskuary import general
+        box = {}
+        class Brain:
+            def __call__(self, *a, **kw): box['session'].stop(); return 'The plan is drafted.'
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Plan the offsite', 'Summary': 'go', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        box['session'] = session = general.GeneralSession(s, tid)
+        session.pick, session.provider, session.model = 'connector:1', 'Northwind AI', ''
+        with mock.patch.object(llm, 'build_llm', return_value=Brain()), mock.patch.object(bv, 'installed', return_value=False), \
+             mock.patch.object(bv, 'can_set_up', return_value=False), self.assertRaises(general.Stopped):
+            session.send_prompt('draft a plan for the offsite', echo=False)
+        self.assertEqual([c['Body'] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE], [])
+
     def test_a_card_that_takes_tools_runs_the_loop_with_the_browser_brief(self):
         seen = []
         class Brain:

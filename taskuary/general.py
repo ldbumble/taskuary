@@ -2730,6 +2730,9 @@ class GeneralSession:
             native_id = getattr(brain, 'session_id', '')
             self.cli_sid = ((native_id if isinstance(native_id, str) else '') or self.cli_sid) if continuity.can_resume(self.store, self.pick) else ''
             self._remember_session()
+            # ...A TURN STOPPED WHILE ITS BRAIN WAS ANSWERING IS STOPPED: a CLI is killed under it, an AI card's one call cannot be - its answer
+            # came back after the x or Remind me and was filed as the turn (the audit, 2026-11-10). Stopped, as the CLI's is
+            if cancel.is_set(): raise Stopped('stopped')
             return self._file(reply, paths, t0, browser_tools, browser_offer)
         except Exception as e:
             stopped = cancel.is_set() or getattr(self, 'closing', False)

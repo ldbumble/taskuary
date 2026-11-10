@@ -14,7 +14,7 @@ from .routing import first_line, draft_task_fields
 from .policy import evaluate
 from .triage import agent_words, classify_intent, person_name, sender_called, wrapper_of
 from .store import task_ref, auto_code_enabled, _now
-from . import buttons, remind, senders, textsim, watch, wrapup, words, workstreams
+from . import brainroute, buttons, remind, senders, textsim, watch, wrapup, words, workstreams
 from .categories import agent_word, route_head
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
@@ -252,6 +252,7 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str, own: bool = False) -> t
     # MAIL THAT TRIES TO STEER AN AI STARTS NOTHING BY ITSELF (the Advisor design rev 2, the owner's ruling 2026-10-28): what triage or
     # ranking read it as trying to make an AI do (message.Danger - the model's reading, never a word list) holds the start for the owner
     if not own and (d := danger(store, msg, mid)): return False, said(f'It reads as an attempt to steer an AI ({d}) - nothing starts until you press.')
+    if not own and (held := brainroute.auto_held(store)): return False, said(held[0].upper() + held[1:] + '.')
     if kind == 'general':
         if cfg.get('general_auto_enabled', '1') != '1': return False, said(f"Starting an agent by itself is switched off in {words.name('coding')}.")
         from . import general
@@ -2125,6 +2126,7 @@ def reach_why(store, tid, msg: dict, mid, follow: dict | None, kind: str, own: b
     if not joinable(store, tid): return 'the task is closed'      # dismissed: a done task new work reopens first (land_on)
     if store.get_setting('answer_to_agent') == 'off': return 'passing lines to the agent is switched off'
     if msg.get('no_auto'): return 'the channel waits for the owner'
+    if not own and (held := brainroute.auto_held(store)): return held
     if live and live != kind: return 'another agent is live on it'
     # ...nor a line that reads as steering an AI (the owner, 2026-10-28): it waits for the owner's press
     if not own and (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d}) - it waits for you'

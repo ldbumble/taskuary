@@ -583,6 +583,27 @@ def cap(store):
     return int(v) if v.isdigit() else None
 
 
+# A DAY'S CEILING FOR WHAT NOBODY ASKED FOR (the owner, 2026-11-10: "client claims he barely used it. are we leaking tokens?"): a leak - a
+# start on every arrival, a wake that wakes again, a pass on a clock - ran a whole day unseen and spent what a month should. Past this many
+# calls in a day, agents do not start or wake by themselves and the clocks' passes wait for tomorrow; the bell says why while it holds
+# (problems.collect). What the owner asks for still runs. Generous by default: an ordinary busy day is a few hundred calls; 0 is no ceiling
+AUTO_CAP_KEY, AUTO_CAP = 'auto_ai_daily_calls', 1500
+
+
+def calls_today(store, now: datetime = None) -> int:
+    r = store._one('SELECT SUM(COALESCE(Calls, 1)) n FROM brainroute WHERE At>=?', ((now or datetime.now()).strftime('%Y-%m-%d'),)) or {}
+    return int(r.get('n') or 0)
+
+
+def auto_held(store, now: datetime = None) -> str:
+    "Why what starts by itself waits today - '' while today's AI calls are under the owner's ceiling (`auto_ai_daily_calls`)."
+    v = str(store.get_setting(AUTO_CAP_KEY) or '').strip()
+    n = int(v) if v.isdigit() else AUTO_CAP
+    if not n or (done := calls_today(store, now)) < n: return ''
+    return (f"today's AI calls reached {done:,} (the daily limit for work nobody asked for is {n:,}), so agents do not start or wake by "
+            "themselves until tomorrow - what you ask for still runs, and the limit is in Settings")
+
+
 def strong_today(store, now: datetime = None) -> int:
     return store.count_brain_routes(since=(now or datetime.now()).strftime('%Y-%m-%d'), tier='strong')
 

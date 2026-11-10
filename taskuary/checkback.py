@@ -105,13 +105,14 @@ def late(store, now: datetime = None) -> int:
 def due(store, now: datetime = None, spawn=None) -> int:
     """Each check-back come due, handed to its task's agent once - run with the reminders (remind.tick). With every agent slot full it waits for
     the next tick rather than being dropped. `spawn` runs the hand-off (a thread by default: the clock never waits on a model)."""
-    from . import general, ingest
+    from . import brainroute, general, ingest
     n = 0
     for t in store._rows("SELECT TaskId, Status, Kind, CheckBackWhat FROM task WHERE IFNULL(CheckBackAt,'')<>'' AND CheckBackAt<=?", (_stamp(now),)):
         tid = t['TaskId']
         if t.get('Status') in CLOSED or not general.handles(t):
             store.update_task(tid, {'CheckBackAt': '', 'CheckBackWhat': ''}, 'assistant'); continue
         if not general.session_for(tid) and not general.idled(tid, store) and not ingest.has_room(store): continue
+        if brainroute.auto_held(store): continue           # past the day's ceiling for what nobody asked for: due again tomorrow
         store.update_task(tid, {'CheckBackAt': '', 'CheckBackWhat': ''}, 'assistant')        # cleared first: it speaks once
         (spawn or ingest._spawn)(fire, store, tid, t.get('CheckBackWhat') or 'what you said you would verify')
         n += 1

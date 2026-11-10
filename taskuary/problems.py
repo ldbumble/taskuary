@@ -315,6 +315,11 @@ def collect(store, all_of_them: bool = False) -> list:
         out.append({'key': 'triage', 'title': brain['title'], 'detail': brain['detail'], 'since': brain['since'], 'error': brain['error'][:400],
                     'now': True, 'where': 'Connections', 'connector': pick[10:] if pick.startswith('connector:') else None,
                     'fix': 'Check my setup', 'kind': 'thinking'})
+    # ...and the day's ceiling for AI work nobody asked for, while it holds: one line, gone tomorrow or when the limit is raised
+    from .brainroute import auto_held
+    if held := auto_held(store):
+        out.append({'key': 'auto_ai_cap', 'title': 'Automatic AI work is paused for today', 'detail': held[0].upper() + held[1:] + '.',
+                    'since': datetime.now().strftime('%Y-%m-%d'), 'now': True, 'where': 'Settings', 'fix': 'Open Settings'})
     # A REPORT'S FAILURE LIVES HERE AND NOWHERE ELSE (the owner, 2026-09-28): a failed run files no row, so
     # this reads each report's latest run - failed, or run without one of its sources - and clears itself
     # the moment a run works again

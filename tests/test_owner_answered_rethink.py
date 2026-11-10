@@ -29,6 +29,23 @@ def test_the_agent_is_told_to_recommend_the_close_never_to_make_it():
     assert 'recommend they close the task' in selfclose.OWNER_ANSWERED_LINE and selfclose.MARKER not in selfclose.OWNER_ANSWERED_LINE
 
 
+def test_the_reply_they_sent_with_taskuarys_own_send_is_no_answer_from_outside():
+    """Agent walk 2, 2026-11-10: the owner pressed Send on the agent's draft; its copy came back from the Sent folder as their newest message
+    on the thread, and the next turn's prompt said they had answered it themselves, outside Taskuary."""
+    s = MemoryStore(); tid = _task(s)
+    said = 'Hi Gail - the badge list is attached, all nine starters.'
+    rid = s.add_review({'TaskId': tid, 'MessageId': s.list_messages(tid)[0]['MessageId'], 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': said})
+    s.decide_review(rid, 'approved', said, 'owner')
+    s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Re: Badge list', 'FromName': 'You', 'FromEmail': 'alex@northwind.example',
+                   'BodyText': said, 'Status': 'context', 'Direction': 'out', 'SentAt': '2026-11-05 09:30:00'})
+    assert not general.owner_answered_last(s, tid)
+    assert selfclose.OWNER_ANSWERED_LINE not in general._prompt(s, tid)[0]
+    # ...a line they then write themselves, from their own mailbox, is one
+    s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Re: Badge list', 'FromName': 'You', 'FromEmail': 'alex@northwind.example',
+                   'BodyText': 'One more: Omar starts Monday too.', 'Status': 'context', 'Direction': 'out', 'SentAt': '2026-11-05 09:45:00'})
+    assert general.owner_answered_last(s, tid)
+
+
 def test_an_older_mail_of_theirs_that_joined_the_task_after_the_ask_is_no_answer():
     """The agent walk, 2026-11-10: a colleague's ask opened the task, and a minute later the owner's own mail on that thread - written ten
     days BEFORE the ask - was put on it as part of the work. Last to join read as newest, and the agent was told the owner had answered."""

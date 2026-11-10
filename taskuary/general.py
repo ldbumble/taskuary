@@ -544,12 +544,20 @@ JOINED = ("SELECT m.*, MAX(m.CreatedAt, IFNULL((SELECT MAX(r.CreatedAt) FROM rou
           "AND IFNULL(m.Channel,'')<>'report' ORDER BY JoinedAt, m.MessageId")
 
 
+def went_from_here(store, tid: int):
+    "A test for a message on task `tid`: is it a reply Taskuary sent on the owner's press, come back from their Sent folder? (its opening words)"
+    from .channels import _same_words
+    sent = [str(x.get('text') or '') for x in wrapup.sent_replies(store, tid)]
+    return lambda x: any(_same_words(x.get('OwnText') or x.get('BodyText') or '', t) for t in sent)
 def owner_answered_last(store, tid: int) -> bool:
     """The message SENT last on the task's thread is the owner's own: they answered it themselves, outside Taskuary.
     Sent, not joined (the agent walk, 2026-11-10): a mail of theirs written ten days before the ask was put on the task a minute after it - part
-    of the work - and, last to join, read as their answer to a question it came before."""
+    of the work - and, last to join, read as their answer to a question it came before.
+    Outside (walk 2, that day): the reply they sent with Taskuary's own Send came back from the Sent folder as their newest, and the turn
+    after was told they had answered "outside Taskuary" - over a turn that listed the same reply as already sent from here."""
     rows = store._rows(JOINED, (tid,))
-    return bool(rows) and bool(max(rows, key=lambda m: (str(m.get('SentAt') or m.get('JoinedAt') or ''), m['MessageId'])).get('Own'))
+    last = max(rows, key=lambda m: (str(m.get('SentAt') or m.get('JoinedAt') or ''), m['MessageId']), default=None)
+    return bool(last and last.get('Own')) and not went_from_here(store, tid)(last)
 # LATEST MESSAGE WINS (the owner, 2026-11-06): corrected after a draft was waiting, the agent answered the thread's first ask again and the
 # draft it had left - mostly a reply already sent - stood under the newest turn as the answer. Each turn now hears which message is newest,
 # the draft waiting and when it was made, and what already went (selfclose.LATEST_LINE); the chat is told which turn a draft is (draft_turns)
@@ -727,12 +735,11 @@ def own_replies(store, tid: int, since: str = None) -> list:
     other's agent hears it too (the stress run, 2026-11-05). From the turn's start, not its answer (the night run, 2026-11-09): a line the
     owner sent while the turn worked was older than the answer, and no turn ever heard it."""
     if since is None and not (since := last_turn_began(store, tid)): return []
-    from .channels import _same_words
-    sent = [str(x.get('text') or '') for x in wrapup.sent_replies(store, tid)]
+    ours = went_from_here(store, tid)
     rows = store._rows("SELECT * FROM message WHERE (IFNULL(Direction,'in')='out' OR Status='context') AND CreatedAt>? AND Status NOT IN ('history','skipped') "
                        "AND (TaskId=? OR ConversationId IN (SELECT ConversationId FROM message WHERE TaskId=? AND ConversationId<>'')) "
                        "ORDER BY SentAt, MessageId", (since, tid, tid))
-    return [x for x in rows if not any(_same_words(x.get('OwnText') or x.get('BodyText') or '', t) for t in sent)]
+    return [x for x in rows if not ours(x)]
 def heard_meanwhile(store, tid: int, reply: str, summ, t0: float, drafted: str = '', brain=None) -> tuple:
     """(reply, summ) after what the owner wrote on the thread themselves WHILE this turn worked: the turn's closing words re-read against it in
     the one light read a waiting draft gets (channels.reread) - never a fresh turn. The night run, 2026-11-09: a turn started a second before the

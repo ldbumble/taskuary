@@ -270,6 +270,11 @@ WITHDRAWN = 'withdrawn - '
 def left_by(store, rid):
     "{CommentId, CreatedAt} of the chat turn that last left review `rid` as it stands (store.snap_draft) - None when no filed turn did."
     return store._one('SELECT CommentId, CreatedAt, Text FROM draft_snapshot WHERE ReviewId=? ORDER BY Id DESC LIMIT 1', (rid,))
+def _turn_after(store, task_id: int, rv) -> bool:
+    "Has a turn begun on the task since draft `rv` was written - the owner's line or a brief after it? Only a written draft counts."
+    from .general import USER_TYPE
+    return bool(str(rv.get('DraftText') or '').strip()) and bool(store._one(
+        'SELECT 1 AS x FROM comment WHERE TaskId=? AND ActorType=? AND CreatedAt>? LIMIT 1', (task_id, USER_TYPE, str(rv.get('CreatedAt') or ''))))
 def an_earlier_turns(store, rv) -> bool:
     "Is this pending draft one a filed chat turn left - so a new letter now is a later turn's, and takes its place as a new draft?"
     s = left_by(store, rv['ReviewId']) if rv else None
@@ -475,7 +480,10 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     if live and (to_mid := live.get('AnswersMid') or live.get('MessageId')) and _person(store, to_mid) != _person(store, mid): live = None
     if sid and live and stale_draft(store, live, sid): supersede(store, live, agent); live = None
     # ...and one an EARLIER TURN left is that turn's answer: a different letter now is this turn's own draft, the old one superseded
-    if live and an_earlier_turns(store, live) and _words(live.get('DraftText')) != _words(text):
+    # ...and so is one no turn of the agent's wrote (triage's, the quick drafter's): rewritten in place, the new letter's card stood at that old
+    # draft's place far above and the turn that wrote it drew none (the owner, 2026-11-10: "why did this not create the draft email action card?")
+    if live and (an_earlier_turns(store, live) or (not agent_drafted(live) and _turn_after(store, task_id, live))) \
+            and _words(live.get('DraftText')) != _words(text):
         store.decide_review(live['ReviewId'], 'closed_unsent', None, agent, note=REPLACED); live = None
     why = f'{agent} wrote this reply in its session - approve to send'
     if sent:

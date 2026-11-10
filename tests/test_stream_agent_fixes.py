@@ -257,3 +257,24 @@ def test_where_no_agent_may_take_the_line_the_one_read_still_settles_the_draft()
         channels.ingest_own_message(s, {'external_id': 'me1', 'channel': 'whatsapp', 'conversation_id': CONV, 'sent_at': stamp(-60),
                                         'body': 'yes 3pm, same room', 'from_email': 'me'}, 'your line in the chat')
     assert not spawn.called and s.get_review(rid)['Status'] == 'superseded'
+
+
+def test_a_draft_rewritten_in_a_later_turn_is_that_turns_card_and_the_old_one_its_record():
+    # the owner, 2026-11-10 ("terrible bug?? why did this not create the draft email action card?"): a reply already waited - written before
+    # any turn of the agent's - and his line asked for a short one with a file. The agent's new letter was written INTO that old review, so its
+    # card stayed at the old draft's place far above, and the new turn drew no card at all
+    s = MemoryStore(); tid = s.create_task({'Title': 'Vendor review', 'Status': 'in_progress'}, 't')
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Channel': 'email', 'FromName': 'Paula Vance', 'FromEmail': 'paula@vendor.example',
+                         'SentAt': '2026-11-10 08:00:00', 'BodyText': 'Your review of the tool?', 'Status': 'routed'})
+    old = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'A long review of every flaw.'})
+    s._exec("UPDATE review SET CreatedAt='2026-11-10 08:01:00' WHERE ReviewId=?", (old,))
+    for at, who, kind, words in (('2026-11-10 08:02:00', 'assistant', general.ASSISTANT_TYPE, 'Read it.'),
+                                 ('2026-11-10 09:00:00', 'owner', general.USER_TYPE, 'reply with the file attached, short, keep the real flaws')):
+        s._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', (at, s.add_comment(tid, who, kind, words)))
+    new = wrapup.agent_reply(s, tid, 'Short version: two real flaws, sheet attached.', 'assistant')['review_id']
+    assert new != old, 'a new review - its card stands in the turn that wrote it'
+    assert s.get_review(old)['Status'] == 'closed_unsent' and s.get_review(old)['DecideNote'] == wrapup.REPLACED
+    turn = s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Replaced the waiting draft with the short one.')
+    assert s.snap_draft(new, turn)
+    [d] = general.draft_turns(s, tid)
+    assert (d['review'], d['turn']) == (new, f'comment-{turn}')

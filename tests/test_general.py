@@ -319,8 +319,7 @@ class SharedSessionTests(unittest.TestCase):
         session = general.GeneralSession(store, tid)
         session.pick, session.provider = 'cli:claude', 'claude'
         answer = 'Here is the comparison.\n[[TASKUARY-DONE]] Finished the comparison.'
-        with mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: answer), \
-             mock.patch.object(session, '_close_out') as close:
+        with mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: answer), mock.patch('taskuary.selfclose.declare') as close:
             self.assertEqual(session.send_prompt('Compare them'), 'Here is the comparison.')
         close.assert_not_called()
         self.assertNotEqual(store.get_task(tid)['Status'], 'done')

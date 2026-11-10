@@ -2839,26 +2839,6 @@ class GeneralSession:
         if closing is not None and has_source: logger.info(f'task {self.task_id}: its agent said it was done - the task stays open for the owner to close')
         return reply
 
-    def _close_out(self, summary: str, turn: int = None):
-        """The chat said the work was done. Same ending as a coding session's: the task closes,
-        the conversation stays on the task as its record, and the reply to whoever asked is
-        drafted for the owner to approve. `turn`: the turn that said so - a later one started or waiting means it is not done."""
-        # NEVER OVER A TURN STILL TO COME (the overnight run, 2026-11-03): the sender's second mail was passed in while the first turn worked;
-        # that turn ended saying done, the close ran 0.1s later and wrapped the session up under the second turn - the pane read finished
-        # and paired Close out for the twenty seconds it was still working. The later turn says for itself whether the work is done
-        if turn is not None and (getattr(self, 'turn_no', 0) != turn or getattr(self, 'waiting_turns', 0)):
-            logger.info(f'task {self.task_id}: its agent said done, but another turn is on - the close waits for that one'); return
-        from . import selfclose
-        try: out = selfclose.declare(self.store, self.task_id, summary, 'assistant', sid=self.sid)
-        except Exception as e:
-            logger.warning(f'assistant self-close failed on task {self.task_id}: {e}'); return
-        # A REFUSED CLOSE IS SAID ON THE TASK, as selfclose.blocked promises ("a self-close that silently declines is
-        # indistinguishable from one that is broken"): the CLI prints the reason to the agent, and this road dropped it - the
-        # task sat in progress under an answer that said it was done (walk 2026-10-21). The owner-ends road files its own line.
-        why = (out or {}).get('why')
-        if not (out or {}).get('closed') and why and why != selfclose.OWNER_ENDS:
-            self.store.add_comment(self.task_id, 'assistant', 'agent', f'The agent said it was finished, but the task was not closed: {why}.')
-
     def trust_moved(self) -> bool:
         "Was this session's CLI conversation born in a mode the task no longer has - under the reviewer and now trusted, or the other way?"
         return bool(self.cli_sid) and (self.cli_sid == self.store.get_setting(f'stranger_sid:{self.task_id}')) != (_origin_of(self.store, self.task_id) == 'stranger')

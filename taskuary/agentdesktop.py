@@ -362,7 +362,7 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
                                'the agent to look again - it will be held for you again.')
         raise RuntimeError(f"agent-desktop refused it: {(err.get('message') or ' '.join(str(said or '').split()))[-300:]}")
     _tell(store, tid, f"The owner approved it and Taskuary ran `{p.get('command')}`. It said: {' '.join(str(said).split())[-300:] or 'done'}. "
-                      'Snapshot the app again, then ' + NEXT[0].lower() + NEXT[1:])
+                      'Snapshot the app again, then ' + NEXT[0].lower() + NEXT[1:], wake=True)
     store.audit('task', tid, 'desktop_act_done', 'owner', 'human', {'what': p.get('what'), 'command': str(p.get('command') or '')[:300]})
     return {'performed': p.get('what') or p.get('command')}
 

@@ -95,6 +95,11 @@ ACTIONS = {
     'desktop_act': ("do this in an app on the owner's desktop", ('sid', 'args'), None),
 }
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook before the act ran - never an agent's marker
+# WHAT NO AGENT MAY ASK FOR, AND THE MARKS NONE MAY PUT ON ITS OWN ASK - one list for both doors: the marker (parse) and the tool
+# (agenttools.proposal_of). They were two, and had drifted (the spine audit, 2026-11-09): the tool's did not name the held steps, so an agent
+# could file a "held step" of its own - a command of its choosing, on the card the owner reads as one Taskuary stopped
+NOT_ASKED = ('merge_pr', 'close_item', 'repair_workflow', *HELD_ACTS)
+MARKS = ('closeout', 'flow_run')
 
 # A POST IS DRAWN AS THE POST (the owner, 2026-11-05: "it's not showing the post and the image as a linkedin post and asking me if i want to
 # post it"): a run_tool on one of these is the owner's words on a network, so its card shows them as a post, editable, with the picture
@@ -188,7 +193,7 @@ def parse(text: str) -> list:
         # raised by the run itself (flow._repair_now): an agent that read a mail asking for one could rewrite any workflow, with
         # its own words for what changes on the card the owner approves
         # ...and `flow_run` is the run a workflow's own write waits in: an agent's run_tool naming one would mark that step done
-        if (a in ACTIONS or a in ('push', 'deploy')) and a not in ('merge_pr', 'close_item', 'repair_workflow', *HELD_ACTS): out.append({**{k: v for k, v in j.items() if k not in ('closeout', 'flow_run')}, 'action': a})
+        if (a in ACTIONS or a in ('push', 'deploy')) and a not in NOT_ASKED: out.append({**{k: v for k, v in j.items() if k not in MARKS}, 'action': a})
         if len(out) >= MAX: break
     return out
 
@@ -426,18 +431,17 @@ def owed(store, tid: int) -> bool:
     return any(_action(r) not in PLAYBOOKS for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (tid,)))
 
 
-def closed_out(store, tid: int, actor: str, said: str) -> bool:
+def closed_out(store, tid: int, actor: str, said: str) -> None:
     """The close-out is done: said on the task, with what still waits (its emails, its playbook). The task STAYS OPEN - only
     the owner's Mark done closes it (the owner, 2026-10-18: "sending and closing are two steps, never automatic"); this used
-    to close it whenever nothing else waited. False always: nothing closed."""
+    to close it whenever nothing else waited."""
     from . import slots
-    if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return False
+    if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return
     n = len(slots.open_(store, tid))
     store.audit('task', tid, 'closed_out', actor)
     rest = (f" {plural(n, 'email')} still to go." if n else ' Its playbook still waits on your approve or dismiss.' if playbook_pending(store, tid)
             else f" {buttons.label('close')} when the task is finished.")
     store.add_comment(tid, actor, 'human', f'{said}{rest}')
-    return False
 
 
 def _action(rv) -> str:
@@ -582,8 +586,9 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     what gets filed - the owner tightening an `alone:` line before the first run is the point."""
     p = json.loads(rv.get('DraftText') or '{}')
     edited = str(final_text or '').strip() and not str(final_text).lstrip().startswith('{')
-    if edited and (p.get('action') in ('write_playbook', 'amend_playbook') or (p.get('action') in CLOSEOUT and p.get('text'))):
-        p['text'] = final_text.strip()
+    # ...a close-out's box too, EMPTY AS PROPOSED INCLUDED (the spine audit, 2026-11-09): a merge with no summary shows an empty box that
+    # reads "GitHub writes the merge message" - what the owner typed into it was dropped, and GitHub wrote the message all the same
+    if edited and p.get('action') in ('write_playbook', 'amend_playbook', *CLOSEOUT): p['text'] = final_text.strip()
     # a tracker close-out's box IS its comment: what the owner left there goes, emptied included (None = pressed off the card, as filed)
     if p.get('action') == 'close_item' and final_text is not None and not str(final_text).lstrip().startswith('{'): p['text'] = str(final_text).strip()
     p = _edited(p, final_text, fields)

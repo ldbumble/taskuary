@@ -706,6 +706,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
                 try: out = proposals.close_pr(store, rv, actor)
                 except Exception as e:
                     store.add_comment(rv['TaskId'], actor, 'human', f'CLOSING THE PULL REQUEST FAILED: {str(e)[:300]}')
+                    store.review_act_failed(rid, str(e), actor)
                     return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300]}
                 if not store.decide_review(rid, 'rejected', None, actor, 'closed the pull request without merging'): return _delivery_busy(store, rid)
                 proposals.settle(store, rv, 'approve', actor)       # answered, like a merge - the task stays open for Mark done
@@ -715,6 +716,7 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
                     out = proposals.execute(store, rv, actor, final, skip_checks=verb == 'merge_anyway', fields=fields)
                 except Exception as e:
                     store.add_comment(rv['TaskId'], actor, 'human', f'PROPOSAL FAILED: {str(e)[:300]}')
+                    store.review_act_failed(rid, str(e), actor)     # the card says it after a reload, and its agent hears it (general.owner_did)
                     return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300],
                             **({'offers': e.offers, 'refused': True} if isinstance(e, proposals.ChecksRed) else {}),
                             # a grant the token lacks (github.Refused.needs): the owner's to add - a retry only repeats it

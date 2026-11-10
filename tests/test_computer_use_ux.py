@@ -191,7 +191,7 @@ class TheHeldActInWords(unittest.TestCase):
              'command': 'agent-browser find text Bills click'}
         raw = "✗ Element '[data-agent-browser-located='true']' is covered by <input#menu-holder> at its click point"
         with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://app.vendor.example/home'}), \
-             mock.patch.object(bg, '_tell', side_effect=lambda st, t, text, wait=False: told.append(text)):
+             mock.patch.object(bg, '_tell', side_effect=lambda st, t, text, **k: told.append(text)):
             out = bg.perform(s, tid, p, run=lambda sid, args: (1, raw))
         self.assertIsNone(out['performed'])
         self.assertEqual(out['refused'], 'vendor.example did not take it - something on the page covers that control. The agent was told and goes on another way.')

@@ -35,7 +35,7 @@ class HeldStepsOneCard(unittest.TestCase):
         real = verdicts.decide
         def door(store, rv, v, **kw): seen.append(rv['ReviewId']); return real(store, rv, v, **kw)
         with mock.patch.object(sg.subprocess, 'run', run), mock.patch('taskuary.spawn.run', run), mock.patch.object(sg.os.path, 'isdir', lambda p: p == HELD), \
-             mock.patch.object(sg, 'git_bash', return_value='bash'), mock.patch.object(sg, '_tell', lambda st, tid, t, wait=False: told.append(t)):
+             mock.patch.object(sg, 'git_bash', return_value='bash'), mock.patch.object(sg, '_tell', lambda st, tid, t, **k: told.append(t)):
             out = sg.approve_steps(self.s, ids, door, 'owner', verb)
         return ids, out, ran, told, seen
 

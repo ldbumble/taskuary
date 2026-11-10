@@ -235,6 +235,8 @@ export const resultOf = (review) => {
   let p = {};
   try { p = JSON.parse(review.FinalText || review.DraftText || "{}") || {}; } catch { p = {}; }
   const r = p.result || {}, url = r.url || (/https?:\/\/\S+/.exec(String(r.said || "")) || [""])[0].replace(/[.,)]+$/, "");
+  // ...a yes the page refused (browsergate._perform's `refused`) is over, and did nothing: it never reads "ran on the page"
+  if (r.refused) return { said: "Approved · not done", what: String(r.refused), url: "", command: String(p.command || "") };
   const what = String(p.about || p.what || r.performed || r.commented || r.closed || r.merged || "").trim();
   return { said: `Approved · ${VERB[p.action] || "done"}`, what, url, command: String(p.command || "") };
 };
@@ -260,13 +262,17 @@ export const heldCard = (reviews) => {
   const n = rs.length, lead = (p) => heldLead(p).lead;
   const whys = [...new Set(ps.map((p) => p.why || "it leaves this computer"))];
   const steps = rs.map((r, i) => ({ id: r.ReviewId, text: lead(ps[i]), command: String(ps[i].command || ""),
-    state: r.Status === "pending" ? "waiting" : ["approved", "edited"].includes(r.Status) ? "ran" : "dismissed", result: resultOf(r) }));
+    state: r.Status === "pending" ? "waiting" : ["approved", "edited"].includes(r.Status) ? "ran" : "dismissed", result: resultOf(r),
+    error: String(r.ActError || "") }));
   const waiting = steps.filter((s) => s.state === "waiting"), ran = steps.filter((s) => s.state === "ran");
+  // ...the step an earlier press failed on (store.review_act_failed), said as that press said it - it still waits, so the card does too
+  const bad = waiting.find((s) => s.error);
   const pressed = waiting.length ? null : ran.length ? "approved" : "dismissed";
   return { title: n > 1 ? `${lead(ps[0])} - ${n} steps` : lead(ps[0]), why: `Held before it ran - ${whys.join("; ")}.`,
     folder: ps[0].where || ps[0].cwd || "the agent's folder", steps, waiting: waiting.map((s) => s.id), pressed,
     said: pressed === "approved" ? (n > 1 ? `${ran.length} of ${n} ran` : "it ran") : pressed === "dismissed" ? "nothing was run" : ran.length ? `${ran.length} of ${n} ran - the rest wait` : "",
-    url: ran.map((s) => s.result?.url).filter(Boolean).at(-1) || "" };
+    url: ran.map((s) => s.result?.url).filter(Boolean).at(-1) || "",
+    error: !bad ? "" : n > 1 ? `Step ${steps.indexOf(bad) + 1} failed: ${bad.error}` : bad.error };
 };
 // ...and once pressed it stays in the turn, pressed, until the owner writes again (general.press_lines draws it as a line from then on)
 export const keptHeld = (reviews, comments) => {

@@ -219,7 +219,6 @@ ANNOTATIONS = {'read': {'readOnlyHint': True, 'openWorldHint': False}, 'own': {'
 # nothing, reads nothing of the owner's (stranger_config's token is the task's own, guard.stranger_denied). Search is NOT here: it reads the
 # owner's other tasks and mail, which a stranger's session never sees (server._owner_history refuses it on this task whoever asks)
 STRANGER_TOOLS = ('remind', 'check_back')
-NOT_PROPOSABLE = ('merge_pr', 'close_item', 'repair_workflow', 'push_direct')     # the owner's close-out, a workflow's own repair, a push past review
 
 
 # ...and on the owner's own ask (wrapup.no_correspondent) there is nobody to reply to: the reply tools are not offered at all. withdraw_draft
@@ -462,11 +461,13 @@ def unvouched(store, tid: int, args: dict) -> bool:
 
 
 def proposal_of(args: dict) -> dict:
-    """The proposal an agent may file, cut to what it may say (proposals.parse's rule): never a close-out, a workflow's own resume, or
-    an act only Taskuary raises."""
+    """The proposal an agent may file, cut to what it may say - by proposals.parse's own list (NOT_ASKED, MARKS): never a close-out, a
+    workflow's own resume, or an act only Taskuary raises. A push past review is not this door's either."""
+    from .proposals import HELD_ACTS, MARKS, NOT_ASKED
     a = str((args or {}).get('action') or '').strip()
-    if a in NOT_PROPOSABLE: raise ValueError(f'{a} is the owner\'s own act - it cannot be proposed')
-    return {**{k: v for k, v in (args or {}).items() if k not in ('closeout', 'flow_run', 'task_id')}, 'action': a}
+    if a in HELD_ACTS: raise ValueError(f'{a} is raised by Taskuary itself when it holds a step - it cannot be proposed. Run the step: Taskuary holds it and asks the owner')
+    if a in (*NOT_ASKED, 'push_direct'): raise ValueError(f'{a} is the owner\'s own act - it cannot be proposed')
+    return {**{k: v for k, v in (args or {}).items() if k not in (*MARKS, 'task_id')}, 'action': a}
 
 
 # ── JSON-RPC: the slice of MCP a CLI speaks to a tool server ───────────────────────────────────────────────────────────────────────

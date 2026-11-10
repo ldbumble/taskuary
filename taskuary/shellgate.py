@@ -401,7 +401,7 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     said = ' '.join(str(said or '').split())[-600:]
     if (told := _batch.get()) is not None: told.append(f"`{cmd[:300]}` said: {said[-200:] or 'done'}")
     else: _tell(store, tid, f"The owner approved it and Taskuary ran `{cmd[:300]}` in {cwd or 'its folder'}. It said: {said[-300:] or 'done'}. "
-                    + NEXT)
+                    + NEXT, wake=True)
     store.audit('task', tid, 'shell_act_done', 'owner', 'human', {'what': p.get('what'), 'about': p.get('about'), 'command': cmd[:300], 'said': said[-300:]})
     return {'performed': p.get('what') or cmd[:200], 'said': said[-300:]}
 
@@ -430,8 +430,8 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
     if verb != 'approve': _tell(store, tid, f"The owner dismissed {len(rvs)} held steps: {ran} - NOT done. Do not try them another way - carry on "
                                             "without them, or ask the owner what they want instead.")
     elif failed: _tell(store, tid, f"The owner approved {len(rvs)} held steps together. Taskuary ran {len(done)} of them ({ran}); step {failed['step']} "
-                                 f"failed: {failed['error'][:300]}. The rest were not run and still wait on the card. " + NEXT)
-    else: _tell(store, tid, f"The owner approved {len(rvs)} held steps together and Taskuary ran them in order: {ran}. " + NEXT)
+                                 f"failed: {failed['error'][:300]}. The rest were not run and still wait on the card. " + NEXT, wake=bool(done))
+    else: _tell(store, tid, f"The owner approved {len(rvs)} held steps together and Taskuary ran them in order: {ran}. " + NEXT, wake=True)
     return {'ok': not failed, 'done': done, 'failed': failed, 'left': left}
 
 

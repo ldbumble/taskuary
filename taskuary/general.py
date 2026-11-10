@@ -622,16 +622,19 @@ def owner_did(store, tid: int) -> list:
     out = [(at, what) for _, at, what, *_r in presses(store, tid, since)]
     out += [(r['DecidedAt'], _decided(store, r))
             for r in store._rows(f"SELECT * FROM review WHERE TaskId=? AND DecidedBy IN ({who}) AND DecidedAt>?", (tid, *OWNER_ACTORS, since))
-            if (r['Status'] in DECIDED and r.get('DecideNote') != DROPPED) or (r['Status'] == 'pending' and r.get('DeliveryState') in NOT_GONE)]
+            if (r['Status'] in DECIDED and r.get('DecideNote') != DROPPED) or (r['Status'] == 'pending' and (r.get('DeliveryState') in NOT_GONE or r.get('ActError')))]
     return [f'{clock_of(at)}: {what}' for at, what in sorted(out, key=lambda x: str(x[0]))]
 # WHAT BECAME OF A SEND IS THE AGENT'S TO KNOW, AS IT ENDED (the agent walk, 2026-11-09): a send the server refused was not told to it at
 # all, one that went on the second press was told as "approved (Not sent: ...)" - it answered "not sent" and offered to set the mail up
 # again, one yes from sending it twice - and a text the owner changed before sending went out without the agent ever seeing what went
 NOT_GONE = {'failed': 'pressed Send on {n} and IT DID NOT GO ({why}) - it still waits for their Send; never set it up again',
             'unknown': 'pressed Send on {n} and it MAY have gone ({why}) - never send it or set it up again unless they ask'}
+# ...and an ACT whose press failed (store.review_act_failed): the agent that set it up heard nothing, and read its card as still unpressed
+ACT_FAILED = 'pressed the button on {n} and IT FAILED ({why}) - it still waits on its card for their press; never do it another way unless they ask'
 def _decided(store, r) -> str:
     "One review the owner pressed, in words for its agent: what became of it - and what went, when they changed its text first."
     n, state, why = f"rv{r['ReviewId']}", r.get('DeliveryState') or '', ' '.join(str(r.get('Reason') or '').split())[:160]
+    if r['Status'] == 'pending' and state not in NOT_GONE: return ACT_FAILED.format(n=n, why=' '.join(str(r.get('ActError') or '').split())[:200])
     if r['Status'] == 'pending': return NOT_GONE[state].format(n=n, why=why or 'no reason was given')
     was = (store._one('SELECT Text FROM draft_snapshot WHERE ReviewId=? ORDER BY Id DESC LIMIT 1', (r['ReviewId'],)) or {}).get('Text')
     went = str(r.get('FinalText') or '')
@@ -660,17 +663,20 @@ def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None) ->
     return True
 # AN APPROVAL WAKES THE AGENT THAT SET IT UP (the owner, 2026-11-09: "when you hit approve the agent continues and says what it did and what
 # the next steps are"): every press that sends or runs what an agent set up - a card's Post, a Send, a merge - is handed to it as Taskuary's
-# words, never the owner's line. A held step tells its own agent (browsergate._tell); a landing its own (landing._landed)
+# words, never the owner's line. A held step tells its own agent (browsergate._tell), in its own words, by the same road (tell); a
+# landing its own (landing._landed)
 APPROVED = 'The owner pressed {press} on what you set up, and it went through: {what}. '
-def approved(store, tid: int, press: str, what: str, actor: str = 'owner') -> str:
-    """Hand task `tid`'s agent the approval that went: 'told' a live (or resting coding) agent as its next prompt, 'woke' a resting
+def tell(store, tid: int, said: str, actor: str = 'owner') -> str:
+    """Hand task `tid`'s agent Taskuary's words `said`: 'told' a live (or resting coding) agent as its next prompt, 'woke' a resting
     general agent that has answered on it, '' where no agent ever worked it."""
     from . import acpcoding, waitroom, workerstate as ws
-    from .browsergate import NEXT
-    said = APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400]) + NEXT
     if ws._live(int(tid)) or acpcoding.idled(int(tid), store): waitroom.add(store, int(tid), said, 'router'); return 'told'
     t = store.get_task(int(tid))
     return 'woke' if t and handles(t) and follow_up(store, tid, 'send', actor, said=said) else ''
+def approved(store, tid: int, press: str, what: str, actor: str = 'owner') -> str:
+    "Hand task `tid`'s agent the approval that went, as `tell` hands anything: 'told', 'woke' or ''."
+    from .browsergate import NEXT
+    return tell(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400]) + NEXT, actor)
 # WHAT THE OWNER SAID ON THE THREAD THEMSELVES (the owner, 2026-11-08: replies from their phone between the other side's lines): a line of theirs
 # in a chat is never a turn of its own (channels.ingest_own_message), so the next turn hears each one since the agent last answered
 def own_replies(store, tid: int, since: str = None) -> list:

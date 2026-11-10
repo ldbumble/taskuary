@@ -58,7 +58,8 @@ export default function HeldSteps({ reviews, onChanged, toRow = false }) {
             {c.url && <> · <a href={c.url} target="_blank" rel="noreferrer">{c.url.replace(/^https?:\/\//, "").slice(0, 70)}</a></>}</Typography>
         </>}
       </Box>
-      {err && <Typography role="alert" sx={{ mt: 0.5, fontSize: 12, color: ALERT_INK }}>{err}</Typography>}
+      {/* ...the step that failed on an earlier press says so after a reload too (heldCard's error, read off the review) */}
+      {(err || (!busy && live && c.error)) && <Typography role="alert" sx={{ mt: 0.5, fontSize: 12, color: ALERT_INK }}>{err || c.error}</Typography>}
     </Box>
   );
 }

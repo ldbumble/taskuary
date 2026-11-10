@@ -34,6 +34,8 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
   const img = fields.find((f) => f.type === "image" && f.value), pic = img ? outputRow(tid ?? row?.TaskId, img.value) : null;
   const max = fields.find((f) => f.key === tk)?.max, over = max && text.length > max;
   const go = done?.url ?? st.url, gone = !!done || st.done;
+  // ...a press that failed before this card was drawn is still said on it: the review keeps it (store.review_act_failed), not the press
+  const failed = err || (!busy && !gone && row?.Status === "pending" && row?.ActError) || "";
   const decide = async (verb) => {
     setBusy(verb); setErr("");
     const nothing = `It didn't go through - nothing was ${post ? "posted" : "sent"}. Try again.`;
@@ -91,7 +93,7 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
             {over && <Typography sx={{ fontSize: 11.5, color: ALERT_INK }}>{text.length} of {max} characters</Typography>}</>
           : <Typography sx={{ fontSize: 12.5, color: FAINT }}>{st.said}</Typography>}
       </Box>
-      {err && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}>{err}</Typography>}
+      {failed && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}>{failed}</Typography>}
       <FileDialog file={viewing} onClose={() => setViewing(null)} />
     </Box>
   );

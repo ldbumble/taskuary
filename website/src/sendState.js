@@ -38,7 +38,9 @@ export function replySendFailure(data) {
 export function savedSendFailure(review) {
   let env = null;
   try { env = typeof review?.Deliver === "string" ? JSON.parse(review.Deliver) : review?.Deliver; } catch { env = null; }
-  if (review?.Status !== "pending" || review.DeliveryClaim || (review.DeliveryState || env?.delivery) !== "failed") return null;
+  if (review?.Status !== "pending" || review.DeliveryClaim) return null;
+  // ...and an ACT whose press failed (store.review_act_failed keeps it as ActError): the same line, after the same reload
+  if ((review.DeliveryState || env?.delivery) !== "failed") return review.ActError ? { message: String(review.ActError), unknown: false, saved: true } : null;
   const message = String(review.Reason || "").replace(/^Not sent:\s*/, "").trim() || "the send was refused";
   return { message, unknown: false, ...(env?.fix?.href ? { fix: env.fix } : {}), saved: true };
 }

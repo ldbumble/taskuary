@@ -380,13 +380,13 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
         why = 'something on the page covers that control' if 'covered by' in said else said[-200:] or 'the browser could not do it'
         _tell(store, tid, f"The owner approved it, but the browser could not do it: {said[-300:] or 'agent-browser failed'}. Nothing was done. "
                           "Look at the page as it is now and reach the same place another way - a menu or banner covering the control can be "
-                          "opened or closed first, or the page opened by its address - then continue.")
+                          "opened or closed first, or the page opened by its address - then continue.", wake=True)
         if p.get('sid'): browserview.ended_on(sid, 'failed', store, tid)
         store.audit('task', tid, 'browser_act_refused', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what')})
         return {'performed': None, 'refused': f"{p.get('site') or 'The page'} did not take it - {why}. The agent was told and goes on another way."}
     now = str(browserview.state(sid, fresh=True).get('url') or '')
     _tell(store, tid, f"The owner approved it and Taskuary ran `{p.get('command')}` in your browser. It said: {said[-300:] or 'done'}. "
-                      f"The page is now {now or 'unknown'} - look at it, then " + NEXT[0].lower() + NEXT[1:])
+                      f"The page is now {now or 'unknown'} - look at it, then " + NEXT[0].lower() + NEXT[1:], wake=True)
     store.audit('task', tid, 'browser_act_done', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what'), 'command': str(p.get('command') or '')[:300],
                                                           'said': now or said[-300:]})
     return {'performed': p.get('what') or p.get('command'), 'site': p.get('site'), 'page': now}
@@ -400,14 +400,21 @@ def declined(store, tid: int, p: dict) -> None:
 NEXT = ('Tell the owner in a line what it did (with its link, if it gave one) and what comes next, then carry on.')     # the turn an approval wakes says what happened
 
 
-def _tell(store, tid: int, text: str, wait: bool = False) -> None:
+def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False) -> None:
     """Words to the agent working the task, as a sign-in's are told (signin._continue) - ON A THREAD: a general chat's send_prompt is
     the agent's whole next turn, so Approve sat on "running..." for minutes, or up to WAIT_TURN and then nobody was told (2026-10-25).
-    Not told, the task says so. A task with none running gets the comment only. `wait`: tests."""
+    Not told, the task says so. A task with none running gets the comment only - unless the words are a yes that RAN (`wake`): an agent
+    that answered and rests is started on them, as any approval starts it (general.tell). It was left asleep, the step done and nobody to say
+    so or go on (the spine audit, 2026-11-09). A no wakes nobody: it is heard with the owner's next line. `wait`: tests."""
     import threading
     from . import terminal as term, workerstate as ws
     sess = ws._live(tid)
-    if not sess: return store.add_comment(tid, 'taskuary', 'agent', f'{text} (No agent is running on this task to tell.)')
+    if not sess:
+        try:
+            from . import general
+            woke = wake and general.tell(store, tid, text)
+        except Exception as e: woke = logger.warning(f'browsergate: task {tid} - its resting agent was not started - {e}')
+        return None if woke else store.add_comment(tid, 'taskuary', 'agent', f'{text} (No agent is running on this task to tell.)')
     if term.stranger_now(store, tid, sess): return None           # the task says why nothing went in
     def go():
         try:

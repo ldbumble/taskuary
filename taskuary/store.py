@@ -1241,6 +1241,9 @@ class SQLiteStore:
             # WHICH MAIL THE DRAFT ANSWERS (the delivery target), kept apart from MessageId, the newest mail it saw (freshness); and the drafter's one line on why
             if 'AnswersMid' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN AnswersMid INTEGER')
             if 'DraftWhy' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftWhy TEXT')
+            # ...and what an ACT's press failed on (review_act_failed): it lived only in the answer to that press - a reload drew the card as
+            # if never pressed, and its agent was told nothing (the spine audit, 2026-11-09). Read only while the review still waits
+            if 'ActError' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ActError TEXT')
             # ...and the agent's word that the reply is NO LONGER NEEDED (someone else answered, the owner already did) - kept as the why
             if 'NotNeeded' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN NotNeeded TEXT')
             # ...which retires the draft now (verdicts.not_needed, 2026-11-09). One marked under the old rule still sat pending with Send under it:
@@ -5801,6 +5804,10 @@ class SQLiteStore:
         self._review_changed(rid)
     def set_review_not_needed(self, rid, why):
         self._exec("UPDATE review SET NotNeeded=? WHERE ReviewId=? AND Status='pending'", (by_sentence(why, 300) or None, rid))
+        self._review_changed(rid)
+    def review_act_failed(self, rid, error, by):
+        "An act's press that failed: kept on the review, which still waits - with who pressed and when, as a failed send keeps them (finish_review_delivery)."
+        self._exec("UPDATE review SET ActError=?, DecidedBy=?, DecidedAt=? WHERE ReviewId=? AND Status IN ('pending','held')", (str(error or '')[:300] or None, by, _now(), rid))
         self._review_changed(rid)
     def set_review_sid(self, rid, sid):
         self._exec('UPDATE review SET DraftSid=? WHERE ReviewId=?', (sid, rid)); self._review_changed(rid)

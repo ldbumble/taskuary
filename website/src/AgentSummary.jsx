@@ -2,7 +2,7 @@
 // drafts waiting on Send, the steps only the owner can take ("On you: …"), or "Nothing left to do here". Where the chat is the task's home the
 // drafts are their cards, inside Next steps (`next`, TaskPage's chat cards, so each draft is drawn once); elsewhere a
 // line each. An On you step's mark says whose it is, never a press.
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SendIcon from "@mui/icons-material/ArrowUpward";
@@ -13,6 +13,7 @@ import { isCardReview } from "./actionCard.js";
 import { Md } from "./md.jsx";
 import { MicButton } from "./ui.jsx";
 import { MESSAGE } from "./kinds.js";
+import { keepUnsent, unsent } from "./unsent.js";
 import { AttachRow, IMAGE_ACCEPT, INLINE_CHIPS, fileChips, fileState, usePromptImages, withImages } from "./promptImages.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
@@ -113,7 +114,13 @@ export const StaleDrafts = ({ reviews, turnId }) => staleOn(reviews, turnId).map
 // hold (`cards`: a draft and its Send, an email owed), the drafter's why over them, and the one box. The box is Send to agent's road (the
 // dispatch, which makes the task the general agent's) with the owner's own words; from its first turn on, the chat is the agent's.
 export function NoAgentChat({ task, reviews = [], cards = null, closed = "", onStarted }) {
-  const [text, setText] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const [text, setText] = useState(() => unsent(task.TaskId)), [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  // ...and words typed and not sent are this task's (unsent.js): back after a reload, and another task's box shows that task's own
+  const kept = useRef(task.TaskId);
+  useEffect(() => {
+    if (kept.current !== task.TaskId) { kept.current = task.TaskId; setText(unsent(task.TaskId)); }
+    else keepUnsent(task.TaskId, text);
+  }, [task.TaskId, text]);
   const pics = usePromptImages({ files: true });          // ...a dropped, pasted or picked file goes with the words (the owner, 2026-11-05)
   const why = String((reviews || []).find((r) => r?.Status === "pending" && r.DraftWhy)?.DraftWhy || "").trim();
   const send = async () => {

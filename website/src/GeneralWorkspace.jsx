@@ -21,6 +21,7 @@ import api from "./api.js";
 import { onLive, touches } from "./live.js";
 import { AttachChip, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
 import { heldLine, notShown, stillHeld, waitingShown } from "./heldLines.js";
+import { keepUnsent, unsent } from "./unsent.js";
 import { endTop, stickToEnd } from "./stickEnd.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
@@ -741,6 +742,13 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
   );
 }
 
+// the arrow of a box whose turn is running: live over words (or a file), and its press holds the line (holdText) - what Enter does there
+function HeldSend({ composer, files, onHold }) {
+  const [text, setText] = useState(() => composer.getState().text);
+  useEffect(() => { const read = () => setText(composer.getState().text); read(); return composer.subscribe(read); }, [composer]);
+  return <button type="button" className="tq-aui-send" data-tq-held-send="" aria-label="Send" disabled={!text.trim() && !files} onClick={onHold}><SendIcon fontSize="small" /></button>;
+}
+
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onAttachBack,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false, waiting = [], box = "",
@@ -930,6 +938,14 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
       setMineDrawn((was) => (was.length === ms.length && was.every((m, i) => m === ms[i]) ? was : ms)); };
     read(); return runtime.thread.subscribe(read);
   }, [runtime]);
+  // WHAT IS TYPED AND NOT SENT is this task's, and outlives a reload and this pane drawn afresh (unsent.js): put back into an empty box, kept
+  // as it is typed, gone once the box is empty - sent, held or wiped
+  useEffect(() => {
+    if (dock) return undefined;
+    const c = runtime.thread.composer, id = task.TaskId;
+    if (!c.getState().text && unsent(id)) c.setText(unsent(id));
+    return c.subscribe(() => keepUnsent(id, c.getState().text));
+  }, [runtime, dock, task.TaskId]);
   const holdLine = (e) => {
     if (dock || asking) return;
     const c = runtime.thread.composer, w = heldLine(e, c.getState().text, !!road || runtime.thread.getState().isRunning);
@@ -948,6 +964,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     (road ? road(w, files.map((a) => a.path)) : api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id }, { timeout: 0 }))
       .catch((x) => { setHeld((h) => h.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))); if (files.length) onAttachBack(files); });
   };
+  const sendArrow = <ComposerPrimitive.Send className="tq-aui-send" aria-label={!dock && asking ? "Send your answer" : "Send"} onClick={answerTyped}><SendIcon fontSize="small" /></ComposerPrimitive.Send>;
   const [landState, setLandState] = useState(null);
   const landAt = landing ? turnOf(messages, landState?.at || "") : null;
   const landNode = landing ? React.cloneElement(landing, { onState: setLandState }) : null;
@@ -1086,7 +1103,11 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               extra={<><ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label="Stop response" onClick={onStop}><CloseIcon fontSize="small" /></ComposerPrimitive.Cancel>
                 {(road ? stopShown : working) && <ThreadPrimitive.If running={false}><button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"
                   title="Stops this turn - the chat stays, and what you type next carries on" onClick={onStop}><CloseIcon fontSize="small" /></button></ThreadPrimitive.If>}</>}
-              send={<ComposerPrimitive.Send className="tq-aui-send" aria-label={!dock && asking ? "Send your answer" : "Send"} onClick={answerTyped}><SendIcon fontSize="small" /></ComposerPrimitive.Send>} />
+              /* THE ARROW WHILE IT WORKS (the owner, 2026-11-10: "Arrow works too"): the runtime's Send is off for as long as a turn this pane
+                 streams runs, so the arrow stood grey over typed words that Enter would have sent. While it runs the arrow is the held line's */
+              send={dock || asking ? sendArrow : <><ThreadPrimitive.If running={false}>{sendArrow}</ThreadPrimitive.If>
+                <ThreadPrimitive.If running><HeldSend composer={runtime.thread.composer} files={attachmentsRef.current.length}
+                  onHold={() => { const c = runtime.thread.composer; holdText(c.getState().text.trim(), c); }} /></ThreadPrimitive.If></>} />
             {askErr && <div className="tq-aui-asking-err" role="alert" style={{ padding: "4px 4px 0" }}>{askErr}</div>}
             <div className="tq-aui-hint">{hint || "Enter sends · Shift+Enter adds a line · paste, drop or attach a file"}</div></>}
           </div>

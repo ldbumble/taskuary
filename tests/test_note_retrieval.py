@@ -136,6 +136,20 @@ class ItSaysSoTests(unittest.TestCase):
         classify_intent({'from_email': DANA, 'subject': 's', 'body': 'b'}, llm=llm, notes=['one note'])
         self.assertNotIn('further note(s)', seen['system'])
 
+    def test_every_mail_shares_one_prefix_and_its_own_evidence_follows_it(self):
+        """The owner, 2026-11-10: "32 million tokens?" - the notes picked for one sender sat in the middle of the system, so the
+        playbooks and workflows under them were new bytes on every mail and no provider cache reached past the owner's memory."""
+        from os.path import commonprefix
+        from taskuary.triage import classify_intent
+        seen = []
+        def llm(system, user, images=None): seen.append(system); return '{"intent": "fyi", "why": "x"}'
+        for who, note in ((DANA, 'Dana: ledgers are fyi'), ('erin@northwind.example', 'Erin: rota changes are tasks')):
+            classify_intent({'from_email': who, 'subject': 's', 'body': 'b'}, llm=llm, notes=[note], watch=f'watch {who}',
+                            playbooks='- rota: when a rota changes', workflows='- invoices: when an invoice arrives', learned='Alex cares about the rota.')
+        shared = commonprefix(seen)
+        self.assertIn('WORKFLOWS A MAIL STARTS', shared); self.assertIn('when an invoice arrives', shared)
+        self.assertNotIn('ledgers are fyi', shared); self.assertGreater(len(shared), 50_000)
+
     def test_the_agent_block_ranks_the_thread_and_stops_growing_forever(self):
         """It had no cap at all - every matching note, however many the owner had given."""
         s = _store(LEDGER, INVOICE, GLOBAL,

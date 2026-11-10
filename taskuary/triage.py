@@ -869,6 +869,22 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            "not care about is never a task on its own - an fyi at most; the people lines weigh the priority only, never "
                            "whether it is a task; a line ending `(about: ...)` bears only on mail about that sender or topic "
                            '(the document above outranks it where they disagree):\n' + learned)
+            # From here down the code only LABELS what it hands over. Every sentence about how to judge it - the
+            # report brief, kind, repositories, chat lines, same_as - lives in the guide (2026-10-09:
+            # the owner, "why are there items in code in triage? I thought we removed them").
+            if playbooks: system += "\n\nPLAYBOOKS - the owner's written procedures, each with the arrival that starts it (when):\n" + str(playbooks)[:3000]
+            # THE OWNER'S WORKSTREAMS (the owner, 2026-11-01): which body of work this belongs to sorts it - a side product's tester is not
+            # a day-job colleague, and a personal chat is never the job's. Context for the sort; how each is weighed is the guide's to say
+            if workstreams: system += ("\n\nTHE OWNER'S WORKSTREAMS - the separate bodies of work they run (a personal one is their own life, "
+                                       'never work); name in "workstream" the one this message fits best, by its id before the colon - '
+                                       'null only when two fit it equally or none does:\n' + str(workstreams)[:2000])
+            if workflows: system += "\n\nWORKFLOWS A MAIL STARTS - the owner's configured jobs, each with the arrival that starts it (when):\n" + str(workflows)[:3000]
+            # a FACT about this install, not a rule of judgement: no coding tool is connected, so coding is not a kind it has
+            if not coding: system += ('\n\nTHERE IS NO CODING AGENT on this install (no coding tool, or developer mode is off). Never choose '
+                                      'kind coding - work that would be coding is general.')
+            # WHAT IS THIS MESSAGE'S OWN comes after what every message shares (the owner, 2026-11-10: "32 million tokens?"): the guide, the
+            # owner's documents and memory, the playbooks, workstreams and workflows are the same bytes on every mail - the prefix a provider
+            # caches - and the evidence picked for this sender and the report's brief differ each time, so they follow
             if notes:
                 # already ranked and budgeted by ingest.relevant_notes. Evidence, never an order (PW-025): how much
                 # each counts for is the guide's to say (templates/triage.md, section 6).
@@ -881,20 +897,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                                   'bear on this message and that you applied, [] when none does' if note_ids else '')
                            + ':\n' + '\n'.join(f'- {n}' for n in notes)
                            + (f'\n({notes_left} further note(s) also apply to this sender but did not fit.)' if notes_left else ''))
-            # From here down the code only LABELS what it hands over. Every sentence about how to judge it - the
-            # report brief, kind, repositories, chat lines, same_as - lives in the guide (2026-10-09:
-            # the owner, "why are there items in code in triage? I thought we removed them").
             if watch: system += "\n\nTHE REPORT'S BRIEF - why the owner runs this report and what they watch for:\n" + str(watch)[:1200]
-            if playbooks: system += "\n\nPLAYBOOKS - the owner's written procedures, each with the arrival that starts it (when):\n" + str(playbooks)[:3000]
-            # THE OWNER'S WORKSTREAMS (the owner, 2026-11-01): which body of work this belongs to sorts it - a side product's tester is not
-            # a day-job colleague, and a personal chat is never the job's. Context for the sort; how each is weighed is the guide's to say
-            if workstreams: system += ("\n\nTHE OWNER'S WORKSTREAMS - the separate bodies of work they run (a personal one is their own life, "
-                                       'never work); name in "workstream" the one this message fits best, by its id before the colon - '
-                                       'null only when two fit it equally or none does:\n' + str(workstreams)[:2000])
-            if workflows: system += "\n\nWORKFLOWS A MAIL STARTS - the owner's configured jobs, each with the arrival that starts it (when):\n" + str(workflows)[:3000]
-            # a FACT about this install, not a rule of judgement: no coding tool is connected, so coding is not a kind it has
-            if not coding: system += ('\n\nTHERE IS NO CODING AGENT on this install (no coding tool, or developer mode is off). Never choose '
-                                      'kind coding - work that would be coding is general.')
             same_ids = {int(w['tid']) for key in ('open_work', 'recently_closed') for w in ((thread or {}).get(key) or []) if w.get('tid')}
             # ...and any line of the owner's open items: a join by meaning names one of those, and it was shown (context.open_items)
             # ...and of what the owner's search found, closed ones too (context.found_tasks)

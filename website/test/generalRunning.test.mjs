@@ -107,6 +107,17 @@ test("the working dots animate from the general workspace's own stylesheet", () 
   assert.match(css, /@keyframes tqAuiThinking/);
 });
 
+test("a running turn's spin stands right under its head, with no band between (the owner, 2026-11-10)", () => {
+  // the live turn the thread draws has an empty body until its first word, and the spin stands outside it (AtWork under ThreadPrimitive.If
+  // running): the body's padding and the turn's 18px foot made the band. Measured against this stylesheet in Chrome: head to spin 34px -> 11px,
+  // the same 11px as the turn drawn from the press (PendingTurn), so nothing jumps when the thread takes the turn over
+  const css = read("generalWorkspace.css");
+  assert.match(css, /\.tq-aui-chat \.tq-aui-agent-body:empty \{ display: none; \}/);
+  assert.match(css, /\.tq-aui-chat \.tq-aui-message:has\(\+ \.tq-aui-thinking\) \{ margin-bottom: 7px; \}/);
+  assert.match(css, /\.tq-aui-chat \.tq-aui-agent > \.tq-aui-role \{ padding-top: 0; margin-bottom: 4px; \}/);
+  assert.match(css, /\.tq-aui-thinking \{[^}]*margin: 0 0 10px;/);                     // the spin carries no top margin of its own
+});
+
 test("a turn that died shows its reason, with no answer of its own to hang it on", () => {
   const view = read("GeneralWorkspace.jsx");
   assert.match(read("agentSteps.js"), /kind: "error", summary: `⚠ \$\{e\.detail\?\.result/);   // the reason is built

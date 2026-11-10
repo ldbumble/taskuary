@@ -164,6 +164,11 @@
 /* ...the agent's name over its answer, as any chat names who speaks (the owner, 2026-11-05: "where is the taskuary name"); the owner's bubble needs none */
 .tq-aui-chat .tq-aui-user > .tq-aui-role, .tq-aui-chat .tq-aui-brief > .tq-aui-role { display: none; }
 .tq-aui-chat .tq-aui-agent > .tq-aui-role { padding-top: 0; margin-bottom: 4px; }
+/* ...and a running turn's spin stands right under that head, where the turn it waits under has said nothing yet: the empty body's padding and the
+   turn's 18px foot were a band between them, and the spin dropped by it as the thread took the turn over (the owner, 2026-11-10: "remove this space
+   between agent and working on this"). 7px puts it where the turn drawn from the press (PendingTurn) has it */
+.tq-aui-chat .tq-aui-agent-body:empty { display: none; }
+.tq-aui-chat .tq-aui-message:has(+ .tq-aui-thinking) { margin-bottom: 7px; }
 .tq-aui-chat .tq-aui-user { justify-items: end; }
 .tq-aui-chat .tq-aui-user .tq-aui-user-bubble { justify-self: end; max-width: 75%; background: var(--tq-inset, #e7efe6); border-color: var(--tq-border, #cfdccd); }
 .tq-aui-chat .tq-aui-arrived { justify-self: end; max-width: 75%; border-top: 0; margin: 2px 0 14px; padding: 8px 12px; background: var(--tq-panel, #fff); border: 1px solid var(--tq-border, #dfdbd3); border-radius: 13px; }

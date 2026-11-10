@@ -2330,7 +2330,10 @@ def _assistant_payload(task_id: int, session=None):
     if str(task.get('Kind') or '') == 'coding':
         raise HTTPException(422, 'a coding task is worked in its terminal, not a chat')
     session = session or general.session_for(task_id)
+    kept = general.waiting_lines(store, task_id)          # ...BEFORE the conversation: a turn takes a line from one into the other (line_state)
     messages = general.with_failure(store, task_id, general.shown_history(store, task_id))
+    took = {(m.get('line'), m.get('createdAt'), ''.join(c.get('text', '') for c in m.get('content') or [])) for m in messages if m['role'] == 'user'}
+    kept = [w for w in kept if (w.get('line'), w['at'], w['text']) not in took]
     # each page or picture belongs to the answer that made it: the turn files its answer after what it published or showed,
     # so it is the first answer stamped at or after it (both stamps are store._now()); one with none yet waits at the foot
     answers = [(str(m.get('createdAt') or ''), m['id']) for m in messages if m['role'] == 'assistant']
@@ -2369,7 +2372,8 @@ def _assistant_payload(task_id: int, session=None):
             'drafts': general.draft_turns(store, task_id),
             # THE OWNER'S LINES NO TURN HAS TAKEN YET (general.wait_line, the owner 2026-11-07): kept as they were sent, drawn on every screen as
             # waiting for the agent, each at the time it was typed
-            'waiting': general.waiting_lines(store, task_id),
+            # ...and the turn they asked for, at work from the press: `working` and `turnStarted`, as the coding chat's payload says them
+            **general.line_state(store, task_id, kept),
             'box': general.box_text(store, task_id),      # ...and what a restart put back in the owner's box (general.to_box)
             'demo': demo.enabled(),          # the demo's turns are written in advance: no AI to connect, so no banner asking for one
             # the conversations of the agents run before this one: drawn IN the chat now (shown_history: every run), never a fold of their own
@@ -2448,11 +2452,6 @@ def _chat_failed(e):
     c = failures.classify(e, act='assistant.message')
     return JSONResponse(status_code=422, content={'detail': c['sentence'], 'fix': c['fix'], 'retry': c['retry']})
 
-# ...said only of a CODING task now: a chat task is reopened by the words typed into it (_refuse_closed_chat), and nothing said on one names
-# a Continue it does not have (general.carry_on, the owner 2026-11-07)
-CLOSED_CHAT = (f"This task is closed. Press {buttons.label('reopen')}, then {buttons.label('continue')}, "
-               'to pick the conversation back up.')
-
 def _chat_kind(task_id: int):
     """WHAT IS TYPED IN A TASK'S ONE BOX STARTS THE GENERAL AGENT (the owner, 2026-11-06: no separate Send to agent form): a task of another
     kind - a reply, your own task - becomes the general agent's first, as Send to agent's dispatch switched it. A coding task is never one."""
@@ -2461,23 +2460,6 @@ def _chat_kind(task_id: int):
     if not t or general.handles(t) or str(t.get('Kind') or '') == 'coding' or general.is_dock(t): return
     store.update_task(task_id, {'Kind': 'general'}, ACTOR)
     store.audit('task', task_id, 'kind_by_typing', ACTOR, detail={'from': t.get('Kind')})
-
-def _refuse_closed_chat(task_id: int):
-    """A CLOSED task's conversation is read-only. Typing into it started a live session on a done task: the pane said
-    "assistant is waiting on you" over a task that read done, and the bar offered only Reopen (the owner, 2026-10-14: "we need
-    to have general agent closed until i reopen and then continue session"). Reopen, then Continue, picks it up. The
-    dock - the assistant that runs Taskuary - is never a task you close, so it is never refused."""
-    from . import general
-    _chat_kind(task_id)
-    t = store.get_task(task_id) or {}
-    if t.get('Status') not in ('done', 'dropped') or general.is_dock(t): return
-    # ...EXCEPT A CHAT TASK, WHERE TYPING IS THE WAY ON (the owner, 2026-11-05: "typing into chat should continue it or restart it ... we can
-    # remove those 2 buttons like continue agent or start new agent. Just type and it continues"): the words reopen it, as Reopen does
-    # (task.reopen: open, an old Remind me cleared), and start_session picks the saved conversation back up, or starts one
-    if general.handles(t):
-        store.update_task(task_id, {'Status': 'open', 'RemindAt': ''}, ACTOR)
-        store.audit('task', task_id, 'reopened_by_typing', ACTOR); return
-    raise HTTPException(409, CLOSED_CHAT)
 
 FOLLOW_UP_STALE = 'The newest messages could not be read first, so the agent goes on from what it already has'
 
@@ -2508,21 +2490,23 @@ def _demo_turn(task_id: int, text: str, line_id=None):
 
 @app.post('/api/tasks/{task_id}/assistant/messages')
 def assistant_message(task_id: int, body: AssistantMessageBody):
-    from . import general
-    _refuse_closed_chat(task_id)
+    """A LINE TYPED IN ANY TASK'S BOX, to whatever agent works it (general.take_line - the one road, the owner 2026-11-10: "coding and general
+    use the same code when it comes to interactions so there should be no difference"). A chat answers with its turn, as it always did; a
+    coding session's turn is its own, and this answers once the line is kept and handed on."""
+    from . import codingchat, general
+    _chat_kind(task_id)
     if (said := _demo_turn(task_id, body.text, _line_id(body))) is not None: return {'reply': said, **_assistant_payload(task_id)}
-    # ...THE LINE HELD BEHIND A RUNNING TURN TAKES THE FIRST LINE'S ROAD (general.say_line, the owner 2026-11-07): kept the moment it is sent,
-    # and started again quietly where the session ended under it - it came back "reload the page and ask again", red in the box
-    try:
-        _refresh_for_turn(task_id)
-        session, reply = _say(task_id, body)
+    try: out = _say(task_id, body)
     except (ValueError, RuntimeError) as e: return _chat_failed(e)
+    if not general.handles(store.get_task(task_id)): return {'reply': '', 'handed': out, **codingchat.chat(store, task_id)}
+    session, reply = out
     return {'reply': reply, **_assistant_payload(task_id, session)}
 
 def _say(task_id: int, body, **kw):
-    "A typed line on the one road (general.say_line), as the chat's doors send it."
+    "A typed line on the one road (general.take_line), as the chat's doors send it - the chat synced first, behind the kept line."
     from . import general
-    return general.say_line(store, task_id, body.text, body.attachments, body.connector_id, body.model, body.pick, ACTOR, line_id=_line_id(body), **kw)
+    return general.take_line(store, task_id, body.text, body.attachments, ACTOR, _line_id(body), prepare=kw.pop('prepare', lambda: _refresh_for_turn(task_id)),
+                             **({k: v for k, v in (('connector_id', body.connector_id), ('model', body.model), ('pick', body.pick)) if v} if general.handles(store.get_task(task_id)) else {}), **kw)
 def _line_id(body): return (getattr(body, 'line_id', None) or '')[:80] or None
 
 @app.post('/api/tasks/{task_id}/assistant/browser')
@@ -2597,7 +2581,7 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
     files its reply on the task.
     """
     from . import general
-    await run_in_threadpool(_refuse_closed_chat, task_id)    # before the stream opens: a plain 409 the composer can say (a store read: off the loop)
+    await run_in_threadpool(_chat_kind, task_id)             # a store write: off the loop
     if (said := await run_in_threadpool(_demo_turn, task_id, body.text)) is not None:
         payload = await run_in_threadpool(_assistant_payload, task_id)
         line = json.dumps({'type': 'done', 'reply': said, 'payload': payload}) + '\n'
@@ -2615,13 +2599,14 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
 
     def work():
         session = None
-        try:
+        def synced():
             fresh, stale = _refresh_for_turn(task_id)
             if stale: put({'type': 'progress', 'name': 'sync_messages', 'detail': stale})
             # ...shown only when it found something: an empty check before every turn was machinery in the chat (the owner, 2026-11-05)
             if fresh.get('polled') and fresh.get('added'):
                 put({'type': 'tool_call', 'name': 'sync_messages',
                      'detail': {'new': fresh.get('added', 0)}})
+        try:
             # ...said started only with an AI to start on: with none the step read "Started the selected agent" over a turn that
             # never could run (2026-10-22 walk) - send_prompt keeps the owner's words and fails saying why
             # ...and a session that ended between being handed over and being spoken to (the owner closed the pane, a wrap-up ran) is
@@ -2630,7 +2615,7 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
                 nonlocal session
                 session = s
                 if s.pick: put({'type': 'start', 'session': s.info()})
-            session, reply = _say(task_id, body, trace=trace, cancel=cancel, started=started)
+            session, reply = _say(task_id, body, trace=trace, cancel=cancel, started=started, prepare=synced)
             put({'type': 'done', 'reply': reply, 'payload': _assistant_payload(task_id, session)})
         # Once headers are streaming, FastAPI cannot replace this with its normal JSON error
         # response. Always terminate the NDJSON stream explicitly instead of leaving the UI's
@@ -2875,9 +2860,9 @@ def continue_session(task_id: int, body: CodeBody = None):
     row, why = _resumable(task_id)
     if not row: raise HTTPException(409, why)
     # continuing IS live work again, whatever the card said: a finished task comes back to the work
-    # tab rather than having an agent run invisibly behind a done row (the owner, 2026-09-15)
-    if task.get('Status') not in ('open', 'waiting', 'in_progress'):
-        store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
+    # tab rather than having an agent run invisibly behind a done row (the owner, 2026-09-15) - by the one rule a typed line reopens it by
+    from . import general
+    general.reopen(store, task_id, ACTOR)
     try: session = _reopen(task_id, row, (body.model if body else None), (body.instruction if body else None))
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         raise HTTPException(422, str(e))
@@ -2980,23 +2965,33 @@ def continue_work(task_id: int, body: ContinueBody = None):
     if task.get('Status') == 'dropped': raise HTTPException(409, 'This task was dismissed.')
     note = ' '.join(str((body.note if body else '') or '').split())[:4000]
     imgs = prompt_images(body.images if body else [])
+    if note:
+        # A NOTE IS A LINE THE OWNER TYPED, and takes the one road every typed line takes (general.take_line): kept as his, the turn at work
+        # from the press, then whatever agent works the task reopened, woken or started by its own starter - a coding session that ended
+        # (its own conversation, else a fresh one with the handover), one that idled out, one at rest. What came in since rides as Taskuary's
+        if general.handles(task) and not general.session_for(task_id):
+            from . import wrapup
+            wrapup.hold_stale(store, task_id)         # a reply an earlier session drafted is out of sight from this answer on (as below)
+        extra = general.relayed(note, (body.context if body else '') or '')
+        told = '\n\n'.join(x for x in [continuity.news_block(store, task_id), f'{general.RELAY} {extra}' if extra else ''] if x) if general.handles(task) else ''
+        try: out = general.take_line(store, task_id, note, imgs or None, ACTOR, wait=False,      # ...and Continue never waits on a sync (_refresh_for_turn)
+                                     **({'delivery_instructions': told} if told else {}))
+        except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
+        kind = 'general' if general.handles(task) else 'coding'
+        store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': kind, 'note': True})
+        from . import outcomes
+        outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=note, facts={'door': 'continue-work', 'kind': kind})
+        return {'continued': True, 'taskId': task_id, 'kind': kind, **(out if isinstance(out, dict) else {})}
     if general.handles(task):
         # THE THREAD MOVED AFTER ITS LAST TURN: the mail that reopened the task goes in first, in the turn's instructions - "pick up
         # where work stopped" alone woke the assistant at "reply sent, task closed" while two people had since asked for more (2026-10-14)
         news = continuity.news_block(store, task_id)
         if not general.provider_options(store): raise HTTPException(422, f"Connect an AI under {words.name('ai')} to continue this work.")
-        if task.get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
-        # ...and the owner's words are on the conversation BEFORE this answers (the owner, 0.3.9.51: "I did Continue, filled it out and
-        # nothing happened"): written by the turn once its CLI had started, the page's read at the answer missed them, and they showed
-        # only on a poll seconds later, under an agent already "working"
-        # THE TURN LEADS WITH WHAT CAME IN (2026-11-03, as ingest.carry_on_turn): the news, then the owner's note, then Resume's words. A resumed
-        # CLI is handed the turn alone, so the news behind it in the instructions sat under "restate that one question and wait", shown nowhere.
-        # Taskuary's part is filed as its brief (the chat's grey line) and the note as the owner's own, in that order
-        extra = general.relayed(note, (body.context if body else '') or '')
-        brief = '\n\n'.join(x for x in [news, f'{general.RELAY} {extra}' if extra else '', '' if note else continuity.RESUME_PROMPT] if x)
-        if brief: store.add_comment(task_id, general.BRIEF_ACTOR, general.USER_TYPE, brief)
-        if note: store.add_comment(task_id, 'owner', general.USER_TYPE, note)
-        turn = '\n\n'.join(x for x in [news, f'FROM THE OWNER: {note}' if note else '', f'{general.RELAY} {extra}' if extra else '', continuity.RESUME_PROMPT] if x)
+        general.reopen(store, task_id, ACTOR)
+        # THE TURN LEADS WITH WHAT CAME IN (2026-11-03, as ingest.carry_on_turn): the news, then Resume's words, filed as Taskuary's brief
+        brief = '\n\n'.join(x for x in [news, continuity.RESUME_PROMPT] if x)
+        store.add_comment(task_id, general.BRIEF_ACTOR, general.USER_TYPE, brief)
+        turn = '\n\n'.join(x for x in [news, continuity.RESUME_PROMPT] if x)
         def go():
             try:
                 try: ses = general.start_session(store, task_id, actor=ACTOR)
@@ -3017,16 +3012,10 @@ def continue_work(task_id: int, body: ContinueBody = None):
             from . import wrapup
             wrapup.hold_stale(store, task_id)
         threading.Thread(target=go, daemon=True, name=f'continue-{task_id}').start()
-        store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'general', 'note': bool(note)})
+        store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'general', 'note': False})
         from . import outcomes
-        outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=note or '', facts={'door': 'continue-work', 'kind': 'general'})
+        outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move='', facts={'door': 'continue-work', 'kind': 'general'})
         return {'continued': True, 'taskId': task_id, 'kind': 'general'}
-    note = with_images(note, imgs).strip()
-    # ...a coding session that IDLED OUT (acpcoding.idle_out) is not over: it comes back as the same run, and the note is its next prompt
-    from . import acpcoding, waitroom
-    if note and acpcoding.idled(task_id, store):
-        out = waitroom.add(store, task_id, note, ACTOR)
-        return {'continued': True, 'taskId': task_id, 'kind': 'coding', 'resumed': True, **out}
     row, _why = _resumable(task_id)
     # CONTINUE IS THE SAME CLI (the owner, 2026-09-30: "it should start as codex if i hit continue of course"): the one that made
     # the conversation, else the one that last worked the task - never whatever the default happens to be today
@@ -3034,8 +3023,7 @@ def continue_work(task_id: int, body: ContinueBody = None):
     brain = (last.get('Brain') or None) if isinstance(last, dict) else None
     # ...and a reply the owner has since SENT is said too: a fresh session told nothing drafted it again (2026-10-20)
     sent = continuity.sent_block(store, task_id, quote=0, cmd='`taskuary --follow-up --reply "<text>"`')
-    fresh = lambda: continue_task(task_id, CodeBody(brain=brain, instruction=(f'FROM THE OWNER: {note}\n\n' if note else '') + continuity.RESUME_PROMPT
-                                                                       + (f'\n\n{sent}' if sent else '')))   # their words lead
+    fresh = lambda: continue_task(task_id, CodeBody(brain=brain, instruction=continuity.RESUME_PROMPT + (f'\n\n{sent}' if sent else '')))
     if row:
         # the conversation belongs to the CLI that made it; when THAT CLI cannot open now (out of sessions, signed out), a fresh
         # session seeded with the handover is the way on - not an error (the owner, 2026-09-30, TQ-0887: codex made it, codex was
@@ -3043,17 +3031,17 @@ def continue_work(task_id: int, body: ContinueBody = None):
         # a CODING agent is told of the new mail by terminal.resume_seed - a count and the context file that holds it whole. The
         # mail itself must not ride the instruction: it was labelled the owner's words, clipped at the tty's ~1 KB command line,
         # and left sitting unsent on the prompt (the owner, 2026-10-14)
-        try: out = continue_session(task_id, CodeBody(instruction=note or None))
+        try: out = continue_session(task_id, CodeBody())
         except HTTPException as e:
             if e.status_code != 422: raise
             store.add_comment(task_id, 'router', 'agent', f"{brain or row['Agent']} could not reopen its conversation ({e.detail}); "
                                                           f"starting a fresh {brain or 'agent'} session with the handover instead.")
             row, out = None, fresh()
     else: out = fresh()
-    store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'coding', 'resumed': bool(row), 'note': bool(note)})
+    store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'coding', 'resumed': bool(row), 'note': False})
     if not row:                                      # a resumed one was recorded by continue_session itself: one act, one row
         from . import outcomes
-        outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=note or '', facts={'door': 'continue-work', 'kind': 'coding'})
+        outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move='', facts={'door': 'continue-work', 'kind': 'coding'})
     return {'continued': True, 'taskId': task_id, 'kind': 'coding', 'resumed': bool(row), **(out if isinstance(out, dict) else {})}
 
 

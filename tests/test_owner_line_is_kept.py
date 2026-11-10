@@ -49,9 +49,9 @@ class OwnerLineIsKept(unittest.TestCase):
         def until(ok, secs=10):
             end = time.time() + secs
             while not ok() and time.time() < end: time.sleep(0.02)
-        first = threading.Thread(target=lambda: general.say_line(self.s, self.tid, 'Compare three tools.')); first.start()
+        first = threading.Thread(target=lambda: general.take_line(self.s, self.tid, 'Compare three tools.')); first.start()
         until(lambda: getattr(general.session_for(self.tid), 'busy', False))
-        held = [threading.Thread(target=lambda w=w: general.say_line(self.s, self.tid, w)) for w in ('Make it cheapest first.', 'And add Trainly.')]
+        held = [threading.Thread(target=lambda w=w: general.take_line(self.s, self.tid, w)) for w in ('Make it cheapest first.', 'And add Trainly.')]
         for i, t in enumerate(held): t.start(); until(lambda n=i + 1: len(general.waiting_lines(self.s, self.tid)) >= n)
         kept = general.waiting_lines(self.s, self.tid)
         self.assertEqual([w['text'] for w in kept], ['Make it cheapest first.', 'And add Trainly.'])      # kept the moment they were sent...
@@ -74,7 +74,7 @@ class OwnerLineIsKept(unittest.TestCase):
         self.assertEqual(general.waiting_lines(self.s, self.tid), [])
         self.assertEqual(server._assistant_payload(self.tid)['box'], 'And copy Erin Blake.')   # ...it is back in the owner's box
         self.brain.delay = 0
-        general.say_line(self.s, self.tid, 'And copy Erin Blake, please.')               # they send it, changed
+        general.take_line(self.s, self.tid, 'And copy Erin Blake, please.')               # they send it, changed
         self.assertEqual(general.box_text(self.s, self.tid), '')                          # ...offered once, never twice
         self.assertEqual([b for t, b in self.said() if t == general.USER_TYPE], ['And copy Erin Blake, please.'])
 
@@ -105,7 +105,7 @@ class OwnerLineIsKept(unittest.TestCase):
         def until(ok, secs=10):
             end = time.time() + secs
             while not ok() and time.time() < end: time.sleep(0.02)
-        say = lambda w, name: threading.Thread(target=lambda: general.say_line(self.s, self.tid, w, line_id=name))
+        say = lambda w, name: threading.Thread(target=lambda: general.take_line(self.s, self.tid, w, line_id=name))
         first = say('Compare three tools.', 'held-1'); first.start()
         until(lambda: getattr(general.session_for(self.tid), 'busy', False))
         held = [say('ok', 'held-2'), say('ok', None), say('ok', 'held-3')]

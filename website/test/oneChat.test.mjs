@@ -181,7 +181,7 @@ test("regression: no 'Working on this…' after the turn ends or while it waits 
   const ses = [{ sid: "s", source: "acp", live: true, at: "2026-11-06 09:00:00", updates: [{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Should I go ahead?" } }] }];
   assert.equal(chatRows({ sessions: ses, live: { working: false } }).at(-1).running, false);
   assert.equal(chatRows({ sessions: ses, live: { working: true }, permissions: [{ id: 1 }] }).at(-1).waiting, true);
-  assert.match(gw, /const codingBusy = coding && !!cc\.live\?\.working && !screenAsks && !perms\.length;/);
+  assert.match(gw, /const codingBusy = coding && \(!!cc\.got\?\.working \|\| !!cc\.live\?\.working\) && !screenAsks && !perms\.length;/);
   assert.match(gw, /const calm = \(st\) => \(!now && st\.status === "running" \? \{ \.\.\.st, status: "done", alongside: false \}/, "an ended turn spins nothing");
 });
 

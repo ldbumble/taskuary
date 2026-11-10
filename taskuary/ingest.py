@@ -2058,7 +2058,6 @@ def _hand_to_agent(store, cfg: dict, tid, msg: dict, actor: str):
     except Exception as e: logger.warning(f'answer_to_agent failed for task {tid}: {e}')
 
 
-CODING_OPENING = set()      # coding tasks whose saved CLI conversation is being reopened by carry-on: live already, no pane yet
 PASS_GATHER = 3.0           # seconds a passed-in line waits once the session is free, for the rest of a burst to join it (_pass_general)
 _PASSING, _PASS_LOCK = {}, threading.Lock()     # task id -> the turns waiting together for its session
 PASS_WAIT = 180             # seconds a passed-in line waits for a session still opening before it is said as not passed
@@ -2069,9 +2068,11 @@ def live_agent(store, tid) -> str:
     cannot, '' when nothing is."""
     from . import general, terminal
     # ...and one that IDLED OUT is still the task's agent (general.idle_out): what comes in is its next turn, and starts it again (_pass_general)
-    if tid in general.OPENING or general.session_for(tid) or general.idled(tid, store): return 'general'
+    # ...a start in flight is the task's agent's, whichever kind (general.OPENING - one mark for both, the owner 2026-11-10)
+    chat = general.handles(store.get_task(tid) or {})
+    if (tid in general.OPENING and chat) or general.session_for(tid) or general.idled(tid, store): return 'general'
     from . import acpcoding                    # ...and a coding session over ACP that idled out, the same (acpcoding.wake)
-    if tid in CODING_OPENING or acpcoding.idled(tid, store) or any(getattr(x, 'alive', False) and x.task_id == tid for x in list(terminal.SESSIONS.values())): return 'coding'
+    if (tid in general.OPENING and not chat) or acpcoding.idled(tid, store) or any(getattr(x, 'alive', False) and x.task_id == tid for x in list(terminal.SESSIONS.values())): return 'coding'
     return 'run' if any(x['Status'] == 'running' for x in store.list_runs(tid)) else ''
 
 
@@ -2186,7 +2187,7 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
         queue_turn(store, tid)
         store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general', 'queued': True})
         return True
-    (CODING_OPENING if coding else general.OPENING).add(tid)
+    general.OPENING.add(tid)
     store.add_comment(tid, 'router', 'agent', f'{_who_said(msg)} wrote again with new work - the '
                       + ('coding agent reopens its own session' if coding else 'assistant carries on its conversation') + ' here by itself.')
     store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general', 'quick': quick})
@@ -2212,7 +2213,7 @@ def queue_turn(store, tid, turn: str = '') -> None:
 def queued_turn(store, tid, turn: str, said: str = '') -> None:
     "Run a turn queue_turn held, now a slot is free: a coding task's own session reopened, else the assistant handed its turn."
     from . import general
-    if not general.handles(store.get_task(tid) or {}): CODING_OPENING.add(tid); return _continue_coding(store, tid)
+    if not general.handles(store.get_task(tid) or {}): general.OPENING.add(tid); return _continue_coding(store, tid)
     general.OPENING.add(tid)
     _replan_general(store, tid, '\n\n---\n\n'.join(x for x in [carry_on_turn(store, tid) if turn == 'carry_on' else '', said] if x))
 
@@ -2538,10 +2539,10 @@ def _pass_coding(store, tid, msg: dict):
     """The line typed into the live coding session (terminal.say_to_task: codex's own queue, else typed - a TUI working takes it
     as its next turn). A pane still reopening is waited for until its own seed went in; a chooser on screen is never typed into
     (Enter would pick whatever is highlighted) - the line waits for the owner."""
-    from . import terminal, waitroom
+    from . import general, terminal, waitroom
     live = lambda: next((x for x in list(terminal.SESSIONS.values()) if x.task_id == tid and x.alive), None)
     end = time.time() + PASS_WAIT
-    while time.time() < end and (tid in CODING_OPENING or getattr(live(), 'accepted', True) is None): time.sleep(.5)
+    while time.time() < end and (tid in general.OPENING or getattr(live(), 'accepted', True) is None): time.sleep(.5)
     t = live()
     try: chooser = bool(t) and terminal.chooser_in(waitroom._screen(t))
     except Exception: chooser = False
@@ -2732,7 +2733,9 @@ def _continue_coding(store, tid):
     except Exception as e:
         logger.warning(f'coding carry-on failed for task {tid}: {e}')
         store.add_comment(tid, 'router', 'agent', f"The coding agent couldn't reopen its session by itself: {' '.join(str(e).split())[:200]} - Continue picks it up.")
-    finally: CODING_OPENING.discard(tid)
+    finally:
+        from . import general
+        general.OPENING.discard(tid)
 
 
 def _who(m: dict) -> str:

@@ -14,7 +14,7 @@ const src = readFileSync(fileURLToPath(new URL("../src/GeneralWorkspace.jsx", im
 test("every typed line keeps its press, so the turn is drawn from the press on every road", () => {
   const hold = src.slice(src.indexOf("const holdText = (w, c) =>"), src.indexOf("const sendArrow ="));
   assert.match(hold, /setSent\(sentNow\(runtime\.thread\.getState\(\)\.messages, Date\.now\(\), busyNow\.current\)\)/);
-  assert.ok(hold.indexOf("setSent(") < hold.indexOf("road ? road("), "kept before any request goes");
+  assert.ok(hold.indexOf("setSent(") < hold.indexOf("api.post("), "kept before any request goes");
 });
 
 test("the turn a line asked for stands under the lines at the foot, never over them", () => {

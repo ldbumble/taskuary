@@ -92,15 +92,27 @@ def waiting(store, tid: int, t=None) -> list:
     """THE OWNER'S LINES NO TURN HAS TAKEN YET, on every screen (the owner, 2026-11-08: "i asked another question and the text was never sent into
     the prompt"): the waiting room's notes not yet handed over, and what a live ACP session holds for its next turn - each drawn as theirs,
     "Waiting for the agent", until a turn takes it. The general chat's own road (general.waiting_lines); [{id, text, at}], oldest first."""
+    from . import general
     from .waitroom import TEAMMATE, parts
-    out = [{'id': f"w{x['WId']}", 'text': parts(x.get('Note'))[0], 'at': x.get('CreatedAt')} for x in store.waiting_notes(int(tid))
-           if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)]
+    # IN THE ORDER A LINE MOVES (general.take_line): kept, then held by the session, then drawn in its record - read in that order, so a line
+    # read gone from one is already in the next, and named once by its kept row's id (`line`) wherever two reads both hold it (chat)
+    kept = general.waiting_lines(store, int(tid))
+    out = kept + [{'id': f"w{x['WId']}", 'text': parts(x.get('Note'))[0], 'at': x.get('CreatedAt')} for x in store.waiting_notes(int(tid))
+                  if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)]
     held = list(getattr(t, '_q', None) or []) if t is not None else []
-    # ...and the owner's words a reopening's first prompt leads with ("FROM THE OWNER: ..." - Continue, a line typed on a session that ended):
-    # held until its adapter is up, ten seconds and more, they were on no screen but the one that sent them (the owner, 2026-11-10)
+    # ...and the owner's words a reopening's first prompt leads with ("FROM THE OWNER: ..." - Continue): held until its adapter is up, ten seconds
+    # and more, they were on no screen but the one that sent them (the owner, 2026-11-10)
     from .outcomes import owner_split
     lines = lambda text, brief, shown: shown or ([w] if brief and (w := owner_split(text)[0]) else [])
-    return out + [{'id': f'q{i}', 'text': w, 'at': None} for i, (_t, _b, shown, _d) in enumerate(held) for w in lines(_t, _b, shown)]
+    return out + [{'id': f'q{i}', 'text': w['text'], 'at': None, 'line': w.get('line')} if isinstance(w, dict) else {'id': f'q{i}', 'text': w, 'at': None}
+                  for i, (_t, _b, shown, _d) in enumerate(held) for w in lines(_t, _b, shown)]
+
+
+def _once(waiting: list, sessions: list) -> list:
+    "Each owner's line once: a kept row the session holds too, or one its record already draws, is drawn there - not twice."
+    drawn = {(u.get('_meta') or {}).get('line') for s in sessions for u in s.get('updates') or []} - {None}
+    held = {w.get('line') for w in waiting if str(w['id']).startswith('q')} - {None}
+    return [w for w in waiting if (w.get('line') if str(w['id']).startswith('q') else w['id']) not in drawn | (set() if str(w['id']).startswith('q') else held)]
 
 
 # ...each step's time in the server's own zone, as every stamp the page reads (store.norm_stamp): a CLI log stamps UTC, and the turn read
@@ -141,14 +153,30 @@ def chat(store, tid: int) -> dict:
     """What the coding chat draws (GeneralWorkspace.jsx): the sessions' steps or ACP updates, the mail that came in, and the live CLI - one that
     idled out (acpcoding.idle_out) still, at rest: the chat stays as it was, and its box is the input that brings it back."""
     from . import acpcoding, permissions
+    from . import general
     t = _live(int(tid)) or (acpcoding.IDLED.get(int(tid)) if acpcoding.idled(int(tid), store) else None)
     from .landing import has_checkout
-    # A LINE MOVES ONE WAY - waiting, then drawn in its session - so the waiting ones are read FIRST: read after the sessions, a line that
-    # was taken between the two reads was in neither, and the owner's words left the chat for one look (CI, 2026-11-10). One caught in
-    # both is drawn where the session has it
-    held, sess = waiting(store, tid, t), sessions(store, tid)
-    drawn = {str((u.get('content') or {}).get('text') or '') for s in sess[-1:] for u in s.get('updates') or [] if u.get('sessionUpdate') == 'user_message_chunk'}
-    return {'task': int(tid), 'sessions': sess, 'mails': mails(store, tid), 'live': live_of(t),
+    # A LINE MOVES ONE WAY - kept, held by its session, drawn in its record - so it is read in that order: read after the sessions, a line
+    # taken between the two reads was in neither (CI, 2026-11-10). One caught in two is drawn once, by its kept row's id (_once)
+    w = waiting(store, tid, t)
+    ss = owned(store, tid, sessions(store, tid))
+    # ...and what the indicator and the lines read, from the one function the general chat's payload calls (general.line_state)
+    return {'task': int(tid), 'sessions': ss, 'mails': mails(store, tid), 'live': live_of(t),
             'checkout': has_checkout(store, tid, getattr(t, 'cwd', '') or ''),
-            'waiting': [w for w in held if not (str(w['id']).startswith('q') and w['text'] in drawn)],
+            **general.line_state(store, int(tid), _once(w, ss)),
             'permissions': permissions.pending(int(tid), store)}         # what the agent waits on the owner's button for
+
+
+def owned(store, tid: int, ss: list) -> list:
+    """ONLY WHAT THE OWNER TYPED IS DRAWN AS HIS (the owner's rules, part 3: "the same fact reads the same"): an ACP adapter sends user-role
+    messages of its own - a slash command's output and the like - and the chat drew them in his bubble. Every line he typed is recorded
+    (general.take_line; before it, the waiting room's notes), so a user-role update Taskuary did not mark and that is not one of his is the
+    agent's (chatStream.stepsFromAcp draws `agent` as its words)."""
+    from . import general
+    from .waitroom import parts
+    his = {' '.join(str(c.get('Body') or '').split()) for c in store.list_comments(int(tid), internal=True)
+           if c.get('ActorType') == general.USER_TYPE and c.get('Actor') == 'owner'}
+    his |= {' '.join(parts(x.get('Note'))[0].split()) for x in store.waitroom(int(tid), limit=500) if (x.get('CreatedBy') or 'owner') == 'owner'}
+    mine = lambda u: ' '.join(str((u.get('content') or {}).get('text') or '').split()) in his
+    mark = lambda u: u if u.get('sessionUpdate') != 'user_message_chunk' or u.get('_meta') else {**u, '_meta': {'taskuary': 'owner' if mine(u) else 'agent'}}
+    return [{**s, 'updates': [mark(u) for u in s['updates']]} if s.get('updates') else s for s in ss]

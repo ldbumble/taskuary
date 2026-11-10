@@ -192,7 +192,7 @@ def test_continuing_a_finished_coding_task_puts_it_back_in_progress(tmp_path):
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
          mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's2'}):
         assert TestClient(server.app).post(f'/api/tasks/{tid}/continue-session').status_code == 200
-    assert store.get_task(tid)['Status'] == 'in_progress'
+    assert store.get_task(tid)['Status'] == 'open'          # by the one rule a typed line reopens a task by (general.reopen, 2026-11-10)
 
 
 def test_a_dismissed_task_is_still_refused(tmp_path):

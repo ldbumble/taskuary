@@ -43,7 +43,8 @@ export function stepsFromAcp(updates) {
   for (const u of updates || []) {
     const kind = u?.sessionUpdate;
     at = u?._at || "";
-    if (kind === "user_message_chunk") chunk(u._meta?.taskuary === "brief" || TOLD.test(textOf(u.content)) ? "brief" : "you", textOf(u.content));
+    // ...and a user-role message the adapter sent itself (a slash command's output) is the agent's, never the owner's line (codingchat.owned)
+    if (kind === "user_message_chunk") chunk(u._meta?.taskuary === "agent" ? "said" : u._meta?.taskuary === "brief" || TOLD.test(textOf(u.content)) ? "brief" : "you", textOf(u.content));
     else if (kind === "agent_message_chunk") chunk("said", textOf(u.content));
     else if (kind === "agent_thought_chunk") chunk("thought", textOf(u.content));
     // ...and a turn that failed, kept by Taskuary where it happened (acpcoding._turn): the turn's error, with the way past it

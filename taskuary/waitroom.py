@@ -175,6 +175,7 @@ def full_on_stranger(store, tid: int, t) -> bool:
 
 
 _DELIVERING, _DLOCK = {}, threading.Lock()
+HELD = {'full', 'closed', 'no_provider', 'held_stranger', 'not_a_choice', 'held_teammate'}      # nothing will take the notes now (_deliver)
 
 
 def deliver(store, tid: int, new: int = None) -> dict:
@@ -187,21 +188,47 @@ def deliver(store, tid: int, new: int = None) -> dict:
     with lk: return _deliver(store, tid, new)
 
 
+def _lines(store, tid: int) -> list:
+    """THE OWNER'S LINES KEPT FOR A CODING AGENT (general.take_line), as notes - all of them one turn, as a chat's turn takes them (send_prompt),
+    each naming its kept row (`line`). A chat's own turn takes its lines itself (say_line): none here for one."""
+    from . import general
+    if general.handles(store.get_task(tid) or {}): return []
+    return [{'WId': None, 'line': w['id'], 'CreatedBy': 'owner', 'CreatedAt': w['at'],
+             'Note': w['text'] + (f"\n\n{general.files_head(w['files'])} (read these files)\n" + '\n'.join(w['files']) if w['files'] else '')}
+            for w in general.waiting_lines(store, tid)]
+
+
+def _handed(store, tid: int, notes: list, how: str):
+    """The notes handed over: the waiting room's marked, and the owner's kept lines taken as his lines of the conversation (store.take_lines) -
+    the record of what he typed - once the session holds them, never before (codingchat.waiting reads them in that order)."""
+    from . import general
+    store.deliver_waiting([x['WId'] for x in notes if x.get('WId') is not None], how)
+    if (ids := [x['line'] for x in notes if x.get('line')]):
+        store.take_lines(tid, general.WAITING_TYPE, general.USER_TYPE, lambda b: general._line_of(b)['text'], ids=set(ids))
+
+
+def _shown(notes: list) -> list:
+    "The owner's own words a prompt carries, drawn as his - each with its kept row's id where it has one."
+    return [{'text': parts(x.get('Note'))[0], 'line': x['line']} if x.get('line') else parts(x.get('Note'))[0]
+            for x in notes if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)]
+
+
 def _deliver(store, tid: int, new: int = None) -> dict:
     from . import terminal as term, peers
     from .ingest import has_room
-    pending = store.waiting_notes(tid)
+    lines, waiting = _lines(store, tid), store.waiting_notes(tid)
+    pending = lines + waiting
     if not pending: return {'delivered': 0, 'state': state(store, tid)[0]}
     st, t = state(store, tid)
-    # the drip: one note per stop, the rest keep their place in line
-    notes = pending[:1] if drip(store) else pending
+    # the drip: one note per stop, the rest keep their place in line - the owner's typed lines all at once, as one turn
+    notes = lines + (waiting[:1] if drip(store) and not lines else [] if drip(store) else waiting)
     left = len(pending) - len(notes)
     # MID-TURN, INTO THE TURN (the owner, 2026-11-06): an ACP coding session whose adapter steers (acpcoding.steerable) takes the words now,
     # into the turn at work, rather than at its end - the parked road below, under every one of its holds
     steer = st == 'working' and t is not None and term.is_acp(t) and bool(getattr(t, 'steerable', lambda: False)())
     # "WHILE YOU WERE WORKING" ONLY WHEN IT WAS (agent walk 2, 2026-11-10): a line typed to an agent at rest reached it as "While you were
     # working, the owner queued 1 note for you ... after finishing the step you are on". Only a note that waited behind a turn says so
-    waited = steer or any(x['WId'] != new for x in notes)
+    waited = steer or any(x['WId'] not in (new, None) for x in notes)
     # A STRANGER'S WORDS NEVER REACH FULL TOOLS UNASKED (the Advisor design rev 2): a session started full on a task a stranger has written on
     # since - a batch's outside contributor among them - gets nothing typed in; the owner's Continue picks it up under the reviewer
     if (st in ('asking', 'parked') or steer) and full_on_stranger(store, tid, t):
@@ -234,7 +261,7 @@ def _deliver(store, tid: int, new: int = None) -> dict:
         if not out.get('delivered'):
             term.type_into(t, text, **ws._as(who))
             store.add_comment(tid, who, 'human', f'Answered the agent: {text[:500]}')
-        store.deliver_waiting([x['WId'] for x in notes], 'answered')
+        _handed(store, tid, notes, 'answered')
         store.audit('task', tid, 'waitroom_deliver', 'router', 'agent', {'n': len(notes), 'how': 'answered', 'left': left})
         return {'delivered': len(notes), 'state': 'answered', 'left': left}
     if st == 'parked' or steer:
@@ -243,8 +270,7 @@ def _deliver(store, tid: int, new: int = None) -> dict:
         # ...an ACP coding session (acpcoding.py) takes it as its next prompt, the batch as Taskuary's brief and each of the owner's own notes
         # drawn as theirs in the coding chat - never "While you were working, the owner queued..." in the owner's bubble (to_general's rule)
         elif term.is_acp(t):
-            t.prompt(' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left, waited=waited)) if x), brief=True,
-                     shown=[parts(x.get('Note'))[0] for x in notes if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)])
+            t.prompt(' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left, waited=waited)) if x), brief=True, shown=_shown(notes))
             how = 'sent into the running turn of' if steer else 'sent to'
         # ...with what other agents said since its last turn in front, framed as theirs (peers.py) - one turn, not two
         else:
@@ -255,15 +281,18 @@ def _deliver(store, tid: int, new: int = None) -> dict:
                 from . import sessionrecord
                 sessionrecord.keep_seed(tid, said_)
             how = term.tell(t, said_)
-        store.deliver_waiting([x['WId'] for x in notes], 'typed')
-        store.add_comment(tid, 'router', 'agent', f'{len(notes)} waiting-room note(s) {how} the live session'
-                          + (' while the agent worked.' if steer else ' once the agent stopped.')
-                          + (f' {left} still waiting for its next stop.' if left else ''))
+            if (n := sum(bool(x.get('line')) for x in notes)): general.answered(tid, n)     # typed in: the pane's own phase says it works from here
+        _handed(store, tid, notes, 'typed')
+        # ...the owner's own lines are his line in the chat and nothing more (a press is one quiet line): no machinery under them
+        if not all(x.get('line') for x in notes):
+            store.add_comment(tid, 'router', 'agent', f'{len(notes)} waiting-room note(s) {how} the live session'
+                              + (' while the agent worked.' if steer else ' once the agent stopped.')
+                              + (f' {left} still waiting for its next stop.' if left else ''))
         store.audit('task', tid, 'waitroom_deliver', 'router', 'agent', {'n': len(notes), 'how': 'typed', 'left': left})
         return {'delivered': len(notes), 'state': 'steered' if steer else 'parked', 'left': left}
     if st == 'no_session':
         task = store.get_task(tid) or {}
-        if task.get('Status') not in ('open', 'in_progress'): return {'delivered': 0, 'state': 'closed'}
+        if task.get('Status') not in ('open', 'in_progress', 'waiting'): return {'delivered': 0, 'state': 'closed'}
         if not has_room(store): return {'delivered': 0, 'state': 'full'}
         # ...a coding session that IDLED OUT (acpcoding.idle_out) comes back as the same run on its own conversation, and the notes are its
         # next prompt - to the owner nothing stopped
@@ -277,22 +306,41 @@ def _deliver(store, tid: int, new: int = None) -> dict:
             if not general.provider_options(store): return {'delivered': 0, 'state': 'no_provider'}
             to_general(store, tid, general.start_session(store, tid, actor='router'), notes, after_restart=True, remaining=left)
             how = 'assistant'
-        else:
-            from . import agents as hub_agents
-            previous = store.last_transcript(tid) or {}
-            agent = previous.get('Agent') or hub_agents.default_agent(store)
-            # Reopening a task is continuity, not a new dispatch decision: keep the profile and
-            # checkout that already know this work. A missing old profile is allowed to fail
-            # visibly rather than silently handing private context to a different configured CLI.
-            term.start_on_task(store, tid, agent, instruction=batch(notes, after_restart=True, remaining=left),
-                               actor='router', cwd=previous.get('Cwd') or None)
-            how = 'seeded'
-        store.deliver_waiting([x['WId'] for x in notes], 'seeded')
-        store.add_comment(tid, 'router', 'agent', f'Reopened a session for {len(notes)} waiting-room note(s) - the previous one had ended.'
-                          + (f' {left} still waiting for its next stop.' if left else ''))
+        else: how = reopen_coding(store, tid, notes, batch(notes, after_restart=True, remaining=left, waited=False))
+        _handed(store, tid, notes, 'seeded')
+        if not all(x.get('line') for x in notes):
+            store.add_comment(tid, 'router', 'agent', f'Reopened a session for {len(notes)} waiting-room note(s) - the previous one had ended.'
+                              + (f' {left} still waiting for its next stop.' if left else ''))
         store.audit('task', tid, 'waitroom_deliver', 'router', 'agent', {'n': len(notes), 'how': how, 'left': left})
         return {'delivered': len(notes), 'state': 'restarted', 'left': left}
     return {'delivered': 0, 'state': st}
+
+
+def reopen_coding(store, tid: int, notes: list, said: str, actor: str = 'router') -> str:
+    """A CODING TASK WITH NO SESSION TAKES WHAT WAS SAID TO IT BY ITS OWN CONVERSATION (the owner, 2026-09-30: "it should start as codex if i hit
+    continue of course"): reopened by the id its CLI gave it, in its checkout, on the CLI that made it - else, where that cannot open (gone,
+    signed out, never named), a fresh session on the CLI that last worked it, told to pick up from the handover and what was sent since. The
+    owner's own lines ride its first prompt as his (ACPCoding.carries). One road for a typed line, Continue and a note left for it. -> how."""
+    from . import agents as hub_agents, continuity, ingest, terminal as term
+    row, _why = ingest._resumable_coding(store, tid)
+    how = 'resumed'
+    try:
+        if not row: raise ValueError(_why)
+        got = term.start_on_task(store, tid, row['Agent'], instruction=said, actor=actor, cwd=row['Cwd'], resume=row['ExtId'], brain=row.get('Brain') or None)
+    except (ValueError, RuntimeError, FileNotFoundError) as e:
+        last = row or store.last_transcript(tid) or {}
+        if row: store.add_comment(tid, 'router', 'agent', f"{last.get('Brain') or row['Agent']} could not reopen its conversation ({e}); "
+                                  f"starting a fresh {last.get('Brain') or 'agent'} session with the handover instead.")
+        sent = continuity.sent_block(store, tid, quote=0, cmd='`taskuary --follow-up --reply "<text>"`')
+        got = term.start_on_task(store, tid, last.get('Agent') or hub_agents.default_agent(store), actor=actor, cwd=last.get('Cwd') or None,
+                                 instruction='\n\n'.join(x for x in (said, continuity.RESUME_PROMPT, sent) if x), brain=last.get('Brain') or None)
+        how = 'seeded'
+    t = term.SESSIONS.get((got or {}).get('sid')) or next((x for x in list(term.SESSIONS.values()) if x.task_id == tid and x.alive), None)
+    if t is not None and term.is_acp(t): t.carries(_shown(notes))
+    elif (n := sum(bool(x.get('line')) for x in notes)):
+        from . import general
+        general.answered(tid, n)          # a pane typed its seed: its own phase says it works from here
+    return how
 
 
 def tick(store) -> int:
@@ -307,7 +355,9 @@ def tick(store) -> int:
     try: handraise.tick(store)
     except Exception as e: logger.warning(f'hand raise tick failed: {e}')
     n = 0
-    for tid in store.tasks_with_waiting():
+    from .general import WAITING_TYPE      # ...and the owner's lines kept for a coding agent (_lines): a chat's own turn takes its own
+    kept = [r['TaskId'] for r in store._rows('SELECT DISTINCT TaskId FROM comment WHERE ActorType=?', (WAITING_TYPE,))]
+    for tid in sorted(set(store.tasks_with_waiting()) | set(kept)):
         try: n += deliver(store, tid)['delivered']
         except Exception as e: logger.warning(f'waiting room: {task_ref(tid)}: {e}')
     from . import peers                        # ...and the notes agents left each other, on the same clock (peers.py)

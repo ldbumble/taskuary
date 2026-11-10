@@ -43,7 +43,14 @@ def normal(r: dict) -> dict:
     return out
 
 
-def risky(r: dict) -> bool: return bool(RISKY.search(' '.join((r.get('tool') or '', r.get('title') or '', r.get('command') or ''))))
+# A COMMAND IS READ FOR WHAT IT DOES, not for its words (the owner, 2026-11-10): `git log --grep push` read as a push and lost its
+# "Always allow", and a send worded any other way kept it. The gates' own reading decides - a step that goes out or deletes outside
+# the agent's folder (shellgate.acts), a web write (acpgate.http_writes). A tool with no command to read is still known by its name
+def risky(r: dict) -> bool:
+    if (cmd := r.get('command')):
+        from . import acpgate, shellgate
+        return bool(shellgate.acts(cmd) or acpgate.http_writes(cmd))
+    return bool(RISKY.search(' '.join((r.get('tool') or '', r.get('title') or ''))))
 
 
 def pattern(r: dict) -> str:

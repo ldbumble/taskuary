@@ -90,6 +90,11 @@ def test_a_push_or_a_send_is_never_allowed_by_a_rule_and_never_offered_always(s)
     assert box == ['allow_once']
     for words in ('send the invoice to the vendor', 'post the release notes', 'pay the Payworth bill'):
         assert perm.normal({'tool': 'mcp', 'title': words})['risky']
+    # ...a COMMAND is read for what it does, never for its words: one that only mentions a push keeps its Always, and a web write
+    # worded with none of the old list's words loses it
+    for cmd, out in (('git log --grep push', False), ('grep -r send_invoice src', False), ('git push origin main', True),
+                     ('curl -X PUT https://vendor.example/api/items/7 -d @row.json', True)):
+        assert perm.normal({'tool': 'Bash', 'kind': 'execute', 'command': cmd})['risky'] is out, cmd
 
 
 def test_only_the_owner_answers(s):

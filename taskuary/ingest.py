@@ -1020,6 +1020,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     return {'status': 'error', 'task_id': None, 'message_id': mid}
         else:
             intent = {'intent': 'task', 'why': ''}
+        intent = owed_reply(store, msg, intent)          # ...a reply owed only to somebody who reads one
         # ...and whatever it decided, it also said what this IS in twelve words. A task keeps that
         # on the task; an fyi or a triaged report has no task, so it is kept on the message and the
         # rail reads it instead of the mail header (funnel.says).
@@ -1129,7 +1130,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 slots.add(store, tid, intent['outputs'], 'triage', sender=_sender(msg))
             # a person's ask put to the owner that an agent works ("here's my draft, let me know your thoughts") still ends in the
             # reply to them: the agent is told so (reply_job) - its thoughts are the owner's Result, the reply is built from them
-            if f['kind'] == 'general' and intent.get('asks_owner') is True and intent.get('sender_class', 'person') == 'person':
+            if f['kind'] == 'general' and intent.get('asks_owner') is True and reads_reply(store, msg, intent):
                 store.tag_task(tid, REPLY_TAG, actor='triage')
             # ...and WHERE the work is done is the coding agent's to pick when it starts (repochoice, the owner 2026-11-06): nothing here
             mid = _land(store, msg, tid, 'routed')
@@ -1483,6 +1484,7 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         else: why = f"awaiting AI triage - kept on {ref}, which stays closed until it is read · connect an AI ({words.name('ai')}) and new mail is sorted by itself"
         store.add_route(mid, tid, 'attach', score, why, [], 'triage', **kw)
         return {'status': 'error', 'task_id': tid, 'message_id': mid}
+    v = owed_reply(store, msg, v)       # ...a reply owed only to somebody who reads one
     reword_todos(store, tid, v)         # ...a correction first, filed or not: the words it changes are on the list already
     # the follow-up's own twelve words, like a new message's - an attached row read its raw subject (X2)
     if v and v.get('title'): msg['_title'] = str(v['title']).strip()[:140] or None
@@ -2861,6 +2863,26 @@ def owes_owner(v: dict | None) -> bool:
     A reply_only alone is not enough - triage gives it to a "sure" in a chat too - so its own asks_owner decides; unanswered, it stays closed."""
     if not v or v.get('degraded'): return False
     return v.get('intent') == 'task' or (v.get('intent') == 'reply_only' and v.get('asks_owner') is True)
+
+
+# A REPLY IS OWED ONLY TO SOMEBODY WHO READS ONE (the owner, 2026-11-10: "github emails are not supposed to be respodned to"). A notice triage
+# read as a question - a build service's "reply to re-run", a list's "reply with your RSVP", the owner's own mail from another device - opened a
+# reply owed: the agent was started told it owed the machine a reply, every reply door refused one, and the empty reply sat on the task for
+# good. Who sent it is a stored fact (the verdict's sender class, else the headers' - wrapup.reads_replies, the one test every reply road
+# takes) and so is the owner's own address: where nobody reads a reply, the ask is the agent's work (a question in it, asks_owner) or nothing
+def reads_reply(store, msg: dict, v: dict | None) -> bool:
+    "Does somebody read a reply to this arriving message: a person sent it (the verdict's class, else the headers'), and not the owner."
+    from .wrapup import from_owner, reads_replies
+    row = {'Channel': msg.get('channel'), 'SenderClass': (v or {}).get('sender_class') or msg.get('sender_class'), 'FromEmail': msg.get('from_email'),
+           'auto_reply': msg.get('auto_reply')}
+    return reads_replies(row) and not from_owner(store, row)
+
+
+def owed_reply(store, msg: dict, v: dict | None) -> dict | None:
+    "The verdict as it stands for this arriving message: a reply_only from a machine or from the owner is the agent's task - an fyi where it asks the owner nothing."
+    if not v or v.get('intent') != 'reply_only' or v.get('invite') or reads_reply(store, msg, v): return v
+    return {**v, 'intent': 'fyi'} if v.get('asks_owner') is False else \
+           {**v, 'intent': 'task', 'kind': v['kind'] if v.get('kind') in task_kinds.AGENT else 'general'}
 
 
 def _reopen(store, tid, msg: dict, actor: str, intent: dict = None) -> bool:

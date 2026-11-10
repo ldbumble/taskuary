@@ -1438,6 +1438,16 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(len(pend), 1)
         self.assertEqual(c.patch('/api/tasks/999999', json={'Kind': 'reply'}).status_code, 404)
 
+    def test_reclassifying_a_machines_notice_to_reply_opens_no_reply_owed_and_says_why(self):
+        # the stress round, 2026-11-10: a build service's notice reclassified as a question opened a reply owed to the notifier that no
+        # door could ever fill - the same rule as arrival (ingest.owed_reply): a reply is owed only to somebody who reads one
+        tid = c.post('/api/tasks', json={'Title': 'Build failed', 'Kind': 'coding'}).json()['taskId']
+        server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:KIND2', 'Channel': 'email', 'FromEmail': 'builds@ci.example',
+                                  'BodyText': 'Build 4512 failed. Reply to re-run.', 'Status': 'routed', 'SenderClass': 'automated'})
+        self.assertEqual(c.patch(f'/api/tasks/{tid}', json={'Kind': 'reply'}).status_code, 200)
+        self.assertFalse([x for x in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if x['TaskId'] == tid])
+        self.assertTrue([x for x in server.store.list_comments(tid) if 'nobody reads a reply' in x['Body']])
+
     def test_a_reply_can_be_opened_on_any_message(self):
         """After a coding agent ran (or triage filed it) there was NO way to answer from the panel -
         nothing pending meant the draft box was unreachable. Opening a reply creates the review

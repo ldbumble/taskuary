@@ -257,6 +257,23 @@ def test_a_reply_owed_that_no_road_takes_to_an_agent_says_so():
     assert any(x.startswith('No agent started: passing lines to the agent is switched off - ') for x in lines(s, tid))
 
 
+def test_a_machine_or_the_owner_is_owed_no_reply_and_the_work_is_the_agents():
+    """The owner, 2026-11-10: "github emails are not supposed to be respodned to". A notice triage read as a question - a build service's
+    "reply to re-run", a list's "reply with your RSVP", the owner's own mail from another device - opened a reply owed and started the agent
+    told THIS TASK IS A REPLY OWED to it, while every reply door refused one: the empty reply sat on the task for good, nothing to press."""
+    ci = mail(from_email='builds@ci.example', from_name='CI Builds', body='Build 4512 failed on main. Reply to re-run.', sender_class='automated')
+    for m, cls in ((ci, 'automated'), (mail(from_email='news@list.example', from_name='Ops Digest', body='Reply with your RSVP'), 'bulk'),
+                   (mail(from_email=ME, from_name='Alex Doyle', body='ask Erin for the Q3 numbers'), 'person')):
+        s = store(); out, went = arrived(s, m, says(intent='reply_only', kind='task', sender_class=cls)); tid = out['task_id']
+        assert s.pending_review(tid) is None and not s.task_has_tag(tid, ingest.REPLY_TAG), m['from_email']
+        assert s.get_task(tid)['Kind'] == 'general' and 'reply_to_agent' not in went, m['from_email']
+        assert went == ['_auto_general'] or any(x.startswith('No agent started:') for x in lines(s, tid)), m['from_email']
+    # ...and a machine's question joining a person's thread opens no reply owed there either
+    s = store(); out, _ = arrived(s, mail(body='Can you draft a pilot plan?'), says(intent='task', kind='general')); tid = out['task_id']
+    arrived(s, {**ci, **WORK, 'body': 'Reply to re-run.'}, says(intent='reply_only', kind='task', sender_class='automated', refines=False))
+    assert s.pending_review(tid) is None
+
+
 def test_a_question_on_a_coding_task_whose_agent_stopped_carries_that_agent_on():
     """The owner, 2026-11-10: "job of agent is to be helpful and do as much as possible". Ray asks "which branch will it land on?" on a bug
     the coding agent fixed and left: the question is that agent's next turn - its session reopened by itself - never a reply owed with

@@ -2772,7 +2772,13 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
     # a draft review appears (auto-drafted when that is on), instead of a repo session.
     if fields.get('Kind') == 'reply' and t.get('Kind') != 'reply':
         mid = reply_target(store, task_id)
-        if mid and not store.pending_review(task_id):
+        # ...owed only to somebody who reads one (ingest.owed_reply's rule, the stress round 2026-11-10): a machine's notice opened a reply
+        # owed to the notifier that no door could ever fill
+        from .wrapup import nobody_waiting
+        if mid and nobody_waiting(store, mid):
+            store.add_comment(task_id, ACTOR, 'human', 'Reclassified as a question - but it came from an automated notice and nobody reads a '
+                              'reply to it, so no reply is opened. Write to a person from the task if one should hear of it.')
+        elif mid and not store.pending_review(task_id):
             rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                                     'Reason': 'reclassified by you: a question, not work to do - needs a reply'})
             store.add_comment(task_id, ACTOR, 'human', 'Reclassified as a question - it needs an answer, not code.')

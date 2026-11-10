@@ -70,6 +70,10 @@ def test_each_rule_is_said_once_and_true():
     # the new lines, each in one place
     for want in ("beats triage's", 'their most likely answer', 'never close with an offer'):
         assert want in system, want
+    # the reply is the agent's to write or to ask about (the owner, 2026-11-10: "think through what the user would want and ask clarifying
+    # question, if you know the answer then just create reply") - said once
+    for once in ('A MESSAGE THAT NEEDS AN ANSWER IS YOURS TO ANSWER', 'ask them that one thing here in the task instead of drafting a guess'):
+        assert system.count(once) == 1, once
     assert 'IS the confirmation' in selfclose.SUMMARY_LINE and 'group chat' in selfclose.SUMMARY_LINE
     assert 'the thread wins' in general.learned_block(s, 'x') or not general.learned_block(s, 'x')
 

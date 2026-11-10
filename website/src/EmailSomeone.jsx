@@ -17,7 +17,8 @@ import { deliverables } from "./taskOutputs.js";
 
 // what a task can send on (slots.KINDS): email, and the chats outbound.send_out carries
 export const TASK_CHANNELS = ["email", "teams", "whatsapp", "telegram", "imessage", "discord"];
-const NOTES = new Set(["coding_session", "agent_result"]);
+// ...and a view the chat drew (session_artifacts.view): kept for the chat to draw, never a file to hand anybody
+const NOTES = new Set(["coding_session", "agent_result", "view"]);
 // the task's own files: what its agents saved or showed, and what came in with its messages
 // ...and the files its agents left in the task's outputs folder (outputs.py, `outputs`: GET /api/task-outputs) - the workbook itself, which
 // the list never offered (2026-10-28); a page shown FROM that folder is the same file, offered once (agentRecord.madeOnce)

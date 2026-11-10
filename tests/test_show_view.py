@@ -169,6 +169,32 @@ class TheTool(unittest.TestCase):
         # ...and the general chat's payload places the copy under an answer, as a file it chose to show
         self.assertTrue(any(p['kind'] == 'shown' and p['name'] == 'dark.png' for p in server._assistant_payload(self.tid)['published']))
 
+    # A DRAWN VIEW IS KEPT WITH THE TASK (2026-11-10): the CLI's log was its only copy - cleaned up, the table was gone from the chat
+    def test_a_view_shown_in_a_turn_is_drawn_from_the_task_once_its_session_log_is_gone_and_never_twice(self):
+        import tempfile
+        from pathlib import Path
+        from fastapi.testclient import TestClient
+        from taskuary import sessionrecord
+        text, err = tool(self.tid, 'show', **SPEC)
+        self.assertFalse(err, text)
+        (art,) = [a for a in self.s.list_task_artifacts(self.tid) if a.get('Kind') == 'view']
+        self.assertEqual(art['ContentType'], 'application/json')
+        self.s.add_transcript(self.tid, 'pty-1', 'the pane, as it ended', agent='coding', ext_id='a-log-cleaned-up', brain='claude')
+        drawn = lambda ss: [x for s in ss for x in s.get('steps') or [] if viewspec.MARK in str(x.get('output') or '')]
+        with mock.patch.object(sessionrecord, '_home', lambda: Path(tempfile.mkdtemp())):     # no CLI log anywhere
+            chat = TestClient(server.app).get(f'/api/tasks/{self.tid}/coding-chat').json()['data']['sessions']
+            rec = sessionrecord.record(self.s, self.tid)['sessions']
+            for ss in (chat, rec):
+                (step,) = drawn(ss)
+                self.assertEqual((step['k'], step['name']), ('tool', 'show'))
+                self.assertEqual(json.loads(step['output'].split(viewspec.MARK)[1])['title'], 'Northwind renewals')
+            # ...and while the session's own record still carries it, that copy is the one drawn
+            sessionrecord._saved_path(self.tid, 'pty-1').write_text(json.dumps({'steps': [
+                {'k': 'tool', 'name': 'mcp__taskuary__show', 'text': '', 'output': text}, {'k': 'said', 'text': 'Three are due.'}]}), encoding='utf-8')
+            chat = TestClient(server.app).get(f'/api/tasks/{self.tid}/coding-chat').json()['data']['sessions']
+            self.assertEqual([x['name'] for x in drawn(chat)], ['mcp__taskuary__show'])
+            self.assertEqual([x['name'] for x in drawn(sessionrecord.record(self.s, self.tid)['sessions'])], ['mcp__taskuary__show'])
+
     def test_a_file_outside_the_agents_folders_is_never_read(self):
         from pathlib import Path
         from taskuary import config

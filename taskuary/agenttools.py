@@ -325,7 +325,13 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         from . import viewspec
         if not a.get('files') and not a.get('elements'): raise ValueError('give `files` (full paths of pictures or pages you made) or a view (`root` and `elements`)')
         # ...the files first: the chat reads a view's spec from its mark to the end of the answer (viewSpec.specIn)
-        return ' '.join([*([show_files(store, tid, a['files'])] if a.get('files') else []), *([viewspec.shown(a)] if a.get('elements') else [])])
+        said = [*([show_files(store, tid, a['files'])] if a.get('files') else []), *([viewspec.shown(a)] if a.get('elements') else [])]
+        # ...and the view kept on the task (session_artifacts.view): the trace that carries it is the CLI's log, which does not last
+        if a.get('elements'):
+            from . import session_artifacts
+            try: session_artifacts.view(store, tid, said[-1].partition(viewspec.MARK)[2])
+            except (OSError, ValueError) as e: logger.warning(f'the view shown on task {tid} was not kept - {e}')
+        return ' '.join(said)
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
     if name == 'check_back': return _j(doors['check_back'](tid, str(a.get('when') or ''), str(a.get('what') or '')))
     if name == 'todos': return _j(doors['todos'](tid, a))

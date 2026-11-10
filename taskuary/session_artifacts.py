@@ -74,6 +74,20 @@ def shown(store, tid: int, src: Path, actor='assistant', name: str = None) -> di
     return store.get_task_artifact(aid)
 
 
+def view(store, tid: int, spec: str, actor='agent') -> dict:
+    """A VIEW the agent drew in its chat (agenttools `show`), kept on the task as it was checked (viewspec.shown, the one line after MARK): the
+    trace was its only copy, in the CLI's own session log, and a view went when that log was cleaned up or the session replaced (2026-11-10:
+    129 of 439 sessions had drawn one, none kept). The chat draws it from here where no trace still holds it (sessionrecord.with_views)."""
+    folder = root() / str(int(tid)); folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"view-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.json"
+    path.write_text(spec, encoding='utf-8')
+    aid = store.add_task_artifact({'TaskId': tid, 'Name': path.name, 'ContentType': 'application/json', 'Size': path.stat().st_size,
+                                   'Path': str(path), 'Kind': VIEW, 'CreatedBy': actor})
+    store.audit('task_artifact', aid, 'create', actor, detail={'task_id': tid, 'kind': VIEW})
+    return store.get_task_artifact(aid)
+VIEW = 'view'
+
+
 def answer_since(store, tid: int) -> str:
     """The newest answer the agent saved since the last session record, so a run's record carries what it answered."""
     arts = store.list_task_artifacts(tid)

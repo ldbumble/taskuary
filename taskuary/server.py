@@ -5787,7 +5787,12 @@ def task_coding_chat(tid: int):
     in, and the live CLI, for the page to draw in the general chat's own rows (chatStream.js)."""
     from . import codingchat
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
-    return {'data': codingchat.chat(store, tid)}
+    from .sessionrecord import with_views
+    from .session_artifacts import VIEW
+    got = codingchat.chat(store, tid)
+    # ...each view a session drew put back where its trace no longer has it (sessionrecord.with_views): the task's own copy, one read
+    with_views(got['sessions'], store._rows("SELECT * FROM task_artifact WHERE TaskId=? AND Kind=?", (int(tid), VIEW)))
+    return {'data': got}
 
 class AgentChannelBody(BaseModel):
     kind: str

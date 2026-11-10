@@ -644,6 +644,34 @@ def _supersede(s: dict, answered: str) -> None:
         rep['last'] = '\n\n'.join(p for p in re.split(r'\n\s*\n', rep['last']) if not (_flat(p) and any(_flat(p) in o for o in old))).strip()
 
 
+# A DRAWN VIEW IS KEPT WITH THE TASK (2026-11-10): the chat drew a view from its session's trace alone, which is the CLI's own log - cleaned up
+# or replaced, the view was gone. Each is kept as `show` checked it (session_artifacts.view); one no trace still holds is put back as the
+# step that drew it, in the session it was drawn in, at its time - the same renderer reads it (chatStream.viewOf). The trace wins: a view
+# it still carries, in any session, is not drawn twice. A view after every session's end belongs to a turn still at work, which draws its own.
+def with_views(sessions: list, arts: list) -> list:
+    from .viewspec import MARK
+    views = sorted((a for a in arts or [] if a.get('Kind') == session_artifacts.VIEW), key=lambda a: (str(a.get('CreatedAt') or ''), a['ArtifactId']))
+    if not views: return sessions
+    hay = json.dumps(sessions, default=str)
+    for a in views:
+        p = session_artifacts.confined(a.get('Path'))
+        try: spec = p.read_text(encoding='utf-8').strip() if p else ''
+        except OSError: spec = ''
+        once = json.dumps(spec)[1:-1]
+        if not spec or once in hay or json.dumps(once)[1:-1] in hay: continue
+        at = _when(a.get('CreatedAt'))
+        s = next((s for s in sessions if s.get('live') or _when(s.get('at')) >= at), None)
+        if not s: continue
+        said, vid = f"Shown in the owner's chat. {MARK}{spec}", f"view{a['ArtifactId']}"
+        if s.get('updates') is not None:
+            ups = s['updates']; i = next((i for i, u in enumerate(ups) if _local(u.get('_at')) > at), len(ups))
+            ups.insert(i, {'sessionUpdate': 'tool_call', 'toolCallId': vid, 'title': 'show', 'status': 'completed', 'rawOutput': said, '_at': at})
+        else:
+            st = s.setdefault('steps', []); i = next((i for i, x in enumerate(st) if x.get('at') and _local(x['at']) > at), len(st))
+            st.insert(i, {'k': 'tool', 'id': vid, 'name': 'show', 'text': '', 'output': said, 'at': at})
+    return sessions
+
+
 def record(store, tid: int) -> dict:
     """Every session this task has had, oldest first, each in the one shape the Agent work card draws:
     who ran it, its result, what it decided and changed, its plan, the files it wrote, and every step."""
@@ -691,6 +719,7 @@ def record(store, tid: int) -> dict:
             if _keeps_last(s, rep): rep['last'] = s['report']['last']
             s['report'] = rep | {'by': c.get('Actor') or '', 'at': _when(c.get('CreatedAt'))}
     arts = store.list_task_artifacts(tid)
+    with_views(sessions, arts)
     for a in sorted((a for a in arts if a.get('Kind') == 'agent_result'), key=lambda a: str(a.get('CreatedAt') or '')):
         p = session_artifacts.confined(a.get('Path'))
         if p and (s := _nearest(sessions, a.get('CreatedAt'))):

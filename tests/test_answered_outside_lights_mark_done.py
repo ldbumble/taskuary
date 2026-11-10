@@ -1,8 +1,9 @@
 """THE OWNER ANSWERED OUTSIDE TASKUARY (the owner, 2026-10-29): a Teams chat, the colleague wrote twice, the owner replied in Teams
 themselves (channels.ingest_own_message: a `context` row, Direction out). The task opened on Came from with "Mark done is next" under an
-Agent nobody started. The Advisor's own pick decides it: its Mark done carries the reply that went as its reason. It names no section any
+Agent nobody started. The task's own recommended move decides it (rulebook.recommended - no model reads it, the owner 2026-11-09): Mark
+done, with the reply that went as its reason. It names no section any
 more - every task is Came from and its one chat, and the chat holds Mark done (the owner, 2026-11-06). Invented Northwind people only (CLAUDE.md)."""
-import json, re
+import re
 from datetime import datetime, timedelta
 from unittest import mock
 from taskuary import advisor, rulebook
@@ -29,33 +30,26 @@ def teams_task(s, answered=True, again=False):
     return tid
 
 
-def model_says(verb):
-    """A model that lights `verb`, keeping what it read."""
-    calls = []
-    def llm(system, user, **kw): calls.append(user); return json.dumps({'verb': verb, 'line': '', 'evidence': []})
-    llm.calls = calls
-    return llm
+def read(s, tid):
+    def no_model(*a, **kw): raise AssertionError('no model reads a task')
+    with mock.patch.object(advisor, 'build_llm', no_model): return advisor.decide(s, f'task:{tid}')
 
 
-def read(s, tid, verb):
-    llm = model_says(verb)
-    advisor.notice(s, advisor.SHOWN, 'task', tid, tier=2, wait=True, llm=llm)
-    with mock.patch.object(advisor, 'notice'): return advisor.decide(s, f'task:{tid}'), llm
-
-
-def test_the_advisors_mark_done_is_lit_where_the_owner_answered_in_teams():
+def test_mark_done_is_lit_where_the_owner_answered_in_teams():
     s = MemoryStore(); tid = teams_task(s)
-    d, llm = read(s, tid, 'close')
-    assert (d['verb'], d['label'], d.get('section')) == ('close', 'Mark done', None), d
-    assert re.search(r'; the fact: Your reply went .*nothing since', llm.calls[0]), 'the reply that went is the fact the model read'
+    d = read(s, tid)
+    assert (d['verb'], d['label'], d['by'], d.get('section')) == ('close', 'Mark done', 'agent', None), d
+    r = rulebook.recommended_task(s, tid)
+    assert r['verb'] == 'close' and re.search(r'^Your reply went .*nothing since', r['why']), 'the reply that went is its reason'
 
 
-def test_nothing_answered_or_asked_again_names_no_section():
+def test_nothing_answered_or_asked_again_lights_nothing_and_names_no_section():
     s = MemoryStore(); tid = teams_task(s, answered=False)
-    assert advisor.decide(s, f'task:{tid}').get('section') is None
+    d = read(s, tid)
+    assert d.get('section') is None and d['verb'] is None, d
     s = MemoryStore(); tid = teams_task(s, again=True)
-    d, _ = read(s, tid, 'reply')
-    assert d.get('section') is None and d.get('verb') == 'reply', d
+    d = read(s, tid)
+    assert d.get('section') is None and d['verb'] is None, 'she wrote again after the answer: it is not over'
 
 
 def test_the_facts_say_the_answer_and_name_no_section():
@@ -65,14 +59,14 @@ def test_the_facts_say_the_answer_and_name_no_section():
     r = rulebook.facts(s, item, advisor.offered(s, item))
     assert r['state'] in ('answered', 'agent_done') and 'section' not in r and '{' not in r['line'] and 'verb' not in r
     assert not hasattr(rulebook, 'SEC')
-    assert read(s, tid, 'next')[0].get('section') is None
+    assert read(s, tid).get('section') is None
 
 
 def test_the_api_hands_the_page_no_section(monkeypatch):
     from fastapi.testclient import TestClient
     from taskuary import server
     s = MemoryStore(); tid = teams_task(s)
-    advisor.notice(s, advisor.SHOWN, 'task', tid, tier=2, wait=True, llm=model_says('close'))
     monkeypatch.setattr(server, 'store', s)
     got = TestClient(server.app).get('/api/advice', params={'key': f'task:{tid}'}).json()
     assert (got.get('verb'), got.get('section')) == ('close', None), got
+    assert TestClient(server.app).get(f'/api/tasks/{tid}').json()['recommended']['verb'] == 'close', 'the task page reads it off its own payload'

@@ -2136,7 +2136,10 @@ def task_detail(task_id: int):
     msgs, verdicts = d.get('messages') or [], store.task_verdicts(task_id)
     o = dict(zip(('origin', 'why'), origin.of_task(store, task_id, msgs)))
     dm = next((m for m in msgs if m.get('Danger')), {})
-    return {**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
+    # THE ONE MOVE ITS ROW FILLS (rulebook.recommended: its agent's own turn and the task's facts) - the same field the rail's item on the
+    # table carries (_pile_payload), so the task page and the canvas light one button and neither asks the Advisor
+    from . import rulebook
+    return {**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])}, 'recommended': rulebook.recommended_task(store, task_id),
             'origin': {**o,                                                                  # who's words are on it (origin.py)
                        # ...and the presses that trust them, in the same words as the held box's (senders.trust_offer)
                        **({'trust': _trust_offer(task_id, msgs)} if o['origin'] == 'stranger' else {}),
@@ -6302,7 +6305,12 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
     # leaves the pile, and nothing told the page - so a sent reply sat on the table as
     # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03). Looked up in the build the pile came from.
-    if current: p = {**p, 'current': funnel.next_item(store, current, items=funnel.full_items(store))}
+    # ...with the one move its row fills (rulebook.recommended) - on the item on the table alone: only its row draws buttons, and the read
+    # is a few rows a card. A copy, never the cached card; an idea is the Advisor's own row and carries none
+    if current:
+        from . import rulebook
+        cur = funnel.next_item(store, current, items=funnel.full_items(store))
+        p = {**p, 'current': {**cur, 'recommended': rulebook.recommended(store, cur)} if cur and cur.get('kind') != 'idea' else cur}
     try: walk = railwalk.peek(store, ACTOR)
     except Exception as e: logger.debug(f'no walk beside the rail: {e}'); walk = None
     p['walk'] = walk
@@ -6795,8 +6803,9 @@ def concierge_chips(key: str):
 
 @app.get('/api/advice')
 def advice_for(key: str):
-    """The Advisor's one decision for the item on the table, at its current revision (advisor.decide): the verb it lights and the line it
-    says ('' is silent) - the same for the canvas, the Tasks tab and the phone - or {"none": why} where nothing is lit."""
+    """The filled button of the item keyed `key` (advisor.status): on an IDEA row the Advisor's decision at its current revision; on a
+    task or a message its own recommended move (rulebook.recommended, by 'agent') for a card with no rail item to carry it - or
+    {"none": why} where nothing is lit."""
     from . import advisor
     return advisor.status(store, key)
 
@@ -6814,13 +6823,6 @@ def advice_press(body: AdvicePressBody):
     try: return {'id': advisor.press(store, body.key, body.advised, body.pressed, body.revision, surface=body.surface, lit=body.lit,
                                      live=body.live, greyed=body.greyed)}
     except Exception as e: logger.warning(f'advice press on {body.key} not recorded: {e}'); return {'id': 0}
-
-
-@app.get('/api/advice/notes')
-def advice_notes(key: str, limit: int = 10):
-    """The Advisor's notes on an item: what it looked at, decided and dropped, per revision (advisor.notes)."""
-    from . import advisor
-    return {'rows': advisor.notes(store, key, limit)}
 
 
 class ConciergeProposeBody(BaseModel):

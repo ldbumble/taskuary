@@ -5,8 +5,10 @@ never read the item, and an agent that finished and asked to go further lit noth
 2026-11-02, for the hundredth time: "never ever use hard coded rules, let the ai see everything and all tools in progressive fashion and it
 should work". So what is left here is FACTS: the item's state named from what the app keeps - a draft and whether it can send from here, the
 agent's state, a failure, the calendar, the days waited, the lane - never the words of a mail, with the fact sentence for it (words.json
-`advice_rule`: an age, a clash, a failure, a promise nothing backs). advisor._prompt hands the state, its sentence, every verb the row
-offers and what the owner chose before in that state (calibrate.evidence) to the model, which decides every light (advisor.decide).
+`advice_rule`: an age, a clash, a failure, a promise nothing backs).
+
+And ONE move read off them (recommended, 2026-11-09: "the agents while running should recommend actions, no assistant"): the button a
+task's row fills comes from its agent's own turn and these facts - no model, no Advisor. The Advisor judges only its own idea rows.
 
 A sentence is only a checkable fact the card does not show, never one explaining a button ("buttons do the talking", the owner)."""
 import json, re
@@ -419,6 +421,68 @@ def facts(store, item: dict, verbs: list) -> dict:
     ev = f.pop(EV, None) or []
     line = _cut(_say(st, **f), 64)
     return {'state': st, 'line': line, **({'evidence': ev} if ev and line else {})}
+
+
+# ── THE TASK'S RECOMMENDED MOVE (the owner, 2026-11-09) ─────────────────────────────────────────────────────────────────────────────
+# The Advisor read every task with a model and lit a button over the agent's own word (its finish check was right 7% of the time). Now the
+# one filled button is read off what the task already says, the same for every kind and brain: a held action's Approve; a failed run's own
+# way past it (the row's lead: the place that fixes it, or Try again); the Send of a draft that waits on the owner - whoever wrote it, an
+# agent or triage - never one whose channel is not connected; Mark done where the agent's turn summary said nothing is left; and with no
+# summary at all (a coding agent's terminal writes none, and a task no agent touched has none) Mark done where the facts say it is over.
+# An agent at work or asking fills nothing: its own pane is the way on.
+OVER = frozenset({'agent_done', 'stopped_done', 'answered', 'done_list', 'watch_handled'})
+QUIET = frozenset({'closed', 'working', 'agent_asking', 'needs_agent'})
+NOTHING_LEFT = 'Its agent said nothing is left to do'
+
+
+def agent_word(store, tid) -> str | None:
+    """What the agent's newest turn summary (general.SUMMARY_TYPE) leaves the owner: 'on_you' while a step of its list is theirs,
+    'nothing_left' where it said so, '' where it said neither - and None with no summary (no agent ran, or one that writes none)."""
+    from . import advisor, general
+    try:
+        last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') == general.SUMMARY_TYPE), None)
+        summ = json.loads(last['Body']) if last else None
+    except (TypeError, ValueError, KeyError): summ = None
+    if not isinstance(summ, dict): return None
+    if any(c.get('on_you') and not c.get('done') and c.get('text') for c in advisor._checklist(store.get_task(int(tid)))): return 'on_you'
+    return 'nothing_left' if summ.get('nothing_left') else ''
+
+
+def _recommended(store, it: dict, verbs: list | None, f: dict | None) -> dict | None:
+    from . import advisor
+    if it.get('kind') == 'idea': return None                # an idea is the Advisor's own row, and its light the Advisor's
+    verbs = advisor.offered(store, it) if verbs is None else verbs
+    f = f or facts(store, it, verbs)
+    st, tid, lead = f['state'], it.get('tid'), (verbs[0]['verb'] if verbs else '')
+    pick = lambda *vs: next((v for v in vs if not advisor.pressable(store, it, v, verbs)), None)
+    why = f.get('line') or ''
+    if st in QUIET: v = None
+    elif st == 'action_held': v = None if advisor.unconnected(store, it) else pick('approve', 'send_close')
+    # ...what failed is never sent again as it stood: its own fix or Try again where the row leads with one, else nothing
+    elif lead == 'fix' or st in FAILED: v = pick(lead) if lead in ('fix', 'continue') else None
+    elif st == 'draft_ready' or ((w := store.waiting_on_owner(int(tid)) if tid else None) and (w.get('FinalText') or w.get('DraftText'))):
+        v = None if advisor.unconnected(store, it) else pick('send_close', 'approve')
+    # ...the agent's own word decides wherever it wrote one: a turn that said neither fills nothing, whatever the facts read
+    elif tid and (said := agent_word(store, tid)) is not None: v, why = (pick('close'), NOTHING_LEFT) if said == 'nothing_left' else (None, '')
+    else: v = pick('close') if st in OVER else None
+    return {'verb': v, 'label': advisor._label(verbs, v, it), 'why': why, 'state': st} if v else None
+
+
+def recommended(store, item: dict, verbs: list = None, f: dict = None) -> dict | None:
+    """{verb, label, why, state} - the one move the item's row fills - or None for nothing filled. `verbs`: the row's buttons where the
+    caller read them already (advisor.offered); `f`: its facts. Never raises: a row that cannot be read fills nothing."""
+    try: return _recommended(store, item or {}, verbs, f) if item else None
+    except Exception as e:
+        logger.warning(f"rulebook: no recommended move for {(item or {}).get('key')} - {e}"); return None
+
+
+def recommended_task(store, tid) -> dict | None:
+    "The same for a task by its id (the task page's own payload): its card as the rail last stood, never a rail build."
+    from . import advisor
+    try: item = advisor._item(store, 'task', int(tid))
+    except Exception as e:
+        logger.debug(f'rulebook: no card for task {tid} - {e}'); item = None
+    return recommended(store, item)
 
 
 def chase_thread(store, item: dict) -> dict | None:

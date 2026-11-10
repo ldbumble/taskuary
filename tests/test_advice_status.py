@@ -7,16 +7,10 @@ from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import advisor, server, words
 from taskuary.store import MemoryStore
-from tests.test_advisor import _Rail, brain_saying
+from tests.test_advisor import _Rail
 
 
 class StatusTests(_Rail):
-    def test_a_line_is_the_line(self):
-        s = MemoryStore(); t = self._asked_task(s)
-        advisor.notice(s, 'reply.arrived', 'task', t, wait=True, llm=brain_saying({'verb': 'forward', 'line': 'Ray Colton owns the exports.', 'evidence': []}))
-        with mock.patch.object(advisor, 'notice'): got = advisor.status(s, f'task:{t}')
-        self.assertEqual((got['verb'], got['line'], got['by']), ('forward', 'Ray Colton owns the exports.', 'model'))
-
     def test_nothing_is_ever_pending_and_nothing_is_lit_without_its_fact(self):
         s = MemoryStore(); t = self._asked_task(s)
         rev = advisor.revision(s, 'task', t)
@@ -33,15 +27,17 @@ class StatusTests(_Rail):
             with mock.patch.object(advisor, 'notice'): got = advisor.status(s, f'task:{t}')
             self.assertEqual((got['verb'], 'none' in got), (None, False), dropped)      # a plain stop lights nothing
 
-    def test_an_agent_at_work_is_the_models_and_a_switched_off_advisor_lights_nothing(self):
+    def test_an_agent_at_work_lights_nothing_no_model_is_asked_and_the_switch_is_the_advisors_alone(self):
         from taskuary import workerstate as ws
         s = MemoryStore(); t = self._stopped_task(s)
         with mock.patch.object(advisor, 'notice') as n, mock.patch.object(ws, 'status', return_value={'state': 'working'}):
             got = advisor.status(s, f'task:{t}')
-        self.assertEqual((got['verb'], got['line'], got['state']), (None, '', 'working'), 'no code lights Next for it: the model reads it')
-        self.assertEqual(n.call_args.kwargs.get('tier'), 2)
+        self.assertEqual((got['verb'], got['line'], got['state'], got['by']), (None, '', 'working', 'agent'))
+        n.assert_not_called()
+        # ...the Advisor switched off: the desk still reads the task's own move; the phone's read (decide) says off, as it did
         s.set_setting(advisor.ON_KEY, '0', 'test')
-        with mock.patch.object(advisor, 'notice'): self.assertEqual(advisor.status(s, f'task:{t}')['none'], 'off')
+        self.assertNotIn('none', advisor.status(s, f'task:{t}'))
+        self.assertEqual(advisor.decide(s, f'task:{t}')['none'], 'off')
 
     def test_nothing_to_advise_on_is_said_as_nothing(self):
         with mock.patch.object(advisor, 'notice'): self.assertEqual(advisor.status(MemoryStore(), 'meeting:3'), {'none': 'nothing'})
@@ -58,4 +54,4 @@ class StatusTests(_Rail):
         s = MemoryStore(); t = self._asked_task(s)
         with mock.patch.object(server, 'store', s), mock.patch.object(advisor, 'notice'):
             got = TestClient(server.app).get('/api/advice', params={'key': f'task:{t}'}).json()
-        self.assertEqual((got['verb'], got['label'], got['line'], got['state'], got['by']), (None, '', '', 'asked', 'model'))
+        self.assertEqual((got['verb'], got['label'], got['line'], got['state'], got['by']), (None, '', '', 'asked', 'agent'))

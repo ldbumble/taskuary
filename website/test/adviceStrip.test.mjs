@@ -27,7 +27,8 @@ test("a press is heard once it settles, so the advice is read again for the item
   // ...and the page and a phone's row both listen, as does the draft's own Send under the card
   // ...every press but Next, which puts the item down (the overnight walk, 2026-10-26: adviceOncePerPress.test.mjs)
   assert.match(read("AssistantView.jsx"), /if \(k && !walkMove\(id\) && leftKey\.current !== k && \(!on \|\| on === k\)\) readAdvice\(k, true\);/);
-  assert.match(read("CanvasItem.jsx"), /onPressed\(\(id\) => \{ if \(!walkMove\(id\)\) read\(\); \}\)/);
+  // ...a narrow window's row listens for nothing: it reads no advice of its own any more (2026-11-09), only what the page hands it
+  assert.doesNotMatch(read("CanvasItem.jsx"), /onPressed|useItemAdvice/);
   assert.equal((read("ReviewDecision.jsx").match(/finally \{ acted\(no\(/g) || []).length, 4, "decide, decideBoth, redraft and copy");
 });
 
@@ -138,12 +139,15 @@ test("an important line lands in the task's Advisor section, and every other str
   assert.equal(taskNote({ none: "no_ai", for: "task:7" }), null, "no AI is no line at all");
   // ...NO SECTION ON THE TASK ANY MORE (the owner, 2026-11-05: "remove the advisor line from the chat ... the agent is the advisor"): every task
   // is its chat now (2026-11-06), so the line lights a button and is said on the draft it is about and on the Agent's tab - never a block
+  // ...AND NO ADVISOR'S LINE ON A TASK AT ALL (the owner, 2026-11-09: "assistant/advisor should only be on rail"): taskNote filters the
+  // notes of the Advisor's own row - an idea - in the past-chats menu; the task page reads none, and beside a waiting draft's Send stands
+  // what leaves with it, a fact of the draft served as its move's why
   const page = read("TaskPage.jsx");
-  assert.match(page, /const warn = notDone \? \(canvas \? note : taskNote\(taskAdvice\)\) : null;/);
+  assert.doesNotMatch(page, /taskNote|taskAdvice|const warn = /, "the task page reads no Advisor's line");
   assert.doesNotMatch(page, /<AdvisorNote |advisorNote|adviceIn/, "no Advisor block on the task page");
-  assert.match(page, /why=\{warn\?\.line \|\| ""\}/, "said on the draft whose button it lit");
+  assert.match(page, /why=\{rec\?\.state === "draft_ready" \? rec\.why \|\| "" : ""\}/, "what leaves, said on the draft whose Send is filled");
   assert.doesNotMatch(page, /1 note/, "nothing hides behind a tab, so the tab says nothing of it");
   assert.ok(!fs.existsSync(new URL("../src/AdvisorNote.jsx", import.meta.url)), "the section it drew is gone with its last user");
   assert.doesNotMatch(page, /data-tq-task-advice/);
-  assert.match(read("CanvasItem.jsx"), /onLeave=\{onLeave\} onStay=\{onStay\} note=\{note\} litMove=\{phone \? pick\?\.verb \|\| pick\?\.id \|\| "" : ""\} \/>/);
+  assert.match(read("CanvasItem.jsx"), /onLeave=\{onLeave\} onStay=\{onStay\} litMove=\{phone \? pick\?\.verb \|\| pick\?\.id \|\| "" : ""\} \/>/);
 });

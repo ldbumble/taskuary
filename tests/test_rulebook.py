@@ -3,7 +3,7 @@ ever use hard coded rules, let the ai see everything"). rulebook.facts names eac
 model reads that, every verb the row offers and the owner's record, and decides every light - read the same by every surface: the desk
 canvas (the rail's key), the Tasks tab (task:N), a phone chat (remote_assistant.primary and the card's line). The desk at phone width is the
 page's (website/test/rulebookMatrix.test.mjs). Invented Northwind people only."""
-import json, re
+import json
 from datetime import date, datetime, timedelta
 from unittest import mock
 import pytest
@@ -37,47 +37,38 @@ def world():
     assistant._AGENDA.clear(); assistant._AGENDA.update(agenda); funnel.invalidate()
 
 
-_FACT = re.compile(r"^THE STATE \([^)]*\): (\w+) - .*?(?:; the fact: (.*))?$", re.M)
-def model_saying(verb):
-    """A model that lights `verb` and says, as its line, the fact THE STATE handed it - so a line on the strip proves the fact reached it."""
-    calls = []
-    def llm(system, user, **kw):
-        calls.append(user); m = _FACT.search(user)
-        return json.dumps({'verb': verb, 'line': (m.group(2) or '') if m and verb else '', 'evidence': []})
-    llm.calls = calls
-    return llm
-
-
-def _decide(s, syn, item, key=None, verb='unset'):
-    """The decision as every surface reads it - after the model read the item (at item.shown, tier 2) and answered `verb`."""
+def _decide(s, syn, item, key=None):
+    """The decision as every surface reads it: the task's own recommended move (rulebook.recommended) - and no model is built to read it."""
     orig = advisor._item
-    with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))):
-        tgt = advisor.target_of(s, key or item['key'])
-        if verb != 'unset': advisor.notice(s, advisor.SHOWN, tgt[0], tgt[1], tier=2, wait=True, llm=model_saying(verb), key=key or item['key'])
-        with mock.patch.object(advisor, 'notice'): return advisor.decide(s, key or item['key'], preread=False)
+    def no_model(*a, **kw): raise AssertionError('no model reads a task or a message')
+    with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))), \
+         mock.patch.object(advisor, 'build_llm', no_model):
+        return advisor.decide(s, key or item['key'], preread=False)
 
 
-# (case, the state the facts name, the verb the model answers - and so the verb lit, whether a line is said: the model's line is the fact
-# THE STATE handed it, so a line proves the fact reached the prompt). Every state is the model's; none lights anything by itself
+# (case, the state the facts name, the one move its row fills, whether a line is said beside it). NO MODEL DECIDES ANY OF IT (the owner,
+# 2026-11-09): a draft that waits fills its Send, a run that is over fills Mark done, a failed run fills its own Try again - and an ask, a
+# wait, a report, an FYI and an agent at work or asking fill nothing
 MATRIX = [
-    ('Badge access for the new AP clerk', 'asked', 'reply', True),
-    ('did the overnight import finish', 'unsendable', 'copy', False),
-    ('AP cutover - Thursday?', 'draft_ready', 'approve', False),
-    ('Lease renewal for the Elm Street office', 'failed_cause', 'new_task', True),
-    ('Spendly card limits', 'idea', 'mine', False),
-    ('Q3 accruals file', 'answered', 'close', True),             # "Your reply went at 10:02; nothing since."
-    ('Helpdesk tickets by day', 'report_ok', 'next', False),
-    ('Vendor portal maintenance', 'fyi', 'next', False),
-    ('agent asking (coding)', 'agent_asking', None, False),       # a coding agent's ask lights nothing (the owner, 2026-11-02)
-    ('agent finished (general)', 'agent_done', None, False),     # its turn said nothing is left nowhere: nothing lit (advisor.agent_light)
-    ('agent failed (general)', 'failed_cause', 'continue', False),    # ...its failure's Try again, said by the run's own line
-    ('agent stopped-saved (coding)', 'stopped', 'continue', False),
-    ('Close the August books', 'done_list', 'close', True),
-    ('Move payroll to Payworth', 'goal', 'next', False),
-    ('Migrate the census export', 'goal_late', 'chase', True),
-    ('Ray: schema sign-off', 'waiting_overdue', 'chase', True),         # due two days ago: late by the header's own clock
-    ('Vendor W-9 for the new supplier', 'waiting_late', 'chase', True),
-    ('Budget figures for Q4', 'waiting_late', 'chase', True),
+    ('Badge access for the new AP clerk', 'asked', None, False),
+    ('did the overnight import finish', 'unsendable', None, False),
+    ('AP cutover - Thursday?', 'draft_ready', 'send_close', False),
+    ('Lease renewal for the Elm Street office', 'failed_cause', None, False),     # a send the server refused is never lit to go again
+    ('Q3 accruals file', 'answered', 'close', False),            # the owner's reply went and nothing came since
+    ('Helpdesk tickets by day', 'report_ok', None, False),
+    ('Vendor portal maintenance', 'fyi', None, False),
+    ('agent asking (general)', 'agent_asking', None, False),
+    ('agent asking (coding)', 'agent_asking', None, False),
+    ('agent finished (general)', 'agent_done', 'close', False),
+    ('agent finished (coding)', 'agent_done', 'close', False),
+    ('agent failed (general)', 'failed_cause', 'continue', True),       # ...its failure's Try again, said by the run's own line
+    ('agent failed (coding)', 'failed_cause', None, False),             # its row leads with New task: nothing is filled
+    ('agent stopped-saved (coding)', 'stopped', None, False),
+    ('Close the August books', 'done_list', 'close', False),
+    ('Move payroll to Payworth', 'goal', None, False),
+    ('Migrate the census export', 'goal_late', None, False),
+    ('Ray: schema sign-off', 'waiting_overdue', None, False),
+    ('Vendor W-9 for the new supplier', 'waiting_late', None, False),
 ]
 
 
@@ -85,19 +76,17 @@ MATRIX = [
 def test_each_state_is_one_decision_on_every_surface(world, case, state, verb, says):
     s, by, syn = world
     item = by[case]
-    d = _decide(s, syn, item, verb=verb)
-    # ...a Send the model names on a draft in its task's Close out lights Send and close there (the owner, 2026-11-03)
-    lit = 'send_close' if verb == 'approve' and item.get('tid') else verb
-    assert (d.get('state'), d.get('verb'), bool(d.get('line'))) == (state, lit, says), d
+    d = _decide(s, syn, item)
+    assert (d.get('state'), d.get('verb'), bool(d.get('line')), d.get('by')) == (state, verb, says, 'agent'), d
+    assert (rulebook.recommended(s, syn.get(item['key']) or item) or {}).get('verb') == verb, 'the page reads the same move off the item'
     assert len(d.get('line') or '') <= 64, 'a line is read whole on a phone'
     assert not words.jargon_in(d.get('line') or ''), d['line']
-    # THE ADVISOR PICKS ONLY FROM THE BUTTONS THE ROW DRAWS (offered: row_buttons, plus Chase on a wait, plus Next)
-    if verb and verb != 'next': assert verb in [v['verb'] for v in advisor.offered(s, syn.get(item['key']) or item)]
-    # THE PHONE READS THE SAME DECISION: its lead is the Advisor's verb wherever its chips carry it, and Next leads where Next is lit
+    # ONLY A BUTTON THE ROW DRAWS IS FILLED (offered: row_buttons, plus Chase on a wait)
+    if verb: assert verb in [v['verb'] for v in advisor.offered(s, syn.get(item['key']) or item)]
+    # THE PHONE READS THE SAME DECISION: its lead is that verb wherever its chips carry it
     chips = concierge.chips_for(s, syn.get(item['key']) or item)
     lead = remote_assistant.primary({'chips': chips, 'item': item}, d)
-    if verb == 'next': assert lead['verb'] == 'next'
-    elif lit in {c['verb'] for c in chips}: assert lead['verb'] == lit
+    if verb in {c['verb'] for c in chips}: assert lead['verb'] == verb
     assert remote_assistant.advice_line({'item': item}, d) == (d.get('line') or '')
 
 
@@ -106,7 +95,7 @@ def test_the_tasks_tab_reads_the_same_decision_as_the_canvas(world):
     s, by, syn = world
     for case in ('Badge access for the new AP clerk', 'Close the August books', 'Ray: schema sign-off', 'Migrate the census export'):
         item = by[case]
-        desk, tab = _decide(s, syn, item, verb='reply'), _decide(s, syn, item, key=f"task:{item['tid']}", verb='reply')
+        desk, tab = _decide(s, syn, item), _decide(s, syn, item, key=f"task:{item['tid']}")
         assert (desk['verb'], desk['line']) == (tab['verb'], tab['line']), case
 
 
@@ -119,24 +108,6 @@ def test_every_state_has_its_meaning_and_fact_and_lights_nothing_of_its_own():
     assert {'asked', 'draft_ready', 'unsendable', 'duplicate', 'working', 'agent_asking', 'unpushed', 'stopped', 'failed', 'agent_done',
             'report_ok', 'report_failed', 'fyi_batch', 'fyi', 'invite_free', 'invite_clash', 'invite_no_cal', 'waiting', 'waiting_late',
             'goal_late', 'goal', 'idea', 'unsorted', 'closed', 'stranger'} <= set(words.ADVICE_RULE)
-
-
-def test_every_state_reaches_the_model_and_none_is_left_to_a_rule(world):
-    """The 2026-11-02 audit: 62% of the rows said "left to the rule" and no model read them. Every case is read now, and its prompt carries
-    the state, its meaning and every verb the row offers - Next among them."""
-    s, by, syn = world
-    for case, state, *_ in MATRIX:
-        item = by[case]
-        tgt = advisor.target_of(s, item['key'])
-        llm = model_saying(None)
-        orig = advisor._item
-        with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))):
-            advisor.judge(s, 'reply.arrived', tgt[0], tgt[1], 'rev-' + case, tier=1, llm=llm, key=item['key'])
-        assert llm.calls, case
-        p = llm.calls[0]
-        assert 'THE STATE (' in p and f'): {state} - ' in p, case
-        assert re.search(r'^VERBS OFFERED: .*next \(Next\)', p, re.M), case
-    assert not s._one("SELECT 1 x FROM advice WHERE Dropped='left to the rule'")
 
 
 # ── the states the world lacks, each built from its facts ─────────────────────────────────────────────────────────────────────────
@@ -273,70 +244,6 @@ def test_unsorted_mail_a_batch_a_closed_task_and_a_failed_report(s):
         {'state': 'report_failed', 'line': 'Report failed: mailbox signed out'}
 
 
-# ── the model's light, and the checks on it ────────────────────────────────────────────────────────────────────────────────────────
-def _habit(s, text, key):
-    """A press count where the 2026-10-23 doc kept it - an install the migration has not reached, or a model that wrote one anyway."""
-    s.save_doc('learned', f"# Learned\n\n## How you sort mail\n\n## What you do next\n- {text} [s:5 | ev: pr1, pr2, pr3 | seen: 2026-10-20 | k: {key}]\n", 'test')
-
-
-def _said(s, t, it, verb, line='', kind=None):
-    advisor._write(s, target_kind='task', target_id=t, key=it['key'], event=advisor.SHOWN, revision=advisor.revision(s, 'task', t), tier=2,
-                   line=line, verb=verb, label=verb, model='m', kind=kind)
-
-
-def test_nothing_is_lit_before_the_model_reads_the_item(s, monkeypatch):
-    t, m, it = _asked(s, 'Weekly report', d=2)
-    monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
-    asked = []
-    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: asked.append(k.get('tier')))
-    d = advisor.decide(s, it['key'], preread=False)
-    assert (d['state'], d['verb'], d['line']) == ('asked', None, '') and asked == [2], 'read now, at the bigger tier; nothing lit meanwhile'
-
-
-def test_a_press_count_lights_nothing(s, monkeypatch):
-    """The owner, 2026-10-25: stop learning from presses and remove the habit mark - a press count in the doc never changes the lit button."""
-    t, m, it = _asked(s, 'Weekly report', who=('Vendor Desk', 'desk@vendor.example'), d=2)
-    monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
-    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
-    _said(s, t, it, 'reply')
-    assert advisor.decide(s, it['key'], preread=False)['verb'] == 'reply'
-    _habit(s, 'On asks from vendor.example, {{owner_first}} presses Mark done (5 of 6)', 'move asked email vendor.example')
-    d = advisor.decide(s, it['key'], preread=False)
-    assert (d['verb'], d['by']) == ('reply', 'model') and 'says' not in d and d['pill'] == d['label'], 'no habit, no count, no mark'
-
-
-def test_send_is_never_lit_on_a_draft_the_check_flagged(s, monkeypatch):
-    t, m, it = _asked(s, 'Invoice 4410', who=('Vendor Desk', 'desk@vendor.example'))
-    rid = Factory(s).review(t, m, draft="It goes out in Friday's payment run.")
-    it = {**it, 'kind': 'review', 'lane': 'approve', 'rid': rid, 'draft': True, 'key': f'review:{rid}'}
-    monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
-    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
-    _habit(s, 'On drafts to vendor.example, {{owner_first}} presses Send (5 of 6)', 'move review email vendor.example')
-    _said(s, t, it, 'redraft', 'Draft promises Friday - nothing here shows it.')
-    d = advisor.decide(s, it['key'], preread=False)
-    assert (d['verb'], d['by'], d['line']) == ('redraft', 'model', 'Draft promises Friday - nothing here shows it.')
-
-
-def test_the_models_light_is_what_is_lit_with_its_line(s, monkeypatch):
-    t, m, it = _asked(s, 'Badge access')
-    monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
-    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
-    _said(s, t, it, 'reply', 'Erin is waiting on you - answer her.')
-    d = advisor.decide(s, it['key'], preread=False)
-    assert (d['verb'], d['line'], d['by']) == ('reply', 'Erin is waiting on you - answer her.', 'model')
-
-
-def test_a_verb_the_row_does_not_carry_is_dropped(s, monkeypatch):
-    from tests.test_advisor import brain_saying
-    t, m, it = _asked(s, 'Badge access')
-    monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
-    monkeypatch.setattr(advisor, 'offered', lambda store, item: _verbs('reply', 'close'))
-    rid = advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=brain_saying({'verb': 'merge_pr', 'line': 'Merge it.', 'evidence': []}))
-    assert s._one('SELECT Dropped FROM advice WHERE Id=?', (rid,))['Dropped'] == 'verb not offered: merge_pr'
-    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
-    assert advisor.decide(s, it['key'], preread=False)['verb'] is None
-
-
 def test_the_next_two_are_read_ahead_whatever_their_state(s, monkeypatch):
     items = [{'key': f'k{n}', 'kind': 'asked' if n % 2 else 'report', 'lane': 'asked', 'tid': n} for n in range(5)]
     monkeypatch.setattr(funnel, 'known', lambda store: {'items': items})       # the read ahead reads the rail as it stands, never builds it
@@ -405,10 +312,9 @@ def test_a_draft_says_what_leaves_with_it(s):
     assert rulebook.facts(s, it, V)['line'] == 'Goes to paula@northwind.example - new to this thread.'
 
 
-def test_a_task_left_sitting_lights_only_the_models_move_beside_what_is_owed(s):
-    """UNTOUCHED TOO LONG (the design rev 2): an open task of the owner's that nothing moved for UNTOUCHED_DAYS working days is said to the
-    model, which reads what is still owed - nothing lit while it reads, then its verb; nothing owed is silent."""
-    from tests.test_advisor import brain_saying
+def test_a_task_left_sitting_is_named_untouched_and_fills_nothing(s):
+    """UNTOUCHED TOO LONG (the design rev 2): an open task of the owner's that nothing moved for UNTOUCHED_DAYS working days is named so,
+    and crossing the line moves its revision - and no button is filled over it: what is still owed is the owner's to say."""
     t = Factory(s).task(title='Sign the Elm Street lease', kind='task')
     old = (datetime.now() - timedelta(days=12)).strftime('%Y-%m-%d %H:%M:%S')
     it = {'key': f'task:{t}', 'kind': 'own', 'lane': 'mine', 'tid': t, 'title': 'Sign the Elm Street lease'}
@@ -417,30 +323,15 @@ def test_a_task_left_sitting_lights_only_the_models_move_beside_what_is_owed(s):
     s._exec('UPDATE task SET CreatedAt=?, UpdatedAt=? WHERE TaskId=?', (old, old, t))
     assert rulebook.untouched(s, s.get_task(t)) >= rulebook.UNTOUCHED_DAYS
     assert advisor.revision(s, 'task', t) != rev, 'crossing the line is read again'
-    assert rulebook.facts(s, it, _verbs('close', 'defer', 'reply')) == {'state': 'untouched', 'line': ''}
-    orig = advisor._item
-    def decide():
-        with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: it if ti == t else orig(store, tk, ti, key)), \
-             mock.patch.object(advisor, 'offered', return_value=[{'verb': v, 'label': v} for v in ('close', 'defer', 'reply')]):
-            advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=llm)
-            with mock.patch.object(advisor, 'notice'): return advisor.decide(s, f'task:{t}', preread=False)
-    llm = brain_saying({'verb': None, 'line': '', 'evidence': []})
-    assert decide()['verb'] is None, 'nothing owed: nothing lit'
-    assert 'UNTOUCHED: nothing has moved on it for' in llm.calls[0][1]
-    s._exec('DELETE FROM advice WHERE TargetId=?', (t,))
-    llm = brain_saying({'verb': 'reply', 'line': 'Erin still needs the signed lease', 'evidence': [], 'kind': 'late'})
-    d = decide()
-    assert (d['state'], d['verb'], d['line'], d['by']) == ('untouched', 'reply', 'Erin still needs the signed lease', 'model'), d
+    verbs = _verbs('close', 'defer', 'reply')
+    assert rulebook.facts(s, it, verbs) == {'state': 'untouched', 'line': ''} and rulebook.recommended(s, it, verbs) is None
 
 
-def test_what_leaves_stands_beside_the_models_send(s):
+def test_what_leaves_stands_beside_the_drafts_send(s):
     t, m, it = _asked(s, 'Q3 accruals')
     Factory(s).review(t, m, draft='Here are the Q3 accruals.', Deliver=json.dumps({'kind': 'reply', 'to': ['erin@northwind.example'], 'cc': ['dana@vendor.example']}))
     s.reconcile_processing_membership(); s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[]); funnel.invalidate()
-    from tests.test_advisor import brain_saying
-    advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=brain_saying({'verb': 'approve', 'line': '', 'evidence': []}))
-    with mock.patch.object(advisor, 'notice'):
-        d = advisor.decide(s, f'task:{t}', preread=False)
+    d = advisor.decide(s, f'task:{t}', preread=False)
     assert (d['state'], d['verb'], d['line']) == ('draft_ready', 'send_close', 'Goes to dana@vendor.example - new to this thread.'), d
 
 

@@ -9,34 +9,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { Box } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
 import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
-import api from "./api.js";
-import { onLive } from "./live.js";
-import { adviceKeyFor, adviceShown, stripWord, taskNote } from "./advice.js";
-import { TableVerbs, onPressed, useHost, useVerbs, walkMove } from "./actionRow.js";
-import { adviceRead } from "./tableState.js";
+import { adviceShown, stripWord } from "./advice.js";
+import { TableVerbs, useHost, useVerbs } from "./actionRow.js";
+import { isIdea } from "./tableState.js";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
-
-// THE ADVISOR'S PICK ON A PHONE'S ROW (U12): the dock's row is filled by the canvas's advice, but a phone draws its own row at the
-// view's foot, which was handed none - so the suggestion's line stood over a row whose dark button was something else. Read for
-// this item, re-read when the Advisor's event names it, and dropped when the item moves on (adviceShown). The same ONE decision as the
-// desk's (advisor.decide) - and no "Thinking..." while it is read: the rule's button is lit at once (the owner, 2026-10-23)
-function useItemAdvice(card, on) {
-  const [advice, setAdvice] = useState(null);
-  const key = card?.key || "";
-  useEffect(() => {
-    if (!on || !key) { setAdvice(null); return undefined; }
-    let live = true;
-    const read = () => api.get("/api/advice", { params: { key } })
-      .then(({ data }) => { if (live) setAdvice(adviceRead(data, key).advice); })
-      .catch(() => { if (live) setAdvice(null); });
-    setAdvice(null); read();
-    const off = onLive("advice", (ev) => { if (adviceKeyFor(ev, { key, aliases: card.aliases || [] })) read(); });
-    // an act on the item moves its revision: read the line again (2026-10-19) - not Next, which puts this item down (overnight walk)
-    const after = onPressed((id) => { if (!walkMove(id)) read(); });
-    return () => { live = false; off?.(); after(); };
-  }, [on, key]);   // eslint-disable-line react-hooks/exhaustive-deps
-  return advice;
-}
 
 // the height the view takes: the chat body's own, less its padding - the same in both states (see above). Said in CSS,
 // against the chat body as a SIZE container (assistantView.css .tq-chat-body): a height measured in script was stale
@@ -130,19 +106,16 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   useHost(phone);
   // ...greyed from a press until its move lands (the owner, 2026-11-03: one move at a time - ten fast clicks are one move, not a queue)
   useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy, run: () => onNext(), title: btnHint("next") }]);
-  // ...and while a phone's own read is on its way the desk's decision for this item lights its row: a window narrowed to a phone dropped the
-  // lit Reply for the length of the read, and the row looked as if the move had folded away (row-one-line, walk item 2 @390, 2026-10-28)
-  const own = useItemAdvice(card, phone);
-  const read = own || (phone && advice?.verb && advice.for === card.key ? advice : null);
-  // the Assistant's lit button outranks the Advisor's line, as it does over the composer (assistantLight.js)
+  // A NARROW WINDOW'S ROW FILLS THE CANVAS'S ONE PICK (`advice`, AssistantView): the task's own recommended move - the field its task and
+  // its rail item are served with (the owner, 2026-11-09: "the agents while running should recommend actions, no assistant") - and on an
+  // idea row the Advisor's decision. It read /api/advice for itself here, a second ask for a second answer; nothing is asked now
+  const read = phone && advice?.for === card.key ? advice : null;
+  // the Assistant's lit button outranks it, as it does over the composer (assistantLight.js)
   const advised = lit ? null : adviceShown(read, { key: card.key, lane: card.lane }, busy);
   // ...and the strip's word and the button it lights are ONE decision, the dock's (advice.stripWord, the UI audit's C2)
   const { noAi, pick } = stripWord({ speaks: true, busy, shown: advised, lit, advice: read, key: card.key, lane: card.lane });
   // ...and with no AI the strip's own Connect an AI went with it, not onto the row (the owner, 2026-10-26: "if you don't get through ai
   // setup the whole thing doesn't work"): a no_ai pick lights nothing there
-  // THE ADVISOR'S SECTION, IN THE VIEW (advice.taskNote): the desk's decision for this item (`advice`, AssistantView), a phone's own read
-  const note = taskNote(phone ? adviceShown(read, { key: card.key, lane: card.lane }, false)
-    : advice && (advice.for === card.key || (card.aliases || []).includes(advice.for)) ? advice : null);
   return (
     <>
     {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
@@ -194,16 +167,16 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         saidDay={lit?.verb === "defer" ? lit.day || null : null}
         // ...and the person and note typed with Hand it to a person ("send this to gail@..."): its form comes up filled in (light.hand)
         saidHand={lit?.verb === "forward" ? lit.hand || null : null}
-        onLeave={onLeave} onStay={onStay} note={note} litMove={phone ? pick?.verb || pick?.id || "" : ""} />
+        onLeave={onLeave} onStay={onStay} litMove={phone ? pick?.verb || pick?.id || "" : ""} />
       </TableVerbs>
       </Box>
       {/* THE BUTTONS ARE NOT HERE (layout B, 2026-09-30): the view registers its verbs and Next, and the ONE row above the chat line
           draws them. On a phone the same row rides at the view's foot instead, in both states - the pinned full-screen view covers
           the dock, and the box is sized once, so Expand must not add or take away a row. */}
-      {/* ...and NO LINE OVER IT, as on the desk (the owner, 2026-10-26: "remove the advisor"): its pick is the lit button, a missing AI
-          the row's own Connect an AI, and a warning is in the view beside what it is about (advice.taskNote) */}
+      {/* ...and NO LINE OVER IT, as on the desk (the owner, 2026-10-26: "remove the advisor"): the pick is the lit button, a missing AI
+          the row's own Connect an AI. Only the Advisor's own row - an idea - joins a move the row lacks (AdvisorNext), as on the desk */}
       {phone && <div className="tq-docked">
-        <AdvisorNext advice={noAi ? null : advised} onPropose={onPropose} />
+        {isIdea(card) && <AdvisorNext advice={noAi ? null : advised} onPropose={onPropose} />}
         <ActionRow inline advised={pick} /></div>}
     </Box>
     </>

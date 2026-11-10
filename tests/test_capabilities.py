@@ -101,22 +101,6 @@ class OfferedTests(unittest.TestCase):
 
 
 class KeyedTests(unittest.TestCase):
-    def test_advice_is_read_back_only_for_the_item_it_was_written_for(self):
-        """One task, two cards: its draft (review:N) and its agent (agent:T). A line judged for the agent's card names a verb only
-        that card carries - read over the draft, it pointed at a button the draft does not have."""
-        s = MemoryStore(); it = draft(s, 'email'); tid = it['tid']
-        agent = {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'tid': tid, 'ref': it['ref'], 'asking': True}
-        rev = advisor.revision(s, 'task', tid)
-        advisor._write(s, target_kind='task', target_id=tid, key=agent['key'], event='agent.asked', revision=rev, tier=2,
-                       line='Draft promises Friday - nothing here shows it.', verb='redraft', label='Redraft')
-        cards = {it['key']: it, agent['key']: agent}
-        with mock.patch.object(advisor, '_item', side_effect=lambda st, k, i, key=None: cards.get(key) or agent), \
-             mock.patch.object(advisor, 'notice') as n:
-            self.assertIsNone(advisor.for_key(s, agent['key'])['verb'], 'Redraft is no button on the agent card')
-            got = advisor.for_key(s, it['key'])
-            self.assertEqual((got['verb'], got['by'], got['line']), (None, 'model', ''))    # not the agent card's line: nothing lit until read
-        self.assertEqual(n.call_args.kwargs.get('key'), it['key'])                 # ...the draft is judged as itself
-
     def test_a_judgement_is_written_under_the_item_it_judged(self):
         s = MemoryStore(); it = draft(s, 'email')
         with mock.patch.object(advisor, '_item', return_value=it):

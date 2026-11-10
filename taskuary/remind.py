@@ -263,9 +263,6 @@ def deadlines(store, now: datetime = None) -> int:
             store._exec('UPDATE task SET DueRaised=? WHERE TaskId=?', (level(t.get('Priority')), t['TaskId']))
         store.add_comment(t['TaskId'], 'assistant', 'agent', line)      # the note IS the saying: the desktop chat hears nothing (asks._say)
         store._exec('UPDATE task SET DueSaid=? WHERE TaskId=?', (s, t['TaskId'])); n += 1
-        if s == 'late':                              # the Advisor on the event (advisor.py): a step slipped
-            from . import advisor
-            advisor.notice(store, 'due.late', 'task', t['TaskId'])
     return n
 
 

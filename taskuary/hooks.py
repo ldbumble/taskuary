@@ -479,12 +479,9 @@ def _events(t, p: dict) -> None:
                 try: browserview.your_turn(st, tid, sid, turn)
                 except Exception as e: logger.warning(f'task {tid}: the page the agent handed over was not raised - {e}')
             try:                                        # the ledger: what the owner does next after a stop (outcomes.py); never breaks a hook
-                from . import advisor, ci, outcomes
+                from . import ci, outcomes
                 agent = getattr(t, 'agent', '') or 'agent'
-                # ...and the Advisor hears of it once per stretch - unless the turn ASKED: then the ask below is the event, and a
-                # stop judged here would be stale the moment the question is recorded (the review, 2026-10-12)
-                if outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent}) and not asks and signing is None and turn is None:
-                    advisor.notice(st, 'agent.stopped', 'task', tid)
+                outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent})
             except Exception as e: logger.debug(f'task {tid}: the stop was not ledgered - {e}')
             # ...as plain questions: a marker's words are no chooser, so they carry no chips (the owner, 2026-11-03)
             g = ws.group_key('|'.join(q for q, _ in asks)) if len(asks) > 1 else None

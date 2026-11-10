@@ -81,7 +81,7 @@ test("a task read speaks over the rail only when it was asked after the rail's, 
   noteRead(7, { task: { TaskId: 7 }, state: "approve", session: null }, 900);
   assert.equal(pageRead(7), null, "a read asked before the rail's is older than it");
   noteRead(7, { task: { TaskId: 7 }, state: "approve", session: { alive: false } }, 1100);
-  assert.deepEqual(pageRead(7), { at: 1100, state: "approve", live: false });
+  assert.deepEqual(pageRead(7), { at: 1100, state: "approve", live: false, rec: null });
   noteRead(7, { task: { TaskId: 7 }, state: "working", session: { alive: true } }, 1050);
   assert.equal(pageRead(7).state, "approve", "a read asked earlier never overwrites a later one, whenever it lands");
   noteRead(7, { task: { TaskId: 8 } }, 1200);

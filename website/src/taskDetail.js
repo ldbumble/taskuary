@@ -67,17 +67,23 @@ export const forgetTasks = (tid = null) => {
 // Each read is stamped with the moment it was ASKED: what it reflects is no older than that. A task read asked after the rail's last
 // one is the newer word on that task (railStatus.agentGone), for its header pill and its rail row alike. Never aged out - only compared.
 let pileAt = 0;
-const reads = new Map();                // tid -> { at, state, live }
-const watchers = new Set();
+const reads = new Map();                // tid -> { at, state, live, rec }
+const watchers = new Set(), recWatchers = new Set();
 export const notePile = (at) => { pileAt = Math.max(pileAt, Number(at) || 0); };
 export function noteRead(tid, data, at = now()) {
   const id = Number(tid), was = reads.get(id);
   if (!id || data?.task?.TaskId !== id || (was && was.at > at)) return;
-  const r = { at, state: data.state || null, live: !!data.session?.alive };
+  // ...and THE TASK'S OWN RECOMMENDED MOVE rides the same read (the owner, 2026-11-09: "the agents while running should recommend actions, no
+  // assistant"): the payload's `recommended` - the agent's turn and the task's facts, read by the server (rulebook.recommended)
+  const r = { at, state: data.state || null, live: !!data.session?.alive, rec: "recommended" in data ? data.recommended || null : was?.rec ?? null };
   reads.set(id, r);
   if (!was || was.state !== r.state || was.live !== r.live) watchers.forEach((f) => f(id));
+  recWatchers.forEach((f) => f(id, r));
 }
 // the task's own read when it was asked after the rail's last one - else null, and the rail's row stands
 export const pageRead = (tid) => { const r = reads.get(Number(tid)); return r && r.at > pileAt ? r : null; };
 // a view drawing rail rows draws again when a task's read says something new
 export const watchReads = (f) => { watchers.add(f); return () => { watchers.delete(f); }; };
+// ...the newest read of a task as it was asked, and every read of one as it lands: the canvas fills its row's button from these, and asks nothing
+export const recRead = (tid) => reads.get(Number(tid)) || null;
+export const watchRecs = (f) => { recWatchers.add(f); return () => { recWatchers.delete(f); }; };

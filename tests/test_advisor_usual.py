@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from unittest import mock
 import pytest
-from taskuary import advisor, funnel, learned_cut as lc, rulebook, terminal, usual
+from taskuary import advisor, funnel, rulebook, terminal, usual
 from taskuary.testing import Factory
 from tests import memory_cases as C
 from tests.memory_cases import put_off, reflected
@@ -27,25 +27,6 @@ def ask(s, who, title, body, hours=3):
     f.message(task_id=t, subject=title, body=body, from_name=C.P[who][0], from_email=C.P[who][1], conversation_id=f'email:{title}', sent_at=at)
     funnel.invalidate()
     return t
-
-
-def test_erin_at_three_hours_gets_her_lateness_beside_the_lit_reply(w):
-    s, facts = w
-    t = ask(s, 'erin', 'Q4 headcount forecast', 'Can you send me the Q4 headcount forecast before the leadership sync?')
-    assert advisor.decide(s, f'task:{t}', preread=False)['state'] == 'asked', 'counted, but no line says her usual yet'
-    reflected(s)                                     # ...the reflection writes it, in the count's words, where the owner can correct it
-    d = advisor.decide(s, f'task:{t}', preread=False)
-    assert (d['state'], d['verb']) == ('asked_late', None), 'named late - nothing lit until the model reads it (2026-11-02)'
-    r = rulebook.facts(s, advisor._item(s, 'task', t, f'task:{t}'), advisor.offered(s, advisor._item(s, 'task', t, f'task:{t}')))
-    assert r['line'] == 'You usually answer Erin within the hour; this is 3h.'
-    assert len(r['line']) <= 60, 'one line on the strip, read whole on a phone'
-    assert r['evidence'][0] == lc.cite_of(usual.answer_key(C.P['erin'][1])), 'it rests on the one line LEARNED.md says it in'
-    assert set(r['evidence'][1:]) <= {f'msg{m}' for m in facts['erin_fast']}, '...and cites the answers that line was counted from'
-    # ...the model reads that fact and lights Reply, saying it and citing what it rests on
-    said = {'verb': 'reply', 'line': r['line'], 'evidence': r['evidence'], 'kind': 'late', 'memory_says': 'You answer Erin within the hour'}
-    advisor.judge(s, advisor.SHOWN, 'task', t, advisor.revision(s, 'task', t), tier=2, llm=lambda system, user, **kw: json.dumps(said), key=f'task:{t}')
-    d = advisor.decide(s, f'task:{t}', preread=False)
-    assert (d['state'], d['verb'], d['line'], d['evidence']) == ('asked_late', 'reply', r['line'], r['evidence'])
 
 
 def test_no_line_when_nothing_is_checkable(w):
@@ -98,21 +79,6 @@ def test_an_owner_line_of_their_own_sets_the_day(w):
     s.save_doc('learned', doc.replace('## How you work\n', '## How you work\n- Mail from spendly.example waits for Monday\n', 1), 'owner')
     d = usual.remind_day(s, t)
     assert (d['day'], d['by'], d['evidence']) == ('Monday', 'spendly.example', [])
-
-
-def test_a_payroll_ask_lights_hand_off_with_the_ray_line(w):
-    s, facts = w
-    t = ask(s, 'site1', 'Payroll correction for a site 5', 'One of our staff was paid the wrong rate last cycle - can this be fixed?', hours=1)
-    seen = []
-    def brain(system, user, **kw):
-        seen.append(user)
-        ok = 'WHOM YOU HANDED THEIR ASKS TO: ray@northwind.example' in user
-        return json.dumps({'verb': 'forward' if ok else 'reply', 'line': 'Ray handles payroll for you.' if ok else '', 'evidence': ['task1'] if ok else []})
-    rev = advisor.revision(s, 'task', t)
-    advisor.judge(s, advisor.SHOWN, 'task', t, rev, tier=2, llm=brain, key=f'task:{t}')
-    assert seen and 'WHOM YOU HANDED THEIR ASKS TO: ray@northwind.example, 2 of 2 times' in seen[-1]
-    d = advisor.decide(s, f'task:{t}', preread=False)
-    assert (d['verb'], d['by'], d['line']) == ('forward', 'model', 'Ray handles payroll for you.')
 
 
 def test_hand_it_to_a_person_opens_on_ray_for_a_payroll_ask_chosen_not_sent(w):

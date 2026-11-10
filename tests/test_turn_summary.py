@@ -226,22 +226,23 @@ def test_corrections_ride_the_summary_block_and_stay_off_the_screen():
     assert text == 'Done.' and summ['corrections'] == c[:2]
 
 
-def test_the_advisor_is_told_nothing_is_left():
-    from taskuary import advisor
+def test_the_rows_recommended_move_reads_the_agents_own_word():
+    from taskuary import rulebook
     s = MemoryStore(); tid = task(s)
-    assert advisor.summary_line(s, tid) == ''
+    assert rulebook.agent_word(s, tid) is None, 'no turn summary: nothing the agent said'
     turn(s, tid, f'Done.\n{block(on_you=[], nothing_left=True)}')
-    assert advisor.summary_line(s, tid) == "THE AGENT'S LAST SUMMARY: nothing left to do here"
+    assert rulebook.agent_word(s, tid) == 'nothing_left' and rulebook.recommended_task(s, tid)['verb'] == 'close'
     turn(s, tid, f'Still Friday.\n{block()}')
-    assert advisor.summary_line(s, tid) == f"THE AGENT'S LAST SUMMARY: on you - {STEP}"
+    assert rulebook.agent_word(s, tid) == 'on_you' and rulebook.recommended_task(s, tid) is None, 'a step of its list is on the owner'
 
 
 def test_a_pending_draft_is_not_nothing_left():
-    from taskuary import advisor
+    from taskuary import advisor, rulebook
     s = MemoryStore(); tid = task(s)
     turn(s, tid, f'Done.\n{block(on_you=[], nothing_left=True)}')
-    with mock.patch.object(advisor, '_draft', return_value={'DraftText': 'Hi Gail'}):
-        assert 'nothing left' not in advisor.summary_line(s, tid)
+    s.add_review({'TaskId': tid, 'Kind': 'reply', 'Status': 'pending', 'DraftText': 'Hi Gail'})
+    with mock.patch.object(advisor, 'unconnected', return_value=False), mock.patch.object(advisor, 'pressable', return_value=''):
+        assert rulebook.recommended_task(s, tid)['verb'] in ('send_close', 'approve'), 'the draft that waits is the move, not Mark done'
 
 
 # ── each turn keeps the draft it wrote (the owner, 2026-11-05) ──────────────────────────────

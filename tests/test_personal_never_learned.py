@@ -2,7 +2,6 @@
 An ask in it is an FYI, never a task; nothing in it teaches a memory line, an episode, a press habit or a voice; and the Advisor raises
 no idea about it. Invented people only (CLAUDE.md)."""
 import json
-from unittest import mock
 import pytest
 from taskuary import episodes, ingest, memorylines, presses, workstreams as W
 from taskuary.store import MemoryStore
@@ -77,25 +76,3 @@ def test_the_advisor_raises_no_idea_about_a_personal_item(s):
                                {'key': 'loose:q4', 'kind': 'loose', 'text': 'Q4 variance has no next step', 'sig': 'b', 'action': {'task': work}}],
                            '2026-11-01 09:00:00')
     assert [i['Key'] for i in said] == ['loose:q4']
-
-
-def test_a_personal_ask_is_said_to_the_model_which_decides(s, monkeypatch):
-    """The owner, 2026-11-01: a personal ask is an FYI. Since 2026-11-02 that is a fact the model reads (PERSONAL: ...) - no code darkens its
-    light - so the work item's prompt has no such line, the personal one's has, and each model's light is what is lit."""
-    from taskuary import advisor, funnel, terminal
-    monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: []); monkeypatch.setattr(funnel, '_agenda', lambda _s, **kw: [])
-    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
-    from tests.test_advisor_consistent import ask
-    s.set_setting('calendar_enabled', '0', 'test')
-    # the same ask twice is a duplicate the rule folds with Remove - lit on work, nothing on a personal ask
-    ask(s, 'Q4 variance', ('Erin Blake', ERIN), 7, cid='email:q4'); w, _ = ask(s, 'RE: Q4 variance', ('Erin Blake', ERIN), 2, cid='email:q4')
-    ask(s, 'The car', ('Mom', MOM), 7, cid='email:car'); t, _ = ask(s, 'RE: The car', ('Mom', MOM), 2, cid='email:car')
-    import json
-    seen = {}
-    for x in (w, t):
-        def brain(system, user, x=x, **kw): seen[x] = user; return json.dumps({'verb': 'remove' if x == w else 'next', 'line': '', 'evidence': []})
-        advisor.judge(s, advisor.SHOWN, 'task', x, advisor.revision(s, 'task', x), tier=2, llm=brain, key=f'task:{x}')
-    assert 'PERSONAL:' in seen[t] and 'PERSONAL:' not in seen[w]
-    work, home = (advisor.decide(s, f'task:{x}', preread=False) for x in (w, t))
-    assert (work['state'], work['verb']) == ('duplicate', 'remove')
-    assert (home['state'], home['verb']) == ('duplicate', 'next')

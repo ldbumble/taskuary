@@ -67,6 +67,6 @@ test("the Tasks tab hears every press on its own page, and only while it is the 
   const tp = src("TaskPage.jsx");
   assert.match(tp, /if \(canvas \|\| !active \|\| !el\) return undefined;/);
   assert.match(tp, /el\.addEventListener\("click", heard, true\);/);
-  assert.match(tp, /notePress\(api, \{ key: `task:\$\{selRef\.current\}`, surface: "task", \.\.\.got, advised: taskAdviceRef\.current\?\.verb \|\| null \}\)/);
+  assert.match(tp, /notePress\(api, \{ key: `task:\$\{selRef\.current\}`, surface: "task", \.\.\.got, advised: recRef\.current\?\.verb \|\| null \}\)/);
   assert.match(tp, /<Box ref=\{pageRef\} data-tq-task-page=/);
 });

@@ -3,7 +3,6 @@ demo refused, both left the line saying "The draft is ready - read it, then send
 for the revision to see, and the scripted Advisor ignored the WHAT FAILED line it was given. A chat draft with no Send got no line
 at all, and the strip told the owner nothing needed a move over a question nobody had answered."""
 import json
-from unittest import mock
 from taskuary import advisor, buttons, demo, funnel
 from taskuary.store import MemoryStore
 from tests.test_advisor import _Rail
@@ -37,22 +36,6 @@ class RefusedTests(_Rail):
             if (s.get_message(r['MessageId']) or {}).get('Channel') == channel: return i['key'], r
         self.fail(f'the demo has no {channel} draft on its rail')
 
-    def test_a_send_the_demo_refused_is_an_act_and_the_line_moves_off_send(self):
-        s = self._world(); key, r = self._draft(s)
-        # a draft waiting: the scripted model lights Send, and the model's light is what is lit (the owner, 2026-11-02)
-        # ...in its Close out, where the send that closes is the one lit (the owner, 2026-11-03)
-        self.assertEqual(self._advise(s, key).get('verb'), 'send_close', 'a draft waiting: Send and close')
-        before = advisor.revision(s, 'task', r['TaskId'])
-        self.assertTrue(demo.refused(s, f"/api/reviews/{r['ReviewId']}/decide", demo.SENDS), 'the refusal is left on the item')
-        self.assertNotEqual(before, advisor.revision(s, 'task', r['TaskId']), 'a refused press moves the revision')
-        f = advisor.failure(s, advisor._item(s, 'task', r['TaskId'], key))
-        self.assertIn('This is the demo', f['why'])
-        offered = [v['verb'] for v in advisor.offered(s, advisor._item(s, 'task', r['TaskId'], key))]
-        self.assertNotIn('new_task', offered, 'no task to fix the demo for not sending'); self.assertNotIn('report_bug', offered)
-        after = self._advise(s, key)
-        self.assertNotIn(after.get('verb'), ('approve', 'send_close'), f'the line still sends the owner to the refused Send: {after}')
-        self.assertTrue(after.get('line'))
-
     def test_a_refused_proposal_is_kept_on_its_target_and_paths_with_no_item_leave_nothing(self):
         s = self._world(); key, r = self._draft(s)
         s._exec("INSERT INTO operation (OpId, Kind, TargetKind, TargetId, ParamsJson, Status, CreatedAt) VALUES ('op9','review.approve','task',?,'{}','proposed','2026-10-19 09:00:00')",
@@ -62,24 +45,6 @@ class RefusedTests(_Rail):
         self.assertEqual((got['TargetKind'], got['TargetId'], got['Status']), ('task', r['TaskId'], 'refused'))
         self.assertEqual(s.get_operation('op9')['Status'], 'proposed', 'the proposal itself is left as it was')
         self.assertEqual(demo.refused(s, '/api/connectors/3', demo.OFF), '')
-
-    def test_a_send_the_mail_server_refused_for_its_address_fixes_the_address_never_redrafts(self):
-        # the address is what is wrong, not the words: Redraft wrote the same mail to the same dead address (the deep dive, 2026-10-20)
-        # ...which the demo's script never reads off the bounce's words: the verdict is the one its world stores with the item (demo.VERDICTS)
-        s = self._world(); key, r = self._draft(s)
-        s._exec("UPDATE review SET DeliveryState='failed', Reason=? WHERE ReviewId=?",
-                ('Not sent: the mail server refused erin.blake@northwind.example (5.1.1 no such user)', r['ReviewId']))
-        title = next(i['title'] for i in funnel.pile(s)['items'] if i['key'] == key)
-        with mock.patch.dict(demo.VERDICTS, {title: demo.VERDICTS['Lease renewal for the Elm Street office']}): got = self._advise(s, key)
-        self.assertIn(got.get('verb'), ('fix', 'new_task'), got)
-        # ...the line is the model's own (cut at a word, 64 characters), said as the fact: the address was refused
-        self.assertTrue(got.get('line', '').startswith('The address was refused'), got)
-
-    def test_a_send_refused_for_another_reason_is_still_redrafted_not_sent_again(self):
-        s = self._world(); key, r = self._draft(s)
-        s._exec("UPDATE review SET DeliveryState='failed', Reason=? WHERE ReviewId=?",
-                ('Not sent: the mail server said no (552 message too large)', r['ReviewId']))
-        self.assertEqual(self._advise(s, key).get('verb'), 'redraft')
 
     def test_the_scripted_advisor_reads_what_failed(self):
         ask = lambda verbs, extra='': json.loads(demo.brain()('Answer with JSON only', f'EVENT: item.shown\n\nVERBS OFFERED: {verbs}{extra}'))
@@ -91,12 +56,6 @@ class RefusedTests(_Rail):
         self.assertEqual(ask(f"approve ({buttons.label('approve', 'check')}), close (Mark done)", unknown)['verb'], 'approve')
         self.assertEqual(ask(send, unknown)['verb'], 'redraft', 'a plain Send is never advised over a send nobody can confirm')
         self.assertEqual(ask(send, f'\n\nWHAT FAILED: the reply was not sent - {demo.SENDS}')['verb'], 'close')
-
-    def test_a_chat_draft_with_no_send_is_copied_and_closed_not_left_silent(self):
-        # the design's state 4 (2026-10-23): Copy lit, and no line - the reason it cannot go is the hover (the owner, 2026-10-22)
-        s = self._world(); key, r = self._draft(s, 'teams')
-        got = self._advise(s, key)
-        self.assertEqual((got.get('verb'), got.get('line'), got.get('state')), ('copy', '', 'unsendable'), got)
 
     def test_a_draft_that_could_not_be_written_is_what_failed_and_an_email_is_never_copied(self):
         """The advisor matrix (2026-10-19): Reply with no AI left an empty box and "no AI connector is set up to write replies" - and the

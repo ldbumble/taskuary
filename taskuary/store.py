@@ -2366,8 +2366,6 @@ class SQLiteStore:
                 facts.update(playbook=_pb.of_task(was_row), asked=bool(v and v.get('intent') in ('task', 'reply_only')
                                                                     and not (own and str(own.get('SentAt') or '') >= str(li.get('SentAt') or ''))))
             outcomes.record(self, 'task.closed', 'task', task_id, actor, facts=facts)
-            from . import advisor
-            advisor.notice(self, 'task.closed', 'task', task_id)        # the Advisor on the event (advisor.py)
         self._bump_snapshots()
         # Timeline rows carry task/review state too, so a task transition changes both views.
         self._poke('feed-changed', 'task-changed', task_id=task_id)

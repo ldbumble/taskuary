@@ -1,7 +1,7 @@
 """WHAT THE OWNER DID IN THIS STATE (the owner, 2026-11-01: "quiet unless sure"; 2026-11-02: "never ever use hard coded rules, let the ai
 see everything"): the owner's own presses per state are EVIDENCE the Advisor's model reads in its prompt - never a switch that darkens a
 button. Invented Northwind data only (CLAUDE.md)."""
-from taskuary import advisor, calibrate
+from taskuary import calibrate
 from taskuary.store import MemoryStore
 
 
@@ -47,23 +47,3 @@ def test_a_workstreams_own_record_is_the_evidence_once_it_has_enough():
     assert calibrate.evidence(s, 'asked', 'ledger-app').endswith('in this workstream, the owner chose: close 6 of 6; a HABIT: close (6 of 6)')
     assert calibrate.evidence(s, 'asked').endswith('the owner chose: reply 30 of 36, close 6 of 36; a HABIT: reply (30 of 36)')
     assert 'in this workstream' not in calibrate.evidence(s, 'asked', 'board-seat'), "a stream with no record of its own reads the home's"
-
-
-def test_the_advisors_prompt_carries_the_owners_record_and_its_light_stands(monkeypatch):
-    from tests.test_advisor_consistent import MARCUS, ask
-    from taskuary import funnel, terminal
-    s = MemoryStore()
-    for k, v in (('calendar_enabled', '0'), ('owner_email', 'alex@northwind.example'), ('owner_name', 'Alex Doyle')): s.set_setting(k, v, 'test')
-    monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: []); monkeypatch.setattr(funnel, '_agenda', lambda _s, **kw: [])
-    first, _ = ask(s, 'Spendly cards for the new site', MARCUS, 7, cid='email:spendly')
-    second, _ = ask(s, 'RE: Spendly cards', MARCUS, 2, cid='email:spendly')
-    for n in range(100, 106): _press(s, n, 'duplicate', 'reply')      # the owner answers "duplicates" rather than folding them
-    calibrate.clear(); funnel.invalidate()
-    seen = []
-    def llm(system, user, **kw): seen.append(user); return '{"verb": "reply", "line": "", "evidence": []}'
-    advisor.notice(s, advisor.SHOWN, 'task', second, tier=2, wait=True, llm=llm)
-    assert 'THE STATE' in seen[0] and 'duplicate' in seen[0]
-    assert 'WHAT THE OWNER CHOSE BEFORE IN THIS STATE' in seen[0] and 'Reply 6 of 6' in seen[0]
-    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
-    d = advisor.decide(s, f'task:{second}', preread=False)
-    assert (d['state'], d['verb'], d['by']) == ('duplicate', 'reply', 'model'), 'the model weighed the record; its light is lit'

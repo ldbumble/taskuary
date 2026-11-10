@@ -129,27 +129,23 @@ test("the row puts a leading agent verb first and Mark done beside it (actionRow
   assert.deepEqual(waiting.agent.slice(0, 2).map((x) => x.id), ["diff", "save-end"]);
 });
 
-test("the Advisor's suggestion reaches the Tasks tab and a phone's own row (U12)", () => {
+// THE TASK'S OWN RECOMMENDED MOVE (the owner, 2026-11-09: "the agents while running should recommend actions, no assistant"): U12 brought
+// the Advisor's read (/api/advice) to the Tasks tab and to a narrow window's row. Both fill the field the task's own read carries now
+test("the task's own recommended move fills the Tasks tab's bar and a narrow window's row, and no Advisor is asked", () => {
   const page = src("TaskPage.jsx"), item = src("CanvasItem.jsx");
-  assert.match(page, /api\.get\("\/api\/advice", \{ params: \{ key: `task:\$\{id\}` \} \}\)/);
-  // ...its line is no strip over the bar now: a warning stands in the task beside its subject (advice.taskNote, 2026-10-26)
-  assert.doesNotMatch(page, /data-tq-task-advice/);
-  assert.match(page, /const warn = notDone \? \(canvas \? note : taskNote\(taskAdvice\)\) : null;/);
-  // ...THE TASKS TAB LIGHTS THE ADVISOR'S VERB (the design, phase A): Mark done was dark on every task; a line only for a fact
-  assert.match(page, /setTaskAdvice\(data\?\.verb \? data : null\)/);
-  assert.match(page, /const barLit = \(verb\) => !!taskAdvice && liveVerb\(taskAdvice\.verb\) === verb;/);
-  assert.match(page, /variant=\{barLit\("close"\) \? "contained" : "outlined"\}/);
-  for (const v of ["remove", "forward", "split"]) assert.match(page, new RegExp(`variant=\\{barLit\\("${v}"\\) \\? "contained" : "outlined"\\}`), v);
-  assert.match(page, /<RemindMe task=\{t\} sx=\{barLit\("defer"\) \? primaryBtn : barBtn\} lit=\{barLit\("defer"\)\}/);
-  assert.doesNotMatch(page, /Suggested: \{taskAdvice\.label\}/);
-  // ...a phone's row at the view's foot, with no line over it (2026-10-26, as the desk): the Advisor only lights its pick there
-  assert.match(item, /\{phone && <div className="tq-docked">\s*<AdvisorNext advice=\{noAi \? null : advised\} onPropose=\{onPropose\} \/>\s*<ActionRow inline advised=\{pick\} \/><\/div>\}/);
+  assert.doesNotMatch(page, /api\/advice|taskAdvice|barLit|readTaskAdvice|taskNote|data-tq-task-advice/);
+  assert.match(page, /const rec = notDone && detail\?\.task\?\.TaskId === selected \? detail\?\.recommended \|\| null : null;/);
+  assert.match(page, /const filled = \(verb\) => liveVerb\(rec\?\.verb\) === verb;/);
+  assert.match(page, /variant=\{filled\("close"\) \? "contained" : "outlined"\}/);
+  for (const v of ["remove", "forward", "split"]) assert.match(page, new RegExp(`variant=\\{filled\\("${v}"\\) \\? "contained" : "outlined"\\}`), v);
+  assert.match(page, /<RemindMe task=\{t\} sx=\{filled\("defer"\) \? primaryBtn : barBtn\} lit=\{filled\("defer"\)\}/);
+  // ...a narrow window's row at the view's foot, with no line over it (2026-10-26, as the desk): only the Advisor's own row - an idea -
+  // joins a move the row lacks
+  assert.match(item, /\{phone && <div className="tq-docked">\s*\{isIdea\(card\) && <AdvisorNext advice=\{noAi \? null : advised\} onPropose=\{onPropose\} \/>\}\s*<ActionRow inline advised=\{pick\} \/><\/div>\}/);
   assert.match(item, /const advised = lit \? null : adviceShown\(read, \{ key: card\.key, lane: card\.lane \}, busy\)/);
-  // ...no Thinking while it is read (the owner, 2026-10-23), and the Advisor's own move pressed from the phone's row as from the page's
-  assert.match(item, /const own = useItemAdvice\(card, phone\);/);
-  // ...and until that read lands, the desk's decision for the same item lights it (a narrowed window kept its lit move)
-  assert.match(item, /const read = own \|\| \(phone && advice\?\.verb && advice\.for === card\.key \? advice : null\);/);
-  assert.doesNotMatch(item, /Thinking about this one|AdviceNone/);
+  // ...lit by the page's own read of the same item (a narrowed window kept its lit move), and it asks nothing of its own
+  assert.match(item, /const read = phone && advice\?\.for === card\.key \? advice : null;/);
+  assert.doesNotMatch(item, /useItemAdvice|Thinking about this one|AdviceNone/);
   assert.match(src("AssistantView.jsx"), /onPropose=\{actions\.pressAdvice\} \/>/);
 });
 

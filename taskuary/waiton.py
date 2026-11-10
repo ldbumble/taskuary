@@ -84,10 +84,6 @@ def arrived(store, tid: int, msg: dict, mid: int = None, actor: str = 'router') 
     who = msg.get('from_name') or msg.get('FromName') or _addr(msg) or 'they'
     store.add_comment(tid, actor, 'agent', f'{who} answered - it was waiting on them.')
     store.audit('task', tid, 'woke', actor, 'agent', {'who': key, 'message_id': mid})
-    try:
-        from . import advisor
-        advisor.notice(store, 'reply.arrived', 'task', tid)
-    except Exception as e: logger.debug(f'waiton: no advice on {tid} - {e}')
     return True
 
 

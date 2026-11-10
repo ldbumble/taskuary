@@ -909,9 +909,11 @@ class OpeningTests(unittest.TestCase):
         self.assertIn('THE DAY', seen['user']); self.assertIn('LEFT IN THE PIPE: 1', seen['user']); self.assertIn('AGENTS HAVE', seen['user'])
         self.assertFalse(concierge.open_day(s, llm=fake)['opened'])          # said once per chat
         self.assertIn(f'review:{r}', funnel.build(s)['items'][0]['aliases'])  # nothing was surfaced by the opening
-        # the walk: the agent's findings are said before the yes is asked
+        # the walk onto a task an agent worked on: the Assistant writes no line of its own about that agent (the owner, 2026-11-09: "the agents
+        # while running should recommend actions, no assistant") - the few words that name any row, and what its row fills is the task's own move
         nxt = concierge.surface(s, llm=lambda sy, u, **k: seen.update(walk=u) or 'The agent regenerated the export; the reply below says so - I would send it.', only='mail')
-        self.assertEqual(nxt['item']['rid'], r); self.assertIn('THE AGENT FOUND: regenerated the export', seen['walk'])
+        self.assertEqual(nxt['item']['rid'], r); self.assertNotIn('walk', seen); self.assertEqual(nxt['say'], concierge.brought_up(nxt['item']))
+        self.assertIn('recommended', nxt['item'])     # ...the row's one filled move rides on the item (nothing here: no mail card is connected to send by)
 
     def test_the_opening_speaks_without_a_model(self):
         s = store(); drafted(s)

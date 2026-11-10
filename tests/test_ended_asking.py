@@ -68,13 +68,13 @@ def test_the_models_read_of_the_final_text_counts_at_the_wrap(s):
     assert [r['text'] for r in wrapup.unanswered(s, t)] == [ASK]
 
 
-def test_the_advisor_reads_the_cut_off_run_as_the_agent_asking_and_runs_no_finish_check(s):
+def test_a_cut_off_run_reads_as_the_agent_asking_and_its_row_fills_nothing(s):
     t = cut_off_asking(s)
     for item in ({'key': f'agent:{t}', 'kind': 'agent', 'lane': 'stopped', 'tid': t},
                  {'key': f'task:{t}', 'kind': 'task', 'lane': 'stopped', 'tid': t}):
         st, _ = rulebook.state(s, item, [{'verb': 'continue', 'label': 'Continue'}, {'verb': 'reply', 'label': 'Reply'}])
         assert st == 'agent_asking', item
-        assert st not in advisor.CHECKED, 'the finish check reads finished work - this run is waiting on the owner'
+        assert st in rulebook.QUIET, 'nothing is filled over an agent that waits on the owner: its own pane is the way on'
 
 
 @pytest.mark.parametrize('verb', ['continue', 'reply', 'next', 'close'])

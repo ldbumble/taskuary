@@ -41,6 +41,14 @@ export function adviceRead(data, key) {
   return { advice: data.verb || data.none || data.state ? { ...data, for: key } : null };
 }
 
+// ONLY AN IDEA ROW IS THE ADVISOR'S (the owner, 2026-11-09: "assistant/advisor should only be on rail"): every other row fills the task's own
+// recommended move, served with the task and with the rail's item (`recommended`: { verb, label, why, state } or null) - no model, no ask
+// ...known BY ITS ITEM, not its key: the rail hands every row a key of its own (processing:pi_...), an idea among them, and by the key alone
+// the Advisor's row read as a task's - nothing asked, nothing lit. A bare key is an idea only where it says so (idea:4, opened by name)
+export const isIdea = (o) => (o && typeof o === "object" ? o.kind === "idea" || isIdea(o.key) : /^idea:/.test(String(o || "")));
+export const ownPick = (rec, key) => (rec?.verb && key
+  ? { verb: rec.verb, label: rec.label || "", state: rec.state || "", why: rec.why || "", line: "", by: "agent", for: key, key } : null);
+
 // THE ADVISOR'S EVENT NAMES ITS ITEM BY THE RAIL'S KEY, and a task opened by name sits on the table as `task:N` - so the line for a
 // Board-opened task landed and was never read (re-audit: "a task opened by name never gets its Advisor line"). The event's own
 // target says which task it is.

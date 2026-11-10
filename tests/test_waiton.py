@@ -112,13 +112,12 @@ class RailTests(unittest.TestCase):
         self.assertTrue(card.get('woke')); self.assertTrue(lanes.on_you(card), card['lane'])      # back on you, as news
         self.assertEqual(concierge.chips_for(self.s, card)[0]['verb'], 'continue')
 
-    def test_the_advisor_reads_the_wake_afresh(self):
+    def test_the_wake_moves_the_tasks_revision(self):
         from taskuary import advisor
         was = advisor.revision(self.s, 'task', self.tid)
         mid = mail(self.s, 'RE: PTO import', who='Paula Vance', email=PAULA, hours=1, tid=self.tid, conv='c1', body='It is the 8/17 file.')
-        with mock.patch.object(advisor, 'notice') as notice: waiton.arrived(self.s, self.tid, self.s.get_message(mid), mid)
+        waiton.arrived(self.s, self.tid, self.s.get_message(mid), mid)
         self.assertNotEqual(advisor.revision(self.s, 'task', self.tid), was)
-        self.assertEqual(notice.call_args[0][1:], ('reply.arrived', 'task', self.tid))
 
     def test_someone_elses_line_is_news_but_no_wake(self):
         mail(self.s, 'RE: PTO import', who='Gail Moreno', email=GAIL, hours=1, tid=self.tid, conv='c1', body='Any news?')

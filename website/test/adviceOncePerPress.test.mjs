@@ -12,9 +12,12 @@ test("Next is no press that re-reads the item it puts down - nor Back, the other
   assert.match(src, /if \(k && !walkMove\(id\) && leftKey\.current !== k && \(!on \|\| on === k\)\) readAdvice\(k, true\);/);
 });
 
-test("...nor on a phone, whose view reads its own line (CanvasItem useItemAdvice)", () => {
+// ...and a narrow window's row asks nothing at all (2026-11-09): it read /api/advice for itself (useItemAdvice), a second ask for a second
+// answer; it is handed the one the page already holds
+test("...nor on a narrow window, whose row is handed the page's own read and asks nothing", () => {
   const item = fs.readFileSync(new URL("../src/CanvasItem.jsx", import.meta.url), "utf8");
-  assert.match(item, /const after = onPressed\(\(id\) => \{ if \(!walkMove\(id\)\) read\(\); \}\);/);
+  assert.match(item, /const read = phone && advice\?\.for === card\.key \? advice : null;/);
+  assert.doesNotMatch(item, /useItemAdvice|onPressed|api\.get\(/);
 });
 
 test("a revision or lane move re-reads only the SAME item - a new key is read by the table's own effect", () => {

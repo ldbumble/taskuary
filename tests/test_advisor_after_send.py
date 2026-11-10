@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from taskuary import advisor, demo, words
 from taskuary.store import MemoryStore
-from tests.test_advisor import _Rail, brain_saying
+from tests.test_advisor import _Rail
 
 def _at(h=0): return (datetime.now() - timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -37,27 +37,6 @@ class AfterSendTests(_Rail):
         self.assertEqual(a, advisor.revision(s, 'task', t), 'a proposal is not an act yet')
         s._exec("UPDATE operation SET Status='done' WHERE OpId='op1'")
         self.assertNotEqual(a, advisor.revision(s, 'task', t))
-
-    def test_the_prompt_says_what_was_sent_and_whether_anything_came_since(self):
-        s = MemoryStore(); t, m, rv = self._asked(s)
-        s._exec("UPDATE review SET Status='approved', DeliveryState='sent', FinalText='Confirmed - the numbers stand.', DecidedAt=? WHERE ReviewId=?", (_at(1), rv))
-        line = advisor.sent_line(s, 'task', t)
-        self.assertIn('A REPLY WAS ALREADY SENT', line); self.assertIn('Erin Blake', line); self.assertIn('the numbers stand', line)
-        self.assertIn('NOTHING HAS COME IN SINCE IT WENT', line)
-        # the close-out with nothing since is a fact the model reads - the state and its reason - and its Mark done is what is lit
-        from unittest import mock
-        p = advisor._prompt(s, advisor.SHOWN, advisor._item(s, 'task', t) or {}, [{'verb': 'reply', 'label': 'Reply'}], 1, 'task', t)
-        self.assertIn('A REPLY WAS ALREADY SENT', p, 'the model is given the send as evidence')
-        self.assertRegex(p, r"\): answered - .*; the fact: Your reply went .*; nothing since\.")
-        advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=lambda sy, u, **kw: '{"verb": "close", "line": "", "evidence": []}')
-        with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, f'task:{t}')
-        self.assertEqual((d['verb'], d['by'], d.get('section')), ('close', 'model', None), 'Mark done lit - the page opens on its chat, no section named')
-        # ...and a word from her after it is the evidence that something is owed again - the model reads which
-        s.add_message({'ConversationId': f'c{t}', 'Channel': 'email', 'Subject': 'Re: August close', 'FromEmail': 'erin@northwind.example',
-                       'FromName': 'Erin Blake', 'SentAt': _at(0), 'BodyText': 'And September?', 'Status': 'routed', 'TaskId': t})
-        later = advisor.sent_line(s, 'task', t)
-        self.assertIn('WRITTEN TO THE OWNER SINCE', later); self.assertIn('And September?', later)
-        self.assertEqual(advisor.sent_line(s, 'task', s.create_task({'Title': 'nothing sent'}, 'owner')), '')
 
     def test_the_demo_advisor_closes_a_reply_that_went_instead_of_answering_it_again(self):
         ask = lambda extra: json.loads(demo.brain()('Answer with JSON only', f'EVENT: item.shown\n\nVERBS OFFERED: reply (Reply), close (Mark done){extra}'))

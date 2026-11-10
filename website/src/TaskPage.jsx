@@ -25,7 +25,7 @@ import { steady } from "./steadyAnchor.js";
 import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { ROW_LOOK } from "./ButtonBar.jsx";
-import { foldRow, heldOff, onPressed, onPressing, press, sectionsOf, taskButtons, useSpineAll, useSpineVerbs, useVerbs } from "./actionRow.js";
+import { foldRow, heldOff, onPressing, press, sectionsOf, taskButtons, useSpineAll, useSpineVerbs, useVerbs } from "./actionRow.js";
 import { notePress, pagePress } from "./pressLog.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
@@ -95,7 +95,6 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // chunks by content, so that tab asks the new server for a filename the build no longer has.
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
-import { adviceKeyFor, taskNote } from "./advice.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
 import { SECTIONS, cameFrom, homeSection, liveTerminal, soloTodo, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
@@ -770,7 +769,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
 
 export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, walkLeave = null, onReminded, onLeave, onStay, onOpenTask,
   onChanged, autostart, onAutostarted, active = true, openAct, onActOpened, canvas = false,
-  onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null, note = null, saidDay = null, saidHand = null, litMove = "" }) {
+  onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null, saidDay = null, saidHand = null, litMove = "" }) {
   const caps = useCapabilities(), canCode = caps.coding;     // no coding tool connected: coding is not offered (capabilities.js)
   const manual = caps.ai === false;                          // no AI: the owner replies and hands off from the bar's ▾ themselves
   // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)
@@ -1111,8 +1110,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   }, [fromSide]);
   // THE SECTION OPENED BY HAND (a closed section's tab), held for the view it was pressed in - `key` is the held view's (mainKey below)
   const [secPick, setSecPick] = useState({ key: null, sec: null });
-  // THE ADVISOR ON THE TASKS TAB (U12): read further down (readTaskAdvice); declared here, as the section the task opens on is its pick too
-  const [taskAdvice, setTaskAdvice] = useState(null);
   // ...and Came from's whole thread, behind "Full message history (N)"
   const [histOpen, setHistOpen] = useState(false);
   const [cameInFull, setCameInFull] = useState(false), [doneOpen, setDoneOpen] = useState(false), [todoAll, setTodoAll] = useState(false);
@@ -1879,7 +1876,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and a task the Advisor raised on a mail it never moved here (another task's, or an older build's) came in as that mail
   const cameIn = answering || newestFirst(inbound)[0]
     || (detail?.raised && newestFirst((detail?.earlier || []).filter((m) => m.Status !== "context" && m.Direction !== "out"))[0]) || null;
-  // ...read when a tab draws (tabFor, in the JSX): the Advisor's note (`warn`) is worked out further down
   const tabLines = () => !twoUp || !t ? {} : {
     from: fromStatus({ channel: cameIn ? cameFrom(cameIn) || channelName(cameIn.Channel) : sources[0] ? channelName(sources[0].channel) : "",
       // ...EVERY message of its conversations, newest first - the tab draws as many as it has room for (fitTabLines): who, and their words
@@ -1895,8 +1891,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       said: outputRefs(cleanText(detail?.closedWhy || detail?.agentStory?.said || reportLine(report?.Body) || (hasRecord ? detail?.agentStory?.line : "") || ""), t.TaskId)
         .text.replace(/\*\*|__|\x60/g, "").replace(/^[#>*\s-]+/, "").slice(0, 240),
       made: (() => { const p = recordProps.pages || []; const n = p[0]?.title || p[0]?.name || String(p[0]?.path || "").split(/[\\/]/).pop();
-        return n ? `${n}${p.length > 1 ? ` +${p.length - 1}` : ""}` : ""; })(),
-      advisor: warn?.advice?.label || "" }),
+        return n ? `${n}${p.length > 1 ? ` +${p.length - 1}` : ""}` : ""; })() }),
   };
   // ...a closed section's tab, in place of the section: the arrow points the way it opens
   const tabFor = (key) => {
@@ -2234,15 +2229,25 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // CONTINUE SESSION is the rail's box here too (T14): one road (/continue-work) for a coding and a regular agent, and
   // what you type is the first thing it hears. The page had two older roads with no note (continue-session, resume).
   const [continueAt, setContinueAtRaw] = useState(null);
-  // on the canvas Continue is a card IN the conversation (AssistantView listens), not a popover over the view
-  // ...and ON A DESK'S CANVAS IT OPENS IN THE AGENT PANE, where Run another agent's box does (the owner, 2026-10-29: "both should open in the
-  // agent window ... Continue box should be inside the canvas always"): pressed here, or lit by the Assistant (tq-continue-here)
+  // ON THE CANVAS IT OPENS IN THE AGENT PANE, where Run another agent's box does (the owner, 2026-10-29: "both should open in the agent
+  // window ... Continue box should be inside the canvas always"): pressed here, or lit by the Assistant (tq-continue-here)
+  // ...AT ANY WIDTH, AND NEVER THROUGH THE ASSISTANT (the owner, 2026-11-09: "the agent does not wait for it"): a narrow canvas handed the
+  // press to the Assistant's conversation to draw the box there, and with that conversation folded away a lit Continue did nothing. The
+  // task draws its own box; over a session's screen, which has no pane for the card, the box opens on the button itself
   const [continueCard, setContinueCard] = useState(null);   // { note } while the pane's Continue card is open
+  // ...AND WHERE THE AGENT SECTION IS ONE CHAT, ITS BOX IS THE CONTINUE BOX (the owner, 2026-11-04: "the box under them - always, Continue's own
+  // road"): a card above the conversation was a second box saying "Continue" over one already reading "Write to pick the session back up".
+  // The note goes into the chat's box, the cursor with it - to send or change
+  const [chatSeed, setChatSeed] = useState(null);           // { id, text }
+  const intoChat = (note) => {
+    setChatSeed({ id: Date.now(), text: note || "" });
+    if (twoUp) openSection("agent");
+    setTimeout(() => { const el = document.querySelector("[data-tq-agent-room] .tq-aui-input"); el?.scrollIntoView({ block: "nearest" }); el?.focus({ preventScroll: true }); }, 60);
+  };
   const setContinueAt = (a) => {
     if (a) setRestartOpen(false);                 // one card under the conversation at a time
-    if (a && canvas && t && twoUp) { setContinueCard({ note: "" }); return; }
+    if (a && canvas && t && !sessionView) { if (chatPane) intoChat(""); else setContinueCard({ note: "" }); return; }
     if (!a) setContinueCard(null);
-    if (a && canvas && t) { window.dispatchEvent(new CustomEvent("tq-continue", { detail: { task: t, ref: t.ref || `TQ-${String(t.TaskId).padStart(4, "0")}` } })); return; }
     setContinueAtRaw(a);
   };
   // CLOSE WITH A NOTE rides the same way: a card in the conversation on the canvas, a popover elsewhere, and the close is
@@ -2384,24 +2389,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     });
     return () => cancelAnimationFrame(f);
   }, [agentUp, t?.TaskId]);
-  // THE ADVISOR ON THE TASKS TAB (U12): the canvas reads it for the item on its table; this view, standing alone, reads its own
-  const readTaskAdvice = useCallback((id) => {
-    if (!id) { setTaskAdvice(null); return; }
-    api.get("/api/advice", { params: { key: `task:${id}` } })
-      .then(({ data }) => { if (!stale(id)) setTaskAdvice(data?.verb ? data : null); })
-      .catch(() => { if (!stale(id)) setTaskAdvice(null); });
-  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (canvas || !active) return; setTaskAdvice(null); readTaskAdvice(selected); }, [canvas, active, selected, readTaskAdvice]);
-  useEffect(() => { if (!canvas && active && t?.UpdatedAt) readTaskAdvice(selected); }, [t?.UpdatedAt]);   // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => (canvas || !active ? undefined
-    : onLive("advice", (ev) => { if (adviceKeyFor(ev, `task:${selRef.current}`)) readTaskAdvice(selRef.current); })), [canvas, active, readTaskAdvice]);
-  // ...and after every press on it: an act moves the item's revision, and the line judged before it must not stand (2026-10-19)
-  useEffect(() => (canvas || !active ? undefined : onPressed(() => readTaskAdvice(selRef.current))), [canvas, active, readTaskAdvice]);
   // EVERY PRESS ON THE TASKS TAB IS KEPT (phase B, 2026-10-23): it was never recorded - only the desk's row was. This view draws its own
   // buttons, so a press is heard here, before it runs: a button known by its one name (pressLog.pagePress), what was filled on the page
   // and what else could be pressed. The canvas's copy is the desk's row, recorded there
-  const pageRef = useRef(null), taskAdviceRef = useRef(null);
-  taskAdviceRef.current = taskAdvice;
+  const pageRef = useRef(null), recRef = useRef(null);
+  recRef.current = detail?.task?.TaskId === selected ? detail?.recommended || null : null;
   // WHAT THE ASSISTANT IS TOLD OF THIS TASK when the owner asks about it (pageView.js, 2026-10-30): the task, and its title as a field it may
   // rewrite - the task tool's own update (task.update), the road every owner act on this page takes. Its boxes (the draft) and its row's
   // buttons are read off the page
@@ -2419,7 +2411,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const heard = (e) => {
       const b = e.target?.closest?.("button");
       const got = selRef.current && b && !b.disabled && el.contains(b) ? pagePress(el, b) : null;
-      if (got) notePress(api, { key: `task:${selRef.current}`, surface: "task", ...got, advised: taskAdviceRef.current?.verb || null });
+      if (got) notePress(api, { key: `task:${selRef.current}`, surface: "task", ...got, advised: recRef.current?.verb || null });
     };
     el.addEventListener("click", heard, true);
     return () => el.removeEventListener("click", heard, true);
@@ -2431,17 +2423,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   saidRef.current = saidDay;
   const remindHere = (at) => { setRemindSaid(saidRef.current); setRemindAt(at); };
   const notDone = !!t && !["done", "dropped"].includes(t.Status);
-  // the bar's button the Advisor lit (advisor.decide - the canvas's decision for the same task); nothing is dark before it answers
-  const barLit = (verb) => !!taskAdvice && liveVerb(taskAdvice.verb) === verb;
-  // THE ADVISOR'S SECTION (advice.taskNote; the owner, 2026-10-26: "remove the advisor", then "an advisor section on the task itself part
-  // of the agent thing but separate"): no line over the row or the bar - the canvas hands its decision's line in (`note`), the Tasks tab
-  // reads its own - its own section over Agent work, and only when there is a line
-  // ...its line is no section on the task (the owner, 2026-11-05: "remove the advisor line from the chat ... the agent is the advisor"): it lights
-  // a button, and says why on the draft it is about and on the Agent's tab
-  const warn = notDone ? (canvas ? note : taskNote(taskAdvice)) : null;
+  // THE TASK'S OWN RECOMMENDED MOVE (the owner, 2026-11-09: "the agents while running should recommend actions, no assistant" - "the agent is
+  // the advisor", 2026-11-05): the one button the bar fills is the field this task's own read carries (`recommended`: its agent's turn and
+  // its facts - a draft that waits, a run that is over, a failure's way past it), the same field the canvas's row fills from. No Advisor
+  // reads a task, and nothing is asked beside the read the page already makes
+  const rec = notDone && detail?.task?.TaskId === selected ? detail?.recommended || null : null;
+  const filled = (verb) => liveVerb(rec?.verb) === verb;
   // THE TASKS TAB'S BAR IS ONE LINE (2026-10-23, foldBar.js): Change folds first, then Split or merge, Hand off with its rule, Not a task;
-  // Mark done and Remind me never fold, nor the button the Advisor lit
-  const bar = useFoldBar(BAR_FOLD_BUT[{ remove: "nat", forward: "hand", split: "reshape", watch: "watch" }[liveVerb(taskAdvice?.verb)] || ""],
+  // Mark done and Remind me never fold, nor the button that is filled
+  const bar = useFoldBar(BAR_FOLD_BUT[{ remove: "nat", forward: "hand", split: "reshape", watch: "watch" }[liveVerb(rec?.verb)] || ""],
     `${t?.TaskId}|${notDone}|${finishing}|${t?.RemindAt || ""}|${watching}`);
   const [barAt, setBarAt] = useState(null);
   // THE CALENDAR'S ANSWERS (calwrite.py, server task_detail's `calendar`): an invite waiting on the owner is answered from the row -
@@ -2679,7 +2669,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     return () => cancelAnimationFrame(f);
   }, [continueCard]);   // eslint-disable-line react-hooks/exhaustive-deps
   const claimRef = useRef(null);
-  claimRef.current = canvas && twoUp && active && t ? (d) => { if (Number(d?.tid) !== Number(selected)) return false; setRestartOpen(false); setContinueCard({ note: d.note || "" }); return true; } : null;
+  claimRef.current = canvas && active && t && !sessionView ? (d) => { if (Number(d?.tid) !== Number(selected)) return false; setRestartOpen(false); if (chatPane) intoChat(d.note); else setContinueCard({ note: d.note || "" }); return true; } : null;
   useEffect(() => {
     const on = (e) => { if (claimRef.current?.(e.detail)) e.detail.claim?.(); };
     window.addEventListener("tq-continue-here", on);
@@ -2783,7 +2773,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {pendingReview ? (<>
             <Box data-tq-review={pendingReview.ReviewId}>
             <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend liveWork={liveWork} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
-              onEmailInstead={() => setEmailOpen(true)} why={warn?.line || ""}
+              onEmailInstead={() => setEmailOpen(true)} why={rec?.state === "draft_ready" ? rec.why || "" : ""}
               onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box>   {/* the list's row moves too (T19) */}
             <MoreDrafts reviews={moreDrafts} messages={storedMessages} onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
           </>) : (
@@ -3077,10 +3067,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 overflowY: "auto", flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size", position: "relative" }}>
                 {/* FROM AND THE WORK (the task page redesign, owner-approved 2026-10-21, replacing the Task / Agent work / Close out accordion):
                     one of them is the main view and the other its drawer (mainOf, the owner 2026-10-26) - a phone's narrow body stacks them */}
-                {/* THE ADVISOR'S OWN SECTION (the owner, 2026-10-26: "one is more a guide and one is more doing work but they are in essence the same
-                    idea") - IN THE MAIN VIEW WHATEVER THE MAIN VIEW IS (the Advisor audit's judge, 2026-10-26): in the right drawer behind a sideways
-                    tab, a late line or the reason for a fold was off screen with only a note-count at the end of the tab to say so. Drawers hold work,
-                    never the Advisor's words; a live agent's screen keeps its room (and its decision says nothing over it) */}
                 <Box ref={columnsBox} data-tq-columns="" data-tq-layout={twoUp ? "sections" : sessionView ? "full" : stacked ? "stacked" : main} sx={stacked ? COLUMNS : { display: "contents" }}>
                 {(!fromDrawer || fromSide) && slot("from",
                   <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={fromDrawer ? "" : undefined}
@@ -3512,7 +3498,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null} next={chatCards}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere && !chatPane} chat={home}
-                        opening={agentOpening}
+                        opening={agentOpening} seed={chatPane ? chatSeed : null}
                         came={home ? { label: cameFrom(sourceMessage) ? `From ${cameFrom(sourceMessage)}` : sources.length ? cameFromLabel(sources) : fromWorkflow ? `Routine · ${fromWorkflow.title}` : "Came from",
                           title: "Where this came from - opens it", onOpen: twoUp ? () => openSection("from") : null } : null}
                         closedLine={closedSaid} term={term}
@@ -3558,29 +3544,29 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 <Box data-tq-task-bar="" ref={bar.ref} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "nowrap", flexShrink: 0, minWidth: 0,
                   px: 1.75, py: 1, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff", "& > *": { flexShrink: 0, whiteSpace: "nowrap" } }}>
                   {notDone ? <>
-                    {/* THE TASKS TAB LIGHTS THE ADVISOR'S VERB, the canvas's own (the design, phase A): Mark done was dark on every task */}
-                    <Button size="small" variant={barLit("close") ? "contained" : "outlined"} disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
-                      sx={barLit("close") ? primaryBtn : barBtn}
+                    {/* THE TASKS TAB FILLS THE TASK'S OWN RECOMMENDED MOVE, the canvas's own (the design, phase A): Mark done was dark on every task */}
+                    <Button size="small" variant={filled("close") ? "contained" : "outlined"} disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
+                      sx={filled("close") ? primaryBtn : barBtn}
                       title={markDoneHint}
                       disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : labelOfRow("done")}</Button>
-                    <Button size="small" variant={barLit("remove") ? "contained" : "outlined"} disableElevation startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
-                      sx={barLit("remove") ? primaryBtn : { ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }} data-tq-bar-item="nat" style={bar.shown("nat") ? undefined : HIDE}
+                    <Button size="small" variant={filled("remove") ? "contained" : "outlined"} disableElevation startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
+                      sx={filled("remove") ? primaryBtn : { ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }} data-tq-bar-item="nat" style={bar.shown("nat") ? undefined : HIDE}
                       title={NAT_TITLE}
                       onClick={notATask}>{labelOfRow("nat")}</Button>
-                    <RemindMe task={t} sx={barLit("defer") ? primaryBtn : barBtn} lit={barLit("defer")} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession} said={saidDay} />
-                    <Button size="small" variant={barLit("watch") ? "contained" : "outlined"} disableElevation sx={barLit("watch") ? primaryBtn : barBtn}
+                    <RemindMe task={t} sx={filled("defer") ? primaryBtn : barBtn} lit={filled("defer")} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession} said={saidDay} />
+                    <Button size="small" variant={filled("watch") ? "contained" : "outlined"} disableElevation sx={filled("watch") ? primaryBtn : barBtn}
                       data-tq-bar-item="watch" data-tq-verb="watch" style={bar.shown("watch") ? undefined : HIDE}
-                      startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 15, color: barLit("watch") ? "inherit" : "#55697a" }} />}
+                      startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 15, color: filled("watch") ? "inherit" : "#55697a" }} />}
                       title={hintOfRow("watch", watching ? "on" : null)} onClick={watchIt}>{labelOfRow("watch", watching ? "on" : null)}</Button>
                     <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} data-tq-bar-item="sep" style={bar.shown("sep") ? undefined : HIDE} />
-                    <Button size="small" variant={barLit("forward") ? "contained" : "outlined"} disableElevation sx={barLit("forward") ? primaryBtn : barBtn}
+                    <Button size="small" variant={filled("forward") ? "contained" : "outlined"} disableElevation sx={filled("forward") ? primaryBtn : barBtn}
                       data-tq-bar-item="hand" style={bar.shown("hand") ? undefined : HIDE}
-                      startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: barLit("forward") ? "inherit" : "#55697a" }} />}
+                      startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: filled("forward") ? "inherit" : "#55697a" }} />}
                       title="Not ours to do — the AI writes the forward, you send it."
                       onClick={() => setHandoff(true)}>{labelOfRow("hand")}</Button>
-                    <Button size="small" variant={barLit("split") ? "contained" : "outlined"} disableElevation sx={barLit("split") ? primaryBtn : barBtn}
+                    <Button size="small" variant={filled("split") ? "contained" : "outlined"} disableElevation sx={filled("split") ? primaryBtn : barBtn}
                       data-tq-bar-item="reshape" style={bar.shown("reshape") ? undefined : HIDE}
-                      startIcon={<CallSplitIcon sx={{ fontSize: 16, color: barLit("split") ? "inherit" : "#6f8a6e" }} />}
+                      startIcon={<CallSplitIcon sx={{ fontSize: 16, color: filled("split") ? "inherit" : "#6f8a6e" }} />}
                       title="Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats."
                       onClick={() => setReshape(true)}>{labelOfRow("reshape")}</Button>
                     <Button size="small" variant="outlined" sx={barBtn} endIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />} data-tq-bar-item="change" style={bar.shown("change") ? undefined : HIDE}

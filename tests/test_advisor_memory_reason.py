@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timedelta
 from unittest import mock
 import pytest
-from taskuary import advisor, funnel, learn, learned_cut as lc, rulebook, terminal, usual
+from taskuary import advisor, funnel, learn, learned_cut as lc, rulebook, terminal
 from taskuary.testing import Factory
 from tests import memory_cases as C
 
@@ -45,42 +45,6 @@ def judged(s, t, answer: dict) -> tuple:
     return advisor.decide(s, f'task:{t}', preread=False), (seen[-1] if seen else '')
 
 
-def test_an_agreeing_model_says_its_memory_reason_in_one_line(w):
-    s, _ = w
-    plant(s, 'people', ERIN)
-    t = ask(s, 'erin', 'Offsite agenda', 'Can you check the offsite agenda before Thursday?')
-    cite = lc.cite_of('erin blake manager answer')
-    d, prompt = judged(s, t, {'verb': 'reply', 'line': 'You answer Erin the same morning.', 'memory_says': 'You answer Erin, your manager, the same morning', 'evidence': [cite]})
-    assert f'(id {cite})' in prompt, 'each memory line the model reads carries the id it cites'
-    assert (d['state'], d['verb'], d['by'], d['line']) == ('asked', 'reply', 'model', 'You answer Erin the same morning.'), d
-    assert len(d['line']) <= 60 and d['evidence'] == [cite]
-    # ...and Why? says what the line rests on in words, never the id
-    note = advisor.notes(s, f'task:{t}')[0]
-    assert note['evidence'][0]['label'].startswith('Erin Blake (erin@northwind.example) is your manager'), note
-
-
-def test_the_models_line_on_the_items_own_facts_stands(w):
-    """No rule to agree with any more (2026-11-02): the model's verb is lit with its line, of whatever kind it is."""
-    s, _ = w
-    plant(s, 'people', ERIN)
-    t = ask(s, 'erin', 'Offsite agenda', 'Can you check the offsite agenda before Thursday?')
-    d, _ = judged(s, t, {'verb': 'reply', 'line': 'Erin wants the agenda checked.', 'evidence': []})
-    assert (d['verb'], d['by'], d['line']) == ('reply', 'model', 'Erin wants the agenda checked.'), d
-    s._exec('DELETE FROM advice WHERE TargetId=?', (t,))
-    d, _ = judged(s, t, {'verb': 'reply', 'line': 'Erin asked twice since Monday.', 'evidence': [], 'kind': 'late'})
-    assert (d['verb'], d['by'], d['line']) == ('reply', 'model', 'Erin asked twice since Monday.'), d
-
-
-def test_a_differing_verbs_long_line_is_cut_at_a_word(w):
-    """The model's verb over the rule's keeps its line, cut to 64 at a word: "...and is waiting on y" read as a slip (the sweep, 2026-10-27)."""
-    s, _ = w
-    t = ask(s, 'erin', 'Offsite agenda', 'Can you check the offsite agenda before Thursday?')
-    long = 'Erin already has the agenda from the planning group and nobody is waiting on you'
-    d, _ = judged(s, t, {'verb': 'close', 'line': long, 'evidence': []})
-    assert (d['verb'], d['by']) == ('close', 'model'), d
-    assert len(d['line']) <= 64 and d['line'].endswith('…') and long.startswith(d['line'][:-1]) and long[len(d['line']) - 1] == ' ', d['line']
-
-
 def test_a_forgotten_line_rests_on_nothing(w):
     s, _ = w
     plant(s, 'people', ERIN)
@@ -88,31 +52,6 @@ def test_a_forgotten_line_rests_on_nothing(w):
     judged(s, t, {'verb': 'reply', 'line': 'You answer Erin the same morning.', 'memory_says': 'You answer Erin, your manager, the same morning', 'evidence': [lc.cite_of('erin blake manager answer')]})
     s.save_doc('learned', s.get_doc('learned').replace(ERIN + '\n', ''), 'owner')
     assert advisor.decide(s, f'task:{t}', preread=False)['line'] == '', 'the line it rested on is gone, so the reason goes with it'
-
-
-def test_a_counted_usual_is_the_fact_the_model_reads(w):
-    """asked_late's line IS the counted usual: it reaches the model as THE STATE's fact, and the model's own line is what the strip says."""
-    s, facts = w
-    t = ask(s, 'erin', 'Q4 headcount forecast', 'Can you send me the Q4 headcount forecast?', hours=3)
-    C.reflected(s)
-    # ...citing the counted usual, it says what that usual is (memory_says) - else its line is hollow and not shown
-    d, prompt = judged(s, t, {'verb': 'reply', 'line': 'She has waited three hours.', 'evidence': [f"msg{facts['erin_fast'][0]}"],
-                              'memory_says': 'You usually answer Erin within the hour'})
-    assert 'asked_late - ' in prompt and 'the fact: You usually answer Erin within the hour; this is 3h.' in prompt, prompt[:600]
-    assert (d['state'], d['verb'], d['line']) == ('asked_late', 'reply', 'She has waited three hours.'), d
-
-
-def test_a_hand_off_count_is_never_the_reason_for_another_verb(w):
-    s, _ = w
-    t = ask(s, 'site1', 'Payroll correction for a site 5', 'One of our staff was paid the wrong rate last cycle - can this be fixed?', hours=1)
-    ids = usual.handed_to(s, C.P['site1'][1], skip=t)['evidence']
-    d, _ = judged(s, t, {'verb': 'reply', 'line': 'Ray handles payroll for you.', 'evidence': ids[:1]})
-    assert advisor.rows(s, 'task', t)[0]['Dropped'] == 'a hand-off reason over another verb'
-    assert (d['verb'], d['line']) == (None, ''), d
-    # ...over Hand it to a person it is the reason, said
-    t2 = ask(s, 'site2', 'Payroll correction for a site 6', 'One of our staff was paid the wrong rate last cycle - can this be fixed?', hours=1)
-    d2, _ = judged(s, t2, {'verb': 'forward', 'line': 'Ray handles payroll for you.', 'memory_says': 'You hand payroll asks to Ray', 'evidence': usual.handed_to(s, C.P['site2'][1], skip=t2)['evidence'][:1]})
-    assert (d2['verb'], d2['line']) == ('forward', 'Ray handles payroll for you.'), d2
 
 
 def test_the_prompt_says_a_memory_line_counts_only_for_what_is_current(w):
@@ -154,19 +93,3 @@ def test_people_lines_rank_by_who_is_on_the_item_then_its_subject():
     assert lc.cut(ls, one, {'domain': 'northwind.example', 'people': ['erin blake']})[0] == [C.ERIN_LINE]
     assert lc.cut(ls, one, {'topic': 'Weekly headcount sheet for Monday'})[0] == [GAIL_PROMISE]
     assert lc.cut(ls, one, {'sender_name': 'erin blake', 'people': ['gail@northwind.example']})[0] == [C.ERIN_LINE], 'the sender first'
-
-
-def test_the_models_verb_on_a_wait_stands_with_or_without_a_memory(w):
-    """No memory gate on a model's verb (2026-11-02): resting on the age alone or on a memory line, its light is lit."""
-    s, _ = w
-    it = waiting_on_gail(s); funnel.invalidate()
-    plant(s, 'promises', GAIL_PROMISE)
-    key, t = it['key'], it['tid']
-    r = advisor.decide(s, key, preread=False)
-    assert (r['verb'], r['ask']) == (None, True), 'nothing lit before the model read it'
-    other = next(v['verb'] for v in advisor.offered(s, advisor._item(s, 'task', t, key)) if v['verb'] != 'next')
-    d, _ = judged(s, t, {'verb': other, 'line': 'It has waited a day.', 'evidence': []})
-    assert (d['verb'], d['by']) == (other, 'model'), d
-    s._exec('DELETE FROM advice WHERE TargetId=?', (t,))
-    d, _ = judged(s, t, {'verb': other, 'line': 'Her sheet is due Monday.', 'memory_says': 'Gail promised the headcount sheet by Monday', 'evidence': [lc.cite_of('gail monday sheet')]})
-    assert (d['verb'], d['by'], d['line']) == (other, 'model', 'Her sheet is due Monday.'), d

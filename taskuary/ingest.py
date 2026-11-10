@@ -1357,9 +1357,6 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     for a in starts: _spawn(*a)
     _split_note(store, split_from, msg, {'task_id': tid})
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
-    if r['decision'] == 'attach':                   # the Advisor on the event (advisor.py): the task has new mail
-        from . import advisor
-        advisor.notice(store, 'message.attached', 'task', tid)
     return {'status': 'attached' if r['decision'] == 'attach' else 'created', 'task_id': tid, 'message_id': mid}
 
 
@@ -1642,8 +1639,6 @@ def _serve_step(store, msg: dict, sv: dict, intent: dict, actor: str, notes_note
         rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                                 'Reason': f"needs a reply: {intent.get('why') or 'question for you'}" + (f' · {unsendable}' if unsendable else '')})
         _spawn(_auto_draft, store, tid, rid)
-    from . import advisor
-    advisor.notice(store, 'message.attached', 'task', sv['task'])
     logger.info(f"ingest: serves step {k} of {ref}")
     return {'status': 'routed' if work else 'filed', 'task_id': tid, 'message_id': mid}
 

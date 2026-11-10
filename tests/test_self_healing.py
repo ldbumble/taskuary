@@ -76,16 +76,6 @@ class MakeATaskToFixThisTests(unittest.TestCase):
         verbs = [v['verb'] for v in advisor.offered(s, it)]
         self.assertEqual(verbs[0], 'fix'); self.assertNotIn('new_task', verbs)
 
-    def test_the_advisor_picking_it_hands_the_page_the_task_to_make(self):
-        s = MemoryStore(); it = draft(s, 'email'); failed_act(s, it)
-        lbl = buttons.label('new_task', 'fix')
-        with mock.patch.object(advisor, '_item', return_value=it):
-            advisor.judge(s, advisor.SHOWN, 'task', it['tid'], advisor.revision(s, 'task', it['tid']), 2,
-                          brain_saying({'verb': lbl, 'line': 'The repository could not be reached - make it a task to fix.', 'evidence': []}), key=it['key'])
-            got = advisor.for_key(s, it['key'])
-        self.assertEqual((got['verb'], got['label']), ('new_task', lbl))
-        self.assertIn('could not be reached', got['task']['text'])
-
     def test_the_task_it_makes_runs_on_the_tool_the_assistant_uses(self):
         op = operations.propose(MemoryStore(), 'task.create_from_text', 0, {'text': 'Fix: x', 'title': 'Fix: x', 'kind': 'task'})
         self.assertEqual((op['kind'], op['status']), ('task.create_from_text', 'proposed'))

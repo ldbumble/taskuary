@@ -1901,8 +1901,8 @@ WHAT_ABOUT = ('WHAT THEIR WORDS ARE ABOUT, in this order: the item on the table 
 
 
 def _advice_block(store, item: dict | None, d: dict | None = None) -> str:
-    """The Advisor's line on the item on the table (advisor.block): 'why?' is answered from it, never recomputed here. `d`: its
-    decision, already read (_decision)."""
+    """Why the item on the table has the button it fills (advisor.block): a task's own recommended move - its agent's turn and its facts -
+    or, on an idea row, the Advisor's line. 'why?' is answered from it, never recomputed here. `d`: already read (_decision)."""
     if not item: return ''
     try:
         from . import advisor
@@ -1912,11 +1912,12 @@ def _advice_block(store, item: dict | None, d: dict | None = None) -> str:
 
 
 def _decision(store, item: dict | None) -> dict:
-    """The Advisor's decision for the item on the table (advisor.decide), or {} - read once per turn."""
+    """The filled button of the item on the table, or {} - read once per turn: a task's recommended move (rulebook.recommended, in
+    advisor.decide's shape), an idea row's Advisor decision."""
     if not item or not item.get('key'): return {}
     try:
         from . import advisor
-        return advisor.decide(store, item['key'], preread=False) or {}
+        return advisor.decide(store, item['key'], preread=False, off=False) or {}
     except Exception as e:
         logger.debug(f'concierge: no advisor decision - {e}'); return {}
 
@@ -1969,7 +1970,9 @@ def _canvas_table(store, item: dict, d: dict) -> list:
         ask = ''
     ask = ask or str(item.get('summary') or item.get('preview') or item.get('why') or '').strip()
     if ask: lines.append(f"  ask: {_cut(' '.join(ask.split()), 200)}")
-    if d.get('verb'): lines.append(f"  lit: {d['verb']} \"{d.get('label') or buttons.label(d['verb'])}\" - the Advisor's pick" + (f": {_cut(d['line'], 120)}" if d.get('line') else ''))
+    by = "the task's own recommended move" if d.get('by') == 'agent' else "the Advisor's pick"
+    if d.get('verb'):
+        lines.append(f"  lit: {d['verb']} \"{d.get('label') or buttons.label(d['verb'])}\" - {by}" + (f": {_cut(d['line'], 120)}" if d.get('line') else ''))
     rv = store.get_review(item['rid']) if item.get('rid') else store.pending_review(t['TaskId']) if t else None
     first = next((ln.strip() for ln in str((rv or {}).get('DraftText') or '').splitlines() if ln.strip()), '')
     if first and str((rv or {}).get('Status') or 'pending') == 'pending': lines.append(f'  draft waiting for Send: "{_cut(first, 140)}"')
@@ -4490,7 +4493,11 @@ def present_turn(store, item: dict, actor: str = 'owner', picked: bool = False, 
         card['chips'] = chips_for(store, card)
         if record: record_related(store, tid, card, 'assistant', say, card)
         return {'item': card, 'say': say, 'options': [], 'chips': card['chips'], 'left': left}
-    llm = _brain_for(store, tid, llm, trace, cancel, fast=True) if record and (llm is not None or INTRO_AI) else None
+    # A ROW WHOSE TASK HAS AN AGENT - at work, asking, stopped or done - gets no line of the Assistant's about it (the owner, 2026-11-09:
+    # "the agents while running should recommend actions, no assistant"): the few words that name any row, and the row's own buttons in
+    # their own order. The agent's turn says where it stands, and the row fills what it recommends (rulebook.recommended). The desk only.
+    mine = routes() and agent_row(store, item)
+    llm = _brain_for(store, tid, llm, trace, cancel, fast=True) if record and not mine and (llm is not None or INTRO_AI) else None
     say, options, wanted, remember_llm = '', [], '', False
     if llm:
         try:
@@ -4511,7 +4518,22 @@ def present_turn(store, item: dict, actor: str = 'owner', picked: bool = False, 
             except Exception as e: logger.warning(f'concierge: the model conversation did not save - {e}')
         record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''),
                        card_for(item) | {'chips': chips})
-    return {'item': item | {'chips': chips}, 'say': say, 'options': options, 'chips': chips, 'left': left}
+    # ...and the one move its row fills, on the desk's card as the rail's item on the table carries it (server._pile_payload)
+    from . import rulebook
+    rec = {'recommended': rulebook.recommended(store, item)} if routes() and item.get('kind') != 'idea' else {}
+    return {'item': item | {'chips': chips} | rec, 'say': say, 'options': options, 'chips': chips, 'left': left}
+
+
+def agent_row(store, item: dict) -> bool:
+    "Whether the row's task has an agent on it - its card, a lane an agent left it in, or any turn an agent took there."
+    it = item or {}
+    if it.get('kind') in ('agent', 'agentdone', 'wrapup') or it.get('lane') in ('working', 'blocked', 'stopped', 'saved'): return True
+    if not it.get('tid'): return False
+    try:
+        from . import continuity, workerstate
+        return bool(workerstate.status(store, int(it['tid'])).get('sid') or continuity.last_agent_turn(store, int(it['tid'])))
+    except Exception as e:
+        logger.debug(f"concierge: no agent read for {it.get('key')} - {e}"); return False
 
 
 def end_turn(store, line: list, actor: str = 'owner', write: bool = True) -> dict:

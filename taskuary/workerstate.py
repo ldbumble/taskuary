@@ -121,11 +121,6 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
             from . import agentchannels
             agentchannels.on_event(store, tid, kind, text, source)
         except Exception as e: logger.debug(f'task {tid}: not said on its channel - {e}')
-    if kind in REQUESTS:                          # the Advisor on the event (advisor.py): an agent asked
-        try:
-            from . import advisor
-            advisor.notice(store, 'agent.asked', 'task', tid)
-        except Exception: pass
     return True
 
 

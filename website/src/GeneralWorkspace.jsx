@@ -743,7 +743,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false, waiting = [], box = "",
   onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, queued = null, heldStart = null, hint = "", placeholder = "",
-  empty = "", stopShown = false }) {
+  empty = "", stopShown = false, seed = null }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -912,6 +912,14 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     if (!box || boxed.current === box || c.getState().text) return;
     boxed.current = box; c.setText(box);
   }, [box, runtime]);
+  // ...and WHAT A CONTINUE LIT FOR THIS TASK SAID (TaskPage `intoChat`): its note, into an empty box, once per press - never over the owner's words
+  const seeded = useRef(null);
+  useEffect(() => {
+    const c = runtime.thread.composer;
+    if (!seed || seeded.current === seed.id) return;
+    seeded.current = seed.id;
+    if (seed.text && !c.getState().text) c.setText(seed.text);
+  }, [seed, runtime]);
   useEffect(() => { setHeld((h) => (h.length ? stillHeld(h, messages) : h)); }, [messages]);
   // the owner's lines the thread on screen draws - its own appends too, which the server's copy has not caught up with (heldLines.notShown)
   const [mineDrawn, setMineDrawn] = useState([]);
@@ -1114,7 +1122,7 @@ const byTime = (ms) => ms.map((m, i) => [String(m.createdAt || "9999").replace("
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, mails = [], reviews = [],
-  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, turnCards = null, queued = null, heldStart = null, onChanged }) {
+  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, turnCards = null, queued = null, heldStart = null, onChanged, seed = null }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -1415,7 +1423,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy || codingBusy} provider={coding ? cc.live?.cli || "" : session?.provider || pickedLabel} name={name} work={work} since={since} began={began}
-        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting} waiting={(coding ? cc.got?.waiting : data?.waiting) || []} box={data?.box || ""}
+        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting} waiting={(coding ? cc.got?.waiting : data?.waiting) || []} box={data?.box || ""} seed={seed}
         chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""} queued={chat && !dock ? queued : null} heldStart={chat && !dock ? heldStart : null}

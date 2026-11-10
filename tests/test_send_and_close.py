@@ -161,14 +161,6 @@ class Advisor(unittest.TestCase):
         d = self.decide(s, item, 'approve', offered=('approve', 'redraft', 'close'))
         self.assertEqual((d['verb'], d['label']), ('approve', 'Send'))
 
-    def test_a_caution_about_the_draft_lights_neither_send(self):
-        from taskuary import advisor
-        for v in ('approve', 'send_close'):
-            d = advisor.checked(None, {'key': 'task:1'}, [buttons.chip(x) for x in ('approve', 'send_close', 'redraft')],
-                                {'key': 'task:1', 'verb': v, 'line': 'It promises Friday', 'kind': 'draft_caution'})
-            self.assertIsNone(d['verb'], v)
-
-
 class PhonePin(unittest.TestCase):
     def test_a_draft_rewritten_after_the_phone_showed_it_is_not_sent_by_send_and_close_either(self):
         from taskuary import remote_assistant as ra

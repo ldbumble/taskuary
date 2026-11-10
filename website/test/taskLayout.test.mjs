@@ -256,8 +256,8 @@ test("the two sections come in the flow's order, and each closed tab says where 
   const tp = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.match(tp, /const stoppedRun = !term\?\.alive && \(detail\?\.runEnded === "stopped" \|\| \["saved", "interrupted"\]\.includes\(detail\?\.agentStory\?\.kind\)\);/);
   assert.match(tp, /failed: failedRun, stopped: stoppedRun \|\| agentState === AGENT\.stopped,/);
-  assert.deepEqual(agentStatus({ profile: "assistant", word: "finished", said: "Wrote a one-page plan.", made: "Plan for a first box", advisor: "Send" }),
-    { lines: ["assistant · finished", "Wrote a one-page plan.", "Made: Plan for a first box"], foot: "✓ Done · Advisor: Send is next" });
+  assert.deepEqual(agentStatus({ profile: "assistant", word: "finished", said: "Wrote a one-page plan.", made: "Plan for a first box" }),
+    { lines: ["assistant · finished", "Wrote a one-page plan.", "Made: Plan for a first box"], foot: "✓ Done" });
   assert.deepEqual(agentStatus({}), { lines: ["not started"], foot: "" });
 });
 
@@ -272,14 +272,15 @@ test("a report's line is its Summary, never its AGENT REPORT marker", () => {
   assert.equal(reportLine("Summary: It says:"), "Summary: It says:".replace(/^Summary:\s*/, ""));
 });
 
-// ANSWERED OUTSIDE TASKUARY (the owner, 2026-10-29): the Advisor's Mark done is lit for it, on the task's one row - its decision names no
-// section of the page (2026-11-06), so where the task opens is its kind's and stage's alone
-test("the Advisor's pick lights a button and names no section; its next move is said on the Agent's tab", () => {
-  assert.equal(agentStatus({ word: "finished", advisor: "Mark done" }).foot, "✓ Done · Advisor: Mark done is next");
+// ANSWERED OUTSIDE TASKUARY (the owner, 2026-10-29): Mark done is filled for it, on the task's one row - the move names no section of the
+// page (2026-11-06), so where the task opens is its kind's and stage's alone
+// ...and the Agent's tab says its own state, no Advisor's next move (the owner, 2026-11-09: "assistant/advisor should only be on rail")
+test("the task's own move fills a button and names no section; the Agent's tab says only its state", () => {
+  assert.equal(agentStatus({ word: "finished", advisor: "Mark done" }).foot, "✓ Done", "an Advisor's word handed in is said nowhere");
   assert.equal(agentStatus({ word: "not started" }).foot, "");
   const src = taskSource();
   assert.doesNotMatch(src, /sectionHere|adviceIn|advisorAt|advisedHeld/);
-  assert.match(src, /advisor: warn\?\.advice\?\.label \|\| "" \}\)/);
+  assert.doesNotMatch(src, /advisor: |warn\?\.advice/);
 });
 
 test("the chat knows the owner answered outside Taskuary: its Draft reply is not the lit move", () => {

@@ -36,7 +36,7 @@ import { loadGeneral } from "./lazyGeneral.js";
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
 import { BACK, advisedIn, aimed, navEnd, navOff, onPressed, onPressing, press as pressRow, walkMove, leaveRow, rowNow, rowDrawable, rowReady, rowTable, useHosted, useRowHold, useRowVerbs, useVerbs } from "./actionRow.js";
 import { deskPress, notePress as notePressed } from "./pressLog.js";
-import { forgetTasks, notePile, pageRead, prefetchTask, watchReads } from "./taskDetail.js";
+import { forgetTasks, heldTask, notePile, pageRead, prefetchTask, recRead, watchReads, watchRecs } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
 import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js";
 import { readTurn, toolTarget } from "./assistantStream.js";
@@ -64,7 +64,7 @@ import { ALERT, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, PRIORITY_COLOR, ROLES 
 import { dangerLine } from "./strangerLine.js";
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
-import { adviceRead, backToWork, overChat, tableOf, tableWords, workWords, workedOn } from "./tableState.js";
+import { adviceRead, backToWork, isIdea, overChat, ownPick, tableOf, tableWords, workWords, workedOn } from "./tableState.js";
 import { ReportLink } from "./BugReportDialog.jsx";
 import { openBugReport, shownError } from "./bugReportOpen.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
@@ -1258,8 +1258,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [text, setText] = useState("");
   // what the mic is still hearing, shown after the typed words until it settles into them (MicButton's onInterim); micRef cancels it on a send
   const [heard, setHeard] = useState(""), micRef = useRef(null);
-  const [advice, setAdvice] = useState(null);     // the Advisor's line for the key on the table (advisor.py), or null
-  // the key the Advisor's last read was for: a new item's row waits for it (actionRow.useRowHold), so the lit button lands with the row
+  // the one filled button for the key on the table: the task's own recommended move (noteOwn) - on an idea row, the Advisor's decision
+  const [advice, setAdvice] = useState(null);
+  // the key that last read was for: a new item's row waits for it (actionRow.useRowHold), so the lit button lands with the row
   // instead of reshuffling it under the owner's hand - a lit verb kept in view pushed its neighbour into the ▾ (the dead-end walk's STILL, 2026-10-23)
   const [readFor, setReadFor] = useState(null);
   // ...and the press round on the item (Next is no act on it: it moves the table): a press's row waits for the read made after it
@@ -1304,7 +1305,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const pics = usePromptImages({ files: true });
   // ...A CONTINUE IN THE AGENT PANE (the owner, 2026-10-29: "Continue box should be inside the canvas always"): a Continue for the task on
   // the table - the walk's, or the Assistant's lit with notes - is the task view's own card, in its Agent pane, when it lays its panes
-  // (TaskPage claims it, tq-continue-here); only a view that does not (a phone) leaves it to the card under the item here
+  // (TaskPage claims it, tq-continue-here, at any width); only an item with no task view up leaves it to the card under the item here.
+  // The task view's OWN Continue never comes this way (the owner, 2026-11-09): it opens its box on the task, with nothing asked of here
   useEffect(() => {
     if (!continueOn) return;
     const tid = continueOn.task?.TaskId;
@@ -1317,12 +1319,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const on = (e) => setContinuingTid(e.detail?.tid ?? null);
     window.addEventListener("tq-continuing", on);
     return () => window.removeEventListener("tq-continuing", on);
-  }, []);
-  // ...and the task view's own Continue on the canvas (TaskPage) asks for the same card
-  useEffect(() => {
-    const on = (e) => { setNoteOn(null); setAgentOn(null); setContinueOn({ task: e.detail.task, ref: e.detail.ref }); };
-    window.addEventListener("tq-continue", on);
-    return () => window.removeEventListener("tq-continue", on);
   }, []);
   // ...and Close with a note, the same card: what came of it, and the task view's own close behind the button
   const [noteOn, setNoteOn] = useState(null);           // { task, ref, close(note) }
@@ -1445,6 +1441,22 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     if (how !== "sync") pin.current = true;
     else navHow.current = "replace";
+  }, []);
+  // THE TASK'S OWN RECOMMENDED MOVE (the owner, 2026-11-09: "the agents while running should recommend actions, no assistant" / "assistant/
+  // advisor should only be on rail"): on every row but an idea, the one filled button is the field its task and its rail item are served
+  // with (`recommended` - the agent's turn and the task's facts), never an Advisor's read. It arrives three ways - the walk's answer, the
+  // rail's `current`, the task view's own read - and the newest by the moment it was asked stands (`at`). Nothing waits on an ask for it
+  const ownRef = useRef(null), recAt = useRef(new WeakMap()), viewOff = useRef(false);
+  const seenAt = (it) => { const m = recAt.current; if (!m.has(it)) m.set(it, Date.now()); return m.get(it); };
+  // ...an idea by the item on the table (its rail key is a processing key like any row's), or by a key that says so
+  const ideaOn = (key) => isIdea(currentRef.current?.key === key ? currentRef.current : key);
+  const noteOwn = useCallback((key, rec, at = Date.now()) => {
+    if (!key || ideaOn(key) || key !== (currentRef.current?.key || cardRef.current)) return;
+    if (ownRef.current?.key === key && ownRef.current.at > at) return;
+    ownRef.current = { key, at, rec: rec || null };
+    const pick = ownPick(rec, key), r = roundRef.current;
+    setAdvice((was) => (was && pick && was.for === key && was.by === pick.by && was.verb === pick.verb && was.label === pick.label && was.why === pick.why ? was : pick));
+    setReadFor((was) => (was?.key === key && was.round === r ? was : { key, round: r }));
   }, []);
   // the chat body's height is the task view's (CanvasItem): measured, never guessed, and re-measured with the window
   useEffect(() => {
@@ -1666,7 +1678,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             speakRef.current?.(line);
           }
           const refreshed = refreshCurrentPresentation(cur, fresh);
+          if ("recommended" in fresh) recAt.current.set(fresh, askedAt);
           if (newer || refreshed !== cur) putOnTable(refreshed, "sync");
+          // ...and the row's own recommended move as this rail read it (funnel's `current.recommended`): an agent that finished fills Mark done
+          if ("recommended" in fresh) noteOwn(fresh.key, fresh.recommended, askedAt);
         }
       }
       return captured;
@@ -1685,7 +1700,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     } })();
     pileFlight.current = request;
     return request;
-  }, [readChat, putOnTable]);
+  }, [readChat, putOnTable, noteOwn]);
   useEffect(() => { loadPileRef.current = loadPile; }, [loadPile]);
   // the FYI band asks for its next page - opened, or its "N more fyi" scrolled into view. One ask at a time; the cached rail
   // answers it (no force), and a read already in flight is followed by one that carries the bigger page.
@@ -1708,16 +1723,36 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   }, []);
   useEffect(() => { currentRef.current = currentItem; }, [currentItem]);
   useEffect(() => { loadState().catch((e) => setErr(errText(e))); }, [loadState]);
-  // the Advisor's line for the item on the table: read when the table changes and when its event lands; a changed
+  // the Advisor's line for ITS OWN ROW on the table - an idea: read when the table changes and when its event lands; a changed
   // item answers {} and the pill goes with it - nothing on the rail moves for it (spec 2026-10-12, mechanics 3-5)
   // ...stamped with the key it was read FOR, and a read that comes back after the table moved on is dropped
   const adviceAsk = useRef(0);
-  // NO "THINKING..." (the owner, 2026-10-23): the Advisor answers at once with the rule's lit button, and the model's read, where one
-  // is wanted, arrives by the `advice` event - nothing is drawn while a read is out
+  // NO "THINKING..." (the owner, 2026-10-23): the Advisor answers at once, and the model's read, where one is wanted, arrives by the
+  // `advice` event - nothing is drawn while a read is out
   const readAdvice = useCallback(async (key, keep) => {
     const n = ++adviceAsk.current, r = roundRef.current;
     if (!keep) setAdvice(null);                     // a new item starts with no line, never the last item's
     if (!key) return;
+    // EVERY OTHER ROW FILLS ITS TASK'S OWN MOVE AND ASKS THE ADVISOR NOTHING (noteOwn): what the item on the table or a read of its task
+    // already says stands at once - a press's row waits on no read - and where neither says yet, the task view's own first read brings it
+    // (watchRecs). Asked for here only where no view will read the task: an item folded away, or a card that is no task view
+    if (!ideaOn(key)) {
+      if (ownRef.current?.key !== key) ownRef.current = null;
+      const it = currentRef.current?.key === key ? currentRef.current : null, tid = Number(it ? it.tid : /^task:(\d+)$/.exec(key)?.[1]) || 0;
+      if (it && "recommended" in it) noteOwn(key, it.recommended, seenAt(it));
+      const h = tid && heldTask(tid) ? recRead(tid) : null;
+      if (h) noteOwn(key, h.rec, h.at);
+      const own = ownRef.current;
+      if (own) {
+        const pick = ownPick(own.rec, key);
+        setAdvice((was) => (was && pick && was.for === key && was.by === pick.by && was.verb === pick.verb && was.label === pick.label && was.why === pick.why ? was : pick));
+        setReadFor((was) => (was?.key === key && was.round === r ? was : { key, round: r }));
+        return;
+      }
+      if (!tid) noteOwn(key, null, 0);
+      else if (viewOff.current || !(it ? showsTask(it, cardFor(it)) : true)) prefetchTask(api, tid);
+      return;
+    }
     let got = null;
     adviceSent.current = { key, at: ++readClock.current };
     // ...and {"none":"no_ai"}: no AI connected is said once, with the way to connect one, instead of a strip that stays empty (U3)
@@ -1730,6 +1765,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // revision: the old pill must go), and when the Advisor's own event names this item or one of its aliases
   // ...and when its lane moves (an agent continued is at work: its "waiting on you" line must go)
   useEffect(() => { readAdvice(onTable); setChanged(null); }, [onTable, readAdvice]);
+  // ...the walk's answer filling in the row its press drew brings the row's field with it (present_turn's item), under the same key
+  useEffect(() => { if (currentItem && "recommended" in currentItem) noteOwn(currentItem.key, currentItem.recommended, seenAt(currentItem)); }, [currentItem, noteOwn]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and every read of the task on the table - the view's own on mount, after an act, on a write anywhere - is the newest word on it
+  useEffect(() => watchRecs((tid, r) => {
+    const it = currentRef.current, key = it?.key || cardRef.current;
+    if (key && (Number(it ? it.tid : /^task:(\d+)$/.exec(key)?.[1]) || 0) === tid) noteOwn(key, r.rec, r.at);
+  }), [noteOwn]);
   // ...the SAME item's revision or lane, that is: a new item is read by the effect above, and this
   // one fired on the same render as a second read of it - three reads of /api/advice a press of Next (the overnight walk, 2026-10-26)
   const revFor = useRef(null);
@@ -3274,6 +3316,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // THE TABLE, ONE RECORD (tableState.js): folded by its X or under a page opened over it, the item keeps its key - and the Advisor
   // keeps quiet, its button never acting on what nobody can see. The strip speaks only for the item on the table, at rest.
   const table = tableOf({ current, cardKey, foldedKey, browsing, setup: setupOn.current, over: !!setupCard });
+  const ideaRow = isIdea(currentItem?.key === table.key ? currentItem : table.key);     // the Advisor's own row is on the table
   // ...and the row draws only ITS verbs from the frame it changes (actionRow.rowTable), none of the one a press is leaving: both in one
   // commit, before the paint - no frame shows the old task's buttons, and a press that fails gives them back in the frame it says so
   useLayoutEffect(() => { rowTable(table.key); leaveRow(flight?.from); }, [table.key, flight?.from]);
@@ -3294,9 +3337,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const litDayRef = useRef(null); litDayRef.current = litNow?.verb === "defer" ? litNow.day || null : null;
   useEffect(() => { setLit((l) => litAfter(l, litTable)); }, [litTable.key, litTable.tid, lit]);   // eslint-disable-line react-hooks/exhaustive-deps
   const shownAdvice = table.speaks && !litNow ? adviceShown(advice, { key: table.key, lane: currentItem?.lane }, busy) : null;
-  // ...and the decision a WARNING in the task is read from (advice.taskNote): never put out by the Assistant's light or a turn in flight -
-  // a warning about the draft does not blink while the chat answers
-  const noteAdvice = adviceShown(advice, { key: table.key, lane: currentItem?.lane }, false);
+  // ...and the same pick for a narrow window's row, drawn at the view's foot (CanvasItem)
+  const tableAdvice = advice?.for === table.key ? advice : null;
+  viewOff.current = !!table.folded || !!browsing;
   shownRef.current = shownAdvice?.verb ? { key: shownAdvice.for || shownAdvice.key || table.key, verb: shownAdvice.verb, revision: shownAdvice.revision } : null;
   // ...an answer that landed wins: the strip asking for an AI over a line the Advisor did give hid the line and left its button dark
   // ...and every other reason there is no line, said (words.json advice_none) - an agent at work included, whose line is hidden.
@@ -3431,7 +3474,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     return () => clearTimeout(t);
   }, [continuingTid]);
   // ...and the Assistant's lit button with its line, for the phone's row at the view's foot (CanvasItem)
-  const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone, lit: litNow, advice: noteAdvice,
+  const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone, lit: litNow, advice: tableAdvice,
     toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); },
     // the task leaves the table the moment it is put down, the "…" under its title line while the close and the walk's answer are out;
     // a close that fails unfolds it and says why
@@ -3439,7 +3482,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       const was = (pileRef.current?.items || []).find((i) => i.tid === tid) || null;
       if (tid) setLeaving((l) => [...l.filter((x) => x.tid !== tid), { tid, key, was, at: null }]); },
     pickUp: (key, why) => { leftKey.current = null; setFoldedKey((k) => (k === key ? null : k)); setNextComing(false); dropLeaving(key); if (why) setErr(why); } }),
-    [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line, litNow?.hand?.to, litNow?.hand?.note, noteAdvice?.for, noteAdvice?.state, noteAdvice?.line, noteAdvice?.verb]);   // eslint-disable-line react-hooks/exhaustive-deps
+    [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line, litNow?.hand?.to, litNow?.hand?.note, tableAdvice?.for, tableAdvice?.state, tableAdvice?.line, tableAdvice?.verb, tableAdvice?.none, tableAdvice?.revision]);   // eslint-disable-line react-hooks/exhaustive-deps
   const lastCardIdx = useMemo(() => { const i = tableCardIndex(shown, old ? null : current || cardKey), c = shown[i]?.card;
     // ...the canvas's own fallback (the newest card in the chat) included: a durable line about a closed task landing after Next drew it
     return i; }, [shown, old, current, cardKey]);
@@ -3647,7 +3690,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // open (focus, dictation, a picture) it is the window and stays until its × or Esc; with words typed it stays grown
   const [hover, setHover] = useState(false), hoverT = useRef(0);
   useEffect(() => () => clearTimeout(hoverT.current), []);
-  const grow = chatApart && !boxWide && (hover || !!text.trim());
+  // ...AND NEVER OVER A TASK'S VIEW (2026-11-09): grown it rises 40px out of its corner, and at 1440x900 that put it across the foot of the
+  // task's own composer - its Send under the pill. Over a task the hint is three words and the tools already sit on the pill's row, so
+  // growing showed nothing more: there it stays the pill, and a press still opens the window
+  const grow = chatApart && !boxWide && !popOn && (hover || !!text.trim());
   const growIn = () => { clearTimeout(hoverT.current); setHover(true); };
   const growOut = () => { clearTimeout(hoverT.current); hoverT.current = setTimeout(() => setHover(false), 350); };
   const iconsInPill = chatApart && overChat(table);
@@ -3745,7 +3791,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         <div className="tq-chats">
           <div className="tq-chats-head">Chats<span style={{ flex: 1 }} /><IconButton aria-label="Close past chats" size="small" onClick={() => setChatsOpen(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton></div>
           <div className="tq-chats-list">
-            {current && <AdvisorNotes keyOnTable={current} />}
+            {current && ideaRow && <AdvisorNotes keyOnTable={current} />}
             {chatsLoading && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>Loading past chats…</Typography>}
             {chatsErr && <Typography role="alert" sx={{ color: "#7a2f3c", fontSize: 12, p: 1.5 }}>{chatsErr}{" "}
               <button type="button" className="tq-chip" onClick={openChats}>{btn("try_again")}</button></Typography>}
@@ -3903,9 +3949,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {/* ...setup's own line only while setup is in view: a task opened over it speaks for itself (tableOf's `over`, 2026-10-26) */}
           {firstRun && !setupCard && <SetupLine />}
           {/* NO STRIP OVER THE ROW (the owner, 2026-10-26: "maybe keep the box but remove the advisor? not sure the advisor is really
-              useful"): the Advisor's pick is the row's one dark button and says nothing; the few lines that warn are in the task, beside
-              what they are about (advice.taskNote). AdvisorNext only joins a move the row lacks, and leaves the walks' hidden mark */}
-          {!firstRun && table.speaks && !holding && !hostedRow && <>
+              useful"): the pick is the row's one dark button and says nothing. ON A TASK'S ROW IT IS THE TASK'S OWN (the owner, 2026-11-09:
+              "assistant/advisor should only be on rail"): a button the row already draws, filled - nothing of the Advisor's is mounted,
+              only a mark of what is filled. ON THE ADVISOR'S OWN ROW - an idea - AdvisorNext joins a move the row lacks, as before */}
+          {!firstRun && table.speaks && !holding && !hostedRow && !ideaRow && readFor?.key === table.key
+            && <div hidden data-tq-recommended={shownAdvice?.verb || ""} />}
+          {!firstRun && table.speaks && !holding && !hostedRow && ideaRow && <>
             <AdvisorNext advice={shownAdvice} onPropose={pressAdvice} onErr={setErr} />
             {/* ...and a decision that lights NOTHING on purpose (an agent asking is answered in its own pane, the design's state 7): no
                 word, no button - only a mark, so the dead-end walk can tell it from one that never got its decision */}

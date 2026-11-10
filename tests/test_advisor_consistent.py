@@ -6,7 +6,6 @@ nobody could press. Each is pinned here on its shape, with invented Northwind pe
 light (no hard-coded rules): the facts say the state and its line, and the check after the model refuses to nothing - it swaps in no verb."""
 import json
 from datetime import date, datetime, timedelta
-from unittest import mock
 import pytest
 from taskuary import advisor, funnel, learn, learned_cut as lc, memoryedit, rulebook, terminal, usual
 from taskuary.store import MemoryStore
@@ -91,31 +90,6 @@ def _erins_habit(s):
         f.message(task_id=old, subject=f'RE: Form {n}', body='Signed.', direction='out', sent_at=at(days=10 + n, minutes=-20), conversation_id=f'email:old{n}')
 
 
-def test_the_late_line_reads_the_learned_line_and_wrong_on_it_takes_the_line_off_the_task(s):
-    _erins_habit(s)
-    t, _ = ask(s, 'Trainly renewal', ERIN, 5)
-    assert advisor.decide(s, f'task:{t}', preread=False)['state'] == 'asked', 'the count alone says no usual'
-    s.save_doc('learned', learn.answer_lines(s, s.get_doc('learned') or ''), 'reflect')
-    line = usual.answer_line(s, ERIN[1])
-    assert line['text'] == 'You answer Erin Blake (erin@northwind.example) within the hour'
-    it = {'key': f'task:{t}', 'tid': t, 'kind': 'asked', 'lane': 'asked'}
-    assert rulebook.facts(s, it, V('reply'))['line'] == 'You usually answer Erin within the hour; this is 5h.', 'the fact the model reads'
-    # ...the model lights Reply on it, citing the line and saying what it says
-    said = {'verb': 'reply', 'line': 'You usually answer Erin within the hour; this is 5h.', 'evidence': [line['cite']], 'kind': 'late', 'memory_says': line['text']}
-    advisor.judge(s, advisor.SHOWN, 'task', t, advisor.revision(s, 'task', t), tier=2, llm=lambda system, user, **kw: json.dumps(said), key=f'task:{t}')
-    d = advisor.status(s, f'task:{t}')
-    assert (d['state'], d['verb'], d['line']) == ('asked_late', 'reply', 'You usually answer Erin within the hour; this is 5h.')
-    memory = [r for r in d['rests'] if r['kind'] == 'memory']
-    assert memory == [{'id': line['cite'], 'kind': 'memory', 'key': line['key'], 'own': False, 'section': 'work', 'label': line['text']}], 'Why? quotes the one line'
-    assert advisor.resting_on(s, [line['cite']]) == [f'task:{t}']
-    with mock.patch.object(advisor, '_emit') as emit:
-        memoryedit.mark(s, line['key'], 'wrong')
-    emit.assert_called_with(f'task:{t}', 'task', t)
-    assert advisor.decide(s, f'task:{t}', preread=False)['line'] == '', 'Wrong on the line: the task says it no more'
-    s.save_doc('learned', learn.answer_lines(s, s.get_doc('learned') or ''), 'reflect')
-    assert usual.answer_line(s, ERIN[1]) is None, '...and the count does not write it back'
-
-
 def test_the_owners_own_words_about_the_person_are_the_usual(s):
     _erins_habit(s)
     t, _ = ask(s, 'Trainly renewal', ERIN, 5)
@@ -138,14 +112,6 @@ def test_a_model_answer_resting_on_a_forgotten_memory_line_stands_no_more(s):
 # ── 4. the lit button is pressable and agrees with its reason ─────────────────────────────────────────────────────────────────────────
 def _d(verb, kind, state='asked', line='x'):
     return {'key': 'task:1', 'state': state, 'verb': verb, 'line': line, 'by': 'model', 'evidence': [], 'kind': kind}
-
-
-def test_a_caution_about_the_draft_never_lights_send(s):
-    d = advisor.checked(s, {'key': 'task:1'}, V('approve', 'redraft'), _d('approve', 'draft_caution', 'draft_ready',
-                        'The draft promises Friday; nothing backs it.'))
-    assert (d['verb'], d['line']) == (None, 'The draft promises Friday; nothing backs it.'), 'never Send; the caution kept - its fix (fix_of) lights Redraft'
-    d = advisor.checked(s, {'key': 'task:1'}, V('approve'), _d('approve', 'draft_caution', 'draft_ready'))
-    assert d['verb'] is None and d['checked'], 'never Send - and no verb swapped in'
 
 
 def test_late_on_a_drafted_task_the_models_reply_stands(s):

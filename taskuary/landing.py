@@ -538,8 +538,20 @@ def _ff(cwd, base, br):
 
 
 def land(store, tid: int, how: str, actor: str = 'owner') -> dict:
-    """The owner's answer to the landing question, carried out. {'ok', 'says', ...}; a conflict is {'ok': False, 'conflict': [...]}."""
+    """The owner's answer to the landing question, carried out. {'ok', 'says', ...}; a conflict is {'ok': False, 'conflict': [...]}.
+    A REFUSED PRESS IS KEPT, AND ITS AGENT HAS IT (rules part 4, the stress round 2026-11-10): a push the remote turned down - someone pushed
+    first: "pull and rebase, then push again" - was said only in the press's own answer. Nothing on the task after a reload, the agent that
+    could rebase never told, and the next Push refused the same way. A line in the chat, and the refusal handed to the agent by the one road."""
     how = str(how or '').strip().lower()
+    try: return _land(store, tid, how, actor)
+    except Refused as e:
+        store.audit('task', tid, 'land_refused', actor, detail={'how': how, 'why': str(e)[:300]})
+        _hand_back(store, tid, f"The owner pressed {HOW.get(how, how)} on your work and it was refused: {e}. Nothing went out, and the question "
+                               "stays on the task. Do what that needs from your side, then ask for it again (propose_land) - or say in a line why you cannot.")
+        raise
+
+
+def _land(store, tid: int, how: str, actor: str) -> dict:
     if how not in HOW: raise ValueError(f"how is one of: {', '.join(HOW)}")
     s = state(store, tid)
     if not s or not s['ask']: raise ValueError((s or {}).get('line') or 'nothing to land on this task')

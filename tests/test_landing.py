@@ -305,6 +305,25 @@ class LandingTests(unittest.TestCase):
         self.assertTrue(landing.propose(self.s, self.tid, 'push', 'the owner asked for it')['ok'])
         self.assertFalse(landing.state(self.s, self.tid)['held'])
 
+    def test_a_push_the_remote_refuses_is_kept_and_its_agent_is_told_the_way_past(self):
+        """A FAILURE IS KEPT WHERE IT HAPPENED (rules part 4): someone pushed to origin first, so the owner's Push was refused - "pull and rebase,
+        then push again". That is the agent's to do, yet only the press's own answer said it: nothing on the task after a reload, the agent
+        never told, and the next Push refused the same way."""
+        from taskuary import general
+        self.on_master_with_origin(); landing.propose(self.s, self.tid, 'push', 'the fix is ready')
+        other = tempfile.mkdtemp(); git(other, 'clone', '-q', self.remote, '.')
+        for k, v in (('user.name', 'Ray Colton'), ('user.email', 'ray@northwind.example')): git(other, 'config', k, v)
+        commit(other, 'notes.md', 'from a teammate\n'); git(other, 'push', '-q', 'origin', 'master')
+        told = []
+        with mock.patch.object(general, 'tell', lambda st, t, said, actor='owner': (told.append(said), 'told')[1]):
+            with self.assertRaises(landing.Refused): landing.land(self.s, self.tid, 'push')
+        self.assertFalse(self.pushed())
+        [line] = [what for _, _, what, *_ in general.presses(self.s, self.tid) if 'Push' in what]
+        self.assertIn('REFUSED', line); self.assertIn('nothing went out', line)
+        [said] = told
+        self.assertIn('was refused', said); self.assertIn('rebase', said)
+        self.assertTrue(landing.state(self.s, self.tid)['ask'], 'the question stays: Push is still one press once the agent has rebased')
+
     def test_not_now_pressed_twice_is_one_press(self):
         "A double click, or the desk and the phone: the second Not now finds the question already folded - one line, one thing the agent hears."
         from taskuary import general

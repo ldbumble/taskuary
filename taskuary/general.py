@@ -595,6 +595,8 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if 
            'land_held': lambda d: f"pressed Not now on the {d.get('what') or 'push'} - nothing went out, and it is not to be asked for again unprompted",
            # ...and the press that LANDED it: with no phrase of its own the line read "You landed." (agent walk 2, 2026-11-10)
            'landed': lambda d: f"pressed {_land_how(d)} on the agent's work - it went through" + (f" ({d['sha'][:7]})" if d.get('sha') else ''),
+           # ...and one the remote or git REFUSED (landing.land): kept as their press, so the card's failure outlives its answer
+           'land_refused': lambda d: f"pressed {_land_how(d)} on the agent's work and it was REFUSED - nothing went out: {_cut(d.get('why'), 200)}",
            # ...and the task's own Publish (server /land), which writes ci's rows in their name: "You pr opened." (the stress round, 2026-11-10)
            'pr_opened': lambda d: f"opened draft pull request {d.get('repo')}#{d.get('number')}",
            'pushed_direct': lambda d: f"pushed {plural(int(d.get('commits') or 0), 'commit')} straight onto {d.get('base') or 'the default branch'}"

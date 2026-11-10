@@ -24,6 +24,7 @@ import { runOperation } from "./taskOps.js";
 import { ChannelIcon, DraftField, LinkedText, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { openAppLink } from "./appLinks.js";
 import { CardErr, failOf } from "./failure.jsx";
+import { press, sure } from "./press.js";
 import { DASH, place } from "./words.js";
 import Dashboard from "./dashboard/Dashboard.jsx";
 import { snapshotOf } from "./dashboard/slice.js";
@@ -700,11 +701,11 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
       // Decline and Finish anyway belong to the GitHub finish, whichever card is showing; the reply rides with them
       const onCo = ["close_pr", "merge_anyway"].includes(verb) && coRv ? coRv.ReviewId : card.rid;
       const withReply = mate || (onCo !== card.rid && !action);
-      const { data } = await api.post(`/api/reviews/${onCo}/decide`, withReply
-        ? { verb, final_text: null, note: null, reply_text: verb !== "reject" ? value : null, blanks_ok: blanksOk }
-        : { verb, final_text: verb === "approve" ? value : null, note: null, blanks_ok: blanksOk });
-      if (data.refused) reloadGh();
-      if (data.send_error) throw new Error(data.send_error);
+      const o = await press(api, onCo, withReply
+        ? { verb, reply_text: verb !== "reject" ? value : null, blanks_ok: blanksOk }
+        : { verb, final_text: verb === "approve" ? value : null, blanks_ok: blanksOk }, action || coRv ? 2 : 1);     // an act or a finish on GitHub runs something
+      if (o.kind === "refused") reloadGh();
+      sure(o, "sent");                 // the one press (press.js): its line is thrown to this card's own reader
       const ran = ["approve", "merge_anyway"].includes(verb) || verb === co?.alt?.verb;
       // the button's own label is all that is said of it - its badge on the card it folds to, never a line (the owner, 2026-10-22)
       const pressed = verb === co?.alt?.verb ? co.alt.label : verb === "merge_anyway" ? OFFER_LABEL.anyway : btn("approve", action ? "action" : undefined);

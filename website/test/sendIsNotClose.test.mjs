@@ -55,7 +55,7 @@ test("no 'Sent to <who>.' line on the desk: a send is said by its badge alone, a
   const cards = read("assistantCards.jsx");
   for (const gone of ["`Sent to ${who}.`", "The reply went to", "Done — the action ran.", "Done — ${co.then}", "Done — ${co.alt.then}"])
     assert.ok(!cards.includes(gone), `still says: ${gone}`);
-  assert.match(cards, /if \(data\.send_error\) throw new Error\(data\.send_error\);/);
+  assert.match(cards, /sure\(o, "sent"\);/);          // the one press throws the server's reason to the card's reader (press.js)
 });
 
 test("no screen says a send closes the task", () => {

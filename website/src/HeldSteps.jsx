@@ -9,7 +9,7 @@ import api from "./api";
 import { heldCard } from "./reviewProposal.js";
 import { useVerbs } from "./actionRow.js";
 import { label as btn } from "./buttons.js";
-import { DECIDE_TIMEOUT } from "./sendState.js";
+import { failLine, pressSteps } from "./press.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
@@ -19,11 +19,10 @@ export default function HeldSteps({ reviews, onChanged, toRow = false }) {
   const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [open, setOpen] = useState(false);
   const go = async (verb) => {
     setBusy(verb); setErr("");
-    try {
-      const { data } = await api.post("/api/reviews/steps", { ids: c.waiting, verb }, { timeout: DECIDE_TIMEOUT * Math.max(1, c.waiting.length) });
-      if (data?.failed) setErr(`Step ${c.steps.findIndex((s) => s.id === data.failed.review) + 1} failed: ${data.failed.error}${data.left?.length ? ` - ${data.left.length === 1 ? "the step after it was" : "the steps after it were"} not run` : ""}`);
-    } catch (e) { setErr(e?.response?.data?.detail || "It didn't go through - nothing was run. Try again."); }
-    finally { setBusy(""); onChanged?.(); }
+    const o = await pressSteps(api, c.waiting, verb), data = o.data;
+    if (data?.failed) setErr(`Step ${c.steps.findIndex((s) => s.id === data.failed.review) + 1} failed: ${data.failed.error}${data.left?.length ? ` - ${data.left.length === 1 ? "the step after it was" : "the steps after it were"} not run` : ""}`);
+    else if (!data) setErr(failLine(o, "run"));        // no answer in time is "it may still be going", never "nothing was run" (press.js)
+    setBusy(""); onChanged?.();
   };
   const id = (v) => `${c.steps[0]?.id}:${v}`, live = !c.pressed;
   useVerbs(`held:${c.steps[0]?.id}`, live ? [

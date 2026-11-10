@@ -15,6 +15,7 @@ import { FileDialog } from "./PublishedPages.jsx";
 import { actionFor, changed, choiceOf, fieldsOf, stateOf, textKey, valuesOf, wordsOf } from "./actionCard.js";
 import { outputRow } from "./taskOutputs.js";
 import { hint } from "./buttons.js";
+import { failLine, landed, press } from "./press.js";
 import { ACCENT, ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 const initials = (s) => String(s || "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "in";
@@ -38,15 +39,14 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
   const failed = err || (!busy && !gone && row?.Status === "pending" && row?.ActError) || "";
   const decide = async (verb) => {
     setBusy(verb); setErr("");
-    const nothing = `It didn't go through - nothing was ${post ? "posted" : "sent"}. Try again.`;
-    try {
-      const { data } = await api.post(`/api/reviews/${row.ReviewId}/decide`, { verb, final_text: verb === "approve" ? text : null, note: null,
-        ...(verb === "approve" && Object.keys(changed(act, p, vals)).length ? { fields: changed(act, p, vals) } : {}) }, { timeout: 120000 });
-      if (!data?.ok) { setErr(data?.send_error || nothing); return; }
-      if (verb === "approve") setDone({ url: data.result?.url || "" });
-      onChanged?.();
-    } catch (e) { setErr(e?.response?.data?.detail || nothing); }
-    finally { setBusy(""); }
+    // ...the one press (press.js): it said "nothing was posted. Try again" after two minutes with no answer, over a post still going up;
+    // and one decided in another window was an error on a card that only had to read itself again
+    const o = await press(api, row.ReviewId, { verb, final_text: verb === "approve" ? text : null,
+      ...(verb === "approve" && Object.keys(changed(act, p, vals)).length ? { fields: changed(act, p, vals) } : {}) }, 2);
+    if (landed(o) && verb === "approve") setDone({ url: o.data.result?.url || "" });
+    if (!landed(o) && o.kind !== "already") setErr(failLine(o, post ? "posted" : "sent"));
+    if (landed(o) || ["already", "unknown"].includes(o.kind)) onChanged?.();
+    setBusy("");
   };
   // ...a choice reads as its label; while it waits, the label is the pick itself - no box around it
   const choice = (f) => f.editable

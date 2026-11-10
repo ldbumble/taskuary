@@ -71,5 +71,5 @@ test("the action card leads Next steps and is drawn once", () => {
   assert.ok(at > s.indexOf("<DraftHead />") && at < s.indexOf("<OnYou items={onYou} />"));
   assert.match(read("TaskPage.jsx"), /const asks = proposals\.filter\(\(p\) => !isCardReview\(p\)\)/);
   assert.match(read("ReviewDecision.jsx"), /act \? <ActionCard/);
-  assert.match(read("ActionCard.jsx"), /\/api\/reviews\/\$\{row\.ReviewId\}\/decide/);       // the one decide road, no second approval
+  assert.match(read("ActionCard.jsx"), /press\(api, row\.ReviewId, /);       // the one decide road, no second approval
 });

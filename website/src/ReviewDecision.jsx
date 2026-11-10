@@ -22,7 +22,8 @@ import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx own
 import { boxText, editAfterRefile, followDraft, useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
-import { DECIDE_TIMEOUT, draftState, failureHead, failureWhy, replySendFailure, reviewDeliveryState, savedSendFailure, sendFix, timedOut } from "./sendState.js";
+import { draftState, failureHead, failureWhy, replySendFailure, reviewDeliveryState, savedSendFailure, sendFix } from "./sendState.js";
+import { press } from "./press.js";
 import { openAppLink } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { runOperation } from "./taskOps.js";
@@ -327,9 +328,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     announce(no(id)); setPressed(id);
     setBusy(true); setErr(""); setSendErr(""); setCoFail(null);
     try {
-      const { data } = await api.post(`/api/reviews/${closeout.ReviewId}/decide`,
-        { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable && words.trim() ? value : null, cc: sendable ? ccNow : null, blanks_ok: blanksOk },
-        { timeout: DECIDE_TIMEOUT });
+      const out = await press(api, closeout.ReviewId,
+        { verb, reply_text: verb !== "reject" && sendable && words.trim() ? value : null, cc: sendable ? ccNow : null, blanks_ok: blanksOk }), data = out.data;
+      // no answer in a minute: the review's own delivery state says where it stands (press.js `unknown`) - never a line of ours
+      if (!data) { if (out.kind === "unknown") onChanged?.(); else setErr(out.why || "That didn't go through - nothing was sent. Try the button again."); setBusy(false); return; }
       if (data.blanks?.length) { setFillIn(true); if (!blanks.length) setErr(data.send_error); }
       // refused before anything happened is not "approved, but it did not send"
       else if (!data.ok && data.send_error) setCoFail({ text: data.send_error, offers: data.offers || [] });
@@ -339,10 +341,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       // ...and the reply that went with it closes the task, on the task page (closeOnSend) - the merge alone does not
       else if (data.ok && verb !== "reject" && onSent) { setSent(true); setBusy(false); await onSent({ closes: closesIt && close && !!data.reply?.ok }); return; }
       reloadGh(); onChanged?.();
-    } catch (e) {
-      if (timedOut(e)) onChanged?.();       // no answer in a minute: the review's own delivery state says where it stands
-      else setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again.");
-    }
+    } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }      // what the page did after the answer (onSent), not the press
     finally { acted(no(id)); }          // the Advisor reads the item again: what it advised has been done, or failed
     setBusy(false);
   };
@@ -366,10 +365,13 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     setPressed(verb === "approve" && shut ? "send_close" : verb);
     setBusy(true); setErr(""); setSendErr("");
     try {
-      const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`,
-        { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, note: null,
+      const out = await press(api, r.ReviewId,
+        { verb, final_text: verb === "approve" && !delivery.frozen ? value : null,
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
-          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk, ...envelopeEdits(verb) }, { timeout: DECIDE_TIMEOUT });
+          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk, ...envelopeEdits(verb) }), data = out.data;
+      // NO ANSWER IN A MINUTE is not "nothing was sent": the server may be sending still. The card reads the review again and its
+      // DeliveryState draws Sending… or Check delivery (reviewDeliveryState) - the check it already has, not a line of ours
+      if (!data) { if (out.kind === "unknown") onChanged?.(); else setErr(out.why || "That didn't go through - nothing was sent. Try the button again."); setBusy(false); return; }
       if (data.ok && !data.send_error && verb === "approve") closing.delete(r.ReviewId);    // the press is over: the next one says again which send
       const it = interruptOf(data, r.ReviewId);
       if (it) { setInterrupt(it); onChanged?.(); setBusy(false); return; }
@@ -394,12 +396,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           said: verb === "approve" ? { text: value, channel: r.Channel || "", to: replyContext(r), subject: deliverySubject(r), id: r.ReviewId } : null }); return;
       }
       onChanged?.();
-    } catch (e) {
-      // NO ANSWER IN A MINUTE is not "nothing was sent": the server may be sending still. The card reads the review again and its
-      // DeliveryState draws Sending… or Check delivery (reviewDeliveryState) - the check it already has, not a line of ours
-      if (timedOut(e)) onChanged?.();
-      else setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again.");
-    }
+    } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }      // what the page did after the answer (onSent), not the press
     finally { acted(no(verb === "approve" && shut ? "send_close" : verb)); }
     setBusy(false);
   };

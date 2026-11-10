@@ -8,6 +8,7 @@ import React, { useEffect, useState } from "react";
 import { Box, Typography } from "@mui/material";
 
 import api from "./api";
+import { press, sure } from "./press.js";
 import { openReply, useDraftJob } from "./replyDraft.js";
 import { mono } from "./theme.jsx";
 import { cleanText } from "./ui.jsx";
@@ -136,9 +137,7 @@ function Draft({ item, busy, play }) {
   const value = text ?? (action ? parsed() : rv.DraftText || "");
   const who = rv.FromName || rv.FromEmail || "them";
   const send = () => play("approve", item.key, async () => {
-    const { data } = await api.post(`/api/reviews/${item.rid}/decide`, { verb: "approve", final_text: action ? null : value, note: null });
-    if (data?.send_error) throw new Error(data.send_error);
-    return data;
+    return sure(await press(api, item.rid, { verb: "approve", final_text: action ? null : value }, action ? 2 : 1), "sent");      // the one press (press.js)
   });
   const redraft = async () => {
     const out = await play("draft", null, async () => (await api.post(`/api/messages/${item.mid}/reply`,
@@ -156,9 +155,7 @@ function Draft({ item, busy, play }) {
           {co || action ? `✔ ${btn("approve", "action")} · +40` : `✔ ${btn("approve")} · +40`}</Btn>
         {/* scored as answering the card - the game has one move for "you decided it" */}
         {co?.alt && <Btn disabled={!!busy} title={`${co.alt.label} - ${co.alt.then}`} onClick={() => play("approve", item.key, async () => {
-          const { data } = await api.post(`/api/reviews/${item.rid}/decide`, { verb: co.alt.verb, final_text: null, note: null });
-          if (data?.send_error) throw new Error(data.send_error);
-          return data;
+          return sure(await press(api, item.rid, { verb: co.alt.verb }, 2));
         })}>✖ {co.alt.label}</Btn>}
       </Row>
       {!action && item.mid && <>
@@ -282,9 +279,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
   const sendMine = () => play("approve", item.key, async () => {
     const { data } = await api.post(`/api/messages/${item.mid}/reply`, { draft: false });
     if (!data?.reviewId) throw new Error("no draft slot came back - try Draft a reply");
-    const sent = (await api.post(`/api/reviews/${data.reviewId}/decide`, { verb: "approve", final_text: mine, note: null })).data;
-    if (sent?.send_error) throw new Error(sent.send_error);
-    return sent;
+    return sure(await press(api, data.reviewId, { verb: "approve", final_text: mine }), "sent");
   });
   const tell = () => play("answer", item.key, () => api.post(`/api/tasks/${item.tid}/waitroom`, { text: answer })).then((ok) => ok && setAnswer(""));
   const open = (tid) => onOpenTask?.(tid, { start: false });

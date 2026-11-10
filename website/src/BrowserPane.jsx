@@ -5,6 +5,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import api from "./api.js";
+import { failLine, landed, press as pressReview } from "./press.js";
 import { label } from "./buttons.js";
 import { useAgents } from "./ui.jsx";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, mono } from "./theme.jsx";
@@ -359,11 +360,9 @@ function HeldBar({ held: h, onDecided }) {
   const decide = async (verb) => {
     if (busy) return;
     setBusy(verb); setErr("");
-    try {
-      const { data } = await api.post(`/api/reviews/${h.id}/decide`, { verb, final_text: null, note: null, cc: null, anyway: false }, { timeout: 120000 });
-      if (data?.send_error) { setErr(failed(null, data)); setBusy(""); onDecided?.(); return; }
-      onDecided?.();
-    } catch (e) { setErr(failed(e)); setBusy(""); }
+    const o = await pressReview(api, h.id, { verb, cc: null, anyway: false }, 2);       // the one press (press.js)
+    if (!landed(o) && o.kind !== "already") { setErr(failLine(o)); setBusy(""); }
+    if (o.kind !== "error") onDecided?.();
   };
   return (
     <Box data-tq-browser-held={h.id} sx={bar}>

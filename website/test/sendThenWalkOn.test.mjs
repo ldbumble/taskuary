@@ -30,7 +30,7 @@ test("a reply sent from Close out closes the task once the send succeeded; a fai
   // the close rides on onSent, which runs only past the error checks: a send_error sets the error and returns before it
   const decide = dec.slice(dec.indexOf("const decide = async"), dec.indexOf("const release = async"));
   assert.ok(decide.indexOf("setSendErr(replySendFailure(data))") < decide.indexOf("await onSent({ closes"));
-  assert.doesNotMatch(decide.slice(0, decide.indexOf("await api.post")), /onSent|complete/, "nothing closes at the press");
+  assert.doesNotMatch(decide.slice(0, decide.indexOf("await press(api, r.ReviewId,")), /onSent|complete/, "nothing closes at the press");
   const sent = page.slice(page.indexOf("const sent = async"), page.indexOf("// Remind me: put away"));
   // ...through the server's one gate, which keeps it open while anything on it still waits on the owner (a held `git push`, 2026-10-29):
   // the page walks on only when that gate says it closed

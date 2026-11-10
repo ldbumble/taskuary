@@ -3,6 +3,7 @@ import { Box, Button, Typography } from "@mui/material";
 import ReviewDecision from "./ReviewDecision.jsx";
 import { ACCENT2, BORDER, FAINT, INK, label } from "./theme.jsx";
 import api from "./api";
+import { press } from "./press.js";
 import { bulkSendable, slotReviews, slotState, slotTally } from "./taskLifecycle.js";
 
 // The emails that close this task (slots.py, spec 2026-10-05): each one with its own draft, approved on its own; the task
@@ -22,7 +23,7 @@ export default function SlotList({ taskId, checklist = [], reviews = [], onChang
   // one press, the same decide each card's own Approve sends - a refused one stays pending on its card
   const approveAll = async () => {
     setBusy(true);
-    try { for (const r of waiting) await api.post(`/api/reviews/${r.ReviewId}/decide`, { verb: "approve", final_text: null, note: null, cc: null }).catch(() => null); }
+    try { for (const r of waiting) await press(api, r.ReviewId, { verb: "approve", cc: null }); }
     finally { setBusy(false); onChanged?.(); }
   };
   return (

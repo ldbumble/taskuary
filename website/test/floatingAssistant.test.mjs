@@ -67,7 +67,7 @@ test("assistant commentary and owner actions are separate surfaces", () => {
   assert.match(source, /btn\("approve"\)/);          // the words come from buttons.json
   assert.match(source, /btn\("redraft"\)/);
   assert.match(source, />Dismiss<\/Button>/);
-  assert.match(source, /\/api\/reviews\/\$\{r\.ReviewId\}\/decide/);
+  assert.match(source, /press\(api, r\.ReviewId, /);          // the one press (press.js)
   assert.match(source, /\/api\/reviews\/\$\{r\.ReviewId\}\/draft/);
   // The dock's turns are still spoken by Taskuary. The label is now the agent named on the task,
   // and in the dock that name IS "Taskuary" - a work window names the agent doing the work instead.

@@ -44,6 +44,7 @@ import { AGENT_TURN, MESSAGE, instructionsHint } from "./kinds.js";
 import { assignedAgent } from "./agentIdentity.js";
 import { LinkPopups, LocalFiles, Md } from "./md.jsx";
 import { draftState } from "./sendState.js";
+import { failLine, press } from "./press.js";
 import PublishedPages, { FileDialog } from "./PublishedPages.jsx";
 import { Attachments } from "./Attachments.jsx";
 import { placeShown } from "./shownPages.js";
@@ -587,10 +588,11 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
       // as proposed unless they changed the words
       const shown = reviewText(r), typed = edits[r.ReviewId];
       const finalText = r.Kind === "action" ? (typed != null && typed !== shown ? typed : null) : typed ?? shown;
-      const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`, {
-        verb, final_text: verb === "approve" ? finalText : null, note: null,
-      });
-      if (data.send_error) throw new Error(data.send_error);
+      // ...the one press (press.js): one decided in another window is read again, with no "Sent" over it; no answer in time is not a failure
+      const o = await press(api, r.ReviewId, { verb, final_text: verb === "approve" ? finalText : null }, r.Kind === "action" ? 2 : 1);
+      if (o.kind === "already") return void await refresh("");
+      if (o.kind === "error") throw o.thrown;
+      if (o.kind !== "ok") { setError(failLine(o)); if (o.kind === "unknown") await load(); return; }
       const message = verb === "approve"
         ? (r.Kind === "action" ? "Action completed." : `Sent to ${reviewTarget(r)}.`) + (r.TaskId ? ` The task stays open until you ${btn("close")}.` : "")
         : verb === "reject" ? "Action dismissed; nothing was run." : "Marked done; no reply was sent.";

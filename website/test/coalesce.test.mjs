@@ -76,8 +76,8 @@ test("a Send lets go when the decide answers, and after a minute with no answer 
   assert.equal(timedOut({ code: "ERR_CANCELED" }), false);
   assert.equal(timedOut({ response: { status: 500 } }), false);
   const card = read("ReviewDecision.jsx");
-  assert.equal((card.match(/\/decide`,[\s\S]{0,400}?\{ timeout: DECIDE_TIMEOUT \}\);/g) || []).length, 2, "both decide calls carry the timeout");
+  assert.equal((card.match(/const out = await press\(api, (closeout|r)\.ReviewId,/g) || []).length, 2, "both decide calls are the one press, which carries the timeout (onePress.test.mjs)");
   assert.doesNotMatch(card, /await onSent\(\); setBusy\(false\)/, "busy never waits on the re-read after the send");
   assert.equal((card.match(/setBusy\(false\); await onSent\(\{ closes: [^\n]+(\}\); return;|\n\s+said: [^\n]+\}\); return;)/g) || []).length, 2);
-  assert.equal((card.match(/if \(timedOut\(e\)\) onChanged\?\.\(\);/g) || []).length, 2, "a timeout reads the review again, no line of its own");
+  assert.equal((card.match(/if \(!data\) \{ if \(out\.kind === "unknown"\) onChanged\?\.\(\); else setErr\(/g) || []).length, 2, "a timeout reads the review again, no line of its own");
 });

@@ -65,6 +65,6 @@ test("the task page draws a turn's held steps as one HeldSteps card, one Approve
   const page = read("TaskPage.jsx"), card = read("HeldSteps.jsx");
   assert.match(page, /const \{ asks: askCards, past: pressedHeld \} = splitHeld\(allReviews, asks\)/);
   assert.match(page, /g\.held\s*\n?\s*\? <HeldSteps/);
-  assert.match(card, /api\.post\("\/api\/reviews\/steps", \{ ids: c\.waiting, verb \}/);
+  assert.match(card, /pressSteps\(api, c\.waiting, verb\)/);          // the batch door, through the one press (press.js)
   assert.equal((card.match(/data-tq-held-approve/g) || []).length, 1, "one Approve on the card");
 });

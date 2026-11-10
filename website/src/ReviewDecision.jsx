@@ -22,7 +22,7 @@ import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx own
 import { boxText, editAfterRefile, followDraft, useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
-import { DECIDE_TIMEOUT, draftState, failureHead, replySendFailure, reviewDeliveryState, sendFix, timedOut } from "./sendState.js";
+import { DECIDE_TIMEOUT, draftState, failureHead, failureWhy, replySendFailure, reviewDeliveryState, savedSendFailure, sendFix, timedOut } from "./sendState.js";
 import { openAppLink } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { runOperation } from "./taskOps.js";
@@ -172,6 +172,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const [pressed, setPressed] = useState("approve");
   const [err, setErr] = useState("");
   const [sendErr, setSendErr] = useState("");       // approved, but the channel refused it
+  // ...and after a reload the review says so itself (savedSendFailure) - until the owner closes the line, or presses again
+  const [shutErr, setShutErr] = useState(false);
+  useEffect(() => { setShutErr(false); }, [r.ReviewId, r.DecidedAt]);
   const [interrupt, setInterrupt] = useState(null); // PW-239: the click that did not send
   const [compare, setCompare] = useState(null);     // the refreshed draft, shown beside the owner's edit
   // A NEW DRAFT UNDER THE OPEN CARD IS SHOWN (editAfterRefile, 2026-11-04): the Assistant's rewrite landed and an emptied box stayed empty,
@@ -548,7 +551,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     title: btnHint("redraft") }] : [])].map((v) => ({ ...v, card: true })), toRow);
   // A FAILED SEND'S FIX IS A BUTTON ON THE ROW, not directions in the error ("add one under Connections" with nothing to press,
   // 2026-10-17) - and an ordinary row verb, so the Advisor can pick it like any other
-  const fix = sendFix(r, sendErr);
+  const failure = sendErr || (!busy && !shutErr && savedSendFailure(r)) || null;
+  const fix = sendFix(r, failure);
   useVerbs(`fix:${r.ReviewId}`, fix ? [{ id: no("fix"), group: "decide", tone: "s", label: fix.label, title: "Opens where this is fixed",
     run: () => openAppLink(fix.href) }] : [], !!fix && toRow);
 
@@ -617,7 +621,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         {/* a held step says what it does and why it waits, in words - its raw line is under Show the command (the owner, 2026-11-09) */}
         <Typography variant="body2" sx={{ color: INK, fontWeight: 600, overflowWrap: "anywhere" }}>{proposal.lead}</Typography>
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block" }}>{proposal.leadWhy}</Typography>
-      </Box>) : r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
+      </Box>) : r.Reason && !failure && (r.DraftText || !/draft/i.test(r.Reason)) && (   // a failed send's reason is the red line below, once
         <Typography data-tq-review-reason="" variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
       )}
       {meta.kind === "zoho_invoice" && <InvoiceLine meta={meta} />}
@@ -871,12 +875,12 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         );
       })()}
       {said && <Alert severity="success" sx={{ mt: 1 }} onClose={() => setSaid("")}>{said}. Press {btn("approve", "action")} again once the checks pass.</Alert>}
-      {sendErr && (
-        <Alert severity="error" sx={{ mt: 1 }} onClose={() => setSendErr("")}>
-          <b>{failureHead(sendErr, !!proposal)}</b> {sendErr.message}
+      {failure && (
+        <Alert data-tq-send-failed="" severity="error" sx={{ mt: 1 }} onClose={() => { setSendErr(""); setShutErr(true); }}>
+          <b>{failureHead(failure, !!proposal)}</b> {failureWhy(failure)}
           {/* a proposal's failure is the act's own sentence ("The held step failed: ..."): no reply, no draft, nothing to send again */}
-          {(sendErr.unknown || !proposal) && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>
-            {sendErr.unknown ? "Check the original attempt before sending by any other route. A missing receipt will not cause Taskuary to send it again."
+          {(failure.unknown || !proposal) && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>
+            {failure.unknown ? "Check the original attempt before sending by any other route. A missing receipt will not cause Taskuary to send it again."
               : fix ? `The draft stays on the task - ${fix.label} below, then send it again.` : "The draft stays on the task. Correct the delivery problem, then send it again."}
           </Box>}
         </Alert>

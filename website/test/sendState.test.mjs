@@ -11,8 +11,8 @@ test("a proposal's failure stands alone; a reply's still says it was not sent", 
   assert.equal(failureHead(f), "The reply was not sent.");
   assert.equal(failureHead({ ...f, unknown: true }, true), "Delivery has not been confirmed.");
   const dec = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
-  assert.match(dec, /<b>\{failureHead\(sendErr, !!proposal\)\}<\/b> \{sendErr\.message\}/);
-  assert.match(dec, /\{\(sendErr\.unknown \|\| !proposal\) && <Box/);     // no "the draft stays on the task" under an act
+  assert.match(dec, /<b>\{failureHead\(failure, !!proposal\)\}<\/b> \{failureWhy\(failure\)\}/);
+  assert.match(dec, /\{\(failure\.unknown \|\| !proposal\) && <Box/);     // no "the draft stays on the task" under an act
 });
 
 test("reply envelopes preserve exact saved To and CC and distinguish other delivery kinds", () => {
@@ -115,4 +115,26 @@ test("a failed send keeps the place that fixes it - from the answer, and after a
   // a draft that went out, or one that never failed, offers no fix
   assert.equal(sendFix({ DeliveryState: "sent", Deliver: JSON.stringify({ delivery: "sent", fix }) }, null), null);
   assert.equal(sendFix({ Deliver: "{" }, null), null);
+});
+
+// THE AGENT WALK, 2026-11-09: a refused send read in red on the card, and after a reload the same draft stood there with Send and a
+// grey caption - the page had kept the failure only from the press's own answer, while the review held it all along
+test("a send that failed is still said after a reload: the card reads it from the review itself", async () => {
+  const { failureWhy, savedSendFailure } = await import("../src/sendState.js");
+  const fix = { label: "Connect a mailbox", href: "#connections=Email" };
+  const r = { Status: "pending", DeliveryState: "failed", Reason: "Not sent: the mail server refused erin@northwind.example (5.1.1 no such user).",
+    Deliver: JSON.stringify({ delivery: "failed", fix }) };
+  assert.deepEqual(savedSendFailure(r), { message: "the mail server refused erin@northwind.example (5.1.1 no such user).", unknown: false, fix, saved: true });
+  assert.equal(failureHead(savedSendFailure(r)), "The reply was not sent.");
+  assert.equal(failureWhy(savedSendFailure(r)), "The mail server refused erin@northwind.example (5.1.1 no such user).");
+  // an older row that knows its state only from the envelope, and one with no reason kept
+  assert.equal(savedSendFailure({ Status: "pending", Deliver: JSON.stringify({ delivery: "failed" }) }).message, "the send was refused");
+  // nothing failed, it went, the attempt is still open (its own delivery line says so), or the review is decided: no failure to say
+  for (const x of [{}, null, { Status: "pending" }, { Status: "pending", DeliveryState: "sent" }, { Status: "pending", DeliveryState: "unknown" },
+    { Status: "pending", DeliveryState: "failed", DeliveryClaim: "p1" }, { Status: "approved", DeliveryState: "failed" }])
+    assert.equal(savedSendFailure(x), null);
+  const card = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
+  assert.match(card, /savedSendFailure\(r\)/, "the reply's card reads the saved failure");
+  assert.doesNotMatch(card, /\{sendErr && \(/, "and draws one failure, wherever it was read from");
+  assert.match(readFileSync(new URL("../src/assistantCards.jsx", import.meta.url), "utf8"), /savedSendFailure\(mate \|\| rv\)/, "the walk's card reads it too");
 });

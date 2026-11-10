@@ -40,7 +40,7 @@ import { laneMeta } from "./funnelPile.js";
 import { age, ago, plural } from "./timeWords.js";
 import { SECTION, WORD, ideaWord } from "./lanes.js";
 import { kindLabel, AGENT_SHOWN } from "./kinds.js";
-import { sendBlockLine, draftState } from "./sendState.js";
+import { sendBlockLine, draftState, failureHead, failureWhy, savedSendFailure } from "./sendState.js";
 import { blankAsk, blankSpans } from "./blanks.js";
 import { BlankAsk } from "./ReviewDecision.jsx";
 import { openReply, useDraftJob } from "./replyDraft.js";
@@ -782,9 +782,12 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
   const moveTitle = stopped ? "GitHub won't merge it yet" : action && !co ? "run what the agent proposed" : co ? "finish it"
     : rv && !value.trim() && !stale ? "no reply drafted yet" : stale ? "the thread moved on" : `reply to ${replyTo}`;
   const via = SENDS_ON[String(mate?.Channel || rv?.Channel || "").toLowerCase()] || "by email";
+  // a send that failed before this card was drawn is still said on it (sendState.savedSendFailure): the review holds it, not the press
+  const unsent = !busy && savedSendFailure(mate || rv);
   return (
     <CardShell card={card} kicker={(co || card.tid) && blocked ? "can't finish yet" : co || (card.tid && value.trim()) ? READY : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
-      lead={action && !co ? <Lead text={rv?.Subject || card.title} /> : <Story card={card} state={card.summary ? "finished" : undefined} fallback={rv?.Subject} tail />} err={err}>
+      lead={action && !co ? <Lead text={rv?.Subject || card.title} /> : <Story card={card} state={card.summary ? "finished" : undefined} fallback={rv?.Subject} tail />}
+      err={err || (unsent ? `${failureHead(unsent, action && !mate)} ${failureWhy(unsent)}`.trim() : "")}>
       <YourMove title={moveTitle} tone={stopped ? "alert" : null} go={verb} then={then}>
         {/* what GitHub says about this pull request now - why Close out is off, or the red it will merge past */}
         {gh && blocked && <div className="tq-move-say">{capital(gh.reason)}.</div>}

@@ -32,8 +32,21 @@ export function replySendFailure(data) {
   return message ? { message, unknown, ...(fix ? { fix } : {}) } : null;
 }
 
+// THE FAILURE A RELOAD READS (the agent walk, 2026-11-09): the review's own record of a send that did not go (store.finish_review_delivery:
+// DeliveryState 'failed', the reason, the fix in the envelope). The card said it in red only from the press's answer - a refresh left the same
+// draft with Send and a grey caption. Not while an attempt is open or unconfirmed: that state has its own line (reviewDeliveryState)
+export function savedSendFailure(review) {
+  let env = null;
+  try { env = typeof review?.Deliver === "string" ? JSON.parse(review.Deliver) : review?.Deliver; } catch { env = null; }
+  if (review?.Status !== "pending" || review.DeliveryClaim || (review.DeliveryState || env?.delivery) !== "failed") return null;
+  const message = String(review.Reason || "").replace(/^Not sent:\s*/, "").trim() || "the send was refused";
+  return { message, unknown: false, ...(env?.fix?.href ? { fix: env.fix } : {}), saved: true };
+}
+
 // THE FAILURE'S HEADLINE: a reply that did not go says so; a PROPOSAL that failed sent no reply at all - an approved push that failed
 // read "The reply was not sent. it ran and failed: ..." (2026-10-29) - so its own sentence stands alone ("The held step failed: ...")
+// ...and its reason is a sentence of its own after it: "The reply was not sent. the mail server refused..." read as one run-on line
+export const failureWhy = (failure) => String(failure?.message || "").trim().replace(/^./, (c) => c.toUpperCase());
 export const failureHead = (failure, act = false) =>
   failure?.unknown ? "Delivery has not been confirmed." : act ? "" : "The reply was not sent.";
 

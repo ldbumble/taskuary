@@ -2,6 +2,14 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.31 - 2026-11-09
+
+- While the next task loads, a held button is drawn greyed, and live again the moment a press works
+- Every AI card runs the same agent as Claude Code, and a coding task can run on a card
+- The held steps of one turn are one compact card with one Approve, and the card stays in its turn as Approved
+- Mark done and the Advisor never wait behind a rail rebuild while an agent works
+- Every coding picker lists the AI cards beside the CLIs and shows what will actually run
+
 ## 0.3.11.30 - 2026-11-09
 
 - An Undo after a Remove lasts ten seconds and never comes back

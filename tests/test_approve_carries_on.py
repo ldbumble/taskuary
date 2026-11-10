@@ -96,6 +96,22 @@ class EveryYesCarriesOn(unittest.TestCase):
         self.assertFalse(kw.get('as_owner', True)); self.assertIn('pressed Approve', text)
         self.assertFalse(general.follow_up(self.s, self.tid, 'send', said='again'), 'once per answer')
 
+    def test_a_wake_that_never_started_leaves_the_next_press_to_start_it(self):
+        self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The reply is ready - press Send.')
+        tried, told = [], []
+        def start(*a, **kw):
+            tried.append(1)
+            if len(tried) == 1: raise RuntimeError('no AI is connected')
+            return SimpleNamespace(send_prompt=lambda text, **k: told.append(text))
+        with mock.patch.object(general, 'start_session', side_effect=start), mock.patch.object(general, 'handles', return_value=True):
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), 'woke')
+            end = time.time() + 5
+            while self.s.list_comments(self.tid, internal=True)[-1]['CommentId'] in general._WOKEN and time.time() < end: time.sleep(.01)
+            self.assertEqual(general.approved(self.s, self.tid, 'Approve', 'the note was posted'), 'woke', 'the first woke nobody')
+            end = time.time() + 5
+            while not told and time.time() < end: time.sleep(.01)
+        self.assertEqual(len(told), 1); self.assertIn('pressed Approve', told[0])
+
     def test_no_agent_ever_on_it_wakes_nothing(self):
         self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), '')
 

@@ -669,7 +669,9 @@ def follow_up(store, tid, press: str, actor: str = 'owner', said: str = None) ->
     _WOKEN.add(last['CommentId'])
     def go():
         try: start_session(store, int(tid), actor=actor).send_prompt(said or FOLLOW_UP, as_owner=False, echo=False)
-        except Exception as e: logger.warning(f'task {tid}: the follow-up after {press} did not start - {e}')
+        # ...a wake that never started woke nobody: the owner's next press on that answer starts it (it was once per answer even so, and
+        # every later press was silent - the spine audit, 2026-11-09)
+        except Exception as e: _WOKEN.discard(last['CommentId']); logger.warning(f'task {tid}: the follow-up after {press} did not start - {e}')
     threading.Thread(target=go, daemon=True, name=f'follow-up-{tid}').start()
     return True
 # AN APPROVAL WAKES THE AGENT THAT SET IT UP (the owner, 2026-11-09: "when you hit approve the agent continues and says what it did and what

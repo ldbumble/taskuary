@@ -1525,6 +1525,27 @@ def _bulk(store, tid: int, item: dict | None, kind: str, p: dict, text: str, act
     return {'say': say_, 'options': [], 'chips': [], 'decision': {'verb': 'next' if off else 'setting'}, 'did': kind, 'rows': len(out['done'])}
 
 
+def stop_turn(t: int) -> bool:
+    """The x on a task's running turn, the one stop the desk has (the owner, 2026-11-10: "we should have x button for agent to stop in middle
+    of the work"): a general agent's answer stopped (server /assistant/cancel), a coding turn cancelled (/agent/cancel). The session stays."""
+    from . import terminal
+    s = general.session_for(int(t))
+    return bool(s and s.stop()) or terminal.cancel_turn(int(t))
+
+
+def _stop_now(store, tid: int, item: dict | None, t: int | None, actor: str) -> dict:
+    """"stop the agent" typed on the desk STOPS it - through the x's own road (stop_turn) - and says so in one line. Stop and save left the
+    desk (b757c3e0d), so there was no button to light, and the Assistant answered "Stopping it." over an agent it never touched. A typed
+    put-down acts (2026-10-23); this is one. No agent running is said, never pretended."""
+    ref = task_ref(t) if t else ''
+    if not t or not _agent_running(t): say_ = f"No agent is running{' on ' + ref if ref else ''} - nothing to stop."
+    elif stop_turn(t): say_ = f"Stopped the agent on {ref} - type to it to carry on."
+    else: say_ = f"The agent on {ref} did not stop - press the x on its turn."
+    record_related(store, tid, item, 'assistant', say_)
+    stopped = say_.startswith('Stopped')
+    return {'say': say_, 'options': [], 'chips': [], 'decision': None, **({'did': 'agent.stop'} if stopped else {})}
+
+
 def _stop_agents(store, tid: int, item: dict | None, p: dict, text: str, actor: str) -> dict:
     """agents.stop (bulk.stop): the agents the model named - by the refs agents.now or pipe.read printed, or every one running - each by its
     task page's Stop and save, at once on the desk (the owner's words naming the set are the press, as a pipe set's are); on a phone the one
@@ -4022,6 +4043,7 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     tk = operations.KINDS[kind][0]
     if kind == 'agent.answer' and it.get('kind') == 'agent' and it.get('asking') and int(it.get('tid') or 0) == target:
         return _answer_now(store, tid, table, target, str(params.get('text') or text or '').strip(), actor, owner=text)
+    if kind == 'agent.stop': return _stop_now(store, tid, table, target or (int(it['tid']) if (it or {}).get('tid') else None), actor)
     if kind == 'script.start':
         # ...its words ride in: "Wrote it into New" over an empty box was the line saying what it had not done (the owner, 2026-10-29)
         return _new(store, tid, table, 'report', str(params.get('text') or text or '').strip()) if 'report' in str(params.get('name') or '') \
@@ -6406,6 +6428,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                 and continuable(store, int(target_item['tid']))):
             t_ = int(target_item['tid'])
             return _task_writes(store, tid, 'agent.continue', t_, {'note': decision.get('text') or ''}, task_ref(t_), actor, said=text)
+        # ...and "stop the agent" stops it, through the x on its turn - the desk has no Stop and save to light (_stop_now)
+        if verb == 'stop_agent':
+            return _stop_now(store, tid, item, int(target_item['tid']) if target_item and target_item.get('tid') else None, actor)
         if verb in ('coding_agent', 'regular_agent') and (own_job or not target_item):
             # ...with what it found first: "find the mail from Gail" searched, said it was not there, and wrote an agent the hunt - and only
             # "Wrote it into New" was shown, the finding gone (the live sweep, 2026-11-01)

@@ -11415,12 +11415,7 @@ def cancel_task_agent(task_id: int):
     """Stop THIS TURN of a coding session over ACP (acpcoding.py): session/cancel - the conversation stays, and what is typed next carries
     on. A pty's turn is stopped by the key its CLI stops on, Esc - the x on the turn was the one stop left there and did nothing (the owner,
     2026-11-10: "we should have x button for agent to stop in middle of the work"); the session itself ends at /agent/stop."""
-    live = hub_term.session_for(task_id)
-    if not live: return {'stopped': False}
-    if hub_term.is_acp(live): return {'stopped': bool(live.cancel())}
-    if not getattr(live, 'alive', False): return {'stopped': False}
-    live.write('\x1b')
-    return {'stopped': True}
+    return {'stopped': hub_term.cancel_turn(task_id)}
 
 @app.post('/api/tasks/{task_id}/agent/stop')
 def stop_task_agent(task_id: int):

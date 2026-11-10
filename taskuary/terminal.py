@@ -2956,6 +2956,17 @@ def session_for(task_id):
     return next((x for x in mine if x.alive), None) or (max(mine, key=lambda x: x.started) if mine else None)
 
 
+def cancel_turn(task_id) -> bool:
+    """Stop THIS TURN of a task's coding session - the x on its running turn (server /agent/cancel) and the Assistant's "stop the agent"
+    alike: ACP's session/cancel, a pty's Esc, the key its CLI stops on. The session stays and what is typed next carries on."""
+    live = session_for(task_id)
+    if not live: return False
+    if is_acp(live): return bool(live.cancel())
+    if not getattr(live, 'alive', False): return False
+    live.write('\x1b')
+    return True
+
+
 def transcript_for(store, task_id) -> tuple:
     """(text, agent, sid) to wrap a task up from. A session still in memory is read live;
     otherwise the one the last session filed when it ended. Wrapping up must not depend on a

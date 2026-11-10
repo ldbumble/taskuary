@@ -53,7 +53,8 @@ STEPS = [
          reads=3.5),
     Step('add LinkedIn as a connector', None, 'Bringing up the LinkedIn card.\n' + c('connection.create', type='linkedin'), 'open:#connector=linkedin', r'LinkedIn'),
     Step('remind me tomorrow', 'msg:1', 'Putting it away until tomorrow.\n' + c('task.defer', until='tomorrow 9am'), 'light:defer', r'^$'),
-    Step('stop the agent', 'agent:6', 'Stopping it.\n' + c('stop_agent'), 'light:stop_agent', r'^$', live=6),
+    # ...stopped, not lit: the desk has no Stop and save, and the x on its turn is the road (concierge._stop_now, 2026-11-10)
+    Step('stop the agent', 'agent:6', 'Stopping it.\n' + c('stop_agent'), 'did:agent.stop', r'^Stopped the agent on TQ-0006', live=6),
 ]
 
 
@@ -68,6 +69,7 @@ def outcomes(out: dict, reads: list) -> list:
     elif d: o.append(f'decision:{d}')
     if out.get('cleared') is not None: o.append('cleared')
     if out.get('proposal'): o.append(f"proposal:{out['proposal'].get('kind')}")
+    if out.get('did'): o.append(f"did:{out['did']}")
     o += [f'read:{k}' for k in reads]
     o += [f'link:{h}' for h in re.findall(r'\]\((#[^)]+)\)', out.get('say') or '')]
     return o or ['words']
@@ -144,6 +146,7 @@ def _guards(st, live_box):
     from taskuary import concierge, ingest, terminal
     st.enter_context(mock.patch.object(terminal, 'live_sessions', return_value=[]))
     st.enter_context(mock.patch.object(terminal, 'for_task', lambda tid, **k: {'sid': f's{tid}'} if live_box and int(tid) in live_box else None))
+    st.enter_context(mock.patch.object(concierge, 'stop_turn', lambda tid: bool(live_box) and int(tid) in live_box))      # the x's road, never a real session
     st.enter_context(mock.patch.object(ingest, '_spawn'))
     st.enter_context(mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: '{"kind": "report", "why": "scripted"}'))
 

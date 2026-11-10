@@ -196,9 +196,9 @@ CASES = [
       note='no such setting: a task is shared from its own row'),
     Q('settings', 'connect my bank', None, c('setup', text='connect my bank'), 'open:#connector=teller', sort={'kind': 'connection', 'provider': 'teller'}, freq=2),
     # ── agents ──
-    Q('agents', 'stop the agent', 'agent', c('stop_agent'), 'light:stop_agent', freq=4, live=6),
+    Q('agents', 'stop the agent', 'agent', c('stop_agent'), 'did:agent.stop', freq=4, live=6, note='stopped through the x on its turn - no Stop and save to light'),
     Q('agents', 'stop the agent', 'agent', [c('stop_agent'), 'Nothing is running on it now - there is nothing to stop.'], 'words', freq=2,
-      note='no session is running on the task: Stop and save is not on its row'),
+      note='no session is running on the task: nothing is stopped, and it says so'),
     Q('agents', 'continue it', 'agent', [c('agent.continue', ref=T6), 'It has no saved session to pick up - Send to agent starts one.'], 'words', freq=3,
       note='the demo task has no saved session, so Continue is not on its row'),
     Q('agents', 'what is the agent doing?', 'agent', [c('agents.now'), 'It is reconciling the August export.'], 'read:agents.now', freq=4),
@@ -514,7 +514,7 @@ AREA_TASK = [
     Q('task', 'put "reconcile against the bank statement" in the agent box and start it', 'todo',
       [v(op='set', field='what_should_the_agent_do', value='reconcile against the bank statement') + '\n' + v(op='press', button='row:regular_agent')],
       'view:press:row:regular_agent', tools=('words',), view=TASK1V, freq=2, note='Send to agent starts work here and sends nothing out: pressed, not pointed'),
-    Q('task', 'stop the agent', 'agent', c('agent.stop'), 'light:stop_agent', view=TASK6V, freq=3, live=6),
+    Q('task', 'stop the agent', 'agent', c('agent.stop'), 'did:agent.stop', view=TASK6V, freq=3, live=6),
     Q('task', 'send this to the coding agent', 'coding', c('coding_agent', text='fix the census sync when a site has no manager'), 'did:dispatch.prepare',
       freq=3, note="the Agent section's one Send to agent starts either kind"),
     Q('task', 'continue the agent', 'agent', [c('agent.continue'), 'There is no saved session on TQ-0006 to pick up - Send to agent starts a new one.'], 'words',
@@ -1354,6 +1354,7 @@ def _guards(stack, sort=None, live=None, agenda=None):
     stack.enter_context(mock.patch.object(terminal, 'live_sessions', return_value=[{'taskId': int(live), 'sid': f's{live}'}] if live else []))
     # a running session on one task, where the case says so - what Stop and save is drawn by (concierge._agent_running)
     stack.enter_context(mock.patch.object(terminal, 'for_task', lambda tid, **k: {'sid': f's{tid}'} if live and int(tid) == int(live) else None))
+    stack.enter_context(mock.patch.object(concierge, 'stop_turn', lambda tid: bool(live) and int(tid) == int(live)))      # the x's road, never a real session
     stack.enter_context(mock.patch.object(ingest, '_spawn'))
     stack.enter_context(mock.patch.object(ingest, 'ask_later'))     # ...nor the model reading a promoted mail's ask (a hand-off makes its task)
     # ...and no agent starts, nothing is typed into a session: the dispatch door answers as a start would (concierge._start_agent, 2026-11-02),

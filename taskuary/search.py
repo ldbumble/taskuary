@@ -232,6 +232,20 @@ def _words_in(text: str, words) -> bool:
     return all(re.search(r'(?<![^\W_])' + re.escape(_fold(w)), t) for w in words)
 
 
+def _panel_text(p: dict) -> str: return f"{p['title']} {p['group']} {p['words']}"
+
+
+def _panels_beyond(knobs, words, hit) -> list:
+    """A PANEL IS ADDED, NEVER IN PLACE OF A KNOB (2026-11-10): "where do I change my signature" is the Email signature knob, and the hand
+    signature panel beside it took the Assistant's link. `knobs` - (label, text) of the settings the words found - answer first: a panel
+    is left out when one knob has every word the panel has and its label names as many of them as the panel's heading does. So it
+    joins for a word only it has ("password": the vault, "hand signature") or when its heading says more ("saved sign" is Saved
+    sign-ins, not Email signature). `hit(text, [word])` is the caller's own match."""
+    named, has = (lambda t: sum(hit(t, [w]) for w in words)), (lambda t: {w for w in words if hit(t, [w])})
+    covers = lambda p: any(has(t) >= has(_panel_text(p)) and named(l) >= named(p['title']) for l, t in knobs)
+    return [(k, p) for k, p in settings_schema.panels().items() if not covers(p)]
+
+
 def _settings(words) -> list:
     out = []
     for k, m in settings_schema.knobs().items():
@@ -240,8 +254,11 @@ def _settings(words) -> list:
                     'snippet': snippet(m.get('desc') or m.get('help'), words, 120), 'rank': not _words_in(m['label'], words),
                     'href': f"#settings=config&group={quote(m['group'], safe='')}&key={quote(k, safe='')}"})
     # ...and what a section draws as a PANEL, by the words the schema keeps for it: "password" found no saved sign-ins (2026-11-10)
-    for k, p in settings_schema.panels().items():
-        if not _words_in(f"{p['title']} {p['group']} {p['words']}", words): continue
+    found = {h['id'] for h in out}
+    knobs = [(m['label'], f"{m['label']} {m['group']} {m.get('desc') or ''} {m.get('help') or ''}")
+             for k, m in settings_schema.knobs().items() if f'set:{k}' in found]
+    for k, p in _panels_beyond(knobs, words, _words_in):
+        if not _words_in(_panel_text(p), words): continue
         out.append({'type': 'setting', 'id': f'set:{k}', 'title': p['title'], 'where': f"Settings · {p['group']}", 'snippet': '',
                     'rank': not _words_in(p['title'], words), 'href': f"#settings=config&group={quote(p['group'], safe='')}&key={quote(k, safe='')}"})
     return sorted(out, key=lambda h: h.pop('rank'))
@@ -283,7 +300,7 @@ def _app_rows(store) -> list:
     rows += [{'type': 'setting', 'title': m['label'], 'where': f"{places.name('settings')} → {m['group']}", 'rest': f"{m['group']} {m.get('desc') or ''} {m.get('help') or ''} {k}",
               'href': f"#settings=config&group={quote(m['group'], safe='')}&key={quote(k, safe='')}"}
              for k, m in settings_schema.knobs().items() if k not in _UNSHOWN]
-    rows += [{'type': 'setting', 'title': p['title'], 'where': f"{places.name('settings')} → {p['group']}", 'rest': f"{p['group']} {p['words']}",
+    rows += [{'type': 'setting', 'panel': k, 'title': p['title'], 'where': f"{places.name('settings')} → {p['group']}", 'rest': f"{p['group']} {p['words']}",
               'href': f"#settings=config&group={quote(p['group'], safe='')}&key={quote(k, safe='')}"} for k, p in settings_schema.panels().items()]
     mine =[c for c in store.list_connectors()]
     on = {str(c.get('Type') or '') for c in mine if c.get('Active')}
@@ -333,6 +350,11 @@ def places(store, q: str, n: int = 8) -> list:
     score = lambda nt: sum(weight[w] * (3 if _hit(w, nt[0]) else 1 if _hit(w, nt[1]) else 0) for w in words)
     seen = set()      # one row per thing: the catalogue lists a few cards twice, and a place two names for one link
     rows_ = [(nt, r) for nt, r in zip(texts, rows) if not ((r['href'], r['title']) in seen or seen.add((r['href'], r['title'])))]
+    # ...a panel only beside the settings the words found, never in their place (_panels_beyond)
+    hit = lambda t, ws: all(_hit(w, _fold(t)) for w in ws)
+    knobs = [(r['title'], nt[1]) for nt, r in rows_ if r['type'] == 'setting' and not r.get('panel') and score(nt) > 0]
+    beyond = {k for k, _ in _panels_beyond(knobs, words, hit)}
+    rows_ = [(nt, r) for nt, r in rows_ if not r.get('panel') or r['panel'] in beyond]
     # ...and a word that IS a thing's own key - a card's type ("database", "imap"), a document's name ("learned"), a page's ("hub") - names it
     exact = lambda r: r.get('key') in said
     # ...and on a tie the app's own place before a catalogue card that shares its name ("the Hub" is the Hub, not the Company Hub connector)
@@ -341,7 +363,7 @@ def places(store, q: str, n: int = 8) -> list:
                     key=lambda x: (-round(x[0], 6), not x[1].get('boost'), order.get(x[1]['type'], 5), len(x[1]['title'])))
     top = scored[0][0] if scored else 0
     # what is near the best - a weak echo of one common word is no candidate
-    return [{k: v for k, v in r.items() if k not in ('rest', 'boost', 'key')} for s, r in scored[:n] if top > 0 and s >= top * 0.35]
+    return [{k: v for k, v in r.items() if k not in ('rest', 'boost', 'key', 'panel')} for s, r in scored[:n] if top > 0 and s >= top * 0.35]
 
 
 # THE AGENT CHAT, SEARCHED (F28, the owner, 2026-11-08): a word only in a line the owner typed, an agent's answer or a draft it left found nothing.

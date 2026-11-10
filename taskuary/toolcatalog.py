@@ -66,7 +66,7 @@ PURPOSE = {
                                  'main branch", "also check the March file") - `text`: the words, as the owner would type them; `ref` when '
                                  'it is not the one on the table. It goes in when the agent stops at its prompt - never mid-step. With no '
                                  'agent at work nobody hears it: say so'),
-    'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which. Several at once is agents.stop",
+    'agent.stop':               "stop the agent working on a task now - the x on its running turn: the one on the table, or the task `ref` names; never a guess at which. On the desk it stops at once and typing to it carries it on; on a phone it is the yes-or-no that ends its session. Several at once is agents.stop",
     'report.rerun':             'run that report again',
     # THE JOB-IDEAS PASS, NOW (the owner, 2026-11-03: "how do I trigger it now"): the daily pass, started at once off the chat's thread
     'advisor.ideas':            ("the Advisor's pass for ideas for the owner's job, run now instead of waiting for its day - \"look for ideas for "
@@ -440,7 +440,7 @@ _DECIDE = {
                        '"clear ..." - those name a set: pipe.clear. `section`: a rail heading (Tasks, Watching, For later, Reports, '
                        'Advisor, FYI) - "walk me through the reports" starts at that section\'s first row, as a click on its heading does',
     'answer_agent':    'answer the agent waiting on the owner - `text`',
-    'stop_agent':      "save and end the agent's session on the item",
+    'stop_agent':      "stop the agent working on the item now - on the desk the x on its running turn, at once; on a phone the yes-or-no that ends its session",
     'rerun':           'run the report on the table again',
     'report_off':      "pause the report on the table - off its clock - only when its findings are about something the owner said they do not care about",
     'remember':        "keep a fact about how the owner works in their memory - `text`, their words (\"I don't care about the legacy export job any more\" too)",

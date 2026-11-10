@@ -288,7 +288,7 @@ class Term:
         # no arguments to know which agent, task and checkout it is speaking for
         self.pty = (_WinPty if os.name == 'nt' else _UnixPty)(
             argv, cwd, rows, cols, {**terminal_host_env(argv, self.sid), **_bv.env(self.sid),
-                                    **session_env(agent or label, task_id, cwd, sid=self.sid, stranger=mode == 'auto')}, mode == 'auto')
+                                    **session_env(agent or label, task_id, cwd, sid=self.sid, stranger=mode != 'full')}, mode != 'full')
         self.alive = True
         # started LAST, and store comes in through the constructor: a CLI that dies immediately
         # used to reach keep() before the caller had handed the session anywhere to file itself
@@ -1161,9 +1161,10 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         try:
             mode = _origin.launch_mode(store, task_id, cli_named(profile, argv), str(profile.get('cmd') or ''))
             # its stranger file sits in its own folder outside the checkout (R25): added, so reading it never asks
-            sd = str(_origin.stranger_dir(task_id)) if mode == 'auto' else ''
+            sd = str(_origin.stranger_dir(task_id)) if mode != 'full' else ''
         except _origin.Refusal as e: raise _origin.refused(e)
-        if mode == 'auto':
+        if mode == 'look': argv = _clis.readonly_args(cli_named(profile, argv), list(argv))       # its own read-only mode: it reads and answers
+        elif mode == 'auto':
             argv, theme = _take_settings(argv)          # one --settings: the session's own file carries the theme
             # ...and an option straight after it closes --add-dir's list, so the prompt is never read as a folder
             argv = _clis.auto_args(cli_named(profile, argv), list(argv)) + ['--add-dir', sd, '--settings', _origin.session_settings(store, task_id, theme)]
@@ -2714,7 +2715,7 @@ def stranger_now(store, tid, t=None) -> str:
     "STRANGER_NOW when the live session on `tid` (or `t`) runs full and the task now reads as a stranger's - said once on the task - else ''."
     t = t or next((x for x in list(SESSIONS.values()) if getattr(x, 'task_id', None) == tid and getattr(x, 'alive', False)), None)
     # ...a general chat (send_prompt) is no full-tools CLI: its floor is its own (general.py), judged at every turn it takes
-    if not t or not tid or getattr(t, 'mode', 'full') == 'auto' or hasattr(t, 'send_prompt'): return ''
+    if not t or not tid or getattr(t, 'mode', 'full') != 'full' or hasattr(t, 'send_prompt'): return ''
     from . import origin
     try: o = origin.of_task(store, tid)[0]
     except Exception as e: o = 'stranger'; logger.warning(f'task {tid}: could not read who wrote on it, so nothing goes in - {e}')

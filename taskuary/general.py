@@ -2540,11 +2540,11 @@ class GeneralSession:
             from . import selfclose as _sc
             system = f'{system}\n\n{_sc.ASK_LINE}'                     # a question is an event, not prose (PW-225)
             hands = self.pick.startswith('cli:') and full_hands(self.store)
-            # a stranger's task on a CLI with no reviewer runs in that CLI's own read-only mode (origin.looks_only) - it reads and
+            # a stranger's task on a CLI with no reviewer runs in that CLI's own read-only mode (origin.launch_mode 'look') - it reads and
             # answers - where it used to be refused outright with "start it with claude"
             if hands:
                 from . import origin
-                hands = not origin.looks_only(self.store, self.task_id, _cli_of_pick(self.store, self.pick))
+                hands = origin.launch_mode(self.store, self.task_id, _cli_of_pick(self.store, self.pick)) != 'look'
             # ...and with no shell, its to-dos are ticked by a mark in the reply (selfclose.tick_markers), never a command it cannot run
             if not hands and self.store.task_checklist(self.task_id): system = f'{system}\n\n{_sc.TICK_CHAT_LINE}'
             # ...ONE WAY TO WRITE A REPLY (2026-11-09): a session with Taskuary's own tools (agenttools.session_args: Claude and Codex, with
@@ -2848,9 +2848,7 @@ class GeneralSession:
         # An API-backed assistant has no shell, so Hub publishing rides as a private response
         # envelope. Consume it before the response enters history or reaches the browser.
         from . import handbook as hub
-        if hub.enabled(self.store):
-            reply = hub.publish_assistant_entries(self.store, self.task_id, reply, 'assistant')
-        if not reply: reply = 'Saved to the Hub.'
+        if hub.enabled(self.store) and reply: reply = hub.publish_assistant_entries(self.store, self.task_id, reply, 'assistant') or 'Saved to the Hub.'
         # the assistant's own "and that's the job done" (selfclose.CHAT_LINE). The marker is a
         # signal to Taskuary, not prose for the owner, so it comes out of what gets filed and
         # what gets shown - the sentence after it becomes the closing comment.
@@ -3286,7 +3284,8 @@ def _start_line(store, tid, t, text, files, actor, line_id, wid, prepare, kw):
             # every tick of the waiting room's clock (a chat's failed turn keeps its line the same way: send_prompt takes it first)
             answered(tid, every=True)
             store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'], ids={wid})
-            store.add_comment(tid, 'router', 'agent', f"The agent did not start: {' '.join(str(e).split())[:300]}")
+            from .ingest import held_start
+            if not held_start(store, tid, e): store.add_comment(tid, 'router', 'agent', f"The agent did not start: {' '.join(str(e).split())[:300]}")
         raise
     finally:
         if handles(t): answered(tid)

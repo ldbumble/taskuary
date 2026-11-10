@@ -689,6 +689,12 @@ def idle_state(store, tid, st=None) -> dict:
             from .senders import trust_offer
             return {**out('held', f'Waiting for you. {_sentence(said)}' + old, 'held for you - not started'), 'trust': trust_offer(store, tid)}
         return out('held', f'Waiting for you. {_sentence(said)}' + old, 'held for you - not started')
+    # ...and a start refused for a stranger's words since (ingest.held_start) is that same hold, its Trust presses with it - never "couldn't
+    # start" over a Trust nowhere to press (the owner, 2026-11-10: "this is also weird bug?")
+    from .ingest import HOLD_TAG, NOT_STARTED
+    if HOLD_TAG in st.tags and (said := next((str(c['Body']) for c in reversed(store.list_comments(tid) or []) if str(c.get('Body') or '').startswith(NOT_STARTED)), '')):
+        from .senders import trust_offer
+        return {**out('held', f'Waiting for you. {said[len(NOT_STARTED):].strip()}' + old, 'held for you - not started'), 'trust': trust_offer(store, tid)}
     if not auto_code_enabled(store) and (t.get('Kind') or '') == 'coding':
         return out('held', f'Waiting for you. Starting {agent} by itself is switched off, so it waits for you.' + old,
                    'held for you - not started')

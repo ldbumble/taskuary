@@ -20,16 +20,18 @@ def test_owner_and_trusted_work_launch_full():
     s = MemoryStore(); t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
     assert origin.launch_mode(s, t, 'codex') == 'full' and origin.launch_mode(s, t, 'claude') == 'full'
 
-def test_a_stranger_s_task_runs_auto_on_claude_and_is_refused_elsewhere():
+def test_a_stranger_s_task_runs_auto_on_claude_reads_only_where_a_cli_can_and_is_refused_elsewhere():
+    """The owner, 2026-11-10 ("this is also weird bug?"): a monitor's task on a CLI with no reviewer was refused outright, "couldn't start". A
+    CLI with a read-only mode of its own (clis.READONLY) reads and answers in it; only one with neither is refused, in words that name the move."""
     s = MemoryStore(); t = _stranger(s)
-    assert origin.launch_mode(s, t, 'claude') == 'auto'
-    with pytest.raises(origin.Refusal, match="no built-in reviewer") as e: origin.launch_mode(s, t, 'gemini')
-    assert 'claude' not in str(e.value)          # no claude is connected here, so the refusal never offers one
+    assert origin.launch_mode(s, t, 'claude') == 'auto' and origin.launch_mode(s, t, 'gemini') == 'look' and origin.launch_mode(s, t, 'codex') == 'look'
+    with pytest.raises(origin.Refusal, match="Trust them if you know who wrote it") as e: origin.launch_mode(s, t, 'copilot')
+    assert 'claude' not in str(e.value) and 'reviewer' not in str(e.value)     # never another tool, never our jargon
 
-def test_an_old_claude_is_refused_stranger_work(monkeypatch):
+def test_an_old_claude_reads_only_on_stranger_work(monkeypatch):
     s = MemoryStore(); t = _stranger(s)
     monkeypatch.setattr(origin, '_claude_version', lambda cmd='claude': (2, 1, 200))
-    with pytest.raises(origin.Refusal, match='2.1.295'): origin.launch_mode(s, t, 'claude')
+    assert origin.launch_mode(s, t, 'claude') == 'look'          # a reviewer too old to refuse is no reviewer: its read-only mode
 
 def test_an_old_claude_does_not_touch_owner_work(monkeypatch):
     s = MemoryStore(); t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')

@@ -383,13 +383,14 @@ def test_a_strangers_coding_session_on_claude_keeps_its_terminal_and_its_floor(f
     assert a[a.index('--mcp-config') + 1].endswith(f'TQ-{t}.stranger.mcp.json')   # ...the owner's harmless tools only (agenttools.STRANGER_TOOLS)
 
 
-def test_a_strangers_coding_session_on_a_cli_with_no_reviewer_starts_nowhere(floor):
-    "codex has no reviewer (clis.AUTO): a stranger's task is refused - no pty, and no ACP session either."
+def test_a_strangers_coding_session_on_a_cli_with_no_reviewer_reads_only_and_never_over_acp(floor):
+    "codex has no reviewer (clis.AUTO): a stranger's task runs in its read-only sandbox (clis.READONLY) on the pty's floor - never ACP."
     s, t, repo = floor
     s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'codex', 'acp_cmd': FAKE, 'cwd': str(repo)}))
-    with pytest.raises(ValueError, match='no built-in reviewer'):
+    with mock.patch.object(terminal, 'Term') as T:
         terminal.open_session(s, 'coding', t, None, str(repo), 32, 110, 'owner', seed_fn=lambda here: 'look')
-    assert not terminal.SESSIONS
+    argv = [str(x) for x in T.call_args.args[0]]
+    assert T.call_args.kwargs['mode'] == 'look' and argv[argv.index('--sandbox') + 1] == 'read-only' and '--dangerously-bypass-approvals-and-sandbox' not in argv
 
 
 @pytest.mark.parametrize('mode', ['full', 'auto', 'look', ''])

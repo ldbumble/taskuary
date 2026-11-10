@@ -69,10 +69,12 @@ def test_a_resumed_stranger_pane_stays_in_auto_mode(tmp_path):
     argv, kw = _pane(s, t, tmp_path, resume='abc')
     assert '--dangerously-skip-permissions' not in argv and 'auto' in argv and kw['mode'] == 'auto'
 
-def test_a_stranger_s_task_on_a_cli_with_no_reviewer_is_refused(tmp_path):
+def test_a_stranger_s_task_on_a_cli_with_no_reviewer_reads_only_and_one_with_neither_is_refused(tmp_path):
     s = _store('gemini', 'g'); t = _stranger(s)
-    with pytest.raises(ValueError, match="no built-in reviewer, so it does not run a stranger's task"):
-        terminal.open_session(s, 'g', task_id=t, cwd=str(tmp_path))
+    argv, kw = _pane(s, t, tmp_path, agent='g')
+    assert kw['mode'] == 'look' and '--yolo' not in argv               # its own read-only mode (clis.READONLY), a stranger's env
+    s = _store('copilot', 'g'); t = _stranger(s)
+    with pytest.raises(ValueError, match="Trust them if you know who wrote it"): terminal.open_session(s, 'g', task_id=t, cwd=str(tmp_path))
 
 def test_an_owner_task_on_that_cli_still_starts(tmp_path):
     s = _store('gemini', 'g'); t = _owner(s)
@@ -158,9 +160,9 @@ def test_an_owner_s_headless_run_is_unchanged():
     assert [x for i, x in enumerate(a) if x not in TOOLBOX and not (i and a[i - 1] in TOOLBOX)] == (base.get('args') or preset_args('claude'))
     assert {k: v for k, v in mine.items() if k != 'args'} == {k: v for k, v in base.items() if k != 'args'}
 
-def test_a_stranger_s_headless_run_on_a_cli_with_no_reviewer_is_refused():
-    s = _store('gemini'); t = _stranger(s)
-    with pytest.raises(ValueError, match='no built-in reviewer'): llm.make_cli_llm(s, 'coding', cli_tools=True, task_id=t)
+def test_a_stranger_s_headless_run_on_a_cli_with_neither_mode_is_refused():
+    s = _store('copilot'); t = _stranger(s)
+    with pytest.raises(ValueError, match='Trust them'): llm.make_cli_llm(s, 'coding', cli_tools=True, task_id=t)
 
 def test_the_classifier_road_ignores_the_task():
     s = _store('gemini'); t = _stranger(s)
@@ -304,13 +306,19 @@ def test_a_stranger_s_line_reaches_only_an_auto_session(monkeypatch, mode):
     ingest._hand_to_agent(s, {'answer_to_agent': 'auto'}, t, {'from_email': 'someone@vendor.example'}, 'router')
     assert typed == []
 
-def test_an_auto_start_that_is_refused_says_so_on_the_task_and_does_not_retry(monkeypatch, tmp_path):
-    s = _store('gemini'); t = _stranger(s); s.set_setting('default_brain', 'gemini', 'owner')     # the coding brain is the CLI, not the profile
-    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'gemini', 'cwd': str(tmp_path)}))   # a folder of its own: the checkout is not asked
+def test_an_auto_start_that_is_refused_is_held_never_failed(monkeypatch, tmp_path):
+    """The owner, 2026-11-10: a refused start read "couldn't start" with a Trust press nowhere. It is the stranger hold - said once on the
+    task (No agent started: ...), HOLD_TAG on it, nothing queued to retry - and Trust is the way on."""
+    s = _store('copilot'); t = _stranger(s); s.set_setting('default_brain', 'copilot', 'owner')     # the coding brain is the CLI, not the profile
+    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'copilot', 'cwd': str(tmp_path)}))   # a folder of its own: the checkout is not asked
     monkeypatch.setattr(blackboard, 'drain_later', lambda *a, **k: None)
     with mock.patch.object(terminal, 'Term'), mock.patch.dict(terminal.SESSIONS, {}, clear=True): ingest._auto_code(s, t)   # never raises into the poller
-    said = ' '.join(c['Body'] for c in s.list_comments(t))
-    assert 'no built-in reviewer' in said and 'Start fails the same way until it is fixed' in said and 'try again' not in said
+    said = [c['Body'] for c in s.list_comments(t)]
+    assert [x for x in said if x.startswith('No agent started:') and 'Trust them' in x] and not [x for x in said if "couldn't start" in x or 'fails' in x]
+    assert s.task_has_tag(t, ingest.HOLD_TAG) and not s.get_dispatch(t)
+    from taskuary import funnel
+    idle = funnel.idle_state(s, t)                   # ...the task's one sentence, with the Trust presses its held box draws (senders.trust_offer)
+    assert idle['kind'] == 'held' and idle['line'].startswith('Waiting for you.') and 'Trust them' in idle['line'] and idle.get('trust')
 
 def test_release_all_wakes_a_held_permit_with_a_deny():
     s = MemoryStore(); t = _stranger(s); out = []

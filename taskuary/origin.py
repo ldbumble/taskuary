@@ -305,29 +305,23 @@ def _claude_version(cmd: str) -> tuple:
     return _ver.get(argv, ())
 
 def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
-    """'full' (today's launch, untouched) or 'auto' (the CLI's reviewer); raises Refusal when a stranger's task cannot run safely.
+    """'full' (today's launch, untouched), 'auto' (the CLI's reviewer) or 'look' (its read-only mode); raises Refusal when a stranger's task
+    cannot run safely.
     `cmd` is the profile's own command, so the version read is the binary that will launch."""
     from . import clis
     if not tid or of_task(store, tid)[0] != 'stranger': return 'full'
     cli = clis._base(cli)
-    if cli not in clis.AUTO: raise Refusal(no_reviewer(store))
-    if cli == 'claude' and _claude_version(cmd or cli) < MIN_CLAUDE:      # `cli` IS claude here - the CLI's own name
-        raise Refusal("a stranger's task needs Claude Code 2.1.295 or later (its hooks must refuse when Taskuary cannot answer)")
-    return 'auto'
+    # ...`cli` IS claude in the version check - the CLI's own name; a reviewer too old to refuse is no reviewer
+    if cli in clis.AUTO and not (cli == 'claude' and _claude_version(cmd or cli) < MIN_CLAUDE): return 'auto'
+    # ...AND A CLI WITH NO REVIEWER READS AND ANSWERS IN ITS OWN READ-ONLY MODE (clis.READONLY), on every road - a coding pane's start was refused
+    # outright, "couldn't start" over a task its chat could have read (the owner, 2026-11-10: "this is also weird bug?")
+    if cli in clis.READONLY: return 'look'
+    raise Refusal(no_reviewer(store))
 
 def no_reviewer(store) -> str:
     """Why a stranger's task cannot run with this CLI's tools, and the way on: the owner's word on the sender. It never names
     another tool (the owner, 2026-10-22: "never suggest another coding tool") - it once named claude even to a Codex-only home."""
-    return ("this tool has no built-in reviewer, so it does not run a stranger's task with its tools. Its chat can still read and "
-            "answer, or press Trust them if you know who wrote it")
-
-
-def looks_only(store, tid, cli: str) -> bool:
-    """A stranger's task on a CLI with no reviewer of its own, but a read-only mode it does have (clis.READONLY - Codex's read-only
-    sandbox): the general agent runs it there, looking and answering, rather than not at all."""
-    from . import clis
-    cli = clis._base(cli)
-    return bool(tid) and cli not in clis.AUTO and cli in clis.READONLY and of_task(store, tid)[0] == 'stranger'
+    return "on a stranger's task this AI cannot be kept to only reading their words, so it does not start - Trust them if you know who wrote it"
 
 
 def stranger_path(tid: int):

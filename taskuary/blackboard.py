@@ -441,6 +441,10 @@ def record_failure(store, tid: int, err, agent: str = '', label: str = 'The agen
     """One failed start, wherever it happened - the queue drain or a direct auto-start: the attempt is
     counted on the queue row (made if the task was not queued yet), the owner reads what happened and
     what comes next, and the retry is scheduled rather than left to an unrelated session ending."""
+    # ...A START A STRANGER'S WORDS MAY NOT HAVE IS HELD, NEVER FAILED (the owner, 2026-11-10: "this is also weird bug?" - "couldn't start" over
+    # a monitor's task, naming a Trust press that was nowhere): the task's one hold, said once, its Trust the way on (ingest.not_started)
+    from .ingest import held_start
+    if held_start(store, tid, err): return None
     if not store.get_dispatch(tid): store.enqueue_dispatch(tid, None, agent, 'start failed - retrying')
     row = store.dispatch_failed(tid, str(err), is_permanent(err), BACKOFF, MAX_ATTEMPTS)
     if not row: return None

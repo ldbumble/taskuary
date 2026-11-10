@@ -2267,6 +2267,14 @@ def not_started(store, tid, why) -> None:
     if (last or {}).get('Body') != line: store.add_comment(tid, 'router', 'agent', line)
 
 
+def held_start(store, tid, err) -> bool:
+    "A start refused for a stranger's words (origin.Refusal) held as the stranger hold is (not_started) - never a failure to retry. True when it was."
+    from . import origin
+    if not isinstance(err, (origin.Refusal, origin.RefusedForStranger)): return False
+    store.clear_dispatch(tid); not_started(store, tid, senders._said(str(err)[:1].upper() + str(err)[1:], stranger=True))
+    return True
+
+
 # A REPLY THAT NEEDS AN AGENT GETS ONE (the owner, 2026-10-28: "if it needs an agent, even if joining a reply task, start an agent").
 # A reply task only ever ran the tool-less writer; a later mail on its thread that triage judged work for an agent joined it, its kind and
 # repository were dropped, and the writer drafted "I have to look into it and will send that separately". Now that line starts the agent

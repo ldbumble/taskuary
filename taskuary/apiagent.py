@@ -392,7 +392,7 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
     TOOLBOX[(tid, sid)] = {t['function']['name'] for t in own}
     (STRANGERS.add if stranger else STRANGERS.discard)((tid, sid))
     # ...and a CLI's own hands where the owner gave them (general.full_hands: 'look things up only' reads, never writes or runs). A stranger's
-    # task gets none of them: its CLI runs read-only on its words alone (origin.looks_only)
+    # task gets none of them: its CLI runs read-only on its words alone (origin.launch_mode 'look')
     mine = [] if stranger else [*(BROWSER if browser else []), *FILES, *WEB, *((WRITE + SHELL) if hands else [])]
     out = own + mine + ([] if 'show' in TOOLBOX[(tid, sid)] else [SHOW])
     OFFERED[(tid, sid)] = {t['function']['name'] for t in out}

@@ -50,7 +50,7 @@ test("picking a section scrolls to it - it does not swap the page out", () => {
   const at = src.indexOf("const goTo = useCallback");
   assert.notEqual(at, -1);
   const go = src.slice(at, at + 420);
-  assert.ok(go.includes("setJump(section ? secId(pg, section) : pageId(pg))"),
+  assert.ok(go.includes("setJump(at || (section ? secId(pg, section) : pageId(pg)))"),
     "a section asks for its anchor - and so does a page, because a page is an anchor too now");
   assert.ok(!/window\.scrollTo\(\{ top: 0/.test(src),
     "nothing jumps to the top of the document: a rail entry is a place in it, not a page that replaces it");
@@ -87,7 +87,8 @@ test("a search hit reads like the rail and lands on the same anchor", () => {
   assert.match(src, /crumb: `Configuration → \$\{meta\(s\.Name\)\.group\}`/, "a knob says which section holds it");
   assert.match(src, /go: \(\) => \{ setQ\(""\); onJump\("config", meta\(s\.Name\)\.group\); \}/,
     "and clicking it scrolls there, rather than dropping you at the top of the page");
-  assert.match(src, /crumb: `\$\{PAGES\[pg\]\.title\} → \$\{n\}`/, "the sections themselves are searchable");
+  // the sections themselves are searchable - their crumb is built in settingsSearch.js (settingsSearch.test.mjs)
+  assert.match(src, /\.\.\.placeHits\(q, \{ schema, sections: SECTIONS,/, "the sections themselves are searchable");
   assert.ok(!/crumb: "Agent memory"/.test(src), "one vocabulary: the crumb is the rail's own name for the page");
 });
 

@@ -58,6 +58,15 @@ class SchemaTests(unittest.TestCase):
         view = (ROOT / 'website' / 'src' / 'SettingsView.jsx').read_text(encoding='utf-8')
         self.assertNotIn('m.type === "profile"', view); self.assertNotIn('profileNames', view)
 
+    def test_the_top_search_finds_a_panel_by_what_it_holds(self):
+        """The saved sign-ins are a panel, not a knob: "password" and "vault" found nothing in the top search (2026-11-10)."""
+        from taskuary import search
+        for q in ('password', 'vault', 'saved sign-ins', 'login'):
+            hrefs = [h['href'] for h in search._settings(q.split())]
+            self.assertIn('#settings=config&group=Agent%20permissions&key=panel%3Asignins', hrefs, q)
+        for k, p in settings_schema.panels().items():
+            self.assertIn(p['group'], settings_schema.GROUPS, k)
+
 
 if __name__ == '__main__':
     unittest.main()

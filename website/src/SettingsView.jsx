@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { refreshCapabilities, useCapabilities } from "./capabilities.js";
 import { nothingMatches } from "./searchHits.js";
+import { matches, placeHits } from "./settingsSearch.js";
 import { placeName } from "./words.js";
 import { focusPlace, openAppLink, ownerHref } from "./appLinks.js";
 import {
@@ -555,13 +556,13 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
 
   // Deep search: every hit knows the page and the section it lives in, and scrolls there.
   // Sections lead - they are the rail's own entries, and a search for a place should offer the place.
-  const hit = (...parts) => parts.join(" ").toLowerCase().includes(q.toLowerCase());
+  const hit = (...parts) => matches(q, ...parts);
   const results = !q ? [] : [
     // the sections themselves, under the same path the rail draws - typing "display" should offer
-    // the section, not only the three knobs that happen to sit in it (the owner, 2026-09-18)
-    ...Object.entries(SECTIONS).flatMap(([pg, names]) => names.filter((n) => hit(n, PAGES[pg].title))
-      .map((n) => ({ key: `s${pg}${n}`, label: n, crumb: `${PAGES[pg].title} → ${n}`, section: true,
-        go: () => { setQ(""); onJump(pg, n); } }))),
+    // the section, not only the three knobs that happen to sit in it (the owner, 2026-09-18) - and the panels, by what they hold
+    ...placeHits(q, { schema, sections: SECTIONS, pages: Object.fromEntries(NAV.map((k) => [k, PAGES[k]])) })
+      .map((h) => ({ ...h, section: !h.knob,
+        go: () => { setQ(""); onJump(h.page, (SECTIONS[h.page] || []).includes(h.section) ? h.section : "", h.knob ? secId("config", h.knob) : ""); } })),
     ...settings.filter((s) => { if (hidden(s.Name)) return false; const m = meta(s.Name); return hit(s.Name, s.Description, m.label, m.desc, m.help, m.group); })
       .map((s) => ({ key: `k${s.Name}`, label: meta(s.Name).label, crumb: `Configuration → ${meta(s.Name).group}`,
         go: () => { setQ(""); onJump("config", meta(s.Name).group); } })),
@@ -744,15 +745,18 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   // scroll nowhere and highlight nothing. The rail cannot work this out - the rows are here.
   const rowsOf = (g) => settings.filter((s) => !hidden(s.Name) && meta(s.Name).group === g
     && !(panelOk && PANEL_OWNED.has(s.Name)));
+  // A PANEL IS A PLACE SEARCH CAN LAND ON: each under its id in settings_schema.json `panels`, which holds the words it is found by
+  // (settingsSearch.js) - the id is its anchor and, as a knob, what #settings=config&group=..&key=<id> scrolls to
+  const panel = (k, el) => <Box key={k} id={secId("config", k)} data-tq-knob={k} sx={{ scrollMarginTop: `${SCROLL_TOP}px` }}>{el}</Box>;
   const panels = {
-    "How mail is sorted": <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />,
-    "Agent permissions": <AgentPermissions />,
+    "How mail is sorted": panel("panel:aidefaults", <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />),
+    "Agent permissions": panel("panel:agentperms", <AgentPermissions />),
   };
   // ...and what a section lists UNDER its knobs: the share links still open sit below the switch that allows them
   const after = {
-    Sharing: <SharedLinks />,
-    Replies: <HandSignature />,              // the signature forms are signed with sits beside the one under the email
-    "Agent permissions": <><SavedSignins /><SendFilter /></>,
+    Sharing: panel("panel:sharedlinks", <SharedLinks />),
+    Replies: panel("panel:handsig", <HandSignature />),              // the signature forms are signed with sits beside the one under the email
+    "Agent permissions": <>{panel("panel:signins", <SavedSignins />)}{panel("panel:sendfilter", <SendFilter />)}</>,
   };
   // no coding tool connected: the Coding agent section has nothing to set (capabilities.js)
   // ...and the phone's knobs are Phone & chats' (the owner, 2026-11-06: "it's not clear where that is"), never a Configuration group too
@@ -1102,10 +1106,11 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     setDocSel(sel.action ? { ...sel, n: Date.now() } : sel);
     setJump(pageId("docs"));
   }, []);
-  const goTo = useCallback((pg, section) => {
+  // `at`: a place inside the section to land on instead of its heading - a panel a search found by what it holds
+  const goTo = useCallback((pg, section, at = "") => {
     setQ(""); setPage(pg);
     setHere(section || "");
-    setJump(section ? secId(pg, section) : pageId(pg));
+    setJump(at || (section ? secId(pg, section) : pageId(pg)));
   }, []);
   // LANDING ONCE IS NOT LANDING. The heading exists long before the page has stopped growing under
   // it - the AI panel fetches its brains, the rows arrive, the audit log paints - and every one of
@@ -1207,7 +1212,14 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     const knobsIn = (g) => Object.values(schema.knobs || {}).filter((k) => k.group === g).length;
     // SEARCH, as the tab had it: a setting you half remember is found by its words, and opens the group it lives in
     const needle = about ? "" : q.trim().toLowerCase();
-    const hits = needle ? Object.entries(schema.knobs || {}).filter(([k, m]) => `${k} ${m.label || ""} ${m.desc || ""}`.toLowerCase().includes(needle)) : [];
+    const hits = needle ? Object.entries(schema.knobs || {}).filter(([k, m]) => matches(needle, k, m.label || "", m.desc || "")) : [];
+    // ...and THE PLACES lead: a section by its name, a page by its title, a panel by what it holds (settingsSearch.js) - "agent
+    // permissions" found nothing here, nor did "password" the saved sign-ins under it (the owner, 2026-11-10)
+    const cfgShown = GROUPS.filter((g) => g !== PHONE_GROUP && knobsIn(g) && (g !== "Coding agent" || canCode));
+    const places = needle ? placeHits(needle, { schema, sections: { config: cfgShown, [PHONE_PAGE]: [PHONE_GROUP], audit: AUDIT_SECTIONS },
+      pages: Object.fromEntries(mine.filter((k) => PAGES[k]).map((k) => [k, PAGES[k]])) })
+      .map((h) => (h.page === "config" ? { key: h.section, title: h.label, sub: h.crumb, section: "config", knob: h.knob || "" }
+        : { key: h.page, title: h.label, sub: h.crumb, section: h.page })) : [];
     // DOCS IS A SHELF OF FILES, not one page (the owner, 2026-09-29: "I don't see the rest of the docs ... we need sub
     // settings to see all the files soul.md/counsel"): the same tree the tab's rail drew - the operator documents, the
     // profiles, the playbooks and their New / Manage entries, How it works - each a card that opens that document
@@ -1225,10 +1237,10 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     }).filter((c) => (SHELF[section] || []).includes(c.shelf));
     // ...a hit keeps the knob it found: it opened its group at the top, the setting itself somewhere below (the 2026-10-19 UI walk)
     // ...a phone knob opens Phone & chats, where its group is drawn now
-    const cards = needle ? hits.map(([k, m]) => (m.group === PHONE_GROUP ? { key: PHONE_PAGE, title: m.label || k, sub: `${PAGES[PHONE_PAGE].title} · ${m.desc || ""}`, section: PHONE_PAGE, knob: k }
-      : { key: m.group, title: m.label || k, sub: `${m.group} · ${m.desc || ""}`, section: "config", knob: k }))
+    const cards = needle ? [...places, ...hits.map(([k, m]) => (m.group === PHONE_GROUP ? { key: PHONE_PAGE, title: m.label || k, sub: `${PAGES[PHONE_PAGE].title} · ${m.desc || ""}`, section: PHONE_PAGE, knob: k }
+      : { key: m.group, title: m.label || k, sub: `${m.group} · ${m.desc || ""}`, section: "config", knob: k }))]
       // ...a group the schema puts nothing in is not a card: "Other" said "its own panel" over an empty page once strays stopped drawing
-      : section === "config" ? GROUPS.filter((g) => g !== PHONE_GROUP && knobsIn(g) && (g !== "Coding agent" || canCode)).map((g) => ({ key: g, title: g, sub: `${knobsIn(g)} settings` }))
+      : section === "config" ? cfgShown.map((g) => ({ key: g, title: g, sub: `${knobsIn(g)} settings` }))
       : SHELF[section] ? docCards.filter((c) => c.key !== "d:learned")
       : section === "memory" ? [{ key: "memory", node: <MemoryLines /> }]
       : section ? [{ key: section, title: PAGES[page].title, sub: PAGES[page].desc }] : [];

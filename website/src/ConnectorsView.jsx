@@ -66,6 +66,7 @@ import ReasonPanel from "./ReasonNetwork.jsx";
 import { DESKTOP_HOW } from "./newTask.js";
 import { openHelp, sayEarlier, viewResult } from "./pageView.js";
 import { READ_META, READ_TYPES } from "./apiReads.js";
+import schema from "../../taskuary/settings_schema.json";   // the saved sign-ins' search words, the ones Settings finds the vault by
 
 /* ── Get AI to set it up: THE ASSISTANT, IN THE CHAT (the owner, 2026-10-30: "don't you think this sort of ai troubleshooting should go
    on in the assistant. it's more intuitive and it will know if you change something in the screen"). The button is the card's door to
@@ -2342,7 +2343,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
        the vault's own list and form (SavedSignins), the same one Settings > Agent permissions shows */
     { title: "Sign-ins", note: "Sites an agent signs into in its browser. Taskuary types a saved sign-in into the site's own page; the agent never sees it.",
       cards: [{ key: "signins", title: "Saved sign-ins", guide: true, desc: "Add or remove the sign-ins Taskuary types for your agents",
-        haystack: "sign in signin sign-in login log in password vault saved credentials user name site portal",
+        haystack: schema.panels["panel:signins"].words,
         go: () => setOpen({ kind: "signins" }) }] },
     { title: "Developer", cards: [...channelCards(["github", "gitlab", "azdo", "bitbucket", "sentry", "pagerduty"]), ...catalogCards("Developer")] },
     { title: "Project management", cards: [...channelCards(["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion",

@@ -176,5 +176,6 @@ test("no stored key without a schema entry is drawn", async () => {
                    "review_task_backfilled", "seeded_report_owner_healed", "some_future_flag"]) assert.equal(hidden(k), true, k);
   for (const k of Object.keys(KNOBS).filter((k) => !k.endsWith("_seeded") && !k.startsWith("owner_"))) assert.equal(hidden(k), false, k);
   // ...and Configuration's list offers no card for a group with nothing in it: Other read "its own panel" over an empty page
-  assert.match(src, /section === "config" \? GROUPS\.filter\(\(g\) => g !== PHONE_GROUP && knobsIn\(g\) &&/);
+  assert.match(src, /const cfgShown = GROUPS\.filter\(\(g\) => g !== PHONE_GROUP && knobsIn\(g\) &&/);
+  assert.match(src, /section === "config" \? cfgShown\.map\(/);
 });

@@ -84,7 +84,7 @@ test("the cards that carry a result register Share; the hook is documented for a
 
 test("Settings lists the open links under the switch, each with Revoke", () => {
   const s = src("SettingsView.jsx");
-  assert.match(s, /Sharing: <SharedLinks \/>/);
+  assert.match(s, /Sharing: panel\("panel:sharedlinks", <SharedLinks \/>\)/);
   assert.match(src("SharedLinks.jsx"), /api\.delete\(`\/api\/shares\/\$\{id\}`\)/);
 });
 

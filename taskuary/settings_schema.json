@@ -15,6 +15,21 @@
     "ai_route_strong_cap",
     "phone_assistant"
   ],
+  "_panels": "What a section draws as a PANEL rather than as knobs, by the words a person would type for it - search had only the knobs to read, so the saved sign-ins were found by no word at all (the owner, 2026-11-10: \"don't see the vault settings either for saved passwords. where is it?\"). SettingsView wraps each panel under its id and a search hit scrolls to it; search.py offers the same rows in the top search; Connections' Saved sign-ins card reads its words from here. `title` is the panel's own heading, `group` the Configuration section it sits in.",
+  "panels": {
+    "panel:aidefaults": {"title": "Which AI does what, and on which model", "group": "How mail is sorted",
+      "words": "ai defaults which ai model models brain brains triage assistant drafter judge provider claude codex api key strong model effort"},
+    "panel:handsig": {"title": "Your signature", "group": "Replies",
+      "words": "hand signature handwritten signature sign forms draw signature consent form permission slip"},
+    "panel:sharedlinks": {"title": "Links open now", "group": "Sharing",
+      "words": "shared links share links open links revoke link public link who has the link"},
+    "panel:agentperms": {"title": "What agents may do in each connected system", "group": "Agent permissions",
+      "words": "agent permissions authority read only read and write what agents may do connection access off for agents"},
+    "panel:signins": {"title": "Saved sign-ins", "group": "Agent permissions",
+      "words": "saved sign-ins sign in signin sign-in login log in password passwords vault credentials user name site portal"},
+    "panel:sendfilter": {"title": "Your own tools that send", "group": "Agent permissions",
+      "words": "tools that send send filter mcp servers connectors claude.ai connectors leave out keep tool sending email post"}
+  },
   "groups": [
     "How mail is sorted",
     "Replies",

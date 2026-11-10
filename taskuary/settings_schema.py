@@ -15,6 +15,7 @@ def _load() -> dict: return json.loads(_PATH.read_text(encoding='utf-8'))
 
 def knobs() -> dict: return _load()['knobs']
 def panel_owned() -> list: return _load()['panel_owned']
+def panels() -> dict: return _load().get('panels', {})
 GROUPS = _load()['groups']
 
 

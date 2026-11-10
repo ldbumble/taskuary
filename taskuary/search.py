@@ -239,6 +239,11 @@ def _settings(words) -> list:
         out.append({'type': 'setting', 'id': f'set:{k}', 'title': m['label'], 'where': f"Settings · {m['group']}",
                     'snippet': snippet(m.get('desc') or m.get('help'), words, 120), 'rank': not _words_in(m['label'], words),
                     'href': f"#settings=config&group={quote(m['group'], safe='')}&key={quote(k, safe='')}"})
+    # ...and what a section draws as a PANEL, by the words the schema keeps for it: "password" found no saved sign-ins (2026-11-10)
+    for k, p in settings_schema.panels().items():
+        if not _words_in(f"{p['title']} {p['group']} {p['words']}", words): continue
+        out.append({'type': 'setting', 'id': f'set:{k}', 'title': p['title'], 'where': f"Settings · {p['group']}", 'snippet': '',
+                    'rank': not _words_in(p['title'], words), 'href': f"#settings=config&group={quote(p['group'], safe='')}&key={quote(k, safe='')}"})
     return sorted(out, key=lambda h: h.pop('rank'))
 
 
@@ -278,7 +283,9 @@ def _app_rows(store) -> list:
     rows += [{'type': 'setting', 'title': m['label'], 'where': f"{places.name('settings')} → {m['group']}", 'rest': f"{m['group']} {m.get('desc') or ''} {m.get('help') or ''} {k}",
               'href': f"#settings=config&group={quote(m['group'], safe='')}&key={quote(k, safe='')}"}
              for k, m in settings_schema.knobs().items() if k not in _UNSHOWN]
-    mine = [c for c in store.list_connectors()]
+    rows += [{'type': 'setting', 'title': p['title'], 'where': f"{places.name('settings')} → {p['group']}", 'rest': f"{p['group']} {p['words']}",
+              'href': f"#settings=config&group={quote(p['group'], safe='')}&key={quote(k, safe='')}"} for k, p in settings_schema.panels().items()]
+    mine =[c for c in store.list_connectors()]
     on = {str(c.get('Type') or '') for c in mine if c.get('Active')}
     rows += [{'type': 'connector', 'title': c.get('title') or c['type'], 'where': 'Connections', 'boost': c['type'] in on, 'key': c['type'],
               'sub': 'connected' if c['type'] in on else 'planned' if c.get('planned') else 'not connected',

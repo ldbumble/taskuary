@@ -501,19 +501,9 @@ def draft_needs(store, item) -> str:
 # A REPLY OWED THAT NOTHING HAS WRITTEN is the task's agent's to write (ingest.reply_to_agent; the owner, 2026-11-10: "no more triage
 # creates draft. agent should be doing it"). Where its agent did not start by itself - the setting, a stranger held - the move is the
 # owner's Send to agent, as it was when the old writer said what it needed
-# ...AND SO IS AN EMAIL THE TASK CLOSES WITH that nothing has written, with no reply waiting on the owner's Send (slots.unwritten; the owner,
-# 2026-11-10: "if you have nothing to reply just ask what should i reply?"): its agent was told once at its turn's end (general.left_unwritten),
-# so the row's one move is its start
 def reply_unwritten(store, item) -> bool:
     r = _unwritten(store, item)
-    return r.get('Kind') == 'draft' and not str(r.get('FinalText') or '').strip() if r else bool(email_unwritten(store, item))
-def email_unwritten(store, item) -> str:
-    "Who the task's unwritten email goes to, where nothing at all waits on the owner's Send - '' otherwise."
-    from . import slots
-    tid = item.get('tid')
-    if not tid or store.pending_review(int(tid), live_only=False): return ''
-    u = slots.unwritten(store, int(tid))
-    return (u[0]['out'].get('name') or u[0]['out'].get('to') or 'them') if u and len(u) == len(slots.open_(store, int(tid))) else ''
+    return r.get('Kind') == 'draft' and not str(r.get('FinalText') or '').strip()
 
 
 def draft_line(store, item, target_kind, target_id) -> str:

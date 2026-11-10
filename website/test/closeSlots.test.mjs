@@ -78,3 +78,11 @@ test("waiting emails open Close out, and it says how many", async () => {
   assert.equal(focusStage({ kind: "coding", task: "waiting", agent: "stopped and saved", emails: 1 }), "reply");
   assert.equal(focusStage({ kind: "coding", task: "waiting", agent: "agent waiting on you", emails: 1 }), "agent");
 });
+
+// THE OWNER, 2026-11-10: "it created reply with nothing in it" - a recipient nobody has written to is no card: never drawn in the chat
+test("a recipient with no draft is not drawn, and a task with only such ones draws no emails block", () => {
+  const list = readFileSync(new URL("../src/SlotList.jsx", import.meta.url), "utf8");
+  assert.match(list, /filter\(\(i\) => i\.out && \(i\.done \|\| byRid\[i\.rid\]\?\.Status === "pending"\)\)/);
+  assert.doesNotMatch(list, />Drop<\/Button>/);
+  assert.match(readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), /const owesEmails = emailsWaiting > 0;/);
+});

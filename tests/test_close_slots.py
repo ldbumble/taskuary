@@ -211,7 +211,7 @@ def test_empty_text_or_nobody_is_refused(s):
     # ...and a recipient with no words files nothing, and says the two ways on (the owner, 2026-11-10: "just ask what should i reply?")
     out = slots.draft(s, tid, ' ', to='office@vendor.example')
     assert 'write the email in `text`, or ask the owner what it should say' in out['why']
-    assert [i['out']['to'] for i in slots.open_(s, tid)] == ['paula@northwind.example'] and len(slots.unwritten(s, tid)) == 1
+    assert [i['out']['to'] for i in slots.open_(s, tid)] == ['paula@northwind.example']
 
 
 def test_a_drafted_slot_on_a_mail_task_still_sends(s):
@@ -280,10 +280,11 @@ def test_triage_reads_outputs_only_on_a_task():
     assert triage.parse_outputs({**j, 'intent': 'fyi'}) == [] and triage.parse_outputs({**j, 'outputs': None}) == []
 
 
-def test_the_schema_offers_outputs():
-    p = triage.verdict_schema()['schema']['properties']
-    assert p['outputs']['type'] == ['array', 'null'] and p['outputs']['items']['additionalProperties'] is False
-    assert 'outputs' in triage.verdict_schema()['schema']['required']
+def test_triage_lists_no_recipients_for_a_message():
+    # the owner, 2026-11-10: "it created reply with nothing in it" - triage's "email to <them>, to draft" stood under the agent's turn with no
+    # words. Who else is written to is the agent's to judge; only the owner's own typed ask names its emails (a hand-made ask, below)
+    assert 'outputs' not in triage.verdict_schema()['schema']['properties']
+    assert '"outputs"' not in triage.SHIPPED and '**outputs**' not in triage.SHIPPED
 
 
 def test_a_hand_made_ask_returns_its_outputs():
@@ -328,7 +329,7 @@ def test_a_handoff_whose_brain_fails_is_made_anyway(s):
     assert s.get_task(made['taskId']) and slots.all_(s, made['taskId']) == [] and session.send_prompt.called
 
 
-def test_a_triaged_message_that_asks_for_emails_gets_slots():
+def test_a_triaged_message_that_asks_for_emails_gets_no_slots():
     from datetime import datetime
     from fastapi.testclient import TestClient
     from taskuary import server
@@ -344,7 +345,7 @@ def test_a_triaged_message_that_asks_for_emails_gets_slots():
         with mock.patch('taskuary.server._llm', return_value=lambda sys_, usr_, **kw: verdict):
             TestClient(server.app).post('/api/ingest/push', json=body)
         tid = next(t['TaskId'] for t in st.list_tasks(active_only=True))
-        assert [i['out']['to'] for i in slots.all_(st, tid)] == ['erin@northwind.example', 'Gail Moreno']
+        assert slots.all_(st, tid) == [], 'the agent decides who else is written to'
     finally: server.store = prev
 
 
@@ -361,27 +362,6 @@ def test_an_output_to_the_sender_is_their_reply_never_an_email(s):
     assert [i['out']['to'] for i in slots.add(s, tid, [{'to': 'Erin Vance', 'about': 'x'}], 'triage', sender={'name': 'Erin Blake'})] == ['Erin Vance']
 
 
-def test_a_triaged_chat_message_never_owes_its_sender_an_email():
-    from datetime import datetime
-    from fastapi.testclient import TestClient
-    from taskuary import server
-    verdict = json.dumps({'intent': 'task', 'kind': 'task', 'why': 'asks for a fix', 'title': 'Fix the logins',
-                          'summary': 'Erin Blake wants the logins fixed.', 'checklist': ['Fix the logins'],
-                          'outputs': [{'to': 'Erin Blake', 'about': 'status on the logins'}]})
-    st, prev = MemoryStore(), server.store
-    server.store = st; st.set_setting('coding_auto_enabled', '0', 'test')
-    try:
-        body = {'external_id': 'slots-sender-1', 'channel': 'teams', 'conversation_id': 'teams:19:sender@thread.v2',
-                'from_name': 'Blake, Erin at Northwind', 'subject': 'Logins', 'body': 'His logins are blank - can you look?',
-                'sent_at': datetime.now().isoformat(sep=' ', timespec='seconds')}
-        with mock.patch('taskuary.server._llm', return_value=lambda sys_, usr_, **kw: verdict):
-            TestClient(server.app).post('/api/ingest/push', json=body)
-        tid = next(t['TaskId'] for t in st.list_tasks(active_only=True))
-        assert slots.all_(st, tid) == []
-    finally: server.store = prev
-
-
-# ── the work rail ────────────────────────────────────────────────────────────────────────
 def test_the_rail_shows_one_row_per_task_with_its_count(s):
     from taskuary import funnel
     tid = typed(s, FOUR[:2]); a, b = draft(s, tid, 0), draft(s, tid, 1)

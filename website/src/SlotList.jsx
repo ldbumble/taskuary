@@ -10,9 +10,11 @@ import { bulkSendable, slotReviews, slotState, slotTally } from "./taskLifecycle
 // closes when the last is sent or dropped. A name with no address yet wears a "?" - it is never guessed into one.
 export default function SlotList({ taskId, checklist = [], reviews = [], onChanged }) {
   const [busy, setBusy] = useState(false);
-  const items = (checklist || []).filter((i) => i.out);
-  if (!items.length) return null;
   const byRid = Object.fromEntries(slotReviews(reviews).map((r) => [r.ReviewId, r]));
+  // ...ONLY AN EMAIL SOMEBODY WROTE (the owner, 2026-11-10: "it created reply with nothing in it ... action is only needed if it helps user"): a
+  // recipient with no draft is no card, and a "To <them> · to draft" row under a turn read as the turn's empty answer
+  const items = (checklist || []).filter((i) => i.out && (i.done || byRid[i.rid]?.Status === "pending"));
+  if (!items.length) return null;
   const waiting = bulkSendable(items, reviews);
   // letting one email go - its draft (if any) is never sent, and the task closes when nothing else is owed
   const drop = async (i) => {
@@ -50,7 +52,6 @@ export default function SlotList({ taskId, checklist = [], reviews = [], onChang
                 : `${i.out.name || named} · ${i.out.kind}`}</Typography></>}
               <Typography variant="caption" sx={{ color: FAINT }}>{slotState(i, rv)}{i.out.by === "agent" ? " · added by the agent" : ""}
                 {i.out.candidates?.length ? ` · could be ${i.out.candidates.slice(0, 3).join(" or ")}` : ""}</Typography>
-              {!i.done && rv?.Status !== "pending" && <Button size="small" disabled={busy} onClick={() => drop(i)}>Drop</Button>}
             </Box>
             {rv?.Status === "pending" && <ReviewDecision review={rv} onChanged={onChanged} onDrop={() => drop(i)} />}
           </Box>

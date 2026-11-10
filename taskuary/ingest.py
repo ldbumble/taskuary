@@ -1127,9 +1127,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 from . import goals
                 store.tag_task(tid, 'goal', actor='triage')
                 goals.plan_later(store, tid, goals.words(store.get_task(tid)))
-            if intent.get('outputs'):                  # what closes it beyond the reply: emails to other people (slots.py)
-                from . import slots
-                slots.add(store, tid, intent['outputs'], 'triage', sender=_sender(msg))
+            # ...and NO RECIPIENTS LISTED FOR IT: an email to someone else is the agent's to judge and write (the owner, 2026-11-10: "it created
+            # reply with nothing in it" - triage's "email to <them>, to draft" stood under the agent's turn with no words; "action is only
+            # needed if it helps user"). The emails a task closes with are the ones its agent or the owner write (slots.draft)
             # a person's ask put to the owner that an agent works ("here's my draft, let me know your thoughts") still ends in the
             # reply to them: the agent is told so (reply_job) - its thoughts are the owner's Result, the reply is built from them
             if f['kind'] == 'general' and intent.get('asks_owner') is True and reads_reply(store, msg, intent):
@@ -1612,9 +1612,6 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         # change is said on the task rather than made silently (PW-076) - only a correction rewords an open one (reword_todos, above)
         added = store.merge_task_checklist(tid, v['checklist'], 'triage', src=mid)
         if added: store.add_comment(tid, 'triage', 'agent', 'New from the latest message:\n' + '\n'.join(f"- [ ] {i['text']}" for i in added))
-    if v and v.get('outputs') and own:          # what closes it beyond the reply: emails to other people (slots.py), once per recipient
-        from . import slots
-        slots.add(store, tid, v['outputs'], 'triage', sender=_sender(msg))
     if (v and v.get('intent') == 'reply_only' and not talking and not v.get('invite')
             and not is_aside(v) and not store.pending_review(tid) and not agent_drafts(store, tid, went)):
         # a fresh question on an existing task is reply-needed there: one pending review for
@@ -1794,11 +1791,6 @@ ECHO_KEY = 160          # a notification quotes the start of a long line, so the
 _INVISIBLE = re.compile('[­​-‏⁠﻿]')
 
 def _plain(t) -> str: return ' '.join(_INVISIBLE.sub(' ', str(t or '')).lower().split())
-
-def _sender(msg: dict) -> dict:
-    """Who wrote `msg`, as slots.add reads it - an output to them is the reply, never an email (slots.is_sender)."""
-    return {'name': msg.get('from_name'), 'address': msg.get('from_email')}
-
 
 def _same_person(a, b) -> bool:
     a, b = sorted((_plain(a), _plain(b)), key=len)
@@ -3128,11 +3120,7 @@ def _enrich(store, tid: int, m: dict, plain: str, llm, earlier: dict = None):
         if not t: return
         if ask['summary'] and ask['summary'] != plain and (t.get('Summary') or '') == plain:
             store.update_task(tid, {'Summary': ask['summary']}, 'triage')
-        blank = not store.task_checklist(tid)          # a list the owner wrote meanwhile is theirs - emails included
-        if ask['checklist'] and blank: store.set_task_checklist(tid, ask['checklist'], 'triage')
-        if ask.get('outputs') and blank:
-            from . import slots
-            slots.add(store, tid, ask['outputs'], 'triage', sender={'name': m.get('FromName'), 'address': m.get('FromEmail')})
+        if ask['checklist'] and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')     # a list the owner wrote meanwhile is theirs
     except Exception as e: logger.warning(f"the ask on {task_ref(tid)} stays the sender's own words - {e}")
 
 

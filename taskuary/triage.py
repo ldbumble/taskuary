@@ -316,10 +316,7 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
          'wrapper': {'type': ['array', 'null'], 'items': {'type': 'string'}},
          # the message asks the owner to find a time to meet: how long and which days (its row's Find a time, calwrite.py)
          'meet': {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['minutes', 'from', 'to'],
-                  'properties': {'minutes': {'type': ['integer', 'null']}, 'from': {'type': ['string', 'null']}, 'to': {'type': ['string', 'null']}}},
-         # what closes it beyond the reply (slots.py): emails to OTHER people the message asks the owner to send
-         'outputs': {'type': ['array', 'null'], 'items': {'type': 'object', 'additionalProperties': False, 'required': ['to', 'about'],
-                                                          'properties': {'to': {'type': 'string'}, 'about': {'type': 'string'}}}}}
+                  'properties': {'minutes': {'type': ['integer', 'null']}, 'from': {'type': ['string', 'null']}, 'to': {'type': ['string', 'null']}}}}
     if playbooks: p['playbook'] = {'type': ['string', 'null']}
     if workflows: p['workflow'] = {'type': ['string', 'null']}
     # which of the owner's workstreams it belongs to (workstreams.py, the owner 2026-11-01: triage sorts by them) - the best fit, null only when
@@ -1054,7 +1051,6 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if meet_of(j, msg.get('sent_at')): out['meet'] = meet_of(j, msg.get('sent_at'))
                 if out['intent'] == 'task' and isinstance(j.get('checklist'), list):
                     out['checklist'] = [x for x in j['checklist'] if isinstance(x, str)]
-                if out['intent'] == 'task' and parse_outputs(j): out['outputs'] = parse_outputs(j)
                 # a GOAL needs its done-when sentence: "goal" on a two-line question with nothing to stop on is a task
                 dw = ' '.join(str(j.get('done_when') or '').split())[:1000]
                 if out['intent'] == 'task' and j.get('goal') is True and dw: out.update(goal=True, done_when=dw)

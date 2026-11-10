@@ -1741,7 +1741,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // to read what the task is and where it came from, and that lives on the task card, not folded
   // to a strip under a heading that says the agent is working.
   const emailsWaiting = waitingEmails(detail?.checklist, detail?.reviews);
-  const owesEmails = (detail?.checklist || []).some((i) => i.out && !i.done);
+  const owesEmails = emailsWaiting > 0;      // ...an email nobody has drafted is no card (SlotList): only one written waits here
   // A RUN OF STEPS WITH NO AGENT STEP (workflows.of_task by_code): code ran it, so there is no Agent work to open - the steps are on
   // the task, under where it came from. A session that did start (an older run, a hand-started agent) still shows.
   const codeRun = !!fromWorkflow?.byCode && !term?.alive && !generalStarted && !detail?.transcript && !report;

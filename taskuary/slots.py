@@ -80,9 +80,6 @@ def add(store, tid: int, outputs, actor: str, sender: dict = None) -> list:
 
 def all_(store, tid: int) -> list: return [i for i in store.task_checklist(tid) if isinstance(i.get('out'), dict)]
 def open_(store, tid: int) -> list: return [i for i in all_(store, tid) if not i.get('done')]
-def unwritten(store, tid: int) -> list:
-    "The open slots no draft stands on: an email the task owes that nobody has written yet (one taken back unsent is unwritten again)."
-    return [i for i in open_(store, tid) if not (i.get('rid') and (store.get_review(i['rid']) or {}).get('Status') in ('pending', 'held'))]
 def written(store, tid: int) -> list:
     """The open slots the agent already wrote, each waiting on the owner's yes."""
     rvs = (store.get_review(i['rid']) for i in open_(store, tid) if i.get('rid'))

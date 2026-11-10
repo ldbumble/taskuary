@@ -220,8 +220,7 @@ def state(store, item: dict, verbs: list) -> tuple:
     if wb == 'quiet': return 'watch_quiet', {}
     # THE WRITER SAID WHAT IT NEEDS (store.set_review_draft_needs): no failure - the work is an agent's, so Continue the one that worked it,
     # else Send to agent. Its reason is on the card already, so nothing is said (walk 2026-10-29: it lit "New task to fix this")
-    # ...an email the task owes with nothing written: the one line says it waits on the owner's word (advisor.email_unwritten)
-    if advisor.draft_needs(store, it) or advisor.reply_unwritten(store, it): return 'needs_agent', ({'who': w} if (w := advisor.email_unwritten(store, it)) else {})
+    if advisor.draft_needs(store, it) or advisor.reply_unwritten(store, it): return 'needs_agent', {}
     # A DASHBOARD's refresh lands under Reports like a report run and Next walks past it (the owner, 2026-10-23): looked at, never acted
     # on - so silent, Next lit. Its Share (and a report's) is on the row for the Advisor to SEE, never the move a rule lights: sending a
     # result somewhere is the owner's own idea, not the obvious next step

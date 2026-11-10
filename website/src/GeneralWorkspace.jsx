@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { pollCalming } from "./visible.js";
+import { coalesced, pollCalming } from "./visible.js";
 import { createPortal } from "react-dom";
 import { says, subState } from "./laneSays.js";
 import {
@@ -1087,7 +1087,12 @@ function useCodingChat(tid, on, term) {
   // the same answer nearly every time); a new step, or a task-changed poke (read at once below), brings it back to 2.5 s
   useEffect(() => (live ? pollCalming(true, async () => { const was = moves.current; await load(); return moves.current !== was; }, 2500, 10000, false)
     : undefined), [!!live, load]);   // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => (on ? onLive("task-changed", (ev) => { if (touches(ev, tid)) load(); }) : undefined), [on, tid, load]);
+  // ...and a task-changed poke reads it too - a burst of them (a busy agent's hooks) once per 2.5 s, never two reads at a time (coalesced)
+  useEffect(() => {
+    if (!on) return undefined;
+    const [wake, stop] = coalesced(load, 2500), off = onLive("task-changed", (ev) => { if (touches(ev, tid)) wake(); });
+    return () => { off(); stop(); };
+  }, [on, tid, load]);
   const rows = useMemo(() => (got ? chatRows(got) : []), [got]);
   return { got, live, rows, load };
 }

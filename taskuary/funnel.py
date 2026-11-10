@@ -115,6 +115,10 @@ DWELL = 12.0                       # seconds a new state must survive before the
 _REPORT_SUMMARY = re.compile(r'(?im)^summary:\s*(.+)$')
 _LIVE_UNSET = object()
 _LOCK = threading.Lock()
+# THE RAIL LAST BUILT, kept past invalidate() (2026-11-09): every write empties _CACHE, and a press or the Advisor that found it empty waited
+# behind the next build - Mark done 67 s, the Advisor 84 s, while a busy agent's writes and two tabs rebuilt it in turn. What only needs
+# the rail as it stood (known) reads this, and never takes _LOCK. `began`: when the build behind it started (pile's convoy check).
+_KNOWN = {'store': None, 'pile': None, 'full': None, 'began': 0.0}
 
 
 MUTES_KEY = 'funnel_mutes'            # the owner's standing "never show me these again" rules
@@ -1592,7 +1596,7 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
     here instead of building the rail a second time (design B, 2026-09-17). `quiet` skips the
     watcher: a Next that turns out stale must reach no write, and announce() writes notices."""
     from . import live
-    seen_generation = _CACHE.get('generation', 0)
+    seen_generation, asked = _CACHE.get('generation', 0), time.perf_counter()
     # the newest write stamp a build begun now has seen (live.seq: the page's reload check) - taken before the workers are, whose
     # moves are stamped too; a caller that observed them itself says when (`seen`), or the build claims no stamp at all
     own = seen is None and observed is _OBSERVE
@@ -1619,6 +1623,11 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
         # the write - saw the shown item's stamp move and refused the press (PW-118: a comment landed on the task about to be shown)
         refreshed_while_waiting = (same_store and force and _CACHE['pile']
                                    and _CACHE.get('generation', 0) != seen_generation and not moved())
+        # ...and a read that waited out a build BEGUN AFTER it was asked has that build: it holds every write made before the ask. Without it
+        # each reader queued behind a build rebuilt in turn while an agent kept writing - a tab, the Advisor and a press, one after another
+        # (a write after the ask that emptied _CACHE since is the next read's, not this one's)
+        if (_CACHE.get('generation', 0) != seen_generation and _KNOWN.get('store') is store and _KNOWN['pile']
+                and _KNOWN.get('began', 0.0) > asked): return _fresh_tails(_KNOWN['pile'], observed)
         if same_store and _CACHE['pile'] and (refreshed_while_waiting or (not force and time.time() - _CACHE['at'] < PILE_EVERY)):
             return _fresh_tails(_CACHE['pile'], observed)
         # ...the stamp and the workers as the BUILD begins, not as the wait for the lock did: a read that waited out another build
@@ -1629,7 +1638,7 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
             try: observed = observe()
             except Exception: observed = None
             workers = workers_signature(observed)
-        mark = _rail_top(store)                        # taken BEFORE the build: a write during it counts as after
+        mark, began = _rail_top(store), time.perf_counter()   # taken BEFORE the build: a write during it counts as after
         # the watcher speaks first: a transition changes the pile too. Quiet, it keeps what it last said.
         events = ((_CACHE['pile'] or {}).get('events') or [] if same_store else []) if quiet else announce(store)
         # ONE build serves the pile and the item the page is holding: the shared builder computes
@@ -1672,6 +1681,7 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
         p['live_seq'] = seen
         _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
                       generation=_CACHE.get('generation', 0) + 1, mark=mark, workers=workers)
+        _KNOWN.update(store=store, pile=p, full=_CACHE['full'], began=began)
         _keep_threads(store, [*(full['items'] if shared else ()), *p['items']])
         return p
 
@@ -1765,6 +1775,11 @@ def cached_pile(store) -> dict | None:
     """The rail as last built, or None - never a build (the Tasks list asks, and must not pay for one)."""
     return _CACHE['pile'] if _CACHE.get('store') is store else None
 def cached_at(store) -> float: return _CACHE.get('at', 0.0) if _CACHE.get('store') is store else 0.0
+def known(store) -> dict | None:
+    """The rail as last built, however much was written since - None only before the first build. Never a build, never a wait."""
+    return _KNOWN['pile'] if _KNOWN.get('store') is store else None
+def building() -> bool: return _LOCK.locked()          # a pile build (or its cache check) holds the lock right now
+def known_full(store) -> list | None: return _KNOWN['full'] if _KNOWN.get('store') is store else None
 
 
 def invalidate(): _CACHE.update(at=0.0, pile=None, store=None, full=None, mark=None, workers=None); _SOURCES.update(at=0.0, by={})

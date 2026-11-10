@@ -60,3 +60,26 @@ export function pollCalming(active, fn, ms, most = ms * 4, first = true) {
     if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onChange);
   };
 }
+
+// A BURST OF WAKE-UPS IS ONE READ (2026-11-09). A working agent's hooks poke task-changed every few seconds, and the coding chat read
+// itself again on each one - beside its own poll, about once a second at 0.5-3 s a read, each queued beside the press the owner was
+// making. `wake()` runs `fn` at once when it has not run for `ms`, else once at the end of that gap; never two at a time (a wake
+// during a read is one more read after it). Returns [wake, stop].
+export function coalesced(fn, ms) {
+  let last = -Infinity, id = 0, busy = false, again = false, dead = false;
+  const run = async () => {
+    id = 0;
+    if (dead) return;
+    if (busy) { again = true; return; }
+    busy = true; last = Date.now();
+    try { await fn(); } catch { /* a failed read is the next wake's to retry */ }
+    busy = false;
+    if (again && !dead) { again = false; wake(); }
+  };
+  function wake() {
+    if (dead || id) return;
+    if (busy) { again = true; return; }
+    id = setTimeout(run, Math.max(0, last + ms - Date.now()));
+  }
+  return [wake, () => { dead = true; clearTimeout(id); id = 0; }];
+}

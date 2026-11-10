@@ -291,14 +291,28 @@ def _item(store, target_kind, target_id, key: str = None):
     if target_kind == 'task':
         t = store.get_task(target_id) or {}
         if not t or (t.get('Status') in ('done', 'dropped') and not store.resumable_session(target_id)): return None
-    try:
-        pile = funnel.pile(store, quiet=True).get('items') or []
-        items = (funnel.full_items(store) or []) + pile                      # read items kept: the one on the table is often read
-    except Exception: items = []
+    # NEVER A RAIL BUILD, NEVER A WAIT FOR ONE (2026-11-09): this read funnel.pile, so every look and every press waited behind whatever
+    # build was running and built again after any write - with an agent busy beside it, GET /api/advice took 84 s and a press 72 s.
+    # The rail as last built - its cache, or the build a write emptied it of since (funnel.known); built here only when there has never been
+    # one and nobody is building it; else the card the rail would show, built for this one key (no lock, a few rows)
+    full, pile = funnel.full_items(store), funnel.cached_pile(store)
+    if pile is None: full, pile = funnel.known_full(store), funnel.known(store)
+    if pile is None and not funnel.building():
+        try: pile, full = funnel.pile(store, quiet=True), funnel.full_items(store)
+        except Exception as e: logger.debug(f'advisor: no rail for {key} - {e}')
+    items = [*(full or ()), *((pile or {}).get('items') or ())]        # read items kept: the one on the table is often read
     f = 'tid' if target_kind == 'task' else 'idea' if target_kind == 'idea' else 'mid'
     mine = [i for i in items if i.get(f) == int(target_id)]
-    return (next((i for i in mine if key and key in keys_of(i)), None) or next(iter(mine), None)
-            or funnel.item_for_key(store, key_of(target_kind, target_id)))
+    hit = next((i for i in mine if key and key in keys_of(i)), None) or next(iter(mine), None)
+    if hit: return hit
+    # (the window's keyed build only - next_item's full-history fallback reads every root, seconds on a big home)
+    k = key or key_of(target_kind, target_id)
+    try:
+        pool = funnel.build(store, keep_surfaced=True, keys=[k])['items'] if not str(k).startswith('fyis:') else []
+        hit = next((i for i in pool if i['key'] == k or k in i.get('aliases', [])), None)
+        hit = funnel.shut(store, funnel._present_one(store, hit)) if hit else None
+    except Exception as e: logger.debug(f'advisor: no keyed card for {key} - {e}'); hit = None
+    return hit or funnel.item_for_key(store, key_of(target_kind, target_id))
 
 
 def habit(store, verb: str, item: dict) -> tuple:
@@ -1738,7 +1752,7 @@ def _preread(store, key: str):
     def go():
         try:
             from . import funnel
-            items = funnel.pile(store, quiet=True).get('items') or []
+            items = (funnel.known(store) or {}).get('items') or []         # the rail as it stands: a read ahead never builds it
             at = next((n for n, i in enumerate(items) if key in keys_of(i)), None)
             for it in (items[at + 1:at + 1 + PREREAD] if at is not None else []):
                 tgt = target_of(store, it.get('key'))

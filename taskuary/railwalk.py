@@ -69,7 +69,11 @@ def _known(store) -> list:
     hand = list(_HAND['rows']) if _HAND.get('store') is store and time.time() - _HAND['at'] < KNOWN_FOR else None
     cached, at = funnel.cached_pile(store), funnel.cached_at(store)
     if cached and (hand is None or at >= _HAND['at']): return list(cached['items'])
-    return hand if hand is not None else _rows(store)
+    if hand is not None: return hand
+    # ...and the rail last built, emptied from the cache by a write since: a busy agent writes every few seconds, so the cache was empty
+    # at almost every press and Mark done waited out a whole build behind the Advisor's and the tabs' (67 s, 2026-11-09)
+    last = funnel.known(store)
+    return list(last['items']) if last else _rows(store)
 
 
 def _mark(store):
@@ -145,7 +149,7 @@ def place_of(store, key: str, st: dict = None, rows: list = None):
     r = find(rows, key)
     if r is not None: return (funnel.order_key(r),) * 2
     if key in (st.get('places') or {}): return tuple(_tuple(x) for x in st['places'][key])
-    it = _lookup(store, key)
+    it = funnel.item_for_key(store, key) or _lookup(store, key)     # a task or a message by its own rows first: never the whole history
     if not it: return None
     if it.get('tid') and not find(rows, it.get('key')):
         it = {**it, 'order_band': 2, 'deferred': False, 'watching': False, 'arrived_at': _arrival(store, it)}
@@ -346,13 +350,14 @@ class _null:
     def __exit__(self, *a): return False
 
 
-def next(store, from_key: str = None, actor: str = 'owner', press: str = None, read=(), llm=None, effect: bool = True) -> dict:
+def next(store, from_key: str = None, actor: str = 'owner', press: str = None, read=(), llm=None, effect: bool = True, rows: list = None) -> dict:
     """The row directly below the one the page had on screen (`from_key`; with none, the stored one), after the effect of leaving it.
     A key no longer on the rail still resolves - through the stored place. At the bottom: item None, ended. Pressed again there with nothing
     new below, the same end answer and no new line. `read`: rows the owner was reading on a page over the table (the Reports page, 2026-10-30)."""
     with _LOCK:
         if (hit := _again(press)): return hit
-        st, rows = state(store), _rows(store)
+        # `rows`: the line a close already holds (leave) - a press never waits on a rail build (2026-11-09)
+        st, rows = state(store), (list(rows) if rows is not None else _rows(store))
         frm = from_key or st.get('on')
         if not frm and not st.get('ended'):
             out = start(store, actor, llm=llm)
@@ -522,19 +527,20 @@ def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, no
     row on screen, re-presented. Put it on my list keeps the new task on the table; Next and Back still measure from the report's place."""
     with _LOCK:
         if (hit := _again(press)): return hit
-        if how in ('all_read', 'next'): return _remember(press, next(store, key, actor))
+        if how in ('all_read', 'next'): return _remember(press, next(store, key, actor, rows=_known(store)))
         # THE PRESS ANSWERS OFF THE RAIL ALREADY KNOWN (2026-11-09): the row, its place and the row below it come from the line in hand
         # (_known), and the rail is built again behind the answer - by the page's own read - never inside it
         st, rows = state(store), _known(store)
         item = find(rows, key)
-        item = as_item(store, [item]) if item is not None else _lookup(store, key)
+        # ...a task or a message off the line is read from its own rows (item_for_key): next_item's keyed miss builds the whole history, 8 s
+        item = as_item(store, [item]) if item is not None else (funnel.item_for_key(store, key) or _lookup(store, key))
         if not item: raise LookupError(f'nothing to leave: {key}')
         place = place_of(store, key, st, rows)
         done = _act(store, item, how, actor, note, until)
         if how != 'left': funnel.invalidate()
         # ...the line as the close left it: the rows in hand without the row closed (and a batch's members), a kept-open row looked up again
         gone = {key, *members_of(key), *(item.get('aliases') or ())}
-        rows = [r for r in rows if not any(_is(r, k) for k in gone)] if done.get('closed') and how != 'put_on_list' else _rows(store)
+        rows = [r for r in rows if not any(_is(r, k) for k in gone)] if done.get('closed') and how != 'put_on_list' else _known(store)
         if how == 'put_on_list' and done.get('made'):
             made = _lookup(store, f"task:{int(done['made'])}")
             if made:
@@ -550,7 +556,7 @@ def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, no
         # ...with what the act said (a removed task's Undo line, a reminder's warning) riding along for the page to draw
         # ...and `read` is what THIS press took off - the row and a batch's members. Next's own (none: effect=False) read as "nothing was read",
         # and the page gave an FYI batch's "All read, next" rows back until the next rail read (the owner, 2026-11-09: "then puts them back up")
-        return _remember(press, {**next(store, key, actor, effect=False), 'read': sorted(gone), **({'left': done['outcome']} if done.get('outcome') else {})})
+        return _remember(press, {**next(store, key, actor, effect=False, rows=rows), 'read': sorted(gone), **({'left': done['outcome']} if done.get('outcome') else {})})
 
 
 def peek(store, actor: str = 'owner') -> dict:

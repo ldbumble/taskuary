@@ -835,6 +835,8 @@ PILE_BLIND_SETTINGS = (
     'assistant_last_undo',       # concierge.LAST_UNDO - what the phone's Undo pill runs
     'rail_walk',                 # railwalk.KEY - where the one walk stands, written by every walk move (the pile is the line it reads)
     'assistant_active_at',       # welcome.ACTIVE_KEY - the owner's last press, written after every one (owner_presence)
+    'landing:',                  # landing.KEY - a coding agent's edits and commits, written by its hook on every Edit (the task page's landing card
+                                 # reads it; no rail card does) - each one emptied the pile while an agent worked (2026-11-09)
 )
 
 # Settings whose key changed: (old, new), moved once as the store opens (Store.__init__) so an install keeps its value.
@@ -5900,8 +5902,20 @@ class SQLiteStore:
             return sid
         return self._insert('source', fields, SOURCE_COLS)
     def touch_source(self, sid):
-        self._exec('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (_now(), sid))
+        self._touch('UPDATE source SET LastPolledAt=? WHERE SourceId=?', (_now(), sid))
         self._processing_ignored_writes += 1
+    # A HEARTBEAT NEVER WAITS ON THE DATABASE (2026-11-09). A poll's "polled at" stamp waited out SQLite's whole 5 s busy timeout while another
+    # process wrote - holding store.lock all the while: the WhatsApp poll held it 6 s at a time, every press and read in the app behind it.
+    # The stamp is written when the database is free within TOUCH_WAIT_MS, else skipped: the next poll stamps it (and reads a little again).
+    TOUCH_WAIT_MS = 200
+    def _touch(self, q, p=()):
+        with self.lock:
+            self.cx.execute(f'PRAGMA busy_timeout={self.TOUCH_WAIT_MS}')
+            try: return self._exec(q, p)
+            except sqlite3.OperationalError as e:
+                if 'locked' not in str(e) and 'busy' not in str(e): raise
+                logger.debug(f'store: a heartbeat stamp skipped - the database is busy ({e})'); return None
+            finally: self.cx.execute('PRAGMA busy_timeout=5000')
     def patch_source_poll_state(self, source_id, *, config_set=None, config_remove=(),
                                 last_polled_at=_POLL_UNSET, expect_fields=None, expect_config=None):
         """Atomically checkpoint source progress; False means the captured source changed."""
@@ -6108,7 +6122,7 @@ class SQLiteStore:
         if error: self._exec('''UPDATE connector SET LastError=?, LastErrorAt=? WHERE ConnectorId=?
                                 AND NOT (LastError IS ? AND COALESCE(LastErrorAt, '') BETWEEN ? AND ?)''',
                              (error[:500], now, cid, error[:500], since, now))
-        else: self._exec('''UPDATE connector SET LastSyncAt=?, LastError=NULL, LastErrorAt=NULL WHERE ConnectorId=?
+        else: self._touch('''UPDATE connector SET LastSyncAt=?, LastError=NULL, LastErrorAt=NULL WHERE ConnectorId=?
                             AND NOT (LastError IS NULL AND LastErrorAt IS NULL AND COALESCE(LastSyncAt, '') BETWEEN ? AND ?)''',
                          (now, cid, since, now))
         self._processing_ignored_writes += 1

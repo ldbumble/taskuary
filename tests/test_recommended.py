@@ -61,9 +61,18 @@ def test_a_draft_that_waits_fills_its_send_whoever_wrote_it(s):
 
 def test_an_agent_at_work_or_asking_fills_nothing(s):
     tid = agent_task(s, kind='coding', summary=None)
-    for st in ('working', 'agent_asking', 'needs_agent', 'closed'):
+    for st in ('working', 'agent_asking', 'closed'):
         with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': ''}):
             assert rulebook.recommended(s, item(tid), verbs('close', 'continue', 'stop_agent')) is None, st
+
+
+def test_a_reply_nothing_has_written_fills_the_agents_start(s):
+    """Nothing drafts a reply but the task's agent (the owner, 2026-11-10). Where none started by itself, its start is the one move."""
+    tid = agent_task(s, kind='reply', summary=None)
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'needs_agent', 'line': ''}):
+        assert rulebook.recommended(s, item(tid), verbs('reply', 'regular_agent', 'close'))['verb'] == 'regular_agent'
+        assert rulebook.recommended(s, item(tid), verbs('reply', 'continue', 'regular_agent'))['verb'] == 'continue', 'the one that worked it first'
+        assert rulebook.recommended(s, item(tid), verbs('reply', 'close')) is None, 'no agent to start: nothing is filled'
 
 
 def test_a_run_that_is_over_fills_mark_done_where_no_summary_was_written(s):

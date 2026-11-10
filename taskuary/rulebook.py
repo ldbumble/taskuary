@@ -431,7 +431,7 @@ def facts(store, item: dict, verbs: list) -> dict:
 # summary at all (a coding agent's terminal writes none, and a task no agent touched has none) Mark done where the facts say it is over.
 # An agent at work or asking fills nothing: its own pane is the way on.
 OVER = frozenset({'agent_done', 'stopped_done', 'answered', 'done_list', 'watch_handled'})
-QUIET = frozenset({'closed', 'working', 'agent_asking', 'needs_agent'})
+QUIET = frozenset({'closed', 'working', 'agent_asking'})
 NOTHING_LEFT = 'Its agent said nothing is left to do'
 
 
@@ -457,6 +457,9 @@ def _recommended(store, it: dict, verbs: list | None, f: dict | None) -> dict | 
     pick = lambda *vs: next((v for v in vs if not advisor.pressable(store, it, v, verbs)), None)
     why = f.get('line') or ''
     if st in QUIET: v = None
+    # ...a reply owed that nothing has written, on a task no agent started on by itself (the setting, a stranger held, no room): the
+    # agent writes it now, so its start is the move - the one that worked it before, else Send to agent (the owner, 2026-11-10)
+    elif st == 'needs_agent': v = pick('continue', 'regular_agent')
     elif st == 'action_held': v = None if advisor.unconnected(store, it) else pick('approve', 'send_close')
     # ...what failed is never sent again as it stood: its own fix or Try again where the row leads with one, else nothing
     elif lead == 'fix' or st in FAILED: v = pick(lead) if lead in ('fix', 'continue') else None

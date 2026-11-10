@@ -63,6 +63,10 @@ def world(tmp_path, monkeypatch, request):
         if kind == 'general':
             conn = {'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose']}
             s.upsert_agent('claude', 'general', 'cli', json.dumps(conn))
+            # ...on the argv road its stand-in speaks (tests/fake_claude.py): this file is marked `acp` for its coding cells, which lifts conftest's
+            # no_real_acp_adapters - and a CI runner then started the real claude adapter for the chat, whose connect never answered (CI, 2026-11-10)
+            from taskuary import clis
+            monkeypatch.setattr(clis, 'ADAPTERS', {})
             monkeypatch.setattr(agents, 'connection_brains', lambda store, cfg=None: [('claude', conn)])
             monkeypatch.setattr(agents, '_resolve_cmd', lambda name: [sys.executable, FAKE_CLAUDE])
             for k, v in (('FAKE_CLAUDE_SPAWN', '1.5'), ('FAKE_CLAUDE_THINK', '1.0'), ('FAKE_CLAUDE_TPS', '2000')):

@@ -997,7 +997,9 @@ def shown_history(store, tid: int) -> list:
     # mail that came in while the agent was at work falls between a brief and its answer - it joins the next brief, or stands at the foot as
     # an input of its own until a turn answers it
     first_turn = str(rows[0].get('CreatedAt')) if rows else ''
-    loose = [x for x in mail if x['MessageId'] not in placed and str(x['JoinedAt']) > first_turn]
+    # ...but the task's OWN row (ownwork.ensure: the owner's ask, filed as its first session opens) never "came in": filed a beat after his
+    # first line (kept before the session opens - take_line), it stood as an input over his next one (CI, 2026-11-10)
+    loose = [x for x in mail if x['MessageId'] not in placed and str(x['JoinedAt']) > first_turn and (x.get('Channel') or '') != ownwork.CHANNEL]
     # ...right above the FIRST entry after it: a brief takes it into its own mail; an answer (a re-think woken without a brief of its own) gets
     # it as the input drawn over it - two answers in a row read as a restart, with the mail that woke the second nowhere
     # ...the turn it woke is the next BRIEF after it (a re-think starts on its own brief once the turn it came in under ends); only with no
@@ -3241,8 +3243,18 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     box_sent(store, tid)
     from . import outputs
     files = outputs.take_in(tid, files) if files and handles(t) else files
+    # ...A START READS THE CHAT FIRST, as it always did (server._refresh_for_turn), at work from the press all the while: a sync that fails
+    # refuses the start before anything is kept, its reason under the line on the page
+    if not (tid in OPENING or _at_work(_live_of(tid))): PRESSED[tid] = time.time()       # the turn's clock: the press
+    if prepare is not None and _live_of(tid) is None:
+        held = tid in OPENING
+        OPENING.add(tid)
+        try: prepare()
+        except Exception:
+            if not held and not _IN_FLIGHT.get(tid): OPENING.discard(tid); PRESSED.pop(tid, None)
+            raise
+        prepare = None
     wid = wait_line(store, tid, text, files, line_id)
-    if not (tid in OPENING or _at_work(_live_of(tid))): PRESSED[tid] = time.time()
     _IN_FLIGHT[tid] = _IN_FLIGHT.get(tid, 0) + 1
     OPENING.add(tid)
     if not wait:

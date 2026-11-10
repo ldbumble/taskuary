@@ -47,10 +47,16 @@ test("a general agent that has said nothing yet is one line in its chat, the box
   await page.waitForSelector("[data-tq-starting-line]", { timeout: 20000 });
   const quiet = await page.evaluate(() => {
     const pane = document.querySelector("[data-tq-starting]").getBoundingClientRect(), box = document.querySelector("[data-tq-starting] [data-tq-one-box]");
-    return { line: document.querySelector("[data-tq-starting-line]").innerText, welcome: !!document.querySelector(".tq-aui-welcome"),
+    const head = document.querySelector("[data-tq-starting] [data-tq-run-clock], [data-tq-pending-turn] [data-tq-run-clock]"), spin = document.querySelector("[data-tq-starting-line]");
+    return { line: spin.innerText, words: /Starting|Working/.test([...document.querySelectorAll("[data-tq-starting], .tq-aui-thread")].map((e) => e.innerText).join(" ")),
+             head: head ? head.innerText : "", under: !!head && head.getBoundingClientRect().bottom <= spin.getBoundingClientRect().top + 1,
+             welcome: !!document.querySelector(".tq-aui-welcome"),
              foot: box ? pane.bottom - box.getBoundingClientRect().bottom : null, onScreen: !!box && box.getBoundingClientRect().bottom <= innerHeight };
   });
-  assert.match(quiet.line, /Starting Agent on Codex…/);
+  // ...the turn's own head - who, when, how long - with the spin under it, and no line of words (the owner, 2026-11-10: "don't want the
+  // working... thing. we should never see that ever. it should show agent and time and how long it's running rightg away")
+  assert.equal(quiet.line.trim(), "", "the spin says no words"); assert.equal(quiet.words, false, "no Starting / Working words anywhere");
+  assert.match(quiet.head, /ran \d/, "the head and its running clock, from the start"); assert.ok(quiet.under, "the spin under the head");
   assert.equal(quiet.welcome, false, "no welcome copy over an agent already started");
   // ...A GENERAL TASK IS A CHAT TASK, whose box stays at the pane's foot from the first second (the owner, 2026-11-05, aaef3db35: "where is
   // the prompt box"; TaskPage data-tq-agent-room="chat"): the starting pane is no longer one line high, the empty room is the chat's, the

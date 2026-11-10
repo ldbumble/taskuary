@@ -42,12 +42,15 @@ class Model:
     def __call__(self, system, user, **kw):
         self._count(system, user)
         if self.job == 'triage':
-            q, hard = 'are you around' in user, 'the figures' in user
+            body = json.loads(user).get('body') or ''          # this mail's own words, never the thread around it
+            q, hard = 'are you around' in body, 'the figures' in body
             return json.dumps({'intent': 'reply_only' if q else 'fyi', 'kind': 'task', 'why': 'w', 'title': 'Erin asks about Tuesday' if q else 'Payworth news',
-                               'summary': 's', 'checklist': [], 'asks_owner': q, 'sender_class': 'person' if q else 'bulk',
+                               'summary': 'Erin asks for the figures' if hard else 'Erin asks about Tuesday', 'checklist': [], 'asks_owner': q, 'sender_class': 'person' if q else 'bulk',
                                'difficulty': 'hard' if hard else 'easy'})
-        if self.job == 'quick_work':
-            return json.dumps({'report': 'Tuesday is free.', 'draft': 'Yes, I am around Tuesday.', 'question': None, 'done': False, 'escalate': False, 'why': ''})
+        if self.job == 'quick_work':                # the figures are looked up: the one call says so and hands on
+            up = 'for the figures' in user.split('QUICK WORK:')[0][-300:]
+            return json.dumps({'report': 'Tuesday is free.', 'draft': None if up else 'Yes, I am around Tuesday.', 'question': None, 'done': False,
+                               'escalate': up, 'why': 'the figures need looking up' if up else ''})
         return json.dumps({'lines': [], 'notes': ''})
     def chat(self, msgs, tools, max_tokens, **kw):
         self._count(msgs, tools)
@@ -94,7 +97,7 @@ def store():
 
 # per caller, for the day above: (calls, est. tokens). Triage is one call a mail; an agent turn of ten look-ups is eleven calls; the
 # Advisor looks where something moved - once here, since nothing does after the mail
-CEILING = {'triage': (125, 2_200_000), 'quick_work': (10, 80_000), 'general': (8 * 12, 1_800_000), 'advisor': (3, 60_000)}
+CEILING = {'triage': (125, 2_200_000), 'quick_work': (16, 130_000), 'general': (8 * 12, 1_800_000), 'advisor': (3, 60_000)}
 
 
 def test_an_idle_day_calls_the_model_only_for_what_arrived():

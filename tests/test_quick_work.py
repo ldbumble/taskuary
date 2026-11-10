@@ -405,11 +405,17 @@ def test_a_quick_arrival_gets_one_call_and_no_agent_session():
         ingest._auto_general(s, tid)
     quick.assert_called_once(); deep.assert_not_called()
 
-def test_a_hard_arrival_starts_the_agent_as_today():
+def test_a_hard_arrival_is_looked_at_in_one_call_first():
+    """The owner, 2026-11-10: "the ai limits as much as possible to use ai" - a hard question started the whole tool loop at once; the one
+    call comes first and climbs only on its own escalate. A stranger's task still starts the agent: its words are in a file the call cannot read."""
     s = home(); tid, _ = arrived(s, 'hard')
     with mock.patch.object(quickwork, 'start') as quick, mock.patch.object(ingest, '_start_general', return_value=True) as deep:
         ingest._auto_general(s, tid)
+    quick.assert_called_once(); deep.assert_not_called()
+    with mock.patch.object(origin, 'of_task', return_value=('stranger', 'a first message')), mock.patch.object(quickwork, 'start') as quick,          mock.patch.object(ingest, '_start_general', return_value=True) as deep:
+        ingest._auto_general(s, tid)
     quick.assert_not_called(); deep.assert_called_once()
+
 
 def test_a_held_start_stays_held():
     s = home(general_auto_enabled='0'); tid, spawned = arrived(s)
@@ -476,7 +482,7 @@ def test_more_mail_after_a_quick_session_ended_is_answered_quick():
 
 def test_a_depth_that_cannot_be_read_starts_the_agent():
     s = home(); tid, _ = arrived(s)
-    with mock.patch.object(quickwork, 'takes', side_effect=RuntimeError('store gone')), mock.patch.object(quickwork, 'start') as quick, \
+    with mock.patch.object(quickwork, 'why_deep', side_effect=RuntimeError('store gone')), mock.patch.object(quickwork, 'start') as quick, \
          mock.patch.object(ingest, '_start_general', return_value=True) as deep:
         ingest._auto_general(s, tid)
     quick.assert_not_called(); deep.assert_called_once()

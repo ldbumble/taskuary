@@ -3307,10 +3307,10 @@ def advisor_brief(store, msg: dict, mid: int) -> str | None:
     return '\n\n'.join(parts)
 
 
-def _reads_quick(store, tid) -> bool:
-    "quickwork.takes, or False - the agent starts - when the depth cannot be read: a start never fails on it."
+def _reads_quick(store, tid, first: bool = False) -> bool:
+    "quickwork.takes (`first`: an arrival's first look, quickwork.looks_first), or False - the agent starts - when the depth cannot be read."
     from . import quickwork
-    try: return quickwork.takes(store, tid)
+    try: return quickwork.looks_first(store, tid) if first else quickwork.takes(store, tid)
     except Exception as e:
         logger.warning(f'the depth of task {tid} could not be read - it starts the agent: {e}')
         return False
@@ -3325,7 +3325,7 @@ def _auto_general(store, tid, brief: str = None, deep: bool = False):
     here has passed auto_start_ok already, so the gate is the same for both; a task triage never judged reads as deep."""
     from . import blackboard as bb, general, quickwork
     try:
-        if not deep and _reads_quick(store, tid): return quickwork.start(store, tid, brief)
+        if not deep and _reads_quick(store, tid, first=True): return quickwork.start(store, tid, brief)
         if not has_room(store):
             # the brief waits with it (a quick call's notes, an Advisor's idea): the drain starts the agent on it, not on the bare Summary
             store.enqueue_dispatch(tid, None, 'assistant', busy_words(store), brief=brief)

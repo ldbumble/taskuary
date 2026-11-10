@@ -461,6 +461,13 @@ def first_free(store, msg: dict, act: str) -> tuple:
     return free[0]['start'], free[0]['end']
 
 
+def head_of(env: dict) -> str:
+    "The card's words for a calendar answer, from its envelope: \"Accept Budget sync - Wed Nov 11, 2:30-3:00 PM\" - the card and its agent read one."
+    act, subject, line = env.get('act'), env.get('subject') or 'the meeting', env.get('when') or ''
+    return {'accept': f'Accept {subject} - {line}', 'decline': f'Decline {subject} - {line}', 'propose': f'Propose {line} for {subject}',
+            'schedule': f"Invite {', '.join(env.get('to') or []) or 'them'} to {subject} - {line}"}.get(act, f'{act} {subject}')
+
+
 def draft(store, mid: int, act: str, start: str = None, end: str = None, actor: str = 'owner', note: str = None) -> dict:
     """The answer, drafted into the approval queue: a review on the message (and its task) whose envelope is the calendar
     act. {reviewId, taskId, say}. A new time with none named is the first free one (first_free); `note` replaces the line the
@@ -489,10 +496,11 @@ def draft(store, mid: int, act: str, start: str = None, end: str = None, actor: 
     line = when(*at, all_day=bool(c and c.get('all_day') and act in ('accept', 'decline')))
     # the card's words, said here once: the time the calendar is told, and for a counter-proposal the time it replaces
     env.update(when=line, **({'was': when(c.get('start'), c.get('end'))} if act == 'propose' and c.get('start') else {}))
-    head = {'accept': f'Accept {subject} - {line}', 'decline': f'Decline {subject} - {line}',
-            'propose': f"Propose {when(start, end)} for {subject}", 'schedule': f'Invite {", ".join(who) or "them"} to {subject} - {line}'}[act]
+    head = head_of(env)
     old = next((r for r in store.reviews_for_message(int(mid)) if r.get('Status') == 'pending' and env_of(r).get('kind') == 'calendar'), None)
-    if old: store.decide_review(old['ReviewId'], 'rejected', old.get('DraftText'), actor, 'replaced by another calendar answer')
+    # ...REPLACED, never turned down (the stress round, 2026-11-10): marked rejected, its agent heard "turned down rv1" over an answer the owner
+    # only changed - a no that nobody said
+    if old: store.decide_review(old['ReviewId'], 'superseded', old.get('DraftText'), actor, 'replaced by another calendar answer')
     text = NOTE[act].format(when=when(start, end) if start else '') if note is None else str(note).strip()[:4000]
     rid = store.add_review({'TaskId': msg.get('TaskId'), 'MessageId': int(mid), 'Kind': 'outbound', 'Status': 'pending', 'DraftText': text, 'Deliver': json.dumps(env),
                             'Reason': f"{head}{' · ' + clash if clash else ''} - press {send_word()} and the calendar is told"})

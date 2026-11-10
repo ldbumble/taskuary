@@ -34,7 +34,7 @@ def test_the_agent_answers_an_invite_with_a_new_time_and_only_the_press_tells_th
         assert s.get_review(got['review'])['DraftText'] == 'Budget review runs then - would this work?'
         # ...set up again as an accept: one card, the new one
         again, _ = call(tid, 'answer_invite', answer='accept')
-        assert s.get_review(got['review'])['Status'] == 'rejected' and env(s, again['review'])['act'] == 'accept'
+        assert s.get_review(got['review'])['Status'] == 'superseded' and env(s, again['review'])['act'] == 'accept'
         assert send(s, again['review'])['ok'] and g.calls[0][1].endswith('/events/ev-1/accept')
 
 

@@ -595,6 +595,10 @@ def pressed(rv: dict, out: dict) -> tuple:
         from . import proposals
         a = proposals._action(rv) or 'action'
         return 'Approve', f"{a.replace('_', ' ')} - {json.dumps(out.get('result') or {}, default=str)[:300]}"
+    # ...a calendar answer is no reply: "the reply was sent" told the agent of an accepted invite (the stress round, 2026-11-10)
+    if (env := _envelope(rv)).get('kind') == 'calendar':
+        from .calwrite import head_of
+        return 'Send', f'the calendar was told: {head_of(env)}'
     return 'Send', f"the {'reply' if rv.get('MessageId') else 'message'} was sent" + (f" ({out['sent']})" if isinstance(out.get('sent'), str) else '')
 
 

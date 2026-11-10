@@ -129,7 +129,7 @@ class TheOwnersMove(unittest.TestCase):
         verbs = [c['verb'] for c in concierge.chips_for(s, rv_item)]
         self.assertEqual(verbs[:5], ['send_close', 'approve', 'accept_invite', 'decline_invite', 'propose_time']); self.assertNotIn('redraft', verbs)
         with mock.patch.object(calwrite, 'busy', return_value=BUSY): second = calwrite.draft(s, out['message_id'], 'decline')
-        self.assertEqual(s.get_review(first['reviewId'])['Status'], 'rejected')
+        self.assertEqual(s.get_review(first['reviewId'])['Status'], 'superseded')
         pending = [r for r in s.reviews_for_message(out['message_id']) if r['Status'] == 'pending']
         self.assertEqual([json.loads(r['Deliver'])['act'] for r in pending], ['decline'])
         self.assertTrue(calwrite.of_task(s, out['task_id'])['invite'])
@@ -164,6 +164,27 @@ class DraftedThenSent(unittest.TestCase):
         self.assertEqual(json.loads(kw['data']), {'comment': 'See you there.', 'sendResponse': True})
         self.assertEqual(self.s.get_review(d['reviewId'])['DeliveryState'], 'sent')
         self.assertTrue(any('Accepted Budget sync' in str(c.get('Body')) for c in self.s.list_comments(self.out['task_id'])))
+
+    def test_an_answer_the_owner_changes_is_replaced_never_turned_down(self):
+        """The agent set up Accept; the owner chose Decline instead. The Accept was marked rejected - and its agent heard "turned down rv1",
+        a no on what was only replaced (the stress round, 2026-11-10)."""
+        from taskuary import general
+        tid = self.out['task_id']
+        self.s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Accept is set up.')
+        self.s._exec("UPDATE comment SET CreatedAt='2000-01-01' WHERE TaskId=?", (tid,))
+        with mock.patch.object(calwrite, 'busy', return_value=BUSY):
+            first = calwrite.answer(self.s, tid, 'accept')
+            self.draft('decline')
+        self.assertEqual(self.s.get_review(first['review'])['Status'], 'superseded')
+        self.assertEqual(general.owner_did(self.s, tid), [])
+
+    def test_its_agent_is_told_the_calendar_answer_went_never_a_reply(self):
+        "Its Send told the agent \"the reply was sent\" - an invite accepted is no reply (the stress round, 2026-11-10)."
+        g = Fake()
+        with mock.patch.object(calwrite, 'requests', g), mock.patch('taskuary.general.approved') as told:
+            d = self.draft('accept'); self.assertTrue(send(self.s, d['reviewId'])['ok'])
+        press, what = told.call_args.args[2:4]
+        self.assertEqual(press, 'Send'); self.assertNotIn('reply', what); self.assertIn('Accept Budget sync', what)
 
     def test_decline_with_the_note_emptied_sends_no_note(self):
         g = Fake()

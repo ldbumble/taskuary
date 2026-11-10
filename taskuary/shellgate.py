@@ -322,6 +322,8 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
         store.add_comment_once(tid, 'taskuary', 'agent', f"The agent asked to {what}: `{str(cmd)[:300]}` - its terminal asks you to allow it.")
         return {'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'ask',
                                        'permissionDecisionReason': f'Taskuary asks you first: {what} ({why}).'}}
+    from . import landing
+    if (lands := landing.push_asked(store, tid, cmd, cwd, about)): return _deny(lands[1])      # the landing card's own button, never a second card
     if not _pending(store, tid, sid, cmd):
         from . import proposals
         proposals.queue(store, tid, {'action': 'shell_act', 'sid': str(sid), 'turn': turn_of(store, tid), 'command': str(cmd)[:4000], 'shell': shell, 'cwd': cwd or '',

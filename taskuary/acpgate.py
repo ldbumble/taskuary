@@ -27,6 +27,7 @@ from . import acp
 
 OWN = 'taskuary'
 ALLOWED, REFUSED, HELD = 'allowed', 'refused', 'held'
+CARD = 'card'           # held, and already the owner's button (the landing card's Push): never asked a second time with Allow once / Reject
 _HTTP = {'curl', 'wget', 'http', 'https', 'xh', 'invoke-webrequest', 'iwr', 'invoke-restmethod', 'irm'}
 _WRITE_METHOD = re.compile(r'^(post|put|patch|delete)$', re.I)
 # curl's short flags are case-sensitive (-F is a form post, -f is --fail); the long ones and PowerShell's -Body / -InFile are not
@@ -99,10 +100,14 @@ def decide(tc: dict, ctx: dict) -> tuple:
     if store is None or not str(tid or '').isdigit():
         return REFUSED, '; '.join(dict.fromkeys(a['what'] for a in shellgate.acts(t['command'], cwd))) + ' - it waits for the owner'
     shell = 'PowerShell' if re.search(r'powershell|pwsh', t['name'] + t['command'], re.I) else 'Bash'
-    # ...put to the owner as buttons (answerer): the Approve card is filed only if they do not answer, so nothing waits twice
-    if ctx.get('owner_asks') and not shellgate.trusted(store, cwd, todo := shellgate.acts(t['command'], cwd)):
-        return HELD, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for your answer'
     raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
+    todo = shellgate.acts(t['command'], cwd)
+    if not shellgate.trusted(store, cwd, todo):
+        from . import landing
+        # a push of the task's own work is the landing card's Push (landing.push_asked) - before any other button is drawn for it
+        if (lands := landing.push_asked(store, int(tid), t['command'], cwd, str(raw.get('description') or ''))): return (CARD if lands[0] else REFUSED), lands[1]
+        # ...put to the owner as buttons (answerer): the Approve card is filed only if they do not answer, so nothing waits twice
+        if ctx.get('owner_asks'): return HELD, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for your answer'
     said = shellgate.check(store, int(tid), str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False, about=str(raw.get('description') or ''))
     if not said: return ALLOWED, 'a repo the owner trusts to act on its own'
     return HELD, said['hookSpecificOutput']['permissionDecisionReason']
@@ -141,7 +146,7 @@ def answerer(ctx: dict, trace=None, held: dict = None):
         if answer == HELD and asks: answer, why = put_to_owner(ctx, params, why)
         out = acp.pick(params.get('options'), answer == ALLOWED)
         iid = str(tc.get('toolCallId') or '')
-        if answer != ALLOWED and held is not None: held[iid] = why if answer == HELD else f'Taskuary refused it: {why}'
+        if answer != ALLOWED and held is not None: held[iid] = why if answer in (HELD, CARD) else f'Taskuary refused it: {why}'
         name = tool_of(tc)['name'] or str(tc.get('title') or 'tool')
         (logger.info if answer == ALLOWED else logger.warning)(f'acp permission: {name} {answer}' + (f' - {why}' if why else ''))
         if trace: trace('permission', name, {'tool_call_id': iid, 'answer': answer, 'why': why, 'title': str(tc.get('title') or '')[:200]})

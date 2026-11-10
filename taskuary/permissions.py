@@ -35,7 +35,8 @@ def normal(r: dict) -> dict:
     opts = [o for o in (r.get('options') or OPTIONS) if o in OPTIONS] or ['allow_once', 'reject_once']
     locs, inp = [str(l) for l in (r.get('locations') or []) if str(l or '').strip()], r.get('input') if isinstance(r.get('input'), dict) else {}
     out = {'tool': str(r.get('tool') or r.get('kind') or 'a tool'), 'kind': str(r.get('kind') or 'other').lower(), 'title': str(r.get('title') or r.get('tool') or ''),
-           'locations': locs, 'input': inp, 'sid': str(r.get('sid') or ''), 'command': str(r.get('command') or inp.get('command') or '')}
+           'locations': locs, 'input': inp, 'sid': str(r.get('sid') or ''), 'command': str(r.get('command') or inp.get('command') or ''),
+           'about': cut(' '.join(str(inp.get('description') or '').split()), 300), 'what': '', 'why': ''}        # what/why: held_for, once it is the owner's
     out['risky'] = risky(out)
     if out['risky']: opts = [o for o in opts if o != 'allow_always']            # an "always" for a push is a push nobody saw
     out['options'] = opts
@@ -87,10 +88,31 @@ def kind_of(said, offered) -> str:
     return ''
 
 
+# WHAT IS ASKED, IN WORDS (the agent walk, 2026-11-09). A long shell line reached the owner as 'It wants to run "git add ... | tail -1; gi"':
+# cut mid-word, and the step it was held for - the push at its end - past the cut. The card leads with the agent's own words for the step
+# (`about`: its description) and what the shell gate holds in it (`what`, `why`), the command whole under a fold; a line of text (a bound
+# chat, the rail) is cut on a word and says so
+def cut(x, n: int) -> str:
+    t = str(x or '')
+    return t if len(t) <= n else (t[:n].rsplit(None, 1)[0] if any(c.isspace() for c in t[:n]) else t[:n]).rstrip() + '\u2026'
+
+
+def held_for(r: dict, cwd: str = '') -> dict:
+    "{'what', 'why'} of a command, in the shell gate's own words - '' where it holds nothing in it."
+    from . import shellgate
+    todo = shellgate.acts(r['command'], str(r['input'].get('cwd') or cwd or '')) if r['command'] else []
+    return {k: '; '.join(dict.fromkeys(a[k] for a in todo)) for k in ('what', 'why')}
+
+
+def asked(r: dict) -> str:
+    "The step in a few words, for the line the owner's answer leaves in the chat: the agent's own, else what it does, else its title."
+    return cut(r.get('about') or r.get('what') or (r['title'] if r['title'] != r['command'] else '') or (f"run `{r['command']}`" if r['command'] else r['tool']), 160)
+
+
 def line(r: dict) -> str:
     where = f" ({', '.join(r['locations'][:3])})" if r['locations'] else ''
     what = r['title'] or r['tool']
-    return f"wants to {what}{where}" if not r['command'] else f"wants to run `{r['command'][:300]}`{where}"
+    return f"wants to {what}{where}" if not r['command'] else f"wants to run `{cut(r['command'], 300)}`{where}"
 
 
 def pending(tid: int = None, store=None) -> list:
@@ -98,6 +120,7 @@ def pending(tid: int = None, store=None) -> list:
     with _LOCK: rows = [dict(p) for p in PENDING.values() if (tid is None or p['tid'] == int(tid)) and (store is None or p['store'] is store)]
     return [{'id': p['id'], 'tid': p['tid'], 'ref': task_ref(p['tid']), 'line': line(p['req']), 'title': p['req']['title'], 'tool': p['req']['tool'],
              'kind': p['req']['kind'], 'locations': p['req']['locations'], 'at': p['at'], 'until': p['until'], 'risky': p['req']['risky'],
+             **{k: p['req'][k] for k in ('about', 'what', 'why', 'command')},
              'options': [{'kind': o, 'label': LABEL[o]} for o in p['req']['options']]} for p in sorted(rows, key=lambda p: p['at'])]
 
 
@@ -112,6 +135,8 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None) -> s
         store.audit('task', tid, 'permission_auto', 'taskuary', 'system', {'pattern': pattern(r), 'answer': got, 'why': why})
         return got
     pid, wait = uuid.uuid4().hex[:12], TIMEOUT if wait is None else wait
+    try: r.update(held_for(r, _cwd(store, tid)))
+    except Exception as e: logger.debug(f'permission on {task_ref(tid)}: its step not read - {e}')
     g = ws.group_key(f'perm:{tid}:{pid}')
     live = ws._live(tid)            # the run that owns the task keys its requests (workerstate.record), else the asking session's
     rid, sid = ws.question_id(g, 1), (str(live.sid) if live else '') or r['sid'] or ws.current_sid(store, tid) or f'perm-{pid}'
@@ -141,7 +166,7 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None) -> s
         if timed_out: timed_out()
         return ans
     if ans.endswith('_always'): store.set_perm_rule(tid, pattern(r), 'allow' if ans.startswith('allow') else 'reject')
-    store.audit('task', tid, 'permission_answered', 'owner', detail={'pid': pid, 'answer': ans, 'pattern': pattern(r)})
+    store.audit('task', tid, 'permission_answered', 'owner', detail={'pid': pid, 'answer': ans, 'pattern': pattern(r), 'asked': asked(r)})
     return ans
 
 

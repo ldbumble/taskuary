@@ -327,7 +327,8 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))
         return out['answer'] if out.get('ok') else out.get('says') or _j(out)
     if name == 'note_peers': return _j(doors['note_peers'](tid, str(a.get('to') or ''), str(a.get('text') or '')))
-    if name == 'propose_land': return _j(doors['propose_land'](tid, str(a.get('how') or ''), str(a.get('why') or '')))
+    # ...`deploy` with it: dropped here, "how push, deploy <branch>" drew Push alone and the agent asked for the deploy in words
+    if name == 'propose_land': return _j(doors['propose_land'](tid, str(a.get('how') or ''), str(a.get('why') or ''), **({'deploy': str(a['deploy'])} if a.get('deploy') else {})))
     if name == 'use_repo':
         out = doors['use_repo'](tid, str(a.get('path_or_name') or ''), str(a.get('why') or ''))
         return out.get('says') or _j(out)

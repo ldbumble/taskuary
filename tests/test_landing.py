@@ -4,7 +4,7 @@ temp folder, no network."""
 import os, subprocess, tempfile, time, unittest
 from unittest import mock
 
-from taskuary import guard, landing
+from taskuary import guard, landing, shellgate
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -258,6 +258,99 @@ class LandingTests(unittest.TestCase):
         with self.assertRaises(landing.Refused) as e: landing.land(self.s, self.tid, 'push')
         self.assertIn('nothing was pushed', str(e.exception))
         with self.assertRaises(ValueError): landing.land(self.s, self.tid, 'deploy')           # not offered: no deploy branch known
+
+    # ── AN AGENT'S OWN `git push` IS THE CARD'S QUESTION TOO (the agent walk, 2026-11-09): told to call propose_land, a coding agent ran
+    # `git add ... && git commit ... && git push` in its shell. With Developer mode on the owner got "THE AGENT ASKS - It wants to run
+    # "git add ... | tail -1; gi"" with Allow once / Reject - cut mid-word, the push not on it - beside a card built to ask it with one Push
+    def dev(self): self.s.set_setting('developer_mode', '1', 'test')
+    def pushed(self): return git(self.remote, 'rev-parse', 'master') == self.sha('master')
+
+    def test_a_push_run_in_the_shell_becomes_the_push_button(self):
+        self.on_master_with_origin(); self.dev()
+        held, said = landing.push_asked(self.s, self.tid, 'git push origin master', self.cwd, about='Push the rounding fix')
+        self.assertTrue(held); self.assertTrue(said.startswith(shellgate.HELD), said); self.assertIn('Push button', said)
+        s = landing.state(self.s, self.tid)
+        self.assertEqual(s['proposal']['how'], 'push'); self.assertIn('rounding fix', s['proposal']['why'])
+        self.assertFalse(self.pushed(), 'asking pushes nothing')
+        # ...a bare `git push` is the same push, and asked twice it is still one question
+        self.assertTrue(landing.push_asked(self.s, self.tid, 'git push', self.cwd)[0])
+        self.assertTrue(landing.push_asked(self.s, self.tid, 'git push -u origin HEAD', self.cwd)[0])
+
+    def test_a_push_onto_another_branch_is_push_and_deploy(self):
+        for cmd in ('git push origin master:deploy', 'git push origin HEAD:deploy', 'git push origin master && git push origin master:deploy'):
+            with self.subTest(cmd):
+                self.tearDown(); self.setUp(); self.on_master_with_origin(); self.dev()
+                self.assertTrue(landing.push_asked(self.s, self.tid, cmd, self.cwd)[0])
+                s = landing.state(self.s, self.tid)
+                self.assertEqual((s['proposal']['how'], s['proposal']['deploy'], [a['how'] for a in s['answers']]), ('deploy', 'deploy', ['push', 'deploy']))
+
+    def test_commit_and_push_in_one_line_runs_nothing_and_says_how_to_ask(self):
+        self.on_master_with_origin(); self.dev()
+        held, said = landing.push_asked(self.s, self.tid, 'git add -A && git commit -m "round once" && git push origin master', self.cwd)
+        self.assertFalse(held, 'nothing waits on the owner yet: the commit in the line has not run')
+        self.assertIn('propose_land', said); self.assertIn('without the push', said)
+        self.assertIsNone(landing.state(self.s, self.tid)['proposal'])
+        # ...output thrown away is no second step: the push alone is still the button
+        self.assertTrue(landing.push_asked(self.s, self.tid, 'git push origin master 2>&1', self.cwd)[0])
+        # ...and a push alone with nothing of the task's own on the card is never sent to a tool that would refuse it: held the old way
+        t2 = Factory(self.s).task(title='Round the totals', kind='coding'); landing.mark_start(self.s, t2, self.cwd)
+        self.assertFalse(landing.push_asked(self.s, t2, 'git push', self.cwd))
+
+    def test_the_tool_carries_the_deploy_branch(self):
+        # "how push, deploy <branch>" drew Push alone: the tool's door dropped `deploy`, and the agent asked for the deploy in words
+        from taskuary import agenttools
+        got = {}
+        agenttools.call(self.s, self.tid, 'propose_land', {'how': 'push', 'why': 'live is the ask', 'deploy': 'deploy'},
+                        {'propose_land': lambda tid, how, why, deploy='': got.update(how=how, deploy=deploy) or {'ok': True}})
+        self.assertEqual(got, {'how': 'push', 'deploy': 'deploy'})
+
+    def test_what_the_card_cannot_do_is_held_the_old_way(self):
+        self.on_master_with_origin(); self.dev()
+        for cmd in ('git push --force origin master', 'git push --tags', 'git push fork master', 'git push origin :old', 'git push origin +master',
+                    'git push origin master other', 'gh pr create --fill && git push', 'git -C ../portal push', 'cd ../portal && git push',
+                    'bash -c "git push origin master"', 'git status'):
+            with self.subTest(cmd): self.assertFalse(landing.push_asked(self.s, self.tid, cmd, self.cwd))
+        other = tempfile.mkdtemp(); git(other, 'init', '-q', '-b', 'master')
+        self.assertFalse(landing.push_asked(self.s, self.tid, 'git push', other), 'a push from another checkout is not this task\'s work')
+        self.assertFalse(landing.push_asked(self.s, Factory(self.s).task(title='No checkout'), 'git push', self.cwd))
+        from taskuary import agents
+        with mock.patch.object(agents, 'developer_mode', agents.developer_mode.real):     # the suite runs with it on (conftest)
+            self.assertTrue(landing.push_asked(self.s, self.tid, 'git push origin master', self.cwd))
+            self.s.set_setting('developer_mode', '0', 'test')
+            self.assertFalse(landing.push_asked(self.s, self.tid, 'git push origin master', self.cwd), 'no landing card is drawn with Developer mode off')
+
+    def test_its_own_branch_pushed_is_the_landing_question(self):
+        self.remote = tempfile.mkdtemp(); git(self.remote, 'init', '-q', '--bare')
+        git(self.cwd, 'remote', 'add', 'origin', self.remote); git(self.cwd, 'push', '-q', 'origin', 'master')
+        self.branch(); self.dev()
+        held, said = landing.push_asked(self.s, self.tid, 'git push -u origin fix-rounding', self.cwd)
+        self.assertTrue(held, said)
+        s = landing.state(self.s, self.tid)
+        self.assertEqual((s['proposal']['how'], len(s['answers'])), ('pr', 4), 'all four answers, its pick marked')
+        self.assertFalse(git(self.remote, 'branch', '--list', 'fix-rounding'))
+
+    def test_both_gates_ask_the_card_first(self):
+        from taskuary import acpgate
+        self.on_master_with_origin(); self.dev()
+        tc = lambda cmd: {'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': cmd, 'description': 'Push the fix'}}
+        ctx = {'store': self.s, 'task_id': self.tid, 'cwd': self.cwd, 'sid': 'run1', 'owner_asks': True}
+        with mock.patch.object(shellgate, 'trusted', return_value=''):
+            asked = []
+            with mock.patch('taskuary.permissions.ask', side_effect=lambda *a, **k: asked.append(a) or 'reject_once'):
+                held = {}
+                out = acpgate.answerer({k: v for k, v in ctx.items() if k != 'owner_asks'}, held=held)({'toolCall': tc('git push origin master'), 'options': [
+                    {'optionId': 'y', 'kind': 'allow_once'}, {'optionId': 'n', 'kind': 'reject_once'}]})
+            self.assertEqual(asked, [], 'no Allow once / Reject card beside the Push button')
+            self.assertEqual(out.get('optionId'), 'n'); self.assertTrue(held['c'].startswith(shellgate.HELD), held)
+            self.assertEqual(acpgate.decide(tc('git add -A && git commit -m x && git push'), ctx)[0], acpgate.REFUSED)
+            # ...the hook's road and an API agent's run_command (shellgate.check): the same answer, and no Approve card filed beside it
+            said = shellgate.check(self.s, self.tid, 'run1', 'git push origin master', cwd=self.cwd)['hookSpecificOutput']['permissionDecisionReason']
+            self.assertIn('Push button', said)
+            self.assertEqual(self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (self.tid,)), [])
+        # ...and a repo the owner trusts to act on its own still just pushes
+        with mock.patch.object(shellgate, 'trusted', return_value='northwind/ledger'):
+            self.assertEqual(shellgate.check(self.s, self.tid, 'run1', 'git push origin master', cwd=self.cwd), {})
+            self.assertEqual(acpgate.decide(tc('git push origin master'), ctx)[0], acpgate.ALLOWED)
 
 
 class LandingDoorTests(unittest.TestCase):

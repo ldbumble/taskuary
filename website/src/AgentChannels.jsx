@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, MenuItem, TextField, Typography } from "@mui/material";
 import api from "./api.js";
-import { ID_HINT, channelLine, membersOf } from "./agentChannels.js";
+import { ID_HINT, channelLine, membersOf, permissionLead } from "./agentChannels.js";
 import ChatPicker from "./ChatPicker.jsx";
 import { chatHint, chatUrl, noChats } from "./chatPicker.js";
 import { ACCENT, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
@@ -26,10 +26,14 @@ export function PermissionCards({ taskId, items = [], onAnswered }) {
     catch (e) { setErr(why(e, "That answer did not reach the agent")); }
     setBusy("");
   };
-  return items.map((p) => (
+  return items.map((p) => { const l = permissionLead(p); return (
     <Box key={p.id} data-tq-permission={p.id} sx={card} role="group" aria-label="The agent asks permission">
       <Head>THE AGENT ASKS</Head>
-      <Typography variant="body2" sx={{ color: INK }}>It {p.line.replace(/\x60([^\x60]+)\x60/g, "“$1”")}.</Typography>
+      <Typography variant="body2" sx={{ color: INK }}>{l.lead}</Typography>
+      {l.why && <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.2 }}>{l.why}</Typography>}
+      {l.command && <Box component="details" open={l.open || undefined} data-tq-permission-command sx={{ mt: 0.4, fontSize: 12, color: DIM, "& summary": { cursor: "pointer" },
+        "& code": { display: "block", whiteSpace: "pre-wrap", overflowWrap: "anywhere", mt: 0.4, fontSize: 11.5, fontFamily: mono, color: INK } }}>
+        <summary>Show the command</summary><code>{l.command}</code></Box>}
       <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 0.8 }}>
         {p.options.map((o) => <Button key={o.kind} size="small" disableElevation disabled={!!busy} data-tq-permission-answer={o.kind}
           variant={o.kind === "allow_once" ? "contained" : "outlined"}
@@ -40,7 +44,7 @@ export function PermissionCards({ taskId, items = [], onAnswered }) {
       <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.5 }}>
         {p.risky ? "It sends or pushes, so there is no Always for it. " : ""}No answer by {String(p.until || "").slice(11, 16)} refuses it.</Typography>
       {err && <Typography variant="body2" sx={{ mt: 0.5, color: "#7a2f3c" }}>{err}</Typography>}
-    </Box>));
+    </Box>); });
 }
 
 // ── the setup: the bindings, Unbind, and Add a channel ─────────────────────────────────────────────────────────────────

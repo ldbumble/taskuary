@@ -393,6 +393,67 @@ def from_proposal(store, tid: int, p: dict) -> dict | None:
     return propose(store, tid, how, str(p.get('why') or ''), deploy=str(p.get('deploy') or p.get('target') or '') if not s['own'] else '')
 
 
+# AN AGENT'S OWN `git push` IS THE CARD'S QUESTION TOO (the agent walk, 2026-11-09). Told to call propose_land, a coding agent ran
+# `git add ... && git commit ... && git push` in its shell instead, and the owner got "THE AGENT ASKS - It wants to run ..." with Allow once /
+# Reject - the line cut mid-word, the push not on it - beside a card built to ask it with one Push. A plain push of the task's own work from
+# its own checkout is that card's question, on every road a shell step is held by (shellgate.check, acpgate.decide). What the button is
+# not - forced, tags, a delete, another remote or checkout, a push inside another shell's string - is held the way any other step is.
+_PUSH_OPTS = frozenset('-u --set-upstream -q --quiet -v --verbose --progress --porcelain'.split())
+_TO_NOWHERE = re.compile(r'\s\d?>{1,2}\s*(?:&\d|/dev/null|\$null|nul)(?=\s|$|[;&|)])', re.I)     # `2>&1`, `>/dev/null`: no part of what is pushed
+_MOVES = frozenset('cd pushd popd chdir set-location sl'.split())
+
+
+def _push_of(argv: list) -> tuple | None:
+    "(src, dst) of one plain `git push [origin [src[:dst]]]`, '' where git's own default decides - None for anything else."
+    from .shellgate import _name
+    if len(argv) < 2 or _name(argv[0]) != 'git' or argv[1] != 'push': return None
+    opts, w = {t for t in argv[2:] if t.startswith('-')}, [t for t in argv[2:] if not t.startswith('-')]
+    if opts - _PUSH_OPTS or len(w) > 2 or w[:1] not in ([], ['origin']): return None
+    src, _, dst = (w[1] if len(w) > 1 else '').partition(':')
+    if src.startswith('+') or (len(w) > 1 and not src): return None             # forced, or `:branch` - a delete
+    return src, dst or src
+
+
+def _top(cwd) -> str: return os.path.normcase(os.path.realpath(_git(cwd, 'rev-parse', '--show-toplevel') or cwd))
+
+
+def push_asked(store, tid: int, cmd: str, cwd: str = '', about: str = '') -> tuple | None:
+    """A shell line that pushes this task's own work, as the card's question. (True, words for the agent): the push is on the card, marked.
+    (False, words): the line does more than push - none of it runs, and the agent is told to ask with propose_land after the rest.
+    None: the card's buttons are not this push (or there is no card: Developer mode off, no checkout) - held like any other step."""
+    from . import agents, shellgate
+    from .browsergate import _segments
+    r = record(store, tid)
+    if not (cwd and r.get('cwd') and agents.developer_mode(store)): return None
+    todo, segs = shellgate.acts(cmd, cwd), _segments(_TO_NOWHERE.sub(' ', str(cmd or ''))) or []
+    pushes = [p for a in segs if (p := _push_of(a))]
+    if not todo or len(pushes) != len(todo) or any(a['what'] != shellgate.GIT['push'] for a in todo): return None
+    if any(shellgate._words(a)[0] in _MOVES for a in segs) or _top(cwd) != _top(r['cwd']): return None
+    s = state(store, tid)
+    if not s: return None
+    cur, to = head_branch(cwd), set()
+    for src, dst in pushes:
+        src, dst = (cur if x in ('', 'HEAD') else x.removeprefix('refs/heads/') for x in (src, dst))
+        if not src or src != s['branch'] or (s['own'] and dst != src) or not _branch_ok(dst): return None
+        to.add(dst)
+    live = set() if s['own'] else to - {s['base']}
+    if len(live) > 1: return None
+    how, deploy = 'pr' if s['own'] else 'push', next(iter(live), '')
+    button = HOW['deploy' if deploy else how]
+    if len(segs) > len(pushes):                   # the commit in the same line has not run: there is nothing to put on the card yet
+        return False, (f"Taskuary did not run this line: a push from this task's checkout is the owner's {button} button, never a shell step. Run "
+                       f"the rest of it without the push, then call propose_land (how {how}{f', deploy {deploy}' if deploy else ''}) - they get "
+                       "the button, and Taskuary tells you when it went.")
+    if not s['ask']: return None
+    try:
+        if ((s['proposal'] or {}).get('how'), (s['proposal'] or {}).get('deploy') or '') != ('deploy' if deploy else how, deploy):
+            propose(store, tid, how, about, deploy=deploy)
+    except ValueError: return None
+    return True, (f"{shellgate.HELD}: this push is the owner's {button} button on the task now, not a shell step - {state(store, tid)['line']} Nothing "
+                  "is pushed until they press it, and Taskuary tells you when it went. Do not push another way. The button is the ask: say in "
+                  "one line what waits on it - never ask in words. End your turn now, or go on with work that does not need it.")
+
+
 class Refused(RuntimeError): pass
 
 

@@ -27,6 +27,18 @@ export function membersOf({ owner = "", ownerId = "", teammates = [] } = {}) {
       .map((t) => ({ name: t.name.trim(), id: t.id.trim(), role: "teammate" }))];
 }
 
+// WHAT A PERMISSION CARD SAYS (permissions.py `pending`): a command is led by the agent's own words for the step (`about`), else by what the
+// shell gate holds in it (`what`), with why it waits - and the command itself, whole, under a fold. It was 'It wants to run "git add ...
+// | tail -1; gi"': cut mid-word, the held step past the cut (the agent walk, 2026-11-09). A command nobody said anything about is shown
+// open; what is no command is the server's own line
+const upFirst = (x) => (x ? x[0].toUpperCase() + x.slice(1) : x);
+export function permissionLead(p) {
+  const about = String(p?.about || "").trim(), what = String(p?.what || "").trim(), command = String(p?.command || "");
+  if (!command) return { lead: `It ${String(p?.line || "asks to go on").replace(/\x60([^\x60]+)\x60/g, "\u201c$1\u201d")}.`, why: "", command, open: false };
+  return { lead: upFirst(about || what) || "Run a command in its shell", command, open: !(about || what),
+    why: what ? `Held before it ran - ${p?.why || "it leaves this computer"}${about ? `: it would ${what}` : ""}.` : "" };
+}
+
 // "Slack · C0LEDGER · with Gail Moreno, Ray Colton"
 export function channelLine(c) {
   const mates = (c?.members || []).filter((m) => m.role === "teammate").map((m) => m.name);

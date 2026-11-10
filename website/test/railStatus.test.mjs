@@ -154,7 +154,9 @@ test("a chat agent the owner answered is agent done on the rail and the chip, ne
   assert.equal(taskStatus({ chat: true, live: parked, state: "agentdone" }).word, "agent done");
   assert.equal(taskStatus({ chat: true, live: parked, state: "blocked" }).word, "agent waiting on you");
   assert.equal(taskStatus({ chat: true, live: { alive: true, waiting: false }, state: "agentdone" }).key, "working");
-  assert.equal(taskStatus({ live: parked, state: "agentdone" }).word, LANE_META.blocked.word, "a coding agent keeps its own cycle");
+  // ...a coding agent's too (the owner, 2026-11-10): it pushed, said nothing is left - "agent done", never "agent waiting on you"
+  assert.equal(taskStatus({ live: parked, state: "agentdone" }).word, "agent done");
+  assert.equal(taskStatus({ live: parked, state: "blocked" }).word, LANE_META.blocked.word, "one that asked, or waits on its Push, still waits on you");
   assert.equal(taskStatus({ state: "queued", queued: { state: "failed" } }).word, "couldn't start");
   assert.equal(taskStatus({ state: "queued", queued: { state: "waiting" } }).word, LANE_META.queued.word);
 });

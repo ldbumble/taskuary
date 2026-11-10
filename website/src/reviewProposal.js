@@ -206,7 +206,7 @@ export const proposalPresentation = (review) => {
     kind: "action",
     title: "Move this part to a task of its own",
     context: review.Reason || "Proposed · nothing moves until you approve",
-    destinationLabel: "New task",
+    destinationLabel: "Its own task",
     destination: proposal.title || "",
     approveLabel: APPROVE,
     busyLabel: "moving…",

@@ -986,10 +986,11 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         # Timeline, reading the session, said "is waiting on you". No words on the tail decide it any more (2026-10-11):
         # a session with no state of its own is parked, never "asked you" from a "?" in what it wrote.
         asking = t.get('state') == 'asking'
-        # ...A CHAT AGENT THAT ASKED NOTHING is done for now (the owner, 2026-11-07; after a Send too, 2026-11-06): its row said "Taskuary is
-        # waiting on you" - it is the task's wrap-up, "agent done", until something is typed again. A reply or an email it drafted still waits on you
-        from . import general
-        if not asking and t.get('mode') == 'assistant' and general.handles(task) and not store.waiting_on_owner(tid):
+        # ...AN AGENT THAT ASKED NOTHING is done for now (the owner, 2026-11-07; after a Send too, 2026-11-06; a coding agent's as well,
+        # 2026-11-10): its row said "Taskuary is waiting on you" - it is the task's wrap-up, "agent done", until something is typed again. A
+        # reply or an email it drafted still waits on you. One reading with the task's own state (taskstate.done_for_now)
+        from . import taskstate
+        if not asking and taskstate.done_for_now(store, task, t):
             out.append(chat_done(store, task, t.get('started'))); continue
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                          tid=tid, agent=agent, priority=task.get('Priority'), asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',

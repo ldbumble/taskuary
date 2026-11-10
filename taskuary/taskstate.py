@@ -161,10 +161,8 @@ class TaskState:
             parked = (session.get('state') or 'parked') == 'parked' and not session.get('request')
             if parked and (t.get('ReviewStatus') == 'pending' or store.waiting_on_owner(tid)): return 'approve'
 
-            # ...and a CHAT agent whose turn asked nothing is done for now, never waiting on you (the owner, 2026-11-07) - as it reads once idled out
-            from .general import handles
-            if parked and handles(t): return 'agentdone'
-            return 'blocked'
+            # ...and an agent whose turn asked nothing is done for now, never waiting on you (the owner, 2026-11-07) - as it reads once idled out
+            return 'agentdone' if done_for_now(store, t, session) else 'blocked'
         st = t.get('Status')
         if st == 'dropped': return 'dropped'
         if st == 'done':
@@ -188,6 +186,21 @@ class TaskState:
         if str(t.get('Assignee') or '').startswith('agent:') or _general_waiting(store, t): return 'queued'
         if st == 'waiting': return 'theirs'
         return 'yours'
+
+
+def done_for_now(store, t: dict, session: dict) -> bool:
+    """A live agent whose turn ENDED with nothing asked and nothing left for a press: "agent done", Mark done lit, the task still open under
+    Tasks (the owner, 2026-11-10). A chat agent always read so; a coding agent that had pushed and said "Nothing is left to do on this
+    task" read "agent waiting on you" with no button lit (agent walk 2). Any other agent's reads it once a turn of this session has ended -
+    a pane just opened has done nothing yet, and one with work still in the background is not over - and no landing question of its waits."""
+    if (session.get('state') or 'parked') != 'parked' or session.get('request') or session.get('held'): return False
+    tid = t['TaskId']
+    if t.get('ReviewStatus') == 'pending' or store.waiting_on_owner(tid): return False
+    from .general import handles
+    if handles(t): return True
+    from . import landing, workerstate as ws
+    evs = [e for e in ws.events(store, tid, session.get('sid')) if e['Kind'] not in ws.NOTES]
+    return bool(evs) and evs[-1]['Kind'] == 'turn_end' and not landing.asked(store, tid)
 
 
 def task_state(store, t: dict = None, session=None, queued=None, tid=None) -> TaskState:

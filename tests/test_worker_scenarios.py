@@ -144,7 +144,7 @@ class Unread(Base):
         asking = [{'taskId': self.tid, 'sid': 'run1', 'agent': 'coding', 'started': '2026-09-06 12:00:00', 'waiting': True,
                    'request': {'request_id': 'q1', 'kind': 'input_needed', 'text': 'Which branch?', 'choices': ['main']}, 'tail': ['> ']}]
         it = funnel.from_agents(self.s, live_state=asking)[0]
-        self.assertEqual((it['lane'], it['asking']), ('blocked', True)); self.assertIn('Which branch?', it['why'])
+        self.assertEqual((it['lane'], it['asking'], it['tail']), ('blocked', True, ['Which branch?'])); self.assertNotIn('Which branch?', it['why'])
         term.SESSIONS['run1'] = live(self.tid)
         ws.record(self.s, self.tid, 'run1', 'finished', text='Done: exports fixed.', source='cli')
         finished = [{'taskId': self.tid, 'sid': 'run1', 'agent': 'coding', 'started': '2026-09-06 12:00:00', 'waiting': False, 'tail': ['> ']}]

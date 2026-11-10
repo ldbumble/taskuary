@@ -495,6 +495,12 @@ def hold(store, tid: int, actor: str = 'owner') -> dict:
     return {'ok': True, 'held': True, 'says': 'Not now - nothing went out. It waits on the task for your press.'}
 
 
+def asked(store, tid) -> bool:
+    "Does a landing question of the agent's wait, as the record alone says it (no git - a rail build asks): it proposed one, nothing landed since."
+    r = record(store, tid); p = r.get('proposal') or {}
+    return bool(p) and str((r.get('landed') or {}).get('at') or '') < str(p.get('at') or '')
+
+
 class Refused(RuntimeError): pass
 
 

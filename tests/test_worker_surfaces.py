@@ -211,7 +211,8 @@ class FunnelTests(unittest.TestCase):
         items = funnel.from_agents(self.s, live_state=live)
         self.assertEqual(len(items), 1); it = items[0]
         self.assertTrue(it['asking']); self.assertEqual(it['request_id'], 'q1'); self.assertEqual(it['choices'], ['a', 'b'])
-        self.assertIn('Which repository should I use?', it['why']); self.assertEqual(it['tail'], ['Which repository should I use?'])
+        self.assertEqual(it['tail'], ['Which repository should I use?'])
+        self.assertNotIn('Which repository', it['why'], 'nothing is asked on the rail: the row says it waits, the card in the task asks')
         live[0]['request'] = {'request_id': 'p1', 'kind': 'approval_needed', 'text': 'Run alembic upgrade head?', 'choices': []}
         it = funnel.from_agents(self.s, live_state=live)[0]
         self.assertIn('approval', it['why'].lower()); self.assertEqual(it['request_kind'], 'approval_needed')

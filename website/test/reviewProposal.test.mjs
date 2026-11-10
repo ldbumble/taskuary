@@ -175,7 +175,7 @@ test("a break-out card says the new task and what moves to it, and its result na
   assert.equal(reviewText({ Kind: "action", DraftText: JSON.stringify(p) }),
     "Erin's ask about seats, apart from the invoice\n\nErin Blake: can we renew the Trainly seats before Friday?");
   const card = proposalPresentation({ Kind: "action", DraftText: JSON.stringify(p), Reason: "the agent proposes to move 1 message to a task of its own" });
-  assert.deepEqual([card.title, card.destinationLabel, card.destination, card.readOnly], ["Move this part to a task of its own", "New task", "Renew the Trainly seats", true]);
+  assert.deepEqual([card.title, card.destinationLabel, card.destination, card.readOnly], ["Move this part to a task of its own", "Its own task", "Renew the Trainly seats", true]);
   const done = { ...p, result: { task: 9, ref: "TQ-0009", said: "TQ-0009 is the new task: Renew the Trainly seats" } };
   assert.deepEqual(resultOf({ Kind: "action", Status: "approved", FinalText: JSON.stringify(done) }),
     { said: "Approved · moved to its own task", what: "TQ-0009 is the new task: Renew the Trainly seats", url: "", command: "" });

@@ -394,6 +394,13 @@ class TheHandsTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'stopped'): self.run_('run_command', command='npm run build', why='build it')
         killed.assert_called_once()
 
+    def test_a_step_that_waits_for_approve_is_asked_for_by_calling_it(self):
+        "Told only that a push waits for the owner's Approve, a model wrote that it needed approval and never called: no button on the task."
+        from taskuary import apiagent
+        said = next(t['function']['description'] for t in apiagent.SHELL if t['function']['name'] == 'run_command')
+        for text in (said, apiagent.TOOLS_BRIEF):
+            self.assertIn("waits for the owner's Approve", text); self.assertIn(apiagent.ASK_BY_CALLING, text)
+
     def test_a_command_the_cli_would_hold_is_held_by_the_same_gate_and_never_run(self):
         with mock.patch('taskuary.spawn.popen') as ran:
             said = self.run_('run_command', command='git push origin main', why='publish the fix')

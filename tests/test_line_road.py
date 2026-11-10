@@ -119,7 +119,8 @@ def first_turn(kind, s, tid, c, wait=True):
     "A turn before his line, on the same road: the task's agent up and once at work."
     c.post(f'/api/tasks/{tid}/assistant/messages', json={'text': 'look at the totals first'}, timeout=120) if wait else \
         threading.Thread(target=lambda: c.post(f'/api/tasks/{tid}/assistant/messages', json={'text': 'look at the totals first'}), daemon=True).start()
-    if wait: assert until(lambda: not read(kind, c, tid)['working'], 60), 'the first turn ended'
+    # ...a setup wait, not the thing under test: a slow runner starting the stand-in adapter for the first time took over a minute (CI's macOS)
+    if wait: assert until(lambda: not read(kind, c, tid)['working'], 240), 'the first turn ended'
     else: assert until(lambda: read(kind, c, tid)['working'] and general._live_of(tid) is not None, 30)
 
 

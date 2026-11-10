@@ -41,6 +41,35 @@ export const matchCards = (groups, q) => {
     || terms.some((x) => String(c.haystack || "").toLowerCase().includes(x))));
   return hits.map((c, i) => [rank(c), c.planned ? 1 : 0, i, c]).sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]).map((x) => x[3]);
 };
+// A CARD'S STATE: what it says outright (`state`), else read off its status line. CONNECTED IS SAID, NEVER ASSUMED (the owner,
+// 2026-11-10: "it says not added but then green. come on"): any line that did not read as off - a vendor MCP card's "not added", a
+// guide card's sentence - fell through to "on" and wore the green ring and the Connected pill. Only a line that says it is on is on:
+// a channel card's "on · ...", a data card's "connection ✓", an agent tool's "added · ...".
+export const cardState = (c) => (c.state || (c.planned ? "planned" : c.guide ? "guide"
+  : /failing|test failed/.test(c.desc) ? "failing"
+    : /^on\b|^added\b|connection ✓/.test(c.desc || "") ? "on" : "off"));
+// ...and the state a card that is not set up says, one wording for every kind (an MCP card said "not added", a data card "not set up")
+export const NOT_SET_UP = "not set up";
+
+// ONE CARD PER SYSTEM, BY THE CATALOGUE'S `system` (the owner, 2026-11-10: "why is there regualr and mcp"): a vendor's MCP entry that
+// names another card's type is not a card of its own - the native card stands for the system, and the MCP server is offered inside
+// it (ConnectorsView's McpDoor). Where the MCP route is the live one and the native card is not, the one card says so - a connection
+// made either way shows as that card connected. With no native card on the page, the MCP card stays, named for the system.
+export const oneCardPerSystem = (groups, cards = CATALOGUE) => {
+  const sys = Object.fromEntries(cards.filter((c) => c.mcp && c.system).map((c) => [c.type, c.system]));
+  const key = (c) => c.type || c.channel, all = groups.flatMap((g) => g.cards);
+  const native = new Map();
+  for (const c of all) if (!c.planned && !sys[key(c)] && !native.has(key(c))) native.set(key(c), c);
+  const folded = new Map();      // native type -> the MCP card folded into it
+  for (const c of all) { const s = sys[key(c)]; if (s && native.has(s) && !folded.has(s)) folded.set(s, c); }
+  const one = (c) => {
+    const m = native.get(key(c)) === c && folded.get(key(c));
+    if (!m) return c;
+    const live = cardState(m) === "on" && cardState(c) !== "on" && cardState(c) !== "failing";
+    return { ...c, haystack: `${c.haystack || ""} ${m.haystack || ""} mcp`, ...(live ? { state: "on", desc: m.desc } : {}) };
+  };
+  return groups.map((g) => ({ ...g, cards: g.cards.filter((c) => !(sys[key(c)] && native.has(sys[key(c)]))).map(one) }));
+};
 // ONE CARD PER SYSTEM: a planned card is dropped where a card for the same type is already on the page - a live one anywhere, or
 // the same planned type earlier. The server's planned list (reports.PLANNED) and this catalogue are kept apart, and PointClickCare
 // drew twice: once by its catalogue name under Corporate systems, once as a bare "pointclickcare" under Everything else (2026-10-19 UI walk)

@@ -567,16 +567,18 @@ transcription card. On a Mac, click in the box and press the Dictation key (or F
 
 ## A vendor's own MCP server
 
-Many cards — Notion MCP, Linear MCP, Atlassian, Airtable, Dropbox, Figma, Stripe MCP, Sentry MCP,
+Many cards — Atlassian, Dropbox, Figma,
 Cloudflare, Vercel, Supabase, Zapier, Canva, PostHog, and for money and people Xero, BILL, Expensify, Ramp, Brex,
 Mercury, Avalara, Deel, Greenhouse and Ashby, and about thirty more — are the vendor's own hosted MCP server,
 added to your agent CLI. **Add** registers it in Claude Code and Codex on this computer; **Sign in**
 opens the vendor's own sign-in page in your browser, once. Taskuary never holds that sign-in, so it
 cannot list the server's tools: adding the card is your word that your agents may use all of them.
-Where a card for the same vendor already brings work in (Notion, Linear, Jira, Monday.com, Todoist,
-Stripe, Sentry, Datadog), that card is unchanged and the MCP card sits beside it.
+Where the same system has a card that brings its work in (Notion, Linear, Airtable, Monday.com, Todoist,
+Stripe, Sentry, Datadog and a dozen more), there is still one card for it: open it, and its MCP server is
+under **For your agents** at the bottom. That card is how Taskuary reads the system; the MCP server is how
+an agent acts in it from its CLI. Added either way, the one card shows as connected.
 
-A few servers sign in with a personal token instead — GitHub MCP, PagerDuty MCP, Smartsheet and Wrike.
+A few servers sign in with a personal token instead — GitHub's, PagerDuty's, Smartsheet's and Wrike's.
 Paste the token on the card and press **Add**: it goes into Claude Code's own configuration as the
 header the vendor names. Codex reads such a token only from an environment variable, so these cards
 add to Claude Code alone.

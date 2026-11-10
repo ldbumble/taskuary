@@ -130,6 +130,29 @@ class TheTableIsTheCatalogue(unittest.TestCase):
             self.assertIn('token on the card' if t in rm.HEADERS else 'Sign in', c['desc'], t)
             self.assertRegex(t, r'^[a-z][a-z0-9_]*$')                     # the type is the CLI's server name
 
+    def test_one_card_per_system(self):
+        """A vendor's MCP entry for a system that has a card of its own names that card (`system`), and the page draws the two as one
+        (connectorCatalog.oneCardPerSystem): "Airtable" and "Airtable MCP" side by side read as two products (the owner, 2026-11-10)."""
+        cards = connectorcatalog.cards()
+        by_type = {c['type']: c for c in cards}
+        by_title = {c['title'].lower(): c['type'] for c in cards if not c.get('mcp')}
+        for c in cards:
+            if not c.get('mcp'): self.assertNotIn('system', c, c['type']); continue
+            base = c['type'][:-4] if c['type'].endswith('_mcp') else None
+            same = base if base in by_type else by_title.get(c['title'].lower().removesuffix(' mcp')) if c['title'].endswith(' MCP') else None
+            self.assertEqual(c.get('system'), same, c['type'])
+            if same: self.assertFalse(by_type[same].get('mcp') or by_type[same].get('planned'), same)
+        systems = [c['system'] for c in cards if c.get('system')]
+        self.assertEqual(len(systems), len(set(systems)), 'one MCP entry per system')
+        self.assertGreaterEqual(len(systems), 20)
+
+    def test_no_entry_is_connected_without_a_connection_row(self):
+        "The catalogue says what a card IS, never that it is on: connected is read off the owner's own row, and a seeded one is off."
+        for c in connectorcatalog.cards():
+            self.assertFalse({'Active', 'HasSecret', 'connected', 'state', 'LastSyncAt'} & set(c), c['type'])
+        rows = [r for r in MemoryStore().list_connectors() if r['Type'] in rm.MCPS]
+        self.assertTrue(rows and not any(connectorcatalog.is_connected(r) for r in rows))
+
     def test_every_row_is_seeded_and_rides_this_road(self):
         have = {c['Type'] for c in MemoryStore().list_connectors()}
         self.assertEqual(sorted(set(rm.MCPS) - have), [])

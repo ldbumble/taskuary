@@ -1,5 +1,5 @@
 {
-  "_": "THE connector catalogue, once: every card the Connections tab shows - the working ones (seeded as connector rows on first launch, store.py) and the planned ones - with a group, a one-line desc and `match`: the words in mail, chats, tasks and reports that mean this system. The tab reads it (connectorCatalog.js); the Advisor is handed the unconnected cards and judges which one the owner's threads are about (assistant.connect_evidence) - `match` decides nothing there any more.",
+  "_": "THE connector catalogue, once: every card the Connections tab shows - the working ones (seeded as connector rows on first launch, store.py) and the planned ones - with a group, a one-line desc and `match`: the words in mail, chats, tasks and reports that mean this system. The tab reads it (connectorCatalog.js); the Advisor is handed the unconnected cards and judges which one the owner's threads are about (assistant.connect_evidence) - `match` decides nothing there any more. `system` on a vendor's MCP entry names the card of the same system (its type): the page draws ONE card for the two, the native one, and offers the MCP server inside it - two cards for one product read as two products (the owner, 2026-11-10).",
   "sources": {
     "_": "Where work comes in: the groups whose working cards are a source of incoming work - mail, chat and task systems. Setup's Connect your main source offers them (email first, the usual one) and is done once one of them is connected and passes its test.",
     "groups": [
@@ -1963,6 +1963,7 @@
     },
     {
       "type": "sentry_mcp",
+      "system": "sentry",
       "title": "Sentry MCP",
       "group": "Developer",
       "planned": false,
@@ -2035,6 +2036,7 @@
     },
     {
       "type": "github_mcp",
+      "system": "github",
       "title": "GitHub MCP",
       "group": "Developer",
       "planned": false,
@@ -2050,6 +2052,7 @@
     },
     {
       "type": "pagerduty_mcp",
+      "system": "pagerduty",
       "title": "PagerDuty MCP",
       "group": "Developer",
       "planned": false,
@@ -2120,6 +2123,7 @@
     },
     {
       "type": "smartsheet_mcp",
+      "system": "smartsheet",
       "title": "Smartsheet MCP",
       "group": "Project management",
       "planned": false,
@@ -2149,6 +2153,7 @@
     },
     {
       "type": "airtable_mcp",
+      "system": "airtable",
       "title": "Airtable MCP",
       "group": "Project management",
       "planned": false,
@@ -2177,6 +2182,7 @@
     },
     {
       "type": "wrike_mcp",
+      "system": "wrike",
       "title": "Wrike MCP",
       "group": "Project management",
       "planned": false,
@@ -2222,6 +2228,7 @@
     },
     {
       "type": "notion_mcp",
+      "system": "notion",
       "title": "Notion MCP",
       "group": "Project management",
       "planned": false,
@@ -2236,6 +2243,7 @@
     },
     {
       "type": "linear_mcp",
+      "system": "linear",
       "title": "Linear MCP",
       "group": "Project management",
       "planned": false,
@@ -2267,6 +2275,7 @@
     },
     {
       "type": "monday_mcp",
+      "system": "monday",
       "title": "Monday.com MCP",
       "group": "Project management",
       "planned": false,
@@ -2281,6 +2290,7 @@
     },
     {
       "type": "todoist_mcp",
+      "system": "todoist",
       "title": "Todoist MCP",
       "group": "Project management",
       "planned": false,
@@ -2621,6 +2631,7 @@
     },
     {
       "type": "stripe_mcp",
+      "system": "stripe",
       "title": "Stripe MCP",
       "group": "Corporate systems",
       "planned": false,
@@ -3015,6 +3026,7 @@
     },
     {
       "type": "mercury_mcp",
+      "system": "mercury",
       "title": "Mercury MCP",
       "group": "Markets & finance",
       "planned": false,
@@ -3126,6 +3138,7 @@
     },
     {
       "type": "datadog_mcp",
+      "system": "datadog",
       "title": "Datadog MCP",
       "group": "Observability",
       "planned": false,
@@ -3337,6 +3350,7 @@
     },
     {
       "type": "paypal_mcp",
+      "system": "paypal",
       "title": "PayPal MCP",
       "group": "Everything else",
       "planned": false,
@@ -3395,6 +3409,7 @@
     },
     {
       "type": "calendly_mcp",
+      "system": "calendly",
       "title": "Calendly MCP",
       "group": "Everything else",
       "planned": false,
@@ -3424,6 +3439,7 @@
     },
     {
       "type": "intercom_mcp",
+      "system": "intercom",
       "title": "Intercom MCP",
       "group": "Project management",
       "planned": false,
@@ -3515,6 +3531,7 @@
     },
     {
       "type": "helpscout_mcp",
+      "system": "helpscout",
       "title": "Help Scout MCP",
       "group": "Project management",
       "planned": false,
@@ -3529,6 +3546,7 @@
     },
     {
       "type": "gorgias_mcp",
+      "system": "gorgias",
       "title": "Gorgias MCP",
       "group": "Project management",
       "planned": false,
@@ -3839,6 +3857,7 @@
     },
     {
       "type": "aircall_mcp",
+      "system": "aircall",
       "title": "Aircall MCP",
       "group": "Everything else",
       "planned": false,
@@ -3853,6 +3872,7 @@
     },
     {
       "type": "typeform_mcp",
+      "system": "typeform",
       "title": "Typeform MCP",
       "group": "Everything else",
       "planned": false,
@@ -3867,6 +3887,7 @@
     },
     {
       "type": "jotform_mcp",
+      "system": "jotform",
       "title": "Jotform MCP",
       "group": "Everything else",
       "planned": false,
@@ -3881,6 +3902,7 @@
     },
     {
       "type": "tally_mcp",
+      "system": "tally",
       "title": "Tally MCP",
       "group": "Everything else",
       "planned": false,

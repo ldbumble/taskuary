@@ -47,7 +47,7 @@ test("three questions on the Advisor's line, each answered on the Connections pa
 test("on the setup screen the same cards say their state in plain words; Connections keeps its own", () => {
   const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
   assert.match(cv, /export const connCardOf = \(c, sources, go, plain = false\) =>/, "a mode of the shared card, not a copy");
-  assert.match(cv, /const connState = \(c\) => \(c\.state \|\|/, "a plain card carries its state, its words are not parsed");
+  assert.match(read("connectorCatalog.js"), /export const cardState = \(c\) => \(c\.state \|\|/, "a plain card carries its state, its words are not parsed");
   for (const w of ["Not set up", "Connected", "Needs sign-in", "Not answering"]) assert.match(cv, new RegExp(`"${w}`), w);
   assert.match(fr, /connCardOf\(c, sources, \(\) => \{ moveOn\(\); setOpen[^\n]*, true\)/,"every connector card on the setup screen is plain");
   assert.doesNotMatch(fr, /last test failed|not set up/, "the CLI cards use the same plain words");

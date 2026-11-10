@@ -38,7 +38,7 @@ import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import BrowserPane from "./BrowserPane.jsx";
 import { WAITING_META, waitingIn } from "./waitingMeta.js";
-import { CATALOGUE, PRESETS, matchCards, onceEach, oneOf, plannedFor, presetBody, presetOf, presetsLeft, repliesOf, repliesOn } from "./connectorCatalog.js";
+import { CATALOGUE, NOT_SET_UP, PRESETS, cardState, matchCards, onceEach, oneCardPerSystem, oneOf, plannedFor, presetBody, presetOf, presetsLeft, repliesOf, repliesOn } from "./connectorCatalog.js";
 import { settingsOf } from "./actionCard.js";
 import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
@@ -1783,9 +1783,8 @@ const NL = String.fromCharCode(10);
 // A card per connection. The dot is read off the status line the card already carries -
 // "off", "not set up" and "connection failing" are the only three states worth a colour.
 // a plain card (connCardOf's `plain`) says its state outright; the catalogue's is read off its status line
-const connState = (c) => (c.state || (c.planned ? "planned" : c.guide ? "guide"
-  : /failing|test failed/.test(c.desc) ? "failing"
-    : /^off|not set up|no key yet/.test(c.desc) ? "off" : "on"));
+// ...and only a line that SAYS it is on is on (connectorCatalog.cardState): "not added" was not "off", so it read as connected
+const connState = cardState;
 const connDot = (c) => ({ planned: "#cfc9bf", guide: "#8b7c63", failing: "#6b2733", off: "#cfc9bf", on: "#55697a" })[connState(c)];
 // the whole card says its state, not just the 7px dot: a live connection wears the brand
 // border on a faintly tinted ground, a failing one the alert border, an unconfigured one
@@ -2219,7 +2218,12 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     : AGENT_TOOLS.has(conn.Type) ? <AgentToolDetail key={conn.ConnectorId} {...shared} />
     : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
     : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} chatsAsk={chatsAsk} />;
-  const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}><Box ref={setScope} data-tq-connector-scope="">{page}</Box></AgentsDoor.Provider>;
+  // ...and the system's own MCP server, on the system's one card (connectorCatalog.oneCardPerSystem): this page is how Taskuary reads it,
+  // that server is how an agent acts in it from its CLI - two roads to one product, offered where the product is
+  const sib = conn && CATALOGUE.find((c) => c.mcp && c.system === conn.Type);
+  const sibRow = sib && (allOf(sib.type).find((c) => c.Active) || allOf(sib.type)[0]);
+  const door = sibRow && <McpDoor on={!!sibRow.Active} onOpen={() => setOpen({ kind: "connector", id: sibRow.ConnectorId })} />;
+  const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}><Box ref={setScope} data-tq-connector-scope="">{page}{door}</Box></AgentsDoor.Provider>;
   if (!browse) {
     if (detail) return detail;
     if (open?.kind === "connector") return null;
@@ -2231,19 +2235,20 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const chanCard = (c) => ({ ...connCardOf(c, sources, () => setOpen({ kind: "connector", id: c.ConnectorId })),
     remove: removable(c) ? { conn: c, channel: META[c.Type]?.channel || "", reload: load } : null });
   // three shapes of card, said once instead of inline in five groups
-  const dataDesc = (c, rtype) => (c?.LastError ? "connection failing" : c?.LastSyncAt ? "connection ✓" : "not set up")
+  const dataDesc = (c, rtype) => (c?.LastError ? "connection failing" : c?.LastSyncAt ? "connection ✓" : NOT_SET_UP)
     + ` · ${plural(reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length, "report")} (built under Reports)`;
   const dataCards = (keys) => keys.flatMap((t) => allOf(t).filter(() => DATA_META[t]).map((c) => {
     const dm = DATA_META[t];
     return { key: `d${c.ConnectorId}`, title: c.Name, channel: t,
-      desc: (c.LastError ? "connection failing" : c.LastSyncAt ? "connection ✓" : "not set up")
+      desc: (c.LastError ? "connection failing" : c.LastSyncAt ? "connection ✓" : NOT_SET_UP)
         + ` · ${plural(reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length, "report")} (built under Reports)`,
       haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
       go: () => setOpen({ kind: "connector", id: c.ConnectorId }), remove: removable(c) ? { conn: c, channel: "data", reload: load } : null };
   }));
   const channelCards = (keys) => keys.flatMap((t) => allOf(t).map(chanCard));
   const specialCards = (type, title, rtype, haystack, desc = (c) => dataDesc(c, rtype)) => allOf(type).map((c) => ({
-    key: `s${c.ConnectorId}`, title: c.Name || title, channel: type,
+    // ...named for the system, never for the road to it (the owner, 2026-11-10): a card seeded as "Airtable MCP" reads "Airtable"
+    key: `s${c.ConnectorId}`, title: String(c.Name || title).replace(/\s+MCP$/i, ""), channel: type,
     desc: desc(c), haystack,
     go: () => setOpen({ kind: "connector", id: c.ConnectorId }),
     // ...and these carry it too (the owner, 2026-11-06): SQL Server, remote Windows, Agent Desktop and Reason Network had Remove only on
@@ -2277,7 +2282,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       haystack: `${c.type} ${c.title} ${c.desc} planned`, planned: true,
     }))];
 
-  const groups = onceEach([
+  const groups = oneCardPerSystem(onceEach([
     { title: "AI — agents & models", cards: [
       { key: "agents", title: noun("cli_agents"), desc: `Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in ${placeName("sorting")}`,
         channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }),
@@ -2290,11 +2295,12 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       // what happens with NO card here is not visible anywhere else, and it looked like something was missing
       note: "Without a card here the mic still works where a voice is found: in Edge or Chrome it uses the browser's own recognition at once, and in the Taskuary window on Windows it uses Windows' own dictation (on this computer, no key) — free, live microphone only. With neither it shows crossed out. Voice notes on WhatsApp/Telegram land marked not transcribed, with a Transcribe button for later. A card is what transcribes a voice-note file on the server. Free choices: Groq (free tier) or Local Whisper (no key, on this machine). Edge's voices are text-to-speech — the other direction.",
       cards: [
-        { key: "builtin-voice", title: "Windows / browser voice", channel: "ai",
+        // ...a page to set things on, not a connection: no Connected ring (it wore one, read off a line that never said "off")
+        { key: "builtin-voice", title: "Windows / browser voice", channel: "ai", guide: true,
           desc: "Choose built-in dictation and test the microphone. No API key.",
           haystack: "windows browser edge chrome built in speech microphone dictation voice",
           go: () => setOpen({ kind: "builtin-voice" }) },
-        { key: "voice-vocabulary", title: "Shared voice vocabulary", channel: "ai",
+        { key: "voice-vocabulary", title: "Shared voice vocabulary", channel: "ai", guide: true,
           desc: "one system-wide list used by every voice connector and mic",
           haystack: "custom shared voice vocabulary words phrases domain names acronyms",
           go: () => setOpen({ kind: "voice-vocabulary" }) },
@@ -2392,7 +2398,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     { title: "Files & sheets", cards: [...dataCards(["knowledge", "handbook", "sharepoint", "google_sheets", "smb_file", "sftp", "obsidian"]),
       ...catalogCards("Files & sheets")] },
     { title: "Everything else", cards: [...channelCards(["calendly", "shopify", "woocommerce", "bigcommerce", "shipstation", "square", "paypal", "twilio"]), ...catalogCards("Everything else"), ...plannedCards(KNOWN_PLANNED, true)] },
- ]);
+ ]));
   const hits = matchCards(groups, q);
   // WORDS TYPED PUT THE OPEN CARD DOWN (the owner, 2026-10-21: "link" typed over the open LinkedIn card, and the page went on
   // showing that card and the section chips - the matches are only ever drawn with no card open, so none showed)
@@ -3282,7 +3288,19 @@ function DesktopDetail({ conn: savedConn, reload, onBack, onCreated }) {
 
 /* ── A tool for the agents: a vendor's MCP server added to the agent CLIs here (remotemcp.py), and/or a skill on disk (videotools.py) ── */
 const AGENT_TOOLS = new Set([...CATALOGUE.filter((c) => c.mcp).map((c) => c.type), "video_use"]);
-const toolDesc = (c) => (c.Active ? "added · your agents can use it" : "not added");
+const toolDesc = (c) => (c.Active ? "added · your agents can use it" : NOT_SET_UP);
+// A SYSTEM'S MCP SERVER, INSIDE ITS ONE CARD (the owner, 2026-11-10: "why is there regualr and mcp"): the card above reads the system for
+// Taskuary - the rail, reports; the vendor's MCP server gives the agents its tools in their CLI. It opens the same page its own card did.
+const McpDoor = ({ on, onOpen }) => (
+  <Box data-tq-mcp-door="" sx={{ mt: 3, pt: 2, borderTop: `1px solid ${BORDER}` }}>
+    <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>For your agents</Typography>
+    <Typography variant="body2" sx={{ color: DIM, mt: 0.25, mb: 1 }}>
+      {on ? "Its own MCP server is added: your agents use its tools from their CLI."
+        : "Its own MCP server lets your agents act in it from their CLI. This card is how Taskuary reads it; the server is how an agent works in it."}
+    </Typography>
+    <Button size="small" variant="outlined" onClick={onOpen}>{on ? "Its MCP server" : "Set up its MCP server"}</Button>
+  </Box>
+);
 function AgentToolDetail({ conn, reload, onBack, onCreated }) {
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState(false);

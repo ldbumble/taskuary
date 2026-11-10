@@ -391,8 +391,7 @@ BACKOFF = (30, 120)              # seconds before attempt 2, then before attempt
 # a failure the next attempt cannot fix: configuration, a missing repository or worker, a permission
 # problem. It becomes "needs you" at once instead of burning the budget (PW-086).
 PERMANENT = ('unknown agent', 'no coding agent is set up', 'repositor', 'repo:', 'checkout', 'permission', 'not configured', 'no such', 'not found',
-             'needs a', 'pick one', 'kind must be', 'assistant view is for', 'no task ', 'not installed',
-             "stranger's task")      # origin.Refusal: retrying the same CLI on the same words is refused the same way
+             'needs a', 'pick one', 'kind must be', 'assistant view is for', 'no task ', 'not installed')   # (a stranger's refusal is a hold: record_failure)
 
 
 def live_count() -> int:

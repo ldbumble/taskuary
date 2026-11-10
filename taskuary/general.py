@@ -842,8 +842,10 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         out.append(f"THE DRAFT WAITING NOW (rv{rv['ReviewId']}{', to ' + to if to else ''}, drafted at {clock(at)}"
                    f"{' - written for this message - keep it or improve it' if mine else ' - BEFORE the newest message' if before else ''}): "
                    f"{_quote(rv['DraftText'], 1500)}\n{selfclose.WITHDRAW_LINE}")
+    # ...each letter with its words (the audit's real turn, 2026-11-10: asked to make the email shorter, the agent read only "the email to
+    # paula@..." and asked the owner what it said)
     if others: out.append('ALSO SET UP AND NOT SENT - take back any the newest message undoes:\n' + '\n'.join(
-        f"- rv{x['rid']}: {x['what']}" for x in others)
+        f"- rv{x['rid']}: {x['what']}" + (f": {_quote(x['text'], 600)}" if x.get('text') else '') for x in others)
         + ('' if rv else f'\n{selfclose.WITHDRAW_LINE}'))
     if nowhere: out.append('AN EMAIL YOU DRAFTED HAS NO ADDRESS:\n' + '\n'.join(f'- rv{r}: {slots.to_missing(w)}' for r, w in nowhere))
     if refused: out.append('WHAT YOU PROPOSED IN YOUR LAST TURN WAS NOT PUT ON A CARD - the owner has no button for it:\n' + '\n'.join(

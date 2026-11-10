@@ -106,3 +106,14 @@ def test_a_reply_nobody_has_written_is_nothing_set_up():
     assert verdicts.unsent(s, tid) == [] and 'ALSO SET UP' not in general.turn_facts(s, tid)
     s.update_review_draft(rid, 'Yes, Tuesday works.', None)
     assert [x['rid'] for x in verdicts.unsent(s, tid)] == [rid]
+
+
+def test_an_email_waiting_is_told_to_the_agent_with_its_words():
+    """The audit's real turn, 2026-11-10: told only "rv1: the email to paula@...", the agent asked to make it shorter could not see what it
+    said, and asked the owner. Each letter set up and not sent is told with its words."""
+    from taskuary import general
+    s = MemoryStore(); tid = own_task(s, 'general')
+    with mock.patch.object(server, 'store', s):
+        call(tid, 'propose_email', to='paula@northwind.example', subject='October report', text='Hi Paula, here is the October report.')
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'make it shorter')
+    assert 'the email to paula@northwind.example: "Hi Paula, here is the October report."' in general.turn_facts(s, tid)

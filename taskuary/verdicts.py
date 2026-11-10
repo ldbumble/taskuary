@@ -484,7 +484,7 @@ def unsent(store, tid: int) -> list:
             if not to and rv.get('MessageId'): to = str((store.get_message(rv['MessageId']) or {}).get('FromEmail') or '')
             what = f"the {'email' if k == 'slot' else 'reply'}" + (f' to {to}' if to else '')
         else: continue
-        out.append({'rid': rv['ReviewId'], 'kind': k, 'to': to, 'what': what})
+        out.append({'rid': rv['ReviewId'], 'kind': k, 'to': to, 'what': what, **({} if k == 'action' else {'text': rv.get('DraftText') or ''})})
     return out
 
 

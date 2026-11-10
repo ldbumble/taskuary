@@ -400,15 +400,13 @@ class FromAHook(unittest.TestCase):
         pty = SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=r'C:\code\repo', agent='coding', label='coding', argv=['claude'],
                               last=1.0, ext_id='c-sess', started='2026-10-24 09:00:00', typed=[], files=lambda: [], tail=lambda n=3: [],
                               idle=lambda: 0.0, witness=SimpleNamespace(note=lambda n: None), store=s, bg={})
-        judged = []
         with mock.patch.dict(term.SESSIONS, {'run1': pty}, clear=True), mock.patch.object(term, 'bind_ext', lambda t, sid: None), \
-                on_page('https://login.bank.example/'), mock.patch.object(hooks, 'judge_turn', lambda *a, **k: judged.append(a)):
+                on_page('https://login.bank.example/'):
             hooks.receive({'hook_event_name': 'Stop', 'session_id': 'c-sess', 'cwd': r'C:\code\repo',
                            'last_assistant_message': 'The toll portal wants a sign-in.\n[[TASKUARY-SIGNIN: bank.example]]'}, cli='claude')
             st = ws.status(s, tid)
         self.assertEqual([r['request_id'] for r in st['requests']], ['signin:bank.example'])
         self.assertEqual(st['requests'][0]['choices'], [])                    # a pty is answered in words, never by typing "1"
-        self.assertEqual(judged, [])
         self.assertNotIn('SIGNIN', st['said'])
 
 

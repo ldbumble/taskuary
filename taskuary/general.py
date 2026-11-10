@@ -2806,9 +2806,6 @@ class GeneralSession:
         if not asks and signing is None and turn is None and closing is None and not is_dock(self.store.get_task(self.task_id)):
             from . import hooks
             hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ)
-            # ...and one that ENDED ON QUESTIONS in its prose, no marker, is waiting on the owner - read as a coding turn's is (hooks.judge_turn):
-            # the chip said "agent done" over two questions only the owner could answer (the owner, 2026-11-09)
-            if hooks.BACKGROUND: hooks.judge_turn(self.store, self.task_id, self.sid, reply[:4000])
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         # ...and the files this turn wrote, as it left them: a later turn rewrites them in place (outputs.keep_turn, the owner 2026-11-07)
         from . import outputs

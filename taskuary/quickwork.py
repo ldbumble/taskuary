@@ -10,14 +10,14 @@ already ran deep, and a routine. A quick call that finds it needs more escalates
 import json, re, threading
 from typing import NamedTuple
 from loguru import logger
-from . import brainroute, browserview, general, ingest, llm, origin, selfclose, slots
+from . import brainroute, browserview, general, ingest, llm, origin, selfclose, slots, workerstate
 
 DEEP_WHY = ('kind', 'routine', 'hard', 'browser', 'stranger', 'emails', 'ran deep')
 SETUP_REFS = (general.SETUP_REF, 'connector:setup')
-NOT_RUNS = ('answered',)          # an answer is the owner's reply landing, not a run; owner and judge events carry their own Source
+NOT_RUNS = ('answered',)          # an answer is the owner's reply landing, not a run; the owner's events carry their own Source
 
 
-def _runs(store, tid) -> list: return [e for e in store.worker_events(tid) if e.get('Kind') not in NOT_RUNS and e.get('Source') not in ('owner', 'judge')]
+def _runs(store, tid) -> list: return [e for e in store.worker_events(tid) if e.get('Kind') not in NOT_RUNS and e.get('Source') not in ('owner', workerstate.READ_OFF_PROSE)]
 
 def only_quick(store, tid) -> bool:
     "True when the task has run events and every one came from the quick path."

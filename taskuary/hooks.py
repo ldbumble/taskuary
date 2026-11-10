@@ -488,8 +488,10 @@ def _events(t, p: dict) -> None:
             for i, (q, _) in enumerate(asks, 1):
                 ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
                           text=q, source='hook')
-            # ...and a turn that asked only in PROSE is the model's to read, in the background - never a word list's
-            if not asks and signing is None and turn is None and said.strip() and not ws.open_requests(ws.events(st, tid, sid)): judge_turn(st, tid, sid, said)
+            # ...and a turn that asked only in its PROSE asked nothing here (the owner, 2026-11-10: "why would we ask anything in the
+            # assistant rail? remove that no need for that ever"). A light model used to read every last message and write its own
+            # wording of a question onto the row - over a card already standing in the task with the same ask. What the agent means
+            # the owner to answer it asks with its question tool or its marker; a turn without one is parked, and its words are in the chat
             # the response ended, the WORK did not: a shell, a monitor or a subagent it left running and will be woken by
             # (background.py) - Claude's own list, else the jobs its hooks started (Copilot), else Claude's transcript.
             # Devin is not here on purpose: it does not wake for a background shell, so one left running is the owner's
@@ -512,58 +514,10 @@ def _events(t, p: dict) -> None:
     except Exception as e: logger.debug(f'worker event from hook skipped: {e}')
 
 
-# DID THE TURN ASK THE OWNER? (the owner, 2026-10-11: "everything should be ai".) A question asked through the CLI's
-# own tool, the [[TASKUARY-ASK]] marker or a chooser arrives as a request on its own. One asked only in the prose that
-# ended the turn has no such signal, and the screen used to be read for it with a word list - "?" at a line's end,
-# "should i", "do you want" - so a report closing on a rhetorical question became "asked you", and the owner's next
-# note went in as its answer. The light model reads the Stop's last message instead: once per turn (cached on the
-# words), on its own thread, so no hook and no button waits on it. Until it answers - or with no brain at all - the
-# session is what it honestly is: parked, waiting on you.
-JUDGE_SYSTEM = ('You read the last message a coding agent wrote before it stopped and handed the turn back to its owner. '
-                'Decide one thing: does the agent need the owner to ANSWER something before the work can go on - a decision, '
-                'a choice between options, a missing fact, a permission? A report of finished work, a rhetorical question, '
-                'or an offer of optional extra help after the work is done is not that. Reply with JSON only: '
-                '{"asks": true or false, "question": "the question in the agent\'s own words, one sentence; empty when asks is false"}')
-JUDGE_WANT = {'type': 'object', 'properties': {'asks': {'type': 'boolean'}, 'question': {'type': 'string'}}, 'required': ['asks']}
-_JUDGED, _JUDGED_MAX = {}, 256          # (sid, sha of the words) -> the question or '' - a Stop the spool replays costs nothing
-
-
-def judge_turn(store, tid: int, sid: str, said: str, brain=None, wait: bool = False):
-    "Read the turn's last message for a question to the owner; record it as an open request when there is one."
-    import hashlib
-    key = (str(sid), hashlib.sha1(said.encode('utf-8', 'replace')).hexdigest())
-    def go():
-        from . import workerstate as ws
-        if key in _JUDGED: q = _JUDGED[key]
-        else:
-            try:
-                from .llm import build_llm, ask_json
-                b = brain or build_llm(store, job='judge')
-                if not b: return
-                v = ask_json(b, JUDGE_SYSTEM, f"THE AGENT'S LAST MESSAGE:\n{said[-4000:]}", want=JUDGE_WANT, need=('asks',)).data or {}
-            except Exception as e: logger.debug(f'turn judge skipped for {sid}: {e}'); return
-            if not isinstance(v, dict) or not isinstance(v.get('asks'), bool): return     # unreadable is no verdict, and is not cached
-            q = ' '.join(str(v.get('question') or '').split())[:600] if v['asks'] else ''
-            if v['asks'] and not q: q = ' '.join(said.split())[-300:]
-            if len(_JUDGED) >= _JUDGED_MAX: _JUDGED.pop(next(iter(_JUDGED)))
-            _JUDGED[key] = q
-        if not q: return
-        # ...and only while that turn is still the newest word: a prompt the owner submitted while the model read has
-        # moved on past the question, and a request recorded after it would stand over the new turn
-        # ...the same Stop's `background` line after it is no new word (TQ shape, 2026-11-09: a turn ended asking "should I rebase and push?"
-        # with the full suite still running in a shell; the judge came back to `background` as the newest event, recorded nothing, and the
-        # header said "agent working" over a turn that had ended on the owner's question - a request outranks running work, bb7df739)
-        evs = [e for e in ws.events(store, tid, sid) if e['Kind'] != 'background']
-        if not evs or evs[-1]['Kind'] != 'turn_end' or evs[-1].get('Text') != said[:4000]: return
-        ws.record(store, tid, sid, 'input_needed', request_id=ws.request_id_for(q), text=q, source='judge')
-    if wait: return go()
-    threading.Thread(target=go, daemon=True, name=f'turn-judge-{sid}').start()
-
-
-# ...AND DID A HEADLESS TURN END SHORT? A general agent's CLI is not woken by work it left in the background, so a turn ending "I have
+# DID A HEADLESS TURN END SHORT? A general agent's CLI is not woken by work it left in the background, so a turn ending "I have
 # the mail side - I'm waiting for the app walkthrough to finish, then I'll write the brief" was filed as its answer, and the task
-# read "researcher answered · agent waiting on you" over a brief that would never come (the owner, 2026-10-21). The same judge reads
-# it - the model, never a phrase list. It used to file such a turn as the run FAILING and end the session; the owner, 2026-11-05: "failure
+# read "researcher answered · agent waiting on you" over a brief that would never come (the owner, 2026-10-21). A light model reads
+# it - never a phrase list. It used to file such a turn as the run FAILING and end the session; the owner, 2026-11-05: "failure
 # means nothing to the user". Now it only says what the turn still waits on, to `then(why)` - the general agent wakes itself once to do it
 # (general.GeneralSession.wake). Nothing is recorded: the session stays open and the turn's answer stands.
 ENDED_SYSTEM = ('You read the last message an agent wrote before its turn ended. Nothing will wake the agent again until its owner '
@@ -576,7 +530,7 @@ ENDED_SYSTEM = ('You read the last message an agent wrote before its turn ended.
                 '{"unfinished": true or false, "why": "what it is still '
                 'waiting on, in a few plain words; empty when unfinished is false"}')
 ENDED_WANT = {'type': 'object', 'properties': {'unfinished': {'type': 'boolean'}, 'why': {'type': 'string'}}, 'required': ['unfinished']}
-_ENDED = {}
+_ENDED, _ENDED_MAX = {}, 256          # (sid, sha of the words) -> what it still waits on or '' - a Stop the spool replays costs nothing
 BACKGROUND = True          # the suite turns the read off its own thread (tests/conftest.py), as advisor.BACKGROUND; `wait` still reads
 
 
@@ -623,13 +577,13 @@ def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = F
             except Exception as e: logger.debug(f'turn-end judge skipped for {sid}: {e}'); return
             if not isinstance(v, dict) or not isinstance(v.get('unfinished'), bool): return
             why = (' '.join(str(v.get('why') or '').split())[:300] or 'work of its own') if v['unfinished'] else ''
-            if len(_ENDED) >= _JUDGED_MAX: _ENDED.pop(next(iter(_ENDED)))
+            if len(_ENDED) >= _ENDED_MAX: _ENDED.pop(next(iter(_ENDED)))
             _ENDED[key] = why
         if not why: return
         # ...and a turn that ended on a step held for the owner's Approve (shellgate, browsergate) is waiting on them, not short: it read
         # "Failed - it ended its turn still waiting on the owner to press Approve" with Try again over the held delete (2026-11-03)
         if held_for(store, tid, sid): return
-        # ...only while that turn is still the newest word, as judge_turn: the owner may have written since
+        # ...only while that turn is still the newest word: the owner may have written since
         evs = [e for e in ws.events(store, tid, sid) if e['Kind'] not in ws.NOTES]
         if not evs or evs[-1]['Kind'] != 'turn_end' or evs[-1].get('Text') != said[:4000]: return
         if then:

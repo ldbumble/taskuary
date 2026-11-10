@@ -68,20 +68,18 @@ class YourTurn(unittest.TestCase):
         self.assertEqual(req['choices'], [])                                 # a pty is answered in words, never by typing "1"
         self.assertEqual(req['text'], 'Your turn in the browser: the agent needs you to do a step on the page')
 
-    def test_the_stop_hook_raises_it_and_no_judge_reads_the_turn(self):
+    def test_the_stop_hook_raises_it(self):
         s, tid = self.s, self.tid
         pty = SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=r'C:\code\repo', agent='general', label='general', argv=['claude'],
                               last=1.0, ext_id='c-sess', started='2026-10-28 09:00:00', typed=[], files=lambda: [], tail=lambda n=3: [],
                               idle=lambda: 0.0, witness=SimpleNamespace(note=lambda n: None), store=s, bg={})
-        judged = []
         with mock.patch.dict(terminal.SESSIONS, {'run1': pty}, clear=True), mock.patch.object(terminal, 'bind_ext', lambda t, sid: None), \
-                on_page(), mock.patch.object(hooks, 'judge_turn', lambda *a, **k: judged.append(a)):
+                on_page():
             hooks.receive({'hook_event_name': 'Stop', 'session_id': 'c-sess', 'cwd': r'C:\code\repo',
                            'last_assistant_message': 'Filled in.\n[[TASKUARY-YOURTURN: tick the robot box]]'}, cli='claude')
             st = ws.status(s, tid)
         self.assertEqual(len(st['requests']), 1)
         self.assertTrue(st['requests'][0]['request_id'].startswith(browserview.TURN_PREFIX))
-        self.assertEqual(judged, [])
         self.assertNotIn('YOURTURN', st['said'])
 
 

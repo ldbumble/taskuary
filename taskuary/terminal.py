@@ -2514,7 +2514,7 @@ _WORKING = re.compile(r'esc to interrupt|esc to cancel|\(thinking\)|[⠋⠙⠹�
 # Only the CLI's OWN chrome is read here - its footer, its prompt glyph, its key hints - never what the agent WROTE (the
 # owner, 2026-10-11: "everything should be ai"). A turn that ended on "Should I also update the tests?" read as parked from
 # its words alone, and so did a report closing on a rhetorical "?". A quiet unknown CLI still parks on the IDLE_WAITING
-# fallback, and whether the agent's last message ASKED the owner is the model's read of it (hooks.judge_turn).
+# fallback, and what the agent ASKS the owner it asks with its question tool or its marker - nothing reads its prose for one.
 _PARKED = re.compile(r'shift\+tab to cycle|\? for shortcuts|bypass permissions on|auto mode on|type your message|'
                      r'\b(press enter|choose an option|select an option|enter to (confirm|select))\b|^\s*[›>❯](?:\s*\d+\.)?', re.I)
 # A QUESTION the owner has to answer, as opposed to a screen that is merely idle. A chooser names

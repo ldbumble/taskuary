@@ -96,8 +96,7 @@ def blocked(store, tid: int, term=None) -> str:
         # A QUESTION THE RUN ITSELF RAISED and nobody has answered: one a hook holds (hooks.ask), or one the agent asked
         # through its CLI's question tool or a [[TASKUARY-ASK]] marker (both recorded as requests by hooks/general). Not
         # the words on its screen - a line ending in "?" read as a question and refused an agent's own --done (2026-10-11:
-        # "everything should be ai") - and not the model's read of a turn (source 'judge'): the agent declaring itself
-        # finished is the newer word on that.
+        # "everything should be ai").
         # ...but a question a HOOK holds blocks the CLI that asked it: an agent running `taskuary --done` is past it - answered in the
         # terminal, or its CLI gave up waiting - and the hold is a leftover nobody can release, which refused every close after it (the owner,
         # 2026-10-30: "it should be able to close task" - two --done refused by a hold the agent had already moved on from). It lets go

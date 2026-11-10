@@ -193,15 +193,15 @@ class DeliveryTests(unittest.TestCase):
         """An agent parked on a question is asking the OWNER: their next words are the answer and go
         in at once, plainly - no "while you were working" preamble. They used to queue behind the
         question and never arrive, while the card said "Told the agent" (2026-09-07 live check). The
-        question is the MODEL's read of the turn's last message (hooks.judge_turn), never a "?" on the tail."""
-        from taskuary import hooks, workerstate as ws
+        question is one the agent ASKED (its tool, its marker) - never a "?" on the tail, and no model's read of its prose."""
+        from taskuary import workerstate as ws
         s = MemoryStore(); tid = task(s)
         said = 'Two repos match. Which one should I use?'
         t = FakeTerm(tid, idle=terminal.IDLE_WAITING + 5, tail=[said]); t.sid = 'fake'
         with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
             self.assertEqual(waitroom.state(s, tid)[0], 'parked')                     # the words alone ask nothing
             ws.record(s, tid, 'fake', 'turn_end', text=said, source='hook')
-            hooks.judge_turn(s, tid, 'fake', said, brain=lambda *a, **k: '{"asks": true, "question": "Which repo should I use?"}', wait=True)
+            ws.record(s, tid, 'fake', 'input_needed', request_id=ws.request_id_for('Which repo should I use?'), text='Which repo should I use?', source='hook')
             self.assertEqual(waitroom.state(s, tid)[0], 'asking')
             out = waitroom.add(s, tid, 'use the 8/17 file')
             self.assertEqual((out['delivered'], out['state']), (1, 'answered'))

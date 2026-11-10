@@ -136,6 +136,10 @@ def events(store, tid: int, sid: str = None) -> list:
     return [e for e in store.worker_events(tid) if sid is None or str(e['Sid']) == str(sid)]
 
 
+# A QUESTION NOBODY ASKED: a model's wording of the prose that ended a turn, which a build before 2026-11-10 recorded as a request and
+# the row then read "Agent asked you: ...". Nothing writes one now (the owner: nothing is asked on the rail); the rows a database
+# still holds are no request and no run (quickwork)
+READ_OFF_PROSE = 'judge'
 def open_requests(evs: list) -> list:
     """The requests still outstanding, oldest first.
 
@@ -153,7 +157,7 @@ def open_requests(evs: list) -> list:
     answered = {e['RequestId'] for e in evs if e['Kind'] == 'answered'}
     spoke = max((i for i, e in enumerate(evs) if e['Kind'] == 'working' and e.get('Text') != WAKE), default=-1)
     return [e for i, e in enumerate(evs)
-            if i > spoke and e['Kind'] in REQUESTS and e['RequestId'] not in answered]
+            if i > spoke and e['Kind'] in REQUESTS and e['RequestId'] not in answered and e.get('Source') != READ_OFF_PROSE]
 
 
 def _public_request(e: dict) -> dict:
@@ -232,13 +236,13 @@ def status(store, tid: int) -> dict:
 ENDINGS = ('finished', *TERMINAL)
 
 
-# A QUESTION THE AGENT ITSELF ASKED, as its run recorded it: its question tool's (q:<group>:<n>), a chooser read off its screen, an API
-# agent's ask, or the model's read of the prose that ended its turn (hooks.judge_turn) - never the CLI's bare idle notice, which follows
+# A QUESTION THE AGENT ITSELF ASKED, as its run recorded it: its question tool's (q:<group>:<n>), a chooser read off its screen or an API
+# agent's ask - never the CLI's bare idle notice, which follows
 # every quiet turn whether or not anything was asked. RESUMED is one of those carried onto the session a restart reopened (server.resume_asking):
 # still the agent's question, and the mark that it was brought back once already
 RESUMED = 'resumed'
 def own_question(r: dict) -> bool:
-    return r.get('kind') == 'input_needed' and bool(r.get('text')) and (r.get('source') in ('judge', 'screen', 'api', RESUMED) or bool(group_of(r.get('request_id'))))
+    return r.get('kind') == 'input_needed' and bool(r.get('text')) and (r.get('source') in ('screen', 'api', RESUMED) or bool(group_of(r.get('request_id'))))
 
 
 def left_asking(store, tid) -> list:

@@ -139,64 +139,37 @@ class QuestionAndPermissionTests(Base):
         self.assertEqual(self.state()['requests'], [])
 
 
-class TurnJudgeTests(Base):
-    """A question asked only in the prose that ended a turn is the MODEL's to read (hooks.judge_turn) - never a word list's.
-    `looks_like_question` read "?" at a line's end as asking, so a report closing on a rhetorical question took the owner's
-    next note as its answer (the owner, 2026-10-11: "everything should be ai")."""
+class Inline:
+    "A thread that runs where it is started - a read left to the background would be judged after the test looked."
+    def __init__(self, target=None, args=(), kwargs=None, **kw): self.go = lambda: target(*args, **(kwargs or {}))
+    def start(self): self.go()
+
+
+class AQuestionInProseIsNoRequest(Base):
+    """A turn that ended on a question in its prose records nothing, and no model reads it (the owner, 2026-11-10: nothing is asked on
+    the rail). A light model used to read every turn's last message and write "Agent asked you: ..." onto the row in its own wording -
+    over a card that already stood in the task with the same ask. A question the agent means the owner to answer is one it ASKS."""
     def setUp(self):
-        super().setUp(); hooks._JUDGED.clear()
-        self.calls = []
-        # the Stop hook's own judge runs on a thread with the store's brain; here every judge runs inline on a scripted one
-        real = hooks.judge_turn
-        self._sync = mock.patch.object(hooks, 'judge_turn', lambda st, tid, sid, said, brain=None, wait=False:
-                                       real(st, tid, sid, said, brain=brain or self.brain, wait=True)); self._sync.start()
-        self.verdict = '{"asks": false, "question": ""}'
+        super().setUp(); self.read = []
+        brain = lambda system, user, **kw: self.read.append(user) or '{"asks": true, "question": "Card or bank?"}'
+        for p in (mock.patch('taskuary.llm.build_llm', return_value=brain), mock.patch.object(hooks.threading, 'Thread', Inline)):
+            p.start(); self.addCleanup(p.stop)
 
-    def tearDown(self): self._sync.stop(); hooks._JUDGED.clear(); super().tearDown()
-
-    def brain(self, system, user, **kw):
-        self.calls.append(user); return self.verdict
-
-    def test_a_question_the_model_reads_in_the_last_message_is_an_open_request(self):
+    def test_the_prose_is_read_by_nobody_and_writes_nothing(self):
         self.session()
-        self.verdict = '{"asks": true, "question": "Should the refund go to the card or the bank?"}'
         self.fire('Stop', last_assistant_message='Two ways to refund this. Should it go to the card or the bank?')
-        st = self.state()
-        self.assertEqual(st['state'], 'input_needed')
-        self.assertEqual(st['requests'][0]['text'], 'Should the refund go to the card or the bank?')
-        self.assertEqual(st['requests'][0]['source'], 'judge')
+        self.assertEqual((self.read, self.state()['requests']), ([], []))
 
-    def test_a_report_ending_in_a_rhetorical_question_is_not_asking(self):
+    def test_the_question_it_asked_with_its_marker_still_stands(self):
         self.session()
-        self.fire('Stop', last_assistant_message='Fixed the export. Why did it break? The cron ran as the wrong user.')
-        self.assertEqual(len(self.calls), 1)                                   # the model read it...
-        self.assertEqual(self.state()['requests'], [])                          # ...and said it asks nothing
-
-    def test_one_read_per_turn_and_none_when_the_turn_already_asked(self):
-        self.session()
-        self.fire('Stop', last_assistant_message='All done.')
-        self.fire('Stop', last_assistant_message='All done.')                  # the same Stop twice (the spool replays)
-        self.assertEqual(len(self.calls), 1)
         self.fire('Stop', last_assistant_message='Need a pick. [[TASKUARY-ASK]] Which account? | Card | Bank')
-        self.assertEqual(len(self.calls), 1)                                   # the marker already asked - no judge
+        self.assertEqual([(r['source'], r['text']) for r in self.state()['requests']], [('hook', 'Which account?')])
 
-    def test_a_prompt_the_owner_sent_while_the_model_read_wins(self):
+    def test_a_row_an_older_build_wrote_is_no_question(self):
         self.session()
-        said = 'Should I also update the docs?'
-        ws.record(self.s, self.tid, 'run1', 'turn_end', text=said, source='hook')
-        ws.record(self.s, self.tid, 'run1', 'working', source='hook')            # the owner typed on before the verdict came
-        hooks.judge_turn(self.s, self.tid, 'run1', said, brain=lambda *a, **k: '{"asks": true, "question": "Docs too?"}')
+        ws.record(self.s, self.tid, 'run1', 'turn_end', text='Should I also update the docs?', source='hook')
+        ws.record(self.s, self.tid, 'run1', 'input_needed', text='Docs too?', source=ws.READ_OFF_PROSE)
         self.assertEqual(self.state()['requests'], [])
-
-    def test_no_brain_leaves_the_session_honestly_parked(self):
-        self._sync.stop()
-        try:
-            self.session()
-            ws.record(self.s, self.tid, 'run1', 'turn_end', text='Which one should I use?', source='hook')
-            with mock.patch('taskuary.llm.build_llm', return_value=None):
-                hooks.judge_turn(self.s, self.tid, 'run1', 'Which one should I use?', wait=True)
-            self.assertEqual(self.state()['requests'], [])
-        finally: self._sync.start()
 
 
 class FailedToolTests(Base):

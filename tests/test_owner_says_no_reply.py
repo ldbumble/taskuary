@@ -7,7 +7,7 @@ the owner's question - the full suite was still running in a background shell. I
 import json, unittest
 from unittest import mock
 
-from taskuary import agenttools, general, hooks, terminal as term, verdicts, wrapup, workerstate as ws
+from taskuary import agenttools, general, terminal as term, verdicts, wrapup, workerstate as ws
 import taskuary
 from tests.test_hooks_events import Base
 from tests.test_thread_change_replans import drafted_task, store
@@ -53,10 +53,8 @@ class OwnerSaysNoReply(unittest.TestCase):
 
 
 class HeaderReadsTheTurn(Base):
-    """A request outranks running work (bb7df739): the Stop's own `background` line is no newer word than the turn it ended."""
-    def setUp(self): super().setUp(); hooks._JUDGED.clear()
-    def tearDown(self): hooks._JUDGED.clear(); super().tearDown()
-
+    """A turn whose shell is still running reads working, whatever its last words were - nothing reads the prose for a question (the
+    owner, 2026-11-10). One the agent ASKED outranks the running work (bb7df739): the Stop's `background` line is no newer word."""
     def ended(self, said):
         t = self.session()
         ws.record(self.s, self.tid, 'run1', 'turn_end', text=said, source='hook')
@@ -64,20 +62,17 @@ class HeaderReadsTheTurn(Base):
                   choices=[{'id': 'b1', 'kind': 'shell', 'what': 'Run the full suite', 'until': None}], source='hook')
         return t
 
-    def test_a_turn_ending_on_a_question_with_the_suite_still_running_is_not_working(self):
-        said = 'It is on your local master only. Should I fix the commit message, rebase and push?'
-        t = self.ended(said)
-        self.assertIs(ws.waiting_of(self.s, t), False)                          # before the judge: the work in the shell reads working
-        hooks.judge_turn(self.s, self.tid, 'run1', said, brain=lambda *a, **k: '{"asks": true, "question": "Rebase and push?"}', wait=True)
+    def test_a_question_it_asked_with_the_suite_still_running_is_not_working(self):
+        t = self.ended('It is on your local master only.')
+        self.assertIs(ws.waiting_of(self.s, t), False)                          # the work in the shell reads working
+        ws.record(self.s, self.tid, 'run1', 'input_needed', text='Rebase and push?', source='api')
         self.assertIs(ws.waiting_of(self.s, t), True)
         self.assertTrue(term.worker_fields(self.s, t)['waiting'])
         from taskuary import taskstate
         self.assertNotEqual(taskstate.state(self.s, self.s.get_task(self.tid), {'alive': True, **term.worker_fields(self.s, t)}), 'working')
 
-    def test_a_turn_that_asked_nothing_still_reads_working_while_its_shell_runs(self):
-        said = 'The suite is still running; I will commit once it passes.'
-        t = self.ended(said)
-        hooks.judge_turn(self.s, self.tid, 'run1', said, brain=lambda *a, **k: '{"asks": false, "question": ""}', wait=True)
+    def test_a_turn_that_asked_nothing_reads_working_while_its_shell_runs_whatever_its_prose(self):
+        t = self.ended('The suite is still running. Should I commit once it passes?')
         self.assertIs(ws.waiting_of(self.s, t), False)
 
 

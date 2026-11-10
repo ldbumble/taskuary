@@ -31,10 +31,10 @@ def ev(s, tid, kind, text='', source='hook', rid=None, sid='c1'):
 
 
 def cut_off_asking(s, kind='coding'):
-    """A coding agent's turn ended asking (the judge's read), the CLI's idle notice after it, then a restart cut the session off."""
+    """A coding agent's turn ended on a question it asked, the CLI's idle notice after it, then a restart cut the session off."""
     t = Factory(s).task(title='Packet download fails for large teams', kind=kind, status='open')
     ev(s, t, 'working'); ev(s, t, 'turn_end', SAID)
-    ev(s, t, 'input_needed', ASK, source='judge', rid=ws.request_id_for(ASK))
+    ev(s, t, 'input_needed', ASK, source='api', rid=ws.request_id_for(ASK))
     ev(s, t, 'input_needed', 'Claude is waiting for your input', rid=ws.request_id_for('Claude is waiting for your input'))
     ev(s, t, 'disconnected', 'the session ended', source='shutdown')
     s.tag_task(t, terminal.INTERRUPTED, True, 'shutdown')
@@ -58,14 +58,6 @@ def test_a_run_that_ended_on_a_report_leaves_nothing_asking(s):
     ev(s, t, 'input_needed', 'Claude is waiting for your input', rid='idle1')
     ev(s, t, 'disconnected', 'the session ended', source='shutdown')
     assert ws.left_asking(s, t) == []
-
-
-def test_the_models_read_of_the_final_text_counts_at_the_wrap(s):
-    """The question asked only in the prose that ended the turn is still a question nobody answered (hooks.judge_turn reads it - the model,
-    never a "?" rule): a session put away there did not finish."""
-    t = Factory(s).task(title='Packet download', kind='coding', status='in_progress')
-    ev(s, t, 'working'); ev(s, t, 'turn_end', SAID); ev(s, t, 'input_needed', ASK, source='judge', rid='j1')
-    assert [r['text'] for r in wrapup.unanswered(s, t)] == [ASK]
 
 
 def test_a_cut_off_run_reads_as_the_agent_asking_and_its_row_fills_nothing(s):

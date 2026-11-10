@@ -138,8 +138,7 @@ def state(store, tid: int) -> tuple:
     # with a `stalled` request open, and a note was typed into it as if it had been asked - and marked the stall
     # answered. Nothing can be answered through a rate limit; the note waits until the limit lifts.
     if (req or {}).get('kind') == 'stalled': return 'working', t
-    # ASKING = the run's own word (a hook's question, a [[TASKUARY-ASK]], the model's read of its last message - hooks.
-    # judge_turn) or the CLI's own chooser chrome on screen. The words on the tail used to decide it (`looks_like_question`:
+    # ASKING = the run's own word (a hook's question, a [[TASKUARY-ASK]]) or the CLI's own chooser chrome on screen. The words on the tail used to decide it (`looks_like_question`:
     # "?" at a line's end, "should i", "do you want") - so a report closing on a rhetorical question took the next note as
     # its ANSWER (the owner, 2026-10-11: "everything should be ai"). Parked without either is parked: the note is typed.
     return ('asking' if req or term.chooser_in(_screen(t)) else 'parked'), t

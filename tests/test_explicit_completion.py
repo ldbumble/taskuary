@@ -139,11 +139,6 @@ class QuestionGateTests(Base):
         ws.record(self.s, self.tid, 'run1', 'input_needed', text='Which account should the refund go to?', choices=['Card', 'Bank'], source='hook')
         self.assertEqual(selfclose.blocked(self.s, self.tid, sess), '')
 
-    def test_the_models_read_of_a_turn_does_not_refuse_done(self):
-        sess = live(self.tid); term.SESSIONS['run1'] = sess
-        ws.record(self.s, self.tid, 'run1', 'input_needed', text='Want me to tidy the logs too?', source='judge')
-        self.assertEqual(selfclose.blocked(self.s, self.tid, sess), '')
-
     def test_a_held_ask_left_behind_is_let_go_and_does_not_refuse_done(self):
         # the leftover hold refused every --done after the agent had moved on (the owner, 2026-10-30: "it should be able to close task")
         sess = live(self.tid); term.SESSIONS['run1'] = sess

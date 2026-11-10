@@ -31,7 +31,7 @@ def ev(s, tid, kind, text='', source='hook', rid=None, sid='c1', choices=None):
                         'ChoicesJson': json.dumps(choices) if choices else None})
 
 
-def cut_off(s, kind='coding', asking=True, status='open', source='judge', choices=None, cut='shutdown', rid=None):
+def cut_off(s, kind='coding', asking=True, status='open', source='api', choices=None, cut='shutdown', rid=None):
     t = Factory(s).task(title='Packet download fails for large teams', kind=kind, status=status)
     s.note_session_id(t, 'c1', 'claude-thread', 'claude', s.cwd)
     ev(s, t, 'working'); ev(s, t, 'turn_end', ASK if asking else 'Looking at the export code now.')

@@ -134,7 +134,7 @@ class ParkedOnItsOwnQuestion(unittest.TestCase):
         return SimpleNamespace(sid='run1', task_id=self.tid, alive=True, waiting=lambda: True, **kw)
 
     def asked(self, sess):
-        self.assertTrue(ws.record(self.s, self.tid, sess.sid, 'input_needed', text=self.Q, source='judge'))
+        self.assertTrue(ws.record(self.s, self.tid, sess.sid, 'input_needed', text=self.Q, source='api'))
         self.assertEqual(waitroom.state(self.s, self.tid)[0], 'asking')
 
     def after(self):

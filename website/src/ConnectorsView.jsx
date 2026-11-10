@@ -36,6 +36,7 @@ import { GoogleCalendar } from "./GoogleCalendar.jsx";
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
+import BrowserPane from "./BrowserPane.jsx";
 import { WAITING_META, waitingIn } from "./waitingMeta.js";
 import { CATALOGUE, PRESETS, matchCards, onceEach, oneOf, plannedFor, presetBody, presetOf, presetsLeft, repliesOf, repliesOn } from "./connectorCatalog.js";
 import { settingsOf } from "./actionCard.js";
@@ -3085,7 +3086,9 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       {/* the sign-in lives at the TOP of the card, not inside the Credentials step: a card that already
           runs on a tenant app opens on Sources, and the one button most people need was folded away.
           It sits above the agent box too: one sign-in is the whole setup, the agent is the long road (B10) */}
-      {MS_SIGNIN.includes(conn.Type) && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} setCfg={setCfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
+      {conn.Type === "teams" && <TeamsAccount conn={conn} cfg={cfg} setCfg={setCfg} reload={reload} />}
+      {MS_SIGNIN.includes(conn.Type) && !(conn.Type === "teams" && cfg.account_type === "personal")
+        && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} setCfg={setCfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
       {conn.Type === "gmail" && <GoogleCalendar conn={conn} cfg={cfg} reload={reload} />}
       {conn.Type === "gmail" && <GoogleFiles conn={conn} cfg={cfg} reload={reload} />}
@@ -5062,3 +5065,58 @@ const Steps = ({ steps }) => (
     ))}
   </Box>
 );
+
+// TEAMS FOR A PERSONAL ACCOUNT (the owner, 2026-11-09): Graph reads only work and school chats, and Teams free has no API, so the
+// personal road signs in once in this card's own browser view and reads the chats through it (teamsweb.py). Opt-in, said plainly.
+const TEAMS_KINDS = [["work", "Work or school (Microsoft 365)"], ["personal", "Personal (Teams free, via the browser)"]];
+const TEAMS_WEB_NOTE = "Reads your chats through a browser session on this computer; Microsoft has no API for personal Teams, so it may need a fix when Microsoft changes the page.";
+export const TeamsAccount = ({ conn, cfg, setCfg, reload }) => {
+  const kind = cfg.account_type === "personal" ? "personal" : "work";
+  const [sid, setSid] = useState(""), [busy, setBusy] = useState(""), [said, setSaid] = useState(null);
+  const pick = async (v) => {
+    if (v === kind) return;
+    const next = { ...cfg, account_type: v };
+    setCfg(next); setSaid(null);
+    try { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigPatch: cfgPatch(cfg, next) }); reload?.(); }
+    catch (e) { setSaid({ ok: false, detail: e?.response?.data?.detail || "The choice did not save - pick it again." }); }
+  };
+  const signIn = async () => {
+    setBusy("signin"); setSaid(null);
+    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/teamsweb/signin`, {}, { timeout: 60000 }); setSid(data.sid); }
+    catch (e) { setSaid({ ok: false, detail: e?.response?.data?.detail || "The browser did not open - press Sign in again." }); }
+    setBusy("");
+  };
+  const done = async () => {
+    setBusy("done");
+    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/teamsweb/done`, {}, { timeout: 120000 }); setSaid(data); if (data.ok) setSid(""); }
+    catch (e) { setSaid({ ok: false, detail: e?.response?.data?.detail || "Teams could not be read - press Sign in again." }); }
+    setBusy(""); reload?.();
+  };
+  // what the last read said, in the card's words: signed out asks for the sign-in again, a changed page says reading stopped
+  const err = conn.LastError || "";
+  const out = /signed out of teams/i.test(err), changed = /page changed/i.test(err);
+  return (
+    <Box data-tq-teams-account={kind} sx={{ mb: 2, p: 1.25, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 0.75 }}>
+      <Typography variant="body2" sx={{ fontWeight: 600 }}>Account</Typography>
+      {TEAMS_KINDS.map(([v, label]) => (
+        <Box key={v} component="label" sx={{ display: "flex", alignItems: "center", gap: 0.5, cursor: "pointer", fontSize: 14 }}>
+          <Radio size="small" checked={kind === v} onChange={() => pick(v)} value={v} name={`teams-kind-${conn.ConnectorId}`} sx={{ p: 0.5 }} />{label}
+        </Box>
+      ))}
+      {kind === "personal" && <>
+        <Typography variant="body2" data-tq-teams-web-note="" sx={{ color: DIM }}>{TEAMS_WEB_NOTE}</Typography>
+        {out && <Typography variant="body2" role="alert" sx={{ color: "#6b2733" }}>Signed out of Teams. Sign in again to keep reading your chats.</Typography>}
+        {changed && <Typography variant="body2" role="alert" sx={{ color: "#6b2733" }}>Teams' page changed; reading stopped.</Typography>}
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+          {!sid && <Button size="small" variant="contained" disableElevation onClick={signIn} disabled={!!busy}>
+            {busy === "signin" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : out || conn.LastSyncAt ? "Sign in again" : "Sign in"}</Button>}
+          {sid && <Button size="small" variant="contained" disableElevation onClick={done} disabled={!!busy}>
+            {busy === "done" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "I've signed in"}</Button>}
+          {sid && <Typography variant="body2" sx={{ color: DIM }}>Take over the view below and sign in to Teams; Taskuary keeps only the browser's cookies.</Typography>}
+        </Box>
+        {sid && <Box sx={{ height: 460, border: `1px solid ${BORDER}`, borderRadius: 1, overflow: "hidden" }}><BrowserPane sid={sid} /></Box>}
+      </>}
+      {said && <Typography variant="body2" sx={{ color: said.ok ? DIM : "#6b2733" }}>{said.ok ? "✓ " : "✗ "}{said.detail}</Typography>}
+    </Box>
+  );
+};

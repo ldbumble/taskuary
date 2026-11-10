@@ -230,9 +230,12 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
 def send_teams(store, chat_id: str, body: str, connector_id=None, want_id: bool = False) -> dict:
     """Post into a chat. App-only posting needs ChatMessage.Send on the app registration,
     which reading does NOT include - say so plainly rather than failing with a 403 blob."""
+    # a personal account's chat (teams.live.com) has no API: the card's browser types it, on this - the owner's - Send (teamsweb.py)
+    from . import teamsweb
+    if teamsweb.is_live(chat_id): return teamsweb.send(store, chat_id, body, connector_id)
     # the card that owns the chat, and only a person's sign-in: an app's token is refused every time (NO_SENDER)
     c = store.get_connector(int(connector_id)) if connector_id else \
-        next((x for x in store.connectors_by_type('teams') if as_person(store, x)), None)
+        next((x for x in store.connectors_by_type('teams') if as_person(store, x) and not teamsweb.personal(x)), None)
     if c and c.get('Active') and not as_person(store, c): raise RuntimeError(NO_SENDER['teams'])
     tok = _graph_token(store, 'teams', c and c['ConnectorId'])
     # a PERSON picked from the people search (an address, not a '19:' chat id) is their 1:1 chat - the one there is, or a new one
@@ -328,6 +331,8 @@ def as_person(store, c) -> bool:
     from .channels import graph_creds
     full = store.get_connector(c['ConnectorId'], with_secret=True) if c and c.get('Active') else None
     if not full: return False
+    from . import teamsweb
+    if teamsweb.personal(full): return True          # Teams free: the owner's own browser sign-in, so it posts as them
     cfg, sec, _ = graph_creds(store, full)
     return bool(sec) and cfg.get('auth') == 'user'
 

@@ -10,7 +10,7 @@ from html import unescape
 from datetime import datetime, timedelta
 from loguru import logger
 
-from . import msauth, net, remotemcp, spawn
+from . import msauth, net, remotemcp, spawn, teamsweb
 from .timewords import plural
 requests = net      # pooled Session + (connect, read) timeouts; the name keeps patches of channels.requests.get biting
 from .github import _h as gh_headers, list_accessible_repos
@@ -257,7 +257,9 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
     if not c: raise ValueError('connector not found')
     cfg, t0, extra = _cfg(c), time.time(), {}
     try:
-        if c['Type'] in ('outlook', 'teams'):
+        if c['Type'] == 'teams' and teamsweb.personal(c):          # Teams free: no API, the card's browser reads it (teamsweb.py)
+            detail = teamsweb.probe(c)
+        elif c['Type'] in ('outlook', 'teams'):
             gcfg, gsec, borrowed = graph_creds(store, c)
             own = bool(c.get('Secret') and (cfg.get('client_id') or cfg.get('auth') == 'user'))
             if c['Type'] == 'teams' and not (own or borrowed or os.getenv('AZURE_CLIENT_ID')):
@@ -2056,6 +2058,12 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
     n, errors = 0, []      # errors: folders a mailbox could not finish - the card shows them, the poll goes on
     full = store.get_connector(c['ConnectorId'], with_secret=True)
     try:
+        if c['Type'] == 'teams' and teamsweb.personal(full):       # Teams free: the card's browser, never Graph (teamsweb.py)
+            mine = [x for x in store.list_sources() if x['Channel'] == 'teams' and x.get('ConnectorId') == c['ConnectorId']]
+            n += teamsweb.poll(store, full, _since(mine[0] if mine else {}, backfill_hours), llm, file_only)
+            for s in mine: store.touch_source(s['SourceId'])
+            store.touch_connector(c['ConnectorId'])
+            return n
         user = False                                # a person's own sign-in reads Teams chats by another road
         if c['Type'] in ('outlook', 'teams'):
             gcfg, gsec, _ = graph_creds(store, full)

@@ -8209,6 +8209,30 @@ def _reads(cid):
     c = store.get_connector(cid) if cid else None
     return bool(c and c.get('Active') and c.get('HasSecret'))
 
+# ── personal Teams (Teams free): signed in once in the card's own browser view, read through it (teamsweb.py) ──
+@app.post('/api/connectors/{cid}/teamsweb/signin')
+def teamsweb_signin(cid: int):
+    """Open the card's browser on Teams for the owner to sign in - its {sid} is what the card's browser view watches. Taskuary keeps
+    nothing of the sign-in; the browser keeps its cookies (browserview.start restores and closes them)."""
+    from . import browserview, teamsweb
+    c = _ms_card(cid)
+    if not teamsweb.personal(c): raise HTTPException(409, 'this Teams card is set to a work or school account')
+    if not browserview.installed(): raise HTTPException(409, teamsweb.NO_BROWSER)
+    sid = teamsweb.sid_of(cid)
+    if not browserview.start(sid, teamsweb.HOME): raise HTTPException(503, 'the browser did not start - press Sign in again')
+    return {'sid': sid}
+
+@app.post('/api/connectors/{cid}/teamsweb/done')
+def teamsweb_done(cid: int):
+    """The owner says they signed in: the browser is closed so its cookies are written (agent-browser saves them on close, never on
+    a clock - browserview.AUTOSAVE_MS), then the card's Test reads the page once through a fresh one."""
+    from . import browserview, teamsweb
+    from .channels import test_connector
+    c = _ms_card(cid)
+    if not teamsweb.personal(c): raise HTTPException(409, 'this Teams card is set to a work or school account')
+    browserview.close(teamsweb.sid_of(cid))
+    return test_connector(store, cid)
+
 def _ms_card(cid):
     """Outlook and Teams both sign in with Microsoft, each card its own account (a Teams card asks for chat scopes)."""
     c = store.get_connector(cid)

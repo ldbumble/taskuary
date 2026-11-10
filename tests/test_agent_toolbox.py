@@ -85,6 +85,9 @@ class TheServer(unittest.TestCase):
         for name in ('search_tasks', 'search_messages', 'propose_reply', 'my_task'):
             r = rpc(theirs, 'tools/call', {'name': name, 'arguments': {'words': 'renewal'}}, headers=st).json()
             self.assertIn('unknown tool', r['error']['message'])
+        # ...with no day, on a task with no reminder, nothing is "taken off": it says what to give
+        r = rpc(theirs, 'tools/call', {'name': 'remind', 'arguments': {}}, headers=st).json()['result']
+        self.assertTrue(r['isError'], r); self.assertIn('no reminder is set', str(r))
         r = rpc(theirs, 'tools/call', {'name': 'remind', 'arguments': {'when': 'in 2 days'}}, headers=st).json()['result']
         self.assertFalse(r['isError'], r); self.assertTrue(self.s.get_task(theirs).get('RemindAt'))
         r = rpc(theirs, 'tools/call', {'name': 'check_back', 'arguments': {'when': 'tomorrow 9am', 'what': 'the export ran'}}, headers=st).json()['result']

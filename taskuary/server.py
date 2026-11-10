@@ -5668,7 +5668,9 @@ def agent_remind(body: AgentRemindBody, request: Request):
     reminder, off the rail until then, never the agent's own wake (check_back). The owner, 2026-11-09."""
     from . import remind
     _own_task_only(request, body.task_id)
-    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    if not (t := store.get_task(body.task_id)): raise HTTPException(404, 'no such task')
+    # ...a call with no day on a task with no reminder took nothing off, and said it had (the stress run, 2026-11-10)
+    if not str(body.until or '').strip() and not t.get('RemindAt'): raise HTTPException(422, 'no reminder is set on this task - give `until` (a day or a time) to set one')
     try: out = remind.set_reminder(store, body.task_id, body.until, body.agent, agent=True)
     except ValueError as e: raise HTTPException(404 if 'not found' in str(e) else 422, str(e))
     operations.record_direct(store, 'task.defer', body.task_id, {'until': body.until or 'none'}, body.agent, out)

@@ -580,7 +580,7 @@ def agent_share(store, tid: int, report, to: str, text: str, via: str = '', acto
     from . import dashboards, slots, wrapup
     from .calwrite import people_of
     src = store.get_source(int(report)) if str(report or '').isdigit() else None
-    if not src or src.get('Channel') != 'report': raise ValueError(f'there is no report {report} - the N of #report=N names it')
+    if not src or src.get('Channel') != 'report': raise ValueError((f'there is no report {report}' if str(report or '').strip() else 'name the report to share') + ' - `report` is the N of its #report=N')
     title, text, to = dashboards.cfg_of(src).get('title') or src.get('Address') or 'Report', str(text or '').strip(), str(to or '').strip()
     if not text or not to: raise ValueError('say who it goes `to`, and in `text` what goes with it')
     via = via if via in ('chat', 'email') else _way(store, tid, to)

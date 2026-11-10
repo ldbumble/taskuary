@@ -299,6 +299,20 @@ def test_nothing_the_owner_did_not_type_is_his(home, shape):
     if shape == 'an empty and a thinking-only answer': assert [x['k'] for x in ses['steps']] == ['you', 'thought']
 
 
+def test_a_resumed_conversation_is_each_session_with_its_own_turns_never_the_log_twice(home):
+    """A pane resumed on its conversation (`claude --resume`) writes on into the same log: the record read that whole log once per session, and
+    the Agent work card drew every earlier turn twice (the stress round, 2026-11-10). Each session keeps the turns up to its own end."""
+    s = MemoryStore(); tid = Factory(s).task(title='March import doubled')
+    jsonl(home / '.claude' / 'projects' / 'C--work-ledger' / 'rs1.jsonl', [
+        U('Why did March double?', **HUMAN, timestamp='2026-11-10T08:00:00Z'), A(SAID('The cursor resets.'), timestamp='2026-11-10T08:01:00Z'),
+        U('Now fix it.', **HUMAN, timestamp='2026-11-10T09:00:00Z'), A(SAID('Fixed.'), timestamp='2026-11-10T09:01:00Z')])
+    end1, end2 = sessionrecord._local('2026-11-10T08:05:00Z'), sessionrecord._local('2026-11-10T09:05:00Z')
+    for sid, at in (('pane-1', end1), ('pane-2', end2)):
+        s._exec("INSERT INTO transcript (TaskId,Sid,Agent,Text,Brain,ExtId,CreatedAt) VALUES (?,?,?,?,?,?,?)", (tid, sid, 'coding', 'x', 'claude', 'rs1', at))
+    recs = {r['sid']: [x['text'] for x in r['steps']] for r in sessionrecord.record(s, tid)['sessions']}
+    assert recs == {'pane-1': ['Why did March double?', 'The cursor resets.'], 'pane-2': ['Now fix it.', 'Fixed.']}
+
+
 def test_sessions_come_newest_first_each_with_its_own_report(home):
     s = MemoryStore(); tid = Factory(s).task(title='Two runs')
     s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)",

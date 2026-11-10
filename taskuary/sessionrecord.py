@@ -656,6 +656,18 @@ def record(store, tid: int) -> dict:
         sessions.append({'sid': r.get('Sid'), 'by': r.get('Agent') or 'agent', 'cli': r.get('Brain') or '', 'cwd': r.get('Cwd') or '',
                          'at': _when(r.get('CreatedAt')), 'source': rec.get('source') or '', 'steps': mark_briefs(tid, rec.get('steps') or []),
                          **{k: rec[k] for k in ('took', 'usage') if rec.get(k) is not None}})
+    # A RESUMED CONVERSATION IS ONE LOG (the stress round, 2026-11-10): `claude --resume` writes on into the file the session before it wrote,
+    # and each session read the whole of it - every earlier turn drawn again under the next. Each keeps the turns up to its own end; a step
+    # with no time, the newest
+    shared = {}
+    for x, r in zip(sessions, rows):
+        if r.get('ExtId'): shared.setdefault((x['cli'], r['ExtId']), []).append(x)
+    for group in (g for g in shared.values() if len(g) > 1):
+        prev = ''
+        for i, x in enumerate(sorted(group, key=lambda x: x['at'])):
+            last = i == len(group) - 1
+            x['steps'] = [st for st in x['steps'] if (last if not st.get('at') else prev < _local(st['at']) and (last or _local(st['at']) <= x['at']))]
+            prev = x['at']
     chat = general.chat_rows(store, tid)
     if chat and any(c.get('ActorType') == general.ASSISTANT_TYPE for c in chat):
         turns = []

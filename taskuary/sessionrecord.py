@@ -477,6 +477,9 @@ def queued(text):
 
 
 _CONTINUED = 'This session is being continued from a previous conversation'     # Claude Code's chrome over a compact summary
+# A NOTE TASKUARY TYPED BEFORE IT MARKED ITS NOTES (2026-11-09/10): an approval's "The owner approved it and Taskuary ran `gh pr comment ...`"
+# was kept as no seed and drew as the owner's line - its fixed opening, Taskuary's own words, is the mark left (chatStream.TOLD, the same)
+TOLD = re.compile(r'^\s*(?:The owner (?:approved it|pressed .{1,60}? on what you set up)|Taskuary left \d+ notes? for you|While you were working, Taskuary queued \d+ notes?)')
 
 
 def mark_briefs(tid: int, steps: list) -> list:
@@ -496,6 +499,7 @@ def mark_briefs(tid: int, steps: list) -> list:
     def mark(x):
         # ...a record SAVED before 2026-11-10 kept the summary as a told step, its structure gone: the CLI's own fixed opening is the one mark left
         if x.get('k') == 'you' and _flat(x.get('text')).startswith(_CONTINUED): return [{**x, 'k': 'compact', 'text': COMPACTED}]
+        if x.get('k') == 'you' and TOLD.match(_flat(x.get('text'))) and queued(x.get('text')) is None: return [{**x, 'k': 'brief'}]
         if x.get('k') == 'you' and (b := queued(x.get('text'))) is not None: return [{**x, 'k': k, 'text': t} for k, t in b]
         if x.get('k') not in ('you', 'brief') or (x['k'] == 'you' and not ours(x) and not owner_split(x.get('text'))[0]): return [x]
         w, rest = owner_split(x.get('text'))

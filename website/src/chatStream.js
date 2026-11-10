@@ -28,6 +28,10 @@ export const parentOf = (u) => String(u?._meta?.claudeCode?.parentToolUseId || u
 const compactionOf = (u, seen) => (u?.sessionUpdate === "compaction_update" ? String(u.compactionId ?? "")
   : (u?.sessionUpdate === "tool_call" || u?.sessionUpdate === "tool_call_update") && (u._meta?.claudeCode?.toolName === "compact" || seen.has(String(u.toolCallId)))
     ? String(u.toolCallId) : null);
+// ...and a note Taskuary typed into a session BEFORE it marked its notes (2026-11-09/10: an approval's "The owner approved it and Taskuary ran
+// `gh pr comment ...`" drew as the owner's green bubble): no mark in the record, so the fixed opening Taskuary itself wrote is the one left
+// (sessionrecord.TOLD, the same words)
+export const TOLD = /^\s*(?:The owner (?:approved it|pressed .{1,60}? on what you set up)|Taskuary left \d+ notes? for you|While you were working, Taskuary queued \d+ notes?)/;
 export function stepsFromAcp(updates) {
   const out = [], byId = new Map(), compacts = new Map();
   let o, cid;
@@ -39,7 +43,7 @@ export function stepsFromAcp(updates) {
   for (const u of updates || []) {
     const kind = u?.sessionUpdate;
     at = u?._at || "";
-    if (kind === "user_message_chunk") chunk(u._meta?.taskuary === "brief" ? "brief" : "you", textOf(u.content));
+    if (kind === "user_message_chunk") chunk(u._meta?.taskuary === "brief" || TOLD.test(textOf(u.content)) ? "brief" : "you", textOf(u.content));
     else if (kind === "agent_message_chunk") chunk("said", textOf(u.content));
     else if (kind === "agent_thought_chunk") chunk("thought", textOf(u.content));
     // ...and a turn that failed, kept by Taskuary where it happened (acpcoding._turn): the turn's error, with the way past it

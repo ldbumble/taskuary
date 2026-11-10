@@ -74,6 +74,27 @@ def test_a_resumed_turn_carries_the_draft_and_the_sent_but_not_a_bare_answer():
     assert general.latest_block(s, t) and not general.latest_block(s, t, resumed=True)    # the CLI has the chat; its turn is the newest
 
 
+def test_a_turn_no_message_started_is_not_handed_the_answered_one_as_newest():
+    """Agent walk 2, 2026-11-10: the owner asked "what is left?", the agent answered, the owner pressed Send - and the turn that press woke
+    read "your answer is to the newest message ... THE NEWEST MESSAGE - from the owner: What is left here?", so it answered that again."""
+    s = MemoryStore(); tid, *_ = the_owners_day(s)
+    assert 'THE NEWEST MESSAGE - from the owner (in this chat)' in general.latest_block(s, tid)
+    at(s, 'comment', 'CommentId', s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Fixed - the November list is drafted.'), '2026-11-06 15:23:00')
+    b = general.latest_block(s, tid)                    # ...the owner's Send wakes it: nobody said anything new
+    assert 'THE NEWEST MESSAGE' not in b and selfclose.LATEST_LINE not in b and 'BEFORE the newest message' not in b
+    assert selfclose.NO_NEW_LINE in b and f'THE LAST MESSAGE, WHICH YOU ANSWERED - from the owner (in this chat), at 03:22 PM' in b and FIX in b
+    # ...a mail that joins after that answer is new, until the turn Taskuary starts on it has answered
+    m = s.add_message({'TaskId': tid, 'ExternalId': 'g-2', 'ConversationId': 'conv-g', 'Channel': 'email', 'FromName': 'Gail Moreno',
+                       'FromEmail': 'gail@northwind.example', 'BodyText': 'Actually I need the December one.', 'Status': 'routed'})
+    at(s, 'message', 'MessageId', m, '2026-11-06 15:40:00')
+    b = general.latest_block(s, tid)
+    assert selfclose.LATEST_LINE in b and 'THE NEWEST MESSAGE - from Gail Moreno' in b
+    at(s, 'comment', 'CommentId', s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, 'Gail Moreno wrote on the thread.'), '2026-11-06 15:41:00')
+    assert 'THE NEWEST MESSAGE - from Gail Moreno' in general.latest_block(s, tid), 'the turn on it has not answered yet'
+    at(s, 'comment', 'CommentId', s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Drafted the December list.'), '2026-11-06 15:42:00')
+    assert 'THE LAST MESSAGE, WHICH YOU ANSWERED - from Gail Moreno' in general.latest_block(s, tid)
+
+
 def test_a_new_mail_is_the_newest_message_and_the_replan_says_latest_wins():
     from taskuary import ingest
     s = MemoryStore(); tid, *_ = the_owners_day(s)

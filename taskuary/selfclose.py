@@ -494,6 +494,12 @@ LATEST_LINE = ('LATEST MESSAGE WINS: your answer is to the newest message, read 
                'conversation, never answer an earlier ask again. If a draft is pending, either replace it with a corrected one (write the new '
                'reply: it takes the place of the old one) or withdraw it (say why in one line); never leave an earlier draft standing as if it '
                'answered this. Never draft again what already went out below; write only what is new since.')
+# ...A TURN NO MESSAGE STARTED (agent walk 2, 2026-11-10): woken by the owner's Send, the agent was handed the line it had answered a minute
+# before as "THE NEWEST MESSAGE", under "your answer is to the newest message" - and answered "What is left here?" a second time. A turn
+# Taskuary starts on an answered task (a press, a result that came back, a check-back) is told nothing new was said (general.latest_block)
+NO_NEW_LINE = ('NO NEW MESSAGE STARTED THIS TURN: the last message on the task is one you have answered - never answer it again. This turn '
+               'is about the rest of what you are told here. A draft still waiting stays as it is unless that undoes it; never draft again '
+               'what already went out below.')
 WITHDRAW_MARK = '[[TASKUARY-WITHDRAW: <why, one line>]]'
 # ...and any unsent thing it set up, as withdraw_draft takes it (verdicts.withdraw): an agent with no shell took back only the reply draft,
 # so an email to the wrong person stood beside the right one with its Send (agent-flow audit, 2026-11-07)

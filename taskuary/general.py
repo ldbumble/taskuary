@@ -557,7 +557,7 @@ def newest_message(store, tid: int) -> dict | None:
     "The newest message on the task - the owner's own line in the chat or a mail that joined it: {who, at, words}. Taskuary's briefs are not one."
     said = [c for c in store.list_comments(tid, internal=True) if c.get('ActorType') == USER_TYPE and c.get('Actor') != BRIEF_ACTOR]
     mail = store._rows(JOINED, (tid,))
-    a = {'who': 'the owner (in this chat)', 'at': str(said[-1].get('CreatedAt') or ''), 'words': said[-1].get('Body')} if said else None
+    a = {'who': 'the owner (in this chat)', 'at': str(said[-1].get('CreatedAt') or ''), 'words': said[-1].get('Body'), 'cid': said[-1]['CommentId']} if said else None
     m = mail[-1] if mail else None
     b = {'who': 'the owner (their own reply on the thread)' if m.get('Own') else m.get('FromName') or m.get('FromEmail') or 'someone',
          'at': str(m.get('JoinedAt') or ''), 'words': m.get('OwnText') or m.get('BodyText') or m.get('Subject'), 'mid': m.get('MessageId')} if m else None
@@ -714,6 +714,11 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner') -> st
     "Hand task `tid`'s agent the approval that went, as `tell` hands anything: 'told', 'woke' or ''."
     from .browsergate import NEXT
     return tell(store, tid, APPROVED.format(press=press, what=' '.join(str(what or 'done').split())[:400]) + NEXT, actor)
+def last_turn_began(store, tid: int) -> str | None:
+    "When the turn task `tid`'s agent last answered BEGAN - the owner's line or Taskuary's brief it answered; None before any answer."
+    at = lambda kind, upto='9999': (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=? AND CreatedAt<=?',
+                                               (tid, kind, upto)) or {}).get('at')
+    return (at(USER_TYPE, last) or last) if (last := at(ASSISTANT_TYPE)) else None
 # WHAT THE OWNER SAID ON THE THREAD THEMSELVES (the owner, 2026-11-08: replies from their phone between the other side's lines): a line of theirs
 # in a chat is never a turn of its own (channels.ingest_own_message), so the next turn hears each one since the agent last answered
 def own_replies(store, tid: int, since: str = None) -> list:
@@ -721,11 +726,7 @@ def own_replies(store, tid: int, since: str = None) -> list:
     answer, and never one Taskuary sent. The THREAD, not the task: in a room holding two tasks the line lands on the one it answers, and the
     other's agent hears it too (the stress run, 2026-11-05). From the turn's start, not its answer (the night run, 2026-11-09): a line the
     owner sent while the turn worked was older than the answer, and no turn ever heard it."""
-    if since is None:
-        at = lambda kind, upto='9999': (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=? AND CreatedAt<=?',
-                                                   (tid, kind, upto)) or {}).get('at')
-        if not (last := at(ASSISTANT_TYPE)): return []
-        since = at(USER_TYPE, last) or last
+    if since is None and not (since := last_turn_began(store, tid)): return []
     from .channels import _same_words
     sent = [str(x.get('text') or '') for x in wrapup.sent_replies(store, tid)]
     rows = store._rows("SELECT * FROM message WHERE (IFNULL(Direction,'in')='out' OR Status='context') AND CreatedAt>? AND Status NOT IN ('history','skipped') "
@@ -758,10 +759,15 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     new, sent = newest_message(store, tid), wrapup.sent_replies(store, tid)
     rv = store.pending_review(tid, 'draft_reply', live_only=False) or store.pending_review(tid, 'draft', live_only=False)
     rv = rv if rv and str(rv.get('DraftText') or '').strip() else None
-    answered = not resumed and any(c.get('ActorType') == ASSISTANT_TYPE for c in store.list_comments(tid, internal=True))
+    rows = store.list_comments(tid, internal=True)
+    answers = [c['CommentId'] for c in rows if c.get('ActorType') == ASSISTANT_TYPE]
+    answered = not resumed and bool(answers)
+    # ...NEWEST ONLY UNTIL IT IS ANSWERED (selfclose.NO_NEW_LINE): the owner's line by the answer filed after it, a mail by the turn that
+    # began once it had joined - one that joined while a turn worked was not in that turn's prompt, and is still new
+    heard = bool(new) and (any(a > new['cid'] for a in answers) if new.get('cid') else new['at'] <= (last_turn_began(store, tid) or ''))
     from . import verdicts                    # ...and the rest it set up and has not sent: named, so a marker can take one back by its id
     others = [x for x in verdicts.unsent(store, tid) if not rv or x['rid'] != rv['ReviewId']]
-    handed = [c for c in store.list_comments(tid, internal=True) if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
+    handed = [c for c in rows if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
     did, own = owner_did(store, tid), own_replies(store, tid)
     from . import slots
     nowhere = slots.needs_address(store, tid)
@@ -770,15 +776,16 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         asked = [r['text'] for r in ws.status(store, tid)['requests'] if r.get('kind') == 'input_needed' and r.get('text')]
     except Exception: asked = []
     if not (rv or sent or answered or others or handed or did or own or asked or nowhere): return ''
-    out = [selfclose.LATEST_LINE]
-    if new: out.append(f"THE NEWEST MESSAGE - from {new['who']}, at {clock(new['at'])}: {_quote(new['words'], 600)}")
+    out = [selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE]
+    if new: out.append(f"{'THE LAST MESSAGE, WHICH YOU ANSWERED' if heard else 'THE NEWEST MESSAGE'} - from {new['who']}, at {clock(new['at'])}: "
+                       f"{_quote(new['words'], 600)}")
     if rv:
         s = wrapup.left_by(store, rv['ReviewId']); at = str((s or rv).get('CreatedAt') or '')
         m = store.get_message(rv.get('AnswersMid') or rv.get('MessageId')) or {}
         # ...one WRITTEN FOR the newest message is not an earlier draft (the owner, 2026-11-09): the quick drafter answered it the same second,
         # and the agent withdrew that correct answer as "a stale copy" and drafted nothing
         to, mine = m.get('FromName') or m.get('FromEmail') or '', bool(new and new.get('mid') and m.get('MessageId') == new['mid'])
-        before = not mine and bool(new) and at < new['at']
+        before = not mine and not heard and bool(new) and at < new['at']
         out.append(f"THE DRAFT WAITING NOW (rv{rv['ReviewId']}{', to ' + to if to else ''}, drafted at {clock(at)}"
                    f"{' - written for this message - keep it or improve it' if mine else ' - BEFORE the newest message' if before else ''}): "
                    f"{_quote(rv['DraftText'], 1500)}\n{selfclose.WITHDRAW_LINE}")

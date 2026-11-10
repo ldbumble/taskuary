@@ -133,15 +133,19 @@ class CacheTests(unittest.TestCase):
         real = funnel.build
         def counted(*a, **kw): builds.append(1); return real(*a, **kw)
         with mock.patch.object(funnel, 'build', side_effect=counted):
-            with mock.patch('taskuary.terminal.live_sessions', return_value=live(['reading export.py'])):
-                self.assertEqual(funnel.pile(s)['items'][0]['lane'], 'working')
-            n = len(builds)
-            with mock.patch('taskuary.terminal.live_sessions', return_value=live(['editing export.py'], files=['export.py'])):
-                # warm() never waits on a build (2026-11-09); one a neighbouring test left running may hold the lock a moment
-                deadline = time.time() + 5
-                while not funnel.warm(s) and time.time() < deadline: time.sleep(0.05)
-                self.assertTrue(funnel.warm(s))
-                row = funnel.pile(s)['items'][0]
+            # ...asked up to three times: on a slow machine (CI's Windows, 2026-11-10) the cache can age out, or a neighbouring test's
+            # leftover thread move it, between the build and the look - then the pile is built again and the question put to that one
+            for _ in range(3):
+                with mock.patch('taskuary.terminal.live_sessions', return_value=live(['reading export.py'])):
+                    self.assertEqual(funnel.pile(s, force=True)['items'][0]['lane'], 'working')
+                n = len(builds)
+                with mock.patch('taskuary.terminal.live_sessions', return_value=live(['editing export.py'], files=['export.py'])):
+                    # warm() never waits on a build (2026-11-09); one a neighbouring test left running may hold the lock a moment
+                    deadline = time.time() + 5
+                    while not (ok := funnel.warm(s)) and time.time() < deadline: time.sleep(0.05)
+                    if ok: row = funnel.pile(s)['items'][0]
+                if ok: break
+            self.assertTrue(ok)
             self.assertEqual(len(builds), n, 'a new line on a working screen rebuilt the pile')
             self.assertEqual((row['lane'], row['tail']), ('working', ['editing export.py']))       # ...and the row shows it all the same
             with mock.patch('taskuary.terminal.live_sessions', return_value=live(['Overwrite export.py? (y/n)'], waiting=True)):

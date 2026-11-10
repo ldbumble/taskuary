@@ -1874,6 +1874,21 @@ def no_emails(text: str) -> str:
     return _EMAIL.sub('[email removed]', text or '')
 
 
+def repo_line(store, tid: int, t: dict, repo: str = None, cwd: str = None) -> str:
+    "WHICH CODE a session is told it works in - none, the repositories to pick from, or its checkout. A CLI's seed and an AI card's brief."
+    from . import repochoice as _rc
+    # A general question is told so out loud. Without this the folder the CLI happens to have
+    # started in was announced as "REPO: ... work only here", and an agent asked to prepare for a
+    # meeting went reading that codebase for the answer.
+    if repo_tag(t) == NO_REPO:
+        return ('NO REPOSITORY - this is a general question, not a change to a codebase. '
+                'Answer it from what you are given and what you can look up; do not go '
+                'hunting for code to edit.')
+    # ...and a session no structure placed is in its task's own folder: it is handed the repositories to pick from (repochoice)
+    if not repo and _rc.is_scratch(tid, cwd): return _rc.block(store, tid, cwd)
+    return f"REPO: {repo or cwd} - you are already in it; work only here." if repo or cwd else ''
+
+
 def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: str = None, instruction_theirs: bool = False, cli: str = '') -> str:
     """What gets typed into a fresh session, and the ONLY context it should need: the ask, the
     mail behind it, which checkout to work in, and the coding rules. One line - a newline
@@ -1896,17 +1911,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     stranger, theirs = _origin.of_task(store, tid)[0] == 'stranger', []
     parts = [f"TASK {task_ref(tid)} - {t.get('Title') or ''}."]
     def say(text, theirs_too=False): (theirs if stranger and theirs_too else parts).append(text)
-    # A general question is told so out loud. Without this the folder the CLI happens to have
-    # started in was announced as "REPO: ... work only here", and an agent asked to prepare for a
-    # meeting went reading that codebase for the answer.
-    from . import repochoice as _rc
-    if repo_tag(t) == NO_REPO:
-        parts.append('NO REPOSITORY - this is a general question, not a change to a codebase. '
-                     'Answer it from what you are given and what you can look up; do not go '
-                     'hunting for code to edit.')
-    # ...and a session no structure placed is in its task's own folder: it is handed the repositories to pick from (repochoice)
-    elif not repo and _rc.is_scratch(tid, cwd): parts.append(_rc.block(store, tid, cwd))
-    elif repo or cwd: parts.append(f"REPO: {repo or cwd} - you are already in it; work only here.")
+    if (where := repo_line(store, tid, t, repo, cwd)): parts.append(where)
     # the blackboard: agents sharing THIS checkout, told to a newcomer once, up front. Another
     # repo's agents are deliberately absent - awareness costs prompt tokens, so it is spent
     # only where a collision is physically possible.

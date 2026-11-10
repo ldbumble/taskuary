@@ -568,6 +568,11 @@ TICK_CHAT_LINE = (f'TO-DOS HERE: you have no shell, so `taskuary --tick` is not 
                   f'to-do, only for what you actually did.')
 
 
+# ...and a session that HAS the tick tool (an AI card whose Taskuary toolbox answered) is told the tool, never "you have no shell"
+TICK_TOOL_LINE = ("TO-DOS HERE: when you finish one of the checklist's to-dos, tick it with the tick tool - its id is in brackets after it. "
+                  'Only what you actually did.')
+
+
 def tick_markers(text: str) -> tuple:
     "(reply with every tick line taken out, [ids] in the order said)."
     return _TICK_RE.sub('', text or '').strip(), list(dict.fromkeys(_TICK_RE.findall(text or '')))

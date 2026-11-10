@@ -196,6 +196,18 @@ class TheSessionTests(unittest.TestCase):
         self.assertIn(apiagent.BRIEF, system)
         self.assertIn('browser_open', [t['function']['name'] for t in tools])
 
+    def test_a_card_with_the_toolbox_is_never_told_it_lacks_what_the_toolbox_holds(self):
+        from taskuary import general, selfclose
+        seen = []
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): seen.append(msgs[0]['content']); return {'content': 'Read them.'}
+        self._turn(Brain(), toolbox=('search_messages', 'tick'))
+        self.assertIn(general._SEARCHED[1], seen[0]); self.assertNotIn('NO SEARCH OF ITS OWN', seen[0])
+        self.assertEqual(general.for_toolbox(f'a\n\n{selfclose.TICK_CHAT_LINE}', ('tick',)), f'a\n\n{selfclose.TICK_TOOL_LINE}')
+        self.assertEqual(general.for_toolbox(general.SEARCHED_LINE, ('show',)), general.SEARCHED_LINE)      # ...and without them, as before
+        seen.clear(); self._turn(Brain())
+        self.assertIn('NO SEARCH OF ITS OWN', seen[0])
+
     def test_a_sign_in_the_looped_agent_asks_for_goes_to_the_vault_road(self):
         # the agent never types a password: its marker raises signin.needs, which fills a saved vault login or asks the owner to
         class Brain:
@@ -656,6 +668,46 @@ class CodingOnACardTests(unittest.TestCase):
         with mock.patch('taskuary.landing.sha', return_value='abc123'), mock.patch('taskuary.landing.head_branch', return_value='main'):
             self.assertEqual(self.g.place_coding(self.s, self.tid), repo)
         self.assertEqual(Path(apiagent.workdir(self.s, self.tid)).resolve(), Path(repo).resolve())
+
+    def test_it_is_told_this_is_coding_and_where_it_works_as_its_cli_is(self):
+        import tempfile
+        self.s.add_comment(self.tid, 'owner', self.g.USER_TYPE, 'fix it')
+        self.assertIn('non-coding work', self.g._prompt(self.s, self.tid)[0])              # ...general work still is
+        self.g.ON_CARD.add(self.tid)
+        system, user = self.g._prompt(self.s, self.tid)
+        self.assertIn(self.g.CODING_WHO, system)
+        self.assertNotIn('non-coding', system); self.assertNotIn('Do not turn this into a coding task', system)
+        self.assertIn('REPOSITORIES - no checkout is chosen for this task yet', user)      # nothing placed it: the ones to pick from
+        repo = tempfile.mkdtemp()
+        self.s.update_task(self.tid, {'Tags': 'repo:northwind/ledger'}, 'owner')
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cwd_map': {'northwind/ledger': repo}}))
+        with mock.patch('taskuary.landing.sha', return_value='abc123'), mock.patch('taskuary.landing.head_branch', return_value='main'):
+            self.g.place_coding(self.s, self.tid)
+        peer = [{'tid': 99, 'ref': 'TQ-0099', 'title': 'sub() adds', 'agent': 'claude', 'files': ['ledger.py'], 'started': ''}]
+        with mock.patch('taskuary.blackboard.peers', return_value=peer), mock.patch('taskuary.blackboard.likely_overlap', return_value=(None, '')) as read:
+            user = self.g._prompt(self.s, self.tid)[1]
+            self.assertIn(f'REPO: {apiagent.workdir(self.s, self.tid)} - you are already in it', user)
+            self.assertIn('OTHER AGENTS are working in this same checkout', user); self.assertIn('ledger.py', user)
+            read.assert_called_once()
+            self.s.add_comment(self.tid, 'assistant', self.g.ASSISTANT_TYPE, 'Fixed add().')
+            self.g._prompt(self.s, self.tid)
+            read.assert_called_once()                                                      # the overlap read is the opening's, not every turn's
+
+    def test_a_note_another_agent_sent_it_is_heard_on_its_next_turn(self):
+        from taskuary import llm as llm_mod
+        other = self.s.create_task({'Title': 'sub() adds', 'Summary': 'fix it', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        self.s.add_peer_note(other, self.tid, 'task', '', 'I am changing ledger.py - hold off until I push')
+        self.g.ON_CARD.add(self.tid)
+        heard = []
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): heard.append(msgs[-1]['content']); return {'content': 'Waiting for it.'}
+        session = self.g.GeneralSession(self.s, self.tid)
+        session.pick, session.provider, session.model = f'connector:{self.cid}', 'Org AI', ''
+        with mock.patch.object(llm_mod, 'build_llm', return_value=Brain()), mock.patch.object(bv, 'installed', return_value=True), \
+             mock.patch.object(bv, 'state', return_value={'open': False}), mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
+            session.send_prompt('fix add()', echo=False)
+        self.assertIn('hold off until I push', heard[0])
+        self.assertEqual(self.s.peer_notes(self.tid), [], 'read once: the next turn does not hear it again')
 
     def test_a_named_repo_with_no_checkout_refuses_as_the_cli_does(self):
         self.s.update_task(self.tid, {'Tags': 'repo:northwind/portal'}, 'owner')

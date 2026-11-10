@@ -272,6 +272,17 @@ def place_coding(store, tid: int) -> str:
     return cwd
 
 
+def coding_brief(store, tid: int, stranger: bool = False, opening: bool = True) -> str:
+    """WHAT A CODING AGENT ON AN AI CARD IS TOLD ABOUT WHERE IT WORKS - the lines a CLI's seed carries (terminal.seed_text): the checkout it
+    is in or the repositories to pick from, who else is working there right now, and what they left on the wall. It had the folder's path
+    and nothing else. The overlap read is a model call: made as the work opens (`opening`), never on every turn."""
+    from . import apiagent, blackboard as bb, terminal
+    cwd = apiagent.workdir(store, tid)
+    said = [terminal.repo_line(store, tid, store.get_task(tid) or {}, cwd=cwd),
+            bb.briefing(store, cwd, exclude_tid=tid, assess_for=tid if opening and not stranger else None), bb.wall_text(store, cwd, for_tid=tid)]
+    return '\n\n'.join(o for o in said if o)
+
+
 def provider_options(store) -> list:
     """Every connected CLI tool first - one each, by the tool's own key - then the API/local-model connectors. Never a profile:
     a profile is instructions on whichever brain runs it (the owner, 2026-10-15: "it's models or cli tools only")."""
@@ -344,7 +355,7 @@ def _cli_of_pick(store, pick: str) -> str:
 
 
 def _browser_task(task: dict) -> bool:
-    """Does this task drive a browser? Only a CLI can: the browser is driven from a shell."""
+    """Does this task drive a browser? A CLI drives it from its shell, an AI card by its browser tools (apiagent)."""
     from . import browserview
     return browserview.wanted(task)
 
@@ -1274,6 +1285,12 @@ SOCIAL_LINE = HUB_LINE
 # nobody - "I'm waiting for the walkthrough to finish, then I'll write the brief" ended a researcher's turn (the owner, 2026-10-21)
 # ...said true (2026-11-09): a turn CAN be woken - their next message, a check-back (CHECK BACK LATER), a press it set up, the judge's WAKE -
 # but none of those is a result it may plan on, so the rule is the same
+# WHAT ITS WORK IS, said once: general work - or, for a coding task on an AI card (on_card), the coding itself. That one was told "non-coding
+# work ... do not turn this into a coding task" over CODING.md's rules, a checkout and a shell (the agent map, 2026-11-10)
+GENERAL_WHO = ("Help complete research, planning, writing, marketing, operational, and other non-coding work. The task and source material "
+               "below are authoritative. Be direct and useful. Do not turn this into a coding task or instruct a coding CLI.")
+CODING_WHO = ("This is coding work and you are the one doing it, with your own tools, in your working folder: read the code before you change "
+              "it, make the change, and run what proves it. The task and source material below are authoritative. Be direct and useful.")
 FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets: you may be woken again - their next message, a "
                "check-back you set (CHECK BACK LATER) - but never plan on it. Do not start "
                "background work, sub-agents or jobs you would have to wait on, and never end with \"I'll get back to you\" or \"waiting for "
@@ -1298,7 +1315,11 @@ HISTORY_LINE = ("THE OWNER'S HISTORY IS IN TASKUARY - SEARCH IT FIRST. For anyth
 # set to look things up only, has no shell and no Taskuary tools, and answered "Prior mail search was unavailable here". On the owner's
 # own or a trusted task Taskuary searches for it - the sender's earlier mail and mail on the subject (mailsearch.meeting_reads, as
 # Prepare does) - and says so; a stranger's task is told why it gets none instead (origin.no_history_line).
-SEARCHED_LINE = ("THIS AI HAS NO SEARCH OF ITS OWN, SO TASKUARY SEARCHED THE OWNER'S SAVED MAIL FOR YOU: the sender's earlier messages "
+# ...and one that turns out to HAVE a search (an AI card whose Taskuary toolbox answered) still gets what was searched for it, said as
+# that: it read "THIS AI HAS NO SEARCH OF ITS OWN" right above the tools that search (for_toolbox)
+_SEARCHED = ("THIS AI HAS NO SEARCH OF ITS OWN, SO TASKUARY SEARCHED THE OWNER'S SAVED MAIL FOR YOU",
+             "TASKUARY HAS ALREADY SEARCHED THE OWNER'S SAVED MAIL FOR YOU - search_messages is yours for anything more")
+SEARCHED_LINE = (_SEARCHED[0] + ": the sender's earlier messages "
                  "and mail on this subject are under EARLIER MAIL in the material{none}. Use them. Never say mail search was unavailable - "
                  "say what was searched when it matters.\n"
                  + ASK_AFTER.format(where='what earlier tasks on this subject settled is under WHAT EARLIER TASKS SETTLED in the material, when any did'))
@@ -1564,6 +1585,13 @@ def by_tool(system: str) -> str:
     from . import selfclose as sc
     return (system.replace(f'\n\n{sc.REPLY_LINE}', '').replace(sc.DRAFT_LINE, sc.DRAFT_TOOL_LINE)
             .replace(_MAIL[0], _MAIL[1]).replace(_GUESS[0], _GUESS[1]))
+def for_toolbox(system: str, names) -> str:
+    """`system` for an AI card whose Taskuary toolbox answered (apiagent.TOOLBOX), by what is in it: what the plain road says it lacks - a
+    way to write a reply but the marked block, a search of its own, a shell to tick a to-do from - said as the tool it has."""
+    from . import selfclose as sc
+    if {'propose_reply', 'propose_email'} & set(names): system = by_tool(system)
+    if 'search_messages' in names: system = system.replace(_SEARCHED[0], _SEARCHED[1])
+    return system.replace(sc.TICK_CHAT_LINE, sc.TICK_TOOL_LINE) if 'tick' in names else system
 READING_CHARS = 1_500
 
 
@@ -1640,9 +1668,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         # ...and said once (2026-11-09): "never claim a tool did what it did not" is AGENT.md's Honest reporting, and "ask when a fact is
         # missing" fought WORK_LINE's keep-working - the one question is AGENT.md's When to ask
         # ...and WHO IT IS (the agent walk, 2026-11-10): on a task it is the agent - "the assistant" is the owner's own chat, the dock
-        f"You are {'the Taskuary general-work assistant' if dock else 'the agent on this task in Taskuary'}. Help complete research, planning, writing, "
-        "marketing, operational, and other non-coding work. The task and source material below are "
-        "authoritative. Be direct and useful. Do not turn this into a coding task or instruct a coding CLI.\n"
+        f"You are {'the Taskuary general-work assistant' if dock else 'the agent on this task in Taskuary'}. {CODING_WHO if tid in ON_CARD else GENERAL_WHO}\n"
         # Work that no repository can carry lands here rather than stalling as a held coding task.
         # Some of it needs a tool nobody has wired - adding somebody to a Teams invite
         # wants calendar WRITE, and Taskuary's calendar is read-only. Saying so in one line is the answer;
@@ -1804,11 +1830,14 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     last = rows[-1] if rows else {}
     ask = _cut(last.get('Body'), OWNER_ASK_CHARS) if sources and not dock and last.get('ActorType') == USER_TYPE else ''
     rd = '' if stranger or dock else reading_block(store, tid)      # ...and triage's reading right under the task: GOAL_LINE reads it first
+    # ...and a coding task on an AI card, where it works and who else is in there - with the task, as its CLI's seed says it
+    code = coding_brief(store, tid, stranger, opening=not any(r.get('ActorType') == ASSISTANT_TYPE for r in rows)) if tid in ON_CARD else ''
     head = ((f"THE OWNER'S ASK - what they want done about the task and the material below:\n{ask}\n\n" if ask else '')
             + f"TASK {detail.get('ref') or tid}\n" + ours(f"TITLE: {task.get('Title') or ''}\n")
             + ours(f"SUMMARY: {task.get('Summary') or ''}\n") + f"STATUS: {task.get('Status') or ''}\n"
             + ours(chk) + "\n"
             + (f'{rd}\n\n' if rd else '')
+            + (f'{code}\n\n' if code else '')
             + (dock_snapshot(store) + '\n\n' if dock else '')
             + (wall + '\n\n' if wall else '')
             + (hub_context.strip() + '\n\n' if hub_context else '')
@@ -2434,7 +2463,7 @@ class GeneralSession:
             brain = llm_mod.build_llm(self.store, **build_args, job='general')
             if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
             from . import apiagent
-            looped, api_tools, api_tooled = False, None, False
+            looped, api_tools, api_box = False, None, ()
             if api_hands:
                 # THE CLI'S TOOLBOX ON AN API CARD (the owner, 2026-11-09: "make sure hipaa thing matches capabilities of claude cli"): Taskuary's
                 # own tools through the same gated server a CLI session reaches (apiagent.tools_for), and the browser on the owner's own task.
@@ -2457,9 +2486,10 @@ class GeneralSession:
                     key = (continuity.context_key(self.store, self.pick, self.model), stranger)
                     if self.card_key != key: self.card_msgs, self.card_key = [], key
                     system = f'{system}\n\n{apiagent.TOOLS_BRIEF}\n\n{apiagent.where_line(self.store, self.task_id)}'
-                    # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose_reply, not the marker line beside it. Swapped
-                    # where the turn is asked, never here: a card that then refuses tools is asked the plain way, and needs the block
-                    api_tooled = bool({'propose_reply', 'propose_email'} & set(apiagent.TOOLBOX.get((self.task_id, self.sid), ())))
+                    # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose_reply, not the marker line beside it - and its own
+                    # search and tick the same (for_toolbox). Swapped where the turn is asked, never here: a card that then refuses tools
+                    # is asked the plain way, and needs the block
+                    api_box = tuple(apiagent.TOOLBOX.get((self.task_id, self.sid), ()))
                 if browser:
                     browser_tools, browser_offer = True, not browserview.state(self.sid, fresh=True).get('open')
                     system = f'{system}\n\n{apiagent.BRIEF}'
@@ -2474,6 +2504,11 @@ class GeneralSession:
                 if (lb := turn_facts(self.store, self.task_id, resumed=True)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
                 if is_dock(self.store.get_task(self.task_id)):
                     user += f'\n\n{dock_snapshot(self.store)}'
+            # ...and WHAT ANOTHER AGENT WROTE TO THIS ONE since its last turn (peers.py): a coding agent on a card hears it on its next turn, as
+            # a CLI's is typed it at its prompt - they were kept for a pane it does not have, and never read
+            if self.task_id in ON_CARD:
+                from . import peers
+                if (heard := peers.take(self.store, self.task_id)): user, whole = f'{heard}\n\n{user}', f'{heard}\n\n{whole}'
             # Paths are harmless context to an API brain and essential if its CLI backup takes
             # over after a quota failure. The source message already names its files too; this
             # line also carries images attached directly in the composer.
@@ -2483,7 +2518,7 @@ class GeneralSession:
                 "The turn, asked of this brain: with its tools where it takes them (apiagent.turn), else the plain way."
                 nonlocal looped, system
                 if looped:
-                    try: return str(apiagent.turn(brain, self.store, self.task_id, self.sid, by_tool(system) if api_tooled else system, user, limit,
+                    try: return str(apiagent.turn(brain, self.store, self.task_id, self.sid, for_toolbox(system, api_box), user, limit,
                                                   trace=visible, cancel=cancel, images=_images(paths), tools=api_tools, history=self.card_msgs) or '').strip()
                     except apiagent.ToolsRefused as e:
                         logger.info(f'task {self.task_id}: {self.provider} took no tools - asked the plain way ({str(e)[:160]})')

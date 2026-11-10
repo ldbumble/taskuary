@@ -84,11 +84,15 @@ const argsOf = (s) => (s.args && Object.keys(s.args).length ? s.args
 // ...a call over ACP is running until ACP says it ran (`status`); a log's, until something came after it. A turn that is over has nothing running
 const OVER = ["completed", "failed"];
 const runs = (s, running, last) => running && (s.status ? !OVER.includes(s.status) : last);
+// ...and one ACP still called pending or running when nothing runs any more NEVER FINISHED - a permission left open when Taskuary restarted, a
+// session that died mid-call: drawn done, "Edited totals.py" read as made (the stress round, 2026-11-10)
+const ended = (s, output) => (s.status && !OVER.includes(s.status) ? { result: output || "It never finished.", is_error: true }
+  : { result: output, is_error: s.status === "failed" });
 export const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) => {
   const id = s.id || `t${i}`, output = String(s.output || "").trim();
   if (s.k === "tool") return [{ type: "tool_call", name: s.name, detail: { tool_call_id: id, args: argsOf(s), output,
       ...(s.parent ? { parent: s.parent } : {}), ...(s.edit ? { edit: s.edit } : {}), ...(s.file ? { file: s.file } : {}) } },
-    ...(runs(s, running, tail && i === steps.length - 1) ? [] : [{ type: "tool_result", name: id, detail: { tool_call_id: id, result: output, is_error: s.status === "failed" } }])];
+    ...(runs(s, running, tail && i === steps.length - 1) ? [] : [{ type: "tool_result", name: id, detail: { tool_call_id: id, ...ended(s, output) } }])];
   if (s.k === "plan") return [{ type: "tool_call", name: "TodoWrite", detail: { tool_call_id: id, args: { todos: s.items || [] } } },
     { type: "tool_result", name: id, detail: { tool_call_id: id, result: "" } }];
   if (s.k === "said") return [{ type: "progress", name: "text", detail: s.text }];
@@ -108,8 +112,10 @@ const argEdit = (name, a) => {
   if (typeof a.patch === "string" || typeof a.input === "string" && /\*\*\* (Update|Add) File|^@@/m.test(a.input)) return { patch: a.patch ?? a.input };
   return null;
 };
-export function editOf(e) {
-  if (e?.type !== "tool_call") return null;
+// ...but an edit that FAILED or never ran is no edit made: drawn "Edited totals.py (+1 −1)" from the diff it asked to make, it read as done -
+// it is its step, drawn failed (the stress round, 2026-11-10)
+export function editOf(e, res) {
+  if (e?.type !== "tool_call" || res?.detail?.is_error) return null;
   const d = e.detail || {}, a = d.args || {};
   if (!d.edit && describeCall(e.name, a).kind !== "edit") return null;
   const edit = d.edit || argEdit(e.name, a), file = d.file || FILE_KEYS.map((k) => a[k]).find(Boolean) || "";
@@ -154,10 +160,13 @@ export function turnParts(events, { answer = "", keepStart = false } = {}) {
     if (e.type === "tool_result") continue;
     // ...and a VIEW the agent showed (agenttools `show`) is its own part, drawn as the UI it describes (ViewSpec.jsx)
     // ...and the FILES it showed with it (viewSpec.filesOf): the pictures themselves, over any view the same call drew
-    const res = results.get(e.detail?.tool_call_id), ps = [filesOf(e, res), editOf(e) || planOf(e) || viewOf(e, res)].filter(Boolean);
+    const res = results.get(e.detail?.tool_call_id), ps = [filesOf(e, res), editOf(e, res) || planOf(e) || viewOf(e, res)].filter(Boolean);
     if (ps.length) { flush(); special.add(e.detail?.tool_call_id); parts.push(...ps); } else run.push(e);
   }
   flush();
+  // ...an edit that failed and was then made is no failure (agentSteps' `recovered`): Claude's first try at a string not found, its second made
+  parts.forEach((p, i) => p.type === "work" && p.steps.forEach((s) => { if (s.status === "error" && s.kind === "edit"
+    && parts.slice(i + 1).some((q) => q.type === "edit" && q.summary.startsWith(s.summary))) s.status = "recovered"; }));
   const lastPlan = parts.map((p) => p.type).lastIndexOf("plan");
   return parts.filter((p, i) => p.type !== "plan" || i === lastPlan).map((p, i) => ({ ...p, id: `p${i}` }));
 }

@@ -33,3 +33,32 @@ test("a CLI log's failed call and its API error read as failures", () => {
   assert.equal(bad.length, 2);
   assert.match(bad[1].summary, /529 Overloaded/);
 });
+
+test("a call ACP never finished is not drawn done once nothing runs - a permission left open across a restart", () => {
+  const ups = [
+    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "Comment the totals." } },
+    { sessionUpdate: "tool_call", toolCallId: "call_1", title: "Edit totals.py", kind: "edit", status: "pending", rawInput: { file_path: "totals.py" },
+      locations: [{ path: "totals.py", line: 1 }], content: [{ type: "diff", path: "totals.py", oldText: "", newText: "# keeps the totals" }] },
+  ];
+  const ses = { sid: "s1", source: "acp", at: "2026-11-10 08:00:00", updates: ups };
+  const steps = (rows) => rows.flatMap((r) => r.parts || []).flatMap((p) => p.steps || (p.type === "edit" ? [p] : []));
+  // ...while its turn runs it is at work
+  assert.ok(chatRows({ sessions: [{ ...ses, live: true }], live: { working: true } }).at(-1).running);
+  const after = chatRows({ sessions: [ses] });
+  assert.equal(after.at(-1).running, false);
+  assert.ok(!steps(after).some((s) => s.status === "done" || s.type === "edit"), JSON.stringify(steps(after)));
+  // ...and one the owner refused (ACP: failed) is no "Edited totals.py" either
+  const refused = chatRows({ sessions: [{ ...ses, updates: [...ups, { sessionUpdate: "tool_call_update", toolCallId: "call_1", status: "failed" }] }] });
+  assert.deepEqual(steps(refused).map((s) => s.type || s.status), ["error"]);
+});
+
+test("an edit that failed and was then made reads recovered, never red, and the made one is the edit row", () => {
+  const steps = [
+    { k: "you", text: "Fix the rounding.", at: "2026-11-10 08:00:00" },
+    { k: "tool", name: "Edit", text: "ledger.py", file: "ledger.py", args: { file_path: "ledger.py" }, status: "failed", output: "String to replace not found", at: "2026-11-10 08:01:00" },
+    { k: "tool", name: "Edit", text: "ledger.py", file: "ledger.py", args: { file_path: "ledger.py" }, edit: { parts: [{ old: "a", new: "b" }] }, at: "2026-11-10 08:02:00" },
+  ];
+  const [, turn] = chatRows({ sessions: [{ sid: "s1", source: "Claude Code log", at: "2026-11-10 08:00:00", steps }] });
+  assert.deepEqual(turn.parts.map((p) => p.type), ["work", "edit"]);
+  assert.equal(turn.parts[0].steps[0].status, "recovered");
+});

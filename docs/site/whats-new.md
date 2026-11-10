@@ -2,6 +2,41 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.34 - 2026-11-10
+
+- One reader for the links a message keeps behind its words, and read_message has them
+- The agent's read of a task says what came in, message by message
+- A promise in the owner's own reply stays on the task it was sent from
+- A long message keeps its last lines when it is cut to fit
+- The task's agent can ask to break a part that is another matter out to its own task
+- No model reads a turn's prose for a question, and none is written onto the row
+- A turn no message started is not handed the answered one as the newest
+- A reply sent with Taskuary's own Send is not an answer from outside it
+- A note handed to an agent at rest does not say it was working
+- An agent with no terminal is not said to have one asking
+- The agent's line to the owner names no handle of Taskuary's and no link that did not come
+- The Push card takes Not now, and the agent stops asking
+- A row whose agent asked says it waits, not the question
+- The break-out card says the new task and what moves to it
+- The owner's Reject reaches the agent as the owner's no
+- The task's agent is told the reply is its own: write it, or ask the one thing
+- A coding agent with nothing left is "agent done", and Mark done is lit
+- Each message the agent reads says where it was written, and keeps its end
+- An attachment is named to the agent with the id its tools take
+- The lines one person types in a chat are one entry in the agent's read
+- The press that pushed the agent's work is a line in the chat
+- A routine's parked run still waits on you
+- A reply owed is the task's agent's to write, from the moment it arrives
+- Every press of the owner's is said in words, never by its row's name
+- A reply handed to the agent at arrival passes the same checks as any start
+- A proposal refused off a mark is heard by the agent that wrote it
+- What the arrival writer left behind is gone, and a refusal holds a stranger's task itself
+- An act the owner approved is told to its agent as done
+- A reply nothing has written lights its agent's start
+- One table for the three gates' held steps, one query for a reply waiting
+- A comment or a close "on the linked issue" is refused where no issue is linked
+- Two tool answers say what to give, not what did not happen
+
 ## 0.3.11.33 - 2026-11-10
 
 - A judge's "no" is an answer, and the note command is taught in the order the CLI takes

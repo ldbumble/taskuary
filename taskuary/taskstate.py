@@ -10,7 +10,12 @@ words (lanes.json), and both pages draw what it says.
 The keys are lanes.json's own: a lane where the rail has one (blocked, working, approve, queued, saved, stopped,
 yours), `theirs` for a task waiting on somebody else, and for a closed task `agentdone` (the agent finished
 it) or `closed` (you did) - `agentdone` as well for an open task whose last run said it finished (workerstate.ended).
+
+And ONE RECORD under it (TaskState, the spine audit 2026-11-09): what is true of a task's agent - the facts, read once - and the
+rules over them, which the rail, All, the page's story and this key had each written out for themselves.
 """
+from functools import cached_property
+
 from . import funnel, workerstate
 from .processing_unread import OWNER_ACTORS, finish_evidence
 
@@ -57,46 +62,142 @@ def _chat_resting(store, t: dict) -> str | None:
     return 'agentdone' if spoke else None
 
 
+class TaskState:
+    """ONE RECORD OF A TASK'S AGENT WORK (the spine audit, 2026-11-09). "Did its agent start, leave, finish or fail" was worked out by a
+    dozen functions - funnel.idle_state, agent_story, agent_left, session_saved, news_since_agent, run_failed, `state` below, the rail's
+    card - each reading the tags, the runs, the transcript and the worker's events for itself, in its own order: one rail row read its
+    task four times to say one lane, and a rule mended in one reader stayed wrong in the next. The FACTS are read here, once each and
+    only when a rule asks for them; the RULES are written here once, and the old names read them off the record.
+
+    `t` is the task's row when the caller holds it - the list's, carrying its latest ReviewStatus and RunStatus - else it is read when
+    first asked for; `session` is its live session row and `queued` its dispatch-queue row, which only `key` reads. A record is one
+    reading: build it, read it, drop it - a rail build makes one per row and hands it down (processing_unread.card_for)."""
+    def __init__(self, store, t=None, session=None, queued=None, tid=None):
+        self.store,self.session,self.queued,self.tid = store,session,queued,tid or (t or {}).get('TaskId')
+        if t is not None: self.t = t
+
+    # ── the facts ──
+    @cached_property
+    def t(self): return self.store.get_task(self.tid) or {}
+    @cached_property
+    def tags(self): return [x.strip() for x in str(self.t.get('Tags') or '').split(',')]
+    @cached_property
+    def transcript(self): return self.store.last_transcript(self.tid) or {}
+    @cached_property
+    def events(self): return self.store.worker_events(self.tid) or []
+    @cached_property
+    def runs(self): return self.store.list_runs(self.tid) or []
+    @cached_property
+    def inbound(self): return self.store.last_inbound_on_task(self.tid) or {}
+    @property
+    def saved(self) -> bool:
+        """The owner ended the agent's session and its result is written (Stop and save): `session saved`, never
+        "left without finishing" (A1, 2026-09-25). A new session clears it (terminal.open_session)."""
+        from . import terminal
+        return terminal.SAVED in self.tags
+    @property
+    def interrupted(self) -> bool:
+        "Taskuary itself closed on top of a live worker (terminal.release_task, PW-262): nothing restarts by itself."
+        from . import terminal
+        return terminal.INTERRUPTED in self.tags
+    def last(self, kinds=None, skip=()):
+        "Its newest worker event of `kinds`, none of `skip` - off the events when a rule has read them already, else the one indexed row."
+        return workerstate.newest(self.store, self.tid, self.__dict__.get('events'), kinds, skip)
+    @cached_property
+    def end(self):
+        "How its last run ENDED, by its own word (workerstate.ended) - read off the events when a rule has them in hand already."
+        return workerstate.ended(self.store, self.tid, evs=self.__dict__.get('events'))
+    @cached_property
+    def finished(self) -> bool: return funnel.session_finished(self.store, self.tid, self.events)
+    @cached_property
+    def failed(self): return funnel.run_failed(self.store, self.tid, st=self)
+
+    # ── the rules ──
+    @cached_property
+    def news(self) -> dict | None:
+        """The message somebody sent AFTER the agent's last session ended - what an open task is about now - or None.
+
+        An agent finished, the task closed, and days later the sender wrote again: the task reopened, correctly, and then
+        opened on the old session's "You ended the session - its report is written" as if that were the news (the owner,
+        2026-10-12: "it has to be clear what is going on ... it was reopened since x happened so reopen coding session")."""
+        from . import terminal
+        if not self.t or self.t.get('Status') in ('done', 'dropped') or getattr(terminal.session_for(self.tid), 'alive', False): return None
+        ended = max(str(self.transcript.get('CreatedAt') or ''), str(self.events[-1].get('CreatedAt') or '') if self.events else '')
+        if not ended: return None                     # no agent ever ran: nothing for news to come after
+        return self.inbound if str(self.inbound.get('SentAt') or '') > ended else None
+
+    @cached_property
+    def left(self) -> str:
+        """'saved' | 'stopped' when an agent HAD this and is gone, else '': the interrupted tag, a session the owner saved, a run that
+        stopped (funnel.left_by_facts - what All can read of it), the run's own last word that it failed or was stopped
+        (workerstate.ended - the reading `key` takes, G7), or a transcript with nothing live behind it and no finished session over it.
+        The lane word for that is `stopped`, never `queued`: a restart killed the agent's session on TQ-0616, the task list said
+        interrupted / needs you, and the rail said "handed to an agent, not started yet" (2026-09-17). Never over news: what is open
+        then is the message, not the session that went before it."""
+        if self.news: return ''
+        return funnel.left_by_facts(self.t.get('Tags'), self.runs) or (
+            'stopped' if self.end in workerstate.TERMINAL or (bool(self.transcript) and not self.finished) else '')
+
+    @cached_property
+    def idle(self) -> dict:
+        "Why nothing is running on it, in the owner's words: {'kind', 'line', 'row'} (funnel.idle_state, which words this record)."
+        return funnel.idle_state(self.store, self.tid, self)
+
+    @cached_property
+    def key(self) -> str:
+        """Its state key, for the Tasks list, the Board, the page and the stage (stages.facts).
+        ...and where it still reads less than `left` does, it reads what it always read - the owner's to settle, not this record's
+        (the spine audit, 2026-11-09): only the LATEST run's status where the rail takes any run that stopped, a bare transcript only
+        under an `agent:` assignee and whether or not its session finished, and no word about mail that came after the agent."""
+        store, t, session, tid = self.store, self.t, self.session, self.tid
+        live = bool(session and session.get('alive', True))
+        # a live session is the fact happening now - a done task continued is work in progress again (T8). A session that
+        # PREDATES the close is a terminal nobody shut, not the task picked back up (the Board's old rule, kept).
+        if live and t.get('Status') == 'done' and t.get('ClosedAt') and str(session.get('started') or '') < str(t['ClosedAt']): live = False
+        if live:
+            if not session.get('waiting'): return 'working'
+            # ...but an agent PARKED - it answered, asked nothing - over a reply it drafted is the reply waiting, as the rail says: the Board
+            # put it under "agent waiting on you" with "ready to send" on the same card, and the header said so until a reload (email walk 2026-10-29)
+            parked = (session.get('state') or 'parked') == 'parked' and not session.get('request')
+            if parked and (t.get('ReviewStatus') == 'pending' or store.waiting_on_owner(tid)): return 'approve'
+
+            # ...and a CHAT agent whose turn asked nothing is done for now, never waiting on you (the owner, 2026-11-07) - as it reads once idled out
+            from .general import handles
+            if parked and handles(t): return 'agentdone'
+            return 'blocked'
+        st = t.get('Status')
+        if st == 'dropped': return 'dropped'
+        if st == 'done':
+            if str(t.get('UpdatedBy') or '') in OWNER_ACTORS: return 'closed'        # yours: no need to read its notes
+            return 'agentdone' if finish_evidence(store, tid) else 'closed'
+        if t.get('RunStatus') == 'running': return 'working'
+        if t.get('ReviewStatus') == 'pending': return 'approve'
+        # still waiting to start, a failed start included - the row carries the error and the page offers Start now / Cancel (T10)
+        if self.queued: return 'queued'
+        left = funnel.left_by_facts(t.get('Tags'), [{'Status': t.get('RunStatus')}] if t.get('RunStatus') else [])
+        # ...and HOW ITS LAST RUN ENDED, in the run's own word (workerstate.ended) - the reading the rail takes too: a run that failed
+        # or was stopped read "on you", and one that finished read "waiting to start", while the worker said what happened (G7)
+        end = None if left else self.end
+        if end == 'finished': return 'approve' if store.waiting_on_owner(tid) else 'agentdone'     # a post or an act left for your press
+        if end: left = 'stopped'
+        if not left and str(t.get('Assignee') or '').startswith('agent:') and self.transcript: left = 'stopped'
+        if left: return left
+        # A CHAT AGENT NOT RUNNING - idled out, or the server restarted - reads as it did live (the owner, 2026-11-07): its open question still
+        # waits on you, and a turn that asked nothing is done for now. Read off the task's saved record, never the in-memory IDLED
+        if (chat := _chat_resting(store, t)): return chat
+        if str(t.get('Assignee') or '').startswith('agent:') or _general_waiting(store, t): return 'queued'
+        if st == 'waiting': return 'theirs'
+        return 'yours'
+
+
+def task_state(store, t: dict = None, session=None, queued=None, tid=None) -> TaskState:
+    "THE record for a task: by its row `t` when the caller holds one, else by `tid` - every reader of a task's agent state starts here."
+    return TaskState(store, t, session, queued, tid)
+
+
 def state(store, t: dict, session=None, queued=None) -> str:
     """This task's state key. `session` is its live session row, `queued` its dispatch-queue row."""
-    live = bool(session and session.get('alive', True))
-    # a live session is the fact happening now - a done task continued is work in progress again (T8). A session that
-    # PREDATES the close is a terminal nobody shut, not the task picked back up (the Board's old rule, kept).
-    if live and t.get('Status') == 'done' and t.get('ClosedAt') and str(session.get('started') or '') < str(t['ClosedAt']): live = False
-    if live:
-        if not session.get('waiting'): return 'working'
-        # ...but an agent PARKED - it answered, asked nothing - over a reply it drafted is the reply waiting, as the rail says: the Board
-        # put it under "agent waiting on you" with "ready to send" on the same card, and the header said so until a reload (email walk 2026-10-29)
-        parked = (session.get('state') or 'parked') == 'parked' and not session.get('request')
-        if parked and (t.get('ReviewStatus') == 'pending' or store.waiting_on_owner(t['TaskId'])): return 'approve'
-
-        # ...and a CHAT agent whose turn asked nothing is done for now, never waiting on you (the owner, 2026-11-07) - as it reads once idled out
-        from .general import handles
-        if parked and handles(t): return 'agentdone'
-        return 'blocked'
-    st = t.get('Status')
-    if st == 'dropped': return 'dropped'
-    if st == 'done':
-        if str(t.get('UpdatedBy') or '') in OWNER_ACTORS: return 'closed'        # yours: no need to read its notes
-        return 'agentdone' if finish_evidence(store, t['TaskId']) else 'closed'
-    if t.get('RunStatus') == 'running': return 'working'
-    if t.get('ReviewStatus') == 'pending': return 'approve'
-    # still waiting to start, a failed start included - the row carries the error and the page offers Start now / Cancel (T10)
-    if queued: return 'queued'
-    left = funnel.left_by_facts(t.get('Tags'), [{'Status': t.get('RunStatus')}] if t.get('RunStatus') else [])
-    # ...and HOW ITS LAST RUN ENDED, in the run's own word (workerstate.ended) - the reading the rail takes too: a run that failed
-    # or was stopped read "on you", and one that finished read "waiting to start", while the worker said what happened (G7)
-    end = None if left else workerstate.ended(store, t['TaskId'])
-    if end == 'finished': return 'approve' if store.waiting_on_owner(t['TaskId']) else 'agentdone'     # a post or an act left for your press
-    if end: left = 'stopped'
-    if not left and str(t.get('Assignee') or '').startswith('agent:') and store.last_transcript(t['TaskId']): left = 'stopped'
-    if left: return left
-    # A CHAT AGENT NOT RUNNING - idled out, or the server restarted - reads as it did live (the owner, 2026-11-07): its open question still
-    # waits on you, and a turn that asked nothing is done for now. Read off the task's saved record, never the in-memory IDLED
-    if (chat := _chat_resting(store, t)): return chat
-    if str(t.get('Assignee') or '').startswith('agent:') or _general_waiting(store, t): return 'queued'
-    if st == 'waiting': return 'theirs'
-    return 'yours'
+    return TaskState(store, t, session, queued).key
 
 
 def column(key: str) -> str | None:

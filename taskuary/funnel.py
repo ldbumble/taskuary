@@ -527,21 +527,9 @@ def hold_for_repo(store, tid, reason=''):
 
 
 def news_since_agent(store, tid) -> dict | None:
-    """The message somebody sent AFTER the agent's last session ended - what an open task is about now - or None.
-
-    An agent finished, the task closed, and days later the sender wrote again: the task reopened, correctly, and then
-    opened on the old session's "You ended the session - its report is written" as if that were the news (the owner,
-    2026-10-12: "it has to be clear what is going on ... it was reopened since x happened so reopen coding session")."""
-    from . import terminal
-    t = store.get_task(tid) or {}
-    if not t or t.get('Status') in ('done', 'dropped'): return None
-    if getattr(terminal.session_for(tid), 'alive', False): return None
-    tr = store.last_transcript(tid) or {}
-    evs = store.worker_events(tid) or []
-    ended = max(str(tr.get('CreatedAt') or ''), str(evs[-1].get('CreatedAt') or '') if evs else '')
-    if not ended: return None                     # no agent ever ran: nothing for news to come after
-    m = store.last_inbound_on_task(tid) or {}
-    return m if str(m.get('SentAt') or '') > ended else None
+    "The message somebody sent AFTER the agent's last session ended - what an open task is about now - or None (taskstate.TaskState.news)."
+    from . import taskstate
+    return taskstate.task_state(store, tid=tid).news
 
 
 def news_line(store, tid, m=None) -> str:
@@ -565,26 +553,29 @@ def _sentence(x: str) -> str:
     return x if not x or x.endswith(('.', '!', '?')) else _cap(x.rstrip(' -;,')) + '.'
 
 
-def run_failed(store, tid, live_too: bool = False) -> dict | None:
+def run_failed(store, tid, live_too: bool = False, st=None) -> dict | None:
     """{sentence, fix} when the task's last run ended FAILED by its own word (workerstate.ended), nothing live on it: the reason in
-    plain words (failures.classify) and the place that fixes it - Connect an AI for an agent with no AI to run on - else None."""
+    plain words (failures.classify) and the place that fixes it - Connect an AI for an agent with no AI to run on - else None.
+    `st`: the task's record (taskstate.TaskState), when the caller holds it - its ending is read there."""
     from . import workerstate
     from .failures import classify
-    if workerstate.ended(store, tid, live_too) != 'failed': return None          # live_too: whatever the session does (R2)
-    last = store.last_worker_event(tid, kinds=('failed',)) or {}
+    # live_too: whatever the session does (R2)
+    if (workerstate.ended(store, tid, live_too) if st is None or live_too else st.end) != 'failed': return None
+    last = (st.last(('failed',)) if st else store.last_worker_event(tid, kinds=('failed',))) or {}
     c = classify(' '.join(str(last.get('Text') or '').split()) or 'it stopped without saying why', tid=tid)
     return {'sentence': _sentence(c['sentence']), 'fix': c['fix']}
 
 
-def timed_out(store, tid) -> str:
+def timed_out(store, tid, st=None) -> str:
     "The run's own sentence when its last word is a turn that ran out of time (general.TIMED_OUT), nothing live on it - else ''."
     from . import general, workerstate
-    last = store.last_worker_event(tid, skip=workerstate.NOTES)
-    ok = last and last['Kind'] == 'stopped' and last.get('Source') == general.TIMED_OUT and workerstate.ended(store, tid) == 'stopped'
+    last = st.last(skip=workerstate.NOTES) if st else store.last_worker_event(tid, skip=workerstate.NOTES)
+    ok = (last and last['Kind'] == 'stopped' and last.get('Source') == general.TIMED_OUT
+          and (workerstate.ended(store, tid) if st is None else st.end) == 'stopped')
     return str(last.get('Text') or '') if ok else ''
 
 
-def idle_state(store, tid) -> dict:
+def idle_state(store, tid, st=None) -> dict:
     """Why nothing is running on a task that was handed to an agent and never began: {'kind', 'line', 'row'}.
 
     "waiting to start" says the state and not the cause, so the owner reads it as a queue that will
@@ -601,27 +592,27 @@ def idle_state(store, tid) -> dict:
     and nothing restarts by itself. Then a run that really ran and stopped. Then triage's own words
     about why it declined to start (the first-time-sender gate writes them, and a no-reply address
     will never clear it). `line` is '' when the task is not actually idle - the caller decides who asks.
+
+    `st`: the task's record (taskstate.TaskState), when the caller holds one. The facts are its own - this words them, in this order.
     """
-    from . import terminal
+    from . import taskstate
     from .blackboard import is_permanent, failed_line
-    t = store.get_task(tid) or {}
+    st = st or taskstate.task_state(store, tid=tid)
+    t = st.t
     agent = agent_word(t.get('Kind'))
-    tags = str(t.get('Tags') or '')
     old = ' It has been waiting since yesterday.' if str(t.get('CreatedAt') or '')[:10] < datetime.now().strftime('%Y-%m-%d') else ''
     out = lambda kind, line, row='': {'kind': kind, 'line': line, 'row': row}
-    news = news_since_agent(store, tid)
-    if news: return out('news', news_line(store, tid, news))
+    if st.news: return out('news', news_line(store, tid, st.news))
     # ...and a run that RAN OUT OF TIME says so in its own words, whatever mark the task wears: "You stopped it" stood over a turn killed at
     # its limit, the owner having stopped nothing (2026-11-04) - it paused, and Continue picks it up (general.TIMED_OUT)
-    if (to := timed_out(store, tid)): return out('left', to, 'cut off by a time limit - continue it')
-    if terminal.SAVED in [x.strip() for x in tags.split(',')]:
-        return out('saved', 'You stopped it and its report is written.')     # the moves are the item's own buttons (news_line)
-    if terminal.INTERRUPTED in [x.strip() for x in tags.split(',')]:
+    if (to := timed_out(store, tid, st)): return out('left', to, 'cut off by a time limit - continue it')
+    if st.saved: return out('saved', 'You stopped it and its report is written.')     # the moves are the item's own buttons (news_line)
+    if st.interrupted:
         return out('interrupted', f'Taskuary closed while {agent} had this, so its work stopped there. Nothing restarts by itself.' + old)
     if held_for_repo(t):
         # plain words: "repository" is on the jargon list (words.json) - the row's own Choose where the code is answers it
         # ...and a run that found the work is in other code asked to move it (wrapup.asks_to_move): it did start, so it never says "before it can start"
-        if store.last_transcript(tid):
+        if st.transcript:
             return out('held', f'Waiting for you. {agent[:1].upper() + agent[1:]} found the work is not in this code and asks where to move it - '
                                'change where the code is and it starts there.', 'asks to move - where is the code?')
         return out('held', f'Waiting for you. It needs to know where the code is before {agent} can start.' + old, 'not started - it needs to know where the code is')
@@ -646,8 +637,8 @@ def idle_state(store, tid) -> dict:
                    'queued - starts when a slot frees')
     # A RUN THAT FAILED SAYS SO, with its reason in plain words (owner-approved, 2026-10-21): it read "Not started yet. Nothing has
     # started the assistant on this." under a chip saying stopped, while the run's own last word was why it failed
-    if (f := run_failed(store, tid)): return out('failed', f"Failed - {f['sentence']}", f"failed - {f['sentence'][:1].lower()}{f['sentence'][1:]}")
-    if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])):
+    if (f := st.failed): return out('failed', f"Failed - {f['sentence']}", f"failed - {f['sentence'][:1].lower()}{f['sentence'][1:]}")
+    if any(r.get('Status') in ('stopped', 'failed', 'error') for r in st.runs):
         return out('left', f'{_cap(agent)} ran on this and stopped without finishing it.' + old)
     # ...and a pty worker leaves NO run row at all - it writes a transcript on the way out, which is
     # the very thing the task card reads to offer "Continue previous work". Only runs were consulted
@@ -659,11 +650,11 @@ def idle_state(store, tid) -> dict:
     # answered, and the step said the agent "left without finishing" over its own finished record)
     # ...and nothing came in since, or news_since_agent would have said so above: "Nothing has started on what came in since" was
     # said over a batch whose session closed with nothing new on it at all (TQ-1112 shape) - the task is simply still open
-    if session_finished(store, tid):
+    if st.finished:
         return out('left', f'{_cap(agent)} finished its work - its record is below. The task is still open.' + old)
-    if store.last_transcript(tid):
+    if st.transcript:
         return out('left', f'{_cap(agent)} ran on this and left without finishing it.' + old)
-    msg, lifted = store.last_inbound_on_task(tid) or {}, False
+    msg, lifted = st.inbound, False
     for r in reversed(store.message_routes(msg.get('MessageId')) or []) if msg.get('MessageId') else []:
         said = held_clause(r.get('Reason'))
         if said is None: continue
@@ -736,14 +727,13 @@ def agent_story(store, tid) -> dict | None:
     owner, 2026-10-11: "it should say what the agent did so far and was interrupted or it never started"). Facts only:
     not_started_why's sentence, and for work that went, the run's own worker events - no model. None when no agent
     was ever meant to have the task. The caller hides it behind a live session."""
-    from . import general, terminal
-    t = store.get_task(tid) or {}
+    from . import general, terminal, taskstate
+    st = taskstate.task_state(store, tid=tid); t = st.t          # one record: the story and its idle line tell the same facts
     if not t or t.get('Status') in ('done', 'dropped'): return None
-    tags = [x.strip() for x in str(t.get('Tags') or '').split(',')]
     who = agent_word(t.get('Kind'))
-    if news_since_agent(store, tid): return {'kind': 'news', 'line': news_line(store, tid)}
-    left, q, st = agent_left(store, tid), store.get_dispatch(tid), idle_state(store, tid)
-    held, why = st['kind'] == 'held', st['line']
+    if st.news: return {'kind': 'news', 'line': news_line(store, tid, st.news)}
+    left, q, idle = bool(st.left), store.get_dispatch(tid), st.idle
+    held, why = idle['kind'] == 'held', idle['line']
     if not (str(t.get('Assignee') or '').startswith('agent:') or left or q or held):
         # ...but WHY NONE WAS MEANT is said where the agent would be (the email walk, 2026-10-29): the owner's own task and a reply
         # opened on an empty Agent section, the reason only in triage's panel ("on your list - no agent works it")
@@ -751,14 +741,14 @@ def agent_story(store, tid) -> dict | None:
         return {'kind': 'none', 'line': why} if why else None
     # the sentence is whole and leads with its state ("Waiting for you.", "Couldn't start."): the page adds nothing before it
     # ...and a run that FINISHED is finished, not "not started" over its own "finished its work" sentence (G7, 2026-10-20)
-    if not left: return {'kind': 'held' if held else 'queued' if q else 'finished' if session_finished(store, tid)
-                                 else 'live' if st['kind'] == 'live' else 'idle', 'line': why,
-                         **({'trust': st['trust']} if held and st.get('trust') else {})}
-    evs = store.worker_events(tid) or []
+    if not left: return {'kind': 'held' if held else 'queued' if q else 'finished' if st.finished
+                                 else 'live' if idle['kind'] == 'live' else 'idle', 'line': why,
+                         **({'trust': idle['trust']} if held and idle.get('trust') else {})}
+    evs = st.events
     sid = str(evs[-1]['Sid']) if evs else None
     run = [e for e in evs if str(e['Sid']) == sid]
     cut = next((e for e in reversed(run) if e['Kind'] == 'disconnected' and e.get('Source') in terminal.INTERRUPTING), None)
-    interrupted = terminal.INTERRUPTED in tags
+    interrupted = st.interrupted
     # a restart that finds the session already dead writes no worker event - release_task's note on the task is the cut
     if interrupted and not cut:
         n = next((c for c in reversed(store.list_comments(tid) or []) if c.get('Actor') in terminal.INTERRUPTING), None)
@@ -781,10 +771,10 @@ def agent_story(store, tid) -> dict | None:
     if len(steps) > 8: steps = steps[:1] + steps[-7:]
     said = next((e for e in reversed(run) if e['Kind'] == 'turn_end' and str(e.get('Text') or '').strip()), None)
     # ...and a run that FAILED is a failure, with the place that fixes it when there is one (Connect an AI): the step offers Try again
-    failed = st['kind'] == 'failed' and not interrupted
+    failed = idle['kind'] == 'failed' and not interrupted
     # ...and A RUN THAT FAILED SAYS WHY FIRST, whatever cut it after (the owner, 2026-10-26: "you can't see what you have to do"): a
     # restart's note led the Result and "could not start: this tool has no built-in reviewer" sat at the foot of the transcript under it
-    ran = run_failed(store, tid) or {}
+    ran = st.failed or {}
     why = ran.get('sentence') or ''
     return {'kind': 'interrupted' if interrupted else 'failed' if failed else 'left', 'line': line, 'steps': steps,
             'said': _said(said['Text']) if said else '', 'said_at': said['CreatedAt'] if said else None,
@@ -807,9 +797,10 @@ def no_agent_why(store, t: dict) -> str:
 
 
 def left_by_facts(tags, runs) -> str:
-    """'saved' | 'stopped' | '' from the task's tags and its runs - the rule the rail (agent_left) and All
-    (processing_all.row_lane) now share, so one task cannot read "waiting to start" in one and "agent stopped" in the
-    other (A16, 2026-09-25)."""
+    """'saved' | 'stopped' | '' from the task's tags and its runs - the rule the rail (taskstate.TaskState.left), the task's key
+    (TaskState.key) and All (processing_all.row_lane) share, so one task cannot read "waiting to start" in one and "agent stopped"
+    in the other (A16, 2026-09-25). All reads no further than this: its row is built from the census's view, which carries the
+    tags and the runs and not the worker's events or the transcript the record goes on to read."""
     from . import terminal
     tg = [x.strip() for x in str(tags or '').split(',')]
     if terminal.SAVED in tg: return 'saved'
@@ -827,33 +818,22 @@ def general_not_started(task: dict, has_conversation: bool, routes=()) -> bool:
 
 
 def session_saved(store, tid) -> bool:
-    """The owner ended the agent's session and its result is written (Stop and save): `session saved`, never
-    "left without finishing" (A1, 2026-09-25). A new session clears it (terminal.open_session)."""
-    from . import terminal
-    return terminal.SAVED in [x.strip() for x in str((store.get_task(tid) or {}).get('Tags') or '').split(',')]
+    "The owner ended the agent's session and its result is written - `session saved` (taskstate.TaskState.saved)."
+    from . import taskstate
+    return taskstate.task_state(store, tid=tid).saved
 
 
 def agent_left(store, tid) -> bool:
-    """An agent HAD this and is gone: the interrupted tag, a run that stopped, or a transcript with nothing
-    live behind it - the first three causes not_started_why names, in its order. The lane word for that
-    is `stopped`, never `queued`: a restart killed the agent's session on TQ-0616, the task list said
-    interrupted / needs you, and the rail said "handed to an agent, not started yet" (2026-09-17)."""
-    from . import terminal
-    t = store.get_task(tid) or {}
-    if news_since_agent(store, tid): return False        # what is open now is the message, not the session that went before it
-    if terminal.INTERRUPTED in [x.strip() for x in str(t.get('Tags') or '').split(',')]: return True
-    if session_saved(store, tid): return True
-    if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])): return True
-    # ...or the run's own last word says it failed or was stopped (workerstate.ended) - the reading taskstate takes (G7)
-    from . import workerstate
-    if workerstate.ended(store, tid) in workerstate.TERMINAL: return True
-    return bool(store.last_transcript(tid)) and not session_finished(store, tid)
+    "An agent HAD this and is gone - a session saved, cut off, stopped or failed, or a transcript nothing finished (taskstate.TaskState.left)."
+    from . import taskstate
+    return bool(taskstate.task_state(store, tid=tid).left)
 
 
-def session_finished(store, tid) -> bool:
+def session_finished(store, tid, evs=None) -> bool:
     """Did the LAST session end by finishing - it said it was done (its `finished` event), or its report was written
-    after it began? Then nothing was left half-done: a task open again after it is open for what arrived since."""
-    evs = store.worker_events(tid) or []
+    after it began? Then nothing was left half-done: a task open again after it is open for what arrived since.
+    `evs`: the task's worker events, when the caller has read them."""
+    if evs is None: evs = store.worker_events(tid) or []
     if not evs: return False                     # no account of the session at all: nothing says it finished
     sid = str(evs[-1]['Sid'])
     run = [e for e in evs if str(e['Sid']) == sid]
@@ -913,11 +893,14 @@ def chat_done(store, task: dict, when=None) -> dict:
                  priority=task.get('Priority'), chat_done=True, why=why)
 
 
-def paused_conversation(store, item: dict) -> dict:
-    """Render resumable general work as a paused agent conversation, never as an unowned task."""
+def paused_conversation(store, item: dict, st=None) -> dict:
+    """Render resumable general work as a paused agent conversation, never as an unowned task.
+    `st`: the task's record (taskstate.TaskState), when the row's builder holds one."""
     tid = item.get('tid')
     if not tid or item.get('lane') == 'working': return item
-    task = store.get_task(tid) or {}
+    from . import taskstate
+    st = st or taskstate.task_state(store, tid=tid)
+    task = st.t
     if task.get('Status') not in ('open', 'waiting', 'in_progress') or not store.saved_session(tid): return item
     try:
         from . import general
@@ -926,12 +909,11 @@ def paused_conversation(store, item: dict) -> dict:
         # input, and the task reads as the task (a reply ready, on you), never "agent stopped" or "conversation saved" (the owner, 2026-11-05)
         # ...and AS IT READ LIVE (the owner, 2026-11-07): its open question still asks you, and a turn that asked nothing is done for now
         if general.idled(tid, store):
-            from . import taskstate
             if (q := taskstate.open_question(store, tid)):
                 return item | {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'asking': True, 'agent': 'assistant', 'mode': 'assistant',
                                'tail': [str(q.get('text') or '')[:300]], 'request_id': q.get('request_id'), 'request_kind': q.get('kind'),
                                'since': _ts(q.get('at')) or item.get('since'), 'why': request_line(None, q)}
-            if item.get('lane') in ('yours', 'queued') and not store.waiting_on_owner(tid) and taskstate.state(store, task) == 'agentdone':
+            if item.get('lane') in ('yours', 'queued') and not store.waiting_on_owner(tid) and st.key == 'agentdone':
                 return item | {k: v for k, v in chat_done(store, task).items() if k in ('key', 'kind', 'lane', 'who', 'why', 'chat_done')}
             return item
     except Exception:
@@ -944,8 +926,8 @@ def paused_conversation(store, item: dict) -> dict:
     from .continuity import since_line, mail_since
     # ...and nothing is ASKING: no session is live here (session_for above), so `blocked` - "agent waiting on you", the hand - was
     # untrue of every saved or failed one (2026-10-22 walk). It is saved or stopped, and a failed last run says it failed (R2)
-    failed = run_failed(store, tid)
-    return item | {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'saved' if session_saved(store, tid) else 'stopped', 'paused': True,
+    failed = st.failed
+    return item | {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'saved' if st.saved else 'stopped', 'paused': True,
                    'agent': 'assistant', 'mode': 'assistant', 'tail': [last[:600]] if last else [],
                    'news': bool(mail_since(store, tid)), **({'failed': True} if failed else {}),
                    'why': (f"Failed - {failed['sentence']}" if failed else '')

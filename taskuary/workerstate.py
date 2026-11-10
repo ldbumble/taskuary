@@ -252,7 +252,14 @@ def left_asking(store, tid) -> list:
     return [r for r in st['requests'] if own_question(r)] if st['state'] in ('disconnected', 'stopped') else []
 
 
-def ended(store, tid, live_too: bool = False) -> str | None:
+def newest(store, tid, evs=None, kinds=None, skip=()):
+    """The task's newest event - of `kinds` only, none of `skip` - or None: off `evs` (its events, oldest first) when the caller holds
+    them (taskstate.TaskState), else the one indexed row (store.last_worker_event). The same reading either way."""
+    if evs is None: return store.last_worker_event(tid, kinds=kinds, skip=skip)
+    return next((e for e in reversed(evs) if (not kinds or e['Kind'] in kinds) and e['Kind'] not in skip), None)
+
+
+def ended(store, tid, live_too: bool = False, evs=None) -> str | None:
     """How the task's last run ENDED, by its own word, with nothing live on it: 'finished' (an explicit result no prompt has
     followed, as status reads it), 'failed', 'stopped' or 'disconnected' - else None: live, never reported, or silent on how it
     ended. Silence is never an ending here: a general conversation that answered and closed is a saved conversation, not a failure.
@@ -262,11 +269,11 @@ def ended(store, tid, live_too: bool = False) -> str | None:
     # `live_too`: the run's own last word even while its session is still open - a run that FAILED reads failed whatever the
     # session does (R2): a failed agent whose session stayed up read "waiting on you" on the phone (the 2026-10-22 re-walk)
     if not tid or (_live(tid) and not live_too): return None
-    last = store.last_worker_event(tid, skip=NOTES)
+    last = newest(store, tid, evs, skip=NOTES)
     if not last: return None
     if last['Kind'] in TERMINAL: return last['Kind']
-    fin = store.last_worker_event(tid, kinds=('finished',))
-    work = fin and store.last_worker_event(tid, kinds=('working',))
+    fin = newest(store, tid, evs, ('finished',))
+    work = fin and newest(store, tid, evs, ('working',))
     return 'finished' if fin and (not work or work['Id'] < fin['Id']) else None
 
 

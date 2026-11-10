@@ -119,9 +119,9 @@ class NextLeavesAStoppedAgentInTasksTests(unittest.TestCase):
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coding'}, 'o')
         mid = mail(s, 'export', who='Omar Keller', email='omar@northwind.example', hours=3, tid=t)
         s.add_route(mid, t, 'route', 1.0, 'triage: coding', [], 'triage')
+        s.add_transcript(t, 's1', 'I looked at the export.', agent='coding')         # its agent ran, and nothing is live behind it: it left
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
-        with mock.patch('taskuary.terminal.live_sessions', return_value=[]), \
-             mock.patch.object(funnel, 'agent_left', return_value=True):
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual((first['item']['lane'], first['item']['tid']), ('stopped', t))
             railwalk.next(s, first['item']['key'])
@@ -140,8 +140,9 @@ class AStopAfterNextIsYoursTests(unittest.TestCase):
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coding'}, 'o')
         mid = mail(s, 'export', who='Omar Keller', email='omar@northwind.example', hours=3, tid=t)
         s.add_route(mid, t, 'route', 1.0, 'triage: coding', [], 'triage')
+        s.add_transcript(t, 's1', 'I looked at the export.', agent='coding')         # its agent ran, and nothing is live behind it: it left
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
-        with mock.patch('taskuary.terminal.live_sessions', return_value=[]), mock.patch.object(funnel, 'agent_left', return_value=True):
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             railwalk.next(s, first['item']['key'])
             later = (datetime.now() + timedelta(minutes=2)).isoformat(sep=' ', timespec='seconds')

@@ -139,20 +139,17 @@ def rest(store, tid: int) -> None:
     import threading, time
     from . import general, terminal as term
     def go():
-        g = general.session_for(tid)
-        if g:
-            if g.busy: g.stop()
-            end = time.time() + REST_WAIT
-            while g.busy and time.time() < end: time.sleep(0.1)
-            g.idle_out(time.time() + general.idle_for() + 1)
-            return
-        live = term.session_for(tid)
+        end, of = time.time() + REST_WAIT, lambda: general.session_for(tid) or term.session_for(tid)
+        # ...a start still on its way (general.OPENING) is put to rest once its turn is up: pressed in the seconds an agent took to come up, the
+        # press found no session and the turn it was started for ran on (the audit, 2026-11-10)
+        while tid in general.OPENING and not getattr(of(), 'busy', False) and time.time() < end: time.sleep(0.1)
+        live = of()
         if not live or not getattr(live, 'alive', False): return
-        if term.is_acp(live):
-            live.cancel(); end = time.time() + REST_WAIT
-            while getattr(live, 'busy', False) and time.time() < end: time.sleep(0.1)
-            live.idle_out(time.time() + general.idle_for() + 1)
-        else: live.write('\x1b')                    # a terminal's turn stops on its CLI's own key; the session rests at its prompt
+        chat = live is general.session_for(tid)
+        if not (chat or term.is_acp(live)): return live.write('\x1b')     # a terminal's turn stops on its CLI's own key; it rests at its prompt
+        if live.busy: live.stop() if chat else live.cancel()
+        while live.busy and time.time() < end: time.sleep(0.1)
+        live.idle_out(time.time() + general.idle_for() + 1)
     def safe():
         try: go()
         except Exception as e: logger.debug(f'task {tid}: its agent was not put to rest after Remind me - {e}')

@@ -167,6 +167,17 @@ class LiveAgentTests(unittest.TestCase):
     def test_with_no_agent_it_is_simply_set(self):
         self.press(None)
 
+    def test_a_start_still_on_its_way_is_put_to_rest_once_its_turn_is_up(self):
+        """The audit, 2026-11-10: pressed in the seconds an agent took to come up, the press found no session, and the turn it had been
+        started for ran on. A start in flight (general.OPENING) is waited for, and its turn stopped."""
+        from taskuary import general
+        sess, up = self.session(True), iter([None] * 3)
+        from types import SimpleNamespace
+        with mock.patch.object(general, 'OPENING', {1}), mock.patch.object(general, 'session_for', side_effect=lambda tid: next(up, sess)), \
+             mock.patch('threading.Thread', lambda target=None, **k: SimpleNamespace(start=target)), mock.patch('taskuary.terminal.session_for', return_value=None):
+            remind.rest(store(), 1)
+        sess.stop.assert_called_once(); sess.idle_out.assert_called_once()
+
 
 class WhatOutranksTheDayTests(unittest.TestCase):
     """Remind me holds a QUIET task (B2, the owner, 2026-10-11): it sat under For later past its own due day, and past

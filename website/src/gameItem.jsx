@@ -380,11 +380,11 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
   return (
     <Box>
       {body}
-      {repo && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 1, p: 1, borderRadius: "9px", bgcolor: "#f6f2ea", color: "#262521" }}>
+      {repo && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 1, p: 1, borderRadius: "9px", bgcolor: "var(--tq-panel, #f6f2ea)", color: "var(--tq-text, #262521)" }}>
         <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Which repository should the coding agent use?</Typography>
         <RepoPicker taskId={repo.taskId} agent={repo.agent} onDone={(d) => { if (d?.repo) { setRepo(null); dispatch({ ...(last || {}), verb: "coding_agent", kind: "coding" }); } }} />
       </Box>}
-      {ask !== null && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 1, color: "#262521" }}>
+      {ask !== null && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 1, color: "var(--tq-text, #262521)" }}>
         <AgentAsk inline coding={ask} what={item.mid ? "It gets the message and its attachments." : "It gets this item."}
           onClose={() => setAsk(null)} onStart={dispatch} /></Box>}
       <Moves item={item} covers={covers} busy={busy} play={play} onRepo={setRepo} onAgent={(v) => setAsk(v !== "regular_agent")} />

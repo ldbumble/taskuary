@@ -48,7 +48,7 @@ export function Templates({ onUse }) {
     <Box data-tq-dashboard-templates="" sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       <Typography sx={{ fontSize: 12, color: FAINT }}>{DASH.or_start}</Typography>
       {list.map((t) => (
-        <Box key={t.key} sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fffdfb" }}>
+        <Box key={t.key} sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "var(--tq-panel, #fffdfb)" }}>
           <Box sx={{ flex: "1 1 240px", minWidth: 0 }}>
             <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: INK }}>{t.title}</Typography>
             <Typography sx={{ fontSize: 12.5, color: FAINT, mt: 0.25 }}>{t.explain}</Typography>
@@ -64,7 +64,7 @@ export function Templates({ onUse }) {
 
 // a column: picked from what its source returned last, or typed (a source that has not run yet has no columns to offer)
 function ColumnField({ label, value, cols, onChange, multiple = false, placeholder }) {
-  const input = (p) => <TextField {...p} label={label || undefined} placeholder={placeholder} sx={{ bgcolor: "#fff" }}
+  const input = (p) => <TextField {...p} label={label || undefined} placeholder={placeholder} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
     inputProps={{ ...p.inputProps, "aria-label": label || placeholder }} />;
   return multiple
     ? <Autocomplete multiple freeSolo size="small" options={cols} value={value || []} onChange={(_e, v) => onChange(v)} renderInput={input} />
@@ -94,7 +94,7 @@ export function SaidLine({ c = null, canAsk, ask, onDrawn, placeholder, clearOnD
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); draw(); } }}
         InputProps={{ readOnly: !canAsk, sx: { fontSize: 13, color: INK, lineHeight: 1.4 } }} inputProps={{ "aria-label": placeholder || DASH.said }} />
       {busy && <Typography sx={{ fontSize: 11.5, color: FAINT, mt: 0.25 }}>{DASH.drawing}</Typography>}
-      {err && <Typography role="alert" sx={{ fontSize: 12, color: "#8a3b2f", mt: 0.25 }}>{err}</Typography>}
+      {err && <Typography role="alert" sx={{ fontSize: 12, color: "var(--tq-danger, #8a3b2f)", mt: 0.25 }}>{err}</Typography>}
     </Box>
   );
 }
@@ -109,7 +109,7 @@ const Section = ({ title, hint, children }) => (
 );
 const AddCard = ({ label, onClick, ...rest }) => (
   <Box onClick={onClick} {...rest} sx={{ ...card, width: { xs: "100%", sm: 354 }, minHeight: 120, display: "flex", flexDirection: "column", alignItems: "center",
-    justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed", color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
+    justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed", color: DIM, "&:hover": { borderColor: "var(--tq-border, #d8cfbe)", color: "var(--tq-link, #55697a)" } }}>
     <AddIcon sx={{ fontSize: 20 }} /><Typography variant="body2" sx={{ fontWeight: 600 }}>{label}</Typography>
   </Box>
 );
@@ -225,12 +225,12 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
       {/* two lines held for every sentence, so the tiles of one row start level whatever their words' length */}
       <Box sx={{ display: "flex", alignItems: "flex-end", gap: 0.5, minHeight: 44 }}>
         <Box draggable onDragStart={() => setDrag({ what: "components", i })} onDragEnd={() => setDrag(null)} title={DASH.move}
-          sx={{ cursor: "grab", flex: "none", mt: 0.5, "&:active": { cursor: "grabbing" } }}><DragIndicatorIcon sx={{ fontSize: 16, color: "#cfc9bf" }} /></Box>
+          sx={{ cursor: "grab", flex: "none", mt: 0.5, "&:active": { cursor: "grabbing" } }}><DragIndicatorIcon sx={{ fontSize: 16, color: "var(--tq-muted, #cfc9bf)" }} /></Box>
         <SaidLine c={c} canAsk={canAsk} ask={(t) => tileAsk(spec, t, c)} onDrawn={(n) => setComps((cur) => swapTile(cur, c, n))} />
         {comps.length < MAX_COMPONENTS && <ContentCopyIcon onClick={() => setComps((cur) => copyTile(cur, i))} titleAccess={DASH.copy}
-          sx={{ ...icon, "&:hover": { color: "#55697a" } }} />}
+          sx={{ ...icon, "&:hover": { color: "var(--tq-link, #55697a)" } }} />}
         <CloseIcon onClick={() => setComps((cur) => cur.filter((_, k) => k !== i))} titleAccess={DASH.remove_tile}
-          sx={{ ...icon, fontSize: 15, "&:hover": { color: "#6b2733" } }} />
+          sx={{ ...icon, fontSize: 15, "&:hover": { color: "var(--tq-danger, #6b2733)" } }} />
       </Box>
       {node}
     </div>
@@ -244,7 +244,7 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
     <Box data-tq-dashboard-editor="" sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
       {note?.text && <Alert severity={note.severity} onClose={() => setNote(null)} sx={{ fontSize: 12.5 }}>{note.text}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
-        <TextField size="small" value={title} onChange={(e) => setTitle(e.target.value)} sx={{ bgcolor: "#fff", minWidth: 220, flex: "1 1 220px" }}
+        <TextField size="small" value={title} onChange={(e) => setTitle(e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)", minWidth: 220, flex: "1 1 220px" }}
           inputProps={{ "aria-label": "Title" }} />
         <Typography sx={{ fontSize: 12, color: FAINT }}>{DASH.schedule}</Typography>
         <SchedulePicker sched={sched} setSched={setSched} cron={spec.cron} />
@@ -256,7 +256,7 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
         {sourceId != null && <Button size="small" disabled={!!busy} onClick={run}
           startIcon={busy === "run" ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}>{busy === "run" ? DASH.running : DASH.run}</Button>}
         {sourceId != null && <Button size="small" color="inherit" disabled={!!busy} onClick={remove} sx={{ color: FAINT }}>{DASH.remove}</Button>}
-        {said && <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: "#47654a" }}>{said}</Typography>}
+        {said && <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: "var(--tq-success, #47654a)" }}>{said}</Typography>}
         {busy === "preview" && data && <Typography sx={{ fontSize: 11.5, color: FAINT }}>{DASH.rereading}</Typography>}
         {data?.at && <Typography sx={{ fontSize: 11.5, color: FAINT, ml: "auto" }}>{DASH.updated} {dayLabel(data.at)} {fmtTime12(data.at)}</Typography>}
       </Box>
@@ -289,7 +289,7 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
         <Box sx={{ width: "100%", display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.25 }}>
           <Typography variant="caption" sx={{ color: DIM }}>{DASH.opens_on}</Typography>
           <Select size="small" value={String(spec.filters?.range ?? 30)} onChange={(e) => setFilter("range", Number(e.target.value))}
-            inputProps={{ "aria-label": DASH.opens_on }} sx={{ fontSize: 12.5, bgcolor: "#fff" }}>
+            inputProps={{ "aria-label": DASH.opens_on }} sx={{ fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
             {RANGES.map((d) => <MenuItem key={d} value={String(d)} sx={{ fontSize: 12.5 }}>{DASH.ranges[String(d)]}</MenuItem>)}
           </Select>
           <Typography variant="caption" sx={{ color: DIM, ml: 1 }}>{DASH.slice_by}</Typography>

@@ -33,6 +33,8 @@ Taskuary is early—currently **v0.3.11.34**—so breaking changes are still pos
 
 <p align="center"><b><a href="https://taskuary.com/docs/">Read the documentation</a></b> — installation, the first run, what to connect, and every setting.</p>
 
+The sun/moon button in the top-right corner switches the whole app between light and dark. The choice stays in this browser and follows other open tabs; before you choose, Taskuary follows your system appearance. Your terminal palette stays independent.
+
 ## What Taskuary can do
 
 One working day, through the real app, on fictional demo data: six asks from Northwind's people - a LinkedIn post,

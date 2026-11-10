@@ -1730,7 +1730,7 @@ function KbSearch({ conn }) {
     <Box sx={{ mt: 2, maxWidth: 560 }}>
       <Typography variant="body2" sx={{ fontWeight: 600, color: INK, mb: 0.75 }}>Ask the knowledge base</Typography>
       <Box sx={{ display: "flex", gap: 1 }}>
-        <TextField size="small" fullWidth placeholder="e.g. what is our resident refund policy" value={q} sx={{ bgcolor: "#fff" }}
+        <TextField size="small" fullWidth placeholder="e.g. what is our resident refund policy" value={q} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} />
         <Button variant="outlined" disabled={busy || !q.trim()} onClick={go}>{busy ? <CircularProgress size={14} /> : "Search"}</Button>
       </Box>
@@ -1768,8 +1768,8 @@ export function ConfigField({ conn, field: [label, key, ph, help], cfg, setCfg, 
   const onChange = (e) => setCfg({ ...cfg, [key]: e.target.value });
   const end = tick ? { InputProps: { endAdornment: tick } } : {};
   if (!(conn?.WriteOnlyKeys || []).includes(key))
-    return <TextField label={label} placeholder={ph || ""} helperText={help} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }} onChange={onChange} {...end} {...rest} />;
-  return <TextField type="password" data-tq-write-only={key} autoComplete="new-password" sx={{ bgcolor: "#fff" }} {...end} {...rest}
+    return <TextField label={label} placeholder={ph || ""} helperText={help} value={cfg[key] || ""} sx={{ bgcolor: "var(--tq-panel, #fff)" }} onChange={onChange} {...end} {...rest} />;
+  return <TextField type="password" data-tq-write-only={key} autoComplete="new-password" sx={{ bgcolor: "var(--tq-panel, #fff)" }} {...end} {...rest}
     label={(conn.ConfigSaved || []).includes(key) ? `${label} — saved, type to replace` : label} placeholder={ph || ""}
     helperText={help ? `${help} Never shown again once saved.` : "Never shown again once saved."}
     value={cfg[key] || ""} onChange={onChange} />;
@@ -1848,7 +1848,7 @@ const TestLine = ({ test, mt = 1, cid }) => {
   const ins = test.install;
   return (
     <Box sx={{ mt }}>
-      <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
+      <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>
         {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}
       </Typography>
       {!test.ok && <BridgeRestart cid={cid} text={test.detail} />}
@@ -1883,15 +1883,15 @@ export const ConnCard = ({ c }) => {
         transition: "border-color .15s, box-shadow .15s",
         ...(c.planned ? {} : { "&:hover": { boxShadow: [ring, "0 2px 8px rgba(47,107,79,.12)"].filter(Boolean).join(", ") } }) }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.1 }}>
-        <Box sx={{ width: 30, height: 30, borderRadius: 2, bgcolor: "#e9e3d8", flexShrink: 0,
+        <Box sx={{ width: 30, height: 30, borderRadius: 2, bgcolor: "var(--tq-inset, #e9e3d8)", flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 17, color: "#55697a" }} />
+          {c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 17, color: "var(--tq-link, #55697a)" }} />
             : <ChannelIcon channel={c.channel} sx={{ fontSize: 17 }} />}
         </Box>
         <Typography noWrap data-tq-setup-label="" sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
         {connState(c) === "on" && !c.plain && (
           <Box component="span" data-tq-conn-pill sx={{ flexShrink: 0, px: 0.75, py: 0.1, borderRadius: 99, fontSize: 10, fontWeight: 600,
-            lineHeight: 1.6, color: "#47654a", bgcolor: "#e8efe6", border: "1px solid #c9d8c5" }}>Connected</Box>
+            lineHeight: 1.6, color: "var(--tq-success, #47654a)", bgcolor: "var(--tq-inset, #e8efe6)", border: "1px solid var(--tq-border, #c9d8c5)" }}>Connected</Box>
         )}
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: connDot(c), flexShrink: 0 }} />
         {c.remove && <CardRemove {...c.remove} />}
@@ -2032,7 +2032,7 @@ const VoiceVocabulary = ({ onBack }) => {
         {saved && <Alert severity="success" sx={{ mt: 1.5 }}>{saved}</Alert>}
         {/* the receipts: what history was read and counted, so every added name traces back to your own mail */}
         {genEv?.length > 0 && (
-          <Box sx={{ mt: 1.5, p: 1.25, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 2 }}>
+          <Box sx={{ mt: 1.5, p: 1.25, bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${BORDER}`, borderRadius: 2 }}>
             <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>What it read</Typography>
             {genEv.map((l, i) => (
               <Typography key={i} variant="caption" component="div" sx={{ color: l.startsWith("  ") ? FAINT : DIM, whiteSpace: "pre-wrap", fontFamily: l.startsWith("  ") ? "monospace" : "inherit", fontSize: 11 }}>{l}</Typography>
@@ -2070,7 +2070,7 @@ function AlchemyWalletGuide({ onBack, onData }) {
     localStorage.removeItem("tq-alchemy-wallet-shell");
     setSid("");
   };
-  const command = (value) => <Box component="pre" sx={{ m: 0, mt: 0.6, mb: 1.5, p: 1.2, bgcolor: "#f4f0e8",
+  const command = (value) => <Box component="pre" sx={{ m: 0, mt: 0.6, mb: 1.5, p: 1.2, bgcolor: "var(--tq-inset, #f4f0e8)",
     border: `1px solid ${BORDER}`, borderRadius: 1.5, overflowX: "auto", fontSize: 12 }}>{value}</Box>;
   return <Box sx={{ maxWidth: 850, mx: "auto" }}>
     <Crumb section="Connections" onBack={onBack} title="Alchemy Agent Wallet" />
@@ -2418,7 +2418,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
         <Box component="input" type="search" value={q} onChange={(e) => search(e.target.value)} placeholder="Search connectors…"
           aria-label="Search connectors" data-tq-browse-search=""
           sx={{ mt: 1.5, width: "100%", boxSizing: "border-box", height: 34, px: 1.25, border: `1px solid ${BORDER}`, borderRadius: "8px",
-            fontFamily: "inherit", fontSize: 12.5, color: INK, bgcolor: "#fff", outline: "none", "&:focus": { borderColor: "#55697a" } }} />
+            fontFamily: "inherit", fontSize: 12.5, color: INK, bgcolor: "var(--tq-panel, #fff)", outline: "none", "&:focus": { borderColor: "#55697a" } }} />
       ),
       query: q, empty: "Nothing in this section yet.", noneAction: <RequestConnection q={q} />,
       // a card removed is gone, and the page back on the list: its Undo stands here (RemoveConnection)
@@ -2514,7 +2514,7 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
     <Box data-tq-add-another={conn.Type} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: addOnly ? 0 : 1.5, maxWidth: 720 }}>
       {!addOnly && <>
         <TextField size="small" label="Connection name" value={name} onChange={(e) => setName(e.target.value)} onBlur={rename}
-          onKeyDown={(e) => { if (e.key === "Enter") rename(); }} sx={{ bgcolor: "#fff", minWidth: 240 }} />
+          onKeyDown={(e) => { if (e.key === "Enter") rename(); }} sx={{ bgcolor: "var(--tq-panel, #fff)", minWidth: 240 }} />
         <Tick st={named} sx={{ ml: 0 }} />
       </>}
       {!one || !connected ? null : !adding ? (
@@ -2523,7 +2523,7 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
         <>
           <TextField size="small" autoFocus label={`Name of the new ${one}`} value={newName}
             onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }}
-            sx={{ bgcolor: "#fff", minWidth: 240 }} />
+            sx={{ bgcolor: "var(--tq-panel, #fff)", minWidth: 240 }} />
           <Button size="small" variant="contained" disableElevation disabled={busy === "add" || !newName.trim()}
             onClick={add}>{busy === "add" ? "Adding…" : "Add"}</Button>
           <Button size="small" onClick={() => { setAdding(false); setNewName(""); setErr(""); }}>Cancel</Button>
@@ -2550,7 +2550,7 @@ function CardPlaybooks({ type }) {
   const go = (slug) => { openAppLink(`playbook=${slug}`); };
   return (
     <Box sx={{ mt: 3, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL }}>
-      <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.75 }}>
+      <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.75 }}>
         PLAYBOOKS — WHAT THIS CONNECTION DOES FOR US
       </Typography>
       {books.length === 0 && (
@@ -2598,7 +2598,7 @@ function RemoveConnection({ conn, reload, onBack, channel = "" }) {
   return (
     <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, maxWidth: 720 }}>
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-        <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#867f74" }}
+        <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "var(--tq-warning, #867f74)" }}
           title="Asks once, then wipes its saved sign-in and settings and switches its sources off - Undo puts them back"
           onClick={() => setAsking(true)}>Remove connection</Button>
         {line && <Typography data-tq-used-by="" variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>{line}</Typography>}
@@ -2617,7 +2617,7 @@ function CardRemove({ conn, channel = "", reload }) {
   const stop = (e) => e.stopPropagation();
   return <Box component="span" onClick={stop} onKeyDown={stop} sx={{ display: "inline-flex", flexShrink: 0 }}>
     <IconButton size="small" data-tq-card-remove="" aria-label={`Remove ${conn.Name || conn.Type}`} title="Remove - asks once; Undo puts it back"
-      onClick={() => { setOpen(true); setAsking(true); }} sx={{ p: 0.25, color: FAINT, "&:hover": { color: "#6b2733" } }}>
+      onClick={() => { setOpen(true); setAsking(true); }} sx={{ p: 0.25, color: FAINT, "&:hover": { color: "var(--tq-danger, #6b2733)" } }}>
       <DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
     <ConfirmDelete open={asking} title={words.title} consequence={words.text} confirmLabel="Remove" undoable onConfirm={remove} onClose={() => setAsking(false)} />
   </Box>;
@@ -2680,7 +2680,7 @@ function MacPermissions({ conn, test, busy, runTest }) {
         bypass them, and both are granted to <b>{host}</b>, not to "Taskuary".
       </Typography>
       {notMac ? (
-        <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>✗ {test.detail}</Typography>
+        <Typography variant="body2" sx={{ color: "var(--tq-danger, #6b2733)", fontWeight: 600 }}>✗ {test.detail}</Typography>
       ) : (
         <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
           <Card title="Read Messages" sub="Full Disk Access" ok={readOk}>
@@ -2708,7 +2708,7 @@ function MacPermissions({ conn, test, busy, runTest }) {
               {openErr.full_disk_access && ` · ${openErr.full_disk_access}`}
             </Typography>
             <TestLine test={test} mt={1} />
-            {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
+            {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "var(--tq-danger, #6b2733)" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
           </Card>
           <Card title="Send Messages" sub="Automation: Messages" ok={sendOk}>
             <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
@@ -2727,7 +2727,7 @@ function MacPermissions({ conn, test, busy, runTest }) {
               {opened === "automation" && " · Settings opened"}
               {openErr.automation && ` · ${openErr.automation}`}
             </Typography>
-            {probe && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: probe.ok ? "#47654a" : "#6b2733" }}>
+            {probe && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: probe.ok ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>
               {probe.ok ? "✓" : "✗"} {probe.detail}</Typography>}
           </Card>
         </Box>
@@ -2873,7 +2873,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           </Button>
         )}
         {conn.Type === "imap" && /@(outlook|hotmail|live|msn)\.|office365|outlook\.office/i.test(`${cfg.address || ""} ${cfg.imap_host || ""}`) && (
-          <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>
+          <Typography variant="body2" sx={{ color: "var(--tq-danger, #6b2733)", fontWeight: 600 }}>
             Microsoft mailboxes no longer accept IMAP passwords — use the Outlook connector and “Sign in with Microsoft”.
           </Typography>
         )}
@@ -2883,7 +2883,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             {/* WhatsApp has no secret at all - the bridge holds the pairing, not us */}
             {adminFields && m.secretLabel && (
               <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
-                value={secret} onChange={(e) => setSecret(e.target.value)} onBlur={boxes.flush} sx={{ bgcolor: "#fff" }}
+                value={secret} onChange={(e) => setSecret(e.target.value)} onBlur={boxes.flush} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
                 onKeyDown={(e) => { if (e.key === "Enter") boxes.flush(); }}
                 InputProps={{ endAdornment: boxes.tick("Secret") }} helperText={SECRET_HELP} />
             )}
@@ -2910,7 +2910,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         <TestLine test={test} mt={1} cid={conn.ConnectorId} />
         {!test && (fresh ? <Typography variant="body2" data-tq-saved-test="" sx={{ mt: 1, color: DIM }}>Saved - press Test to check it.</Typography>
           : conn.LastError && <>
-            <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>
+            <Typography variant="body2" sx={{ mt: 1, color: "var(--tq-danger, #6b2733)" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>
             <BridgeRestart cid={conn.ConnectorId} text={conn.LastError} /></>)}
       </Box>
     )},
@@ -2964,13 +2964,13 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             {s.LastPolledAt && <Typography variant="caption" sx={{ color: FAINT }}>polled {timeAgo(s.LastPolledAt)}</Typography>}
             <Switch checked={!!s.Active} onChange={() => toggleSource(s)} />
             <IconButton size="small" title="Remove it (off keeps it listed) - Undo puts it back" aria-label={`Remove ${s.Address}`} onClick={() => removeSrc(s)}>
-              <DeleteOutlineIcon sx={{ fontSize: 16, color: "#867f74" }} />
+              <DeleteOutlineIcon sx={{ fontSize: 16, color: "var(--tq-warning, #867f74)" }} />
             </IconButton>
           </Box>
         ))}
         <UndoLine kinds={["source"]} onRestored={reload} sx={{ mt: 1, mb: 0 }} />
         <Box sx={{ display: "flex", gap: 1, mt: 1.5, maxWidth: 460 }}>
-          <TextField fullWidth placeholder={m.srcPh} value={newSrc} sx={{ bgcolor: "#fff" }} error={!!srcBad} helperText={srcBad || undefined}
+          <TextField fullWidth placeholder={m.srcPh} value={newSrc} sx={{ bgcolor: "var(--tq-panel, #fff)" }} error={!!srcBad} helperText={srcBad || undefined}
             onChange={(e) => { setNewSrc(e.target.value); setSrcBad(""); }} onKeyDown={(e) => e.key === "Enter" && addSource()} />
           <Button variant="contained" disableElevation onClick={addSource}>Add</Button>
         </Box>
@@ -3001,7 +3001,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           <Box component="span" title={sync.why} data-tq-sync-why={sync.why || undefined} sx={{ display: "inline-flex" }}>
             <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync || !sync.ok}
               startIcon={srcSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-              sx={{ background: sync.ok ? "linear-gradient(90deg, #55697a, #7d9a7c)" : undefined }}>{srcSync ? "Syncing…" : btnLabel("sync_now")}</Button>
+              sx={{ color: "#fff", background: sync.ok ? "linear-gradient(90deg, #55697a, #7d9a7c)" : undefined }}>{srcSync ? "Syncing…" : btnLabel("sync_now")}</Button>
           </Box>
         )}
       </Box>
@@ -3047,11 +3047,11 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       setBusy("");
     };
     // white is the box's, not its hint's: on the root it drew a white band under every field; the hint's link in the app's ink
-    const boxSx = { "& .MuiInputBase-root": { bgcolor: "#fff" }, "& .MuiFormHelperText-root a": { color: "#41525f" } };
+    const boxSx = { "& .MuiInputBase-root": { bgcolor: "var(--tq-panel, #fff)" }, "& .MuiFormHelperText-root a": { color: "var(--tq-link, #41525f)" } };
     return (
       <Box data-tq-simple-mail={conn.Type} sx={{ display: "flex", flexDirection: "column", gap: 1.25, maxWidth: 520 }}>
         {conn.Type === "imap" && /@(outlook|hotmail|live|msn)\.|office365|outlook\.office/i.test(`${cfg.address || ""} ${cfg.imap_host || ""}`) && (
-          <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>
+          <Typography variant="body2" sx={{ color: "var(--tq-danger, #6b2733)", fontWeight: 600 }}>
             That is a Microsoft mailbox - use the Microsoft 365 / Outlook card instead.</Typography>
         )}
         {m.fields.filter(([, key]) => keep.includes(key)).map(([label, key, ph, helper]) => (
@@ -3172,19 +3172,19 @@ function MssqlConnection({ conn, drivers, reload }) {
         <StepContent>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
             <TextField label="server" placeholder="localhost  ·  localhost\SQLEXPRESS  ·  HOST\INSTANCE" value={cfg.server || ""}
-              sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, server: e.target.value })} {...box("server")} />
+              sx={{ bgcolor: "var(--tq-panel, #fff)" }} onChange={(e) => setCfg({ ...cfg, server: e.target.value })} {...box("server")} />
             <TextField label="database" placeholder="master" value={cfg.database || ""}
-              sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, database: e.target.value })} {...box("database")} />
-            <Select value={cfg.auth || "windows"} sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, auth: e.target.value })}
+              sx={{ bgcolor: "var(--tq-panel, #fff)" }} onChange={(e) => setCfg({ ...cfg, database: e.target.value })} {...box("database")} />
+            <Select value={cfg.auth || "windows"} sx={{ bgcolor: "var(--tq-panel, #fff)" }} onChange={(e) => setCfg({ ...cfg, auth: e.target.value })}
               endAdornment={<Box sx={{ mr: 3 }}>{boxes.tick("auth")}</Box>}>
               <MenuItem value="windows" sx={{ fontSize: 12.5 }}>Windows auth (local, trusted)</MenuItem>
               <MenuItem value="sql" sx={{ fontSize: 12.5 }}>SQL login</MenuItem>
             </Select>
-            {sqlAuth && <TextField label="username" value={cfg.username || ""} sx={{ bgcolor: "#fff" }}
+            {sqlAuth && <TextField label="username" value={cfg.username || ""} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
               onChange={(e) => setCfg({ ...cfg, username: e.target.value })} {...box("username")} />}
             {sqlAuth && <TextField label={conn.HasSecret ? "password (saved — type to replace)" : "password"} type="password"
-              value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }} {...box("Secret")} />}
-            <Select value={cfg.driver || ""} displayEmpty sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, driver: e.target.value })}
+              value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }} {...box("Secret")} />}
+            <Select value={cfg.driver || ""} displayEmpty sx={{ bgcolor: "var(--tq-panel, #fff)" }} onChange={(e) => setCfg({ ...cfg, driver: e.target.value })}
               endAdornment={<Box sx={{ mr: 3 }}>{boxes.tick("driver")}</Box>}>
               <MenuItem value="" sx={{ fontSize: 12.5 }}>(auto — newest installed driver)</MenuItem>
               {drivers.map((d) => <MenuItem key={d} value={d} sx={{ fontSize: 12.5 }}>{d}</MenuItem>)}
@@ -3199,7 +3199,7 @@ function MssqlConnection({ conn, drivers, reload }) {
           <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
             startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
           <TestLine test={test} mt={1} />
-          {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "var(--tq-danger, #6b2733)" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
         </StepContent>
       </Step>
     </Stepper>
@@ -3268,7 +3268,7 @@ function DesktopDetail({ conn: savedConn, reload, onBack, onCreated }) {
           startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
       </Box>
       <TestLine test={test} mt={1} />
-      {draft.err && <Typography role="alert" sx={{ mt: 1, color: "#8a3646", fontSize: 12 }}>{draft.err}</Typography>}
+      {draft.err && <Typography role="alert" sx={{ mt: 1, color: "var(--tq-danger, #8a3646)", fontSize: 12 }}>{draft.err}</Typography>}
       <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
@@ -3316,7 +3316,7 @@ function AgentToolDetail({ conn, reload, onBack, onCreated }) {
           : v.signed_in ? "added · signed in" : v.signing_in ? "added · signing in…" : "added"}</Typography>))}
       {skill && <Typography variant="body2" sx={{ color: INK }}>Skill <a href={skill.repo} target="_blank" rel="noreferrer">{skill.name}</a>: {skill.here ? "installed" : "not installed"}</Typography>}
       {(st?.missing || []).map((m) => <Typography key={m} variant="body2" sx={{ color: DIM }}>Still needs {m}.</Typography>)}
-      {st?.token && !clis.some(([, v]) => v.added) && <TextField size="small" type="password" label="Personal token" value={tok} sx={{ bgcolor: "#fff", minWidth: 320, mt: 1 }}
+      {st?.token && !clis.some(([, v]) => v.added) && <TextField size="small" type="password" label="Personal token" value={tok} sx={{ bgcolor: "var(--tq-panel, #fff)", minWidth: 320, mt: 1 }}
         onChange={(e) => setTok(e.target.value)} onBlur={saveTok} helperText="Kept as this card's secret and written only into Claude Code's own config" />}
       {!!st?.sign_in?.length && <Typography variant="body2" sx={{ color: DIM, mt: 1, maxWidth: 720 }}>
         Sign-in is the vendor's, in the agent: press Sign in, or {st.sign_in.join("; or ")}. Taskuary never sees that sign-in, so it cannot list this server's tools - adding it here is your word that your agents may use all of them.</Typography>}
@@ -3364,14 +3364,14 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
       {tab === "Agent" && <AgentTab steps={WINRM_AGENT} />}
       {tab === "Setup" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
-          <TextField label="machine name" placeholder="NWWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
+          <TextField label="machine name" placeholder="NWWEB01" value={cfg.host || ""} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
             onChange={(e) => setCfg({ ...cfg, host: e.target.value })} onBlur={boxes.flush} InputProps={{ endAdornment: boxes.tick("host") }} />
           <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
             <Button variant="contained" disableElevation disabled={busy === "test" || !cfg.host} onClick={runTest}
               startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
           </Box>
           <TestLine test={test} mt={0} />
-          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "var(--tq-danger, #6b2733)" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
         </Box>
       )}
       <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} agentSteps={WINRM_AGENT} reload={reload} />
@@ -3459,7 +3459,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", mb: 1 }}>
             <TextField size="small" placeholder="search by name…" value={q}
               onChange={(e) => { setQ(e.target.value); setLimit(PAGE_OBJ); }}
-              sx={{ bgcolor: "#fff", width: 230 }}
+              sx={{ bgcolor: "var(--tq-panel, #fff)", width: 230 }}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: FAINT }} /></InputAdornment> }} />
             {kinds.length > 1 && (
               <FilterPills value={kind} onChange={(v) => { setKind(v); setLimit(PAGE_OBJ); }}
@@ -3483,7 +3483,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
                 {CLOUD_MODES.map(([v, label]) => (
                   <Box key={v} component="span" title={label}
                     onClick={() => !bulk && setAllShown(v)}
-                    sx={{ fontSize: 11, fontWeight: 600, color: bulk ? FAINT : "#55697a", cursor: bulk ? "default" : "pointer",
+                    sx={{ fontSize: 11, fontWeight: 600, color: bulk ? FAINT : "var(--tq-link, #55697a)", cursor: bulk ? "default" : "pointer",
                       "&:hover": { textDecoration: bulk ? "none" : "underline" } }}>
                     {bulk === v ? `${v}…` : v}
                   </Box>
@@ -3538,7 +3538,7 @@ function PushAddress({ conn }) {
   if (!path) return null;
   return (
     <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.6, p: 1.25, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
-      Point the vendor at your own public https address followed by <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "#fff", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{path}</Box>
+      Point the vendor at your own public https address followed by <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "var(--tq-panel, #fff)", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{path}</Box>
       {" "}- a tunnel of yours (cloudflared, ngrok) to the Taskuary port on this computer. Only that path answers there.
     </Typography>
   );
@@ -3615,7 +3615,7 @@ function OAuthConnect({ conn, meta, reload }) {
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
         {meta.connect.widget === "token" && (
           <TextField size="small" value={token} onChange={(e) => setToken(e.target.value)} disabled={busy}
-            placeholder="setup token from your SimpleFIN account" sx={{ bgcolor: "#fff", minWidth: 260, flex: 1 }}
+            placeholder="setup token from your SimpleFIN account" sx={{ bgcolor: "var(--tq-panel, #fff)", minWidth: 260, flex: 1 }}
             inputProps={{ spellCheck: false, autoComplete: "off", style: { fontSize: 12.5 } }} />
         )}
         <Button variant="contained" disableElevation onClick={go}
@@ -3624,7 +3624,7 @@ function OAuthConnect({ conn, meta, reload }) {
           {busy ? <><CircularProgress size={12} sx={{ color: "#fff", mr: 1 }} /> {meta.connect.widget === "token" ? "claiming…" : "waiting for the sign-in…"}</> : st?.connected ? "Reconnect" : meta.connect.label}
         </Button>
         {st?.connected
-          ? <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Connected{st.member ? ` as ${st.member}` : ""}{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.institution ? ` · ${st.institution}` : ""}{(st.env || st.environment) === "sandbox" ? " · sandbox" : ""}{st.days_left != null ? ` · ${plural(st.days_left, "day")} left on the sign-in` : ""}</Typography>
+          ? <Typography variant="body2" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ Connected{st.member ? ` as ${st.member}` : ""}{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.institution ? ` · ${st.institution}` : ""}{(st.env || st.environment) === "sandbox" ? " · sandbox" : ""}{st.days_left != null ? ` · ${plural(st.days_left, "day")} left on the sign-in` : ""}</Typography>
           : <Typography variant="body2" sx={{ color: DIM }}>{st?.has_app ? "keys saved — not connected yet" : "paste the application's keys below first"}</Typography>}
         {busy && url && !st?.connected && (
           <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, flexBasis: "100%" }}>
@@ -3643,10 +3643,10 @@ function OAuthConnect({ conn, meta, reload }) {
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}>
           {/* named from the card, not hardcoded: three providers share this box now, and it told
               a Zoho owner their INTUIT app needed the URI. */}
-          The {meta.title} app must list this redirect URL, exactly: <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "#fff", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{st.redirect_uri}</Box>
+          The {meta.title} app must list this redirect URL, exactly: <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "var(--tq-panel, #fff)", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{st.redirect_uri}</Box>
         </Typography>
       )}
-      {err && <Typography variant="body2" sx={{ color: "#6b2733", mt: 0.75 }}>✗ {err}</Typography>}
+      {err && <Typography variant="body2" sx={{ color: "var(--tq-danger, #6b2733)", mt: 0.75 }}>✗ {err}</Typography>}
     </Box>
   );
 }
@@ -3681,7 +3681,7 @@ function ActionDefaults({ type, cfg, setCfg, tick }) {
   const fields = settingsOf(type);
   if (!fields.length) return null;
   return <Box data-tq-action-defaults={type} sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
-    {fields.map((f) => <TextField key={f.key} select size="small" label={f.label} value={String(cfg[`default_${f.key}`] ?? f.default)} sx={{ bgcolor: "#fff", minWidth: 180 }}
+    {fields.map((f) => <TextField key={f.key} select size="small" label={f.label} value={String(cfg[`default_${f.key}`] ?? f.default)} sx={{ bgcolor: "var(--tq-panel, #fff)", minWidth: 180 }}
       data-tq-action-default={f.key} onChange={(e) => setCfg({ ...cfg, [`default_${f.key}`]: e.target.value })} InputProps={{ endAdornment: tick(`default_${f.key}`) }}
       helperText="What a post an agent sets up starts with - you can change it on the post">
       {f.choices.map((c) => <MenuItem key={String(c.value)} value={String(c.value)} sx={{ fontSize: 13 }}>{c.label}</MenuItem>)}</TextField>)}
@@ -3769,7 +3769,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
           {meta.apis && <ApiDots apis={meta.apis} cfg={cfg} setCfg={setCfg} />}
           <ActionDefaults type={conn.Type} cfg={cfg} setCfg={setCfg} tick={boxes.tick} />
           {!meta.noSecret && <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
-            type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
+            type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
             onBlur={boxes.flush} onKeyDown={(e) => { if (e.key === "Enter") boxes.flush(); }} InputProps={{ endAdornment: boxes.tick("Secret") }}
             helperText={meta.secretHelp || SECRET_HELP} />}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
@@ -3786,7 +3786,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
               }}>{busy === a.label ? <CircularProgress size={12} /> : a.label}</Button>
             ))}
             <AiWalkButton ai={ai} />
-            {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
+            {msg && <Typography variant="body2" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
             <Switch data-tq-card-on="" checked={!!conn.Active} disabled={draft.flipping} onChange={(e) => setActive(e.target.checked)} />
@@ -3799,7 +3799,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
           {meta.search && <KbSearch conn={conn} />}
           <TestLine test={test} mt={0} />
           {!test && (fresh ? <Typography variant="body2" data-tq-saved-test="" sx={{ color: DIM }}>Saved - press Test to check it.</Typography>
-            : conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>)}
+            : conn.LastError && <Typography variant="body2" sx={{ color: "var(--tq-danger, #6b2733)" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>)}
         </Box>
       )}
       {tab === "Setup" && meta.discovers && (
@@ -3986,9 +3986,9 @@ const GithubCloseout = ({ conn, mine, reload }) => {
           <Typography sx={{ ...mono, fontSize: 12, color: INK, fontWeight: 600 }}>
             {row.repo}{row.role ? ` · your role: ${row.role}` : ""}{row.methods ? ` · merges by ${row.method}` : ""}
           </Typography>
-          {row.error && <Typography variant="body2" sx={{ color: "#8a2f3a" }}>{row.error}</Typography>}
+          {row.error && <Typography variant="body2" sx={{ color: "var(--tq-danger, #8a2f3a)" }}>{row.error}</Typography>}
           {(row.acts || []).map((a) => (
-            <Typography key={a.key} variant="body2" sx={{ color: a.ok ? DIM : "#8a2f3a" }}>
+            <Typography key={a.key} variant="body2" sx={{ color: a.ok ? DIM : "var(--tq-danger, #8a2f3a)" }}>
               {a.ok ? "✓" : "✗"} {a.what}{a.ok ? "" : ` - needs ${a.needs}`}
             </Typography>
           ))}
@@ -4013,7 +4013,7 @@ function MailSignature({ conn, addresses = [], reload }) {
   const cfg = parse(conn.ConfigJson);
   const per = cfg.signatures && typeof cfg.signatures === "object" ? cfg.signatures : {};
   const field = (key, label, value, onChange) => (
-    <TextField key={key} data-tq-mail-signature={key} fullWidth multiline minRows={2} size="small" sx={{ mt: 2, maxWidth: 460, bgcolor: "#fff" }}
+    <TextField key={key} data-tq-mail-signature={key} fullWidth multiline minRows={2} size="small" sx={{ mt: 2, maxWidth: 460, bgcolor: "var(--tq-panel, #fff)" }}
       label={label} value={value} helperText="Blank uses the signature in Settings." onChange={onChange} />
   );
   const save = (next) => saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, ...next }) });
@@ -4189,12 +4189,12 @@ const MailFolders = ({ conn, s, reload }) => {
       {open && (
         <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", alignItems: "center" }}>
           {list === null && <CircularProgress size={11} />}
-          {err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
+          {err && <Typography variant="caption" sx={{ color: "var(--tq-danger, #6b2733)" }}>{err}</Typography>}
           {(list || []).map((f) => (
             <Box key={f.id} onClick={() => toggle(f.id)}
               sx={{ px: 0.9, py: 0.2, borderRadius: 99, cursor: "pointer", fontSize: 11, userSelect: "none",
-                fontWeight: chosen.has(f.id) ? 700 : 500, bgcolor: chosen.has(f.id) ? "#eae4d8" : "#fff",
-                color: chosen.has(f.id) ? "#55697a" : DIM, border: `1px solid ${chosen.has(f.id) ? "#d8cfbe" : BORDER}` }}>
+                fontWeight: chosen.has(f.id) ? 700 : 500, bgcolor: chosen.has(f.id) ? "var(--tq-inset, #eae4d8)" : "var(--tq-panel, #fff)",
+                color: chosen.has(f.id) ? "var(--tq-link, #55697a)" : DIM, border: `1px solid ${chosen.has(f.id) ? "var(--tq-border, #d8cfbe)" : BORDER}` }}>
               {f.name}{f.count ? <Box component="span" sx={{ color: FAINT, ml: 0.5 }}>{f.count}</Box> : null}
             </Box>
           ))}
@@ -4268,7 +4268,7 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
   const StepLine = ({ n, label, state }) => (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
       <Box sx={{ width: 18, height: 18, borderRadius: "50%", fontSize: 11, fontWeight: 600, display: "grid", placeItems: "center",
-        bgcolor: state === "done" ? "#47654a" : state === "now" ? "#55697a" : "#e6e2dc", color: state === "todo" ? DIM : "#fff" }}>{state === "done" ? "✓" : n}</Box>
+        bgcolor: state === "done" ? "#47654a" : state === "now" ? "#55697a" : "var(--tq-inset, #e6e2dc)", color: state === "todo" ? DIM : "#fff" }}>{state === "done" ? "✓" : n}</Box>
       <Typography variant="body2" sx={{ fontSize: 13, fontWeight: state === "now" ? 700 : 500, color: state === "todo" ? DIM : INK }}>{label}</Typography>
       {state === "now" && busy && <CircularProgress size={11} sx={{ color: DIM }} />}
     </Box>
@@ -4311,11 +4311,11 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
         )}
         {st.connected ? (
           <Box sx={{ mt: 0.5 }}>
-            <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Paired{st.me ? ` as ${st.me}` : ""}{st.phone ? ` · ${st.phone}` : ""} — the bridge is connected. Test, then enable.</Typography>
+            <Typography variant="body2" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ Paired{st.me ? ` as ${st.me}` : ""}{st.phone ? ` · ${st.phone}` : ""} — the bridge is connected. Test, then enable.</Typography>
           </Box>
         ) : st.bridge === false ? (
           <Box>
-            <Typography variant="caption" sx={{ color: phase === "failed" ? "#a33" : DIM, lineHeight: 1.5, display: "block", mb: 0.75 }}>
+            <Typography variant="caption" sx={{ color: phase === "failed" ? "var(--tq-danger, #a33)" : DIM, lineHeight: 1.5, display: "block", mb: 0.75 }}>
               {phase === "installing" ? (st.node ? "Fetching the bridge's dependency (Baileys, not bundled on purpose). The QR appears here the moment the bridge is up."
                 : `${st.manager?.detail || "Setting up Node.js"} - the bridge starts by itself once it is done.`)
                 : phase === "failed" ? `The bridge could not start: ${st.manager.detail}`
@@ -4339,7 +4339,7 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
         )}
       </Box>
       {!st.connected && st.qr_svg && (
-        <Box component="img" src={st.qr_svg} alt="WhatsApp pairing QR" sx={{ width: 220, height: 220, borderRadius: 1, bgcolor: "#fff", border: `1px solid ${BORDER}` }} />
+        <Box component="img" src={st.qr_svg} alt="WhatsApp pairing QR" sx={{ width: 220, height: 220, borderRadius: 1, bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${BORDER}` }} />
       )}
     </Box>
   );
@@ -4438,7 +4438,7 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
           half of it - so both are Settings -> Phone & chats. This card keeps what is
           genuinely the connector's: the pairing, and what comes in (the owner, 2026-09-17). */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25, py: 0.6, px: 0.8, flexWrap: "wrap",
-        border: `1px solid ${guideJid ? "#c3d2c5" : BORDER}`, borderRadius: 1, bgcolor: guideJid ? "#f2f7f2" : "transparent" }}>
+        border: `1px solid ${guideJid ? "var(--tq-border, #c3d2c5)" : BORDER}`, borderRadius: 1, bgcolor: guideJid ? "var(--tq-panel, #f2f7f2)" : "transparent" }}>
         <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Assistant chat</Typography>
         <Box sx={{ flex: 1, minWidth: 180 }}>
           <Typography variant="caption" sx={{ color: guideJid ? INK : FAINT, fontWeight: guideJid ? 600 : 400, display: "block" }} noWrap>
@@ -4458,17 +4458,17 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
       </Typography>
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 0.75, flexWrap: "wrap" }}>
         <FilterPills options={["All", "People", "Groups"]} value={kind} onChange={setKind} />
-        <TextField size="small" value={q} onChange={(e) => setQ(e.target.value)} sx={{ flex: 1, minWidth: 200, bgcolor: "#fff" }}
+        <TextField size="small" value={q} onChange={(e) => setQ(e.target.value)} sx={{ flex: 1, minWidth: 200, bgcolor: "var(--tq-panel, #fff)" }}
           placeholder="search by name, phone number or group name" />
       </Box>
-      {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
+      {err && <Typography variant="caption" sx={{ color: "var(--tq-danger, #6b2733)", display: "block" }}>✗ {err}</Typography>}
       {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>no reachable chats loaded yet — refresh, or send a message in a direct chat</Typography>}
       {shown.map((r) => (
         <Box key={r.jid} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5, borderBottom: `1px solid ${BORDER}` }}>
           {/* the help text above promises "the row marked Myself" - it used to say "group", because
               that is the shape of the jid WhatsApp gives your own thread */}
           <Chip size="small" label={r.self ? "Myself" : r.group ? "group" : "chat"}
-            sx={{ height: 18, fontSize: 10, ...(r.self ? { bgcolor: "#dfe9e0", fontWeight: 600 } : {}) }} />
+            sx={{ height: 18, fontSize: 10, ...(r.self ? { bgcolor: "var(--tq-inset, #dfe9e0)", fontWeight: 600 } : {}) }} />
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{waLabel(r.jid, r.name)}</Typography>
             {/* the number beside a saved name - a person is known by both; the id is the small grey line under them */}
@@ -4482,7 +4482,7 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
                 {waSaid(r.said, !!src[r.jid]?.Active, timeAgo(r.said?.at))}</Typography>)}
             <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, display: "block", opacity: 0.8 }} noWrap>{r.jid}</Typography>
           </Box>
-          {guideJid === r.jid && <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ assistant chat</Typography>}
+          {guideJid === r.jid && <Typography variant="caption" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ assistant chat</Typography>}
           {adding === r.jid ? <CircularProgress size={14} sx={{ mx: 1.5 }} />
             : <Switch size="small" checked={!!src[r.jid]?.Active} onChange={() => flip(r.jid)}
                 inputProps={{ "aria-label": `${waLabel(r.jid, r.name)} comes in` }} />}
@@ -4557,7 +4557,7 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
       </Typography>
       {signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
-          <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
+          <Typography variant="body2" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
           <Button size="small" variant="outlined" onClick={signout} title="Anything set to run on your ChatGPT account stops until you sign in again - Undo puts it back">Sign out</Button>
         </Box>
       ) : flow ? (
@@ -4571,10 +4571,10 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
         <Box><Button variant="contained" disableElevation disabled={busy} onClick={start}>
           {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Sign in with ChatGPT"}</Button></Box>
       )}
-      {detail && <Typography variant="body2" sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
+      {detail && <Typography variant="body2" sx={{ fontWeight: 600, color: state === "ok" ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>
         {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
       {/* opened again after a failed sign-in: the failure is still said, over the button that tries again (2026-10-20) */}
-      {!detail && !flow && !signedIn && conn.LastError && <Typography variant="body2" sx={{ fontWeight: 600, color: "#6b2733" }}>
+      {!detail && !flow && !signedIn && conn.LastError && <Typography variant="body2" sx={{ fontWeight: 600, color: "var(--tq-danger, #6b2733)" }}>
         ✗ {String(conn.LastError).replace(/\.?\s*$/, ".")} Press Sign in with ChatGPT to try again.</Typography>}
     </Box>
   );
@@ -4600,8 +4600,8 @@ export const MS_AZURE_FREE = "https://azure.microsoft.com/free";
 export const MS_AUDIENCE = "Any Entra ID Tenant + Personal Microsoft accounts";
 const MsOwnApp = ({ conn, cfg, setCfg, copy }) => {
   const install = conn.MsApp === "install" || conn.MsApp === "outlook", steps = !["card", "install", "outlook"].includes(conn.MsApp);
-  const box = { "& .MuiInputBase-root": { bgcolor: "#fff" }, "& .MuiFormHelperText-root": { mx: 0 } };   // white is the box's, not its hint's
-  const code = (t) => <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "#fff", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{t}</Box>;
+  const box = { "& .MuiInputBase-root": { bgcolor: "var(--tq-panel, #fff)" }, "& .MuiFormHelperText-root": { mx: 0 } };   // white is the box's, not its hint's
+  const code = (t) => <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "var(--tq-panel, #fff)", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{t}</Box>;
   return (
     <Box data-tq-ms-own-app="" sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
       {steps && (
@@ -4737,7 +4737,7 @@ export const MsSignIn = ({ conn, cfg, setCfg, reload, onSignedIn, plain = false 
       </Typography>
       {!flow && signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
-          <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
+          <Typography variant="body2" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
           <Button size="small" variant="outlined" onClick={signout}
             title={`${chats ? "Teams chats" : "Mail and calendar"} stop syncing until you sign in again - Undo puts it back. Nothing already here is lost.`}>Sign out</Button>
           {/* choosing it signs in again with the one more permission (or without it) - Microsoft's page opens for it */}
@@ -4771,7 +4771,7 @@ export const MsSignIn = ({ conn, cfg, setCfg, reload, onSignedIn, plain = false 
           </Typography>
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Typography sx={{ ...mono, fontSize: 26, fontWeight: 600, letterSpacing: 3, color: INK, px: 1.5, py: 0.5,
-              bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>{flow.user_code}</Typography>
+              bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>{flow.user_code}</Typography>
             <IconButton size="small" onClick={() => copy(flow.user_code)} title="copy the code"><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
             <Button size="small" variant="contained" disableElevation component="a" href={flow.verification_uri} target="_blank" rel="noreferrer"
               endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}>Open the sign-in page</Button>
@@ -4813,10 +4813,10 @@ export const MsSignIn = ({ conn, cfg, setCfg, reload, onSignedIn, plain = false 
           )}
         </Box>
       )}
-      {detail && <Typography variant="body2" sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
+      {detail && <Typography variant="body2" sx={{ fontWeight: 600, color: state === "ok" ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>
         {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
       {adminUrl && !signedIn && (
-        <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", display: "flex", flexDirection: "column", gap: 0.5 }}>
+        <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)", display: "flex", flexDirection: "column", gap: 0.5 }}>
           <Typography variant="body2" sx={{ fontWeight: 600, color: INK }}>Approval link for your Microsoft 365 admin</Typography>
           <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
             Forward this to whoever runs your Microsoft 365. They open the link, sign in, and click Accept - once, for everyone in your
@@ -4883,8 +4883,8 @@ const ProcessingStep = ({ conn, reload, n }) => {
         {MODES.map(([v, title, desc]) => (
           <Box key={v} onClick={() => set(v)}
             sx={{ p: 1.25, borderRadius: 2, cursor: "pointer", bgcolor: PANEL,
-              border: `${mode === v ? 1.5 : 1}px solid ${mode === v ? "#6f8a6e" : BORDER}`,
-              "&:hover": { borderColor: "#6f8a6e" } }}>
+              border: `${mode === v ? 1.5 : 1}px solid ${mode === v ? "var(--tq-border-strong, #6f8a6e)" : BORDER}`,
+              "&:hover": { borderColor: "var(--tq-border-strong, #6f8a6e)" } }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
               <Radio size="small" checked={mode === v} sx={{ p: 0 }} />
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{title}</Typography>
@@ -4939,7 +4939,7 @@ const CombineStep = ({ conn, n }) => {
         </Box>
       </Box>
       <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5 }}>{SAYS[level]} {ALWAYS}</Typography>
-      {err && <Typography variant="caption" sx={{ color: "#a33", display: "block" }}>{err}</Typography>}
+      {err && <Typography variant="caption" sx={{ color: "var(--tq-danger, #a33)", display: "block" }}>{err}</Typography>}
     </Box>
   );
 };
@@ -4985,7 +4985,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
             return (
               <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
                 <Typography sx={{ ...mono, color: INK, flex: 1, fontSize: 13 }} noWrap>{s.Address}</Typography>
-                {gc.private === false && <Chip size="small" label="public" sx={{ height: 18, fontSize: 9.5, bgcolor: "#f1e1da", color: "#6b2733" }} />}
+                {gc.private === false && <Chip size="small" label="public" sx={{ height: 18, fontSize: 9.5, bgcolor: "var(--tq-tint-brass, #f1e1da)", color: "var(--tq-danger, #6b2733)" }} />}
                 {["issues", "prs", "auto"].map((kind) => (
                   <Select key={kind} size="small" value={githubInboundValue(gc, roles, kind)}
                     sx={{ fontSize: 11.5, height: 26, ".MuiSelect-select": { py: 0.4 } }}
@@ -5031,7 +5031,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
           {prompts.map(([key, label, hint]) => (
             <TextField key={key} fullWidth multiline minRows={2} label={label} helperText={hint}
               value={cfg[key] || ""} onChange={(e) => setPrompt(key, e.target.value)}
-              sx={{ bgcolor: "#fff", mt: 1.5 }} />
+              sx={{ bgcolor: "var(--tq-panel, #fff)", mt: 1.5 }} />
           ))}
         </Box>
       )}
@@ -5058,7 +5058,7 @@ const Steps = ({ steps }) => (
   <Box sx={{ maxWidth: 720, mx: "auto" }}>
     {steps.map((step, i) => (
       <Box key={i} sx={{ display: "flex", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
-        <Box sx={{ ...mono, width: 24, height: 24, borderRadius: "50%", bgcolor: "#eae4d8", color: "#55697a",
+        <Box sx={{ ...mono, width: 24, height: 24, borderRadius: "50%", bgcolor: "var(--tq-inset, #eae4d8)", color: "var(--tq-link, #55697a)",
           fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</Box>
         <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{step}</Typography>
       </Box>
@@ -5105,8 +5105,8 @@ export const TeamsAccount = ({ conn, cfg, setCfg, reload }) => {
       ))}
       {kind === "personal" && <>
         <Typography variant="body2" data-tq-teams-web-note="" sx={{ color: DIM }}>{TEAMS_WEB_NOTE}</Typography>
-        {out && <Typography variant="body2" role="alert" sx={{ color: "#6b2733" }}>Signed out of Teams. Sign in again to keep reading your chats.</Typography>}
-        {changed && <Typography variant="body2" role="alert" sx={{ color: "#6b2733" }}>Teams' page changed; reading stopped.</Typography>}
+        {out && <Typography variant="body2" role="alert" sx={{ color: "var(--tq-danger, #6b2733)" }}>Signed out of Teams. Sign in again to keep reading your chats.</Typography>}
+        {changed && <Typography variant="body2" role="alert" sx={{ color: "var(--tq-danger, #6b2733)" }}>Teams' page changed; reading stopped.</Typography>}
         <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
           {!sid && <Button size="small" variant="contained" disableElevation onClick={signIn} disabled={!!busy}>
             {busy === "signin" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : out || conn.LastSyncAt ? "Sign in again" : "Sign in"}</Button>}
@@ -5116,7 +5116,7 @@ export const TeamsAccount = ({ conn, cfg, setCfg, reload }) => {
         </Box>
         {sid && <Box sx={{ height: 460, border: `1px solid ${BORDER}`, borderRadius: 1, overflow: "hidden" }}><BrowserPane sid={sid} /></Box>}
       </>}
-      {said && <Typography variant="body2" sx={{ color: said.ok ? DIM : "#6b2733" }}>{said.ok ? "✓ " : "✗ "}{said.detail}</Typography>}
+      {said && <Typography variant="body2" sx={{ color: said.ok ? DIM : "var(--tq-danger, #6b2733)" }}>{said.ok ? "✓ " : "✗ "}{said.detail}</Typography>}
     </Box>
   );
 };

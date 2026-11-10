@@ -16,7 +16,7 @@ export default function SharedLinks() {
     catch (e) { setErr(e?.response?.data?.detail || "That link was not revoked - try again."); }
     finally { setBusy(0); }
   };
-  if (err) return <Typography variant="body2" role="alert" sx={{ color: "#a33b3b", py: 1.5 }}>{err}</Typography>;
+  if (err) return <Typography variant="body2" role="alert" sx={{ color: "var(--tq-danger, #a33b3b)", py: 1.5 }}>{err}</Typography>;
   if (!rows?.length) return null;
   return (
     <Box data-tq-shared-links="" sx={{ py: 1.5 }}>

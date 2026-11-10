@@ -82,7 +82,7 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
 test("the tabs look pressable: an arrow, a pointer, a hover tint, a focus ring - the live drawer's and the sections' alike", () => {
   const src = taskSource(), tab = src.slice(src.indexOf("const DRAWER_TAB"), src.indexOf("\n\n", src.indexOf("const DRAWER_TAB")));
   assert.match(tab, /cursor: "pointer"/);
-  assert.match(tab, /"&:hover": \{ bgcolor: lit \? "#46586a" : "#f3efe9" \}/);
+  assert.match(tab, /"&:hover": \{ bgcolor: lit \? "#46586a" : "var\(--tq-inset, #f3efe9\)" \}/);
   assert.match(tab, /"&:focus-visible": \{ outline: `2px solid \$\{lit \? INK : ACCENT\}`/);
   // ...lit, it is filled in the accent and peeks out once - never for a reader who asked for no motion
   assert.match(tab, /bgcolor: lit \? ACCENT :/);
@@ -94,7 +94,7 @@ test("the tabs look pressable: an arrow, a pointer, a hover tint, a focus ring -
   const sec = src.slice(src.indexOf("const SECTION_TAB"), src.indexOf("// ...the TAB each drawer folds to"));
   assert.match(sec, /appearance: "none", font: "inherit", cursor: "pointer"/);
   assert.doesNotMatch(sec, /writingMode/, "horizontal words");
-  assert.match(sec, /"&:hover": \{ bgcolor: "#f8f6f2" \}/);
+  assert.match(sec, /"&:hover": \{ bgcolor: "var\(--tq-panel, #f8f6f2\)" \}/);
   assert.match(sec, /"&:focus-visible": \{ outline: `2px solid \$\{ACCENT\}`/);
   assert.match(src, /<Box component="button" type="button" data-tq-section-tab=\{sec\.key\}/);
   // ...its lines whole or not drawn, as many as the room holds and none skipped: never a fixed count, never squeezed to a sliver

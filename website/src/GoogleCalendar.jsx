@@ -79,7 +79,7 @@ export function GoogleCalendar({ conn, cfg, reload }) {
         <Box><Button variant="contained" disableElevation disabled={busy || !can} onClick={start}>
           {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : G_CAL}</Button></Box>
       )}
-      {detail && <Typography variant="body2" role={state === "ok" ? undefined : "alert"} sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
+      {detail && <Typography variant="body2" role={state === "ok" ? undefined : "alert"} sx={{ fontWeight: 600, color: state === "ok" ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>
         {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
     </Box>
   );

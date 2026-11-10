@@ -348,11 +348,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 endAdornment: query ? <InputAdornment position="end"><IconButton size="small" aria-label="Clear task search"
                   onClick={() => setQuery("")}><CloseIcon sx={{ fontSize: 15 }} /></IconButton></InputAdornment> : null,
               }}
-              sx={{ "& .MuiOutlinedInput-root": { bgcolor: "#fff", fontSize: 12.5 } }} />
+              sx={{ "& .MuiOutlinedInput-root": { bgcolor: "var(--tq-panel, #fff)", fontSize: 12.5 } }} />
           </Box>
           {/* rows as separated cards on a soft ground - air between tasks instead of a ruled
               ledger, selection said with the border alone. Scandinavian: fewer lines, calmer. */}
-          <Box sx={{ overflowY: "auto", flex: 1, bgcolor: "#f1ede7", px: 1, py: 1 }}>
+          <Box sx={{ overflowY: "auto", flex: 1, bgcolor: "var(--tq-inset, #f1ede7)", px: 1, py: 1 }}>
             {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !shown.length && !nOlder
               ? <Empty>{search ? `No tasks match “${search}”.`
                 : !tasks.length ? "No tasks yet — they arrive on your work rail as work comes in, or start one with New."
@@ -369,11 +369,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
               <Box key={task.TaskId} onClick={() => onSelect(task.TaskId)} data-tq-task-row=""
                 // the one shown is unmistakable: 2px ring + a wash of its colour (2026-09-28: "barely tell which task is shown")
                 sx={{ px: 1.25, py: 0.9, mb: 0.75, cursor: "pointer", borderRadius: 1.75,
-                  bgcolor: sel ? `color-mix(in srgb, ${st.solid} 9%, #fff)` : "#fff",
+                  bgcolor: sel ? `color-mix(in srgb, ${st.solid} 9%, var(--tq-panel, #fff))` : "var(--tq-panel, #fff)",
                   border: sel ? `2px solid ${st.solid}` : `1px solid ${BORDER}`, borderLeft: `${sel ? 5 : 3}px solid ${st.solid}`,
                   boxShadow: sel ? `0 2px 12px color-mix(in srgb, ${st.solid} 28%, transparent)` : "none",
                   transition: "border-color .12s, box-shadow .12s",
-                  "&:hover": { borderColor: sel ? st.solid : "#d8cfbe", borderLeftColor: st.solid } }}>
+                  "&:hover": { borderColor: sel ? st.solid : "var(--tq-border, #d8cfbe)", borderLeftColor: st.solid } }}>
                 {/* THE TITLE FIRST. It used to come third, under as many as five chips - ref, kind,
                     task phase, state, agent - which wrap to two lines on a 372px rail, so the one
                     line that says what the task IS was the last thing read (the owner, 2026-09-16).
@@ -394,7 +394,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     header carried. */}
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", mt: 0.4, minWidth: 0 }}>
                   <Typography noWrap sx={{ color: FAINT, fontSize: 10.5, flex: 1, minWidth: 0 }}>
-                    <Box component="span" data-tq-task-ref="" sx={{ color: "#55697a", fontWeight: 600,
+                    <Box component="span" data-tq-task-ref="" sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600,
                       fontVariantNumeric: "tabular-nums", letterSpacing: ".015em" }}>{task.ref}</Box>
                     {` · ${shortKind(task.Kind)}`}{worker ? ` · ${worker}` : ""}
                   </Typography>
@@ -415,7 +415,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     stays two lines, so the rail does not pay for this everywhere */}
                 {/* A START THAT FAILED says so on the row, with the error (T10) - it said "starts by itself when it can" */}
                 {task.State === "queued" && task.Queued?.state === "failed" && (
-                  <Typography noWrap title={task.Queued.lastError || ""} sx={{ fontSize: 10.5, mt: 0.45, color: ALERT, fontWeight: 600 }}>
+                  <Typography noWrap title={task.Queued.lastError || ""} sx={{ fontSize: 10.5, mt: 0.45, color: "var(--tq-danger, #8a3646)", fontWeight: 600 }}>
                     couldn't start{task.Queued.lastError ? `: ${task.Queued.lastError}` : ""}{task.Queued.permanent ? " - a setup problem, Start won't fix it" : ""}
                   </Typography>
                 )}
@@ -430,16 +430,16 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     </Typography>
                   </Box>
                 )}
-                {task.Playbook && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>
+                {task.Playbook && <Typography variant="caption" noWrap sx={{ color: "var(--tq-warning, #6b5f45)", display: "block", mt: 0.2 }}>
                   Playbook · {task.Playbook.title}
                 </Typography>}
                 {!task.Playbook && task.Source === "report" && task.SearchSources
-                  && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>
+                  && <Typography variant="caption" noWrap sx={{ color: "var(--tq-warning, #6b5f45)", display: "block", mt: 0.2 }}>
                     Report · {String(task.SearchSources).split(",")[0]}
                   </Typography>}
                 {/* a workflow run says it is one, and who started it - its clock, your Run now, the assistant, your phone (workflows.run) */}
                 {!task.Playbook && isWorkflowRun(task)
-                  && <Typography variant="caption" noWrap data-tq-workflow-run="" sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>
+                  && <Typography variant="caption" noWrap data-tq-workflow-run="" sx={{ color: "var(--tq-warning, #6b5f45)", display: "block", mt: 0.2 }}>
                     Workflow{startedBy(task) ? ` · started by ${startedBy(task)}` : ""}
                   </Typography>}
                 {search && <Typography variant="caption" noWrap sx={{ color: FAINT, display: "block", mt: 0.2 }}>

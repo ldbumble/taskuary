@@ -10,7 +10,7 @@ import { plural } from "./timeWords.js";
 
 const DOT = { repaired: "#a58bb5", ok: ROLES.done.solid, failed: ALERT, waiting: ROLES.working.solid, dry: "#8a9bab", skipped: "#cfc9bf" };
 export const Dot = ({ status }) => <Box component="span" title={STATUS[status] || status}
-  sx={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", flexShrink: 0, bgcolor: DOT[status] || "#cfc9bf" }} />;
+  sx={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", flexShrink: 0, bgcolor: DOT[status] || "var(--tq-inset, #cfc9bf)" }} />;
 
 // what a step came back with - from a test, or the last run
 export function StepResult({ rec, compact }) {
@@ -25,7 +25,7 @@ export function StepResult({ rec, compact }) {
       </Typography>
       {rec.error && <Typography variant="caption" sx={{ display: "block", color: ALERT_INK, mt: 0.25, whiteSpace: "pre-wrap" }}>{rec.error}</Typography>}
       {rec.why && rec.status !== "failed" && <Typography variant="caption" sx={{ display: "block", color: DIM, mt: 0.25 }}>why · {rec.why}</Typography>}
-      {(rec.warnings || []).map((w) => <Typography key={w} variant="caption" sx={{ display: "block", color: "#7a5b2f", mt: 0.25 }}>⚠ {w}</Typography>)}
+      {(rec.warnings || []).map((w) => <Typography key={w} variant="caption" sx={{ display: "block", color: "var(--tq-warning, #7a5b2f)", mt: 0.25 }}>⚠ {w}</Typography>)}
       {rec.body && <Box component="pre" sx={{ ...mono, fontSize: 11, lineHeight: 1.45, color: INK, whiteSpace: "pre-wrap", wordBreak: "break-word",
         bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1, p: 1, m: 0, mt: 0.6, maxHeight: compact ? 180 : 260, overflow: "auto" }}>{rec.body}</Box>}
     </Box>
@@ -55,7 +55,7 @@ export default function RunSteps({ steps, onFix, fixing, dense, repairs }) {
           startIcon={fixing ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 12, py: 0.1 }}>{btnLabel("fix")}</Button>}
       </Box>
       {(repairs || []).map((x, k) => (
-        <Box key={k} data-tq-self-repair="" sx={{ mb: 0.6, px: 1, py: 0.6, borderRadius: 1, border: "1px solid #ddd0e5", bgcolor: "#f7f3f9" }}>
+        <Box key={k} data-tq-self-repair="" sx={{ mb: 0.6, px: 1, py: 0.6, borderRadius: 1, border: "1px solid var(--tq-border, #ddd0e5)", bgcolor: "var(--tq-panel, #f7f3f9)" }}>
           <Typography variant="caption" sx={{ display: "flex", alignItems: "baseline", gap: 1, color: INK, flexWrap: "wrap" }}>
             <Box component="span" sx={{ fontWeight: 600 }}>Repaired itself · {x.label}</Box>
             <Box component="span" sx={{ color: DIM, flex: 1, minWidth: 160 }}>{x.why}</Box>

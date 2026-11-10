@@ -12,7 +12,7 @@ const subjectOf = new Function(`return ${body}`)();
 
 test("the subject rides over a mail's words, bold, and its whole words stay on hover", () => {
   assert.match(ws, /\{!!subjectOf\(x, all\[i - 1\]\) && <span className="tq-aui-arrived-subject" dir="auto">\{x\.subject\}<\/span>\}\n\s*\{!!mailWords\(x\) && <span className="tq-aui-arrived-words" dir="auto" title=\{x\.words\}>/);
-  assert.match(css, /\.tq-aui-arrived-subject \{ color: #2b2925; font-weight: 600;/);
+  assert.match(css, /\.tq-aui-arrived-subject \{ color: var\(--tq-text, #2b2925\); font-weight: 600;/);
 });
 
 test("the subject is said once a run, never over a chat line, the owner's own, or words that are only it", () => {

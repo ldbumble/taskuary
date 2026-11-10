@@ -43,6 +43,7 @@ function fromPicture(file) {
   });
 }
 
+// Signatures keep paper under their fixed export ink, including transparent saved PNGs.
 function Pad({ onSave, onCancel, busy }) {
   const ref = useRef(null), last = useRef(null), [ink, setInk] = useState(false);
   useEffect(() => {
@@ -129,7 +130,7 @@ export default function HandSignature() {
           <input ref={file} type="file" accept="image/png,image/jpeg" hidden onChange={upload} data-tq-hand-signature-file="" />
         </Box>
       )}
-      {err && <Typography role="alert" sx={{ color: "#a33b3b", fontSize: 12.5, mt: 1 }}>{err}</Typography>}
+      {err && <Typography role="alert" sx={{ color: "var(--tq-danger, #a33b3b)", fontSize: 12.5, mt: 1 }}>{err}</Typography>}
     </Box>
   );
 }

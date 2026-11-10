@@ -81,7 +81,7 @@ export function PdfView({ file, onClose, sx }) {
   }, [file.url]);
   return (
     // spans throughout: it also opens under a link inside a paragraph of an answer (md.jsx)
-    <Box component="span" data-tq-pdf-view={file.name || ""} sx={{ display: "block", mt: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", overflow: "hidden", ...sx }}>
+    <Box component="span" data-tq-pdf-view={file.name || ""} sx={{ display: "block", mt: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)", overflow: "hidden", ...sx }}>
       <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 1, px: 1, py: 0.4, bgcolor: PANEL2, borderBottom: `1px solid ${BORDER}` }}>
         <Typography variant="caption" sx={{ color: INK, fontWeight: 600, flex: 1, minWidth: 0 }} noWrap title={file.name}>{file.name}</Typography>
         {!!file.size && <Typography variant="caption" sx={{ color: FAINT }}>{kb(file.size)}</Typography>}
@@ -166,9 +166,9 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
       // slate, 11.5px and a real target: the sage at 10.5px read 3.8:1 on the card and its hit box was 17px tall (the 2026-10-07
       // design pass)
       sx={{ appearance: "none", border: 0, bgcolor: "transparent", px: 0, py: 0.6,
-        color: err ? FAINT : "#41525f", cursor: busy ? "default" : "pointer", display: "inline-flex",
+        color: err ? FAINT : "var(--tq-link, #41525f)", cursor: busy ? "default" : "pointer", display: "inline-flex",
         alignItems: "center", gap: 0.4, mt: 0.2, fontSize: 11.5, textDecoration: "underline", textDecorationColor: "#c7d2dc",
-        textUnderlineOffset: "3px", "&:hover": { color: err ? FAINT : "#2f3d48", textDecorationColor: "currentColor" } }}>
+        textUnderlineOffset: "3px", "&:hover": { color: err ? FAINT : "var(--tq-link, #2f3d48)", textDecorationColor: "currentColor" } }}>
       {busy ? <CircularProgress size={10} /> : <AttachFileIcon sx={{ fontSize: 12 }} />}
       {err || "look for attachments on this mail"}
     </Typography>
@@ -189,8 +189,8 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
             <Box key={a.id} component="button" type="button" onClick={() => setBig(a)}
               title={`${a.name} · ${kb(a.size)} — click to enlarge`}
               sx={{ appearance: "none", p: 0, border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden", cursor: "zoom-in",
-                bgcolor: "#fff", alignSelf: "flex-start", maxWidth: "100%",
-                "&:hover": { borderColor: "#d8cfbe" } }}>
+                bgcolor: "var(--tq-panel, #fff)", alignSelf: "flex-start", maxWidth: "100%",
+                "&:hover": { borderColor: "var(--tq-border, #d8cfbe)" } }}>
               <Box component="img" src={attUrl(a)} alt={a.name}
                 sx={{ display: "block", maxHeight: dense ? 150 : 420, maxWidth: "100%", objectFit: "contain" }} />
             </Box>
@@ -205,7 +205,7 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
             <Box key={a.id} sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: PANEL2,
               px: 0.9, py: 0.7, maxWidth: 420 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.4 }}>
-                <GraphicEqIcon sx={{ fontSize: 13, color: "#6f8a6e" }} />
+                <GraphicEqIcon sx={{ fontSize: 13, color: "var(--tq-success, #6f8a6e)" }} />
                 <Typography variant="caption" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap title={a.name}>{clipName(a)}</Typography>
                 <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5 }}>{kb(a.size)}</Typography>
                 <Box component="a" href={attUrl(a, true)} title="save the audio"
@@ -233,7 +233,7 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
               target="_blank" rel={a.link || !a.url ? "noopener noreferrer" : "noopener"} title={titleOf(a, original)}
               aria-expanded={!a.link && a.url && isPdf(a) ? pdf?.id === a.id : undefined}
               onClick={!a.link && a.url ? (e) => { e.preventDefault(); isPdf(a) ? setPdf(pdf?.id === a.id ? null : a) : save(a); } : undefined}
-              icon={<Typography component="span" variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 600, color: "#55697a", flexShrink: 0 }}>{kindOf(a)}</Typography>}
+              icon={<Typography component="span" variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 600, color: "var(--tq-link, #55697a)", flexShrink: 0 }}>{kindOf(a)}</Typography>}
               /* ...and a file it could not keep says so on the chip, not only on hover */
               note={a.link ? (a.note ? "not read" : "") : a.url ? kb(a.size) : original ? "in the original" : "not saved"}
               sx={{ opacity: hrefOf(a, original) ? 1 : 0.6, cursor: hrefOf(a, original) ? "pointer" : "default" }} />

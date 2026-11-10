@@ -20,11 +20,11 @@ export default function HeldStart({ taskId, line, onChanged }) {
       sx={{ fontSize: 12.5, minHeight: 30, textTransform: "none" }}>{busy === (trust ? "trust" : "once") ? "Starting…" : label}</Button>);
   return (
     <Box data-tq-held-start="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
-      <Typography sx={{ fontSize: 13.5, color: "#292824" }}>{line}</Typography>
+      <Typography sx={{ fontSize: 13.5, color: "var(--tq-text, #292824)" }}>{line}</Typography>
       <Box sx={{ display: "flex", gap: 1, mt: 0.75, flexWrap: "wrap" }}>
         {btn(false, "Run anyway", { variant: "contained", "data-tq-run-anyway": "" })}
         {btn(true, "Trust sender", { variant: "outlined", "data-tq-trust-sender": "" })}
       </Box>
-      {err && <Typography variant="caption" sx={{ display: "block", color: ALERT, mt: 0.5 }}>{err}</Typography>}
+      {err && <Typography variant="caption" sx={{ display: "block", color: "var(--tq-danger, #8a3646)", mt: 0.5 }}>{err}</Typography>}
     </Box>);
 }

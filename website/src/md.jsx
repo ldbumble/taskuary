@@ -33,10 +33,10 @@ export function LinkDialog({ url, onClose }) {
       </DialogTitle>
       <DialogContent dividers sx={{ p: 0, display: "flex", flexDirection: "column" }}>
         <iframe src={url} title={url} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" referrerPolicy="no-referrer"
-          style={{ border: 0, width: "100%", height: "70vh", background: "#fff" }} />
+          style={{ border: 0, width: "100%", height: "70vh", background: "var(--tq-panel, #fff)" }} />
         <Box data-tq-link-blank="" sx={{ px: 1.5, py: 0.75, fontSize: 12, color: DIM, borderTop: `1px solid ${BORDER}` }}>
           If it stays blank, this site won't show inside Taskuary - <Box component="button" type="button" onClick={out}
-            sx={{ border: 0, p: 0, bgcolor: "transparent", color: "#55697a", fontWeight: 600, cursor: "pointer", font: "inherit" }}>Open in browser</Box>
+            sx={{ border: 0, p: 0, bgcolor: "transparent", color: "var(--tq-link, #55697a)", fontWeight: 600, cursor: "pointer", font: "inherit" }}>Open in browser</Box>
         </Box>
       </DialogContent>
     </Dialog>
@@ -65,7 +65,7 @@ const A = ({ href, children, onTask }) => {
   const pop = React.useContext(LinkPop), web = !!pop && road === "outside" && isWebLink(href);
   if (file) href = attUrl({ url: own }, true);
   return (<>
-    <a href={href} target={road === "outside" ? "_blank" : undefined} data-tq-file-link={file ? "" : undefined} data-tq-web-link={web ? "" : undefined} aria-expanded={pdf ? view : undefined} data-tq-road={road} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
+    <a href={href} target={road === "outside" ? "_blank" : undefined} data-tq-file-link={file ? "" : undefined} data-tq-web-link={web ? "" : undefined} aria-expanded={pdf ? view : undefined} data-tq-road={road} rel="noreferrer" style={{ color: "var(--tq-link, #55697a)", fontWeight: 600, textDecoration: "none" }}
       data-tq-task-link={m ? m[1] : undefined}
       onClick={(e) => {
         if (m) { e.preventDefault(); if (onTask) onTask(Number(m[1])); else openAppLink(`task=${m[1]}`); }
@@ -119,7 +119,7 @@ const LocalPath = ({ f, children }) => {
   const [big, setBig] = React.useState(false), src = attUrl({ url: f.url });
   return (<>
     {/* ...a picture opens over the chat; any other file as a link to a file does (A: saved, a PDF read under it) */}
-    {f.image ? <a href={src} data-tq-file-link="" onClick={(e) => { e.preventDefault(); setBig(true); }} style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}>
+    {f.image ? <a href={src} data-tq-file-link="" onClick={(e) => { e.preventDefault(); setBig(true); }} style={{ color: "var(--tq-link, #55697a)", fontWeight: 600, textDecoration: "none" }}>
       <code data-tq-local-path={f.rel}>{children}</code></a>
       : <A href={f.url}><code data-tq-local-path={f.rel}>{children}</code></A>}
     {f.image && <span data-tq-local-picture="" style={{ display: "block", margin: "4px 0 6px" }}>

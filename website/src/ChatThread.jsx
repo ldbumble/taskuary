@@ -49,7 +49,7 @@ export default function ChatThread({ messages = [], maxHeight = 460 }) {
   const list = [...messages].sort((a, b) => tsMs(b.SentAt) - tsMs(a.SentAt));
   return (
     <Box data-tq-chat-thread="" sx={{ mt: 0.85, width: "100%", maxWidth: 800, mx: "auto", boxSizing: "border-box", maxHeight, overflowY: "auto", px: 1, py: 0.75,
-      borderRadius: 2, bgcolor: "#ece8e1", display: "flex", flexDirection: "column", gap: 0.35 }}>
+      borderRadius: 2, bgcolor: "var(--tq-inset, #ece8e1)", display: "flex", flexDirection: "column", gap: 0.35 }}>
       {list.map((m, i) => {
         const me = mine(m), prev = list[i - 1];
         const newDay = !prev || dayOf(prev.SentAt) !== dayOf(m.SentAt);
@@ -58,7 +58,7 @@ export default function ChatThread({ messages = [], maxHeight = 460 }) {
         const hasFiles = typeof m.MessageId === "number";
         return (
           <React.Fragment key={m.MessageId}>
-            {newDay && <Typography sx={{ alignSelf: "center", fontSize: 10.5, color: FAINT, bgcolor: "#ece6dc", px: 1, py: 0.1,
+            {newDay && <Typography sx={{ alignSelf: "center", fontSize: 10.5, color: FAINT, bgcolor: "var(--tq-inset, #ece6dc)", px: 1, py: 0.1,
               borderRadius: 99, my: 0.3 }}>{dayLabel(m.SentAt)}</Typography>}
             {/* the conversation is a centred column, its own line around it - theirs and yours a reading distance apart, not the two
                 edges of a wide window (the owner, 2026-10-15: "center them in the chat ... make line around the chat that is centered
@@ -68,7 +68,7 @@ export default function ChatThread({ messages = [], maxHeight = 460 }) {
               <Box title={me ? undefined : m.FromName || m.FromEmail || undefined}
                 sx={{ maxWidth: { xs: "88%", md: "min(86%, 640px)" }, minWidth: 0, px: 1.1, py: 0.45, borderRadius: 2,
                 borderTopLeftRadius: !me && newRun ? 4 : undefined, borderTopRightRadius: me && newRun ? 4 : undefined,
-                bgcolor: me ? "#dfe9df" : "#fff", border: `1px solid ${me ? "#cddccd" : BORDER}`,
+                bgcolor: me ? "var(--tq-inset, #dfe9df)" : "var(--tq-panel, #fff)", border: `1px solid ${me ? "var(--tq-border, #cddccd)" : BORDER}`,
                 color: INK, fontSize: 13.5, lineHeight: 1.45, overflowWrap: "anywhere" }}>
                 <Box component="span" sx={{ whiteSpace: "pre-wrap" }}>
                   {newRun && !me && <Box component="span" sx={{ fontWeight: 600, mr: 0.75 }}>{firstName(m)}</Box>}

@@ -3,37 +3,37 @@
 .tq-aui-tool-running .tq-aui-tool-dot { background: #c99b42; animation: tqAuiPulse 1.2s ease-in-out infinite; }
 .tq-aui-tool-error .tq-aui-tool-dot { background: #9a4e53; }
 /* the kind's mark (AgentStepRows ICON): small, the step's own grey; a failed one in the failure's colour, a held one waiting */
-.tq-aui-step-icon { font-size: 14px !important; flex: 0 0 14px; color: #8b877e; }
-.tq-aui-tool-error .tq-aui-step-icon { color: #9a4e53; }
-.tq-aui-tool-held .tq-aui-step-icon, .tq-aui-tool-running .tq-aui-step-icon { color: #a8842f; }
-.tq-aui-step-spin { flex: 0 0 auto; color: #a8842f !important; }
+.tq-aui-step-icon { font-size: 14px !important; flex: 0 0 14px; color: var(--tq-muted, #8b877e); }
+.tq-aui-tool-error .tq-aui-step-icon { color: var(--tq-danger, #9a4e53); }
+.tq-aui-tool-held .tq-aui-step-icon, .tq-aui-tool-running .tq-aui-step-icon { color: var(--tq-warning, #a8842f); }
+.tq-aui-step-spin { flex: 0 0 auto; color: var(--tq-warning, #a8842f) !important; }
 /* held for the owner's yes (agentSteps `held`): the waiting colour, still - nothing failed */
 .tq-aui-tool-held .tq-aui-tool-dot { background: #c99b42; }
 /* WHAT IT DID, as plain lines (agentSteps.js): its own words in the answer's type, and one quiet row per thing it did. A row opens
    on the raw call behind it - kept for debugging, never the first thing read. */
 .tq-aui-steps { margin: 0 0 12px; display: flex; flex-direction: column; gap: 1px; }
-.tq-aui-said { margin: 2px 0 6px; color: #4d514b; }
+.tq-aui-said { margin: 2px 0 6px; color: var(--tq-secondary, #4d514b); }
 .tq-aui-said p { margin: 0 0 4px; }
 .tq-aui-step { margin: 0; border-radius: 7px; }
 .tq-aui-step summary, .tq-aui-step-line { min-height: 24px; padding: 2px 6px; display: flex; align-items: center; gap: 8px; list-style: none;
-  font-size: 12.5px; line-height: 1.4; color: #5d6158; }
+  font-size: 12.5px; line-height: 1.4; color: var(--tq-secondary, #5d6158); }
 .tq-aui-step summary { cursor: pointer; }
 .tq-aui-step summary::-webkit-details-marker { display: none; }
-.tq-aui-step summary::after { content: "▸"; margin-left: auto; padding-left: 8px; color: #aaa59b; font-size: 11px; }
+.tq-aui-step summary::after { content: "▸"; margin-left: auto; padding-left: 8px; color: var(--tq-muted, #aaa59b); font-size: 11px; }
 .tq-aui-step[open] summary::after { content: "▾"; }
-.tq-aui-step summary:hover { background: #f4f1ea; }
-.tq-aui-step summary:hover::after { color: #858078; }
+.tq-aui-step summary:hover { background: var(--tq-inset, #f4f1ea); }
+.tq-aui-step summary:hover::after { color: var(--tq-muted, #858078); }
 .tq-aui-step summary span:not(.tq-aui-tool-dot), .tq-aui-step-line span:not(.tq-aui-tool-dot) { overflow-wrap: anywhere; word-break: break-word; }
-.tq-aui-step em { color: #8a6d1f; font-size: 11px; font-style: normal; white-space: nowrap; }
-.tq-aui-step.tq-aui-tool-error em { color: #9a4e53; }
+.tq-aui-step em { color: var(--tq-warning, #8a6d1f); font-size: 11px; font-style: normal; white-space: nowrap; }
+.tq-aui-step.tq-aui-tool-error em { color: var(--tq-danger, #9a4e53); }
 /* ...a step the agent retried and got through (agentSteps `recovered`): a quiet note, never the failure's red */
-.tq-aui-step.tq-aui-tool-recovered em, .tq-aui-step.tq-aui-tool-none em { color: #858078; }
-.tq-aui-step-thought summary, .tq-aui-step-thought .tq-aui-step-line { font-style: italic; color: #858078; }
+.tq-aui-step.tq-aui-tool-recovered em, .tq-aui-step.tq-aui-tool-none em { color: var(--tq-muted, #858078); }
+.tq-aui-step-thought summary, .tq-aui-step-thought .tq-aui-step-line { font-style: italic; color: var(--tq-muted, #858078); }
 .tq-aui-step pre { margin: 2px 0 6px 21px; padding: 8px 10px; max-height: 220px; overflow-x: hidden; overflow-y: auto; border-radius: 7px;
-  background: #22231f; color: #e8e4dc; font: 10.5px/1.45 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-.tq-aui-note { margin: 0 0 4px; padding: 2px 6px; color: #858078; font-size: 11.5px; }
-.tq-aui-note-error { color: #9a4e53; }
+  background: #22231f; color: var(--tq-muted, #e8e4dc); font: 10.5px/1.45 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.tq-aui-note { margin: 0 0 4px; padding: 2px 6px; color: var(--tq-muted, #858078); font-size: 11.5px; }
+.tq-aui-note-error { color: var(--tq-danger, #9a4e53); }
 @keyframes tqAuiPulse { 50% { opacity: .3; } }
 /* a helper's own steps, under its row (agentSteps kids) */
-.tq-aui-helper-steps { margin: 2px 0 4px 18px; padding-left: 8px; border-left: 2px solid #e6e0d4; }
+.tq-aui-helper-steps { margin: 2px 0 4px 18px; padding-left: 8px; border-left: 2px solid var(--tq-border, #e6e0d4); }
 [data-tq-step-alongside] { margin-right: 6px; }

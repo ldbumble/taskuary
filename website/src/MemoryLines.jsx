@@ -40,7 +40,7 @@ export default function MemoryLines() {
       {!groups.length && <Typography variant="body2" sx={{ color: FAINT, fontSize: 13 }}>Nothing learned yet.</Typography>}
       {groups.map((sec) => (
         <Box key={sec.slug} data-tq-memory-section={sec.slug} sx={{ display: "flex", flexDirection: "column" }}>
-          <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#55697a", mb: 0.5 }}>{sec.title}</Typography>
+          <Typography sx={{ fontSize: 12, fontWeight: 600, color: "var(--tq-link, #55697a)", mb: 0.5 }}>{sec.title}</Typography>
           {sec.lines.map((l) => {
             const words = sentence(l.text), from = provenance(l);
             if (!words) return null;

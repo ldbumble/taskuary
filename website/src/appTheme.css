@@ -1,0 +1,4 @@
+html { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
+/* Native controls and selection share the page's palette, including portals and crash screens. */
+html[data-theme="dark"] ::selection { background: #526779; color: #eeeae3; }

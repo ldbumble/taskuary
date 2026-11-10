@@ -118,7 +118,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   // setup the whole thing doesn't work"): a no_ai pick lights nothing there
   return (
     <>
-    {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
+    {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "var(--tq-canvas, #f6f4f1)" }} />}
     {/* focusable, not in the Tab order: a search pick hands focus here, to what it opened (SearchEverything focusDrawn) */}
     <Box ref={box} data-tq-canvas-item={card.key} data-tq-pinned={pin ? "" : undefined} tabIndex={-1}
       sx={{ height: h, display: "flex", flexDirection: "column", minWidth: 0, scrollMarginTop: 0, outline: "none",

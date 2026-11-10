@@ -147,7 +147,7 @@ export default function SkillImport({ onClose, onImported }) {
                       <Box key={r.path} onClick={() => (on || pickCount < max) && togglePick(r.path)}
                         sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.35, px: 0.75, borderRadius: 1,
                           cursor: on || pickCount < max ? "pointer" : "default", opacity: on || pickCount < max ? 1 : 0.5,
-                          "&:hover": { bgcolor: "#f4f1ec" } }}>
+                          "&:hover": { bgcolor: "var(--tq-panel, #f4f1ec)" } }}>
                         <Checkbox size="small" checked={on} disabled={!on && pickCount >= max} sx={{ p: 0.25 }}
                           inputProps={{ "aria-label": `bring in ${r.name}` }} />
                         <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 600, color: INK, flex: 1 }} noWrap>{r.name}</Typography>
@@ -176,7 +176,7 @@ export default function SkillImport({ onClose, onImported }) {
                   {g.rows.map((r) => (
                     <Box key={r.path} onClick={() => setPath(r.path)}
                       sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.6, px: 0.75, borderRadius: 1, cursor: "pointer",
-                        bgcolor: path === r.path ? "#f4f1ec" : "transparent", "&:hover": { bgcolor: "#f4f1ec" } }}>
+                        bgcolor: path === r.path ? "var(--tq-panel, #f4f1ec)" : "transparent", "&:hover": { bgcolor: "var(--tq-panel, #f4f1ec)" } }}>
                       <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 600, color: INK, flex: 1 }} noWrap>{r.name}</Typography>
                       <Typography variant="caption" sx={{ color: FAINT }}>{kb(r.bytes)}</Typography>
                     </Box>
@@ -224,7 +224,7 @@ export default function SkillImport({ onClose, onImported }) {
                     {openBody[i] ? "Hide the body" : "Read it"}
                   </Button>
                   {openBody[i] && (
-                    <Box sx={{ mt: 0.75, maxHeight: 260, overflowY: "auto", bgcolor: "#f6f4f1", borderRadius: 1, p: 1 }}>
+                    <Box sx={{ mt: 0.75, maxHeight: 260, overflowY: "auto", bgcolor: "var(--tq-canvas, #f6f4f1)", borderRadius: 1, p: 1 }}>
                       <Typography component="pre" sx={{ ...mono, fontSize: 11.5, whiteSpace: "pre-wrap", m: 0, color: INK }}>{r.body}</Typography>
                     </Box>
                   )}

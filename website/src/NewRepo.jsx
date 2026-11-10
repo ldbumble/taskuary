@@ -11,7 +11,7 @@ import api from "./api";
 import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
 import { AUTO, OTHER, chosenRepo } from "./newRepo.js";
 
-const small = { "& .MuiInputBase-root": { fontSize: 12.5, bgcolor: "#fcfaf7" } };
+const small = { "& .MuiInputBase-root": { fontSize: 12.5, bgcolor: "var(--tq-panel, #fcfaf7)" } };
 
 export default function NewRepo({ agent = "", bus, out, first = "" }) {
   const [rows, setRows] = useState(null);
@@ -38,7 +38,7 @@ export default function NewRepo({ agent = "", bus, out, first = "" }) {
         <AccountTreeIcon sx={{ fontSize: 15, color: DIM }} />
         <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Repository</Typography>
         <select aria-label="Repository the session opens in" value={pick} onChange={(e) => setPick(e.target.value)}
-          style={{ fontSize: 12.5, padding: "5px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "#fff", color: INK, minWidth: 240, maxWidth: "100%" }}>
+          style={{ fontSize: 12.5, padding: "5px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "var(--tq-panel, #fff)", color: INK, minWidth: 240, maxWidth: "100%" }}>
           <option value={AUTO}>{c.named ? `Auto - ${c.repo}` : "Auto - picks from what you write"}</option>
           {list.map((r) => <option key={r.repo} value={r.repo}>{r.repo}{r.has_path ? "" : " (no local folder)"}</option>)}
           <option value={OTHER}>Another repository…</option>

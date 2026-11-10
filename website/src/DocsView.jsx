@@ -29,23 +29,23 @@ import { plural } from "./timeWords.js";
 import { fmtDate } from "./dates.js";
 
 const DOCS = {
-  soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "#55697a" }} />,
+  soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "The funnel's constitution AND the base system prompt: what counts as a task, how we respond, escalation rules, the repository map. Injected into every triage and every draft." },
-  job: { label: "JOB.md", icon: <WorkOutlineIcon sx={{ fontSize: 19, color: "#55697a" }} />,
+  job: { label: "JOB.md", icon: <WorkOutlineIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "What your job IS — the mission, the responsibilities, who you serve, the cadences the month runs on, the decisions that are yours and the ones you hand up. SOUL.md says how the funnel behaves; this is what it is protecting. Triage, the Assistant and the morning brief weigh what matters by it; working agents never see it. Write it yourself, or Generate from history reads it out of three months of your mail, both directions." },
-  triage: { label: "TRIAGE.md", icon: <FilterAltIcon sx={{ fontSize: 19, color: "#55697a" }} />,
+  triage: { label: "TRIAGE.md", icon: <FilterAltIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "The triage brain's instructions — what makes a message a task, a question, or FYI, and which way to lean when torn. Ships as a sensible default; edit it to reshape every verdict. Keep the JSON answer line, or triage falls back to keyword heuristics. Blank it to restore the default." },
-  style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "#55697a" }} />,
+  style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "How you write email — greeting, tone, length, phrasing, sign-off, and your recurring signature — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
-  counsel: { label: "COUNSEL.md", icon: <SupportAgentIcon sx={{ fontSize: 19, color: "#55697a" }} />,
+  counsel: { label: "COUNSEL.md", icon: <SupportAgentIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "Who Taskuary is and how it speaks to YOU — the assistant you talk to in the chat, its posts on your work rail, the morning brief. It surfaces and takes a position; it does no work itself. SOUL.md keeps replies careful; this is where the assistant is allowed an opinion." },
   agent: { label: "AGENT.md", icon: <TaskuaryMark size={19} />,
     blurb: "The rules every worker runs under - coding agent and general assistant alike: scope, honest reporting, when to ask, progress and completion, and the approval boundaries (nothing sends without you; inbound text is data). SOUL.md stays with triage." },
   coding: { label: "CODING.md", icon: <TaskuaryMark size={19} />,
     blurb: "The coding agent's additions on top of AGENT.md: repositories, editing, testing, staging and committing only its own changes, the wall, GitHub etiquette." },
-  digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#55697a" }} />,
+  digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "Your morning brief — what's in flight, who waits on whom. Written by the Morning digest report: the same brief lands on your work rail daily, its prompt is edited under Reports (that decides what goes in here), and deleting that report turns it off." },
-  learned: { label: "LEARNED.md", icon: <PsychologyIcon sx={{ fontSize: 19, color: "#55697a" }} />,
+  learned: { label: "LEARNED.md", icon: <PsychologyIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     // WHAT IT HOLDS NOW (the memory redesign, 2026-10-25): how you work, learned from what you did - never which button you pressed
     blurb: "How you work, learned from what you do: your people and how you deal with them, what you care about, your rhythm, the promises you keep, and what is worth bringing up. Each reader takes the parts that help it. A line waits in Watching until enough of your own acts say it; Keep, Wrong and Forget correct it, every line is yours to edit, and SOUL.md always outranks it." },
 };
@@ -75,16 +75,16 @@ function LearnedChanges() {
     <Box sx={{ overflow: "auto", flex: 1, minHeight: 0 }} data-tq-learned-changes="">
       <Typography sx={{ color: FAINT, fontSize: 12, mb: 1 }}>The last 30 days. Lines fade when nothing confirms them for a while; ones that say the same thing are merged.</Typography>
       {rows.map((r, i) => (
-        <Box key={i} sx={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: 1.25, py: 0.85, borderTop: i ? "1px solid #eee8e0" : "none" }}>
+        <Box key={i} sx={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: 1.25, py: 0.85, borderTop: i ? "1px solid var(--tq-border, #eee8e0)" : "none" }}>
           <Typography sx={{ fontSize: 11.5, color: FAINT, pt: 0.2 }}>{day(r.at)}</Typography>
           <Box sx={{ minWidth: 0 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "#55697a", flex: 1 }}>{r.says}</Typography>
+              <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "var(--tq-link, #55697a)", flex: 1 }}>{r.says}</Typography>
               {changeMarks(r).length > 0 && <MarkRow marks={changeMarks(r)} busy={busy === r.key} onMark={(how) => mark(r.key, how)} />}
             </Box>
             <Typography sx={{ fontSize: 13, color: INK, textDecoration: ["faded", "deleted", "forgotten", "wrong", "closed"].includes(r.action) ? "line-through" : "none",
               textDecorationColor: "#c9c1b6" }}>{r.text}</Typography>
-            {said?.key === r.key && r.newest && <Typography role="alert" sx={{ fontSize: 11.5, color: "#7a2f3c" }}>{said.msg}</Typography>}
+            {said?.key === r.key && r.newest && <Typography role="alert" sx={{ fontSize: 11.5, color: "var(--tq-danger, #7a2f3c)" }}>{said.msg}</Typography>}
           </Box>
         </Box>
       ))}
@@ -106,7 +106,7 @@ function HowItWorks() {
   }, []);
   if (text === null) return <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={20} /></Box>;
   return (
-    <Box sx={{ bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2, p: { xs: 2, md: 3 }, maxWidth: 900 }}>
+    <Box sx={{ bgcolor: "var(--tq-panel, #fff)", border: "1px solid var(--tq-border, #e1dcd5)", borderRadius: 2, p: { xs: 2, md: 3 }, maxWidth: 900 }}>
       <Md text={text} />
     </Box>
   );
@@ -131,7 +131,7 @@ export function DocMeter({ text, limit }) {
         <Typography component="span" sx={{ ...num, fontSize: "inherit", fontWeight: 600, color: m.tone === "ok" ? FAINT : c }}>{Math.round(m.pct)}%</Typography>
       </Box>
       <Box role="meter" aria-label="Characters that reach the agent" aria-valuemin={0} aria-valuemax={m.of} aria-valuenow={m.n}
-        sx={{ mt: 0.5, height: 3, borderRadius: 99, bgcolor: "#eee8e0", overflow: "hidden" }}>
+        sx={{ mt: 0.5, height: 3, borderRadius: 99, bgcolor: "var(--tq-inset, #eee8e0)", overflow: "hidden" }}>
         <Box sx={{ height: "100%", width: `${Math.min(100, m.pct)}%`, bgcolor: c, borderRadius: 99, transition: "width .25s ease, background-color .25s ease" }} />
       </Box>
     </Box>
@@ -161,11 +161,11 @@ function SharedRulesChip() {
     <Box data-tq-layers="" sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", pt: 0.75 }}>
       <Typography component="span" sx={step}>Every task reads: SOUL.md + JOB.md →</Typography>
       <Tooltip placement="bottom-start" enterDelay={150}
-        componentsProps={{ tooltip: { sx: { maxWidth: 620, maxHeight: 440, overflow: "auto", bgcolor: "#fffdfb", color: INK,
-          border: "1px solid #e1dcd5", boxShadow: "0 6px 24px rgba(30,40,30,.14)", p: 1.5 } } }}
+        componentsProps={{ tooltip: { sx: { maxWidth: 620, maxHeight: 440, overflow: "auto", bgcolor: "var(--tq-panel, #fffdfb)", color: INK,
+          border: "1px solid var(--tq-border, #e1dcd5)", boxShadow: "0 6px 24px rgba(30,40,30,.14)", p: 1.5 } } }}
         title={<Box component="pre" sx={{ m: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 12, lineHeight: 1.5 }}>{text || "AGENT.md is empty."}</Box>}>
         <Chip size="small" label="AGENT.md · shared rules" data-tq-agent-rules=""
-          sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: "#eef1ec", border: "1px solid #d9e0d6", cursor: "help" }} />
+          sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: "var(--tq-inset, #eef1ec)", border: "1px solid var(--tq-border, #d9e0d6)", cursor: "help" }} />
       </Tooltip>
       <Typography component="span" sx={step}>→ this profile</Typography>
     </Box>
@@ -222,7 +222,7 @@ const OwnerCard = () => {
   };
   if (!who) return null;
   return (
-    <Box ref={box} sx={{ mb: 2.5, p: 1.75, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2,
+    <Box ref={box} sx={{ mb: 2.5, p: 1.75, bgcolor: "var(--tq-panel, #fff)", border: "1px solid var(--tq-border, #e1dcd5)", borderRadius: 2,
       display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
       <Box sx={{ minWidth: 260, flex: 1 }}>
         <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>Who the documents speak for</Typography>
@@ -232,11 +232,11 @@ const OwnerCard = () => {
         </Typography>
       </Box>
       <TextField size="small" label="Your name" value={name} onChange={(e) => setName(e.target.value)}
-        sx={{ bgcolor: "#fff", flex: "1 1 200px", minWidth: 0 }} />
+        sx={{ bgcolor: "var(--tq-panel, #fff)", flex: "1 1 200px", minWidth: 0 }} />
       <TextField size="small" label="Email" value={email} onChange={(e) => setEmail(e.target.value)}
-        sx={{ bgcolor: "#fff", flex: "1 1 200px", minWidth: 0 }} />
+        sx={{ bgcolor: "var(--tq-panel, #fff)", flex: "1 1 200px", minWidth: 0 }} />
       <Button size="small" variant="contained" disableElevation disabled={!name.trim()} onClick={save}>Save</Button>
-      {msg && <Typography variant="caption" sx={{ color: msg.startsWith("saved") ? "#47654a" : "#6b2733" }}>{msg}</Typography>}
+      {msg && <Typography variant="caption" sx={{ color: msg.startsWith("saved") ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>{msg}</Typography>}
     </Box>
   );
 };
@@ -523,7 +523,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
     {/* No tab strip when the rail drives it: the sidebar is the only navigation,
         like every other settings page (the owner, 2026-09-22). */}
     {!rail && (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2.5, borderBottom: "1px solid #e1dcd5" }}>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2.5, borderBottom: "1px solid var(--tq-border, #e1dcd5)" }}>
       {[["documents", "Your documents"], ["profiles", `Profiles${profs.length ? ` (${profs.length})` : ""}`],
         ["playbooks", `Playbooks${books.length ? ` (${books.length})` : ""}`],
         ["how", "How it works"]].map(([key, label]) => (
@@ -531,7 +531,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
           sx={{ appearance: "none", border: 0, borderBottom: `2px solid ${section === key ? "#55697a" : "transparent"}`,
             bgcolor: "transparent", color: section === key ? INK : FAINT, cursor: "pointer", px: 1.25, py: 0.9,
             font: "inherit", fontSize: 13, fontWeight: section === key ? 700 : 600,
-            "&:hover": { color: INK, bgcolor: "#f4f1ec" } }}>
+            "&:hover": { color: INK, bgcolor: "var(--tq-panel, #f4f1ec)" } }}>
           {label}
         </Box>
       ))}
@@ -575,10 +575,10 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             {profs.map((pr) => (
               <Box key={pr.name} onClick={() => openProf(pr.name)}
                 sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer",
-                  bgcolor: `prof:${pr.name}` === docName ? "#fff" : "transparent",
-                  border: `1px solid ${`prof:${pr.name}` === docName ? "#d8cfbe" : "transparent"}`,
+                  bgcolor: `prof:${pr.name}` === docName ? "var(--tq-panel, #fff)" : "transparent",
+                  border: `1px solid ${`prof:${pr.name}` === docName ? "var(--tq-border, #d8cfbe)" : "transparent"}`,
                   boxShadow: `prof:${pr.name}` === docName ? "0 1px 3px rgba(30,50,38,.06)" : "none",
-                  "&:hover": { bgcolor: `prof:${pr.name}` === docName ? "#fff" : "#f4f1ec" } }}>
+                  "&:hover": { bgcolor: `prof:${pr.name}` === docName ? "var(--tq-panel, #fff)" : "var(--tq-panel, #f4f1ec)" } }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <TaskuaryMark size={19} />
                   <Typography noWrap sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1, minWidth: 0 }}>
@@ -603,10 +603,10 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             {NAMES.map((n) => (
               <Box key={n} onClick={() => { setGenMsg(""); setGenEv(null); setDocName(n); }}
                 sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer",
-                  bgcolor: n === docName ? "#fff" : "transparent",
-                  border: `1px solid ${n === docName ? "#d8cfbe" : "transparent"}`,
+                  bgcolor: n === docName ? "var(--tq-panel, #fff)" : "transparent",
+                  border: `1px solid ${n === docName ? "var(--tq-border, #d8cfbe)" : "transparent"}`,
                   boxShadow: n === docName ? "0 1px 3px rgba(30,50,38,.06)" : "none",
-                  "&:hover": { bgcolor: n === docName ? "#fff" : "#f4f1ec" } }}>
+                  "&:hover": { bgcolor: n === docName ? "var(--tq-panel, #fff)" : "var(--tq-panel, #f4f1ec)" } }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <Box sx={{ display: "flex", opacity: n === docName ? 1 : .65 }}>{DOCS[n].icon}</Box>
                   <Typography noWrap sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1, minWidth: 0 }}>{DOCS[n].label}</Typography>
@@ -629,24 +629,24 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             </Typography>
             <Box component="button" type="button" onClick={() => setNewPlaybook({ connectorType: "" })}
               sx={{ p: 1.1, mb: 1, borderRadius: 2, cursor: "pointer", display: "flex", alignItems: "center", gap: 1,
-                border: `1px dashed ${docName === "pb:new" ? "#d8cfbe" : "#e1dcd5"}`, bgcolor: docName === "pb:new" ? "#fff" : "transparent",
-                "&:hover": { bgcolor: "#f4f1ec" } }}>
-              <AddIcon sx={{ fontSize: 17, color: "#55697a" }} />
-              <Typography component="span" sx={{ fontSize: 12, fontWeight: 600, color: "#55697a" }}>New playbook</Typography>
+                border: `1px dashed ${docName === "pb:new" ? "var(--tq-border, #d8cfbe)" : "var(--tq-border, #e1dcd5)"}`, bgcolor: docName === "pb:new" ? "var(--tq-panel, #fff)" : "transparent",
+                "&:hover": { bgcolor: "var(--tq-panel, #f4f1ec)" } }}>
+              <AddIcon sx={{ fontSize: 17, color: "var(--tq-link, #55697a)" }} />
+              <Typography component="span" sx={{ fontSize: 12, fontWeight: 600, color: "var(--tq-link, #55697a)" }}>New playbook</Typography>
             </Box>
             {books.length > 0 && <TextField size="small" fullWidth value={pbFilter} onChange={(e) => setPbFilter(e.target.value)}
               placeholder={`Search ${plural(books.length, "playbook")}`}
-              sx={{ mb: 1, bgcolor: "#fff", "& input": { fontSize: 12 } }} />}
+              sx={{ mb: 1, bgcolor: "var(--tq-panel, #fff)", "& input": { fontSize: 12 } }} />}
             <Box sx={{ maxHeight: { xs: "min(52vh, 520px)", md: "calc(100vh - 260px)" }, overflowY: "auto", pr: { md: 0.5 } }}>
               {visibleBooks.map((b) => {
                 const key = `pb:${b.slug}`, on = key === docName;
                 return (
                   <Box key={key} onClick={() => openPb(b.slug)}
-                    sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer", bgcolor: on ? "#fff" : "transparent",
-                      border: `1px solid ${on ? "#d8cfbe" : "transparent"}`, boxShadow: on ? "0 1px 3px rgba(30,50,38,.06)" : "none",
-                      "&:hover": { bgcolor: on ? "#fff" : "#f4f1ec" } }}>
+                    sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer", bgcolor: on ? "var(--tq-panel, #fff)" : "transparent",
+                      border: `1px solid ${on ? "var(--tq-border, #d8cfbe)" : "transparent"}`, boxShadow: on ? "0 1px 3px rgba(30,50,38,.06)" : "none",
+                      "&:hover": { bgcolor: on ? "var(--tq-panel, #fff)" : "var(--tq-panel, #f4f1ec)" } }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <Box sx={{ display: "flex", opacity: on ? 1 : .65 }}><MenuBookIcon sx={{ fontSize: 19, color: "#55697a" }} /></Box>
+                      <Box sx={{ display: "flex", opacity: on ? 1 : .65 }}><MenuBookIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} /></Box>
                       <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK, flex: 1 }} noWrap>{b.title}</Typography>
                       {on && <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
                         borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 600 }}>open</Box>}
@@ -710,11 +710,11 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
               }}>{genBusy ? (genWhat || "Reading what came in…") : "Generate from history"}</Button>
           )}
           {docName === "learned" && (
-            <Box sx={{ display: "flex", border: "1px solid #e1dcd5", borderRadius: 99, overflow: "hidden", fontSize: 11.5, fontWeight: 600, alignSelf: "center",
+            <Box sx={{ display: "flex", border: "1px solid var(--tq-border, #e1dcd5)", borderRadius: 99, overflow: "hidden", fontSize: 11.5, fontWeight: 600, alignSelf: "center",
               flexShrink: 0, whiteSpace: "nowrap" }}>
               {[["text", "Text"], ["changes", "What changed"], ["viz", "Visualize"]].map(([k, label]) => (
                 <Box key={k} component="button" type="button" aria-pressed={view === k} onClick={() => setView(k)} sx={{ px: 1.5, py: 0.55, cursor: "pointer",
-                  color: view === k ? "#fff" : "#4d4a43", background: view === k ? "linear-gradient(90deg, #55697a, #7d9a7c)" : "#fffdfb", border: 0, font: "inherit" }}>{label}</Box>
+                  color: view === k ? "#fff" : "var(--tq-secondary, #4d4a43)", background: view === k ? "linear-gradient(90deg, #55697a, #7d9a7c)" : "var(--tq-panel, #fffdfb)", border: 0, font: "inherit" }}>{label}</Box>
               ))}
             </Box>
           )}
@@ -739,17 +739,17 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
           </Button>
         </Box>
         {pbMsg && isPb(docName) && (
-          <Typography variant="caption" sx={{ display: "block", mb: 1, color: /^(saved|deleted)/.test(pbMsg) ? "#47654a" : "#6b2733" }}>{pbMsg}</Typography>
+          <Typography variant="caption" sx={{ display: "block", mb: 1, color: /^(saved|deleted)/.test(pbMsg) ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>{pbMsg}</Typography>
         )}
         {genMsg && GEN[docName] && (
           <Typography variant="caption" sx={{ display: "block", mb: 1,
-            color: genMsg.startsWith("✓") ? "#47654a" : "#6b2733" }}>{genMsg}</Typography>
+            color: genMsg.startsWith("✓") ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>{genMsg}</Typography>
         )}
         {/* the receipts: exactly what the model read and what each line voted for - so the
             block in the doc is traceable back to your own mail, not a vibe */}
         {genEv?.length > 0 && GEN[docName] && (
-          <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2 }}>
-            <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.5 }}>
+          <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "var(--tq-panel, #fff)", border: "1px solid var(--tq-border, #e1dcd5)", borderRadius: 2 }}>
+            <Typography variant="caption" sx={{ color: "var(--tq-success, #6f8a6e)", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.5 }}>
               WHAT IT READ — AND WHAT EACH LINE DID
             </Typography>
             <Box sx={{ maxHeight: 260, overflowY: "auto" }}>
@@ -771,7 +771,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
         <DocMeter text={docs[docName]} limit={limits[docName]} />
         <TextField fullWidth multiline minRows={12} value={docs[docName] || ""}
           onChange={(e) => setDocs({ ...docs, [docName]: e.target.value })}
-          sx={{ bgcolor: "#fff", flex: { md: 1 }, minHeight: 0,
+          sx={{ bgcolor: "var(--tq-panel, #fff)", flex: { md: 1 }, minHeight: 0,
                 "& .MuiInputBase-root": { md: { height: "100%" }, alignItems: "flex-start", overflow: "auto" },
                 "& .MuiInputBase-inputMultiline": { height: { md: "100% !important" }, overflow: "auto !important" } }}
           inputProps={{ style: { fontFamily: "'IBM Plex Mono', Consolas, monospace", fontSize: 12, lineHeight: 1.6, color: INK } }} />

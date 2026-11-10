@@ -54,7 +54,7 @@ export const SetupChip = ({ state, onOpen }) => {
   if (!state.left) return (
     <Tooltip title="Setup - your AI, email, connections and what Taskuary knows about your work">
       <Box onClick={onOpen} data-tq-setup-open="" role="button" aria-label="Setup" sx={{ cursor: "pointer", ml: { xs: 0, sm: 1 }, px: { xs: 0.6, sm: 1 },
-        py: { xs: 0.5, sm: 0.35 }, display: { xs: "flex", sm: "block" }, borderRadius: 99, border: `1px solid ${BORDER}`, "&:hover": { bgcolor: "#eae4d8" } }}>
+        py: { xs: 0.5, sm: 0.35 }, display: { xs: "flex", sm: "block" }, borderRadius: 99, border: `1px solid ${BORDER}`, "&:hover": { bgcolor: "var(--tq-inset, #eae4d8)" } }}>
         <Box sx={{ display: { xs: "flex", sm: "none" } }}>{ring(100)}</Box>
         <Typography variant="caption" sx={{ fontWeight: 600, color: DIM, display: { xs: "none", sm: "inline" } }}>Setup</Typography>
       </Box>
@@ -64,8 +64,8 @@ export const SetupChip = ({ state, onOpen }) => {
     <Tooltip title={state.dismissed ? "Setting up — put away, click to reopen" : "Finish setting Taskuary up"}>
       <Box onClick={onOpen} role="button" aria-label={words} data-tq-setup-chip=""
         sx={{ display: "flex", alignItems: "center", gap: 0.75, cursor: "pointer", ml: { xs: 0, sm: 1 },
-          px: { xs: 0.6, sm: 1 }, py: { xs: 0.5, sm: 0.35 }, borderRadius: 99, border: `1px solid ${state.dismissed ? BORDER : "#d8cfbe"}`,
-          bgcolor: state.dismissed ? "transparent" : "#eae4d8",
+          px: { xs: 0.6, sm: 1 }, py: { xs: 0.5, sm: 0.35 }, borderRadius: 99, border: `1px solid ${state.dismissed ? BORDER : "var(--tq-border, #d8cfbe)"}`,
+          bgcolor: state.dismissed ? "transparent" : "var(--tq-inset, #eae4d8)",
           opacity: state.dismissed ? 0.75 : 1, "&:hover": { opacity: 1 } }}>
         {/* The track has to be WARM. It was #e6e9ef - a cool grey-blue on this warm tan pill, 1.04:1,
             the same lightness - so the ring was invisible. And on a fresh install nothing is done, so
@@ -74,7 +74,7 @@ export const SetupChip = ({ state, onOpen }) => {
             table now rather than being typed here: muted is the part not done, done is the part that is,
             which is the same green the panel ticks a finished row with. */}
         {ring(pct)}
-        <Typography variant="caption" sx={{ fontWeight: 600, color: state.dismissed ? DIM : "#55697a", display: { xs: "none", sm: "inline" } }}>{words}</Typography>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: state.dismissed ? DIM : "var(--tq-link, #55697a)", display: { xs: "none", sm: "inline" } }}>{words}</Typography>
       </Box>
     </Tooltip>
   );
@@ -144,7 +144,7 @@ const Step = ({ s, n, open, onOpen, onGo, onDone, firstItems }) => {
   const active = open && !s.done;
   return (
     <Box sx={{ borderTop: n ? `1px solid ${BORDER}` : "none",
-      bgcolor: active ? "#fff" : "transparent",
+      bgcolor: active ? "var(--tq-panel, #fff)" : "transparent",
       boxShadow: active ? "inset 3px 0 0 #55697a" : "none",
       px: active ? 1.5 : 0, py: s.done ? 1 : 1.5, transition: "background-color .15s" }}>
       {/* the button WRAPS below the text rather than squeezing it: naming the destination makes it
@@ -152,15 +152,15 @@ const Step = ({ s, n, open, onOpen, onGo, onDone, firstItems }) => {
           per line at 390px (photographed) */}
       <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: s.done ? "center" : "flex-start" }}>
         <Box sx={{ pt: s.done ? 0 : 0.25, display: "flex" }}>
-          {s.done ? <CheckCircleIcon sx={{ fontSize: 18, color: "#47654a" }} />
-            : <RadioButtonUncheckedIcon sx={{ fontSize: 20, color: "#55697a" }} />}
+          {s.done ? <CheckCircleIcon sx={{ fontSize: 18, color: "var(--tq-success, #47654a)" }} />
+            : <RadioButtonUncheckedIcon sx={{ fontSize: 20, color: "var(--tq-link, #55697a)" }} />}
         </Box>
         <Box sx={{ flex: "1 1 150px", minWidth: 0 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
             <Typography sx={{ fontWeight: s.done ? 600 : 700, fontSize: s.done ? 12.5 : 13.5,
               color: s.done ? DIM : INK }}>{s.title}</Typography>
             {s.done && s.detail && (
-              <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>{s.detail}</Typography>
+              <Typography variant="caption" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>{s.detail}</Typography>
             )}
           </Box>
           {/* WHY before HOW, while it is still a decision */}
@@ -190,9 +190,9 @@ const Step = ({ s, n, open, onOpen, onGo, onDone, firstItems }) => {
         )}
         {s.done && s.action !== "sync" && (Form
           ? <Typography variant="caption" onClick={onOpen}
-              sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>change</Typography>
+              sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "var(--tq-link, #55697a)" } }}>change</Typography>
           : <Typography variant="caption" onClick={() => onGo(s.goto)}
-              sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>change</Typography>)}
+              sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "var(--tq-link, #55697a)" } }}>change</Typography>)}
       </Box>
       {/* A reopened DONE step puts its form UNDER the row, indented to the text column - inside the
           header row it overflowed its track and sat on the step's own title (owner, 2026-09-02). */}

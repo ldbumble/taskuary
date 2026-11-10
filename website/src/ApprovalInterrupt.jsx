@@ -15,7 +15,7 @@ export default function ApprovalInterrupt({ it, onResolve }) {
           Nothing was sent. The draft you approved was written before this arrived.
         </Typography>
         {it.latest && (
-          <Box sx={{ border: "1px solid #d2d6cf", borderRadius: 1.5, p: 1, mb: 1 }}>
+          <Box sx={{ border: "1px solid var(--tq-border, #d2d6cf)", borderRadius: 1.5, p: 1, mb: 1 }}>
             <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>
               {it.latest.FromName || it.latest.FromEmail || "New message"}{it.latest.SentAt ? ` · ${it.latest.SentAt}` : ""}
             </Typography>

@@ -20,7 +20,7 @@ const btn = { minHeight: 32, py: 0, px: 1.4, fontSize: 12.5, textTransform: "non
 
 const FileLine = ({ f }) => (
   <Typography variant="caption" sx={{ ...mono, display: "block", color: DIM, fontSize: 11 }} noWrap>
-    <Box component="span" sx={{ color: "#47654a" }}>+{f.plus}</Box> <Box component="span" sx={{ color: "#7a2f3c" }}>-{f.minus}</Box> {f.path}
+    <Box component="span" sx={{ color: "var(--tq-success, #47654a)" }}>+{f.plus}</Box> <Box component="span" sx={{ color: "var(--tq-danger, #7a2f3c)" }}>-{f.minus}</Box> {f.path}
   </Typography>);
 export const SHOWN = 8;
 
@@ -69,7 +69,7 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
   const rest = (s.answers || []).map((a) => a.how).filter((h) => h !== w.first && h !== w.second);
   const tip = s.push ? `up to ${String(s.push.tip || "").slice(0, 7)}${s.push.deploy ? ` · deploys to ${s.push.deploy}` : ""}` : s.own && s.ask ? `${plural(s.ahead, "commit")} ahead` : "";
   const sub = s.held ? w.held : [tip, `+${s.plus || 0} −${s.minus || 0}`, s.ask && s.proposal?.why].filter(Boolean).join(" · ");
-  const link = { ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } };
+  const link = { ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } };
   const press = (h, tone0, tone = s.held ? "t" : tone0) => (
     <Button key={h} size="small" disableElevation disabled={!!busy} data-tq-land={h} variant={tone === "p" ? "contained" : tone === "s" ? "outlined" : "text"}
       title={tone === "p" ? w.hint : undefined}
@@ -82,7 +82,7 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
   // away; once pressed it STAYS in its turn as the press it took and what came of it, as the held steps' card does (HeldSteps)
   return (
     <Box data-tq-landing="" data-tq-act-state={s.held ? "held" : s.ask ? "waiting" : s.landed ? "pressed" : "resting"}
-      sx={inChat ? { my: 1, px: 1.25, py: 0.9, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" } : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+      sx={inChat ? { my: 1, px: 1.25, py: 0.9, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" } : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
       <Typography data-tq-landing-title="" sx={{ fontSize: 13.5, fontWeight: s.held ? 600 : 700, color: s.held ? DIM : INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>{w.title}</Typography>
       <Typography noWrap data-tq-landing-sub="" title={[sub, w.shared].filter(Boolean).join(" - ")} sx={{ fontSize: 11.5, color: FAINT }}>{sub}</Typography>
       {!!s.files?.length && !s.held && <Box sx={{ display: "flex", gap: 1.5, mt: 0.4 }}>
@@ -110,9 +110,9 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
             Mark a part Revert to take it out of {s.branch} before it lands - one commit on the branch, nothing else touched.</Typography>}
           {diff === null && !diffErr && <Typography variant="body2" data-tq-diff-loading="" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1 }}>
             <CircularProgress size={14} color="inherit" />Loading the changes…</Typography>}
-          {diffErr && <Typography variant="body2" data-tq-diff-error="" sx={{ color: "#7a2f3c" }}>{diffErr}</Typography>}
+          {diffErr && <Typography variant="body2" data-tq-diff-error="" sx={{ color: "var(--tq-danger, #7a2f3c)" }}>{diffErr}</Typography>}
           {diff !== null && <DiffView files={files} marks={reviewing ? marks : null} onMark={reviewing ? (k, m) => setMarks((x) => ({ ...x, [k]: m })) : null} />}
-          {reviewing && !!picked.length && <Button size="small" variant="outlined" disabled={!!busy} data-tq-landing-revert="" sx={{ ...btn, mt: 0.75, color: "#7a2f3c", borderColor: BORDER }}
+          {reviewing && !!picked.length && <Button size="small" variant="outlined" disabled={!!busy} data-tq-landing-revert="" sx={{ ...btn, mt: 0.75, color: "var(--tq-danger, #7a2f3c)", borderColor: BORDER }}
             startIcon={busy === "revert" ? <CircularProgress size={12} color="inherit" /> : null} onClick={revert}>
             Revert {plural(picked.length, "marked part")}</Button>}
         </DialogContent>
@@ -125,7 +125,7 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
       </Box> : s.landed && <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.6 }}>
         {/* ...the press it took, drawn pressed, and what came of it on the same line */}
         <Button size="small" variant={s.landed.how === "discard" ? "outlined" : "contained"} disableElevation disabled data-tq-pressed={s.landed.how}
-          sx={{ ...btn, "&.Mui-disabled": s.landed.how === "discard" ? { color: FAINT } : { bgcolor: "#dfe8dd", color: "#47654a" } }}>{w.done}</Button>
+          sx={{ ...btn, "&.Mui-disabled": s.landed.how === "discard" ? { color: FAINT } : { bgcolor: "var(--tq-tint-sage, #dfe8dd)", color: "var(--tq-success, #47654a)" } }}>{w.done}</Button>
         <Typography data-tq-act-done="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{said ? said.replace(url, "").replace(/[:\s]+$/, "") : w.doneLine}
           {url && <> · <a href={url} target="_blank" rel="noreferrer">{url.replace(/^https?:\/\//, "").slice(0, 70)}</a></>}</Typography>
       </Box>}

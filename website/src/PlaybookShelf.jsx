@@ -45,8 +45,8 @@ export function PlaybookRow({ b, onOpen, onToggle }) {
   return (
     <Box data-tq-playbook={b.slug} onClick={onOpen}
       sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.25, px: 0.5, cursor: "pointer", borderBottom: `1px solid ${BORDER}`,
-        opacity: on ? 1 : 0.7, "&:hover": { bgcolor: "#faf8f4" } }}>
-      <MenuBookIcon sx={{ fontSize: 18, color: "#55697a", flexShrink: 0 }} />
+        opacity: on ? 1 : 0.7, "&:hover": { bgcolor: "var(--tq-panel, #faf8f4)" } }}>
+      <MenuBookIcon sx={{ fontSize: 18, color: "var(--tq-link, #55697a)", flexShrink: 0 }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{b.title}</Typography>
         <Typography variant="caption" sx={{ color: DIM, display: "block" }} noWrap>when: {b.when || "—"}</Typography>

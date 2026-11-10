@@ -1,36 +1,36 @@
 /* pages the agent published (PublishedPages.jsx): a row each at the foot of the conversation, the preview opening under it */
 .tq-published { width: 100%; margin: 2px auto 10px; display: flex; flex-direction: column; gap: 6px; }
-.tq-published-page { border: 1px solid #e3ddd2; border-radius: 11px; background: #fff; overflow: hidden; }
+.tq-published-page { border: 1px solid var(--tq-border, #e3ddd2); border-radius: 11px; background: var(--tq-panel, #fff); overflow: hidden; }
 .tq-published-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; flex-wrap: wrap; }
 .tq-published-name { flex: 1; min-width: 160px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font: inherit; }
 .tq-published-name:disabled { cursor: default; }
-.tq-published-name b { color: #4d514b; font-size: 12.5px; }
-.tq-published-name span { color: #8a8d86; font-size: 11px; }
-.tq-published-frame { display: block; width: 100%; height: min(70vh, 640px); border: 0; border-top: 1px solid #e3ddd2; background: #fff; }
-.tq-published-md { border-top: 1px solid #e3ddd2; padding: 10px 14px; max-height: min(70vh, 640px); overflow: auto; font-size: 13px; }
-.tq-published-note { border-top: 1px solid #e3ddd2; padding: 10px 14px; color: #8a8d86; font-size: 12px; }
+.tq-published-name b { color: var(--tq-secondary, #4d514b); font-size: 12.5px; }
+.tq-published-name span { color: var(--tq-muted, #8a8d86); font-size: 11px; }
+.tq-published-frame { display: block; width: 100%; height: min(70vh, 640px); border: 0; border-top: 1px solid var(--tq-border, #e3ddd2); background: var(--tq-panel, #fff); }
+.tq-published-md { border-top: 1px solid var(--tq-border, #e3ddd2); padding: 10px 14px; max-height: min(70vh, 640px); overflow: auto; font-size: 13px; }
+.tq-published-note { border-top: 1px solid var(--tq-border, #e3ddd2); padding: 10px 14px; color: var(--tq-muted, #8a8d86); font-size: 12px; }
 /* what a chat SHOWED (selfclose.SHOW_LINE): a picture at its own size up to the column, a CSV as a table that scrolls */
-.tq-published-picture { border-top: 1px solid #e3ddd2; padding: 8px; background: #fff; text-align: center; }
+.tq-published-picture { border-top: 1px solid var(--tq-border, #e3ddd2); padding: 8px; background: var(--tq-panel, #fff); text-align: center; }
 .tq-published-picture img { max-width: 100%; max-height: min(70vh, 640px); height: auto; }
-.tq-published-table { border-top: 1px solid #e3ddd2; max-height: min(70vh, 640px); overflow: auto; font-size: 12.5px; }
+.tq-published-table { border-top: 1px solid var(--tq-border, #e3ddd2); max-height: min(70vh, 640px); overflow: auto; font-size: 12.5px; }
 .tq-published-table table { border-collapse: collapse; min-width: 100%; }
-.tq-published-table th, .tq-published-table td { border-bottom: 1px solid #eee9df; padding: 4px 10px; text-align: left; white-space: nowrap;
+.tq-published-table th, .tq-published-table td { border-bottom: 1px solid var(--tq-border, #eee9df); padding: 4px 10px; text-align: left; white-space: nowrap;
   max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
 /* ...its own layout, never the chat's fixed one (.tq-aui-agent-body table): fixed columns at 100% with unwrapped cells drew each long value
    over the next column (the owner, 2026-11-05: "this csv preview is corrupted"). As wide as its columns, the box scrolls sideways */
 .tq-aui-agent-body .tq-published-table table, .tq-published-table table { width: auto; min-width: 100%; table-layout: auto; }
-.tq-published-table th { position: sticky; top: 0; background: #faf8f4; color: #4d514b; font-weight: 600; }
+.tq-published-table th { position: sticky; top: 0; background: var(--tq-panel, #faf8f4); color: var(--tq-secondary, #4d514b); font-weight: 600; }
 .tq-aui-agent-body .tq-published { margin: 8px 0 2px; }
 /* a file the agent made for the task (taskOutputs.js): a workbook's sheets as tabs over the table, plain text as itself */
 .tq-published-file { cursor: default; }
-.tq-published-tabs { display: flex; gap: 2px; padding: 6px 10px 0; border-top: 1px solid #e3ddd2; overflow-x: auto; background: #faf8f4; }
-.tq-published-tabs button { border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; background: none; padding: 4px 10px; font: inherit; font-size: 11.5px; color: #8a8d86; cursor: pointer; white-space: nowrap; }
-.tq-published-tabs button.on { background: #fff; border-color: #e3ddd2; color: #4d514b; font-weight: 600; }
+.tq-published-tabs { display: flex; gap: 2px; padding: 6px 10px 0; border-top: 1px solid var(--tq-border, #e3ddd2); overflow-x: auto; background: var(--tq-panel, #faf8f4); }
+.tq-published-tabs button { border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; background: none; padding: 4px 10px; font: inherit; font-size: 11.5px; color: var(--tq-muted, #8a8d86); cursor: pointer; white-space: nowrap; }
+.tq-published-tabs button.on { background: var(--tq-panel, #fff); border-color: var(--tq-border, #e3ddd2); color: var(--tq-secondary, #4d514b); font-weight: 600; }
 .tq-published-tabs + .tq-published-table { border-top: 0; }
-.tq-published-text { margin: 0; border-top: 1px solid #e3ddd2; padding: 10px 14px; max-height: min(70vh, 640px); overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tq-published-text { margin: 0; border-top: 1px solid var(--tq-border, #e3ddd2); padding: 10px 14px; max-height: min(70vh, 640px); overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* an agent's files, each thing once (PublishedPages deliver): its earlier versions, the rest of a long list and its working files fold */
 .tq-published .tq-published { margin: 0; }
-.tq-published-more { border: 0; background: none; padding: 0 2px; font: inherit; font-size: 11.5px; color: #8a8d86; cursor: pointer; text-align: left; }
-.tq-published-more:hover { color: #4d514b; }
+.tq-published-more { border: 0; background: none; padding: 0 2px; font: inherit; font-size: 11.5px; color: var(--tq-muted, #8a8d86); cursor: pointer; text-align: left; }
+.tq-published-more:hover { color: var(--tq-secondary, #4d514b); }
 .tq-published-folded { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .tq-published-fold[data-tq-fold="earlier"] .tq-published-folded { padding-left: 12px; }

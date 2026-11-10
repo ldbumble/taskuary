@@ -109,7 +109,7 @@ function SignatureSetting({ value, save }) {
   return (
     <Box data-tq-signature="" sx={{ display: "flex", flexDirection: "column", gap: 1, width: "100%", maxWidth: 460 }}>
       {offer && !text.trim() && (
-        <Box data-tq-signature-offer="" sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", px: 1.5, py: 1 }}>
+        <Box data-tq-signature-offer="" sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)", px: 1.5, py: 1 }}>
           <Typography sx={{ fontSize: 12, color: DIM, mb: 0.5 }}>Your sent mail ends with this - is it your signature?</Typography>
           <Typography sx={{ fontSize: 12.5, color: INK, whiteSpace: "pre-line" }}>{offer}</Typography>
           <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
@@ -118,7 +118,7 @@ function SignatureSetting({ value, save }) {
           </Box>
         </Box>
       )}
-      <TextField multiline minRows={3} value={text} onChange={(e) => setText(e.target.value)} sx={{ bgcolor: "#fff" }}
+      <TextField multiline minRows={3} value={text} onChange={(e) => setText(e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
         label={boxes?.length > 1 ? "Default - for any mailbox without its own" : undefined}
         inputProps={{ style: { fontSize: 12.5 }, "aria-label": "Email signature" }} onBlur={() => text !== value && save(text.trim())} />
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
@@ -126,7 +126,7 @@ function SignatureSetting({ value, save }) {
         {note && <Typography sx={{ fontSize: 12, color: DIM }}>{note}</Typography>}
       </Box>
       {(boxes || []).map((b) => <MailboxSignature key={b.address} box={b} save={saveBox} />)}
-      <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", px: 1.5, py: 1, fontSize: 12.5, whiteSpace: "pre-line", color: INK }}>
+      <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)", px: 1.5, py: 1, fontSize: 12.5, whiteSpace: "pre-line", color: INK }}>
         {"Hi Erin,\n\nThanks - that's done.\n\n"}{text.trim() || acct.accounts[0]?.signature
           || <span style={{ color: DIM }}>(no signature - your sign-off in STYLE.md, else your name)</span>}
       </Box>
@@ -143,7 +143,7 @@ function MailboxSignature({ box, save }) {
   const [text, setText] = useState(box.signature || "");
   useEffect(() => { setText(box.signature || ""); }, [box.signature]);
   return (
-    <TextField data-tq-mailbox-signature={box.address} multiline minRows={2} size="small" value={text} sx={{ bgcolor: "#fff" }}
+    <TextField data-tq-mailbox-signature={box.address} multiline minRows={2} size="small" value={text} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
       label={`From ${box.address}`} helperText="Blank uses the default." onChange={(e) => setText(e.target.value)}
       inputProps={{ style: { fontSize: 12.5 } }} onBlur={() => text.trim() !== (box.signature || "") && save(box.address, text.trim())} />
   );
@@ -253,7 +253,7 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
             {r.live && r.chat && (
               <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", mt: 1, ml: { sm: 12.5 }, flexWrap: "wrap" }}>
                 <Select size="small" value={r.listens || "walk"} disabled={busy === r.channel}
-                  sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 260 }}
+                  sx={{ bgcolor: "var(--tq-panel, #fff)", fontSize: 12.5, minWidth: 260 }}
                   onChange={(e) => listen(r.channel, e.target.value)}>
                   <MenuItem value="always" sx={{ fontSize: 12 }}>listens any time you message it</MenuItem>
                   <MenuItem value="walk" sx={{ fontSize: 12 }}>listens once a walk is handed over, and after it comes back</MenuItem>
@@ -272,7 +272,7 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
               return (
                 <Box data-tq-doorway-state={st.state} sx={{ mt: 1, ml: { sm: 12.5 } }}>
                   <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                    <Typography variant="body2" sx={{ color: st.state === "off" || st.state === "unset" ? DIM : "#47654a", fontWeight: 600, fontSize: 12.5 }}>{st.line}</Typography>
+                    <Typography variant="body2" sx={{ color: st.state === "off" || st.state === "unset" ? DIM : "var(--tq-success, #47654a)", fontWeight: 600, fontSize: 12.5 }}>{st.line}</Typography>
                     {canHandOver(r, handoff) && <Button size="small" variant="outlined" disabled={busy === r.channel} data-tq-hand-walk={r.channel}
                       startIcon={<ChannelIcon channel={r.channel} sx={{ fontSize: 14 }} />} onClick={() => walk(r.channel)}
                       title={`I say hello in ${CHANNEL_NAME[r.channel] || r.channel} and take you through what is waiting there; the desktop keeps working beside it`}>
@@ -287,7 +287,7 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
         );
       })}
       {err && (
-        <Typography variant="body2" sx={{ color: "#6b2733", py: 2 }}>{err}</Typography>
+        <Typography variant="body2" sx={{ color: "var(--tq-danger, #6b2733)", py: 2 }}>{err}</Typography>
       )}
       {rows && !rows.length && (
         <Box sx={{ py: 2, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
@@ -301,7 +301,7 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
         Only chats you are alone in are offered. A group can never command the assistant, and an answer
         about your mail must not land where other people are reading.
       </Typography>
-      {wErr && <Typography variant="body2" sx={{ color: "#6b2733", mt: 1 }}>✗ {wErr}</Typography>}
+      {wErr && <Typography variant="body2" sx={{ color: "var(--tq-danger, #6b2733)", mt: 1 }}>✗ {wErr}</Typography>}
     </Box>
   );
 };
@@ -576,7 +576,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     // so existing task/session APIs keep their profile-specific model and repository mappings.
     if (m.type === "agent") return (
       <Select size="small" value={codingOptions.some((o) => o.value === s.Value) ? s.Value : (codingOptions[0]?.value || "")}
-        onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "#fff" }}>
+        onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
         {codingOptions.map((o) => <MenuItem key={o.value} value={o.value} sx={{ fontSize: 12.5 }}>{o.label}</MenuItem>)}
         {!codingOptions.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>no coding CLI yet — add one under Connections</MenuItem>}
       </Select>
@@ -590,7 +590,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
           onChange={(e) => {
             const picked = typeof e.target.value === "string" ? e.target.value.split(",") : e.target.value;
             saveSetting(s.Name, picked.includes("*") ? "*" : picked.join(","));
-          }} sx={{ minWidth: 250, maxWidth: 380, fontSize: 12.5, bgcolor: "#fff" }}>
+          }} sx={{ minWidth: 250, maxWidth: 380, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
           <MenuItem value="*" sx={{ fontSize: 12.5 }}>automatic — any other configured coding CLI</MenuItem>
           {codingOptions.map((o) => <MenuItem key={o.value} value={o.value} sx={{ fontSize: 12.5 }}>{o.label}</MenuItem>)}
         </Select>
@@ -599,7 +599,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     // the brains list is dynamic: AI connectors that actually hold a key + your CLI agents
     if (m.type === "brain") return (
       <Select size="small" displayEmpty value={brainOptions.some((b) => b.value === s.Value) ? s.Value : ""}
-        sx={{ minWidth: 250, fontSize: 12.5, bgcolor: "#fff" }}
+        sx={{ minWidth: 250, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}
         onChange={(e) => saveSetting(s.Name, e.target.value)}>
         {brainOptions.map((b) => (
           <MenuItem key={b.value} value={b.value} disabled={!b.ready} sx={{ fontSize: 12.5 }}>
@@ -617,7 +617,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             ? picked.map((v) => options.find((b) => b.value === v)?.label || v).join(" → ") : "none"}
           onChange={(e) => saveSetting(s.Name, (typeof e.target.value === "string"
             ? e.target.value.split(",") : e.target.value).join(","))}
-          sx={{ minWidth: 250, maxWidth: 420, fontSize: 12.5, bgcolor: "#fff" }}>
+          sx={{ minWidth: 250, maxWidth: 420, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
           {options.map((b) => <MenuItem key={b.value} value={b.value} disabled={!b.ready} sx={{ fontSize: 12.5 }}>
             {b.label}{b.ready ? "" : " — unavailable"}
           </MenuItem>)}
@@ -641,8 +641,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
               onClick={() => saveSetting(k, val(k) ? "0" : "1")}
               sx={{ display: "inline-flex", alignItems: "center", px: 0.9, py: 0.35, borderRadius: 99,
                 cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: val(k) ? 700 : 500, userSelect: "none",
-                bgcolor: val(k) ? "#eae4d8" : "#e9e3d8", color: val(k) ? "#55697a" : DIM,
-                border: `1px solid ${val(k) ? "#d8cfbe" : BORDER}`, "&:hover": { borderColor: "#d8cfbe" } }}>
+                bgcolor: val(k) ? "var(--tq-inset, #eae4d8)" : "var(--tq-inset, #e9e3d8)", color: val(k) ? "var(--tq-link, #55697a)" : DIM,
+                border: `1px solid ${val(k) ? "var(--tq-border, #d8cfbe)" : BORDER}`, "&:hover": { borderColor: "var(--tq-border, #d8cfbe)" } }}>
               {m.flags[k].label}
             </Box>
           ))}
@@ -665,8 +665,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             <Box key={ch} component="button" type="button" aria-pressed={on.has(ch)} onClick={() => toggle(ch)}
               sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, px: 0.9, py: 0.35, borderRadius: 99,
                 cursor: "pointer", fontFamily: "inherit", fontSize: 11.5, fontWeight: on.has(ch) ? 700 : 500, userSelect: "none",
-                bgcolor: on.has(ch) ? "#eae4d8" : "#e9e3d8", color: on.has(ch) ? "#55697a" : DIM,
-                border: `1px solid ${on.has(ch) ? "#d8cfbe" : BORDER}`, "&:hover": { borderColor: "#d8cfbe" } }}>
+                bgcolor: on.has(ch) ? "var(--tq-inset, #eae4d8)" : "var(--tq-inset, #e9e3d8)", color: on.has(ch) ? "var(--tq-link, #55697a)" : DIM,
+                border: `1px solid ${on.has(ch) ? "var(--tq-border, #d8cfbe)" : BORDER}`, "&:hover": { borderColor: "var(--tq-border, #d8cfbe)" } }}>
               <ChannelIcon channel={ch} sx={{ fontSize: 12 }} />{ch}
             </Box>
           ))}
@@ -681,7 +681,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     if (m.type === "sound") {
       return (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Select size="small" value={s.Value || "chime"} sx={{ width: 130, bgcolor: "#fff", fontSize: 12.5 }}
+          <Select size="small" value={s.Value || "chime"} sx={{ width: 130, bgcolor: "var(--tq-panel, #fff)", fontSize: 12.5 }}
             onChange={(e) => { saveSetting(s.Name, e.target.value); playSound(e.target.value); }}>
             {SOUNDS.map((o) => <MenuItem key={o} value={o} sx={{ fontSize: 12.5 }}>{o}</MenuItem>)}
           </Select>
@@ -692,7 +692,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       );
     }
     if (m.type === "select") return (
-      <Select size="small" value={s.Value} onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "#fff" }}>
+      <Select size="small" value={s.Value} onChange={(e) => saveSetting(s.Name, e.target.value)} sx={{ minWidth: 140, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
         {m.options.map((o) => <MenuItem key={o} value={o} sx={{ fontSize: 12.5 }}>
           {(m.optionLabels && m.optionLabels[o]) || o.replaceAll("_", " ")}
         </MenuItem>)}
@@ -704,7 +704,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       return (
         <Select size="small" displayEmpty value={zones.includes(s.Value) ? s.Value : ""}
           MenuProps={{ PaperProps: { sx: { maxHeight: 380 } } }}
-          sx={{ minWidth: 240, fontSize: 12.5, bgcolor: "#fff" }}
+          sx={{ minWidth: 240, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}
           onChange={(e) => saveSetting(s.Name, e.target.value)}>
           <MenuItem value="" sx={{ fontSize: 12.5 }}>this machine's local time</MenuItem>
           {zones.map((z) => <MenuItem key={z} value={z} sx={{ fontSize: 12.5 }}>{z}</MenuItem>)}
@@ -712,7 +712,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       );
     }
     if (m.type === "number") return (
-      <TextField type="number" defaultValue={s.Value} sx={{ width: 100, bgcolor: "#fff" }}
+      <TextField type="number" defaultValue={s.Value} sx={{ width: 100, bgcolor: "var(--tq-panel, #fff)" }}
         inputProps={{ style: { fontSize: 12.5, padding: "6px 10px" } }}
         onBlur={(e) => e.target.value !== s.Value && saveSetting(s.Name, e.target.value, e.target)} />
     );
@@ -725,7 +725,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       const bad = jsonBad[s.Name];
       return (
         <TextField defaultValue={s.Value} multiline minRows={1} error={!!bad} helperText={bad || " "}
-          placeholder='{"researcher": "codex"}' sx={{ width: 260, bgcolor: "#fff" }} inputProps={{ style: { fontSize: 12.5, fontFamily: "monospace" } }}
+          placeholder='{"researcher": "codex"}' sx={{ width: 260, bgcolor: "var(--tq-panel, #fff)" }} inputProps={{ style: { fontSize: 12.5, fontFamily: "monospace" } }}
           onBlur={(e) => {
             const v = e.target.value.trim(), why = jsonProblem(v);
             setJsonBad((b) => ({ ...b, [s.Name]: why }));
@@ -734,7 +734,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       );
     }
     return (
-      <TextField defaultValue={s.Value} sx={{ width: 150, bgcolor: "#fff" }} inputProps={{ style: { fontSize: 12.5, padding: "6px 10px" } }}
+      <TextField defaultValue={s.Value} sx={{ width: 150, bgcolor: "var(--tq-panel, #fff)" }} inputProps={{ style: { fontSize: 12.5, padding: "6px 10px" } }}
         onBlur={(e) => e.target.value !== s.Value && saveSetting(s.Name, e.target.value, e.target)} />
     );
   };
@@ -781,12 +781,12 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     return (
       <Box key={s.Name} data-tq-knob={s.Name} {...(asked ? { "data-tq-asked": "" } : {})}
         sx={{ display: "flex", alignItems: { xs: "stretch", sm: "center" }, flexDirection: { xs: "column", sm: "row" },
-        gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}`, ...(asked ? { outline: "2px solid #6f8a6e", outlineOffset: 4, borderRadius: 1 } : {}) }}>
+        gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}`, ...(asked ? { outline: "2px solid var(--tq-success, #6f8a6e)", outlineOffset: 4, borderRadius: 1 } : {}) }}>
         <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
           onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
           <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
             {m.label}
-            {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cfc9bf" }} />}
+            {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "var(--tq-muted, #cfc9bf)" }} />}
           </Typography>
           <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{m.desc || s.Description}</Typography>
           {/* the line every description was missing: what shipped, and whether this is
@@ -833,7 +833,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             <Typography variant="body2" sx={{ color: DIM }}>
               {/* the page title above already says what these are; this line is the door to the rules of the rules */}
               <Typography component="button" type="button" variant="body2" onClick={() => setHelp(SECTION_HELP.policies)}
-                sx={{ color: "#55697a", cursor: "pointer", border: 0, background: "none", padding: 0, font: "inherit", "&:hover": { textDecoration: "underline" } }}>
+                sx={{ color: "var(--tq-link, #55697a)", cursor: "pointer", border: 0, background: "none", padding: 0, font: "inherit", "&:hover": { textDecoration: "underline" } }}>
                 How precedence works →
               </Typography>
             </Typography>
@@ -870,7 +870,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
           <RecentlyDeleted kinds={["rule"]} onRestored={load} />
           {draft && (
             <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
-              <Typography variant="body2" sx={{ color: "#55697a", fontWeight: 600 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>
+              <Typography variant="body2" sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>
               <TextField label="Name" value={draft.Name} onChange={(e) => setDraft({ ...draft, Name: e.target.value })} />
               <Box sx={{ display: "flex", gap: 1, flexWrap: { xs: "wrap", sm: "nowrap" } }}>
                 <TextField select fullWidth label="Matches mail" value={draft.Kind} onChange={(e) => setDraft({ ...draft, Kind: e.target.value })}>
@@ -933,7 +933,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             after the fact breaks every hash from that point on. <b>Verify</b> recomputes the chain and says whether the record you see is
             the record that was written.
             <Typography component="button" type="button" variant="body2" onClick={() => setHelp(SECTION_HELP.audit)}
-              sx={{ color: "#55697a", cursor: "pointer", border: 0, background: "none", padding: 0, font: "inherit", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
+              sx={{ color: "var(--tq-link, #55697a)", cursor: "pointer", border: 0, background: "none", padding: 0, font: "inherit", ml: 0.75, "&:hover": { textDecoration: "underline" } }}>
               How to read it →
             </Typography>
           </Typography>
@@ -942,7 +942,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             {verifying ? "Checking every row…" : "Check the record"}</Button>
           {verify && (
             <Box sx={{ mt: 2 }}>
-              {verify.ok && <Typography sx={{ fontWeight: 600, fontSize: 13.5, color: "#47654a" }}>
+              {verify.ok && <Typography sx={{ fontWeight: 600, fontSize: 13.5, color: "var(--tq-success, #47654a)" }}>
                 ✓ Intact — {verify.rows} rows verified
               </Typography>}
               {/* two different findings, and calling both "BROKEN" cried wolf about a bug in
@@ -991,8 +991,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             {results.map((r) => (
               <Box key={r.key} onClick={r.go}
                 sx={{ ...card, p: 1.5, cursor: "pointer", transition: "border-color .15s, box-shadow .15s",
-                  "&:hover": { borderColor: "#c8c0b3", boxShadow: "0 2px 8px rgba(47,56,64,.08)" } }}>
-                <Typography sx={{ color: "#55697a", fontWeight: 600, fontSize: 13.5 }}>{r.label}</Typography>
+                  "&:hover": { borderColor: "var(--tq-border, #c8c0b3)", boxShadow: "0 2px 8px rgba(47,56,64,.08)" } }}>
+                <Typography sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600, fontSize: 13.5 }}>{r.label}</Typography>
                 <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.35 }}>{r.crumb}</Typography>
               </Box>
             ))}
@@ -1254,7 +1254,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
         <TextField fullWidth size="small" placeholder="Search settings…" value={q} onChange={(e) => setQ(e.target.value)}
           inputProps={{ "aria-label": "Search settings", "data-tq-browse-search": "" }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 17, color: FAINT }} /></InputAdornment> }}
-          sx={{ mt: 1.5, bgcolor: "#fff", borderRadius: 2 }} />
+          sx={{ mt: 1.5, bgcolor: "var(--tq-panel, #fff)", borderRadius: 2 }} />
       ),
       // what the assistant changed here - the tab drew it over Configuration
       tools: <>{hidden && <Typography data-tq-settings-hidden="" variant="body2" sx={{ mt: 1.5, color: DIM }}>{hidden}</Typography>}
@@ -1287,7 +1287,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       <Box sx={{ position: { md: "sticky" }, top: { md: 62 }, maxHeight: { md: "calc(100vh - 74px)" }, overflowY: { md: "auto" } }}>
         <Typography id="tqSettingsRail" sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 1.5 }}>Settings</Typography>
         <TextField fullWidth placeholder="Search settings…" value={q}
-          onChange={(e) => setQ(e.target.value)} sx={{ mb: 1.5, bgcolor: "#fff", borderRadius: 2 }}
+          onChange={(e) => setQ(e.target.value)} sx={{ mb: 1.5, bgcolor: "var(--tq-panel, #fff)", borderRadius: 2 }}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 17, color: FAINT }} /></InputAdornment> }} />
         {/* THE RAIL IS THE MAP: a page, and under it the sections that page stacks. Eleven
             Configuration groups were a pill strip that ran off the right edge of the page, and a
@@ -1301,8 +1301,8 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
               <Box onClick={() => goTo(k)}
                 sx={{ display: "flex", alignItems: "center", gap: 1.1, px: 1.25, height: 34, borderRadius: 1.75,
                   cursor: "pointer", fontSize: 12.5, fontWeight: on ? 600 : 400,
-                  color: on ? "#41525f" : DIM, bgcolor: on ? "#eae4d8" : "transparent",
-                  "&:hover": { bgcolor: on ? "#eae4d8" : "#f4f1ec" } }}>
+                  color: on ? "var(--tq-link, #41525f)" : DIM, bgcolor: on ? "var(--tq-inset, #eae4d8)" : "transparent",
+                  "&:hover": { bgcolor: on ? "var(--tq-inset, #eae4d8)" : "var(--tq-panel, #f4f1ec)" } }}>
                 {React.createElement(PAGES[k].icon, { sx: { fontSize: 16 } })}
                 <Box component="span" sx={{ flex: 1, minWidth: 0 }}>{PAGES[k].title}</Box>
                 {!!secs.length && (
@@ -1322,10 +1322,10 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
                     sx={{ ml: e.head ? 1.5 : 2.5, pl: 1.25, pr: 0.75, py: e.head ? 0.6 : 0.45, cursor: "pointer",
                       fontSize: 12, lineHeight: 1.35, mt: e.head ? 0.75 : 0,
                       borderLeft: e.head ? "none" : `2px solid ${at ? ACCENT2 : BORDER}`,
-                      color: at ? "#41525f" : e.head ? "#55697a" : DIM,
+                      color: at ? "var(--tq-link, #41525f)" : e.head ? "var(--tq-link, #55697a)" : DIM,
                       fontWeight: at ? 650 : e.head ? 700 : 400,
                       letterSpacing: e.head ? ".02em" : 0,
-                      "&:hover": { color: "#41525f", borderLeftColor: at ? ACCENT2 : "#c8c0b3" } }}>
+                      "&:hover": { color: "var(--tq-link, #41525f)", borderLeftColor: at ? ACCENT2 : "var(--tq-border, #c8c0b3)" } }}>
                     {e.label}
                   </Box>
                 );
@@ -1341,7 +1341,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
             same settings_schema.json this page draws from, so it can never describe another app) */}
         <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 1, px: 1.25 }}>
           <Box component="a" href="https://taskuary.com/docs/settings" target="_blank" rel="noreferrer"
-            sx={{ color: "#55697a", textDecoration: "none", "&:hover": { textDecoration: "underline" } }}>
+            sx={{ color: "var(--tq-link, #55697a)", textDecoration: "none", "&:hover": { textDecoration: "underline" } }}>
             Full documentation →
           </Box>
         </Typography>
@@ -1382,7 +1382,7 @@ const AssistantChanges = () => {
     return "";
   };
   return (
-    <Box sx={{ ...card, mb: 2, px: 1.5, py: 1.1, borderLeft: "4px solid #6f8a6e" }}>
+    <Box sx={{ ...card, mb: 2, px: 1.5, py: 1.1, borderLeft: "4px solid var(--tq-border-strong, #6f8a6e)" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <Typography sx={{ ...mono, fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: ACCENT2, flex: 1, textTransform: "uppercase" }}>What the assistant changed</Typography>
       </Box>
@@ -1441,19 +1441,19 @@ const AuditHistory = () => {
         <Typography sx={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT }}>LAST {rows.length} ACTIONS</Typography>
         <Box sx={{ flex: 1 }} />
         <TextField size="small" placeholder="filter — a task id, an action, a word" value={q} onChange={(e) => setQ(e.target.value)}
-          sx={{ width: 280, bgcolor: "#fff" }} inputProps={{ style: { fontSize: 12, padding: "5px 9px" } }} />
+          sx={{ width: 280, bgcolor: "var(--tq-panel, #fff)" }} inputProps={{ style: { fontSize: 12, padding: "5px 9px" } }} />
       </Box>
       {!shown.length && <Empty>Nothing matches.</Empty>}
       {shown.map((r) => (
         <Box key={r.Id} sx={{ display: "grid", gridTemplateColumns: "150px 110px 150px minmax(0, 1fr) 70px", gap: 1.5, alignItems: "baseline", py: 0.75, borderBottom: `1px solid ${BORDER}` }}>
           <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }}>{String(r.CreatedAt || "").slice(0, 16)}</Typography>
-          <Typography variant="caption" sx={{ color: r.ActorType === "human" ? "#47654a" : DIM, fontWeight: 600 }}>{who(r)}</Typography>
+          <Typography variant="caption" sx={{ color: r.ActorType === "human" ? "var(--tq-success, #47654a)" : DIM, fontWeight: 600 }}>{who(r)}</Typography>
           <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>{String(r.Action || "").replace(/_/g, " ")}</Typography>
           <Typography variant="caption" sx={{ color: DIM, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.Detail || ""}>
             {r.EntityType}{r.EntityId ? ` ${r.EntityType === "task" ? `TQ-${String(r.EntityId).padStart(4, "0")}` : `#${r.EntityId}`}` : ""}
             {r.Detail ? ` — ${typeof r.Detail === "string" ? r.Detail : JSON.stringify(r.Detail)}` : ""}
           </Typography>
-          <Typography variant="caption" sx={{ ...mono, color: "#cfc9bf", fontSize: 9.5 }} title={`row hash ${r.RowHash || ""}`}>{String(r.RowHash || "").slice(0, 8)}</Typography>
+          <Typography variant="caption" sx={{ ...mono, color: "var(--tq-muted, #cfc9bf)", fontSize: 9.5 }} title={`row hash ${r.RowHash || ""}`}>{String(r.RowHash || "").slice(0, 8)}</Typography>
         </Box>
       ))}
     </Box>

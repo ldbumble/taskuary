@@ -15,7 +15,7 @@ const USE = { light: "the quick model", standard: "the card's own model", strong
 const LEVEL = { quick: "Quick", standard: "Normal", hard: "Hard" };
 export const SAYS = "Triage judges each task quick, normal or hard and picks the model for it: quick work runs on a smaller model, "
   + "hard work on a stronger one. An AI with only one model thinks less or harder instead, where it can.";
-const sel = { fontSize: 12.5, bgcolor: "#fff", minWidth: 150 };
+const sel = { fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)", minWidth: 150 };
 const err = (e, d) => e?.response?.data?.detail || e?.message || d;
 // AN AI PER LEVEL (the owner, 2026-11-06: "not by default but you can adjust in settings"): for the agents' work only - general work,
 // quick work, and coding on a CLI. Blank is the card's AI; set, that level runs on the AI named here when it can take the call.
@@ -29,7 +29,7 @@ function LevelModel({ value, models, disabled, onSave }) {
   return (
     <Autocomplete freeSolo forcePopupIcon openOnFocus size="small" options={models || []} value={v} disabled={disabled}
       onInputChange={(_e, next) => setV(next)} onChange={(_e, next) => { setV(next || ""); commit(next); }} onBlur={() => commit(v)}
-      sx={{ minWidth: 170 }} renderInput={(p) => <TextField {...p} placeholder="its own model" sx={{ bgcolor: "#fff" }}
+      sx={{ minWidth: 170 }} renderInput={(p) => <TextField {...p} placeholder="its own model" sx={{ bgcolor: "var(--tq-panel, #fff)" }}
         inputProps={{ ...p.inputProps, style: { fontSize: 12.5 } }} />} />
   );
 }
@@ -93,7 +93,7 @@ export function RouteRules() {
     put([{ id, when, use: { tier: add.tier }, on: true, by: "owner" }, ...rules.filter((r) => r.id !== id)]);
   };
   return (
-    <Box data-tq-knob="ai_route_mode ai_route_strong_cap" data-tq-route-rules="" sx={{ ...card, p: 2, mb: 1.5, bgcolor: "#fff" }}>
+    <Box data-tq-knob="ai_route_mode ai_route_strong_cap" data-tq-route-rules="" sx={{ ...card, p: 2, mb: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14 }}>Which AI does each job</Typography>
         <Select size="small" value={p.mode} onChange={(e) => save({ mode: e.target.value })} sx={sel} data-tq-route-mode="">
@@ -139,7 +139,7 @@ export function RouteRules() {
               <Typography sx={{ fontSize: 12.5, color: r.on ? INK : FAINT, flex: 1 }}>{r.sentence}</Typography>
               {r.by === "owner" && (
                 <Typography component="button" type="button" variant="caption" onClick={() => put(rules.filter((x) => x.id !== r.id))}
-                  sx={{ border: 0, background: "none", p: 0, font: "inherit", color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
+                  sx={{ border: 0, background: "none", p: 0, font: "inherit", color: "var(--tq-link, #55697a)", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
                   remove</Typography>
               )}
             </Box>
@@ -162,7 +162,7 @@ export function RouteRules() {
             <Typography sx={{ fontSize: 12.5, color: DIM }}>At most</Typography>
             <TextField size="small" value={cap} placeholder="no cap" onChange={(e) => setCap(e.target.value)}
               onBlur={() => cap !== String(p.cap ?? "") && save({ cap })} inputProps={{ "aria-label": "strong calls a day", "data-tq-route-cap": "" }}
-              sx={{ width: 90, bgcolor: "#fff" }} />
+              sx={{ width: 90, bgcolor: "var(--tq-panel, #fff)" }} />
             <Typography sx={{ fontSize: 12.5, color: DIM }}>strong calls a day; used today: {p.used_today}</Typography>
           </Box>
         </Box>
@@ -177,7 +177,7 @@ export function RecentRoutes() {
   useEffect(() => { api.get("/api/ai/routes").then((r) => setRows(r.data.routes || [])).catch(() => setRows([])); }, []);
   if (!rows?.length) return null;
   return (
-    <Box data-tq-recent-routes="" sx={{ ...card, p: 2, mb: 1.5, bgcolor: "#fff" }}>
+    <Box data-tq-recent-routes="" sx={{ ...card, p: 2, mb: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
       <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.5 }}>RECENT ROUTES</Typography>
       {rows.map((r) => (
         <Typography key={r.Id} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }} title={r.Outcome && r.Outcome !== "ok" ? r.Outcome : undefined}>

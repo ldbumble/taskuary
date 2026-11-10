@@ -37,7 +37,7 @@ const SAYS = {
 export const ClosingCard = ({ mode = "done", sx }) => {
   const [head, line] = SAYS[mode] || SAYS.wrap;
   return (
-    <Box data-tq-closing={mode} sx={{ ...card, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf", ...sx }}>
+    <Box data-tq-closing={mode} sx={{ ...card, bgcolor: "var(--tq-inset, #e3e6e1)", border: "1px solid var(--tq-border, #d2d6cf)", ...sx }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <CircularProgress size={15} />
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>{head}</Typography>
@@ -51,7 +51,7 @@ export const ClosingCard = ({ mode = "done", sx }) => {
 // over a pane that is closing: the card, and nothing under it can be typed into or pressed until it is done
 export const ClosingCover = ({ mode = "done" }) => (
   <Box data-tq-closing-cover="" sx={{ position: "absolute", inset: 0, zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center",
-    p: 2, bgcolor: "rgba(250,248,245,.82)", backdropFilter: "blur(1px)", cursor: "progress" }}>
+    p: 2, bgcolor: "rgb(var(--tq-panel-rgb, 250 248 245) / .82)", backdropFilter: "blur(1px)", cursor: "progress" }}>
     <ClosingCard mode={mode} sx={{ maxWidth: 420, width: "100%" }} />
   </Box>
 );
@@ -79,10 +79,10 @@ export const WriteupBlock = ({ view, hasReply, onRetry, onDraft, draftLabel }) =
   return (
     <Box data-tq-writeup={view.state} data-tq-writeup-stage={view.stage || ""} role="status" aria-live="polite"
       sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}`, maxWidth: 900 }}>
-      <Box sx={{ bgcolor: PANEL2, border: `1px ${failed ? "solid" : "dashed"} ${failed ? "#c9a3a9" : BORDER}`, borderRadius: 1.25, px: 1.25, py: 1 }}>
+      <Box sx={{ bgcolor: PANEL2, border: `1px ${failed ? "solid" : "dashed"} ${failed ? "var(--tq-edge-red, #c9a3a9)" : BORDER}`, borderRadius: 1.25, px: 1.25, py: 1 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           {!failed && <CircularProgress size={14} />}
-          <Typography sx={{ color: failed ? "#7a2f3c" : INK, fontWeight: 600, fontSize: 13.5 }}>{writeupHead(view, hasReply)}</Typography>
+          <Typography sx={{ color: failed ? "var(--tq-danger, #7a2f3c)" : INK, fontWeight: 600, fontSize: 13.5 }}>{writeupHead(view, hasReply)}</Typography>
         </Box>
         {failed ? <>
           <Typography variant="body2" sx={{ color: DIM, mt: 0.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
@@ -96,7 +96,7 @@ export const WriteupBlock = ({ view, hasReply, onRetry, onDraft, draftLabel }) =
             {writeupSteps(view, hasReply).map((s) => (
               <Box component="li" key={s.k} data-step={s.state} sx={{ display: "flex", alignItems: "center", gap: 0.75, py: 0.15,
                 fontSize: 12.5, color: s.state === "next" ? FAINT : INK, fontWeight: s.state === "now" ? 600 : 400 }}>
-                <Box component="span" sx={{ width: 14, textAlign: "center", color: s.state === "done" ? "#47654a" : "inherit" }}>
+                <Box component="span" sx={{ width: 14, textAlign: "center", color: s.state === "done" ? "var(--tq-success, #47654a)" : "inherit" }}>
                   {s.state === "done" ? "✓" : s.state === "now" ? "›" : "·"}</Box>
                 {s.text}{s.state === "now" ? "…" : ""}
               </Box>

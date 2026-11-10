@@ -83,7 +83,7 @@ export default function ReasonPanel({ conn, reload }) {
           {trusted.map((t) => <Chip key={t} label={t} size="small" disabled={busy === `rm${t}`} onDelete={() => saveTrust(withoutTrust(trusted, t), `rm${t}`)} />)}
         </Box>
         <Box sx={{ display: "flex", gap: 1 }}>
-          <TextField size="small" label="name, or name/session" value={add} onChange={(e) => setAdd(e.target.value)} sx={{ bgcolor: "#fff", minWidth: 240 }}
+          <TextField size="small" label="name, or name/session" value={add} onChange={(e) => setAdd(e.target.value)} sx={{ bgcolor: "var(--tq-panel, #fff)", minWidth: 240 }}
             onKeyDown={(e) => { if (e.key === "Enter" && cleanOne(add)) { saveTrust(withTrust(trusted, add), "add"); setAdd(""); } }} />
           <Button size="small" variant="outlined" disabled={!cleanOne(add) || busy === "add"}
             onClick={() => { saveTrust(withTrust(trusted, add), "add"); setAdd(""); }}>Trust</Button>

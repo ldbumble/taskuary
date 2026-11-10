@@ -193,7 +193,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
     : `${ASK[step]}${reading && step !== "systems" ? " I'm reading your email to fill this in." : ""} Then press ${nextLabel}.`;
   useEffect(() => { onLine?.(line); }, [line, onLine]);
   useEffect(() => () => onLine?.(""), [onLine]);
-  if (!a) return err ? <Typography sx={{ color: "#9b2c2c", fontSize: 13 }}>{err}</Typography> : <CircularProgress size={16} />;
+  if (!a) return err ? <Typography sx={{ color: "var(--tq-danger, #9b2c2c)", fontSize: 13 }}>{err}</Typography> : <CircularProgress size={16} />;
 
   const set = (k) => (e) => { touched.current.add(k); setA((x) => ({ ...x, [k]: e.target.value })); };
   const has = (s) => a.systems.includes(s);
@@ -203,7 +203,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
     if (v && !has(v)) { touched.current.add("systems"); setA((x) => ({ ...x, systems: [...x.systems, v] })); setSeen((x) => [...new Set([...x, v])]); }
     setOther("");
   };
-  const field = { "& .MuiInputBase-root": { fontSize: 15, bgcolor: "#fff" } };
+  const field = { "& .MuiInputBase-root": { fontSize: 15, bgcolor: "var(--tq-panel, #fff)" } };
   const enter = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); next(); } };
   const shown = all ? [...new Set([...seen, ...offered])] : seen;
   const text = draft ? texts[step] : "";
@@ -238,8 +238,8 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
         {reading && !a.signature && <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={13} />
           <Typography sx={{ color: DIM, fontSize: 13 }}>Reading your sent mail for it…</Typography></Box>}
         <Typography sx={{ color: DIM, fontSize: 12 }}>How it sits under an email:</Typography>
-        <Box data-tq-signature-preview="" sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff", px: 2, py: 1.25, fontSize: 13.5,
-          whiteSpace: "pre-line", color: "#2b2b2b", maxWidth: 520 }}>
+        <Box data-tq-signature-preview="" sx={{ border: "1px solid var(--tq-border, #ddd5c6)", borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)", px: 2, py: 1.25, fontSize: 13.5,
+          whiteSpace: "pre-line", color: "var(--tq-text, #2b2b2b)", maxWidth: 520 }}>
           {"Hi Erin,\n\nThanks - that's done.\n\n"}{(a.signature || "").trim() || <span style={{ color: DIM }}>(no signature - leave it blank and drafts sign the way your writing style does)</span>}
         </Box>
       </>}
@@ -268,15 +268,15 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
           <Typography sx={{ color: DIM, fontSize: 13.5 }}>{says.busy}</Typography></Box>
       ) : <>
-        {draft.state === "failed" && <Typography data-tq-draft-failed="" sx={{ color: "#9b2c2c", fontSize: 13.5 }}>
+        {draft.state === "failed" && <Typography data-tq-draft-failed="" sx={{ color: "var(--tq-danger, #9b2c2c)", fontSize: 13.5 }}>
           {soon ? draft.why : `I couldn't write it: ${draft.why}`}</Typography>}
         {/* READ AS A DOCUMENT, not its markdown (the owner, 2026-10-16: the box showed "### What my job is"): Edit opens the text */}
         {editing === step || !text.trim()
           ? <TextField key={step} multiline fullWidth minRows={10} maxRows={22} value={text} sx={{ ...field, "& textarea": { fontSize: 14, lineHeight: 1.5 } }}
             onChange={(e) => { const v = e.target.value; setEdited((x) => ({ ...x, [step]: true })); setTexts((x) => ({ ...x, [step]: v })); }}
             inputProps={{ "aria-label": LABEL[step] }} autoFocus={editing === step} />
-          : <Box data-tq-job-read="" sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff", px: 2, py: 1, maxHeight: under ? "36vh" : "52vh", overflowY: "auto",
-              "& h2": { fontSize: 15.5, fontWeight: 700, mt: 2, mb: 0.5, borderBottom: "1px solid #ece6db" }, "& h2:first-of-type": { mt: 0.5 },
+          : <Box data-tq-job-read="" sx={{ border: "1px solid var(--tq-border, #ddd5c6)", borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)", px: 2, py: 1, maxHeight: under ? "36vh" : "52vh", overflowY: "auto",
+              "& h2": { fontSize: 15.5, fontWeight: 700, mt: 2, mb: 0.5, borderBottom: "1px solid var(--tq-border, #ece6db)" }, "& h2:first-of-type": { mt: 0.5 },
               "& h3": { fontSize: 14.5, fontWeight: 700, mt: 1.5, mb: 0.5 }, "& h3:first-of-type": { mt: 0.5 }, "& ul": { pl: 2.5, my: 0.5 },
               "& li": { fontSize: 14, lineHeight: 1.55, mb: 0.4 } }}><Md text={text} /></Box>}
       </>}</Box>}
@@ -285,7 +285,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
       {under && <WorkstreamsSection d={drafts.workstreams} text={texts.workstreams} busy={!!busy} onAgain={() => learn(["workstreams"])}
         onChange={(v) => { setEdited((x) => ({ ...x, workstreams: true })); setTexts((x) => ({ ...x, workstreams: v })); }} />}
       {note && !draft && <Typography sx={{ color: DIM, fontSize: 13 }}>{note}</Typography>}
-      {err && <Typography sx={{ color: "#9b2c2c", fontSize: 13 }}>{err}</Typography>}
+      {err && <Typography sx={{ color: "var(--tq-danger, #9b2c2c)", fontSize: 13 }}>{err}</Typography>}
       {((!under && moves.length > 0) || skipper) && <Box data-tq-about-moves="" sx={{ display: "flex", alignItems: "center", gap: 0.5, ml: -1, flexWrap: "wrap" }}>
         {!under && moves}
         {skipper && <Button size="small" disabled={!!busy} onClick={skip} sx={{ ...quiet, ml: "auto" }}>Skip these questions</Button>}
@@ -306,7 +306,7 @@ export function WorkstreamsSection({ d, text, onChange, onAgain = null, busy = f
           <Typography sx={{ color: DIM, fontSize: 13.5 }}>{SAYS.workstreams.busy}</Typography></Box>
         {later && <Typography data-tq-workstreams-later="" sx={{ color: FAINT, fontSize: 12.5 }}>{later}</Typography>}
       </> : d.state === "failed" ? <>
-        <Typography data-tq-draft-failed="" sx={{ color: "#9b2c2c", fontSize: 13.5 }}>{SAYS.workstreams.failed(d.why)}</Typography>
+        <Typography data-tq-draft-failed="" sx={{ color: "var(--tq-danger, #9b2c2c)", fontSize: 13.5 }}>{SAYS.workstreams.failed(d.why)}</Typography>
         {onAgain && <Box><Button size="small" sx={quiet} disabled={busy} onClick={onAgain}>Write it again</Button></Box>}
       </> : <WorkstreamsConfirm text={text} onChange={onChange} />}
     </Box>
@@ -326,9 +326,9 @@ export function WorkstreamsConfirm({ text, onChange }) {
     <Box data-tq-workstreams-confirm="" sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       {/* ONE TICK (the owner, 2026-11-09: "either you want taskuary to use this or not. no need for personal button. wording is confusing") */}
       <Typography sx={{ fontSize: 13, color: DIM }}>Taskuary uses what's ticked. Untick anything that isn't your work.</Typography>
-      <Box sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff" }}>
+      <Box sx={{ border: "1px solid var(--tq-border, #ddd5c6)", borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
         {rows.map((r, i) => { const kept = r.keep !== false; return (
-          <Box key={r.slug} data-tq-workstream-row={r.slug} sx={{ px: 1.5, py: 1.25, "& + &": { borderTop: "1px solid #ece6db" } }}>
+          <Box key={r.slug} data-tq-workstream-row={r.slug} sx={{ px: 1.5, py: 1.25, "& + &": { borderTop: "1px solid var(--tq-border, #ece6db)" } }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Checkbox size="small" checked={kept} onChange={(e) => put(i, { keep: e.target.checked })} sx={{ p: 0.5, ml: -0.5 }}
                 inputProps={{ "aria-label": `Keep ${r.name || "this workstream"}` }} />

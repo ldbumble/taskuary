@@ -96,9 +96,9 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
       <Box component="button" type="button" onClick={(e) => setEl(e.currentTarget)}
         data-tq-filter="true" aria-label={`Filter the rail - ${label}`}
         sx={{ flex: 1, minWidth: 0, height: 30, display: "flex", alignItems: "center", gap: 0.75, px: 1.25,
-          borderRadius: "8px", border: `1px solid ${narrowed ? "#b9c3cb" : BORDER}`, bgcolor: narrowed ? "#e4e9ee" : PANEL,
+          borderRadius: "8px", border: `1px solid ${narrowed ? "var(--tq-border, #b9c3cb)" : BORDER}`, bgcolor: narrowed ? "var(--tq-inset, #e4e9ee)" : PANEL,
           cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 600, color: narrowed ? INK : DIM, textAlign: "left",
-          "&:hover": { borderColor: "#b9c3cb", bgcolor: narrowed ? "#e4e9ee" : PANEL } }}>
+          "&:hover": { borderColor: "var(--tq-border, #b9c3cb)", bgcolor: narrowed ? "var(--tq-inset, #e4e9ee)" : PANEL } }}>
         <FilterAltIcon sx={{ fontSize: 15, color: narrowed ? ACCENT : DIM, flexShrink: 0 }} />
         <Box component="span" sx={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</Box>
         <ChevronRightIcon sx={{ fontSize: 14, color: FAINT, transform: "rotate(90deg)", flexShrink: 0 }} />
@@ -113,13 +113,13 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
             <Chip key={o.key} size="small" label={o.label} data-tq-kind={o.key || "all"}
               onClick={() => onChange(o.key, pick)}
               sx={{ height: 24, fontSize: 11, fontWeight: 600, borderRadius: 99,
-                bgcolor: cat === o.key ? "#e4e9ee" : PANEL2, color: cat === o.key ? "#41525f" : DIM,
-                border: `1px solid ${cat === o.key ? "#cbd4dc" : BORDER}` }} />
+                bgcolor: cat === o.key ? "var(--tq-inset, #e4e9ee)" : PANEL2, color: cat === o.key ? "var(--tq-link, #41525f)" : DIM,
+                border: `1px solid ${cat === o.key ? "var(--tq-border, #cbd4dc)" : BORDER}` }} />
           ))}
         </Box>
         <Typography sx={{ fontSize: 9.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Source</Typography>
         <TextField fullWidth placeholder="search sources…" value={srcQ} onChange={(e) => setSrcQ(e.target.value)}
-          sx={{ bgcolor: "#fff", mb: 0.5 }} inputProps={{ style: { fontSize: 12, padding: "5px 8px" } }} />
+          sx={{ bgcolor: "var(--tq-panel, #fff)", mb: 0.5 }} inputProps={{ style: { fontSize: 12, padding: "5px 8px" } }} />
         <Box sx={{ maxHeight: 220, overflowY: "auto", mx: -0.5 }}>
           <MenuItem selected={!pick} onClick={() => onChange(cat, "")} sx={{ fontSize: 12, borderRadius: 1 }}>all sources</MenuItem>
           {/* 96 discovered buckets turned this into a page-long wall. It is a bounded, searchable
@@ -151,7 +151,7 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
         </Box>
         {narrowed && (
           <Button size="small" onClick={() => { onChange("", ""); close(); }}
-            sx={{ mt: 0.75, fontSize: 11, textTransform: "none", color: ACCENT }}>Show everything</Button>
+            sx={{ mt: 0.75, fontSize: 11, textTransform: "none", color: "var(--tq-link, #55697a)" }}>Show everything</Button>
         )}
       </Popover>
     </>
@@ -541,8 +541,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                   onClick={() => (n.key === "new" && !onGo ? setNewOpen(true) : onGo?.(n.go, n.key))}
                   sx={{ display: "flex", alignItems: "center", gap: 1.25, width: "100%", height: 30, px: 1.25, border: 0,
                     borderRadius: "8px", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, textAlign: "left",
-                    color: navOn === n.key ? INK : "#4d4a43", bgcolor: navOn === n.key ? "#e4e9ee" : "transparent",
-                    "& svg": { fontSize: 16, color: "#6e685f" }, "&:hover": { bgcolor: navOn === n.key ? "#e4e9ee" : PANEL2 } }}>
+                    color: navOn === n.key ? INK : "var(--tq-secondary, #4d4a43)", bgcolor: navOn === n.key ? "var(--tq-inset, #e4e9ee)" : "transparent",
+                    "& svg": { fontSize: 16, color: "var(--tq-secondary, #6e685f)" }, "&:hover": { bgcolor: navOn === n.key ? "var(--tq-inset, #e4e9ee)" : PANEL2 } }}>
                   <Icon />{n.label}
                 </Box>
               </Tooltip>

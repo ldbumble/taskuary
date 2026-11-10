@@ -27,12 +27,12 @@ const DONE_TODAY = "done:today";      // search.DONE_TODAY
 
 // colour identifies, it never shouts: each pill is a pale tint with its own ink, from the five colours - never the
 // oxblood, which means "this is on you" and nothing else
-const TONES = { slate: [PALETTE.slate, "#e6ebef"], sage: [PALETTE.sage, "#e5ece2"], brass: [PALETTE.brass, "#ede7da"],
-  oat: [PALETTE.oat, "#ece8e1"], advisor: [ASSISTANT.ink, "#e8eee4"], pick: [PILL_COLORS.pick.fg, PILL_COLORS.pick.bg] };
+const TONES = { slate: ["var(--tq-link, #55697a)", "var(--tq-tint-slate, #e6ebef)"], sage: ["var(--tq-success, #5f7a5f)", "var(--tq-tint-sage, #e5ece2)"], brass: ["var(--tq-warning, #827356)", "var(--tq-tint-brass, #ede7da)"],
+  oat: ["var(--tq-muted, #7b7366)", "var(--tq-tint-neutral, #ece8e1)"], advisor: [ASSISTANT.ink, "var(--tq-tint-sage, #e8eee4)"], pick: [PILL_COLORS.pick.fg, PILL_COLORS.pick.bg] };
 const ICONS = { task: TaskAltIcon, email: MailOutlineIcon, chat: ChatBubbleOutlineIcon, pr: CallMergeIcon, issue: AdjustIcon,
   advisor: PsychologyOutlinedIcon, report: BarChartIcon, source: PowerOutlinedIcon, setting: TuneIcon, connector: PowerOutlinedIcon,
   person: PersonOutlineIcon };
-const MARK = "#efe3bf";            // the matched words: a highlighter's wash, not a colour that means anything
+const MARK = "var(--tq-tint-brass, #efe3bf)";            // the matched words: a highlighter's wash, not a colour that means anything
 
 export function Pill({ hit, sx }) {
   const k = kindOf(hit), [fg, bg] = TONES[k.tone] || TONES.oat;
@@ -71,7 +71,7 @@ export function SearchBar({ onOpen }) {
         width: { xs: 32, sm: "100%" }, height: 32, px: { xs: 0, sm: 1.1 }, cursor: "text",
         border: `1px solid ${BORDER}`, borderRadius: "9px", bgcolor: PANEL, fontFamily: "inherit", textAlign: "left",
         transition: "border-color .15s, box-shadow .15s",
-        "&:hover": { borderColor: "#cfc7bb", boxShadow: "0 1px 3px rgba(30,50,38,.06)" } }}>
+        "&:hover": { borderColor: "var(--tq-border, #cfc7bb)", boxShadow: "0 1px 3px rgba(30,50,38,.06)" } }}>
       <SearchIcon sx={{ fontSize: 16, color: FAINT }} />
       <Box component="span" sx={{ flex: 1, fontSize: 12.5, color: FAINT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
         display: { xs: "none", sm: "block" } }}>{devMode ? "Search tasks, mail, chats, PRs…" : "Search tasks, mail, chats…"}</Box>
@@ -86,8 +86,8 @@ const CHANNEL_WORDS = { email: "Email", teams: "Teams", whatsapp: "WhatsApp", te
 function MessageThem({ person, onGo, sx }) {
   const [ways, setWays] = useState(null);
   const ask = () => api.get("/api/send-targets").then(({ data }) => setWays(channelsFor(person, data?.data))).catch(() => setWays([]));
-  const btn = { fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, color: ACCENT, bgcolor: "transparent", border: `1px solid ${BORDER}`,
-    borderRadius: "6px", px: 0.8, py: "2px", cursor: "pointer", "&:hover": { borderColor: "#cbd4dc", bgcolor: "#e6ebef" } };
+  const btn = { fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, color: "var(--tq-link, #55697a)", bgcolor: "transparent", border: `1px solid ${BORDER}`,
+    borderRadius: "6px", px: 0.8, py: "2px", cursor: "pointer", "&:hover": { borderColor: "var(--tq-border, #cbd4dc)", bgcolor: "var(--tq-inset, #e6ebef)" } };
   return (
     <Box data-tq-message-them={person.to} onMouseDown={(e) => e.preventDefault()} onClick={(e) => e.stopPropagation()}
       sx={{ display: "flex", alignItems: "center", gap: 0.6, flexWrap: "wrap", flexShrink: 0, ...sx }}>
@@ -110,7 +110,7 @@ function Row({ hit, words, on, onPick, onTask, onHover, onMessage }) {
       onClick={() => onPick(hit)} onMouseMove={onHover}
       onMouseDown={(e) => e.preventDefault()}
       sx={{ position: "relative", display: "flex", gap: 1.25, alignItems: "flex-start", px: 1.5, py: 1, mx: 0.75, borderRadius: "9px",
-        cursor: "pointer", bgcolor: on ? "#f0ebe3" : "transparent", transition: "background-color .08s" }}>
+        cursor: "pointer", bgcolor: on ? "var(--tq-inset, #f0ebe3)" : "transparent", transition: "background-color .08s" }}>
       {/* one column of pills, so every title starts at the same x: "Connection" outgrew 62px and its title stood 24px right of the rest */}
       {/* ...on a desk; a phone keeps the titles' room */}
       <Pill hit={hit} sx={{ mt: "1px", minWidth: 62, width: { xs: "auto", sm: 88 }, justifyContent: "center" }} />
@@ -137,7 +137,7 @@ function Row({ hit, words, on, onPick, onTask, onHover, onMessage }) {
             onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); onTask(hit.tid); }}
             sx={{ ...mono, flexShrink: 0, fontSize: 10.5, color: closed ? FAINT : ACCENT, bgcolor: "transparent", border: `1px solid ${BORDER}`,
               borderRadius: "6px", px: 0.6, py: "1px", cursor: "pointer", textDecoration: closed ? "line-through" : "none",
-              "&:hover": { borderColor: "#cbd4dc", bgcolor: "#e6ebef" } }}>{hit.ref}</Box>
+              "&:hover": { borderColor: "var(--tq-border, #cbd4dc)", bgcolor: "var(--tq-inset, #e6ebef)" } }}>{hit.ref}</Box>
         </Tooltip>
       )}
     </Box>
@@ -267,7 +267,7 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
       slotProps={{ backdrop: { sx: { bgcolor: "rgba(38,37,33,.28)", backdropFilter: "blur(2px)" } } }}
       sx={{ "& .MuiDialog-container": { alignItems: "flex-start" } }}
       PaperProps={{ sx: { mt: "9vh", width: 680, maxWidth: "calc(100vw - 32px)", borderRadius: "14px", bgcolor: PANEL,
-        border: `1px solid #dad4cb`, boxShadow: "0 24px 64px rgba(30,50,38,.22)", overflow: "hidden", m: 2 } }}>
+        border: `1px solid var(--tq-border, #dad4cb)`, boxShadow: "0 24px 64px rgba(30,50,38,.22)", overflow: "hidden", m: 2 } }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2, height: 56, borderBottom: `1px solid ${BORDER}` }}>
         <SearchIcon sx={{ fontSize: 21, color: q ? INK : FAINT }} />
         <InputBase autoFocus fullWidth value={q} onKeyDown={key}
@@ -282,17 +282,17 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
             onMouseDown={(e) => e.preventDefault()} onClick={() => { setToday((v) => !v); setOnly(""); setAt(0); held.current = ""; }}
             title="The tasks you closed today"
             sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, height: 26, px: 1.1, borderRadius: 99, cursor: "pointer",
-              fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, border: `1px solid ${today ? "#cbd4dc" : BORDER}`,
-              bgcolor: today ? "#e4e9ee" : "transparent", color: today ? "#41525f" : DIM, "&:hover": { bgcolor: today ? "#e4e9ee" : PANEL2 } }}>
+              fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, border: `1px solid ${today ? "var(--tq-border, #cbd4dc)" : BORDER}`,
+              bgcolor: today ? "var(--tq-inset, #e4e9ee)" : "transparent", color: today ? "var(--tq-link, #41525f)" : DIM, "&:hover": { bgcolor: today ? "var(--tq-inset, #e4e9ee)" : PANEL2 } }}>
             <TaskAltIcon sx={{ fontSize: 13 }} />Done today
           </Box>
           {strip.length > 1 && strip.map((f) => (
             <Box key={f.key || "all"} component="button" type="button" role="tab" aria-selected={only === f.key} data-tq-search-filter={f.key || "all"}
               onMouseDown={(e) => e.preventDefault()} onClick={() => { setOnly(f.key); setAt(0); }}
               sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, height: 26, px: 1.1, borderRadius: 99, cursor: "pointer",
-                fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, border: `1px solid ${only === f.key ? "#cbd4dc" : BORDER}`,
-                bgcolor: only === f.key ? "#e4e9ee" : "transparent", color: only === f.key ? "#41525f" : DIM,
-                "&:hover": { bgcolor: only === f.key ? "#e4e9ee" : PANEL2 } }}>
+                fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, border: `1px solid ${only === f.key ? "var(--tq-border, #cbd4dc)" : BORDER}`,
+                bgcolor: only === f.key ? "var(--tq-inset, #e4e9ee)" : "transparent", color: only === f.key ? "var(--tq-link, #41525f)" : DIM,
+                "&:hover": { bgcolor: only === f.key ? "var(--tq-inset, #e4e9ee)" : PANEL2 } }}>
               {f.label}<Box component="span" sx={{ fontSize: 10.5, color: FAINT, fontWeight: 600 }}>{f.n}</Box>
             </Box>
           ))}
@@ -325,7 +325,7 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
         {settled && aloneAs(res) && <Box data-tq-search-alone="" sx={{ px: 2.5, py: 1.25, fontSize: 12.5, color: DIM }}>{nothingYet(aloneAs(res))}
           <MessageThem person={hits[0]} onGo={message} sx={{ mt: 0.9 }} /></Box>}
       </Box>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, height: 36, borderTop: `1px solid ${BORDER}`, bgcolor: "#faf8f5",
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, height: 36, borderTop: `1px solid ${BORDER}`, bgcolor: "var(--tq-panel, #faf8f5)",
         fontSize: 11, color: FAINT }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>↑</Kbd><Kbd>↓</Kbd>move</Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>Enter</Kbd>open</Box>

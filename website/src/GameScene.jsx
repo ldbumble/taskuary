@@ -1071,7 +1071,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
           onClick={() => descriptor && onSelect?.(descriptor.task.TaskId)}
           sx={{ position: "absolute", zIndex: 3, transform: "translate(-50%, -100%)", minWidth: 118,
             maxWidth: 175, display: "none", px: 1.05, py: 0.7, borderRadius: "8px",
-            bgcolor: "rgba(255,253,249,.92)", border: `1px solid ${BORDER}`,
+            bgcolor: "rgb(var(--tq-panel-rgb, 255 253 249) / .92)", border: `1px solid ${BORDER}`,
             boxShadow: "0 8px 24px rgba(48,52,43,.12)", backdropFilter: "blur(7px)",
             cursor: descriptor ? "pointer" : "default", pointerEvents: descriptor ? "auto" : "none",
             textAlign: "left", "&:hover": { borderColor: "#9eaa98", bgcolor: PANEL } }}>
@@ -1082,7 +1082,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
               <Typography noWrap sx={{ fontSize: 10.5, fontWeight: 600, color: INK }}>{descriptor.state.agent}</Typography>
               <Typography sx={{ ...mono, ml: "auto", fontSize: 9.5, color: FAINT }}>{descriptor.task.ref}</Typography>
             </Box>
-            <Typography noWrap sx={{ fontSize: 10.5, color: descriptor.state.tone === "waiting" ? ROLES.you.solid : FAINT,
+            <Typography noWrap sx={{ fontSize: 10.5, color: descriptor.state.tone === "waiting" ? ROLES.you.ink : FAINT,
               pt: 0.2 }}>{descriptor.state.label}</Typography>
           </>}
         </Box>
@@ -1092,7 +1092,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
       {POOLS.flatMap(([pool, zone, n]) => npcs.filter((x) => poolOf(x) === pool).slice(0, n).map((item, i) => (
         <Box key={`npc:${i}:${pool}`} ref={tagRef(`npc:${i}:${pool}`)} onClick={() => onPick?.(item.key)}
           sx={{ ...pinned, maxWidth: 190, px: 1, py: 0.55, borderRadius: "10px 10px 10px 2px", cursor: "pointer",
-            bgcolor: item.key === picked ? "#1f242c" : zone === "archive" ? "rgba(236,240,255,.94)" : "rgba(255,253,249,.94)",
+            bgcolor: item.key === picked ? "#1f242c" : zone === "archive" ? "rgb(var(--tq-panel-rgb, 236 240 255) / .94)" : "rgb(var(--tq-panel-rgb, 255 253 249) / .94)",
             color: item.key === picked ? "#fff" : INK, border: `1px solid ${item.key === picked ? "#1f242c" : BORDER}`,
             boxShadow: "0 8px 22px rgba(30,34,40,.16)", outline: hoverKey === item.key ? "2px solid #d9a441" : "none" }}>
           <Typography noWrap sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.3, opacity: 0.8 }}>
@@ -1103,8 +1103,8 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
 
       {cabinets.slice(0, 8).map((c, i) => (
         <Box key={`cab:${c.Topic}`} ref={tagRef(`cab:${i}`)} onClick={() => onCabinet?.(c.Topic)}
-          sx={{ ...pinned, px: 0.9, py: 0.35, borderRadius: "6px", cursor: "pointer", bgcolor: c.Topic === picked ? "#1f242c" : "#f3efe6",
-            color: c.Topic === picked ? "#fff" : INK, border: "1px solid #b9b2a3", boxShadow: "0 4px 12px rgba(30,34,40,.12)" }}>
+          sx={{ ...pinned, px: 0.9, py: 0.35, borderRadius: "6px", cursor: "pointer", bgcolor: c.Topic === picked ? "#1f242c" : "var(--tq-panel, #f3efe6)",
+            color: c.Topic === picked ? "#fff" : INK, border: "1px solid var(--tq-border-strong, #b9b2a3)", boxShadow: "0 4px 12px rgba(30,34,40,.12)" }}>
           <Typography noWrap sx={{ ...mono, fontSize: 10.5, fontWeight: 600 }}>🗄 {c.Topic} · {c.n}</Typography>
         </Box>
       ))}

@@ -38,7 +38,7 @@ const Step = ({ s }) => {
       {s.items.map((i, n) => <Box key={n} sx={{ pl: 1 }}>{i.status === "completed" ? "✓" : i.status === "in_progress" ? "▸" : "○"} {i.text}</Box>)}
     </Box>);
   if (s.k === "result") return <Typography sx={{ fontSize: 12, color: FAINT, fontStyle: "italic" }}>Its answer — shown above.</Typography>;
-  if (s.k === "error") return <Typography sx={{ fontSize: 12, color: "#8a3646" }}>⚠ {s.text}</Typography>;
+  if (s.k === "error") return <Typography sx={{ fontSize: 12, color: "var(--tq-danger, #8a3646)" }}>⚠ {s.text}</Typography>;
   if (s.k === "brief") return <BriefLine text={s.text} />;
   if (s.k === "compact") return <Typography sx={{ fontSize: 11.5, color: FAINT }}>{s.text || "Conversation compacted"}</Typography>;
   if (s.k === "gap") return <Typography sx={{ fontSize: 11.5, color: FAINT }}>… {s.text}</Typography>;
@@ -244,7 +244,7 @@ const ResultView = ({ s, pages, diff, since, draft, story, diffOpen = false, onD
       {made && <Box data-tq-result-files="" sx={sec}>
         <Typography sx={head}>What it made</Typography>
         {diff && <Typography data-tq-diff-stat="" sx={{ ...mono, fontSize: 11.5, color: DIM, mb: 0.4 }}>
-          {plural(diff.files, "file")} changed <Box component="span" sx={{ color: "#47654a" }}>+{diff.added}</Box> <Box component="span" sx={{ color: "#6b2733" }}>−{diff.removed}</Box>
+          {plural(diff.files, "file")} changed <Box component="span" sx={{ color: "var(--tq-success, #47654a)" }}>+{diff.added}</Box> <Box component="span" sx={{ color: "var(--tq-danger, #6b2733)" }}>−{diff.removed}</Box>
           {onDiff && <Box component="span" data-tq-diff-toggle="">{" · "}<Button size="small" aria-expanded={diffOpen} onClick={onDiff}
             sx={{ ...link, fontSize: 11.5, verticalAlign: "baseline", textTransform: "none" }}>{diffOpen ? "Hide diff" : "Show diff"}</Button></Box>}</Typography>}
         <FileNames files={mine} />

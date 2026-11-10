@@ -26,7 +26,7 @@ import NewSheet from "./NewSheet.jsx";
 const HubView = React.lazy(() => import("./HubView.jsx"));
 
 const chipSx = (on) => ({ height: 30, px: 1.6, borderRadius: 99, border: `1px solid ${on ? "#55697a" : BORDER}`, cursor: "pointer",
-  bgcolor: on ? "#55697a" : PANEL, color: on ? "#fff" : "#4d4a43", fontFamily: "inherit", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" });
+  bgcolor: on ? "#55697a" : PANEL, color: on ? "#fff" : "var(--tq-secondary, #4d4a43)", fontFamily: "inherit", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" });
 
 // The frame every area draws through. sections: [{key, label, n}]; cards: [{key, title, sub, badge, icon, onOpen}];
 // detail: the view's own element for the one open card, or null. `openLabel` names the open card for the assistant.
@@ -66,7 +66,7 @@ export function BrowseFrame({ title, area = "", summary, sections = [], section,
         {/* what the tab offered beside its list - Run due now, Write one, the filters: the tab is gone, so it is here */}
         {tools}
         {/* a note with no list under it yet (a link to something that is gone) is said here, where it is seen */}
-        {!!note && section == null && <Typography sx={{ mt: 1.25, fontSize: 12.5, color: "#7a2f3c", lineHeight: 1.5 }}>{note}</Typography>}
+        {!!note && section == null && <Typography sx={{ mt: 1.25, fontSize: 12.5, color: "var(--tq-danger, #7a2f3c)", lineHeight: 1.5 }}>{note}</Typography>}
         {!!sections.length && (
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1.5 }}>
             {sections.map((s) => (
@@ -87,7 +87,7 @@ export function BrowseFrame({ title, area = "", summary, sections = [], section,
           {!noBack && <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.75, py: 1.1, borderBottom: `1px solid ${BORDER}` }}>
             <Box component="button" type="button" data-tq-browse-back="" onClick={onBack}
               sx={{ display: "flex", alignItems: "center", gap: 0.5, height: 32, pl: 1, pr: 1.5, borderRadius: "8px", border: `1px solid ${BORDER}`,
-                bgcolor: PANEL, color: "#41525f", fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
+                bgcolor: PANEL, color: "var(--tq-link, #41525f)", fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
               <ArrowBackIosNewIcon sx={{ fontSize: 12 }} />{sectionLabel || title}
             </Box>
             {/* the back button says where you are; "the other 5 reports cards are hidden while this one is open" said it again
@@ -109,7 +109,7 @@ export function BrowseFrame({ title, area = "", summary, sections = [], section,
               <Box key={c.key} component="button" type="button" data-tq-browse-card={c.key} disabled={!c.onOpen} onClick={c.onOpen}
                 sx={{ display: "flex", alignItems: "flex-start", gap: 1.25, textAlign: "left", p: 1.5, border: `1px solid ${BORDER}`, borderRadius: "10px",
                   bgcolor: PANEL, cursor: c.onOpen ? "pointer" : "default", fontFamily: "inherit", minWidth: 0, opacity: c.onOpen ? 1 : 0.7,
-                  "&:hover": c.onOpen ? { borderColor: "#b9c3cb" } : {} }}>
+                  "&:hover": c.onOpen ? { borderColor: "var(--tq-border, #b9c3cb)" } : {} }}>
                 {c.icon}
                 <Box sx={{ minWidth: 0, flex: 1 }}>
                   <Typography sx={{ fontSize: 13, fontWeight: 600, color: INK }} noWrap>{c.title}</Typography>

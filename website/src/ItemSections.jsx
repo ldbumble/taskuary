@@ -73,7 +73,7 @@ export function ItemAsk({ ask, hand = null, onHand = null, came = "" }) {
       sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere" }}>{l.text}</Typography>)}
     {said.map((t, i) => <React.Fragment key={i}>
       <Typography data-tq-item-said="" sx={{ alignSelf: "flex-end", maxWidth: "75%", fontSize: 13.5, lineHeight: 1.48, color: INK, overflowWrap: "anywhere",
-        bgcolor: "#e7efe6", border: "1px solid #cfdccd", borderRadius: "13px", px: 1.5, py: 1 }}>{t.q}</Typography>
+        bgcolor: "var(--tq-inset, #e7efe6)", border: "1px solid var(--tq-border, #cfdccd)", borderRadius: "13px", px: 1.5, py: 1 }}>{t.q}</Typography>
       <Box data-tq-item-answer="" sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere", "& p": { my: 0.25 } }}><LinkPopups><Md text={t.a} /></LinkPopups></Box>
     </React.Fragment>)}
     <Box aria-hidden sx={{ flex: "1 1 auto" }} />
@@ -83,7 +83,7 @@ export function ItemAsk({ ask, hand = null, onHand = null, came = "" }) {
         label={hand ? btn(hand.verb) : "Ask about this"} sendAttrs={{ "data-tq-item-send": hand ? "agent" : "ask" }}
         chips={hand?.items.length ? hand.items.map((i) => <AttachChip key={i.key} data-tq-item-chip={i.key} name={i.title} onRemove={busy ? null : () => drop(i.key)}
           title={`${btn(hand.verb)} - it gets ${i.title}`} />) : came ? <AttachChip data-tq-came-chip="" name={came} icon={false} title={`Came from: ${came}`} /> : null} />
-      {err && <Typography role="alert" sx={{ fontSize: 12.5, color: "#a33", pt: 0.5 }}>{err}</Typography>}
+      {err && <Typography role="alert" sx={{ fontSize: 12.5, color: "var(--tq-danger, #a33)", pt: 0.5 }}>{err}</Typography>}
     </Box>
   </Box>;
 }
@@ -139,8 +139,8 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
     <ItemLay.Provider value={laid}>
     <Box data-tq-item-sections={kind} sx={{ ...frameInner, height, display: "flex", flexDirection: "column", boxSizing: "border-box", minWidth: 0 }}>
       {/* THE HEADER LINE a task's is (TaskPage data-tq-task-head): what kind it is in the ref's place, its title, and when */}
-      <Box data-tq-item-head="" sx={{ px: 1.75, py: 0.7, bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0, display: "flex", gap: 0.9, alignItems: "center", minHeight: 30 }}>
-        <Typography sx={{ color: "#41525f", letterSpacing: ".015em", fontWeight: 600, fontSize: 11.5, flexShrink: 0 }}>{label}</Typography>
+      <Box data-tq-item-head="" sx={{ px: 1.75, py: 0.7, bgcolor: "var(--tq-panel, #fff)", borderBottom: `1px solid ${BORDER}`, flexShrink: 0, display: "flex", gap: 0.9, alignItems: "center", minHeight: 30 }}>
+        <Typography sx={{ color: "var(--tq-link, #41525f)", letterSpacing: ".015em", fontWeight: 600, fontSize: 11.5, flexShrink: 0 }}>{label}</Typography>
         <Typography noWrap title={typeof title === "string" ? title : undefined} sx={{ color: INK, flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14, letterSpacing: "-.005em" }}>{title}</Typography>
         {aside && <Box sx={{ flexShrink: 0, color: DIM, fontSize: 11.5, display: "flex", alignItems: "center", gap: 0.75 }}>{aside}</Box>}
       </Box>

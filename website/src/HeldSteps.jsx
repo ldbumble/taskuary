@@ -29,17 +29,17 @@ export default function HeldSteps({ reviews, onChanged, toRow = false }) {
     { id: id("approve"), group: "decide", tone: "p", label: btn("approve", "action"), disabled: !!busy, run: () => go("approve"), card: true },
     { id: id("reject"), group: "decide", tone: "s", label: "Dismiss", disabled: !!busy, run: () => go("reject"), card: true }] : [], toRow);
   return (
-    <Box data-tq-held-steps={n} data-tq-act-state={c.pressed || "waiting"} sx={{ mt: 0.5, px: 1.25, py: 0.9, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }}>
+    <Box data-tq-held-steps={n} data-tq-act-state={c.pressed || "waiting"} sx={{ mt: 0.5, px: 1.25, py: 0.9, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
       <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>{c.title}</Typography>
       <Typography noWrap title={c.folder} sx={{ fontSize: 11.5, color: FAINT }}>{live ? `${c.why.replace(/\.$/, "")} · in ` : "In "}
         <Box component="span" sx={{ color: DIM, fontWeight: 600 }}>{c.folder}</Box></Typography>
       {n > 1 && <Box component="ol" data-tq-held-list="" sx={{ m: 0, mt: 0.5, pl: 2.5, fontSize: 12.5, color: INK, lineHeight: 1.5 }}>
         {c.steps.map((s) => <li key={s.id} data-tq-held-step={s.state}><span style={{ color: s.state === "dismissed" ? FAINT : INK }}>{s.text}</span>
-          {MARK[s.state] && <span style={{ color: s.state === "ran" ? "#47654a" : FAINT, marginLeft: 6 }}>{MARK[s.state]}</span>}</li>)}</Box>}
+          {MARK[s.state] && <span style={{ color: s.state === "ran" ? "var(--tq-success, #47654a)" : FAINT, marginLeft: 6 }}>{MARK[s.state]}</span>}</li>)}</Box>}
       <Typography {...pressable(() => setOpen((o) => !o))} data-tq-show-command="" aria-expanded={open}
-        sx={{ ...FOCUS_RING, display: "inline-block", mt: 0.4, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
+        sx={{ ...FOCUS_RING, display: "inline-block", mt: 0.4, fontSize: 11.5, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
         {open ? `Hide the command${n > 1 ? "s" : ""}` : `Show the command${n > 1 ? "s" : ""}`}</Typography>
-      {open && <Box component="pre" data-tq-held-commands="" sx={{ m: 0, mt: 0.4, p: 0.75, bgcolor: "#f6f4f1", borderRadius: 1, fontSize: 11.5, color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+      {open && <Box component="pre" data-tq-held-commands="" sx={{ m: 0, mt: 0.4, p: 0.75, bgcolor: "var(--tq-inset, #f6f4f1)", borderRadius: 1, fontSize: 11.5, color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
         {c.steps.map((s, i) => `${n > 1 ? `${i + 1}. ` : ""}${s.command}`).join("\n")}</Box>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.6, flexWrap: "wrap" }}>
         {live ? <>
@@ -51,7 +51,7 @@ export default function HeldSteps({ reviews, onChanged, toRow = false }) {
         </> : <>
           {/* ...the press it took, drawn pressed, and what came of it on the same line */}
           <Button size="small" variant={c.pressed === "approved" ? "contained" : "outlined"} disableElevation disabled data-tq-pressed={c.pressed}
-            sx={{ "&.Mui-disabled": c.pressed === "approved" ? { bgcolor: "#dfe8dd", color: "#47654a" } : { color: FAINT } }}>
+            sx={{ "&.Mui-disabled": c.pressed === "approved" ? { bgcolor: "var(--tq-tint-sage, #dfe8dd)", color: "var(--tq-success, #47654a)" } : { color: FAINT } }}>
             {c.pressed === "approved" ? "✓ Approved" : "✗ Dismissed"}</Button>
           <Typography data-tq-act-done="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{c.said}
             {c.url && <> · <a href={c.url} target="_blank" rel="noreferrer">{c.url.replace(/^https?:\/\//, "").slice(0, 70)}</a></>}</Typography>

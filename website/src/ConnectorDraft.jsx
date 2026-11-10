@@ -150,7 +150,7 @@ export function Tick({ st, sx }) {
   const bad = st.state === "error";
   return (
     <Typography component="span" role="status" data-tq-saved={st.state}
-      sx={{ ml: 1, fontSize: 12, fontWeight: 600, whiteSpace: bad ? "normal" : "nowrap", color: bad ? "#8a3646" : "#47654a", ...sx }}>
+      sx={{ ml: 1, fontSize: 12, fontWeight: 600, whiteSpace: bad ? "normal" : "nowrap", color: bad ? "var(--tq-danger, #8a3646)" : "var(--tq-success, #47654a)", ...sx }}>
       {bad ? w : `✓ ${w}`}</Typography>
   );
 }

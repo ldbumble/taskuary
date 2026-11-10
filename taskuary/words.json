@@ -57,7 +57,7 @@
     "action_held":   {"line": "", "is": "a step an agent wants to take (a push, a merge) is held for the owner's yes"},
     "failed":        {"line": "Failed: {why}", "is": "something on it failed, and a fix is named for it"},
     "failed_cause":  {"line": "Failed: {why}", "is": "something on it failed, with no fix named - the cause is to be read"},
-    "needs_agent":   {"line": "", "is": "the reply writer did not draft it: it said it needs an agent to do the work first"},
+    "needs_agent":   {"line": "Email to {who} unwritten - waits on your word", "is": "the reply writer did not draft it: it said it needs an agent to do the work first; or a reply or email it owes is still unwritten, and its agent was told"},
     "report_failed": {"line": "Report failed: {why}", "is": "a report run failed"},
     "report_ok":     {"line": "", "is": "a report run landed"},
     "dashboard":     {"line": "", "is": "a dashboard refreshed"},

@@ -1361,6 +1361,19 @@ FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets.
 WAKE = ("TASKUARY: your last answer ended still waiting on {why}. Nothing wakes you once a turn ends, so that result would never come "
         "back. Do it now, in this turn - wait for it here, or do the work yourself - and answer with the result. If part of it truly cannot "
         "be done, say which part and why.")
+# ...AND ONE THAT LEFT WHAT IT OWES UNWRITTEN (the owner, 2026-11-10: "it created reply with nothing in it. that's dumb. if you have nothing to
+# reply just ask what should i reply?"): an email the task closes with, or the reply it owes, with no card of it and no question asked, is an
+# owed thing nobody is on. Its agent is woken once, by the same wake: write it or ask the one thing missing. Ending without either again, the
+# row lights its start (advisor.reply_unwritten)
+UNWRITTEN = ("TASKUARY: your turn ended with {what} still unwritten - nobody else writes it. Write it now, set up for the owner's Send; or, "
+             "if what it should say is something only the owner knows, ask them that one question. Nothing else.")
+def left_unwritten(store, tid: int) -> str:
+    "What task `tid` owes that nobody has written, in the words its agent is woken with - '' when nothing is."
+    from . import advisor, slots, wrapup
+    owed = [f"the email to {i['out'].get('name') or i['out'].get('to')} (slot {i['id']})" for i in slots.unwritten(store, tid)]
+    if (rv := advisor._unwritten(store, {'tid': tid})).get('Kind') == 'draft':
+        owed.insert(0, f"the reply to {wrapup.owed_to(store, rv.get('MessageId'), rv)}")
+    return UNWRITTEN.format(what=' and '.join(owed)) if owed else ''
 # SEARCH BEFORE ASKING (the owner, 2026-11-05, from Hermes' session_search): a fact an earlier task already settled - found, confirmed, used
 # - is read from that task's ending (search.outcomes), never asked of the owner again. {where}: how this session reads them
 ASK_AFTER = ("SEARCH BEFORE YOU ASK: before asking the owner for a fact - a vendor id, a login route, the account they prefer - check whether "
@@ -2922,7 +2935,9 @@ class GeneralSession:
             from . import background, hooks, sessionrecord
             try: path = sessionrecord.READERS['claude'][0](self.cli_sid) if self.cli_sid and self.pick.startswith('cli:') and _cli_of_pick(self.store, self.pick) == 'claude' else None
             except Exception as e: logger.debug(f'task {self.task_id}: its CLI log was not found - {e}'); path = None
-            hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ, jobs=background.left(self.trace, path))
+            # ...and what it owes and left unwritten is said back first, from the task's own rows - no judge to ask (left_unwritten)
+            if (owed := left_unwritten(self.store, self.task_id)): self.wake('', said=owed)
+            else: hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ, jobs=background.left(self.trace, path))
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         # ...and the files this turn wrote, as it left them: a later turn rewrites them in place (outputs.keep_turn, the owner 2026-11-07)
         from . import outputs
@@ -3036,13 +3051,14 @@ class GeneralSession:
         c.set()
         return True
 
-    def wake(self, why: str):
+    def wake(self, why: str, said: str = ''):
         """Wake the agent ONCE after a turn that ended still waiting on work of its own (hooks.judge_ended): it is told to do it now. Never
-        filed as the owner's words, never again until the owner writes - a woken turn that ends short again stays the answer it gave."""
+        filed as the owner's words, never again until the owner writes - a woken turn that ends short again stays the answer it gave.
+        `said`: the words in place of WAKE's (left_unwritten)."""
         if getattr(self, 'woke', False) or not self.alive: return
         self.woke = True
         def go():
-            try: self.send_prompt(WAKE.format(why=why or 'work of its own'), as_owner=False, echo=False)
+            try: self.send_prompt(said or WAKE.format(why=why or 'work of its own'), as_owner=False, echo=False)
             except Exception as e: logger.info(f'task {self.task_id}: the agent was not woken to finish - {e}')
         self.waking = threading.Thread(target=go, daemon=True, name=f'wake-{self.sid}'); self.waking.start()
 

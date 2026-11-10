@@ -172,5 +172,48 @@ class TheTurnsOwnRecordAnswersFirstTests(unittest.TestCase):
         self.assertEqual(woke, ['the walkthrough'])
 
 
+class WhatATurnLeavesUnwrittenTests(unittest.TestCase):
+    """The owner, 2026-11-10: "it created reply with nothing in it. that's dumb. if you have nothing to reply just ask what should i reply?" -
+    a task from a mail owed an email to someone on the thread (triage's slot), the owner asked the agent to respond, and its turn ended with the
+    email still "to draft": no words in it, no card, no question, and only Drop beside it. Each way a turn can end so: told once to write it or
+    ask, never by a judge (the rows say it), and after that the row lights its start with one line."""
+    def no_judge(self, *a, **k): raise AssertionError('the rows already say what is owed')
+
+    def owing(self, s):
+        from taskuary import slots
+        tid = researcher(s); slots.add(s, tid, [{'to': 'office@vendor.example', 'about': 'the renewal'}], 'triage')
+        return tid
+
+    def test_a_slot_left_to_draft_wakes_the_agent_once_to_write_it_or_ask(self):
+        from taskuary import rulebook
+        for said in ('Done.', '[[TASKUARY-DRAFT to="office@vendor.example" subject="Renewal"]]  [[/TASKUARY-DRAFT]]'):
+            with self.subTest(said[:20]):
+                s = MemoryStore(); a_claude(self); tid = self.owing(s)
+                seen = turn(s, tid, said, judge=self.no_judge)
+                self.assertEqual(len(seen['prompts']), 2, 'told once - the woken turn that left it again is not told twice')
+                self.assertIn('email to office@vendor.example (slot ', seen['prompts'][1])
+                self.assertIn('ask them that one question', seen['prompts'][1])
+                f = rulebook.facts(s, {'tid': tid, 'kind': 'task', 'key': f'task:{tid}'}, [])
+                self.assertEqual(f, {'state': 'needs_agent', 'line': 'Email to office@vendor.example unwritten - waits on your word'})
+
+    def test_a_turn_that_wrote_it_or_asked_is_not_woken(self):
+        for said in ('[[TASKUARY-DRAFT to="office@vendor.example" subject="Renewal"]]Hi - the renewal terms are fine by us.[[/TASKUARY-DRAFT]]',
+                     '[[TASKUARY-ASK]] What should the email to the vendor say about the price?'):
+            with self.subTest(said[:20]):
+                s = MemoryStore(); a_claude(self); tid = self.owing(s)
+                self.assertEqual(len(turn(s, tid, said)['prompts']), 1)
+
+    def test_a_reply_owed_and_left_unwritten_wakes_it_the_same_way(self):
+        from taskuary.testing import Factory
+        from taskuary import origin
+        s = MemoryStore(); a_claude(self); tid = researcher(s); f = Factory(s)
+        p = mock.patch.object(origin, '_claude_version', return_value=origin.MIN_CLAUDE); p.start(); self.addCleanup(p.stop)
+        f.review(tid, f.message(tid, from_email='erin@northwind.example', from_name='Erin Blake', subject='Renewal', body='Can you confirm?'),
+                 kind='draft', draft='')
+        seen = turn(s, tid, 'Looked into it.', judge=self.no_judge)
+        self.assertEqual(len(seen['prompts']), 2)
+        self.assertIn('the reply to Erin Blake still unwritten', seen['prompts'][1])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -80,6 +80,9 @@ def add(store, tid: int, outputs, actor: str, sender: dict = None) -> list:
 
 def all_(store, tid: int) -> list: return [i for i in store.task_checklist(tid) if isinstance(i.get('out'), dict)]
 def open_(store, tid: int) -> list: return [i for i in all_(store, tid) if not i.get('done')]
+def unwritten(store, tid: int) -> list:
+    "The open slots no draft stands on: an email the task owes that nobody has written yet (one taken back unsent is unwritten again)."
+    return [i for i in open_(store, tid) if not (i.get('rid') and (store.get_review(i['rid']) or {}).get('Status') in ('pending', 'held'))]
 def written(store, tid: int) -> list:
     """The open slots the agent already wrote, each waiting on the owner's yes."""
     rvs = (store.get_review(i['rid']) for i in open_(store, tid) if i.get('rid'))
@@ -133,6 +136,7 @@ def seen(store, tid: int):
 
 # A CHAT ID IS NO MAILBOX, whoever named it - the agent or triage's slot (the night run, 2026-11-09: "emails" went to whatsapp:1555...)
 _NO_MAILBOX = "{to} is a chat, not a mailbox - answer them in that chat (propose_reply, `answers` their line) or give their email address as `to`"
+NO_WORDS = "the email has no words, so nothing was filed - write the email in `text`, or ask the owner what it should say"
 def _chat_id(to) -> bool:
     from .ingest import CHAT_CHANNELS
     return str(to or '').split(':')[0].strip().lower() in CHAT_CHANNELS
@@ -146,7 +150,9 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     Gmail" fell to the first Outlook card, and the agent, with no way to say it, tried the Gmail card as a tool (TQ-1354).
     `guessed`: the addresses on it the agent guessed (no address on record) - the card says so, and the owner's Send is the check."""
     text = str(text or '').strip()
-    if not text: return {'ok': False, 'why': 'no email text'}
+    # ...a recipient with no words is no email (the owner, 2026-11-10: "it created reply with nothing in it ... if you have nothing to reply just
+    # ask what should i reply?"): nothing is filed, and the agent is told its two ways on
+    if not text: return {'ok': False, 'why': NO_WORDS}
     mailbox = str(mailbox or '').strip()
     if mailbox:
         from . import outbound

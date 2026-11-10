@@ -208,6 +208,10 @@ def test_empty_text_or_nobody_is_refused(s):
     tid = typed(s, FOUR[:1])
     assert not slots.draft(s, tid, '  ', slot=slots.open_(s, tid)[0]['id'])['ok']
     assert not slots.draft(s, tid, 'hi')['ok']
+    # ...and a recipient with no words files nothing, and says the two ways on (the owner, 2026-11-10: "just ask what should i reply?")
+    out = slots.draft(s, tid, ' ', to='office@vendor.example')
+    assert 'write the email in `text`, or ask the owner what it should say' in out['why']
+    assert [i['out']['to'] for i in slots.open_(s, tid)] == ['paula@northwind.example'] and len(slots.unwritten(s, tid)) == 1
 
 
 def test_a_drafted_slot_on_a_mail_task_still_sends(s):

@@ -64,6 +64,7 @@ test("a system with both ways offers API and MCP at the top of its page, each it
   assert.equal(wayState("API", { LastSyncAt: "2026-11-10 09:00:00" }), "set up", "a data card set up by its reads");
   assert.deepEqual(WAY_NAMES, ["API", "MCP"]);
   assert.ok(WAY_NAMES.every((w) => WAYS[w] && WAYS[w].split(/[.!?] /).length === 1), "one plain sentence under each");
+  for (const w of WAY_NAMES) assert.doesNotMatch(WAYS[w], /CLI|MCP|sign-in or key/, `${w} says it without jargon`);
   // ...drawn with the page's own tabs, the chosen way's own page under them; choosing opens that way's row
   assert.match(src, /const ways = waysOf\(conn, byType\);/);
   assert.match(src, /onWay=\{\(w\) => setOpen\(\{ kind: "connector", id: ways\[w\]\.ConnectorId \}\)\}/);

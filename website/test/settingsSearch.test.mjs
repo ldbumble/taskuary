@@ -21,6 +21,8 @@ test("the saved sign-ins and Agent permissions are found by the words a person t
     assert.ok(h, `"${q}" finds a place in Configuration → Agent permissions`);
     assert.equal(h.crumb, "Configuration → Agent permissions");
   }
+  // ...and the panel itself for each way a person says it (the owner, 2026-11-10: "login" found only two settings)
+  for (const q of ["login", "log in", "sign in", "password"]) assert.ok(find(q).some((x) => x.knob === "panel:signins"), `"${q}" finds Saved sign-ins`);
   const v = find("password vault").find((x) => x.knob === "panel:signins");
   assert.ok(v, "the vault itself, not only its section");
   assert.equal(v.label, "Saved sign-ins", "labelled with the panel's own heading");

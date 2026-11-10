@@ -74,8 +74,9 @@ export const oneCardPerSystem = (groups, cards = CATALOGUE) => {
 // options.. yes"): the system's own connector and its vendor's MCP server, each row as it is - `byType` the page's pick of a row per type.
 // Null where the system has one way: no choice is drawn. Either way can be open; either or both set up
 export const WAY_NAMES = ["API", "MCP"];
-export const WAYS = { API: "Taskuary connects with its own sign-in or key: what it holds reaches your rail, reports and agents.",
-  MCP: "Its own MCP server, added to your agent CLI: your agents use the system's own tools." };
+// ...each said so a person who has never heard of MCP knows what it gives (the owner, 2026-11-10: "yes simplify")
+export const WAYS = { API: "Taskuary reads this system for you: its items reach your rail, reports and agents.",
+  MCP: "Your agents use this system's own tools directly." };
 export const waysOf = (conn, byType, cards = CATALOGUE) => {
   const cat = conn && cards.find((c) => c.type === conn.Type);
   const twin = cat && (cat.mcp ? cat.system : cards.find((c) => c.mcp && c.system === cat.type)?.type), row = twin && byType[twin];

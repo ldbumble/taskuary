@@ -130,6 +130,18 @@ class TheAppIndexed(unittest.TestCase):
         self.assertEqual(self.first(s, 'where do I change my signature'), '#settings=config&group=Replies&key=email_signature')
         self.assertEqual(self.first(s, 'the sync interval'), '#settings=config&group=Sync%20%26%20startup&key=poll_minutes')
 
+    def test_a_panel_whose_words_hold_the_word_is_offered_behind_the_settings_never_dropped(self):
+        """The owner, 2026-11-10: "login" found the two settings that mention it and not Saved sign-ins - a panel was dropped whenever a
+        setting held every word. It joins behind them; the Email signature knob still leads its own question."""
+        s, vault = MemoryStore(), '#settings=config&group=Agent%20permissions&key=panel%3Asignins'
+        for q in ('login', 'log in', 'sign in', 'password'):
+            self.assertIn(vault, [h['href'] for h in search.places(s, q)], q)
+            self.assertIn('Saved sign-ins', [h['title'] for h in search._settings(q.split())], q)
+        top = [h['title'] for h in search._settings(['login'])]
+        self.assertEqual(top[-1], 'Saved sign-ins', 'behind the settings the word found')
+        self.assertEqual(self.first(s, 'where do I change my signature'), '#settings=config&group=Replies&key=email_signature')
+        self.assertEqual([h['title'] for h in search._settings(['signature'])][0], 'Email signature')
+
     def test_cards_pages_reports_and_documents(self):
         s = MemoryStore()
         s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1}, 't')

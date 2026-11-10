@@ -240,10 +240,12 @@ def _panels_beyond(knobs, words, hit) -> list:
     signature panel beside it took the Assistant's link. `knobs` - (label, text) of the settings the words found - answer first: a panel
     is left out when one knob has every word the panel has and its label names as many of them as the panel's heading does. So it
     joins for a word only it has ("password": the vault, "hand signature") or when its heading says more ("saved sign" is Saved
-    sign-ins, not Email signature). `hit(text, [word])` is the caller's own match."""
+    sign-ins, not Email signature). `hit(text, [word])` is the caller's own match.
+    ...AND A PANEL WHOSE OWN WORDS HOLD A WORD TYPED IS NEVER DROPPED (the owner, 2026-11-10: "login" found two settings and not Saved
+    sign-ins): it joins BEHIND the knobs that cover it - `behind`, their labels - so the knob still leads ("where do I change my signature")."""
     named, has = (lambda t: sum(hit(t, [w]) for w in words)), (lambda t: {w for w in words if hit(t, [w])})
-    covers = lambda p: any(has(t) >= has(_panel_text(p)) and named(l) >= named(p['title']) for l, t in knobs)
-    return [(k, p) for k, p in settings_schema.panels().items() if not covers(p)]
+    by = lambda p: [l for l, t in knobs if has(t) >= has(_panel_text(p)) and named(l) >= named(p['title'])]
+    return [(k, p, b) for k, p in settings_schema.panels().items() if not (b := by(p)) or any(hit(p['words'], [w]) for w in words)]
 
 
 def _settings(words) -> list:
@@ -257,10 +259,10 @@ def _settings(words) -> list:
     found = {h['id'] for h in out}
     knobs = [(m['label'], f"{m['label']} {m['group']} {m.get('desc') or ''} {m.get('help') or ''}")
              for k, m in settings_schema.knobs().items() if f'set:{k}' in found]
-    for k, p in _panels_beyond(knobs, words, _words_in):
+    for k, p, behind in _panels_beyond(knobs, words, _words_in):
         if not _words_in(_panel_text(p), words): continue
         out.append({'type': 'setting', 'id': f'set:{k}', 'title': p['title'], 'where': f"Settings · {p['group']}", 'snippet': '',
-                    'rank': not _words_in(p['title'], words), 'href': f"#settings=config&group={quote(p['group'], safe='')}&key={quote(k, safe='')}"})
+                    'rank': 2 if behind else not _words_in(p['title'], words), 'href': f"#settings=config&group={quote(p['group'], safe='')}&key={quote(k, safe='')}"})
     return sorted(out, key=lambda h: h.pop('rank'))
 
 
@@ -353,13 +355,16 @@ def places(store, q: str, n: int = 8) -> list:
     # ...a panel only beside the settings the words found, never in their place (_panels_beyond)
     hit = lambda t, ws: all(_hit(w, _fold(t)) for w in ws)
     knobs = [(r['title'], nt[1]) for nt, r in rows_ if r['type'] == 'setting' and not r.get('panel') and score(nt) > 0]
-    beyond = {k for k, _ in _panels_beyond(knobs, words, hit)}
+    beyond = {k: b for k, _, b in _panels_beyond(knobs, words, hit)}
     rows_ = [(nt, r) for nt, r in rows_ if not r.get('panel') or r['panel'] in beyond]
+    # ...one that joins behind knobs ranks just under the lowest of them
+    under = {k: min(score(nt) for nt, r in rows_ if r['type'] == 'setting' and not r.get('panel') and r['title'] in b) for k, b in beyond.items() if b}
     # ...and a word that IS a thing's own key - a card's type ("database", "imap"), a document's name ("learned"), a page's ("hub") - names it
     exact = lambda r: r.get('key') in said
     # ...and on a tie the app's own place before a catalogue card that shares its name ("the Hub" is the Hub, not the Company Hub connector)
     order = {'place': 0, 'setting': 1, 'report': 2, 'document': 3, 'connector': 4}
-    scored = sorted(((score(nt) + (1 if exact(r) else 0), r) for nt, r in rows_),
+    mark = lambda nt, r: score(nt) + (1 if exact(r) else 0)
+    scored = sorted(((min(mark(nt, r), under[r['panel']] * 0.999) if r.get('panel') in under else mark(nt, r), r) for nt, r in rows_),
                     key=lambda x: (-round(x[0], 6), not x[1].get('boost'), order.get(x[1]['type'], 5), len(x[1]['title'])))
     top = scored[0][0] if scored else 0
     # what is near the best - a weak echo of one common word is no candidate

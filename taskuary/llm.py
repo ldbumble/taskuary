@@ -754,7 +754,9 @@ def ask_json(brain, system: str, user: str, want: dict = None, need=(), **kw) ->
 
     carries = getattr(brain, 'takes_want', None)
     if want is not None and carries: kw['want'] = want
-    def short(a): return [k for k in need if not (a.data or {}).get(k)] if carries is False else []
+    # `false` and 0 are answers: reading them as left out asked every "no" a second time, and the second time it said yes
+    def blank(v): return v is None or (not v and not isinstance(v, (bool, int, float)))
+    def short(a): return [k for k in need if blank((a.data or {}).get(k))] if carries is False else []
     first = ask(user)
     if first.data is not None and not short(first): return _stepped(brain, system, user, want, need, kw, first)
     again = (f"\n\nYour last answer left out: {', '.join(short(first))}. Answer the whole JSON object "

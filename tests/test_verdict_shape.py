@@ -153,6 +153,17 @@ class AskJsonTests(unittest.TestCase):
         self.assertIn('title', asks[1]); self.assertIn('summary', asks[1])
         self.assertEqual(out.data['title'], 'October newsletter')
 
+    def test_a_no_is_an_answer_and_is_not_asked_again(self):
+        """A judge that answered `false` was told it had left the key out, and on the second ask it said
+        `true` with a question the agent never asked - so the task read "agent waiting on you"."""
+        asks = []
+        def brain(system, user, **kw):
+            asks.append(user); return '{"asks": false, "count": 0}' if len(asks) == 1 else '{"asks": true, "count": 1}'
+        brain.takes_want = False
+        out = llm_mod.ask_json(brain, 'sys', 'usr', need=('asks', 'count'))
+        self.assertEqual(len(asks), 1)
+        self.assertIs(out.data['asks'], False)
+
     def test_it_gives_up_after_one_retry_and_returns_what_it_got(self):
         """Never a loop against a model that cannot comply: the fallback downstream is what a
         missing field always meant, and a second failure is not worth a third call."""

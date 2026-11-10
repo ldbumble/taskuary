@@ -11,6 +11,7 @@
 // MAX_KEPT messages in memory with a sequence number; Taskuary remembers where it got to.
 import http from "node:http";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from "@whiskeysockets/baileys";
@@ -113,21 +114,42 @@ process.on("unhandledRejection", (reason) => {
 // chance to clean up) is taken over; a pid since reused by another program Taskuary sees by its command line and clears.
 const LOCK = path.resolve("wa-auth.lock");
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e?.code === "EPERM"; } };
-const lockPairing = () => {
+const claim = (file) => {
   for (let i = 0; i < 3; i++) {
     try {
-      fs.writeFileSync(LOCK, String(process.pid), { flag: "wx" });
-      process.on("exit", () => { try { if (fs.readFileSync(LOCK, "utf8").trim() === String(process.pid)) fs.unlinkSync(LOCK); } catch {} });
+      fs.writeFileSync(file, String(process.pid), { flag: "wx" });
+      process.on("exit", () => { try { if (fs.readFileSync(file, "utf8").trim() === String(process.pid)) fs.unlinkSync(file); } catch {} });
       return 0;
     } catch (e) {
       if (e?.code !== "EEXIST") throw e;
       let held = 0;
-      try { held = Number(fs.readFileSync(LOCK, "utf8").trim()) || 0; } catch {}
+      try { held = Number(fs.readFileSync(file, "utf8").trim()) || 0; } catch {}
       if (held && held !== process.pid && alive(held)) return held;
-      fs.rmSync(LOCK, { force: true });
+      fs.rmSync(file, { force: true });
     }
   }
   return -1;
+};
+// ...AND PER PAIRING, NOT PER FOLDER (2026-11-10). wa-auth.lock sits in the folder the bridge runs in, and a pairing copied to another
+// folder (carried over from the package folder, or the folder copied by hand) is the same login: a bridge left running there connected
+// beside the new one, each spending message keys the other's copy of the session still expects. The pairing is named by its identity
+// key (creds.json) and claimed in one place for the whole user; a second claimant says who holds it in wa-auth.held-by, where Taskuary
+// (wabridge._unlock) reads it and ends that bridge when it can prove it is one of ours.
+const PAIRINGS = process.env.WA_PAIRING_LOCKS || path.join(os.tmpdir(), "taskuary-wa-pairings");
+const pairingId = () => {
+  try {
+    const k = JSON.parse(fs.readFileSync(path.resolve("wa-auth", "creds.json"), "utf8"))?.signedIdentityKey?.public;
+    return k ? crypto.createHash("sha1").update(JSON.stringify(k)).digest("hex").slice(0, 16) : "";
+  } catch { return ""; }       // not paired yet: a fresh identity no other folder has
+};
+const lockPairing = () => {
+  const held = claim(LOCK), id = held ? "" : pairingId();
+  if (held || !id) return held;
+  fs.mkdirSync(PAIRINGS, { recursive: true });
+  const file = path.join(PAIRINGS, `${id}.lock`), other = claim(file);
+  if (other > 0) fs.writeFileSync(path.resolve("wa-auth.held-by"), JSON.stringify({ pid: other, lock: file }));
+  else fs.rmSync(path.resolve("wa-auth.held-by"), { force: true });
+  return other;
 };
 for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, () => process.exit(0));     // so the lock goes with a plain stop
 

@@ -431,6 +431,34 @@ test("a pairing a live bridge holds is refused with 75; a lock whose bridge is g
   } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }); }
 });
 
+test("one pairing copied into two folders runs one bridge: the second names the first and stays off WhatsApp", { timeout: 40_000 }, async () => {
+  const [a, b, claims] = [0, 1, 2].map(() => fs.mkdtempSync(path.join(os.tmpdir(), "wa-bridge-test-")));
+  const was = process.env.WA_PAIRING_LOCKS;
+  process.env.WA_PAIRING_LOCKS = claims;                               // runBridge's children inherit it
+  try {
+    for (const d of [a, b]) {          // the same login in both: a pairing carried over, or the folder copied
+      fs.mkdirSync(path.join(d, "wa-auth"));
+      fs.writeFileSync(path.join(d, "wa-auth", "creds.json"), JSON.stringify({ signedIdentityKey: { public: { type: "Buffer", data: "c3ludGhldGlj" } } }));
+    }
+    const first = runBridge(a, await freePort(), 12_000);
+    assert.ok(await until(() => fs.existsSync(path.join(a, "connected.txt"))), "the first bridge connects");
+    const holder = Number(fs.readFileSync(path.join(claims, fs.readdirSync(claims)[0]), "utf8"));
+    const second = await runBridge(b, await freePort());
+    assert.equal(second.code, 75, second.out);
+    assert.match(second.out, new RegExp(`WA_AUTH_LOCKED: .* bridge pid ${holder}`));
+    assert.ok(!fs.existsSync(path.join(b, "connected.txt")), "never two bridges on one login");
+    assert.equal(JSON.parse(fs.readFileSync(path.join(b, "wa-auth.held-by"), "utf8")).pid, holder, "Taskuary is told whom to end");
+    await first;                                                       // ended (killed: no chance to clean its claim up)
+    const third = runBridge(b, await freePort());
+    assert.ok(await until(() => fs.existsSync(path.join(b, "connected.txt"))), "with the first gone, the pairing is this one's");
+    assert.ok(!fs.existsSync(path.join(b, "wa-auth.held-by")));
+    await third;
+  } finally {
+    if (was === undefined) delete process.env.WA_PAIRING_LOCKS; else process.env.WA_PAIRING_LOCKS = was;
+    for (const d of [a, b, claims]) fs.rmSync(d, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
 // "We lost the names" (2026-11-02): the group roster was asked for once per connect, and a bridge restarted by an update whose one
 // ask timed out listed no group at all - every switched-on group a bare id until the next drop. The first ask fails here; the next names it.
 const SLOW_GROUPS = `

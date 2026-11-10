@@ -174,6 +174,17 @@ class CodingCarryOnTests(unittest.TestCase):
         self.assertEqual(start.call_args.kwargs['resume'], 'cli-conv-1')                                    # its own session, not a fresh one
         self.assertIsNone(s.get_dispatch(tid)); self.assertNotIn(tid, ingest.CODING_OPENING)
 
+    def test_a_line_whose_session_ended_reopens_it_by_itself(self):
+        # ..."Continue picks it up" left the line owed with nothing running (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible")
+        s = store(); tid = coding_task(s, self.cwd)
+        try:
+            with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(terminal, 'say_to_task', return_value=False), \
+                 mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True):
+                ingest._pass_coding(s, tid, {**mail(**AGAIN), 'message_id': None})
+            self.assertEqual([c[0][0].__name__ for c in spawn.call_args_list], ['_continue_coding'])
+            self.assertFalse([c for c in s.list_comments(tid) if 'Continue picks it up' in c['Body']])
+        finally: ingest.CODING_OPENING.discard(tid)
+
     def test_not_when_coding_starts_are_switched_off(self):
         s = store(coding_auto_enabled='0'); tid = coding_task(s, self.cwd)
         self.assertNotIn('_continue_coding', ingested(s, mail(**AGAIN))[1])
@@ -211,6 +222,18 @@ class PassInTests(unittest.TestCase):
                 ingest._pass_general(s, tid, mail(**AGAIN))
         finally: general.OPENING.discard(tid)
         self.assertGreaterEqual(len(looks), 3); ses.send_prompt.assert_called_once()
+
+    def test_a_line_whose_session_ended_carries_the_conversation_on(self):
+        # ...as one whose session ends under it already did, never "type to carry on" (the owner, 2026-11-10: "job of agent is to be
+        # helpful and do as much as possible")
+        s = store(); tid = finished_task(s); s.update_task(tid, {'Status': 'open'}, 't')
+        try:
+            with mock.patch.object(general, 'session_for', return_value=None), mock.patch.object(general, 'idled', return_value=False), \
+                 mock.patch.object(ingest, '_replan_general') as replan:
+                ingest._pass_general(s, tid, mail(**AGAIN))
+            self.assertIn('price the second site', replan.call_args[0][2])
+            self.assertFalse([c for c in s.list_comments(tid) if 'type to carry on' in c['Body']])
+        finally: general.OPENING.discard(tid)
 
     def test_a_running_coding_agent_has_it_typed_into_its_session(self):
         s = store(); tid = finished_task(s); s.update_task(tid, {'Kind': 'coding'}, 't')

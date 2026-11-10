@@ -2478,6 +2478,9 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
         try: ses = general.start_session(store, tid, actor='router')
         except Exception as e: logger.warning(f'task {tid}: the idle agent was not started again for a new line - {e}')
     if not ses:
+        # ...a session that ENDED before the line reached it is carried on as one that ends under it is (below): "type to carry on" here
+        # was a turn owed with nothing running (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible")
+        if joinable(store, tid, shut=False): general.OPENING.add(tid); _replan_general(store, tid, turn or _pass_turn(msg)); return
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the assistant's session ended - {general.CARRY_ON}.")
         return
     # A BURST IS ONE RE-THINK (the owner's stress run, 2026-11-05): five mails in a few seconds were five queued turns, the agent re-reading
@@ -2534,7 +2537,11 @@ def _pass_coding(store, tid, msg: dict):
     if chooser:
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message was not typed in: the agent has a choice open on screen. It waits for you.")
     elif not _said_coding(store, tid, msg):
-        store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the coding session ended - Continue picks it up.")
+        # ...a session that ended under the line reopens by itself, as new work on a stopped coding task does (_carry_on: said why only
+        # where it may not) - "Continue picks it up" left it owed with nothing running (the owner, 2026-11-10: "job of agent is to be
+        # helpful and do as much as possible"). One still live that took no typing is not reopened over
+        if live_agent(store, tid): store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the coding session ended - Continue picks it up.")
+        else: _carry_on(store, tid, msg, msg.get('message_id'), {'intent': 'task', 'kind': 'coding'}, 'router')
 
 
 # THE NEW ASK IS THE TURN, NOT A NOTE BEHIND IT (the owner, 2026-11-03: "I don't see it gets the most recent question. coding does").

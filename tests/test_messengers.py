@@ -247,6 +247,11 @@ class WhatsAppTests(unittest.TestCase):
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {**bridge, 'contactSync': {'failures': 3, 'why': 'missing key'}}):
             st = messengers.wa_status(c)
         self.assertEqual((st['line'], st['fix']), ('Connected · 2 chats · last message 40m ago · contact names not syncing · 12 turned away', 'pair'))
+        # linked but reading nothing for a stretch (2026-11-10): the card stops saying "Connected" and offers the one move that mends it
+        broken = {**bridge, 'unreadable': {'count': messengers.UNREADABLE_MIN, 'since': now - messengers.UNREADABLE_FOR - 60}}
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: broken):
+            st = messengers.wa_status(c)
+        self.assertEqual((st['parts'], st['fix']), (['Linked, but messages cannot be read - pair again'], 'pair'))
         with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {**bridge, 'connected': False, 'loggedOut': True}):
             st = messengers.wa_status(c)
         self.assertEqual((st['line'], st['fix']), ('Logged out', 'pair'))

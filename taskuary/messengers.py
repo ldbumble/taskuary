@@ -304,7 +304,8 @@ def wa_status(c) -> dict:
            'reconnect': st.get('reconnect') or {}, 'filter': st.get('filter') or {},
            # what the card's status line says beyond "the socket is open" (bridge.mjs /status, health.mjs) - None from an older bridge
            'admitted': st.get('admitted'), 'turned_away': st.get('turnedAway'), 'last_inbound_at': st.get('lastInboundAt') or 0,
-           'last_failure': st.get('lastFailure'), 'contact_sync': st.get('contactSync') or {}, 'logged_out': bool(st.get('loggedOut'))}
+           'last_failure': st.get('lastFailure'), 'contact_sync': st.get('contactSync') or {}, 'logged_out': bool(st.get('loggedOut')),
+           'unreadable': st.get('unreadable') or {}}
     if st.get('qr') and not out['connected']:
         import segno
         out['qr_svg'] = segno.make(st['qr'], error='m').svg_data_uri(scale=5, border=2, dark='#1e1e2e', light='#ffffff')
@@ -319,6 +320,19 @@ def _ago(ts: float, now: float) -> str:
 
 
 CONTACT_SYNC_REPAIR = 3         # failed contact syncs in a row (one per ~10 min) before the card offers Pair again
+# LINKED BUT READING NOTHING (2026-11-10: a linked WhatsApp, "Connected" on the card, and no message came in at all - only "failed to
+# decrypt message" in the bridge's log). The bridge counts the messages it could not decrypt since the last one it could (health.mjs
+# `unreadable`; a repeat of one already taken is not counted). This many, for this long, with none readable, is a link whose keys no
+# longer match the phone's: asking again does not mend it, pairing again does.
+UNREADABLE_MIN, UNREADABLE_FOR = 5, 30 * 60
+UNREADABLE_SAY = 'WhatsApp is linked but its messages cannot be read on this computer - press Pair again on the WhatsApp card to link it afresh'
+
+
+def wa_unreadable(st: dict, now: float = None) -> bool:
+    "The bridge's /status (or wa_status) says it has decrypted nothing somebody wrote for a stretch, only failures."
+    u = st.get('unreadable') or {}
+    now = time.time() if now is None else now
+    return bool(st.get('connected')) and int(u.get('count') or 0) >= UNREADABLE_MIN and bool(u.get('since')) and now - u['since'] >= UNREADABLE_FOR
 
 
 def wa_status_line(st: dict, now: float = None) -> dict:
@@ -340,6 +354,7 @@ def wa_status_line(st: dict, now: float = None) -> dict:
         elif n is not None: parts.append('no message yet')
         if int((st.get('contact_sync') or {}).get('failures') or 0) >= CONTACT_SYNC_REPAIR:
             parts.append('contact names not syncing'); fix = 'pair'
+        if wa_unreadable(st, now): parts, fix = ['Linked, but messages cannot be read - pair again'], 'pair'
     away = int(st.get('turned_away') or 0) if st.get('connected') else 0
     return {'parts': parts, 'fix': fix, 'line': ' · '.join(parts + ([f'{away} turned away'] if away else []))}
 

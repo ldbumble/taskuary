@@ -684,6 +684,11 @@ def check_link(store, c: dict, read=None, now: float = None):
     except Exception as e: logger.debug(f'whatsapp link check: {e}'); return _LINK['err']
     if st.get('connected'):
         if _LINK['down']: logger.info(f"whatsapp link is back after {now - _LINK['down']:.0f}s")
+        # ...and connected is not reading: a link whose every message fails to decrypt brings nothing in, open socket or not
+        from .messengers import wa_unreadable, UNREADABLE_SAY
+        if wa_unreadable(st, now):
+            if not _LINK['err']: logger.warning(f"whatsapp: {(st.get('unreadable') or {}).get('count')} messages could not be decrypted and none could")
+            _LINK.update(down=0.0, err=UNREADABLE_SAY); return UNREADABLE_SAY
         _LINK.update(down=0.0, err=None); return None
     # A DROP THE BRIDGE RECOVERS FROM IS NOT A WARNING (the owner, 2026-11-06: "Stream Errored (ack)" in the console, back 60 s later):
     # WhatsApp's servers end the stream now and then and the bridge reconnects by itself. Said quietly here; the card and the bell speak

@@ -342,6 +342,67 @@ test("disappearing group messages retain text, quotes and media through nested e
   });
 });
 
+// WhatsApp HANDS A MESSAGE OVER AGAIN when its ack was lost (2026-11-10: a burst of MessageCounterError "Key used already or never filled"
+// on the owner's own lines, right after a reconnect). libsignal refuses the copy and Baileys only logs it and NACKs - no retry, no event.
+// TAKEN was read in this run, BEFORE in the last one (wa-seen.json); LOST never was, so the phone is asked for it and it comes back.
+const REPLAY = `
+import { EventEmitter } from "node:events";
+import fs from "node:fs";
+export const DisconnectReason = { loggedOut: 401 };
+export const useMultiFileAuthState = async () => ({ state: { creds: {}, keys: { set: async () => {} } }, saveCreds: async () => {} });
+export const downloadMediaMessage = async () => Buffer.alloc(0);
+export const decryptPollVote = () => { throw new Error("no polls here"); };
+const put =(lvl) => (o, msg) => fs.appendFileSync("log.jsonl", JSON.stringify([lvl, o?.key?.id || "", String(msg || o)]) + "\\n");
+export const DEFAULT_CONNECTION_CONFIG = { logger: { child: () => ({ info: put("info"), warn: put("warn"), error: put("error"), debug: put("debug") }) } };
+export default function makeWASocket(config) {
+  const ev = new EventEmitter(), chat = "15550100200@s.whatsapp.net";
+  const msg = (id, text) => ({ key: { remoteJid: chat, fromMe: true, id }, message: { conversation: text }, messageTimestamp: 1750000000 });
+  const spent = (id) => config.logger.error({ key: { remoteJid: chat, fromMe: true, id },
+    err: Object.assign(new Error("Key used already or never filled"), { name: "MessageCounterError" }) }, "failed to decrypt message");
+  const sock = { ev, user: { id: "15550100100:1@s.whatsapp.net" }, groupFetchAllParticipating: async () => ({}), resyncAppState: async () => {},
+    requestPlaceholderResend: async (key) => { fs.appendFileSync("asked.txt", key.id + "\\n");
+      setTimeout(() => ev.emit("messages.upsert", { type: "notify", messages: [msg(key.id, "sent again by the phone")] }), 20); } };
+  setTimeout(() => {
+    ev.emit("connection.update", { connection: "open" });
+    ev.emit("messages.upsert", { type: "notify", messages: [msg("TAKEN", "on my way")] });
+    setTimeout(() => { spent("TAKEN"); spent("BEFORE"); spent("LOST"); }, 50);
+  }, 20);
+  return sock;
+}`;
+
+test("a message WhatsApp delivers again is quiet and loses nothing; one never read is asked for again and comes in", { timeout: 30_000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wa-bridge-test-"));
+  const fake = path.join(dir, "fake-baileys.mjs");
+  fs.writeFileSync(fake, REPLAY);
+  fs.writeFileSync(path.join(dir, "wa-seen.json"), JSON.stringify(["BEFORE"]));
+  const hooks = `export async function resolve(s, c, next) {
+    return s === "@whiskeysockets/baileys" ? { url: ${JSON.stringify(pathToFileURL(fake).href)}, shortCircuit: true } : next(s, c); }`;
+  const reg = `import { register } from "node:module"; register(${JSON.stringify("data:text/javascript," + encodeURIComponent(hooks))});`;
+  const port = await freePort(), token = "test-token";
+  const child = spawn(process.execPath, ["--import", "data:text/javascript," + encodeURIComponent(reg), BRIDGE],
+    { cwd: dir, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, WA_BRIDGE_PORT: String(port), WA_BRIDGE_TOKEN: token,
+      WA_BRIDGE_FILTER: JSON.stringify({ allDirect: false, jids: ["15550100200@s.whatsapp.net"] }) } });
+  let out = "";
+  child.stdout.on("data", (c) => (out += c)); child.stderr.on("data", (c) => (out += c));
+  try {
+    let ms = [];
+    for (let i = 0; i < 150 && ms.length < 2; i++) { ms = (await get(port, "/messages", token))?.messages || []; await new Promise((r) => setTimeout(r, 100)); }
+    assert.deepEqual(ms.map((m) => [m.id, m.text]), [["TAKEN", "on my way"], ["LOST", "sent again by the phone"]], out);
+    const log = fs.readFileSync(path.join(dir, "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.deepEqual(log.filter(([lvl]) => lvl === "error").map(([, id]) => id), ["LOST"], "a repeat of a message already taken is not an error");
+    assert.deepEqual(log.filter(([lvl]) => lvl === "debug").map(([, id]) => id), ["TAKEN", "BEFORE"], "one debug line each");
+    assert.equal(fs.readFileSync(path.join(dir, "asked.txt"), "utf8"), "LOST\n", "only the message never read is asked for");
+    assert.match(out, /WhatsApp message LOST could not be read on this computer - asking the phone to send it again/);
+    assert.doesNotMatch(out, /message (TAKEN|BEFORE) could not be read/);
+    const st = await status(port, token);
+    assert.equal(st.unreadable.count, 0, "the message came back: the link reads");
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, "wa-seen.json"), "utf8")), ["BEFORE", "TAKEN", "LOST"], "kept for the next start");
+  } finally {
+    if (child.exitCode === null) { const gone = new Promise((r) => child.once("exit", r)); child.kill(); await gone; }
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
 test("a held port is said in one line and exits 98 before WhatsApp is touched", { timeout: 30_000 }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wa-bridge-test-"));
   const port = await freePort(), holder = net.createServer().listen(port, "127.0.0.1");

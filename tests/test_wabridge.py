@@ -622,6 +622,17 @@ class LinkCheckTests(unittest.TestCase):
         self.assertIn('nothing is coming in', self.check(st, 1000 + wabridge.LINK_GRACE))
         self.assertIsNone(self.check({'connected': True}, 1000 + wabridge.LINK_GRACE + wabridge.LINK_EVERY))
 
+    def test_linked_but_reading_nothing_says_pair_again_and_a_readable_message_clears_it(self):
+        """2026-11-10: "Connected" on the card, nothing came in, and the bridge's log was all "failed to decrypt message"."""
+        from taskuary import messengers
+        since = 1000.0
+        st = lambda n, at=since: {'connected': True, 'unreadable': {'count': n, 'since': at, 'lastAt': at}}
+        self.assertIsNone(self.check(st(messengers.UNREADABLE_MIN), since + 60), 'a burst is not yet a broken link')
+        self.assertIsNone(self.check(st(messengers.UNREADABLE_MIN - 1), since + messengers.UNREADABLE_FOR + 120), 'a few failures are not one')
+        err = self.check(st(messengers.UNREADABLE_MIN), since + messengers.UNREADABLE_FOR + 240)
+        self.assertIn('cannot be read', err); self.assertIn('Pair again', err)
+        self.assertIsNone(self.check(st(0, 0), since + messengers.UNREADABLE_FOR + 360), 'a message read since: the link is fine')
+
     def test_read_once_a_minute(self):
         n = []
         wabridge.check_link(None, self.C, read=lambda: n.append(1) or {'connected': True}, now=1000)

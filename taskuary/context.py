@@ -325,7 +325,7 @@ def _item(t: dict, *tail) -> str:
 # (store.list_tasks q=, what search.everything and the agents' search_tasks run), one word at a time; a word that finds more than
 # SEARCH_COMMON tasks says nothing about this one and is dropped, and a task found by two words or more - or by the whole subject - is
 # shown with its status: open or watched, or closed and when. The model says whether it is this; a done task it names reopens only on
-# work owed (_join_same). A dropped task is never rejoined (_joinable_task), so it is not shown. ~10 lines of 140: ~1.4K characters.
+# work owed (ingest.land_on). A dropped task is never rejoined (ingest.joinable), so it is not shown. ~10 lines of 140: ~1.4K characters.
 SEARCH_HITS, SEARCH_WORDS, SEARCH_COMMON = 10, 8, 20
 
 

@@ -2155,7 +2155,7 @@ def _copies(inbound: list) -> list:
 
 
 def repeats(store, tid: int, msgs: list = None, routes: list = None) -> dict | None:
-    """ONE VENDOR, ONE ITEM, SAID. Ingest folds a sender writing again about the same thing onto one task (_join_same) and
+    """ONE VENDOR, ONE ITEM, SAID. Ingest folds a sender writing again about the same thing onto one task (ingest.land_on) and
     never told the owner: {'n', 'who', 'line'} - "Payworth wrote five times about the same thing - every one is kept here.
     All they need now: the signed W-9." The count is code: separate messages (a conversation each) triage joined as the same,
     else one person's lines that carry the same words ("Gail said the same thing 3 times"). What they need is the newest repeat's

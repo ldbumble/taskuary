@@ -90,7 +90,8 @@ const initial = (messages) => {
   const folded = foldedSummaries(messages);
   return (messages || []).map((m) => {
     const custom = { ...(m.brief ? { brief: true, mail: m.mail || [], ...(m.fold ? { fold: m.fold } : {}) } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id), drafts: m.drafts_then || null } : {}),
-      ...(m.since ? { since: m.since } : {}), ...(m.press ? { press: true, ...(m.result ? { result: m.result } : {}) } : {}) };   // a press of the owner's (general.press_lines): their line, no turn
+      ...(m.since ? { since: m.since } : {}), ...(m.press ? { press: true, ...(m.result ? { result: m.result } : {}) } : {}),   // a press of the owner's (general.press_lines): their line, no turn
+      ...(m.line ? { line: m.line } : {}) };          // the name the page that sent it gave it (heldLines.lineOf)
     return { ...m, ...(Object.keys(custom).length ? { metadata: { custom } } : {}),
       // ...a stamp is the SERVER'S LOCAL time (dates.js, store.norm_stamp), read through asUtc with the zone setting - read as UTC, every
       // answer said 7:32 AM for 12:32 PM (the owner, 2026-11-05: "time is wrong. we have settings for time zone")
@@ -942,8 +943,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     // ...WITH THE BOX'S FILES: a line held mid-turn went without them, and they sat on in the box (the owner, 2026-11-06) - put back if it did not go
     const files = [...attachmentsRef.current];
     if (files.length) onClearAttachments(files.map((a) => a.path));
-    setHeld((h) => [...h, { id, text: w || withImages("", files.map((a) => a.path)), after, drawn: mineDrawn.length }]);
-    (road ? road(w, files.map((a) => a.path)) : api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path) }, { timeout: 0 }))
+    // ...sent UNDER ITS NAME where the road is the chat's own: the conversation has this line when it has the name, whatever else arrived (heldLines.lineOf)
+    setHeld((h) => [...h, { id, text: w || withImages("", files.map((a) => a.path)), after, drawn: mineDrawn.length, named: !road }]);
+    (road ? road(w, files.map((a) => a.path)) : api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id }, { timeout: 0 }))
       .catch((x) => { setHeld((h) => h.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))); if (files.length) onAttachBack(files); });
   };
   const [landState, setLandState] = useState(null);

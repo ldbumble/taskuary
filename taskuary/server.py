@@ -520,6 +520,7 @@ class AssistantSessionBody(BaseModel):
     connector_id: int | None = None; pick: str | None = None; model: str | None = None
 class AssistantMessageBody(AssistantSessionBody):
     text: str; attachments: list[str] = []
+    line_id: str | None = None       # the page's own name for this line (general.wait_line): echoed on the kept line and on its turn
 class DecideBody(BaseModel):
     verb: str; final_text: str | None = None; note: str | None = None
     cc: list[str] | None = None      # loop somebody in on this answer (email only)
@@ -2474,7 +2475,7 @@ def _refresh_for_turn(task_id: int) -> tuple[dict, str]:
         logger.info(f'task {task_id}: follow-up sent without a fresh sync - {e}')
         return {}, FOLLOW_UP_STALE
 
-def _demo_turn(task_id: int, text: str):
+def _demo_turn(task_id: int, text: str, line_id=None):
     """THE DEMO HAS NO AI (the owner, 2026-11-05: "of course no prompts work since there is no AI"): what is typed into a task's chat is
     kept, and the answer under it says so in plain words - never "No AI is connected" over a chat whose turns were all written in
     advance. None off the demo, and for the Assistant's own chat, which the demo answers from its recordings."""
@@ -2482,7 +2483,7 @@ def _demo_turn(task_id: int, text: str):
     if not demo.enabled() or general.is_dock(store.get_task(task_id)) or not str(text or '').strip(): return None
     said = demo.chat_turn(any(c.get('ActorType') == general.ASSISTANT_TYPE and c.get('Body') not in (demo.CHAT_TURN, demo.NEW_CHAT_TURN)
                               for c in store.list_comments(task_id)))
-    store.add_comment(task_id, 'owner', general.USER_TYPE, str(text).strip())
+    store.add_comment(task_id, 'owner', general.USER_TYPE, str(text).strip(), line_id=line_id)
     store.add_comment(task_id, 'assistant', general.ASSISTANT_TYPE, said)
     return said
 
@@ -2491,7 +2492,7 @@ def _demo_turn(task_id: int, text: str):
 def assistant_message(task_id: int, body: AssistantMessageBody):
     from . import general
     _refuse_closed_chat(task_id)
-    if (said := _demo_turn(task_id, body.text)) is not None: return {'reply': said, **_assistant_payload(task_id)}
+    if (said := _demo_turn(task_id, body.text, _line_id(body))) is not None: return {'reply': said, **_assistant_payload(task_id)}
     # ...THE LINE HELD BEHIND A RUNNING TURN TAKES THE FIRST LINE'S ROAD (general.say_line, the owner 2026-11-07): kept the moment it is sent,
     # and started again quietly where the session ended under it - it came back "reload the page and ask again", red in the box
     try:
@@ -2503,7 +2504,8 @@ def assistant_message(task_id: int, body: AssistantMessageBody):
 def _say(task_id: int, body, **kw):
     "A typed line on the one road (general.say_line), as the chat's doors send it."
     from . import general
-    return general.say_line(store, task_id, body.text, body.attachments, body.connector_id, body.model, body.pick, ACTOR, **kw)
+    return general.say_line(store, task_id, body.text, body.attachments, body.connector_id, body.model, body.pick, ACTOR, line_id=_line_id(body), **kw)
+def _line_id(body): return (getattr(body, 'line_id', None) or '')[:80] or None
 
 @app.post('/api/tasks/{task_id}/assistant/browser')
 def assistant_browser(task_id: int):

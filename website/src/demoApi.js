@@ -734,7 +734,7 @@ const write = (method, url, body) => {
     }
     const asked = String(body?.text || "").trim();
     if (asked) {
-      box.messages.push({ id: `u${++nextId}`, role: "user", content: [{ type: "text", text: asked }] });
+      box.messages.push({ id: `u${++nextId}`, role: "user", content: [{ type: "text", text: asked }], ...(body?.line_id ? { line: body.line_id } : {}) });
       const said = demoReply(m[1], asked);
       box.messages.push({ id: `a${++nextId}`, role: "assistant", content: [{ type: "text", text: said }] });
       return { reply: said, ...box };

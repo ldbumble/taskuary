@@ -48,6 +48,42 @@ test("the lines the server kept for the agent show on every screen, once (the ow
   assert.deepEqual(waitingShown(undefined, [], server, server), []);
 });
 
+// A LINE IS KNOWN BY THE NAME ITS PAGE GAVE IT (the spine audit, 2026-11-09): by its words and by counting, a line from another window or
+// the phone retired a held line the server did not have yet, and "ok" sent twice stood once
+test("a line sent under its name is the conversation's when the conversation has the name, and by nothing else", () => {
+  const named = (text, line) => ({ ...said(text), line }), held = [{ id: "h1", text: "ok", after: 1, drawn: 1, named: true }, { id: "h2", text: "ok", after: 1, drawn: 1, named: true }];
+  assert.deepEqual(stillHeld(held, [said("hello")]).map((l) => l.id), ["h1", "h2"]);
+  // ...the phone's "ok", another window's "ok" under its own name, a third line: none of them is this page's line arriving
+  assert.deepEqual(stillHeld(held, [said("hello"), said("ok"), named("ok", "other-1"), said("and one more")]).map((l) => l.id), ["h1", "h2"]);
+  assert.deepEqual(stillHeld(held, [said("hello"), named("ok", "h2")]).map((l) => l.id), ["h1"], "the second arrived first: the first is still held");
+  assert.deepEqual(stillHeld(held, [said("hello"), named("ok", "h2"), named("ok", "h1")]), []);
+  // ...the thread on screen carries the name on the message's metadata, all the runtime keeps (GeneralWorkspace `initial`)
+  assert.deepEqual(stillHeld(held, [said("hello"), { ...said("ok"), metadata: { custom: { line: "h1" } } }], "drawn").map((l) => l.id), ["h2"]);
+  // ...and a named line of the conversation's is never an unnamed held line arriving, by its words or by the count (the coding CLI's road)
+  const loose = [{ id: "c1", text: "ok", after: 1 }];
+  assert.deepEqual(stillHeld(loose, [said("hello"), named("ok", "other-1")]), loose);
+  assert.deepEqual(stillHeld([...held, ...loose], [said("hello"), said("ok")]).map((l) => l.id), ["h1", "h2"], "an unnamed one still goes by its words");
+});
+
+test("a kept line is this page's own by its name; unnamed, each of the page's copies stands for one kept line", () => {
+  const server = [said("compare three tools")], waiting = [{ id: 7, text: "ok", line: "h1" }, { id: 8, text: "ok", line: "other-1" }, { id: 9, text: "ok" }, { id: 10, text: "ok" }];
+  // this page holds h1: the other window's "ok" and the phone's two are drawn, and its own is not drawn twice
+  assert.deepEqual(waitingShown(waiting, [{ id: "h1", text: "ok", named: true }], server, server).map((w) => w.id), [8, 9, 10]);
+  // ...its thread streamed one "ok" of its own, with no name: one kept line is that one, not both
+  assert.deepEqual(waitingShown(waiting, [], [...server, said("ok")], server).map((w) => w.id), [7, 8, 10]);
+  assert.deepEqual(waitingShown(waiting, [{ id: "c1", text: "ok" }], server, server).map((w) => w.id), [7, 8, 10], "nor an unnamed held line for more than one");
+});
+
+test("the chat sends a held line under its name, and the thread keeps the name the server gives back", async () => {
+  const { readFileSync } = await import("node:fs");
+  const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(ws, /setHeld\(\(h\) => \[\.\.\.h, \{ id, text: w \|\| withImages\("", files\.map\(\(a\) => a\.path\)\), after, drawn: mineDrawn\.length, named: !road \}\]\);/);
+  assert.match(ws, /api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant\/messages`, \{ text: w, attachments: files\.map\(\(a\) => a\.path\), line_id: id \}/);
+  assert.match(ws, /\.\.\.\(m\.line \? \{ line: m\.line \} : \{\}\) \};/);
+  // ...the public demo's own server answers the same way: a line typed there is not left standing at the foot
+  assert.match(readFileSync(new URL("../src/demoApi.js", import.meta.url), "utf8"), /role: "user", content: \[\{ type: "text", text: asked \}\], \.\.\.\(body\?\.line_id \? \{ line: body\.line_id \} : \{\}\) \}\);/);
+});
+
 // A PRESS IS THE OWNER'S LINE, NOT A HELD ONE (the owner, 2026-11-08: "You set a reminder for Monday" drawn on the right): a press landing
 // while a line is held never takes that line away
 test("a press drawn as the owner's line never counts as the held line arriving", () => {

@@ -51,7 +51,7 @@ test("the chat box lets go of its files once the send is accepted, and keeps the
   assert.match(gw, /if \(event\.type !== "error"\) took\(\);/, "the first word back from the server is the send accepted");
   assert.doesNotMatch(gw, /onClearAttachments\(\); onSent\(event\.payload\)/, "never every file at the turn's end: one added meanwhile stays");
   // ...a line held while it works carries the box's files, and puts them back if it did not go
-  assert.match(gw, /\{ text: w, attachments: files\.map\(\(a\) => a\.path\) \}/);
+  assert.match(gw, /\{ text: w, attachments: files\.map\(\(a\) => a\.path\), line_id: id \}/);
   assert.match(gw, /onAttachBack\(files\)/);
   assert.match(gw, /const clearAttachments = useCallback\(\(paths\) =>/);
 });

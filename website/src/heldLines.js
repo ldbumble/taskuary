@@ -17,17 +17,26 @@ export function heldLine(e, text, running) {
 // twice - once as the turn's own, once still "held" at the foot - because the copy the server kept differed only in its spacing)
 const same = (w) => String(w || "").replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\s+/g, " ").trim();
 
-// the held lines the conversation does not have yet: `after` is how many of the owner's lines it had when the line was held, and each
-// line it has since takes away one held line with the same words. A line the server has but spelled otherwise still goes: once the
-// owner's lines since `after` are as many as the held lines up to this one, the conversation has them all.
+// THE NAME THE PAGE GAVE A LINE IT SENT (the spine audit, 2026-11-09): sent with the line (`line_id`), kept on it and on the turn it becomes
+// (general.wait_line), and echoed on both (`line`; metadata.custom.line in the thread). A line was known by its words and by counting, so
+// one from another window or the phone retired a held line the server did not have yet, and "ok" sent twice stood once
+const lineOf = (m) => m?.line || m?.metadata?.custom?.line || "";
+
+// the held lines the conversation does not have yet. A line sent under its name (`named`) is the conversation's when the conversation has
+// that name, and by nothing else. A road with no names - the coding CLI's, an answer to the agent's ask - reads as before, among the lines
+// no page named: `after` is how many of the owner's lines the conversation had when the line was held, and each line it has since takes
+// away one held line with the same words. A line the server has but spelled otherwise still goes: once the owner's unnamed lines since
+// `after` are as many as the unnamed held lines up to this one, the conversation has them all.
 // `at`: which count the line was held after - `after`, the server's conversation; `drawn`, the thread on screen (notShown)
 export function stillHeld(held, messages, at = "after") {
-  const mine = (messages || []).filter((m) => m?.role === "user").map(words), used = new Set(), from = (l) => l[at] || 0;
-  return (held || []).filter((l, k) => {
+  const all = (messages || []).filter((m) => m?.role === "user"), names = new Set(all.map(lineOf).filter(Boolean));
+  const mine = all.map((m) => (lineOf(m) ? "" : words(m))), used = new Set(), from = (l) => l[at] || 0, loose = (held || []).filter((l) => !l.named);
+  return (held || []).filter((l) => {
+    if (l.named) return !names.has(l.id);
     const i = mine.findIndex((w, j) => j >= from(l) && !used.has(j) && same(w) === same(l.text));
     if (i >= 0) { used.add(i); return false; }
     const since = mine.filter((w, j) => j >= from(l) && w).length;
-    return since < (held || []).slice(0, k + 1).filter((x) => from(x) === from(l)).length;
+    return since < loose.slice(0, loose.indexOf(l) + 1).filter((x) => from(x) === from(l)).length;
   });
 }
 
@@ -39,8 +48,16 @@ export const notShown = (held, thread) => stillHeld(held, thread, "drawn");
 // THE LINES THE SERVER KEPT FOR THE AGENT (general.waiting_lines, the owner 2026-11-07): saved the moment they were sent, so every screen draws
 // them - another tab's, the phone's, this page reloaded - with the time each was typed, until a turn takes them. Not where this screen draws the
 // same words already: a line it held itself, or its thread's own copy of a line it streamed
+// ...BY ITS NAME where it has one (lineOf): this page's own held line is the kept line that carries its name, and no other - two windows
+// that each sent "ok" both draw both. A kept line with no name (the thread's own first line, streamed) is this screen's by its words, and
+// each of this screen's copies stands for ONE kept line: the words were a set, so "ok" kept twice drew once, or not at all
 export function waitingShown(waiting, held, thread, messages) {
-  const kept = (messages || []).filter((m) => m?.role === "user").length;
-  const own = new Set([...(held || []).map((l) => same(l.text)), ...(thread || []).filter((m) => m?.role === "user").slice(kept).map((m) => same(words(m)))]);
-  return (waiting || []).filter((w) => !own.has(same(w.text)));
+  const kept = (messages || []).filter((m) => m?.role === "user").length, ids = new Set((held || []).filter((l) => l.named).map((l) => l.id));
+  const own = [...(held || []).filter((l) => !l.named).map((l) => same(l.text)), ...(thread || []).filter((m) => m?.role === "user").slice(kept).filter((m) => !lineOf(m)).map((m) => same(words(m)))];
+  return (waiting || []).filter((w) => {
+    if (w.line) return !ids.has(w.line);
+    const i = own.indexOf(same(w.text));
+    if (i >= 0) own.splice(i, 1);
+    return i < 0;
+  });
 }

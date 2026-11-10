@@ -503,7 +503,7 @@ CREATE TABLE IF NOT EXISTS route (RouteId INTEGER PRIMARY KEY, MessageId INTEGER
   Decision TEXT, Score REAL, Reason TEXT, CandidatesJson TEXT, RoutedBy TEXT, CreatedAt TEXT,
   RawOutput TEXT, ParseError TEXT, VerdictJson TEXT);
 CREATE TABLE IF NOT EXISTS comment (CommentId INTEGER PRIMARY KEY, TaskId INTEGER, Actor TEXT,
-  ActorType TEXT, Body TEXT, CreatedAt TEXT);
+  ActorType TEXT, Body TEXT, CreatedAt TEXT, LineId TEXT);
 CREATE TABLE IF NOT EXISTS audit (Id INTEGER PRIMARY KEY, EntityType TEXT, EntityId INTEGER,
   Action TEXT, Actor TEXT, ActorType TEXT, RunId INTEGER, Detail TEXT, PrevHash TEXT, RowHash TEXT, CreatedAt TEXT);
 CREATE TABLE IF NOT EXISTS agent (AgentId INTEGER PRIMARY KEY, Name TEXT UNIQUE, Kind TEXT,
@@ -1213,6 +1213,8 @@ class SQLiteStore:
                 self.cx.execute('ALTER TABLE route ADD COLUMN VerdictJson TEXT')
             # why a reply draft could not be written (PW-046): the review stays pending and
             # reply-needed, the reason is shown beside it with a retry, never mistaken for a draft
+            # the name the page gave a line it sent (general.wait_line): the page knows its own line by it, never by its words
+            if 'LineId' not in {r[1] for r in self.cx.execute('PRAGMA table_info(comment)')}: self.cx.execute('ALTER TABLE comment ADD COLUMN LineId TEXT')
             rvcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
             if 'DraftError' not in rvcols:
                 self.cx.execute('ALTER TABLE review ADD COLUMN DraftError TEXT')
@@ -5212,9 +5214,9 @@ class SQLiteStore:
             except Exception: continue
         return out
     def list_routes(self, task_id): return self._rows('SELECT * FROM route WHERE TaskId=? ORDER BY RouteId', (task_id,))
-    def add_comment(self, task_id, actor, actor_type, body):
-        return self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)',
-                          (task_id, actor, actor_type, body, _now()))
+    def add_comment(self, task_id, actor, actor_type, body, line_id=None):
+        return self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId) VALUES (?,?,?,?,?,?)',
+                          (task_id, actor, actor_type, body, _now(), line_id))
     def add_comment_once(self, task_id, actor, actor_type, body):
         """Append a turn unless it is already the last turn on this task.
 
@@ -5249,8 +5251,8 @@ class SQLiteStore:
             got = [dict(r) for r in self.cx.execute('SELECT * FROM comment WHERE TaskId=? AND ActorType=? ORDER BY CommentId', (task_id, kind))]
             for r in got:
                 self.cx.execute('DELETE FROM comment WHERE CommentId=?', (r['CommentId'],))
-                self.cx.execute('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)',
-                                (task_id, r['Actor'], as_kind, words(r['Body']), r['CreatedAt']))
+                self.cx.execute('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId) VALUES (?,?,?,?,?,?)',
+                                (task_id, r['Actor'], as_kind, words(r['Body']), r['CreatedAt'], r.get('LineId')))
             if got: self.cx.commit(); self._writes += 1
         if got: self._poke('task-changed', task_id=task_id)
         return got

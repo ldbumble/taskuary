@@ -75,9 +75,12 @@ def _line_of(body) -> dict:
     try: got = json.loads(body or '{}')
     except ValueError: got = {'text': str(body or '')}
     return {'text': str(got.get('text') or ''), 'files': list(got.get('files') or [])}
-def wait_line(store, tid: int, text: str, files=None) -> int:
-    "Keep the owner's line for the agent now - every screen draws it at once (task-changed): its row id."
-    wid = store.add_comment(tid, 'owner', WAITING_TYPE, json.dumps({'text': text, 'files': list(files or [])}))
+def wait_line(store, tid: int, text: str, files=None, line_id=None) -> int:
+    """Keep the owner's line for the agent now - every screen draws it at once (task-changed): its row id.
+    `line_id`: THE NAME THE PAGE GAVE IT (the spine audit, 2026-11-09). The page that sent a line draws it at once and has to know when the
+    conversation has it; it knew by its words and by counting, so a line from another window retired one not yet filed, and "ok" sent twice
+    stood once. The name rides the kept row and the turn it becomes (store.take_lines), and comes back on both (waiting_lines, _as_messages)."""
+    wid = store.add_comment(tid, 'owner', WAITING_TYPE, json.dumps({'text': text, 'files': list(files or [])}), line_id=line_id)
     from . import handraise
     handraise.moved(tid)
     return wid
@@ -117,7 +120,8 @@ def box_sent(store, tid: int):
         if r.get('ActorType') == BOX_TYPE: store.drop_comment(r['CommentId'])
 def waiting_lines(store, tid: int) -> list:
     "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
-    return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body'])} for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE]
+    return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body']), **({'line': r['LineId']} if r.get('LineId') else {})}
+            for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE]
 # A SESSION THAT ENDED UNDER A LINE (failed, closed, idled out) - never "reload the page" (the owner, 2026-11-07): say_line starts a fresh one,
 # which takes the kept line. 'has ended' is what every caller reads it by
 ENDED = 'this assistant session has ended - it starts again with the next line you send'
@@ -498,7 +502,7 @@ def _as_messages(rows) -> list:
     return [{'id': f"comment-{c['CommentId']}",
              'role': 'assistant' if c.get('ActorType') == ASSISTANT_TYPE else 'user',
              'content': [{'type': 'text', 'text': c.get('Body') or ''}],
-             'createdAt': c.get('CreatedAt'), **({'brief': True} if is_brief(c) else {})} for c in rows]
+             'createdAt': c.get('CreatedAt'), **({'brief': True} if is_brief(c) else {}), **({'line': c['LineId']} if c.get('LineId') else {})} for c in rows]
 
 
 def history(store, tid: int) -> list:
@@ -2142,7 +2146,7 @@ class GeneralSession:
 
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
                     pick=None, trace=None, cancel=None, as_owner=True,
-                    delivery_instructions: str = None, kept: bool = False, brief: bool = False, waiting: int = None) -> str:
+                    delivery_instructions: str = None, kept: bool = False, brief: bool = False, waiting: int = None, line_id: str = None) -> str:
         """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
         make it open a conversation (the walk, a setup). It is not written to the history and
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
@@ -2158,7 +2162,7 @@ class GeneralSession:
         # ...and EACH IS KEPT THE MOMENT IT IS SENT (the owner, 2026-11-07): with the time it was typed, on every screen as waiting for the
         # agent, through a reload and a restart - never only in this process (WAITING_TYPE)
         mine = as_owner and not brief and not kept
-        if mine and waiting is None: waiting = wait_line(self.store, self.task_id, text, attachments)
+        if mine and waiting is None: waiting = wait_line(self.store, self.task_id, text, attachments, line_id)
         if not self._take(WAIT_TURN, cancel):
             # ...it gave up because the session ended under it - the caller's road starts a fresh one, which takes the kept line (say_line) -
             # or because it was cancelled, which takes the line back
@@ -3011,7 +3015,7 @@ def idle_sweep(now: float = None) -> list:
 
 
 def say_line(store, tid: int, text: str, attachments=None, connector_id=None, model=None, pick=None, actor='owner', trace=None, cancel=None,
-             waiting: int = None, started=None):
+             waiting: int = None, started=None, line_id: str = None):
     """THE ONE ROAD FOR A LINE THE OWNER SENDS TO A TASK'S AGENT (the owner, 2026-11-07): the first line and every one held behind a running
     turn alike. Kept the moment it is sent (send_prompt), handed to the agent's session - started, or brought back, as needed - and, where
     that session ends under it (a turn failed, it idled out, a wrap-up closed it), handed once to a fresh one, which takes the kept line: a
@@ -3023,7 +3027,7 @@ def say_line(store, tid: int, text: str, attachments=None, connector_id=None, mo
     for again in (False, True):
         ses = start_session(store, tid, connector_id, model, actor, pick)
         if started: started(ses)
-        try: return ses, ses.send_prompt(text, attachments, connector_id, model, pick=pick, trace=trace, cancel=cancel, waiting=waiting)
+        try: return ses, ses.send_prompt(text, attachments, connector_id, model, pick=pick, trace=trace, cancel=cancel, waiting=waiting, line_id=line_id)
         except RuntimeError as e:
             if again or 'has ended' not in str(e) or (cancel is not None and cancel.is_set()): raise
             waiting = getattr(e, 'waiting', None) or waiting

@@ -339,7 +339,11 @@ class ACPCoding:
         try: stop, said = self.client.prompt(text); ok = True
         except acp_mod.ACPAgentError as e:
             logger.warning(f'acp coding {self.sid}: the turn failed - {e}')
-            self._say('progress', 'acp', f'The turn failed: {str(e)[:300]}')
+            from .general import CARRY_ON
+            self._say('progress', 'acp', why := f'The turn failed: {str(e)[:300]} - {CARRY_ON}.')
+            # ...IN THE CHAT, where it happened (rules part 4): said only on its Terminal, the chat - drawn from the kept updates - showed the
+            # turn's first words and stopped. Taskuary's own update, marked as its brief is (chatStream.stepsFromAcp draws it as the turn's error)
+            self._record({'sessionUpdate': 'error', 'content': {'type': 'text', 'text': why}, '_meta': {'taskuary': 'error'}})
         finally:
             self.in_turn = False
             try: self.steps.flush(stop if ok else 'error')

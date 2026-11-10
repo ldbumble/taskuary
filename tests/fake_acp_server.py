@@ -7,6 +7,7 @@ only knows how to match replies to its own requests hangs here - which is the po
 
 Set in its environment, for the tests that need more:
   FAKE_ACP_FAIL=init     it dies at initialize, as an adapter that cannot start does
+  FAKE_ACP_FAIL=turn     its first turn answers with an error after a word, as an overloaded model's does
   FAKE_ACP_RESUME=1      it offers session/resume (no replay) beside session/load
   FAKE_ACP_ASK=<command> the permission it asks for is to run that shell command (kind execute)
   FAKE_ACP_CODE=<file>   a coding turn: a plan, an edit of that file asked for (kind edit, its location) and, once allowed, made -
@@ -114,6 +115,8 @@ for line in sys.stdin:
         said = ' '.join(str(b.get('text') or '') for b in msg['params'].get('prompt') or [])
         _heard = f"heard: {said} [mode={SET['mode']} model={SET['model']} effort={SET['effort']} turn={STARTS}" + (f' resumed={RESUMED}' if RESUMED else '') + ']'
         update('agent_message_chunk', content={'type': 'text', 'text': 'Looking. '})
+        if os.environ.get('FAKE_ACP_FAIL') == 'turn' and STARTS == 1:
+            send({'jsonrpc': '2.0', 'id': mid, 'error': {'code': -32603, 'message': 'Internal error: API Error: 529 Overloaded'}}); continue
         if os.environ.get('FAKE_ACP_HANG') == '1' and STARTS == 1:
             _prompt_id = mid; continue                  # only session/cancel ends this one
         if os.environ.get('FAKE_ACP_CODE'):

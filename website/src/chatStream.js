@@ -42,6 +42,8 @@ export function stepsFromAcp(updates) {
     if (kind === "user_message_chunk") chunk(u._meta?.taskuary === "brief" ? "brief" : "you", textOf(u.content));
     else if (kind === "agent_message_chunk") chunk("said", textOf(u.content));
     else if (kind === "agent_thought_chunk") chunk("thought", textOf(u.content));
+    // ...and a turn that failed, kept by Taskuary where it happened (acpcoding._turn): the turn's error, with the way past it
+    else if (kind === "error" && u._meta?.taskuary === "error") out.push({ k: "error", text: textOf(u.content), ...(at ? { at } : {}) });
     else if ((cid = compactionOf(u, compacts)) != null) {
       let c = compacts.get(cid);
       if (!c) { c = { k: "compact", id: cid, ...(at ? { at } : {}) }; compacts.set(cid, c); out.push(c); }

@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import acpcoding, agents, blackboard, codingchat, devphone, peers, permissions, session_artifacts, shellgate, terminal, waitroom
+from taskuary import acpcoding, agents, blackboard, codingchat, devphone, general, peers, permissions, session_artifacts, shellgate, terminal, waitroom
 from taskuary.store import MemoryStore
 from taskuary import llm, origin
 
@@ -154,6 +154,18 @@ def test_a_line_typed_while_it_works_is_kept_shown_and_taken_by_the_next_turn(wo
     assert codingchat.chat(s, tid)['waiting'] == []
     ups = [u for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'user_message_chunk']
     assert any(u['content']['text'] == 'was this code completed?' and '_meta' not in u for u in ups)      # drawn as theirs
+
+
+def test_a_turn_that_fails_says_so_in_the_chat_and_typing_carries_on(world, monkeypatch):
+    """A FAILURE IS KEPT WHERE IT HAPPENED (rules part 4): a turn the adapter ended with an error - an overloaded model - was said only on the
+    session's Terminal; the chat, drawn from the kept updates, showed "Looking." and stopped, with nothing to say the turn had failed."""
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_FAIL', 'turn')
+    t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)
+    [e] = [u for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'error']
+    assert '529 Overloaded' in e['content']['text'] and general.CARRY_ON in e['content']['text'] and e['_meta'] == {'taskuary': 'error'}
+    t.prompt('try again'); assert idle(t, 2)
+    assert 'heard: try again' in [x for k, x in t.history if k == 'said'][-1]
 
 
 def test_a_note_from_the_waiting_room_is_drawn_as_the_owners_words(world):

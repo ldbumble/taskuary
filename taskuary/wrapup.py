@@ -12,46 +12,43 @@ TRANSCRIPT_SYSTEM = (
     'You are reading the terminal transcript of a coding agent that has just worked a task for '
     "the owner, who has now closed the session. Write the owner's record of what happened, from "
     'the transcript ALONE - never a step it did not take, never a claim it did not make.\n'
-    'Output ONLY this JSON: {"determination": "...", "actions": "...", "summary": "...", '
-    '"outcome": "did_work|nothing_to_do|elsewhere", "elsewhere": "..."} - '
+    'Output ONLY this JSON: {"determination": "...", "actions": "...", "summary": "..."} - '
     'determination is what was decided and why, in plain language and at most 80 words. '
     'actions is only what was actually changed or produced (files, commands, records, ids), '
     'at most 80 words; do not repeat the determination. summary is the concrete outcome for '
     'someone who read none of the transcript: one or two natural sentences, at most 55 words, '
-    'with no headings, process narration, or repetition of the other fields.\n'
-    'outcome is nothing_to_do ONLY when the session changed, produced and chased nothing because there '
-    'was nothing here to do at all - the message turned out to be a notice, a reminder, a newsletter or '
-    "somebody else's job. Anything the session did, found out or settled for the owner is did_work, and "
-    'that includes looking and reporting that the problem is not real.\n'
-    'outcome is elsewhere when the session concluded that the work it was asked for is real but is not in the code it was '
-    'opened in - it lives in another repository or codebase and has to be done there. That is never nothing_to_do. The '
-    'elsewhere field then names the repository the session said the work is likely in, as it wrote it, or "" when it could '
-    'not tell; for every other outcome it is "".')
+    'with no headings, process narration, or repetition of the other fields.')
+# HOW THE RUN ENDED IS THE AGENT'S TO SAY (the owner's rule: "no second voice drafts, judges or edits for it"): an agent that ran
+# `taskuary --done` said it finished the work here - `--no-reply` when nobody should hear back - and the report's model is never asked
+# to second-guess that. This clause is put only for a run that ended WITHOUT the agent saying: the owner's Stop, a killed or crashed CLI,
+# an old one with no --done - the one place the transcript is all there is.
+OUTCOME_ASK = ('\nAlso give "outcome": "did_work|elsewhere" and "elsewhere": "..." in the same JSON. outcome is elsewhere when the session '
+               'concluded that the work it was asked for is real but is not in the code it was opened in - it lives in another repository '
+               'or codebase and has to be done there; anything else is did_work. The elsewhere field then names the repository the '
+               'session said the work is likely in, as it wrote it, or "" when it could not tell; for did_work it is "".')
 
 
-def report_from_transcript(store, task_id: int, transcript: str, agent: str = '', final_message: str = '') -> dict:
+def report_from_transcript(store, task_id: int, transcript: str, agent: str = '', final_message: str = '', said: bool = False) -> dict:
     """The report, written from what is already on screen. The agent is never asked for prose:
     by the time you click Done you are done talking to it, and a transcript cannot argue. No AI
     configured (or a bad answer) files the agent's own last word, or says plainly that there is no summary - never the screen
     itself: "Summary: ● Bash(cd ...; gh pr view ..." was filed as a report (TQ-1112 shape, 2026-10-16). The record does not
-    disappear for it - the transcript is kept with the session (terminal's transcript row)."""
+    disappear for it - the transcript is kept with the session (terminal's transcript row).
+    `said`: the agent ended the run itself (`taskuary --done`) - its outcome is its own, and the model writes only the report's prose."""
     from .llm import build_llm
     blank = dict.fromkeys(FIELDS, '')
     if not (transcript or '').strip(): return blank | {'summary': '(the session ended with nothing on screen)'}
     try:
         llm = build_llm(store, job='summary')
         if not llm: raise RuntimeError('no AI connector is set up to write the report')
-        out = llm(TRANSCRIPT_SYSTEM, f"Task: {(store.get_task(task_id) or {}).get('Title') or ''}\n\n"
-                                     f'Transcript:\n{transcript}', max_tokens=900)
+        out = llm(TRANSCRIPT_SYSTEM + ('' if said else OUTCOME_ASK), f"Task: {(store.get_task(task_id) or {}).get('Title') or ''}\n\n"
+                                                                      f'Transcript:\n{transcript}', max_tokens=900)
         j = json.loads(re.sub(r'^```(json)?|```$', '', (out or '').strip(), flags=re.M))
         rep = blank | {k: str(j.get(k) or '') for k in FIELDS}
         if not any(rep.values()): raise ValueError('empty report')
-        # a flag, not prose: resolution_text never renders it, finish() reads it (see nobody_waiting).
-        # Absent or unrecognised means did_work - the ending that drafts, because swallowing a reply
-        # somebody is waiting for is the worse failure of the two.
-        if j.get('outcome') == 'nothing_to_do': rep['outcome'] = 'nothing_to_do'
-        # ...and work that lives in another repository is not done here: that ending ASKS to move it (asks_to_move), never closes
-        if j.get('outcome') == ELSEWHERE: rep |= {'outcome': ELSEWHERE, 'elsewhere': ' '.join(str(j.get('elsewhere') or '').split())[:120]}
+        # a flag, not prose: resolution_text never renders it, finish() reads it (moves). Absent or unrecognised is the work done here.
+        # Work that lives in another repository is not done here: that ending ASKS to move it (asks_to_move), never closes
+        if not said and j.get('outcome') == ELSEWHERE: rep |= {'outcome': ELSEWHERE, 'elsewhere': ' '.join(str(j.get('elsewhere') or '').split())[:120]}
         return rep
     except Exception as e:
         logger.warning(f'transcript report failed for task {task_id}: {e}')
@@ -1069,7 +1066,10 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
         _question(playbooks.draft, store, tid, text, agent)])
     _stage(tid, 'report')
     asked = unanswered(store, tid)                 # read while the session is still up: its questions lead the result
-    rep = report_from_transcript(store, tid, text, agent, final_message='' if cut else final_message)
+    # ...and whether the agent ended it itself: the run's Finished event is its `--done` (selfclose._finished), the only one there is
+    from . import workerstate as ws
+    said = ws.status(store, tid).get('state') == 'finished'
+    rep = report_from_transcript(store, tid, text, agent, final_message='' if cut else final_message, said=said)
     # ...and so does the move it asks for, when the work turned out to be in another repository (asks_to_move)
     left = left_open(asked + ([{'text': move_question(store, tid, rep)}] if moves(rep) and not (close and actor == 'owner') else []))
     report = with_left_open(resolution_text(rep), left)

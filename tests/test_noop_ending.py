@@ -108,18 +108,21 @@ class NoOpEndingTests(unittest.TestCase):
 class ReportOutcomeTests(unittest.TestCase):
     def test_the_flag_is_read_and_never_shown(self):
         s = MemoryStore()
-        tid = s.create_task({'Title': 'Outstanding Assignment', 'Kind': 'coding'}, 'o')
-        j = ('{"determination": "a training reminder", "actions": "nothing", '
-             '"summary": "nothing to do here", "outcome": "nothing_to_do"}')
+        tid = s.create_task({'Title': 'Export job', 'Kind': 'coding'}, 'o')
+        j = ('{"determination": "the export job lives elsewhere", "actions": "nothing", '
+             '"summary": "not in this repository", "outcome": "elsewhere", "elsewhere": "northwind/portal"}')
         with mock.patch('taskuary.llm.build_llm', return_value=lambda sy, u, **kw: j):
-            rep = wrapup.report_from_transcript(s, tid, 'Read the mail. Nothing to do here.')
-        self.assertEqual(rep['outcome'], 'nothing_to_do')
+            rep = wrapup.report_from_transcript(s, tid, 'Searched. Not in this repository.')
+        self.assertEqual(rep['outcome'], 'elsewhere')
         self.assertNotIn('outcome', wrapup.resolution_text(rep).lower())   # a flag, not prose
 
     def test_anything_but_the_flag_reads_as_work_done(self):
+        """...and "nothing to do" is no outcome of its own: whether anybody hears back is the sender's stored class and the agent's
+        `--no-reply`, never the report model's reading (it was read by nobody since 2026-11-10)."""
+        self.assertNotIn('nothing_to_do', wrapup.TRANSCRIPT_SYSTEM + wrapup.OUTCOME_ASK)
         s = MemoryStore()
         tid = s.create_task({'Title': 't', 'Kind': 'coding'}, 'o')
-        for val in ('did_work', 'unsure', ''):
+        for val in ('did_work', 'nothing_to_do', 'unsure', ''):
             with mock.patch('taskuary.llm.build_llm',
                             return_value=lambda sy, u, **kw: '{"summary": "s", "outcome": "%s"}' % val):
                 self.assertNotIn('outcome', wrapup.report_from_transcript(s, tid, 'did it'))

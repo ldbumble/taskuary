@@ -34,14 +34,47 @@ def tags(s, tid): return str(s.get_task(tid).get('Tags') or '')
 
 class ReportReadsTheMoveTests(unittest.TestCase):
     def test_the_report_model_is_asked_for_elsewhere_and_its_answer_is_kept(self):
-        self.assertIn('elsewhere', wrapup.TRANSCRIPT_SYSTEM)
-        self.assertIn('never nothing_to_do', wrapup.TRANSCRIPT_SYSTEM)
+        """A run that ended without the agent saying how (the owner's Stop, a killed CLI): the transcript is all there is."""
+        self.assertIn('elsewhere', wrapup.OUTCOME_ASK)
         s = MemoryStore(); tid, _ = coding_task(s)
         llm = mock.Mock(return_value=json.dumps(MOVE))
         with mock.patch('taskuary.llm.build_llm', return_value=llm):
             rep = wrapup.report_from_transcript(s, tid, 'searched for the export job: not in this repo')
         self.assertEqual((rep['outcome'], rep['elsewhere']), ('elsewhere', 'northwind/portal'))
         self.assertTrue(wrapup.moves(rep))
+        self.assertIn(wrapup.OUTCOME_ASK, llm.call_args[0][0])
+
+    def test_an_agent_that_said_done_is_not_second_guessed(self):
+        """The owner's rule (2026-11-10, "no second voice drafts, judges or edits for it"): `taskuary --done` is the agent saying it
+        finished the work here. The report's model writes the prose and is never asked how the run ended - nor heard if it says."""
+        s = MemoryStore(); tid, _ = coding_task(s)
+        llm = mock.Mock(return_value=json.dumps(MOVE))
+        with mock.patch('taskuary.llm.build_llm', return_value=llm):
+            rep = wrapup.report_from_transcript(s, tid, 'fixed the export', said=True)
+        self.assertFalse(wrapup.moves(rep)); self.assertNotIn('outcome', rep)
+        self.assertNotIn('did_work', llm.call_args[0][0])
+        self.assertEqual(rep['summary'], MOVE['summary'])                 # ...its prose is still the report
+
+    def test_the_wrap_reads_the_agents_done_off_its_run(self):
+        """Which run said it: the Finished event its `--done` records (selfclose._finished) - a run with none was not said."""
+        from types import SimpleNamespace
+        from taskuary import terminal as term, workerstate as ws
+        s = MemoryStore(); tid, _ = coding_task(s)
+        saw = []
+        def rep(*a, **k): saw.append(k.get('said')); return {'summary': 'fixed'}
+        sess = SimpleNamespace(sid='run1', alive=True, task_id=tid, witness=SimpleNamespace(said='Fixed it.'))
+        keep = dict(term.SESSIONS); self.addCleanup(lambda: (term.SESSIONS.clear(), term.SESSIONS.update(keep)))
+        with mock.patch.object(term, 'transcript_for', return_value=('fixed the export', 'coding', 'run1')), \
+             mock.patch.object(term, 'close', return_value=True), mock.patch.object(wrapup, 'report_from_transcript', side_effect=rep), \
+             mock.patch.object(wrapup, 'finish', return_value={}), mock.patch('taskuary.proposals.collect', return_value=[]), \
+             mock.patch('taskuary.playbooks.draft', return_value=None), mock.patch('taskuary.handbook.enabled', return_value=False):
+            term.SESSIONS['run1'] = sess
+            wrapup.wrap(s, tid, close=False, actor='owner')
+            sess.sid = 'run2'; term.SESSIONS.clear(); term.SESSIONS['run2'] = sess
+            ws.record(s, tid, 'run2', 'finished', text='Fixed it.', source='cli')
+            with mock.patch.object(term, 'transcript_for', return_value=('fixed the export', 'coding', 'run2')):
+                wrapup.wrap(s, tid, close=False, actor='coding')
+        self.assertEqual(saw, [False, True])
 
     def test_other_outcomes_carry_no_move(self):
         s = MemoryStore(); tid, _ = coding_task(s)

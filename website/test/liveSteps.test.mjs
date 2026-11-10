@@ -74,3 +74,12 @@ test("a turn's run is counted from the newest thing above it, not the row just a
   assert.equal(turnBegan([null, undefined]), null);
   assert.match(read("GeneralWorkspace.jsx"), /turnBegan\(ms\.slice\(0, i\)\.map\(\(m\) => m\.createdAt\)\)/);
 });
+
+// ONE WAY TO STOP AN AGENT MID-RUN, ON THE RUNNING TURN (the owner, 2026-11-10: "we should have x button for agent to stop in middle of the
+// work"): a small x on the turn's head, calling the chat's own stop road
+test("the running turn's head carries the x that stops it, on the chat's own stop road", () => {
+  const ws = read("GeneralWorkspace.jsx"), clock = ws.slice(ws.indexOf("const RunClock"), ws.indexOf("const AgentNameCtx"));
+  assert.match(clock, /stop = React\.useContext\(StopCtx\)/);
+  assert.match(clock, /\{stop && <IconButton size="small" data-tq-stop-run="" aria-label="Stop the agent"[^>]*onClick=\{stop\}/);
+  assert.match(ws, /<StopCtx\.Provider value=\{dock \? null : onStop\}>/);
+});

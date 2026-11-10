@@ -125,7 +125,8 @@ def put_in(state, kind, s, tid, c, monkeypatch):
     t = general._live_of(tid)
     if state == 'idled':
         monkeypatch.setattr(general, 'idle_for', lambda: 0); t.last -= 100
-        assert t.idle_out(), t.idle_why()
+        # ...once the first turn's permission ask is settled on a busy machine: a session asking is never idled out (idle_why)
+        assert until(lambda: t.idle_why() == '', 15) and t.idle_out(), t.idle_why()
         monkeypatch.setattr(general, 'idle_for', lambda: 3600)
     if state in ('ended', 'restart', 'closed'):
         t.close(); general.drop_session(tid); terminal.SESSIONS.pop(t.sid, None)

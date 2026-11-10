@@ -160,11 +160,16 @@ const AgentBand = ({ name, provider, work, starting = "" }) => {
     data-tq-working="" {...(starting && !work.steps.length ? { "data-tq-starting-line": "" } : {})}><i /><i /><i /></div>;
 };
 // THE TURN'S HEAD, FROM THE PRESS: its time and how long it has run, counting - the same element before the agent's first word and after it
+// ...and the ONE way to stop an agent mid-run, on the turn it stops (the owner, 2026-11-10: "we should have x button for agent to stop in middle
+// of the work"): the chat's own stop road (onStop), nothing else
+const StopCtx = React.createContext(null);
 const RunClock = ({ start }) => {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now()), stop = React.useContext(StopCtx);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   return <span data-tq-ran="" data-tq-run-clock="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
-    · {when(new Date(start))} · ran {elapsedText(Math.max(0, now - start))}</span>;
+    · {when(new Date(start))} · ran {elapsedText(Math.max(0, now - start))}
+    {stop && <IconButton size="small" data-tq-stop-run="" aria-label="Stop the agent" title="Stops this turn - the chat stays, and what you type next carries on"
+      onClick={stop} sx={{ ml: 0.5, p: 0.25, verticalAlign: "-3px" }}><CloseIcon sx={{ fontSize: 13 }} /></IconButton>}</span>;
 };
 
 // ...and WHILE THE CLI COMPACTS ITS CONTEXT, that line says so (chatStream.compactingNow; the owner, 2026-11-10: "while it's going on show
@@ -991,7 +996,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   // ...the turn a line asked for stands UNDER that line, wherever the line is drawn - never over it (the owner, 2026-11-10)
   const atFoot = footLines.length > 0;
   return (
-    <AssistantRuntimeProvider runtime={runtime}><LandingCtx.Provider value={landAt && !dock ? { after: landAt, node: landNode } : null}><TurnCardsCtx.Provider value={dock ? [] : placed}>
+    <AssistantRuntimeProvider runtime={runtime}><LandingCtx.Provider value={landAt && !dock ? { after: landAt, node: landNode } : null}><TurnCardsCtx.Provider value={dock ? [] : placed}><StopCtx.Provider value={dock ? null : onStop}>
       <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>
         <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport">
           {/* ...where the chat is home, the ask as triage read it is its first line (ChatCtx) */}
@@ -1073,10 +1078,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>{hasReply(nextAt.reviews) ? "Suggested reply" : "Next steps"}</Typography>{nextAt.next}</Box>}
           {/* ...the branch's landing, where the task works in a checkout (landing.has_checkout): in its turn (LandingCtx), here only before any */}
           {!dock && !landAt && landNode}
-          {/* ...a pressed card with no agent turn to stand in yet stands here */}
-          {!dock && placed.filter((c) => !c.after && !c.waits).map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}
-          {/* ...and one that waits, raised by a turn that has not answered yet */}
-          {!dock && <TurnAsks cards={placed.filter((c) => !c.after && c.waits)} also={!!footNext && placed.some((c) => c.also)} sx={{ mx: { xs: 1, sm: 2 } }} />}
+          {/* ...NO "WAITING ON YOU" BOX AT THE FOOT (the owner, 2026-11-10: "it's just a row in the chat"): a card stands in the turn that raised
+              it (placeCards); only a chat with no agent turn at all draws one here, as its one row */}
+          {!dock && placed.filter((c) => !c.after).map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}
           {/* ...A START HELD FOR A NEW SENDER says so under what came in, with its Run anyway (HeldStart, the owner, 2026-11-09) */}
           {!dock && heldStart}
           {/* ...A START WAITING FOR A SLOT is the agent's own line in the chat, not a strip over it (the owner, 2026-11-08) */}
@@ -1124,13 +1128,13 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             <div className="tq-aui-hint">{hint || "Enter sends · Shift+Enter adds a line · paste, drop or attach a file"}</div></>}
           </div>
       </ThreadPrimitive.Root>
-    </TurnCardsCtx.Provider></LandingCtx.Provider></AssistantRuntimeProvider>
+    </StopCtx.Provider></TurnCardsCtx.Provider></LandingCtx.Provider></AssistantRuntimeProvider>
   );
 }
 
 // A CODING SESSION AS THIS CHAT'S SOURCE (codingchat.py): every session's steps or ACP updates, the mail that came in, the live CLI and what it
 // waits on the owner for - read again while a CLI runs, when the task moves, and when the page's own session (`term`) changes
-function useCodingChat(tid, on, term) {
+function useCodingChat(tid, on, term, cuts = []) {
   const [got, setGot] = useState(null);
   // ...each read that brought something new counted (`moves`), so the poll below calms while the chat stands still (pollCalming)
   const last = useRef(""), moves = useRef(0);
@@ -1156,7 +1160,8 @@ function useCodingChat(tid, on, term) {
     const [wake, stop] = coalesced(load, 2500), off = onLive("task-changed", (ev) => { if (touches(ev, tid)) wake(); });
     return () => { off(); stop(); };
   }, [on, tid, load]);
-  const rows = useMemo(() => (got ? chatRows(got) : []), [got]), compacting = useMemo(() => !!got && compactingNow(got), [got]);
+  const cutKey = cuts.join("|"), compacting = useMemo(() => !!got && compactingNow(got), [got]);
+  const rows = useMemo(() => (got ? chatRows({ ...got, cuts }) : []), [got, cutKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   return { got, live, rows, load, compacting };
 }
 // ...the two sources in one stream, in the order things happened (a turn still at work, with no time of its own yet, at the foot)
@@ -1191,7 +1196,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ONE CHAT, WHATEVER THE SOURCE (chatStream.chatSource): a coding task's sessions, or the general agent's conversation - and how much of the
   // work it draws (chatDetail.js): this task's own choice, else its kind's default from Settings. Off a task's own chat (the dock, the Wall), as ever
   const source = dock ? "general" : chatSource(task, term), coding = source === "coding";
-  const cc = useCodingChat(task.TaskId, coding, term), defaults = useChatDefaults(), own = useOwnDetail(task.TaskId);
+  const cc = useCodingChat(task.TaskId, coding, term, (chat && !dock ? turnCards || [] : []).map((c) => c.at)), defaults = useChatDefaults(), own = useOwnDetail(task.TaskId);
   const level = chat && !dock ? detailFor({ source, settings: defaults, own }) : "steps";
   useEffect(() => { if (cc.got) setRevision((k) => k + 1); }, [cc.got]);
   attachmentsRef.current = attachments;

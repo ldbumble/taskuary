@@ -186,7 +186,11 @@ const at = (x) => String(x || "").replace("T", " ").slice(0, 19);
 // the chat draws no brief, so their question stood nowhere. Their words are their line; the rest stays Taskuary's
 export const ownerIn = (text) => (/^FROM THE OWNER:[ \t]*([^\n]+(?:\n(?!\n)[^\n]*)*)/.exec(String(text || "")) || [])[1]?.trim() || "";
 
-export function chatRows({ sessions = [], mails = [], live = null, permissions = [] } = {}) {
+// `cuts`: when each card of the task was raised (TaskPage turnCards). A CARD IS A ROW OF THE CHAT where its turn raised it (the owner, 2026-11-10:
+// "approve should be there then once that's done it shoudl continue after it not above it.. it's just a row in the chat"): a turn that goes on past
+// a card - an Approve lets an ACP turn carry on - is two rows, the card between them (agentSummary.turnOf puts it after the first)
+export function chatRows({ sessions = [], mails = [], live = null, permissions = [], cuts = [] } = {}) {
+  const marks = [...new Set((cuts || []).map(at).filter(Boolean))].sort();
   // THE TURN THAT ENDED IS NOT WORKING (the owner's live coding task, 2026-11-06: the turn ended on "Should I go ahead?", the chip said "agent
   // waiting on you", and "Working on this…" still turned under the answer): a live session is one that is alive, not one at work - it works
   // while the server says so (codingchat.live_of `working`), and a question on screen or a permission card is the owner's turn
@@ -212,6 +216,7 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
       // and one that failed or was cut off says nothing
       if (s.k === "compact") { if (!s.status || s.status === "completed") { close(); rows.push({ kind: "event", at: s.at, text: COMPACTED }); } return; }
       if (s.k === "gap" || s.k === "screen") return;
+      if (turn && marks.some((c) => c >= at(turn.steps.at(-1)?.at || turn.at) && c < at(s.at))) close();
       if (!turn) turn = { kind: "turn", at: s.at, sid: ses.sid, steps: [] };
       turn.steps.push(s);
     });

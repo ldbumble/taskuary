@@ -89,6 +89,10 @@ test("the task header has no chips: its one pill is the status, the rail's own m
 test("an agent waiting on you keeps its terminal in view; its row has no Answer it, and Stop and save leads a live session", () => {
   const page = src("TaskPage.jsx");
   assert.doesNotMatch(page, /id: "answer_agent"|answerAgent|askKey/);
+  // ...nor under another name: a run left asking is Continued, its box showing the question, and nothing over it is filled (the owner,
+  // 2026-11-10: "yes remove that button. the agent itself asks that question. Never need that button")
+  for (const f of ["TaskPage.jsx", "ContinueBox.jsx", "AssistantView.jsx"]) assert.doesNotMatch(src(f), /"answer_agent"/, f);
+  assert.match(page, /\{ id: "continue", group: "agent", lead: !pendingReview && !runFix && !leftAsking,/);
   assert.doesNotMatch(page, /data-tq-agent-asks|seenAsk|>Show details</);
   assert.match(page, /const stopSave = \{ id: "save-end", group: "agent", lead: !pendingReview,/);
   assert.match(page, /\.\.\.\(liveSession \? \[\s+(\/\/[^\n]*\n\s+)*\.\.\.\(!pendingReview && !chatPane \? \[stopSave\] : \[\]\),\s+\.\.\.\(liveCodingSession \? \[\{ id: "diff"[^\n]*\n\s+\.\.\.\(pendingReview && !chatPane \? \[stopSave\] : \[\]\),/,

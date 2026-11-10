@@ -1108,12 +1108,14 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     if 'continue' in verbs and _general(store, item): verbs = [v for v in verbs if v != 'continue']
     # NO "ANSWER IT" BUTTON (owner-approved, 2026-10-20: "we don't need that button"): an agent's question is answered by typing in its
     # own pane, right above the row - and the button was even the lit one over a FINISHED agent whose reply waited on the owner's
-    # approval. A live agent's row leads with Stop and save (CHIPS['agent']); a typed answer still reaches it (decide, the phone).
+    # approval. A typed answer still reaches it (decide, the phone).
     # A REPORT THAT FAILED says "run it again" - so Run it again leads, where there is a report to run (B7)
     if item.get('kind') == 'report' and item.get('bad') and item.get('source_id'): verbs = ['rerun'] + [v for v in verbs if v != 'rerun']
     first = canon_verb(first) if first else first             # an old word typed (Later, Handled) promotes the button it became
     # ...never the fix: it is the failed send's own button, with the place it opens (advisor.offered), not a word to promote
-    if first and first in CHIP_WORDS and first not in ('next', 'fix'):
+    # ...nor, on the desk, "Answer it": what the model said it would tell the agent went to it already, and the agent's own card in its task
+    # is where it waits (the owner, 2026-11-10: "yes remove that button ... Never need that button"); the phone keeps it as a numbered choice
+    if first and first in CHIP_WORDS and first not in ('next', 'fix') and not (first == 'answer_agent' and routes()):
         verbs = [first] + [v for v in verbs if v != first]
     out = []
     for v in verbs:

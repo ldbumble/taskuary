@@ -70,13 +70,14 @@ def test_a_cut_off_run_reads_as_the_agent_asking_and_its_row_fills_nothing(s):
 
 
 @pytest.mark.parametrize('verb', ['continue', 'reply', 'next', 'close'])
-def test_on_a_coding_agent_left_asking_only_its_answer_may_light(s, verb):
+def test_on_a_coding_agent_left_asking_nothing_may_light(s, verb):
     t = cut_off_asking(s)
     it = {'key': f'task:{t}', 'kind': 'task', 'lane': 'stopped', 'tid': t}
     vs = [{'verb': v, 'label': v} for v in ('continue', 'reply', 'close', 'answer_agent')]
     d = advisor.checked(s, it, vs, {'key': it['key'], 'state': 'agent_asking', 'verb': verb, 'line': 'Reply to Gail about the download', 'evidence': []})
     assert d['verb'] is None and d['line'] == '', d
-    assert advisor.checked(s, it, vs, {'key': it['key'], 'state': 'agent_asking', 'verb': 'answer_agent', 'line': ''})['verb'] == 'answer_agent'
+    # ...not even its "Answer it", a button no more (the owner, 2026-11-10: "the agent itself asks that question. Never need that button")
+    assert advisor.checked(s, it, vs, {'key': it['key'], 'state': 'agent_asking', 'verb': 'answer_agent', 'line': ''})['verb'] is None
 
 
 def test_a_general_agent_left_asking_is_still_the_models_call(s):

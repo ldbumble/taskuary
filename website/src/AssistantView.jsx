@@ -2665,7 +2665,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     notePress(liveVerb(a.verb));                   // a move the row has no button for is pressed here, not through the row
     // a fix is a place (advisor.for_key's href), never a proposal: with no '<rid>:fix' on the row it opens the place itself
     if (liveVerb(a.verb) === "fix" && a.href) { openAppLink(a.href); return null; }
-    if (a.verb === "answer_agent") { askAnswer(currentRef.current); return null; }
     // MAKE A TASK TO FIX THIS (advisor.failure): a failure nothing here fixes becomes a task of its own, carrying what failed - made by
     // the same tool the assistant uses, so it has a receipt like any act, then opened
     if (liveVerb(a.verb) === "new_task" && a.task) {
@@ -2713,12 +2712,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (!data?.id) throw new Error(data?.say || "It did not start.");
     setAgentOn(null);
     await runProposal({ ...data, key: data.key || item.key });
-  };
-  // ANSWER IT has nothing to send until the owner says it: pressed bare it was refused ("What should I tell...?"). The box is where
-  // the answer goes - the server passes what is typed over a waiting agent to it
-  const askAnswer = (item) => {
-    noteLine(`Type your answer below - it goes straight to ${item?.agent || "the agent"} that is waiting.`);
-    setTimeout(() => composeRef.current?.focus(), 0);
   };
   // THE CALENDAR'S ANSWERS (calwrite.py): Accept and Decline draft at once; Propose a new time and Find a time open the free times
   // first (SlotPicker). Each lands on the table as a draft with Send lit, as a reply does - nothing reaches the calendar before the
@@ -2773,7 +2766,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
       return;
     }
-    if (c.verb === "answer_agent") { askAnswer(item); return; }
     // SEND TO AGENT ASKS WHAT FIRST (the owner, 2026-10-23): the agent box opens where the item is - nothing starts at the press
     if (AGENT_VERBS.includes(c.verb) && !c.text) { askAgent(item, c.verb); return; }
     // one item by name - one the walk already showed and will not repeat yet ("N things you've already seen")

@@ -221,7 +221,7 @@ def _list_line(store) -> str:
 VERBS_OFFERED, THE_ITEM, WHAT_FAILED = 'VERBS OFFERED', 'THE ITEM', 'WHAT FAILED'
 # EACH LINE IS A FACT, NEVER THE BUTTON EXPLAINED (the owner, 2026-10-23: "buttons do the talking"; at most 60 characters) - and where the
 # script's verb is the rule's own, the strip says the rule's fact and drops this one (advisor.decide)
-ADVICE = {'answer_agent': 'The agent is waiting on your answer.', 'approve': '',
+ADVICE = {'approve': '',
           'reply': 'Someone is waiting on an answer from you.', 'continue': 'The agent stopped partway.'}
 # ...and like the real one it reads what was already done: a reply that went, with nothing written since, is closed, not answered
 # again - the scripted "Someone is waiting on an answer" stood over a close-out reading Sent (2026-10-19)
@@ -264,7 +264,7 @@ PLAY = {'working': ['next'], 'report_ok': ['next'], 'dashboard': ['next'], 'fyi_
         'invite_free': ['accept_invite'], 'invite_clash': ['propose_time'], 'unpushed': ['review_changes'], 'fyi_danger': ['not_ours'],
         'action_held': ['approve'], 'needs_agent': ['continue', 'regular_agent'], 'unsendable': ['copy', 'close'], 'duplicate': ['split', 'remove'],
         'watch_quiet': ['chase', 'let_go'], 'stopped_done': ['close'], 'done_list': ['close'], 'watch_handled': ['close'],
-        'agent_asking': ['answer_agent'], 'waiting': [], 'stopped': [], 'closed': []}
+        'agent_asking': [], 'waiting': [], 'stopped': [], 'closed': []}
 LATE = ('waiting_late', 'waiting_overdue', 'waiting_late_usual', 'goal_late', 'watch_quiet')
 _STATE = re.compile(r"^THE STATE \([^)]*\): (\w+) - .*?(?:; the fact: (.*))?$", re.M)
 DEMO_SAYS = 'This is the demo - '                     # every refusal sentence above starts so (SENDS, STARTS, OFF, REFUSALS)

@@ -1424,8 +1424,9 @@ def checked(store, item: dict, verbs: list, d: dict) -> dict:
     elif kind == 'same_ask' and verb in ('remove', 'split') and _survives(store, item): why = 'the survivor of a duplicate pair is never folded'
     # ...and a coding agent asking to go further is the owner's call in its pane, never closed under it (the owner, 2026-11-02)
     # - nothing lit over it but its own answer: Continue and "Reply to the sender" stood over a coding agent's "go ahead?" (the owner,
-    # 2026-11-03), on its card while it asked and on the task's row once a restart had cut it off asking
-    elif d.get('state') == 'agent_asking' and verb != 'answer_agent' and _coding(store, item): why = "a coding agent's ask is the owner's"
+    # 2026-11-03), on its card while it asked and on the task's row once a restart had cut it off asking - and not its "Answer it" either,
+    # a button no more (the owner, 2026-11-10: "yes remove that button. the agent itself asks that question. Never need that button")
+    elif d.get('state') == 'agent_asking' and _coding(store, item): why = "a coding agent's ask is the owner's"
     if not why: return {**d, 'kind': kind}
     logger.info(f"advisor: {d['key']} {verb} refused ({why}) - nothing lit instead")
     return {**d, 'verb': None, 'kind': kind, 'checked': why, 'line': '', 'evidence': []}

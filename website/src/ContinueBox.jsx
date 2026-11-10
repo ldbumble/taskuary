@@ -19,7 +19,7 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const pics = usePromptImages();
-  const word = label(asked ? "answer_agent" : "continue");
+  const word = label("continue");
   // ...once: a double press (or Ctrl+Enter then a click) posted /continue-work twice before `busy` was drawn (the agents walk, 2026-10-26)
   const flight = useRef(false);
   const go = async () => {

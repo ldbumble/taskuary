@@ -1230,6 +1230,12 @@ class NonCoderWordsTests(unittest.TestCase):
             chips = concierge.chips_for(None, item)
             self.assertNotIn('answer_agent', [c['verb'] for c in chips])
             self.assertEqual((chips[0]['verb'], chips[0]['label']), ('stop_agent', 'Stop and save'))
+        # ...nor brought back on the desk by the model naming it (the owner, 2026-11-10: "Never need that button"); the phone keeps it
+        # as a numbered choice (remote_assistant: an empty pick asks what to tell the agent)
+        self.assertNotIn('answer_agent', [c['verb'] for c in concierge.chips_for(None, it, 'answer_agent')])
+        tok = concierge.DELIVERY.set(concierge.PHONE)
+        try: self.assertEqual(concierge.chips_for(None, it, 'answer_agent')[0]['verb'], 'answer_agent')
+        finally: concierge.DELIVERY.reset(tok)
         # ...and its line still says where the answer goes: a typed answer in the box below reaches it (decide), a stopped one has nobody
         self.assertIn('answer it below', concierge.fallback(it, False))
         self.assertNotIn('answer it below', concierge.fallback({**it, 'lane': 'stopped'}, False))

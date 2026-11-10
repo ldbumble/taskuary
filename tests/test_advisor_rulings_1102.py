@@ -60,8 +60,8 @@ def test_a_close_over_a_coding_agents_ask_is_refused_to_nothing(s, verb):
     t, it = _asking(s, 'coding')
     d = advisor.checked(s, it, _verbs('close', 'stop_agent', 'answer_agent'), {'key': it['key'], 'state': 'agent_asking', 'verb': verb, 'line': 'x', 'evidence': []})
     assert d['verb'] is None and d['checked'] and d['line'] == '', 'refused to nothing - never swapped for another verb'
-    # ...the agent's own answer stands, and a coding agent in another state is not this check's
-    assert advisor.checked(s, it, _verbs('answer_agent'), {'key': it['key'], 'state': 'agent_asking', 'verb': 'answer_agent', 'line': ''})['verb'] == 'answer_agent'
+    # ...nor an "Answer it", a button no more (the owner, 2026-11-10: "Never need that button"), and a coding agent in another state is not this check's
+    assert advisor.checked(s, it, _verbs('answer_agent'), {'key': it['key'], 'state': 'agent_asking', 'verb': 'answer_agent', 'line': ''})['verb'] is None
     assert advisor.checked(s, it, _verbs(verb), {'key': it['key'], 'state': 'agent_done', 'verb': verb, 'line': ''})['verb'] == verb
 
 

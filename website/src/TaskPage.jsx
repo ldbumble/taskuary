@@ -2290,7 +2290,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // shows the question and what is typed goes to the agent as it picks up (the owner, 2026-11-03: "it's asking me question but the ai closed
   // the agent why?"). The same button and box, said as what they are
   const leftAsking = (!term?.alive && detail?.leftAsking?.[0]) || "";
-  const continueWord = startingAgent === "resume" ? (failedRun ? "Trying again…" : "Continuing…") : failedRun ? btn("try_again") : leftAsking ? btn("answer_agent") : labelOfRow("continue");
+  // ...said Continue, never "Answer it", and filled by nothing (the owner, 2026-11-10: "yes remove that button. the agent itself asks that
+  // question. Never need that button"): the box shows its question, and the row lights nothing over an agent that asks
+  const continueWord = startingAgent === "resume" ? (failedRun ? "Trying again…" : "Continuing…") : failedRun ? btn("try_again") : labelOfRow("continue");
   // WHAT THE OPEN AGENT PANE ALREADY DRAWS, so its heading's stage moves (PaneMoves) never say a press twice: the start box stands open
   // (RunForm) and its own button is the start; a failed general run's Try again stands under its reason (data-tq-failed-fix) - unless
   // its fix (Connect an AI) stands there instead
@@ -2537,7 +2539,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         // ...not a second Connect an AI on the canvas (the owner, 2026-10-26: "why would we need connect an ai? if you don't get through ai
         // setup the whole thing doesn't work"): the Result's line says why and points at Connections
         ...(runFix && !(inRow && runFix.href === place("ai").href) ? [{ id: "fix", group: "decide", tone: "p", label: runFix.label, run: () => openAppLink(runFix.href), title: btnHint("fix") }] : []),
-        ...(chatPane ? [] : [{ id: "continue", group: "agent", lead: !pendingReview && !runFix, label: continueWord, disabled: !!startingAgent || !!noAiWhy, why: noAiWhy,
+        ...(chatPane ? [] : [{ id: "continue", group: "agent", lead: !pendingReview && !runFix && !leftAsking, label: continueWord, disabled: !!startingAgent || !!noAiWhy, why: noAiWhy,
           run: continuePress, title: failedRun ? btnHint("try_again") : hintOfRow("continue") }])]
       // EVERY START OPENS THE BOX FIRST (the owner, 2026-10-23: "you need to write prompt what about the email or attachment is the
       // issue"): Send to agent on a general task, on a goal, with no coding tool - each started at the press with nothing said. It

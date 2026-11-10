@@ -38,7 +38,7 @@ test("the canvas's Send to agent - a chip, the Advisor's pick - opens the box wh
   const chip = v.slice(v.indexOf("const runChip = async"), v.indexOf("const previewProposal"));
   const at = chip.indexOf("if (AGENT_VERBS.includes(c.verb) && !c.text) { askAgent(item, c.verb); return; }");
   assert.ok(at > 0 && at < chip.indexOf("proposeDirect(verb, key, true, null)"), "asked before the proposal road");
-  const advice = v.slice(v.indexOf("const pressAdvice = async"), v.indexOf("const askAnswer"));
+  const advice = v.slice(v.indexOf("const pressAdvice = async"), v.indexOf("const calendarDrafted"));
   assert.ok(advice.indexOf("askAgent(currentRef.current, liveVerb(a.verb))") < advice.indexOf("proposeDirect(a.verb"), "the Advisor's pick too");
   // a task on the table opens ITS box, in its agent step; anything else gets the box under its card
   assert.match(v, /if \(item\?\.tid && showsTask\(item, cardFor\(item\)\)\) \{ window\.dispatchEvent\(new CustomEvent\("tq-agent-ask"/);

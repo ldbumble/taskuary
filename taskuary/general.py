@@ -2462,6 +2462,7 @@ class GeneralSession:
                     # ...and where it cannot, the next real step as the owner's question - never "cannot be done from here" (2026-11-09)
                     if self.browser_wanted and not apiagent.can(brain): self._remember_trace('progress', 'browser', NO_BROWSER_LINE)     # true of a card that takes no tools, and only of it
                     system = f'{system}\n\n{apiagent.no_browser_line() if apiagent.can(brain) else apiagent.no_tools_line()}'
+            whole = user                 # the conversation said in full: what a fresh one hears where this one cannot be picked back up
             if self.cli_sid:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
                 user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
@@ -2471,19 +2472,20 @@ class GeneralSession:
             # Paths are harmless context to an API brain and essential if its CLI backup takes
             # over after a quota failure. The source message already names its files too; this
             # line also carries images attached directly in the composer.
-            if paths:
-                user += '\n\nATTACHED FILES (read these when relevant)\n' + '\n'.join(str(Path(p).resolve()) for p in paths)
-            try:
-                limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
+            files = '\n\nATTACHED FILES (read these when relevant)\n' + '\n'.join(str(Path(p).resolve()) for p in paths) if paths else ''
+            limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
+            def ask(brain, user):
+                "The turn, asked of this brain: with its tools where it takes them (apiagent.turn), else the plain way."
+                nonlocal looped, system
                 if looped:
-                    try: reply = str(apiagent.turn(brain, self.store, self.task_id, self.sid, by_tool(system) if api_tooled else system, user, limit,
-                                                   trace=visible, cancel=cancel, images=_images(paths), tools=api_tools) or '').strip()
+                    try: return str(apiagent.turn(brain, self.store, self.task_id, self.sid, by_tool(system) if api_tooled else system, user, limit,
+                                                  trace=visible, cancel=cancel, images=_images(paths), tools=api_tools) or '').strip()
                     except apiagent.ToolsRefused as e:
                         logger.info(f'task {self.task_id}: {self.provider} took no tools - asked the plain way ({str(e)[:160]})')
                         looped, system = False, f"{system.replace(apiagent.BRIEF, '').replace(apiagent.TOOLS_BRIEF, '')}\n\n{apiagent.no_tools_line()}"
-                if not looped:
-                    with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
-                        reply = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
+                with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
+                    return str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
+            try: reply = ask(brain, user + files)
             except Exception as e:
                 # the CLI could not pick that conversation back up (it was restarted, its history
                 # was cleared, the id aged out). Start a fresh one and say the whole thing, once.
@@ -2495,40 +2497,14 @@ class GeneralSession:
                 self.cli_sid = ''
                 self.resume_notice = 'The original session could not be resumed. Restored from the saved conversation.'
                 self._remember_session()
-                system, user = _prompt(self.store, self.task_id)
-                if tooled: system = by_tool(system)
-                if not as_owner: user += '\n\n' + text
-                if delivery_instructions:
-                    system = f'{system}\n\n{str(delivery_instructions).strip()}'
-                from . import handbook as hub
-                if self.pick.startswith('cli:'):
-                    from . import selfclose
-                    from . import outputs
-                    system = f'{system}\n\n{POST_LINE}\n\n{selfclose.SHOW_LINE}\n\n{outputs.brief(self.task_id)}'
-                    if self.holds_browser():
-                        from . import shellgate
-                        system = f'{system}\n\n{shellgate.HOLD_LINE}'
-                    if hub.enabled(self.store): system = f'{system}\n\n{HUB_LINE}'
-                elif hub.enabled(self.store):
-                    system = f'{system}\n\n{hub.ASSISTANT_LINE}'
-                if browser_tools:
-                    from . import browserview
-                    system = f'{system}\n\n{browserview.offer(held=self.holds_browser()) if browser_offer else browserview.brief(held=self.holds_browser())}'
-                if desk: system = f'{system}\n\n{agentdesktop.brief(held=self.holds_browser())}'
-                system = f'{system}\n\n{_sc.ASK_LINE}'
-                if systems: system = f'{system}\n\n{systems}'
-                if said: system = f'{system}\n\n{said}'           # the fresh conversation hears of the mail as the first did
-                if prior: user = f'{prior}\n\n{user}'
-                build_args = dict(pick=self.pick, model=self.chosen or None,
-                                  trace=visible, cancel=cancel, task_id=self.task_id)
-                if browser_tools or hands or desk:
-                    build_args.update(cli_tools=True, extra_env=browser_env)
-                if (browser_tools or desk) and self.holds_browser(): build_args.update(hold_sid=self.sid)
-                build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
-                brain = llm_mod.build_llm(self.store, **build_args, job='general')
-                limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
-                with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
-                    reply = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
+                # THE SAME TURN, ON THE SAME BRAIN, UNDER THE SAME INSTRUCTIONS (the spine audit, 2026-11-09): this was a second copy of
+                # everything above, written by hand, and it had drifted - the fresh conversation was not told of the files sent with the
+                # turn, how to tick its to-dos, the procedure triage matched or why its browser had not opened; it lost the right to
+                # look things up and its place among the open CLIs (so a 300 s leash came back on an agent's turn); and a card with
+                # tools was asked without them. Only what "resumed" changes is said again: no id, and the conversation in full
+                brain = llm_mod.build_llm(self.store, **{**build_args, 'resume': None}, job='general')
+                if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
+                reply = ask(brain, whole + files)
             actual = getattr(brain, 'last_pick', '')
             if isinstance(actual, str) and actual and actual != self.pick:
                 choice = next((o for o in provider_options(self.store) if o['pick'] == actual), None)

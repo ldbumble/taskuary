@@ -92,6 +92,30 @@ def test_missing_native_session_falls_back_to_saved_history_and_says_so():
     assert store.saved_session(tid)['NativeId'] == 'replacement'
 
 
+def test_the_fresh_conversation_is_the_same_turn_under_the_same_instructions(tmp_path):
+    """The retry was a second copy of the turn's assembly, written by hand, and it had drifted (the spine audit, 2026-11-09): the fresh
+    conversation was not told of the files sent with the turn, and was built without the right to look things up or its place among the
+    open CLIs. It is the one turn asked again: no id to resume, and the conversation said in full."""
+    store = MemoryStore(); connect(store); tid = task(store)
+    store.add_comment(tid, 'owner', general.USER_TYPE, 'Use the August period, not September.')
+    f = tmp_path / 'numbers.csv'; f.write_text('a,b')
+    session = general.GeneralSession(store, tid, pick='cli:claude')
+    session.cli_sid = 'expired'; session._remember_session()
+    seen = []
+    def failed(system, user, **kw): seen.append((system, user)); raise RuntimeError('session not found')
+    def restored(system, user, **kw): seen.append((system, user)); return 'Continuing the August report.'
+    restored.session_id = 'replacement'
+    with mock.patch.object(llm, 'build_llm', side_effect=[failed, restored]) as build:
+        session.send_prompt('Carry on with these', attachments=[str(f)])
+    (first, turn), (again, whole) = seen
+    assert again == first, 'one set of instructions, whichever conversation hears them'
+    assert 'August period' not in turn and 'August period' in whole
+    assert all('ATTACHED FILES' in u and 'numbers.csv' in u for u in (turn, whole))
+    a, b = (c.kwargs for c in build.call_args_list)
+    assert a['resume'] == 'expired' and b['resume'] is None
+    assert {**a, 'resume': None} == b and b['keep'] == f'general:{tid}' and 'August period' in b['fallback_user']
+
+
 def test_a_session_closed_under_its_turn_stops_it_and_starts_no_fresh_conversation():
     """Mark done on a working agent closes its session and its CLI dies under the turn: that is a stop, never "could not resume" - the whole
     turn was said again to a fresh conversation on the closed task, and its answer landed there 25 s later (the agent walk, 2026-11-09)."""

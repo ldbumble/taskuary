@@ -2,6 +2,21 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.36 - 2026-11-10
+
+- Add application-wide light and dark themes with a header toggle
+- A press handed over a second time is open again, so its card and chip show
+- Words instead of the press tell the agent that nothing waits on the owner now
+- A held page act is told to the agent as a card in the task, never a pane beside the chat
+- A step handed over on a page that has closed says so, and its press has the agent bring it back
+- A held step whose press failed is settled and handed to the agent, said once in one plain line
+- A line the owner types takes one road for every agent: kept as his, the turn at work from the press, then the kind's own starter
+- A card stays the row its turn raised it at, and what the agent does after the press is drawn under it; the running turn's head carries its x
+- A row with nothing lit says why on the desk, in the same sentence the phone reads
+- Review changes stays on the row after the coding session is gone, and opens the landing card's diff
+- Not for me asks how far on the desk, as the phone does, in a small menu under the pressed button
+- An agent that asks is answered in its own card; no Answer it is drawn or lit on the desk
+
 ## 0.3.11.35 - 2026-11-10
 
 - The owner's Reject reads as theirs on the step

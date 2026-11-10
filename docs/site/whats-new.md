@@ -2,6 +2,50 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.33 - 2026-11-10
+
+- A judge's "no" is an answer, and the note command is taught in the order the CLI takes
+- A computer with no browser for agents is given one, not sent to install it
+- A test run never writes the durable PATH
+- A send that failed and then went is told to its agent as sent
+- Taskuary's note to an agent parked on a question is not the owner's answer
+- An agent's own git push is the landing card's Push, and a permission card says what it asks
+- One rail builder: the old body of funnel.build is gone
+- Mark done on a working chat agent answers at once and never restarts its turn
+- Inside a task the agent recommends; the Assistant and Advisor stay on the rail
+- A send that failed is still said after a reload
+- Opening a task never waits on the rail, and its read asks each thing once
+- An email the owner drops is told to its agent, and what the agent set stands on the page
+- An open task stays under Tasks when its agent is done for now
+- What an agent is told agrees with itself: one road for a draft, the thread in its material
+- A permission request a killed run left open is refused and said at the next start
+- A held step's row says Approve, and offers no Redraft
+- One road onto a task that exists
+- An act's press is kept on its review: what failed, who may ask, who is told
+- A task's agent state is one record, read once
+- Done on the agent's page is a press, and a waiting act keeps its buttons
+- A card stands in the turn that raised it, and a waiting act draws once
+- A verdict is pressed one way, and no answer in time is not a failure
+- A hand-off with no words is refused, not written and sent unseen
+- A line typed while the agent works is known by its name, not its words
+- A wake that never started leaves the next press to start the agent
+- What filed a draft is its own field, not the first words of its reason
+- A coding task set to an AI card starts on its card by every road
+- A conversation that cannot be resumed is asked the same turn again
+- An agent on an AI card keeps its own conversation from turn to turn
+- An agent on an AI card is not ended for running long, and Stop ends it at once
+- A coding agent on an AI card is told it is coding, where, and what its peers said
+- Setup's draft state is kept by the store it belongs to, not by its address
+- A coding agent on an AI card is a peer in its checkout, as a pane is
+- What the hub's read of a task loses to its size is never what already went out
+- An AI card's session leaves nothing behind it when it goes
+- The chat agent's own close-out is gone: nothing had called it since only the owner closes
+- A close that lands late no longer takes the table off the row opened meanwhile
+- A card agent asks for an approval by making the call, and is told so
+- The Assistant's chat is nobody's job: no mail joins it, and triage is not shown it
+- Send and close closes before the task's agent is told the send went
+- Typed words outlive a reload, and the arrow sends while the agent works
+
 ## 0.3.11.32 - 2026-11-09
 
 - A steered line is drawn before it is sent, and a module's calendar stays in that module

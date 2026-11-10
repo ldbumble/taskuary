@@ -6,6 +6,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from taskuary import concierge, server
+from taskuary.store import MemoryStore
 
 c = TestClient(server.app)
 EVENT = {'subject': 'Ledger cut-over plan', 'start': '2026-10-27T10:00:00', 'end': '2026-10-27T10:30:00', 'where': 'Teams',
@@ -14,6 +15,9 @@ EVENT = {'subject': 'Ledger cut-over plan', 'start': '2026-10-27T10:00:00', 'end
 
 class PrepareTests(unittest.TestCase):
     def setUp(self):
+        # its own mail and nobody else's: on the store every test file shares, what the brief found of Erin's mail turned on which files
+        # had run before it - the saved mail of theirs crowded this one out of the reads (red in one part of CI, 2026-11-10)
+        p = mock.patch.object(server, 'store', MemoryStore()); p.start(); self.addCleanup(p.stop)
         server.store.add_message({'ExternalId': 'graph:prep-erin-1', 'Channel': 'email', 'Subject': 'Ledger cut-over: entity order',
                                   'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example', 'SentAt': '2026-10-20 09:00:00',
                                   'BodyText': 'Can we move the two smaller entities first and the main one after close?'})

@@ -566,6 +566,16 @@ def no_calendar_left_behind():
     assistant._AGENDA.clear(); assistant._AGENDA.update(was)
 
 
+@pytest.fixture(autouse=True, scope='module')
+def no_store_left_behind():
+    """The app's store a module found is the one the next module finds. A module that put its own in server.store and never put the
+    first back cut every later module off from the mail it had saved - one that keeps the store it was imported with
+    (`S = server.store`) saved a message the routes then could not find: nine 404s a shard later, in whichever part of CI the two
+    happened to share (2026-11-10). Per module: a module may keep one store of its own across its tests."""
+    srv = sys.modules.get('taskuary.server'); was = getattr(srv, 'store', None); yield
+    if was is not None: srv.store = was
+
+
 @pytest.fixture(autouse=True, scope='session')
 def agents_can_start():
     """A bare store connects no brain, so every agent button would be greyed and the Advisor's check refuse them all (advisor.checked) -

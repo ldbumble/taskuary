@@ -212,7 +212,7 @@ class Rows(unittest.TestCase):
 class Endpoints(unittest.TestCase):
     def setUp(self):
         simplefin.reset_budget()
-        server.store = MemoryStore()
+        p = mock.patch.object(server, 'store', MemoryStore()); p.start(); self.addCleanup(p.stop)
         self.cid = server.store.get_connector_by_type('simplefin')['ConnectorId']
 
     def test_status_needs_nothing_saved_first(self):

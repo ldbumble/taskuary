@@ -235,6 +235,70 @@ def test_a_compaction_is_one_quiet_step_never_the_owners_line(home):
     assert [(x['k'], x['text']) for x in ses['steps']] == [('compact', sessionrecord.COMPACTED), ('said', 'Go on.')]
 
 
+# NOTHING THE OWNER DID NOT TYPE IS HIS (the owner, 2026-11-10: "this is obvious stuff that your stress test should be catching.."): every
+# shape a real Claude Code log takes, read into the chat's steps. A user-role entry is the owner's only where the log says a human typed it -
+# and what they typed mid-turn, which the log keeps as a queued attachment, is theirs too
+U = lambda text, **kw: {'type': 'user', 'message': {'role': 'user', 'content': text}, **kw}
+A = lambda *blocks, model='claude-x', **kw: {'type': 'assistant', 'message': {'role': 'assistant', 'model': model, 'content': list(blocks)}, **kw}
+SAID = lambda t: {'type': 'text', 'text': t}
+HUMAN = {'origin': {'kind': 'human'}}
+TOOL = A({'type': 'tool_use', 'id': 'tu1', 'name': 'Bash', 'input': {'command': 'pytest -q ledger'}})
+SHAPES = {
+    'a background task finishing': [U('Run the tests in the background.', **HUMAN), TOOL,
+        U('<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>',
+          origin={'kind': 'task-notification', 'producer': 'session-task'}), A(SAID('The tests passed.'))],
+    "another agent's message": [U('Ask the helper.', **HUMAN), U('The helper says: done with the importer.', origin={'kind': 'peer', 'from': 'a1'})],
+    'an interrupted turn': [U('Fix the importer.', **HUMAN), TOOL,
+        U([{'type': 'tool_result', 'tool_use_id': 'tu1', 'is_error': True, 'content': "The user doesn't want to proceed with this tool use."}]),
+        U([SAID('[Request interrupted by user for tool use]')]), U([SAID('[Request interrupted by user]')]),
+        A(SAID('No response requested.'), model='<synthetic>')],
+    'a line typed mid-turn': [U('Fix the importer.', **HUMAN), TOOL,
+        {'type': 'attachment', 'attachment': {'type': 'queued_command', 'prompt': 'Only March, please.', 'commandMode': 'prompt', 'origin': {'kind': 'human'}}},
+        {'type': 'attachment', 'attachment': {'type': 'queued_command', 'prompt': [SAID('And this screenshot.'), {'type': 'image', 'source': {}}],
+                                              'commandMode': 'prompt', 'origin': {'kind': 'human'}}},
+        {'type': 'attachment', 'attachment': {'type': 'queued_command', 'prompt': '<task-notification>b1 done</task-notification>',
+                                              'commandMode': 'task-notification', 'origin': {'kind': 'task-notification'}}}],
+    'a hook, a reminder and a slash command': [U('Fix the importer.', **HUMAN),
+        {'type': 'attachment', 'attachment': {'type': 'hook_additional_context', 'content': ['Taskuary: 2 notes wait.']}},
+        U('<system-reminder>The task list is empty.</system-reminder>', isMeta=True),
+        U('<command-name>/compact</command-name>\n<command-message>compact</command-message>'),
+        U('<local-command-stdout>Compacted.</local-command-stdout>')],
+    'an API error': [U('Fix the importer.', **HUMAN), A(SAID('API Error: 529 Overloaded. Try again in a moment.'), isApiErrorMessage=True,
+                                                        model='<synthetic>')],
+    'a tool that failed': [U('Fix the importer.', **HUMAN), TOOL,
+        U([{'type': 'tool_result', 'tool_use_id': 'tu1', 'is_error': True, 'content': 'Exit code 1\nE   ModuleNotFoundError: ledger'}])],
+    "a helper's sidechain and its result": [U('Find the double read.', **HUMAN),
+        A({'type': 'tool_use', 'id': 'tk1', 'name': 'Task', 'input': {'description': 'find the double read', 'prompt': 'Search the importer.'}}),
+        U('Search the importer.', isSidechain=True), A(SAID('It is in importer.py.'), isSidechain=True),
+        U([{'type': 'tool_result', 'tool_use_id': 'tk1', 'content': [SAID('It is in importer.py:40.\n<system-reminder>x</system-reminder>')]}])],
+    'a pasted image': [U([SAID('[Image #1] Why is this red?'), {'type': 'image', 'source': {'type': 'base64', 'data': 'AAAA'}}], **HUMAN)],
+    'an empty and a thinking-only answer': [U('Fix the importer.', **HUMAN), A(), A({'type': 'thinking', 'thinking': 'The cursor resets.'})],
+}
+OWNER = {'a background task finishing': ['Run the tests in the background.'], "another agent's message": ['Ask the helper.'],
+         'a line typed mid-turn': ['Fix the importer.', 'Only March, please.', 'And this screenshot.'], 'a pasted image': ['[Image #1] Why is this red?'],
+         "a helper's sidechain and its result": ['Find the double read.']}
+
+
+@pytest.mark.parametrize('shape', list(SHAPES))
+def test_nothing_the_owner_did_not_type_is_his(home, shape):
+    from taskuary import codingchat
+    s = MemoryStore(); tid = Factory(s).task(title='March import doubled')
+    lines = [json.dumps(r) for r in SHAPES[shape]]
+    # ...the log as it stands when the CLI is killed mid-write: its last line half there
+    (p := home / '.claude' / 'projects' / 'C--work-ledger' / 'sh1.jsonl').parent.mkdir(parents=True, exist_ok=True)
+    p.write_text('\n'.join(lines) + '\n' + lines[-1][:20], encoding='utf-8')
+    s.add_transcript(tid, 'pane-s', 'screen', 'coding', 'C:/work/ledger', 'sh1', brain='claude')
+    [ses] = codingchat.sessions(s, tid)
+    assert [x['text'] for x in ses['steps'] if x['k'] == 'you'] == OWNER.get(shape, ['Fix the importer.'])
+    said = [x['text'] for x in ses['steps'] if x['k'] == 'said']
+    assert not any(w in ' '.join(said) for w in ('No response requested', 'API Error')), said
+    if shape == 'an API error': assert [x['k'] for x in ses['steps']][-1] == 'error'
+    if shape in ('a tool that failed', 'an interrupted turn'):
+        [tool] = [x for x in ses['steps'] if x['k'] == 'tool']
+        assert tool['status'] == 'failed' and tool['output']
+    if shape == 'an empty and a thinking-only answer': assert [x['k'] for x in ses['steps']] == ['you', 'thought']
+
+
 def test_sessions_come_newest_first_each_with_its_own_report(home):
     s = MemoryStore(); tid = Factory(s).task(title='Two runs')
     s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)",

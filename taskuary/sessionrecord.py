@@ -148,6 +148,17 @@ def _compact(out: list, at):
     if not (out and out[-1]['k'] == 'compact'): out.append({'k': 'compact', 'text': COMPACTED, 'at': at})
 
 
+# ONLY WHAT A HUMAN TYPED IS THE OWNER'S (the owner, 2026-11-10: "this is obvious stuff that your stress test should be catching.."): Claude
+# writes its own user-role entries too - a background task's <task-notification>, another agent's message, "[Request interrupted by user]".
+# The log says who: `origin.kind` is 'human' on a typed line. A log too old to carry one is read by Claude's own test for its markers - a
+# leading <tag>, or the interrupt's bracket - and the line typed MID-TURN, which it keeps as a queued_command attachment, is the owner's too
+_CHROME = re.compile(r'^(?:<[a-z][\w-]*[\s>]|\[Request interrupted by user[^\]]*\])')
+def _typed(j: dict, x: str) -> bool:
+    kind = (j.get('origin') or {}).get('kind') if isinstance(j.get('origin'), dict) else None
+    return kind == 'human' if kind else not (_CHROME.match(x) or x.startswith('Caveat:'))
+def _texts(content) -> list: return [x for b in _blocks(content) if b.get('type') == 'text' and (x := str(b.get('text') or '').strip())]
+
+
 def _claude(path: Path) -> list:
     out, uses = [], {}
     for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
@@ -156,17 +167,26 @@ def _claude(path: Path) -> list:
         if j.get('isCompactSummary') or (j.get('type') == 'system' and j.get('subtype') == 'compact_boundary'):
             if not j.get('isSidechain'): _compact(out, j.get('timestamp'))
             continue
+        q = j.get('attachment') if j.get('type') == 'attachment' and isinstance(j.get('attachment'), dict) else {}
+        if q.get('type') == 'queued_command' and not j.get('isSidechain'):
+            out += [{'k': 'you', 'text': _cut(x, YOU_N), 'at': j.get('timestamp') or q.get('timestamp')} for x in _texts(q.get('prompt')) if _typed(q, x)]
+            continue
         if j.get('isMeta') or j.get('isSidechain') or j.get('type') not in ('user', 'assistant'): continue
         at, msg = j.get('timestamp'), j.get('message') or {}
+        # ...an API error is a failure, said as one; any other line Claude writes in the agent's place ("No response requested.") is no one's
+        if j['type'] == 'assistant' and (j.get('isApiErrorMessage') or j.get('sessionFailureNotice')):
+            out.append({'k': 'error', 'text': _cut(' '.join(_texts(msg.get('content'))) or 'The model could not answer.', 400), 'at': at}); continue
+        if j['type'] == 'assistant' and msg.get('model') == '<synthetic>': continue
         # ...an edit's result carries the patch Claude wrote, line numbers and all: it replaces the before/after its call was handed
         res = j.get('toolUseResult') if isinstance(j.get('toolUseResult'), dict) else {}
         for b in _blocks(msg.get('content')):
             t = b.get('type')
             if t == 'tool_result' and (s := uses.get(b.get('tool_use_id'))) and (h := _hunks(res.get('structuredPatch'))): s['edit'] = {'hunks': h}
+            # ...A CALL THAT FAILED READS AS FAILED, with what it said (a held step's "Taskuary held this" too - the chat draws that held, not red)
+            if t == 'tool_result' and b.get('is_error') and (s := uses.get(b.get('tool_use_id'))):
+                s['status'], s['output'] = 'failed', _cut(' '.join(_texts(b.get('content'))) if isinstance(b.get('content'), list) else b.get('content'), 400)
             if j['type'] == 'user':
-                # the owner's words - not a tool result coming back, not a slash command's or a hook's plumbing
-                if t == 'text' and (x := str(b.get('text') or '').strip()) and not x.startswith(('<command-', '<local-command', '<system-reminder', 'Caveat:')):
-                    out.append({'k': 'you', 'text': _cut(x, YOU_N), 'at': at})
+                if t == 'text' and (x := str(b.get('text') or '').strip()) and _typed(j, x): out.append({'k': 'you', 'text': _cut(x, YOU_N), 'at': at})
             elif t == 'thinking' and str(b.get('thinking') or '').strip(): out.append({'k': 'thought', 'text': _cut(b['thinking'], THOUGHT_N), 'at': at})
             elif t == 'text' and str(b.get('text') or '').strip(): out.append({'k': 'said', 'text': _cut(b['text'], SAID_N), 'at': at})
             elif t == 'tool_use': out.append(s := _tool(b.get('name'), b.get('input'), at)); uses[b.get('id')] = s

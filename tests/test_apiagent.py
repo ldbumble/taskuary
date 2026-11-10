@@ -110,7 +110,43 @@ class OneRoundTripTests(unittest.TestCase):
         with mock.patch.object(apiagent, 'run_tool', return_value='PAGE'), self.assertRaises(RuntimeError):
             apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'go', 500, history=kept, trace=trace)
         self.assertEqual([(m['role'], m.get('tool_call_id'), m.get('content')) for m in kept[2:]],
-                         [('tool', 'a', 'PAGE'), ('tool', 'b', 'not run - the turn ended first')])
+                         [('tool', 'a', 'PAGE'), ('tool', 'b', 'no answer - the turn ended first')])
+
+    def test_nothing_counts_its_steps_and_only_going_in_circles_ends_it(self):
+        "It stopped at 24 tool calls and said where it got - an agent at work is never ended for running long."
+        look = {'tool_calls': [{'id': 'c', 'function': {'name': 'browser_look', 'arguments': '{}'}}]}
+        asked, n = [], iter(range(999))
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): asked.append(kw); return {'content': 'Read all sixty.'} if len(asked) > 60 else look
+        with mock.patch.object(apiagent, 'run_tool', side_effect=lambda *a: f'PAGE {next(n)}') as ran:
+            self.assertEqual(apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'go', 500), 'Read all sixty.')
+        self.assertEqual(ran.call_count, 60)
+        asked.clear()
+        class Circling:
+            def chat(self, msgs, tools, max_tokens, **kw): asked.append((kw, msgs[-1]['content'])); return {'content': 'Stuck on the list.'} if kw else look
+        with mock.patch.object(apiagent, 'run_tool', return_value='PAGE') as ran, mock.patch.object(apiagent, 'STUCK', 5):
+            self.assertEqual(apiagent.turn(Circling(), MemoryStore(), 1, 's', 'sys', 'go', 500), 'Stuck on the list.')
+        self.assertEqual(ran.call_count, 5)
+        self.assertEqual(asked[-1][0], {'tool_choice': 'none'}); self.assertIn('the same call 5 times in a row', asked[-1][1])
+
+    def test_stop_ends_the_turn_at_once_under_a_model_call_or_a_tool(self):
+        "Stop was read between steps: it waited out the model's answer, the page, the command."
+        import threading, time
+        stop, hold = threading.Event(), threading.Event()
+        class Thinking:
+            def chat(self, *a, **kw): hold.wait(20); return {'content': 'late'}
+        threading.Timer(0.2, stop.set).start(); t0 = time.monotonic()
+        with self.assertRaisesRegex(RuntimeError, 'stopped'): apiagent.turn(Thinking(), MemoryStore(), 1, 's', 'sys', 'go', 500, cancel=stop)
+        self.assertLess(time.monotonic() - t0, 5)
+        stop, kept = threading.Event(), []
+        class Brain:
+            def chat(self, *a, **kw): return {'tool_calls': [{'id': 'c', 'function': {'name': 'browser_look', 'arguments': '{}'}}]}
+        threading.Timer(0.2, stop.set).start(); t0 = time.monotonic()
+        with mock.patch.object(apiagent, 'run_tool', side_effect=lambda *a: hold.wait(20)), self.assertRaisesRegex(RuntimeError, 'stopped'):
+            apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'go', 500, cancel=stop, history=kept)
+        hold.set()
+        self.assertLess(time.monotonic() - t0, 5)
+        self.assertEqual([m['role'] for m in kept], ['user', 'assistant', 'tool'], 'what it had done is kept, its open call answered')
 
     def test_a_long_conversation_drops_its_oldest_tool_answers_then_its_oldest_turns(self):
         call = lambda k: {'role': 'assistant', 'tool_calls': [{'id': k, 'function': {'name': 'file_read', 'arguments': '{}'}}]}
@@ -326,15 +362,28 @@ class TheHandsTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.run_('file_edit', path='notes/quotes.csv', old='nowhere', new='x')
 
     def test_a_command_the_cli_would_run_runs_now_in_the_working_folder(self):
-        class Done: returncode, stdout, stderr = 0, b'3 files', b''
-        with mock.patch('taskuary.hooks.command_gate', return_value={}) as gate, mock.patch('taskuary.spawn.run', return_value=Done()) as ran:
+        class Done:
+            pid, returncode = 4242, 0
+            def communicate(self, timeout=None): return b'3 files', b''
+        with mock.patch('taskuary.hooks.command_gate', return_value={}) as gate, mock.patch('taskuary.spawn.popen', return_value=Done()) as ran:
             said = self.run_('run_command', command='git status', why='see what changed')
         self.assertIn('exit 0', said); self.assertIn('3 files', said)
         self.assertEqual(gate.call_args.args[3], 'git status')
         self.assertEqual(ran.call_args.kwargs['cwd'], apiagent.workdir(self.s, self.tid))
 
+    def test_stop_ends_a_command_under_way_and_what_it_started(self):
+        import subprocess, threading
+        class Building:
+            pid, returncode = 4242, None
+            def communicate(self, timeout=None): raise subprocess.TimeoutExpired('build', timeout)
+        stop = threading.Event(); stop.set()
+        with mock.patch('taskuary.hooks.command_gate', return_value={}), mock.patch('taskuary.spawn.popen', return_value=Building()), \
+             mock.patch.dict(apiagent.STOPS, {(self.tid, 'sid-h'): stop}), mock.patch.object(apiagent, '_kill') as killed:
+            with self.assertRaisesRegex(RuntimeError, 'stopped'): self.run_('run_command', command='npm run build', why='build it')
+        killed.assert_called_once()
+
     def test_a_command_the_cli_would_hold_is_held_by_the_same_gate_and_never_run(self):
-        with mock.patch('taskuary.spawn.run') as ran:
+        with mock.patch('taskuary.spawn.popen') as ran:
             said = self.run_('run_command', command='git push origin main', why='publish the fix')
         ran.assert_not_called()
         self.assertIn('held this for the owner', said)

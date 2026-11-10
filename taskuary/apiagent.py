@@ -5,8 +5,10 @@ on the HIPAA AI card only: no Claude Code, no Codex) "log into the scheduling po
 cannot be done from here - paste the claim information" (the owner, 2026-11-09: "why is this so dumb. this is agent itself"). The
 action is the goal, and the browser road already exists: agent-browser, the sign-in vault, the hold on acts that can't be undone.
 
-So the turn is a bounded loop (MAX_STEPS) of the card's own chat-completions `tools` (llm.make_llm's `chat`): the model calls a
-tool, the server runs it, the answer goes back. The tools are the CLI road's own, run by the server rather than a shell:
+So the turn is a loop of the card's own chat-completions `tools` (llm.make_llm's `chat`): the model calls a tool, the server runs
+it, the answer goes back - until it answers in words, as a CLI's turn does. Nothing counts its steps (the owner, 2026-11-04: an agent
+at work is never ended for running long - only finishing or Stop ends it); only going in circles does (STUCK). And Stop ends it AT
+ONCE, mid-call or mid-tool (_await). The tools are the CLI road's own, run by the server rather than a shell:
 - browser_open / browser_look / browser_click / browser_fill / browser_press / browser_screenshot - `agent-browser` in THIS task's
   named session (browserview), so the pane shows it. Every act goes through browsergate.check first, exactly as a CLI's shell
   command does through its hook: a press that can't be undone is held for the owner and the agent is told so.
@@ -21,7 +23,7 @@ import json, re, shlex
 from pathlib import Path
 from loguru import logger
 
-MAX_STEPS = 24                 # tool calls in one turn: a sign-in, a few pages and a table - not a crawl
+STUCK = 30                     # the same call with the same answer, this many times in a row: going in circles, not working
 CAP = 12_000                   # one tool answer, as the model reads it
 WAIT = 45.0                    # one browser act
 
@@ -216,6 +218,7 @@ def env_of(store, tid: int, sid: str) -> dict:
 
 
 SAY = {}                       # (tid, sid) -> how this turn says a step of Taskuary's own (the browser being set up) in the chat
+STOPS = {}                     # (tid, sid) -> this turn's Stop switch: a command under way is killed by it (_hands)
 BRAINS = {}                    # (tid, sid) -> the brain this turn runs on: web_search asks it, with its own search on
 
 
@@ -277,12 +280,50 @@ def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
         cwd, shell = workdir(store, tid), 'PowerShell' if os.name == 'nt' else 'Bash'
         held = hooks.command_gate(store, tid, sid, cmd, shell, cwd, ask=False, about=why)
         if held: return (held.get('hookSpecificOutput') or {}).get('permissionDecisionReason') or f'{shellgate.HELD}.'
-        try: r = spawn.run(shellgate._argv(shell, cmd), cwd=cwd, env=env_of(store, tid, sid), capture_output=True, timeout=RUN_WAIT,
-                           stdin=__import__('subprocess').DEVNULL)
-        except __import__('subprocess').TimeoutExpired: raise ValueError(f'it ran past {RUN_WAIT // 60} minutes and was stopped')
-        said = (shellgate.text(r.stdout) + shellgate.text(r.stderr)).strip()
-        return _cut(f'exit {r.returncode} in {cwd}' + chr(10) + (said or '(no output)'))
+        import subprocess, time
+        # ...its own process group off Windows, so the whole of it can be ended (_kill)
+        p = spawn.popen(shellgate._argv(shell, cmd), cwd=cwd, env=env_of(store, tid, sid), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        stdin=subprocess.DEVNULL, start_new_session=True)
+        stop, end = STOPS.get((tid, sid)), time.monotonic() + RUN_WAIT
+        while True:
+            try: out, errs = p.communicate(timeout=0.5); break
+            except subprocess.TimeoutExpired:
+                # STOP ENDS THE COMMAND TOO, and what it started: a build went on for its ten minutes under a turn the owner had stopped
+                if stop is not None and stop.is_set(): _kill(p); raise RuntimeError('stopped')
+                if time.monotonic() > end: _kill(p); raise ValueError(f'it ran past {RUN_WAIT // 60} minutes and was stopped')
+        said = (shellgate.text(out) + shellgate.text(errs)).strip()
+        return _cut(f'exit {p.returncode} in {cwd}' + chr(10) + (said or '(no output)'))
     raise ValueError(f'no tool named {name}')
+
+
+def _kill(p):
+    "The command and everything it started: ending its shell alone left the build under it running."
+    import os, signal
+    from . import spawn
+    try:
+        if os.name == 'nt': spawn.run(['taskkill', '/PID', str(p.pid), '/T', '/F'], capture_output=True, timeout=15)
+        else: os.killpg(p.pid, signal.SIGKILL)
+    except Exception as e: logger.info(f'apiagent: command {p.pid} not ended as a whole - {e}')
+    try: p.kill(); p.communicate(timeout=5)
+    except Exception: pass
+
+
+def _await(f, stop):
+    """f(), given up AT ONCE when the owner stops the turn. Stop was read between steps only, so it waited out whatever was under way - a
+    model's answer (minutes, on a long one), a page, a command. The step runs on a thread of its own; stopped, the turn ends now and
+    the step's answer is dropped when it comes (a command is killed, _hands)."""
+    if stop is None: return f()
+    import contextvars, threading
+    box = {}
+    def go():
+        try: box['out'] = f()
+        except BaseException as e: box['err'] = e
+    t = threading.Thread(target=contextvars.copy_context().run, args=(go,), daemon=True, name='apiagent-step'); t.start()
+    while t.is_alive():
+        t.join(0.2)
+        if stop.is_set() and t.is_alive(): raise RuntimeError('stopped')
+    if 'err' in box: raise box['err']
+    return box['out']
 
 
 def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
@@ -373,12 +414,12 @@ def _settle(msgs: list):
     at = max((i for i, m in enumerate(msgs) if m.get('tool_calls')), default=None)
     if at is None: return
     done = {m.get('tool_call_id') for m in msgs[at + 1:] if m.get('role') == 'tool'}
-    msgs.extend({'role': 'tool', 'tool_call_id': i, 'content': 'not run - the turn ended first'}
+    msgs.extend({'role': 'tool', 'tool_call_id': i, 'content': 'no answer - the turn ended first'}
                 for c in msgs[at]['tool_calls'] if (i := c.get('id') or str((c.get('function') or {}).get('name') or '')) not in done)
 
 
 def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: int, trace=None, cancel=None, tools=None,
-         steps: int = MAX_STEPS, images=None, history: list = None) -> str:
+         steps: int = None, images=None, history: list = None) -> str:
     """One turn of an API brain with tools: call, run, answer back, until it answers in words. `trace(kind, name, detail)` sees each
     step as a CLI's do (tool_call / tool_result), so the pane and the chat draw them the same - a `show` among them as its pictures.
 
@@ -390,21 +431,25 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
     tools = tools if tools is not None else [*BROWSER, SHOW]
     BRAINS[(tid, sid)] = brain
     if trace: SAY[(tid, sid)] = lambda s: trace('progress', 'browser', s)
+    STOPS[(tid, sid)] = cancel
     content = ([{'type': 'image_url', 'image_url': {'url': f'data:{ct};base64,{llm.vision_safe(ct, b64)}'}} for ct, b64 in images]
                + [{'type': 'text', 'text': user}]) if images else user
     mine = {'role': 'user', 'content': content}
     msgs, begun = [{'role': 'system', 'content': system}, *(history or []), mine], False
+    why, last, again = 'You are out of steps for this turn.', None, 0
+    stopped = lambda: cancel is not None and cancel.is_set()
     def said(m):
         text = llm.said_text(m)
         if text: msgs.append({'role': 'assistant', 'content': text})
         return text
     try:
-        for i in range(steps):
+        for i in (range(steps) if steps else __import__('itertools').count()):
             # ...stopped before its first answer, a conversation under way still heard the line: the next turn says only its own
-            if cancel is not None and cancel.is_set(): begun = begun or bool(history); raise RuntimeError('stopped')
+            if stopped(): begun = begun or bool(history); raise RuntimeError('stopped')
             _fit(msgs)
-            try: m = brain.chat(msgs, tools, max_tokens)
+            try: m = _await(lambda: brain.chat(msgs, tools, max_tokens), cancel)
             except Exception as e:
+                if stopped(): begun = begun or bool(history); raise
                 # ...the conversation it was handed is what this call could not take (too long for the model now, or a gateway that
                 # dropped it): nothing of this turn has run, so it is asked again with the conversation said whole (general)
                 if i == 0 and history: raise Lost(str(e)) from e
@@ -414,22 +459,27 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
             begun = True
             calls = m.get('tool_calls') or []
             if not calls: return said(m)
-            msgs.append({k: v for k, v in m.items() if v is not None})          # as sent: a Gemini model's thought signature rides on it
+            msgs.append({'role': 'assistant', **{k: v for k, v in m.items() if v is not None}})          # as sent: a Gemini model's thought signature rides on it
             for c in calls:
                 f = c.get('function') or {}
                 name = str(f.get('name') or '')
                 try: a = json.loads(f.get('arguments') or '{}') or {}
                 except ValueError: a = {}
                 if trace: trace('tool_call', name, {'args': a})
-                try: out, err = run_tool(store, tid, sid, name, a), False
+                try: out, err = _await(lambda: run_tool(store, tid, sid, name, a), cancel), False
                 except Exception as e:
+                    if stopped(): raise
                     out, err = f'{name} failed: {e}', True
                     logger.info(f'apiagent: task {tid} {name} failed - {e}')
                 if trace: trace('tool_result', name, {'result': out, 'is_error': err})
                 msgs.append({'role': 'tool', 'tool_call_id': c.get('id') or name, 'content': _cut(out)})
-        # out of steps: one last answer in words, no more tools - where it got and what is left
-        msgs.append({'role': 'user', 'content': 'You are out of steps for this turn. Say what you did, what you found, and what is left.'})
-        return said(brain.chat(msgs, tools, max_tokens, tool_choice='none'))
+                again, last = (again + 1 if (name, a, out) == last else 0), (name, a, out)
+            if again >= STUCK - 1:
+                why = f'You have made the same call {again + 1} times in a row and had the same answer each time.'
+                logger.info(f'apiagent: task {tid} going in circles on {name} - asked for where it got'); break
+        # going in circles (or out of a caller's own bound): one last answer in words, no more tools - where it got and what is left
+        msgs.append({'role': 'user', 'content': f'{why} Say what you did, what you found, and what is left.'})
+        return said(_await(lambda: brain.chat(msgs, tools, max_tokens, tool_choice='none'), cancel))
     finally:
         # ...kept once the model has answered at all: a turn stopped or failed part-way keeps what it did, so Continue goes on from there.
         # Its pictures are not carried (the model saw them; their bytes would ride on every later call)

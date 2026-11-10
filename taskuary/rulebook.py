@@ -435,6 +435,17 @@ QUIET = frozenset({'closed', 'working', 'agent_asking'})
 # an answer owed to the owner gone late: its agent is woken once to draft the chase (checkback.late), and where none was, Chase is lit
 LATE = frozenset({'waiting_late', 'waiting_overdue', 'waiting_late_usual', 'goal_late', 'watch_quiet'})
 NOTHING_LEFT = 'Its agent said nothing is left to do'
+# THE MOVE A STATE'S OWN FACT NAMES (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible. it shoudl prompt you,
+# should i deploy"): these lit nothing, and their line was hidden too - work left unpushed is looked at
+MOVES = {'unpushed': ('review_changes',)}
+
+
+def landing_asks(store, tid) -> bool:
+    """Whether the task's landing card asks its question - Push, or how its branch lands (landing.state) - whose own first button is filled
+    there: the row lights nothing over it. Read only for work left unpushed."""
+    from . import landing
+    try: return bool(tid) and (landing.asked(store, tid) or bool((landing.state(store, int(tid)) or {}).get('ask')))
+    except Exception as e: logger.debug(f'rulebook: no landing read for {tid} - {e}'); return False
 
 
 def agent_word(store, tid) -> str | None:
@@ -472,7 +483,8 @@ def _recommended(store, it: dict, verbs: list | None, f: dict | None) -> dict | 
     elif st in LATE and not (tid and checkback.woke(store, tid)): v = pick('chase')
     # ...the agent's own word decides wherever it wrote one: a turn that said neither fills nothing, whatever the facts read
     elif tid and (said := agent_word(store, tid)) is not None: v, why = (pick('close'), NOTHING_LEFT) if said == 'nothing_left' else (None, '')
-    else: v = pick('close') if st in OVER else None
+    # ...and with no word of an agent's over it, the move the state's own fact names (MOVES)
+    else: v = pick('close') if st in OVER else None if st == 'unpushed' and landing_asks(store, tid) else pick(*MOVES.get(st, ()))
     return {'verb': v, 'label': advisor._label(verbs, v, it), 'why': why, 'state': st} if v else None
 
 

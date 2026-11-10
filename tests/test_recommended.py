@@ -84,7 +84,7 @@ def test_a_run_that_is_over_fills_mark_done_where_no_summary_was_written(s):
             r = rulebook.recommended(s, item(tid), verbs('close', 'defer'))
             assert (r['verb'], r['why'], r['state']) == ('close', 'Finished at 10:02; nothing since.', st)
     # ...and where it is not over - stopped mid-work, work not pushed, an ask, a wait - nothing is filled
-    for st in ('stopped', 'unpushed', 'asked', 'asked_late', 'own', 'untouched', 'fyi', 'report_ok'):
+    for st in ('stopped', 'asked', 'asked_late', 'own', 'untouched', 'fyi', 'report_ok'):
         with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': ''}):
             assert rulebook.recommended(s, item(tid), verbs('close', 'continue', 'reply', 'review_changes')) is None, st
 
@@ -109,6 +109,21 @@ def test_a_late_answer_no_agent_was_woken_for_fills_chase_with_its_fact(s):
             assert rulebook.recommended(s, it, verbs('chase', 'defer'))['verb'] == 'chase', st
     s.audit('task', tid, 'check_back', 'late', 'agent', {'state': 'waiting_late'})
     assert rulebook.recommended(s, it) is None, 'its woken agent said what it did about it'
+
+
+def test_work_left_unpushed_fills_review_changes_unless_its_landing_card_asks(s):
+    """A coding agent left changes it did not push, and nothing was lit (the owner, 2026-11-10: "should i deploy and respond once deployed???
+    isnt' this the goal?"). Review changes is the move - and where the landing card already asks (Push, or how the branch lands, its own
+    first button filled), the row lights nothing over it."""
+    from taskuary import landing
+    tid = agent_task(s, kind='coding')
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'unpushed', 'line': 'Changes ready - not pushed.'}):
+        r = rulebook.recommended(s, item(tid), verbs('review_changes', 'close'))
+        assert (r['verb'], r['why']) == ('review_changes', 'Changes ready - not pushed.')
+        with mock.patch.object(landing, 'state', return_value={'ask': True, 'push': {'tip': 'abc1234'}}):
+            assert rulebook.recommended(s, item(tid), verbs('review_changes', 'close')) is None, "the card's Push is the lit move"
+        with mock.patch.object(landing, 'asked', return_value=True):
+            assert rulebook.recommended(s, item(tid), verbs('review_changes', 'close')) is None, 'the agent proposed how it lands'
 
 
 def test_a_failed_run_fills_its_own_way_past_it_and_never_the_send_that_failed(s):

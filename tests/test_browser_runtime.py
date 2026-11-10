@@ -212,6 +212,8 @@ class TheCliAgentTests(unittest.TestCase):
         sess, system, m = self.turn(wanted=False)
         m.wait.assert_not_called(); m.soon.assert_called_once()
         self.assertIn('NO BROWSER IS OPEN', system); self.assertIn('IT IS STILL BEING SET UP', system); self.assertNotIn('install agent-browser under', system)
+        # ...and the turn says it at once, under its header (the owner, 2026-11-10: "check why it did not start right away")
+        self.assertIn(bv.GETTING, [e.get('detail') for e in sess.trace if e.get('name') == 'browser'])
 
     def test_and_when_the_last_try_failed_it_is_told_why_not_that_it_is_coming(self):
         sess, system, m = self.turn(wanted=False, failed='agent-browser could not be downloaded (GitHub: refused)')

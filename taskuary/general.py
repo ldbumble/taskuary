@@ -2475,6 +2475,9 @@ class GeneralSession:
                 if browserview.can_set_up():
                     if self.browser_wanted: setup_why = browserview.set_up(lambda s: self._remember_trace('progress', 'browser', s))
                     elif browser_offered(self.store, self.task_id, self.pick): setup_why = browserview.set_up_soon(); coming = not setup_why
+                    # ...and SAID in the turn (the owner, 2026-11-10: "check why it did not start right away"): a sign-in asked of a fresh
+                    # computer sat on its turn's header while the agent waited out the download with nothing written under it
+                    if coming: self._remember_trace('progress', 'browser', browserview.GETTING)
                 was = browserview.last_page(self.task_id) if self.browser_wanted else ''
                 last = was if was and page_needs_owner(self.store, self.task_id) else ''
                 if self.browser_wanted and (browserview.state(self.sid, fresh=True).get('open') or (last and browserview.start(self.sid, last))):

@@ -710,6 +710,7 @@ NO_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET: Taskuary tried to set
              'here. If the work needs a web page, do what you can without it, then tell the owner in one line: "The browser could not be '
              'set up on this computer: {why}. Ask me again and Taskuary tries again." ')
 COMING = 'The browser is being set up on this computer (a one-time download) - try again in a few minutes'
+GETTING = 'Getting the browser ready on this computer - a one-time download; the agent goes on by itself once it is there.'
 # ...and a stranger's task (origin.py: a message on it is from someone the owner has not vouched for) gets no browser: a link in a
 # stranger's mail is the oldest way to talk an agent into a form. Said, so the answer is the reason and the press, not "could not"
 STRANGER_LINE = ('NO BROWSER ON THIS TASK: it carries a message from someone the owner has not vouched for ({why}), and a link in such a '

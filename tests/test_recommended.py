@@ -4,6 +4,7 @@ facts (rulebook.recommended) - the same for a general agent, an API-card agent, 
 judges it: the Advisor reads its own idea rows and nothing else. The task page and the rail's item on the table carry the same field, and
 the walk onto a row whose task has an agent asks the Assistant for no line about it. Invented Northwind people only (CLAUDE.md)."""
 import json
+from datetime import datetime, timedelta
 from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
@@ -75,6 +76,28 @@ def test_a_reply_nothing_has_written_fills_the_agents_start(s):
         assert rulebook.recommended(s, item(tid), verbs('reply', 'close')) is None, 'no agent to start: nothing is filled'
 
 
+def test_an_ask_no_agent_started_on_fills_send_to_agent(s):
+    """Someone asked, no agent started by itself (the switch, a stranger, a full house), and nothing was lit: Send to agent is the move, as
+    for a reply nothing has written - and where an agent already holds the task its row draws none, so nothing is filled."""
+    tid = agent_task(s, kind='todo', summary=None)
+    for st in ('asked', 'asked_late'):
+        with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': 'Erin Blake asked 3 days ago.'}):
+            r = rulebook.recommended(s, item(tid), verbs('reply', 'regular_agent', 'close'))
+            assert (r['verb'], r['why']) == ('regular_agent', 'Erin Blake asked 3 days ago.'), st
+            assert rulebook.recommended(s, item(tid), verbs('reply', 'close')) is None, st
+
+
+def test_a_phish_is_put_down_and_a_duplicate_folded_as_their_own_facts_say(s):
+    """Each state's own line named its move - "Not ours is its move", "fold it into that one" - and nothing was lit."""
+    tid = agent_task(s, kind='todo', summary=None)
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'fyi_danger', 'line': ''}):
+        assert rulebook.recommended(s, item(tid, kind='fyi'), verbs('mine', 'regular_agent', 'not_ours'))['verb'] == 'not_ours'
+        assert rulebook.recommended(s, item(tid, kind='fyi'), verbs('regular_agent', 'remove'))['verb'] == 'remove', "a task's row says it Not for me"
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'duplicate', 'line': 'Same ask as TQ-0001 - fold it into that one.'}):
+        r = rulebook.recommended(s, item(tid), verbs('reply', 'split', 'remove'))
+        assert (r['verb'], r['why']) == ('split', 'Same ask as TQ-0001 - fold it into that one.')
+
+
 def test_a_run_that_is_over_fills_mark_done_where_no_summary_was_written(s):
     """A coding agent's terminal writes no summary, and a task no agent touched has none: the facts say it is over."""
     tid = agent_task(s, kind='coding')
@@ -83,9 +106,66 @@ def test_a_run_that_is_over_fills_mark_done_where_no_summary_was_written(s):
             r = rulebook.recommended(s, item(tid), verbs('close', 'defer'))
             assert (r['verb'], r['why'], r['state']) == ('close', 'Finished at 10:02; nothing since.', st)
     # ...and where it is not over - stopped mid-work, work not pushed, an ask, a wait - nothing is filled
-    for st in ('stopped', 'unpushed', 'asked', 'asked_late', 'waiting_late', 'own', 'untouched', 'fyi', 'report_ok'):
+    for st in ('own', 'fyi', 'report_ok'):
         with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': ''}):
             assert rulebook.recommended(s, item(tid), verbs('close', 'continue', 'reply', 'review_changes')) is None, st
+
+
+def late_wait(s, d=7):
+    tid = s.create_task({'Title': 'Vendor W-9', 'Kind': 'general', 'Status': 'waiting'}, 'owner')
+    s._exec("UPDATE task SET WaitingOn='ray.colton@northwind.example' WHERE TaskId=?", (tid,))
+    Factory(s).message(task_id=tid, subject='W-9?', direction='out', sent_at=f'{datetime.now() - timedelta(days=d):%Y-%m-%d %H:%M:%S}')
+    return tid, {'key': f'task:{tid}', 'kind': 'todo', 'lane': 'theirs', 'tid': tid}
+
+
+def test_a_late_answer_no_agent_was_woken_for_fills_chase_with_its_fact(s):
+    """Somebody has not answered and it is late (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible"): it lit
+    nothing. Where no agent was woken to chase it, Chase is the move - over an older turn's word too - and once one was, its own turn says."""
+    tid, it = late_wait(s)
+    r = rulebook.recommended(s, it)
+    assert (r['verb'], r['label'], r['state']) == ('chase', 'Chase them', 'waiting_late') and r['why'].startswith('Ray Colton: ')
+    s.add_comment(tid, 'assistant', general.SUMMARY_TYPE, json.dumps({'about': 'W-9', 'did': 'Asked Ray'}))
+    assert rulebook.recommended(s, it)['verb'] == 'chase', 'a turn from before the wait went late'
+    for st in sorted(rulebook.LATE):
+        with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': 'Ray Colton: 2 days late.'}):
+            assert rulebook.recommended(s, it, verbs('chase', 'defer'))['verb'] == 'chase', st
+    s.audit('task', tid, 'check_back', 'late', 'agent', {'state': 'waiting_late'})
+    assert rulebook.recommended(s, it) is None, 'its woken agent said what it did about it'
+
+
+def test_work_left_unpushed_fills_review_changes_unless_its_landing_card_asks(s):
+    """A coding agent left changes it did not push, and nothing was lit (the owner, 2026-11-10: "should i deploy and respond once deployed???
+    isnt' this the goal?"). Review changes is the move - and where the landing card already asks (Push, or how the branch lands, its own
+    first button filled), the row lights nothing over it."""
+    from taskuary import landing
+    tid = agent_task(s, kind='coding')
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'unpushed', 'line': 'Changes ready - not pushed.'}):
+        r = rulebook.recommended(s, item(tid), verbs('review_changes', 'close'))
+        assert (r['verb'], r['why']) == ('review_changes', 'Changes ready - not pushed.')
+        with mock.patch.object(landing, 'state', return_value={'ask': True, 'push': {'tip': 'abc1234'}}):
+            assert rulebook.recommended(s, item(tid), verbs('review_changes', 'close')) is None, "the card's Push is the lit move"
+        with mock.patch.object(landing, 'asked', return_value=True):
+            assert rulebook.recommended(s, item(tid), verbs('review_changes', 'close')) is None, 'the agent proposed how it lands'
+
+
+def test_an_agent_stopped_with_its_work_unfinished_fills_continue(s):
+    """It had work and is gone, and nothing was lit ("no default verb"): Continue is the move wherever its row draws one - a general
+    agent's row has none (its chat box is the way on), and then nothing is filled."""
+    tid = agent_task(s, kind='coding')
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'stopped', 'line': ''}):
+        assert rulebook.recommended(s, item(tid, lane='stopped'), verbs('continue', 'close', 'review_changes'))['verb'] == 'continue'
+        assert rulebook.recommended(s, item(tid, lane='stopped'), verbs('close', 'regular_agent')) is None
+
+
+def test_a_row_with_nothing_lit_says_why_in_its_states_one_sentence(s):
+    """Plain buttons and no word stood over a late wait whose agent was woken, a first mail from a stranger, a landing card that asks
+    (the owner, 2026-11-10): the line was dropped unless something failed or a draft was ready. Wherever nothing is lit it is said now."""
+    tid, it = late_wait(s)
+    s.audit('task', tid, 'check_back', 'late', 'agent', {'state': 'waiting_late'})
+    with mock.patch.object(advisor, '_item', lambda *a, **k: it):
+        d = advisor.decide(s, f'task:{tid}')
+    assert d['verb'] is None and d['state'] == 'waiting_late' and d['line'].startswith('Ray Colton: ') and d['line'].endswith('no answer.')
+    assert not hasattr(rulebook, 'UNTOUCHED_DAYS') and 'untouched' not in rulebook.RULES, 'a state with no line, no move and no wake is gone'
 
 
 def test_a_failed_run_fills_its_own_way_past_it_and_never_the_send_that_failed(s):

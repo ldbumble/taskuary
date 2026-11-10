@@ -146,12 +146,14 @@ CHIPS ={'review': ('send_close', 'approve', 'redraft', 'close', 'defer', 'watch'
          # ...and Pause this report, for the Advisor to light over a run whose findings the owner said they do not care about (the owner,
          # 2026-10-27: "the Advisor may suggest switching a report off"); the press is the owner's, the report stays under Reports
          'report': ('mine', 'regular_agent', 'report_off', 'next'), 'agentdone': ('close', 'reply', 'next'),
-         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'watch', 'next'),
-         'asked': ('reply', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'next'),
+         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'not_ours_kind', 'defer', 'next'), 'task': ('close', 'defer', 'watch', 'next'),
+         'asked': ('reply', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'not_ours_sender', 'next'),
          # a to-do with a task behind it (a promise you made in a chat) is closed here too - Next only read it (2026-10-15)
-         'todo': ('reply', 'close', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'next'),
+         'todo': ('reply', 'close', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'not_ours_sender', 'next'),
+         # ...and Not ours taken further is the item's own (the owner, 2026-11-10: "on bottom the only buttons should be nav"): Ignore this
+         # sender beside a mail's Not for me, No more ideas like this beside an idea's - a chip under the receipt rode onto the NEXT item's bar
          # an fyi can become WORK too: "make this job stop emailing me" arrived as a notification (2026-09-24)
-         'fyi': ('mine', 'regular_agent', 'not_ours', 'next'),
+         'fyi': ('mine', 'regular_agent', 'not_ours', 'not_ours_sender', 'next'),
          # the handful carries its own "All read, next" button (2026-09-14) and nothing else
          'fyis': (),
          # a connection that stopped answering: ask it again, here - Next was its only word, a dead end (2026-09-23)
@@ -861,6 +863,13 @@ def _live_task(store, item) -> bool:
 IDEA_ACT = {'mine': 'task', 'regular_agent': 'agent', 'coding_agent': 'agent', 'not_ours': 'dismiss', 'not_ours_kind': 'dismiss_kind'}
 
 
+WRITES_BACK = frozenset({'reply', 'redraft'})       # the verbs that write back to whoever sent it (Reply, Draft with AI)
+def _replies_on(store, item) -> bool:
+    from . import wrapup
+    try: return wrapup.replies_on(store, item)
+    except Exception: return True                     # an unreadable row keeps its Reply: the door still asks again
+
+
 def _chasable(store, item) -> bool:
     if store is None: return False
     from . import rulebook
@@ -894,6 +903,11 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if verb == 'not_ours_kind':
         own = 'not_ours' in CHIPS.get(item.get('kind'), ()) and not item.get('closeout') and not cannot(item, 'not_ours', store)
         return f"{what} is not one of the assistant's ideas" + (f" - say {buttons.label('not_ours')}." if own else '.')
+    # A REPLY ONLY WHERE SOMEBODY READS ONE (the owner, 2026-11-10: "reply by itself makes no sense on github ... fix this globally"): a code
+    # host's notice, a billing or monitoring mailer, a list, a report run or the owner's own note has nobody to write back to (wrapup.replies_on).
+    # Telling a person about it is its own act - the agent emails them - so the line says that, and no reply is put on the table
+    if verb in WRITES_BACK and store is not None and (item.get('tid') or item.get('mid')) and not item.get('rid') and not _replies_on(store, item):
+        return f"Nobody reads a reply on {what} - no person sent it. To tell someone about it, say who and what, and the agent emails them."
     if verb == 'report_off' and not _report_on(store, item):
         return f"There's no report on {what} running on its clock to switch off."
     # ...an agent still WORKING on it takes the words as its next prompt (agent.tell, the owner 2026-11-02)

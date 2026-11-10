@@ -168,6 +168,37 @@ def test_a_turn_that_fails_says_so_in_the_chat_and_typing_carries_on(world, monk
     assert 'heard: try again' in [x for k, x in t.history if k == 'said'][-1]
 
 
+@pytest.mark.parametrize('how', ['ended', 'idled'])
+def test_a_line_typed_to_a_session_at_rest_is_named_and_worked_on_from_the_press_to_the_answer(world, monkeypatch, how):
+    """The owner, 2026-11-10: "i put in new prompt it then showed working on top of it to the left for split second then disappered and 10 second
+    later the agent thing came up". A line typed on a coding task whose session ended (reopened on its conversation) or idled out (woken) is,
+    from the moment the server takes it until the answer: the owner's line in the chat's payload, and the agent at work - with an adapter
+    that takes its time to start. An idled one opened with nothing queued and fell to rest under the line until the waiting room next looked."""
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    s, tid, repo = world
+    t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)
+    if how == 'ended': t.close(); s.update_task(tid, {'Status': 'done'}, 'owner')
+    else: monkeypatch.setattr(general, 'idle_for', lambda: 0); t.last -= 100; assert t.idle_out(), t.idle_why()
+    monkeypatch.setenv('FAKE_ACP_SPAWN', '2')
+    line = 'can you check and then merge it in'
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        assert c.post(f'/api/tasks/{tid}/continue-work', json={'note': line}).status_code == 200
+        gaps, end = [], time.time() + 20
+        while time.time() < end:
+            d = codingchat.chat(s, tid)
+            ups = (d['sessions'][-1].get('updates') or []) if d['sessions'] else []
+            answered = sum(u['sessionUpdate'] == 'agent_message_chunk' and line in str(u) for u in ups)
+            if answered: break
+            named = any(w['text'] == line for w in d['waiting']) or any(line in str(u) for u in ups if u['sessionUpdate'] == 'user_message_chunk')
+            if not ((d['live'] or {}).get('working') and named): gaps.append(((d['live'] or {}).get('working'), named))
+            time.sleep(0.05)
+    assert answered, 'the line was answered'
+    assert gaps == [], f'between the press and the answer the payload said: {gaps[:5]}'
+    assert s.get_task(tid)['Status'] == 'in_progress', 'a line typed on a done task reopens it'
+
+
 def test_a_note_from_the_waiting_room_is_drawn_as_the_owners_words(world):
     s, tid, repo = world
     t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)

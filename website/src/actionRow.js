@@ -12,7 +12,7 @@ const live = new Map();          // id -> the latest verb (its run closes over t
 const ofs = new Map();           // id -> the card that registered it: the item a button drawn from it was drawn for (press)
 const owners = new Map();        // owner -> { verbs, ref, at }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.tucked ? { tucked: true } : {}), ...(v.spine ? { spine: v.spine } : {}), ...(v.stage ? { stage: v.stage } : {}), ...(v.laid ? { laid: v.laid } : {}) });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}), ...(v.tucked ? { tucked: true } : {}), ...(v.spine ? { spine: v.spine } : {}), ...(v.stage ? { stage: v.stage } : {}), ...(v.laid ? { laid: v.laid } : {}), ...(v.bar ? { bar: true } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 // THE WALK'S TWO WAYS, ONE PILL (the owner, 2026-10-27: "We have a Next button - let's have a Back button that goes up the line as well ...
 // on the first one no Back, like no Next on the last one. Combine Next/Back into one big pill called Nav"): Back is the walk's step up the
@@ -508,11 +508,20 @@ export const useSpineVerbs = (sec) => useSyncExternalStore(spineSub, () => spine
 export const useSpineAll = () => useSyncExternalStore(spineSub, () => spineVerbs);
 // ...the row: Back and Next alone; each pane's stage moves in the move pill's order (`spine`: the word a folded pane shows - Draft reply
 // where nothing is drafted yet); the title bar's the task's own, Mark done first - a live agent's too: the press stops and saves first
-export function splitRow(row, on) {
-  if (!on) return { row, by: {} };
-  const nav = { ...row, decide: [], agent: [], more: [] };
-  // ...an item that lays ONE pane of its own (`only`: an FYI's Came from) takes that pane's moves off the bar and leaves it the rest
+// THE BAR IS NAVIGATION ONLY (the owner, 2026-11-10: "on bottom the only buttons should be nav. all other buttons should be on task no????"):
+// `desk` is the desk's bar under the chat. With nothing laid out to carry them, an item's moves go to its own row ON THE ITEM (`item`:
+// AssistantView's ItemMoves, over the card on the table) - an FYI batch's bar read Back, All read, next and a CHANGE pill. Only Back and Next
+// stand on the bar, and a verb that says it belongs there (`bar`: the empty rail's New and Change my setup, the owner's one exception that day).
+// A phone's row is its task view's own (inline): it keeps every move
+export function splitRow(row, on, desk = false) {
+  desk = desk === true;                // ...a caller's old third argument (the verbs list) is not the desk
+  const nav = { ...row, decide: [], agent: [], more: [] }, bar = (xs) => xs.filter((v) => v.bar), barred = { ...nav, decide: bar([...row.decide, ...row.agent, ...row.more]) };
+  const unbar = (xs) => xs.filter((v) => !v.bar);
+  const item = () => { const { move, change, share } = pillsOf(row); return [...unbar(move), ...unbar([...change, ...share]).map((v) => ({ ...v, quiet: true }))]; };
+  if (!on) return desk ? { row: barred, by: { item: item() } } : { row, by: {} };
+  // ...an item that lays ONE pane of its own (`only`: an FYI's Came from) takes that pane's moves off the bar - and the rest go to the item's row
   if (on.only) { const { move, change } = pillsOf(row), here = [...move, ...change].filter((v) => stageOf(v) === on.only), off = (xs) => xs.filter((v) => !here.includes(v));
+    if (desk) return { row: barred, by: { [on.only]: here, item: item().filter((v) => !here.some((h) => h.id === v.id)) } };
     return { row: { ...row, decide: off(row.decide), agent: off(row.agent), more: off(row.more) }, by: { [on.only]: here } }; }
   // ...and one laid on the desk in a task's three sections (ItemSections: a report, a dashboard, an FYI) puts EVERY move on the pane it is about,
   // as a task's ride its panes (the owner, 2026-10-31: "i thought we moved all buttons to the agent canvas?? report should be white with buttons

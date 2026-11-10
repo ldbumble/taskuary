@@ -102,14 +102,15 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   const move = advised?.none ? adviceNone(advised.none).move : "";
   const conn = move === "ai" ? verbs.list.find((v) => v.label === CONNECT_AI && !v.disabled) : null;
   const pick = advised?.none ? (conn ? { id: conn.id } : move === "ai" ? null : { verb: move || "next" }) : advised;
-  // ...LESS THE STAGE MOVES where the task lays its panes: those ride on their pane (actionRow.splitRow)
-  const { row, by: held } = splitRow(rowOf(verbs, pick), laidOf(verbs.list) || verbs.lay || null);
+  // ...LESS THE STAGE MOVES where the task lays its panes: those ride on their pane (actionRow.splitRow) - and on the desk's bar, every move but
+  // Back and Next: the rest ride the item's own row (the owner, 2026-11-10: "on bottom the only buttons should be nav")
+  const hosted = useHosted();
+  const { row, by: held } = splitRow(rowOf(verbs, pick), laidOf(verbs.list) || verbs.lay || null, !inline && !hosted);
   // ...and the pane's spine presses as the bar does (CI, 0.3.10.5: Send to agent on a folded Agent spine pressed while the row held did
   // nothing - its button still named the card that drew it before the task page's card was registered again, and press found no verb there)
   const spineBy = verbs === now ? held : Object.fromEntries(Object.entries(held).map(([k, vs]) => [k, vs.map((v) => ({ ...v, of: liveOf(v.id)?.of ?? v.of }))]));
   useEffect(() => { putSpineVerbs(spineBy); });
   const { ref, decide, agent, more, next, back, why } = row;
-  const hosted = useHosted();
   // ...a phone's row is Nav, Mark done, as many moves as fit and one ▾ (foldsOf.phone) - the width the page calls a phone (AssistantView)
   const phone = useMediaQuery("(max-width:600px)");
   // the card's own move, advised, is lit on the card (rowOf's `lit`); only the row that is drawn says which

@@ -7,7 +7,6 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { announceRemoved, clearRemoved, fromAnswer, lastRemoved, onRemoved, removedLine, showsRemoved, UNDO_MS } from "../src/removed.js";
-import { followUps } from "../src/proposalCard.js";
 
 const SRC = new URL("../src/", import.meta.url);
 const read = (f) => readFileSync(new URL(f, SRC), "utf8");
@@ -63,14 +62,9 @@ test("leaving a card saves what was still waiting to save - nothing asks, nothin
   assert.doesNotMatch(d, /keptDraft/);
 });
 
-test("Not ours runs as just this once, and offers From now on after it - never before", () => {
-  const p = { verb: "not_ours", kind: "message.file", target: 12, params: { learn: false }, alts: [{ verb: "not_ours", label: "Just this once", current: true },
-    { verb: "not_ours_sender", label: "From now on - their mail is filed for you" }, { verb: "block_sender", label: "A rule in Settings" }] };
-  // its own operation on the same message: filed, the item is off the pile and cannot be looked up there again
-  assert.deepEqual(followUps(p, { status: "done" }), [{ verb: "not_ours_sender", label: "From now on - their mail is filed for you",
-    follow: { kind: "preference.exclude_sender", target: 12, params: { scope: "sender" } } }]);
-  assert.deepEqual(followUps(p, { status: "error" }), []);
-  assert.deepEqual(followUps({ ...p, verb: "close" }, { status: "done" }), []);
+// ...and how far is the item's own button beside it, never a chip after it (the owner, 2026-11-10: the chip rode onto the next item's bar)
+test("Not ours runs as just this once; From now on is the item's own button, not a chip after the press", () => {
+  assert.doesNotMatch(read("proposalCard.js"), /followUps|FURTHER/);
   // the card no longer prints the switch behind just-this-once
   assert.match(read("proposalCard.js"), /"wrap", "learn"\]/);
 });

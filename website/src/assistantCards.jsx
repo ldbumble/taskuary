@@ -1339,7 +1339,8 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const verb = !asks ? null : own || mineAlone
     ? handIt && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={handIt} sx={moveSx}>
         {busy === "agent" ? "Handing it over…" : hand}</Button>
-    : card.mid && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={draftReply} sx={moveSx}>{busy === "reply" ? "Drafting…" : btn("reply")}</Button>;
+    // ...a Reply only where somebody reads one: the server's `replies` (wrapup.reads_reply_row, the owner 2026-11-10 - never a machine's notice)
+    : card.mid && card.replies && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={draftReply} sx={moveSx}>{busy === "reply" ? "Drafting…" : btn("reply")}</Button>;
   const asker = String(card.who || "them").replace(/\s*<[^>]*>/g, "");
   // AN AGENT ALREADY DID IT (the owner, 2026-09-28: TQ-0796 read "who should take it? Hand to agent" under the report of
   // the agent that took it): once a report is filed the move is to close the task. It offered Continue beside it too, and finished
@@ -1671,7 +1672,8 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
   const ask = (i, coding) => { if (!(table != null && handAll(i, coding))) setAsking({ key: i.key, coding }); };
   const actsOf = (i) => (<>
             <div className="tq-card-actions tq-fyi-acts">
-              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title={btnHint("reply")} sx={quiet}>{btn("reply")}</Button>}
+              {/* ...Reply where somebody reads one (the item's `replies`, the server's): a code host's or a billing mailer's line has none */}
+              {i.mid && i.replies && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title={btnHint("reply")} sx={quiet}>{btn("reply")}</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title={btnHint("mine", "fyi")} sx={quiet}>{btn("mine", "fyi")}</Button>}
               {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => ask(i, true)} title={btnHint("coding_agent")} sx={quiet}>{btn("coding_agent")}</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy || !!noAi} onClick={() => ask(i, false)} title={noAi || btnHint("regular_agent")} sx={quiet}>{btn("regular_agent")}</Button>}

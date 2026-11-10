@@ -35,7 +35,7 @@ def test_no_line_when_nothing_is_checkable(w):
     stranger = ask(s, 'omar', 'Expense policy wording', 'Per diem or daily allowance?')                         # nobody's usual yet
     for t in (fresh, stranger):
         d = advisor.decide(s, f'task:{t}', preread=False)
-        assert (d['state'], d['verb'], d['line']) == ('asked', None, ''), d     # no fact, nothing lit (the owner, 2026-10-28)
+        assert (d['state'], d['verb'], d['line']) == ('asked', 'regular_agent', ''), d     # no fact said; the ask is handed to an agent (2026-11-10)
 
 
 def test_a_payworth_renewal_opens_remind_me_on_the_day_its_how_you_work_line_says(w):

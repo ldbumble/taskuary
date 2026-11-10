@@ -16,7 +16,7 @@ class StatusTests(_Rail):
         rev = advisor.revision(s, 'task', t)
         with mock.patch.object(advisor, 'notice'), mock.patch.object(advisor, '_INFLIGHT', {('task', t, rev, 2, None)}):
             got = advisor.status(s, f'task:{t}')
-        self.assertEqual((got['verb'], got['line'], 'pending' in got), (None, '', False))
+        self.assertEqual((got['verb'], got['line'], 'pending' in got), ('regular_agent', '', False))     # an ask no agent took: Send to agent (2026-11-10)
 
     def test_an_obvious_move_is_silent_whatever_the_model_dropped(self):
         s = MemoryStore(); t = self._stopped_task(s)
@@ -25,7 +25,7 @@ class StatusTests(_Rail):
             s._exec('DELETE FROM advice')
             advisor._write(s, target_kind='task', target_id=t, key=f'task:{t}', event=advisor.SHOWN, revision=rev, dropped=dropped)
             with mock.patch.object(advisor, 'notice'): got = advisor.status(s, f'task:{t}')
-            self.assertEqual((got['verb'], 'none' in got), (None, False), dropped)      # a plain stop lights nothing
+            self.assertEqual((got['verb'], 'none' in got), ('continue', False), dropped)  # a stop with work unfinished lights Continue (2026-11-10)
 
     def test_an_agent_at_work_lights_nothing_no_model_is_asked_and_the_switch_is_the_advisors_alone(self):
         from taskuary import workerstate as ws
@@ -54,4 +54,4 @@ class StatusTests(_Rail):
         s = MemoryStore(); t = self._asked_task(s)
         with mock.patch.object(server, 'store', s), mock.patch.object(advisor, 'notice'):
             got = TestClient(server.app).get('/api/advice', params={'key': f'task:{t}'}).json()
-        self.assertEqual((got['verb'], got['label'], got['line'], got['state'], got['by']), (None, '', '', 'asked', 'agent'))
+        self.assertEqual((got['verb'], got['label'], got['line'], got['state'], got['by']), ('regular_agent', 'Send to agent', '', 'asked', 'agent'))

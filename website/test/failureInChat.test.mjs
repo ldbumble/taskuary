@@ -62,3 +62,13 @@ test("an edit that failed and was then made reads recovered, never red, and the 
   assert.deepEqual(turn.parts.map((p) => p.type), ["work", "edit"]);
   assert.equal(turn.parts[0].steps[0].status, "recovered");
 });
+
+test("a note Taskuary typed into an ACP session before it marked its notes is its line, never the owner's", () => {
+  const told = "The owner approved it and Taskuary ran `gh pr comment 12 --body ok` in C:/work/ledger. It said: https://github.com/northwind/ledger/pull/12. Carry on.";
+  const steps = stepsFromAcp([
+    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "Answer the review comment" } },
+    { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Drafted." } },
+    { sessionUpdate: "user_message_chunk", content: { type: "text", text: told } },
+  ]);
+  assert.deepEqual(steps.map((s) => s.k), ["you", "said", "brief"]);
+});

@@ -2127,10 +2127,12 @@ def task_detail(task_id: int):
         r['Signature'] = signatures.for_review(store, r, here.get(r.get('MessageId')), memo=sigs)     # what goes under it: the reply box shows it
     # the owner's own mail has nobody behind it to answer (wrapup.from_owner): the page's Reply doors read this, never a guess
     from .ingest import own_addresses, row_recipients
-    from .wrapup import from_owner
+    from .wrapup import from_owner, reads_reply_row
     me, memo = own_addresses(store), {}
     for m in d.get('messages') or []:
         m['FromOwner'] = from_owner(store, m, me)
+        # ...and whether ANYBODY reads a reply to it - a person, not the owner nor a machine (wrapup.reads_reply_row): the page's Reply doors read it
+        m['ReadsReply'] = reads_reply_row(store, m, me)
         # ...and whom it went to, by name - Came from showed only the sender (the owner, 2026-11-03: "we should be able to see who else was on email")
         if (rc := row_recipients(store, m, me, memo)): m['Recipients'] = rc
     from . import batch as _batch
@@ -4016,6 +4018,11 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     if no_one_behind(m.get('Channel')):
         raise HTTPException(422, 'nobody sent this, so there is nobody to answer - work it, or write '
                                  'what you found on the task itself')
+    # ...nor did a person send a machine's notice (the owner, 2026-11-10: "reply by itself makes no sense on github"): the same words the row's
+    # missing Reply would say (concierge.cannot), so a door pressed from an old page puts nothing on the table
+    from .categories import automated
+    from . import concierge
+    if automated(m): raise HTTPException(422, concierge.cannot({'mid': mid, 'title': m.get('Subject') or 'this message'}, 'reply', store))
     later = body is not None and body.later
     # THE OWNER'S OWN MAIL A PROMISE WAS MADE IN is answered on the promise's task (store.promised_in): the mail sits on its thread's
     # task, whose newest inbound line is somebody else's ask - the reply that keeps the promise goes to whom it was made to

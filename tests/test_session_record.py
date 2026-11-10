@@ -313,6 +313,15 @@ def test_a_resumed_conversation_is_each_session_with_its_own_turns_never_the_log
     assert recs == {'pane-1': ['Why did March double?', 'The cursor resets.'], 'pane-2': ['Now fix it.', 'Fixed.']}
 
 
+def test_a_note_taskuary_typed_before_it_marked_its_notes_is_its_brief(home):
+    """2026-11-10: a coding chat showed "You - The owner approved it and Taskuary ran `gh pr comment 12` ..." - an approval typed into the session
+    the day before notes were marked. Its fixed opening, Taskuary's own words, makes it Taskuary's line."""
+    s = MemoryStore(); tid = Factory(s).task(title='Answer the review')
+    told = 'The owner approved it and Taskuary ran `gh pr comment 12 --body ok` in C:/work/ledger. It said: https://github.com/northwind/ledger/pull/12. Carry on.'
+    steps = sessionrecord.mark_briefs(tid, [{'k': 'you', 'text': 'Answer the review comment'}, {'k': 'you', 'text': told}])
+    assert [x['k'] for x in steps] == ['you', 'brief']
+
+
 def test_sessions_come_newest_first_each_with_its_own_report(home):
     s = MemoryStore(); tid = Factory(s).task(title='Two runs')
     s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)",

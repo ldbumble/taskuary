@@ -65,8 +65,9 @@ test("the first screen has one headline count, and reports and FYI stay on the r
 });
 
 test("the empty pile's setup chip is not a second 'set up' (U14), and the set-up ask names coding only with a coding tool", () => {
-  assert.match(view, /\{ verb: "tour", label: "Change my setup" \}/);
-  assert.match(view, /nothing changes until you say so\."\n\s+\+ \(canCode \?/);
+  assert.match(view, /\{ verb: "tour", label: "Change my setup", bar: true \}/);
+  // ...and no Set something up beside it: the empty rail's New is the sidebar's own door, and leads there (the owner, 2026-11-10)
+  assert.doesNotMatch(view, /label: "Set something up"/);
   assert.doesNotMatch(view, /no repository is touched/);
 });
 

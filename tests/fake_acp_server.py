@@ -7,6 +7,7 @@ only knows how to match replies to its own requests hangs here - which is the po
 
 Set in its environment, for the tests that need more:
   FAKE_ACP_FAIL=init     it dies at initialize, as an adapter that cannot start does
+  FAKE_ACP_SPAWN=<secs>  it takes that long to start before it reads anything, as npx fetching an adapter does
   FAKE_ACP_FAIL=turn     its first turn answers with an error after a word, as an overloaded model's does
   FAKE_ACP_RESUME=1      it offers session/resume (no replay) beside session/load
   FAKE_ACP_ASK=<command> the permission it asks for is to run that shell command (kind execute)
@@ -71,6 +72,7 @@ def options():
             sel('effort', 'thought_level', ['low', 'high'])]
 
 
+if os.environ.get('FAKE_ACP_SPAWN'): __import__('time').sleep(float(os.environ['FAKE_ACP_SPAWN']))
 for line in sys.stdin:
     line = line.strip()
     if not line: continue

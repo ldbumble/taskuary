@@ -273,6 +273,9 @@ def _preview(store, r: dict):
 def from_feed(store, rows: list, *, canonical=False) -> list:
     out, agents, reviews, threads = [], set(), set(), {}
     speaks, more = thread_speaker(rows), {}
+    from .ingest import own_addresses
+    from .wrapup import reads_reply_row
+    own = own_addresses(store)
     for r in rows:
         if not canonical and _feed_skip(r): continue
         # Generated Assistant reports carry durable ideas. Those ideas are produced below as the
@@ -299,7 +302,9 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                     # the mail's own subject beside triage's title, and the danger triage read in it (message.Danger) - shown, never a gate
                     subject=_short(r.get('Subject') or '', 140), danger=_short(r.get('Danger') or '', 200) or None,
                     # ...and whom it is aimed at, the owner or the agent: a scam on the owner is said as one (the owner, 2026-10-30)
-                    danger_aim=(r.get('DangerAim') or 'agent') if r.get('Danger') else None)
+                    danger_aim=(r.get('DangerAim') or 'agent') if r.get('Danger') else None,
+                    # ...and whether anybody reads a reply to it: a card's own Reply stands only then (wrapup.reads_reply_row, the owner 2026-11-10)
+                    replies=reads_reply_row(store, r, own))
         subj = says(r)
         if r.get('MsgStatus') == 'triaging':
             # A RANKED ARRIVAL WAITING ITS TURN IS NOT BEING TRIAGED (the owner, 2026-09-28: "they should be ranked

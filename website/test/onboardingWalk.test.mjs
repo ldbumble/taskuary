@@ -176,8 +176,9 @@ test("setting something up and walking the app are two different doors", () => {
   const at = view.lastIndexOf("Run a report or routine");
   const chip = view.slice(view.lastIndexOf("<button", at), at);
   assert.ok(chip.includes('onClick={() => onNavigate?.("Reports")}'), "it opens Reports");
-  assert.match(view, /const askSetup = \(\) =>/);
-  assert.match(view, /kind: "setup"/, "and the card it pushes still exists");
+  // ...and setting something up is the sidebar's New, on the empty rail's bar (the owner, 2026-11-10: "even these should just be shortcut to new")
+  assert.match(view, /\{ verb: "newtask", label: NEW_DOOR\.label/);
+  assert.match(view, /if \(c\.verb === "newtask"\) \{ browseRef\.current\?\.\("new", \{\}\); return; \}/, "the same New the sidebar opens");
 });
 
 // Rows 2 and 4 both read "Connections" and went to the AI CLI agents page and the connector list.

@@ -96,7 +96,11 @@ def waiting(store, tid: int, t=None) -> list:
     out = [{'id': f"w{x['WId']}", 'text': parts(x.get('Note'))[0], 'at': x.get('CreatedAt')} for x in store.waiting_notes(int(tid))
            if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)]
     held = list(getattr(t, '_q', None) or []) if t is not None else []
-    return out + [{'id': f'q{i}', 'text': w, 'at': None} for i, (_t, _b, shown, _d) in enumerate(held) for w in shown]
+    # ...and the owner's words a reopening's first prompt leads with ("FROM THE OWNER: ..." - Continue, a line typed on a session that ended):
+    # held until its adapter is up, ten seconds and more, they were on no screen but the one that sent them (the owner, 2026-11-10)
+    from .outcomes import owner_split
+    lines = lambda text, brief, shown: shown or ([w] if brief and (w := owner_split(text)[0]) else [])
+    return out + [{'id': f'q{i}', 'text': w, 'at': None} for i, (_t, _b, shown, _d) in enumerate(held) for w in lines(_t, _b, shown)]
 
 
 # ...each step's time in the server's own zone, as every stamp the page reads (store.norm_stamp): a CLI log stamps UTC, and the turn read

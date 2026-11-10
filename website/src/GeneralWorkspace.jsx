@@ -922,9 +922,12 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     const read = () => { if (settled(runtime.thread.getState().messages, sent)) setSent(null); };
     read(); return runtime.thread.subscribe(read);
   }, [sent, runtime]);
-  useEffect(() => { if (!sent) { wasBusy.current = false; return; } if (serverBusy) wasBusy.current = true; else if (wasBusy.current) setSent(null); }, [sent, serverBusy]);
+  // ...a turn already at work when the line went (a line typed mid-turn) is not the one it asked for: only its end, then a turn started since, counts
+  useEffect(() => { if (!sent) { wasBusy.current = false; return; }
+    if (!serverBusy && sent.busy) setSent((x) => (x ? { ...x, busy: false } : x));
+    else if (serverBusy && !sent.busy) wasBusy.current = true; else if (!serverBusy && wasBusy.current) setSent(null); }, [sent, serverBusy]);
   // ...and a press nothing ever took up stops claiming the agent is coming
-  useEffect(() => { if (!sent) return undefined; const t = setTimeout(() => { if (!wasBusy.current) setSent(null); }, 30000); return () => clearTimeout(t); }, [sent]);
+  useEffect(() => { if (!sent) return undefined; const t = setTimeout(() => { if (!wasBusy.current && !sent.busy) setSent(null); }, 30000); return () => clearTimeout(t); }, [sent]);
   // WHAT A RESTART PUT BACK IN THE BOX (general.to_box, the owner 2026-11-07): lines no turn took are the owner's again to send, change or
   // clear - never sent for them. Into an empty box, once per text; sending anything from the box ends the offer (general.box_sent)
   const boxed = useRef("");
@@ -972,6 +975,10 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     if (files.length) onClearAttachments(files.map((a) => a.path));
     // ...sent UNDER ITS NAME where the road is the chat's own: the conversation has this line when it has the name, whatever else arrived (heldLines.lineOf)
     setHeld((h) => [...h, { id, text: w || withImages("", files.map((a) => a.path)), after, drawn: mineDrawn.length, named: !road }]);
+    // ...AND THE AGENT'S TURN UNDER IT FROM THE PRESS, ON EVERY ROAD (the owner, 2026-11-10: "NOthing should ever show above a new promt and the agnt
+    // thing should show right away working"): only an answer to its question set it, so a line typed to a coding agent at rest stood under the
+    // working line the server drew a beat later, and through a start of ten seconds and more nothing said it was being worked on
+    setSent(sentNow(runtime.thread.getState().messages, Date.now(), busyNow.current));
     (road ? road(w, files.map((a) => a.path)) : api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id }, { timeout: 0 }))
       .catch((x) => { setHeld((h) => h.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))); if (files.length) onAttachBack(files); });
   };
@@ -988,7 +995,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const sentWork = sent && !dock ? <AtWork name={name} provider={provider} work={work} since={sent.at} began={serverBusy ? began : null} compacting={compacting}
     starting={serverBusy ? starting : starting || startingLine(name, provider)} /> : atWork;
   const footLines = [...waitingShown(waiting, held, mineDrawn, messages).map((w) => ({ id: `waiting-${w.id}`, text: w.text, at: w.at })), ...notShown(held, mineDrawn)];
-  const atFoot = !!sent && footLines.length > 0;
+  // ...the turn a line asked for stands UNDER that line, wherever the line is drawn - never over it (the owner, 2026-11-10)
+  const atFoot = footLines.length > 0;
   return (
     <AssistantRuntimeProvider runtime={runtime}><LandingCtx.Provider value={landAt && !dock ? { after: landAt, node: landNode } : null}><TurnCardsCtx.Provider value={dock ? [] : placed}>
       <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>
@@ -1062,7 +1070,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             {/* ...under the owner's own head, as every line of theirs is - "you" in grey read as somebody else's (the product audit, 2026-11-08) */}
             <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{l.at ? ` · ${when(l.at)}` : ""}</div>
             <div className="tq-aui-user-bubble" dir="auto">{l.text}</div>
-            {l.err ? <div className="tq-aui-hint" role="alert">{l.err}</div> : !atFoot && <div className="tq-aui-hint" data-tq-waiting="">Waiting for the agent</div>}</div>)}
+            {l.err ? <div className="tq-aui-hint" role="alert">{l.err}</div> : !(sent || serverBusy) && <div className="tq-aui-hint" data-tq-waiting="">Waiting for the agent</div>}</div>)}
           {/* ...and the turn its answer asked for, under it (PendingTurn `foot`) */}
           {atFoot && <ThreadPrimitive.If running={false}><PendingTurn busy={serverBusy} sent={sent} foot atFoot>{sentWork}</PendingTurn></ThreadPrimitive.If>}
           {/* ...a chat no turn has summed up yet: its cards (TaskPage's chatCards), under the thread */}

@@ -5012,6 +5012,19 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
                 learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway, fields=body.fields,
                 blanks_ok=body.blanks_ok, bcc=body.bcc, subject=body.subject)
 
+class StepsBody(BaseModel):
+    ids: list[int]; verb: str = 'approve'
+@app.post('/api/reviews/steps')
+def decide_steps(body: StepsBody):
+    """ONE APPROVE FOR A TURN'S HELD STEPS (the owner, 2026-11-09: "one action button and one card"): each step through the one decide door
+    (verdicts.decide), in order, stopping at the first that fails - shellgate.approve_steps. Dismiss dismisses them all."""
+    from . import shellgate
+    from .verdicts import decide as land
+    if body.verb not in ('approve', 'reject'): raise HTTPException(422, 'bad verb')
+    try: out = shellgate.approve_steps(store, body.ids, land, ACTOR, body.verb)
+    except ValueError as e: raise HTTPException(422, str(e))
+    return out
+
 @app.get('/api/reviews/{rid}/closeout')
 def closeout_state(rid: int):
     """What the close-out card should offer RIGHT NOW, read from GitHub (ghcloseout.assess): the pull request's state

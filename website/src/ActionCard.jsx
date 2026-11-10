@@ -84,11 +84,11 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
             <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}</Typography></>
           : st.live ? <>
             <Button size="small" variant="contained" disableElevation data-tq-act-press="" disabled={!!busy || !text.trim() || !!over} onClick={() => decide("approve")}
-              title={hint("approve", post ? "post" : "action")} startIcon={busy === "approve" ? <CircularProgress size={12} color="inherit" /> : null}>
+              title={act.note || hint("approve", post ? "post" : "action")} startIcon={busy === "approve" ? <CircularProgress size={12} color="inherit" /> : null}>
               {busy === "approve" ? w.busy : w.press}</Button>
             <Button size="small" disabled={!!busy} onClick={() => decide("reject")} data-tq-act-dismiss="">Dismiss</Button>
-            {over ? <Typography sx={{ fontSize: 11.5, color: ALERT_INK }}>{text.length} of {max} characters</Typography>
-              : act.note && <Typography sx={{ fontSize: 11.5, color: FAINT }}>{act.note}</Typography>}</>
+            {/* ...its note ("Nothing is posted until you press it") is the button's hover, not a grey line under every card (the owner, 2026-11-09) */}
+            {over && <Typography sx={{ fontSize: 11.5, color: ALERT_INK }}>{text.length} of {max} characters</Typography>}</>
           : <Typography sx={{ fontSize: 12.5, color: FAINT }}>{st.said}</Typography>}
       </Box>
       {err && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}>{err}</Typography>}

@@ -59,7 +59,7 @@ test("a held act waits on the live canvas, and the sign-in ask never invites the
   const gw = src("GeneralWorkspace.jsx");
   // ...on the browser view when it is on screen (BrowserPane's Approve / Dismiss, 2026-10-28), else its card in the chat
   assert.match(gw, /acts=\{actsHere\}/);
-  assert.match(gw, /const actsHere = viewShown \? \(data\?\.browserActs \|\| \[\]\)\.filter\(\(r\) => !heldOn\(r, session\?\.sid\)\) : data\?\.browserActs \|\| \[\];/);
+  assert.match(gw, /const actsHere = \(viewShown \? \(data\?\.browserActs \|\| \[\]\)\.filter\(\(r\) => !heldOn\(r, session\?\.sid\)\) : data\?\.browserActs \|\| \[\]\)\.filter\(\(r\) => proposalFrom\(r\)\?\.action !== "shell_act"\);/);
   assert.match(gw, /data-tq-browser-acts=""/);
   assert.match(gw, /acts\.map\(\(r\) => <ReviewDecision key=\{r\.ReviewId\} review=\{r\} onChanged=\{onDraftDecided\} \/>\)/);
   assert.match(gw, /startsWith\("signin:"\) \? "Message the agent - never your password" : "Answer the agent's question…"/);

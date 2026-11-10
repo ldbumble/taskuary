@@ -595,6 +595,12 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     ) : null;
   }
 
+  const ccAdd = <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.5, flexWrap: "wrap" }}>
+    <CcRow cc={ccNow} setCc={setCc} channel="email" />
+    {!bccOpen && !bccNow.length && <Typography {...pressable(() => setBccOpen(true))} data-tq-add-bcc=""
+      sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>Add BCC</Typography>}
+  </Box>;
+  const ccInline = isEmail && !proposal && !isCal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" && !(busy || delivery.frozen) && !ccNow.length && !bccNow.length && !bccOpen;
   return (
     <Box sx={{ mt: 0.5 }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1 }}>{err}</Alert>}
@@ -633,8 +639,11 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       {meta.share?.report != null && <SharedDashboard report={meta.share.report} title={meta.share.title} />}
       {newMeeting && !delivery.frozen && r.Status === "pending" && <SubjectRow subject={subjNow} onChange={setSubj} disabled={off} />}
       {isCal ? <CalendarLine meta={meta} /> : !proposal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" ? (
+        // ...To, and Add CC / Add BCC beside it while nobody is copied: one line, not three (the owner, 2026-11-09: "check all the cards are compacted")
+        <Box data-tq-to-line="" sx={ccInline ? { display: "flex", alignItems: "baseline", columnGap: 2, flexWrap: "wrap" } : undefined}>
         <ToRow to={replyContext(filedDelivery)} disabled={off || delivery.frozen} needs={needsTo} who={String(meta.needs || [].concat(meta.to || []).join(", "))}
           onSave={async (to) => { await api.put(`/api/reviews/${r.ReviewId}/envelope`, { to }); onChanged?.(); }} />
+        {ccInline && ccAdd}</Box>
       ) : (
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
         <Typography sx={{ ...label, flexShrink: 0 }}>{proposal?.destinationLabel || "To"}</Typography>
@@ -656,11 +665,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           CC: {ccNow.length ? ccNow.join(", ") : "none"}{bccNow.length ? ` · BCC: ${bccNow.join(", ")}` : ""}{subjNow ? ` · ${subjNow}` : ""}
         </Typography>
       ) : <>
-        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.5, flexWrap: "wrap" }}>
-          <CcRow cc={ccNow} setCc={setCc} channel="email" />
-          {!bccOpen && !bccNow.length && <Typography {...pressable(() => setBccOpen(true))} data-tq-add-bcc=""
-            sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>Add BCC</Typography>}
-        </Box>
+        {!ccInline && ccAdd}
         {(bccOpen || bccNow.length > 0) && <CcRow cc={bccNow} setCc={setBcc} channel="email" label="BCC" />}
         <SubjectRow subject={subjNow} onChange={setSubj} disabled={off} />
       </>)}

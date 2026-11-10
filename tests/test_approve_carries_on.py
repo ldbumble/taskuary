@@ -52,11 +52,16 @@ class HeldStep(unittest.TestCase):
 
     def test_the_press_is_an_event_with_its_result_and_no_owner_line(self):
         self.approve(SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: None))
+        self.assertEqual(general.press_lines(self.s, self.tid), [], 'until the owner writes again it is the pressed card in the turn, not a line')
+        owner = [c for c in self.s.list_comments(self.tid, internal=True) if c.get('ActorType') == general.USER_TYPE and c.get('Actor') != general.BRIEF_ACTOR]
+        self.assertEqual(owner, [], 'nothing drawn as typed by the owner')
+        self.s._exec("INSERT INTO comment (TaskId, Actor, ActorType, Body, CreatedAt) VALUES (?, 'owner', ?, 'Thanks - now the changelog', '2000-01-01')",
+                     (self.tid, general.USER_TYPE))      # ...an owner line whose time is before the press: still the card
+        self.assertEqual(general.press_lines(self.s, self.tid), [])
+        self.s._exec("UPDATE comment SET CreatedAt='2999-01-01' WHERE Body='Thanks - now the changelog'")    # ...the owner wrote again: a line
         [p] = general.press_lines(self.s, self.tid)
         self.assertTrue(p['press']); self.assertTrue(p['content'][0]['text'].startswith('You approved: '), p)
         self.assertEqual(p['result']['url'], SAID); self.assertIn('gh pr comment 12', p['result']['command'])
-        owner = [c for c in self.s.list_comments(self.tid, internal=True) if c.get('ActorType') == general.USER_TYPE and c.get('Actor') != general.BRIEF_ACTOR]
-        self.assertEqual(owner, [], 'nothing drawn as typed by the owner')
         kept = json.loads(self.s.get_review(self.rv['ReviewId'])['FinalText'])
         self.assertEqual(kept['result']['said'], SAID, 'the card keeps what it did, to read as its result')
 

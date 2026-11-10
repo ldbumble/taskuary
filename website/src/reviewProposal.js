@@ -238,3 +238,38 @@ export const resultOf = (review) => {
   const what = String(p.about || p.what || r.performed || r.commented || r.closed || r.merged || "").trim();
   return { said: `Approved · ${VERB[p.action] || "done"}`, what, url, command: String(p.command || "") };
 };
+
+// ONE CARD FOR A TURN'S HELD STEPS (the owner, 2026-11-09: "this should be one action button and one card. make it smaller and more
+// combined"): the shell steps one agent turn had held (shellgate.turn_of - the owner's last line when it held them) are one action. One title,
+// why it waits said once, the folder once, the steps numbered, every command under one "Show the commands", one Approve that runs them in order
+// (/api/reviews/steps) and one Dismiss. A step held after the owner wrote again is another turn's card. Each item: { key, reviews }
+const isHeldStep = (r) => proposalFrom(r)?.action === "shell_act";
+const turnKey = (r) => { const p = proposalFrom(r); return p?.turn == null ? `rv${r.ReviewId}` : `${r.TaskId}|${p.sid || ""}|${p.turn}|${p.where || p.cwd || ""}`; };
+export const heldGroups = (rows) => {
+  const out = [], at = new Map();
+  for (const r of rows || []) {
+    if (!isHeldStep(r)) { out.push({ key: `rv${r.ReviewId}`, reviews: [r] }); continue; }
+    const k = turnKey(r);
+    if (at.has(k)) at.get(k).reviews.push(r); else { const g = { key: `held:${r.ReviewId}`, held: true, reviews: [r] }; at.set(k, g); out.push(g); }
+  }
+  return out;
+};
+// ...what the card says: its title, the one why, the folder, each step's words and state, and how its press ended
+export const heldCard = (reviews) => {
+  const rs = [...(reviews || [])].sort((a, b) => a.ReviewId - b.ReviewId), ps = rs.map((r) => proposalFrom(r) || {});
+  const n = rs.length, lead = (p) => heldLead(p).lead;
+  const whys = [...new Set(ps.map((p) => p.why || "it leaves this computer"))];
+  const steps = rs.map((r, i) => ({ id: r.ReviewId, text: lead(ps[i]), command: String(ps[i].command || ""),
+    state: r.Status === "pending" ? "waiting" : ["approved", "edited"].includes(r.Status) ? "ran" : "dismissed", result: resultOf(r) }));
+  const waiting = steps.filter((s) => s.state === "waiting"), ran = steps.filter((s) => s.state === "ran");
+  const pressed = waiting.length ? null : ran.length ? "approved" : "dismissed";
+  return { title: n > 1 ? `${lead(ps[0])} - ${n} steps` : lead(ps[0]), why: `Held before it ran - ${whys.join("; ")}.`,
+    folder: ps[0].where || ps[0].cwd || "the agent's folder", steps, waiting: waiting.map((s) => s.id), pressed,
+    said: pressed === "approved" ? (n > 1 ? `${ran.length} of ${n} ran` : "it ran") : pressed === "dismissed" ? "nothing was run" : ran.length ? `${ran.length} of ${n} ran - the rest wait` : "",
+    url: ran.map((s) => s.result?.url).filter(Boolean).at(-1) || "" };
+};
+// ...and once pressed it stays in the turn, pressed, until the owner writes again (general.press_lines draws it as a line from then on)
+export const keptHeld = (reviews, comments) => {
+  const last = (comments || []).filter((c) => c.ActorType === "assistant_user").map((c) => String(c.CreatedAt || "")).sort().at(-1) || "";
+  return (reviews || []).filter((r) => isHeldStep(r) && r.Status !== "pending" && String(r.DecidedAt || "") > last);
+};

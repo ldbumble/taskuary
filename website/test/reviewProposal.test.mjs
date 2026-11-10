@@ -171,6 +171,6 @@ test("a held shell step leads with what it does and why, its command folded", ()
 
 test("the section says Also waiting on you only under something else that waits", () => {
   const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /\$\{asksBelow \? "Also waiting on you" : "Waiting on you"\}\$\{asks\.length > 1 \? ` · \$\{asks\.length\}` : ""\}/);
+  assert.match(page, /\$\{asksBelow \? "Also waiting on you" : "Waiting on you"\}\$\{liveAsks > 1 \? ` · \$\{liveAsks\}` : ""\}/);
   assert.match(page, /const asksBelow = !!\(pendingReview \|\| moreDrafts\.length \|\| owesEmails/);
 });

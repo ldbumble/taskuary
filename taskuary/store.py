@@ -2015,9 +2015,11 @@ class SQLiteStore:
             # data heal: dbs written before review dedupe can hold stacked pending reviews
             # of the same kind on one task - keep the newest, supersede the rest. NOT a task's emails (slots.py): several
             # pending at once is what they are, and every start retired all but the newest (TQ-0957, 2026-10-05). Nor a reply to
-            # ANOTHER PERSON on the same task: an agent's reply to one requester and one to a second are two letters (2026-11-02)
+            # ANOTHER PERSON on the same task: an agent's reply to one requester and one to a second are two letters (2026-11-02). Nor
+            # a task's PROPOSALS: one turn's two held pushes are two steps of one act, and every open of the store retired all but the last
+            # (2026-11-09, the one-card walk: the merge vanished, its push stood alone)
             self.cx.execute("""UPDATE review SET Status='superseded'
-                               WHERE Status='pending' AND Kind<>'slot' AND ReviewId NOT IN (
+                               WHERE Status='pending' AND Kind NOT IN ('slot','action') AND ReviewId NOT IN (
                                    SELECT MAX(rv.ReviewId) FROM review rv LEFT JOIN message m ON m.MessageId=rv.MessageId
                                    WHERE rv.Status='pending'
                                    GROUP BY rv.TaskId, rv.Kind, lower(IFNULL(m.FromEmail, IFNULL(m.FromName, ''))))""")

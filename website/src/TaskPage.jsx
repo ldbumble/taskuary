@@ -51,6 +51,7 @@ import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDe
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision from "./ReviewDecision.jsx";
+import HeldSteps from "./HeldSteps.jsx";
 import SlotList from "./SlotList.jsx";
 import BatchItems from "./BatchItems.jsx";
 import { progress as batchProgress } from "./batchItems.js";
@@ -105,7 +106,7 @@ import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
   AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
-import { closeoutOf } from "./reviewProposal.js";
+import { closeoutOf, heldGroups, keptHeld } from "./reviewProposal.js";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
 import LandingCard from "./LandingCard.jsx";
@@ -2711,6 +2712,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // went out, the proposals - drawn once, in the agent's newest summary (AgentSummary's Next steps) or under the chat's thread
   // ...an act with its card (a post, a tracker comment) is drawn in the turn that set it up (GeneralWorkspace, ActionCard) - never here again
   const asks = proposals.filter((p) => !isCardReview(p));
+  // ...a turn's held steps are ONE card, and a pressed one stays in the turn, pressed (heldGroups, keptHeld; the owner, 2026-11-09)
+  const kept = keptHeld(allReviews, detail?.comments), askCards = heldGroups([...kept, ...asks].sort((a, b) => a.ReviewId - b.ReviewId));
+  const liveAsks = askCards.filter((g) => g.reviews.some((r) => r.Status === "pending")).length;
   const asksBelow = !!(pendingReview || moreDrafts.length || owesEmails || (handInPane && handoff) || calAsk?.invite);
   const chatBody = () => <>
       {/* HAND IT TO A PERSON, IN THE CHAT (the owner, 2026-10-29: "you click the button and the matching UI opens in its pane"): on
@@ -2729,7 +2733,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           replaces this block in place - or, if it stopped, that it did, with Try again and the reply button */}
       {upFailed && <WriteupBlock view={writeup} hasReply={!!replyMessage} onRetry={canWrap || pressedHere ? wrapUp : null}
         onDraft={() => openReply(true)} draftLabel={replyPrimary} />}
-      {!writeup && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
+      {!writeup && ((pendingReview || proposals.length || kept.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
         <Box sx={{ mt: 0.5 }}>
           {/* THE INVITE, AND WHAT IT CLASHES WITH (calwrite.of_task), over the row's Accept / Decline / Propose a new time */}
           {calAsk?.invite && <Typography data-tq-invite="" variant="body2" sx={{ mb: 1, color: INK }}>{calAsk.line}
@@ -2888,16 +2892,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               taking a fourth stage: lanes.json has one `approve` lane for a reply and an
               action alike, and one lane on the rail is one section on the page. */}
           {/* ...in the chat an act with its card is drawn in the turn that set it up (GeneralWorkspace, ActionCard) - never a second time here */}
-          {asks.length > 0 && (
-            <Box sx={{ mt: 1.4, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
-              <Typography sx={{ ...label, display: "block", mb: 0.5 }}>
-                {/* ..."Also" only under something else waiting above it (the owner, 2026-11-09: one stale ask read "Also" over nothing) */}
-                {`${asksBelow ? "Also waiting on you" : "Waiting on you"}${asks.length > 1 ? ` · ${asks.length}` : ""}`}
-              </Typography>
-              {asks.map((p) => (
-                <ReviewDecision key={p.ReviewId} review={p} toRow={inRow && !pendingReview && proposals.length === 1}
+          {askCards.length > 0 && (
+            <Box sx={{ mt: 1.4, pt: liveAsks ? 1.1 : 0, borderTop: liveAsks ? `1px solid ${BORDER}` : 0 }}>
+              {/* ..."Also" only under something else waiting above it (the owner, 2026-11-09: one stale ask read "Also" over nothing) */}
+              {liveAsks > 0 && <Typography sx={{ ...label, display: "block", mb: 0.5 }}>
+                {`${asksBelow ? "Also waiting on you" : "Waiting on you"}${liveAsks > 1 ? ` · ${liveAsks}` : ""}`}
+              </Typography>}
+              {askCards.map((g) => g.held
+                ? <HeldSteps key={g.key} reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1}
+                    onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
+                : <ReviewDecision key={g.key} review={g.reviews[0]} toRow={inRow && !pendingReview && proposals.length === 1}
                   onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
-              ))}
+              )}
             </Box>
           )}
         </Box>
@@ -2908,7 +2914,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const waits = !!(pendingReview || moreDrafts.length || proposals.length || owesEmails || handoff);
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
-  const chatCards = sentHere ? <SentHere {...sentHere} /> : !["done", "dropped"].includes(t?.Status) && (waits || upFailed
+  const chatCards = sentHere ? <SentHere {...sentHere} /> : !["done", "dropped"].includes(t?.Status) && (waits || kept.length || upFailed
     || chatReplyShown({ replyMessage, pendingReview, sentReview: null, unsentReview: null }) || calAsk?.invite) ? <Box ref={cardsRef} data-tq-chat-cards="" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{chatBody()}</Box> : null;
   return (

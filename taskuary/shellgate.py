@@ -28,7 +28,7 @@ is held is a delete tool by name (rm, del, Remove-Item, rmdir... and the .NET / 
 folder: its working folder and the temp folder are its to tidy, everything else is the owner's. A target it cannot read - a variable set
 somewhere else, a pipe into Remove-Item - is held, never let through for being hard to read.
 """
-import json, ntpath, os, re, shlex, shutil, subprocess, tempfile
+import contextvars, json, ntpath, os, re, shlex, shutil, subprocess, tempfile
 from loguru import logger
 from .browsergate import _segments, _deny, _tell, NEXT
 
@@ -38,7 +38,8 @@ HELD = 'Taskuary held this for the owner'
 HOLD_LINE = ("A DELETE ON THE OWNER'S COMPUTER outside your working folder, and a step that leaves the machine (a push, a merge, a publish, "
              "a mail from a script), is HELD for the owner's press: Taskuary refuses it with \"held for the owner\", puts it on the task, runs "
              "it once they approve and tells you what happened. So never ask the owner in words whether to delete - run the command, end your "
-             "turn when it is held, and say what waits for their Approve. Draft no reply that says it is done while it waits: the reply is "
+             "turn when it is held, and say in one line what waits for their Approve. The held step IS the owner's button: never ask \"will you "
+             "run these\", never print the commands for them to copy. Draft no reply that says it is done while it waits: the reply is "
              "written once Taskuary tells you the step ran.")
 ASKS = {'claude'}       # the CLIs whose PreToolUse hook can answer `ask` with their own prompt (measured: Claude 2.1.312 honours it)
 # each tool's own words for a step that goes out, as (what it does, in the owner's words): its subcommand, or (subcommand, action)
@@ -323,14 +324,22 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
                                        'permissionDecisionReason': f'Taskuary asks you first: {what} ({why}).'}}
     if not _pending(store, tid, sid, cmd):
         from . import proposals
-        proposals.queue(store, tid, {'action': 'shell_act', 'sid': str(sid), 'command': str(cmd)[:4000], 'shell': shell, 'cwd': cwd or '',
+        proposals.queue(store, tid, {'action': 'shell_act', 'sid': str(sid), 'turn': turn_of(store, tid), 'command': str(cmd)[:4000], 'shell': shell, 'cwd': cwd or '',
                                      # the card's In: the folder a delete aims at, never the agent's own scratch folder it ran from
                                      'what': what, 'why': why, 'where': next((a['where'] for a in todo if a.get('where')), ''),
                                      **({'about': ' '.join(str(about).split())[:300]} if str(about or '').strip() else {})}, 'agent')
         store.audit('task', tid, 'shell_act_held', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
-    return _deny(f"{HELD}: {what} ({why}). It is on the task for the owner to approve; once they do, Taskuary runs this "
-                 "exact command in the same folder and tells you what happened. Do not try it another way. End your turn now, or go on "
+    return _deny(f"{HELD}: {what} ({why}). It is on the task as the owner's Approve button; once they press it, Taskuary runs this "
+                 "exact command in the same folder and tells you what happened. Do not try it another way. The button is the ask: say in one "
+                 "line what it waits on - never ask them to run it, never print the command for them to copy. End your turn now, or go on "
                  "with work that does not need it.")
+
+
+def turn_of(store, tid) -> int:
+    """WHICH TURN HELD IT (the owner, 2026-11-09: "this should be one action button and one card"): the owner's last line on the task. Steps
+    held under the same line are one action - one card, one Approve; a step held after the owner wrote again is a new card."""
+    from .general import USER_TYPE
+    return max((c['CommentId'] for c in store.list_comments(tid, internal=True) if c.get('ActorType') == USER_TYPE), default=0)
 
 
 def git_bash() -> str:
@@ -388,12 +397,43 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     rc, said = (run or go)(_argv(p.get('shell') or 'Bash', cmd), cwd)
     if rc != 0: raise RuntimeError(failed(said, rc))
     said = ' '.join(str(said or '').split())[-600:]
-    _tell(store, tid, f"The owner approved it and Taskuary ran `{cmd[:300]}` in {cwd or 'its folder'}. It said: {said[-300:] or 'done'}. "
+    if (told := _batch.get()) is not None: told.append(f"`{cmd[:300]}` said: {said[-200:] or 'done'}")
+    else: _tell(store, tid, f"The owner approved it and Taskuary ran `{cmd[:300]}` in {cwd or 'its folder'}. It said: {said[-300:] or 'done'}. "
                     + NEXT)
     store.audit('task', tid, 'shell_act_done', 'owner', 'human', {'what': p.get('what'), 'about': p.get('about'), 'command': cmd[:300], 'said': said[-300:]})
     return {'performed': p.get('what') or cmd[:200], 'said': said[-300:]}
 
 
+# ONE APPROVE FOR A TURN'S HELD STEPS (approve_steps): each step is approved through the one decide door, in order; the agent hears once, at the end
+_batch = contextvars.ContextVar('shellgate_batch', default=None)
+
+def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = 'approve') -> dict:
+    """The owner's one Approve on a held-steps card: each review, in the order given, through `decide` (verdicts.decide - the same checks a
+    single Approve gets: pending, re-validated, run by perform). Stops at the first that does not go and says which; the rest stay waiting.
+    `verb` 'reject': the card's one Dismiss - every step dismissed, the agent told once."""
+    rvs = [store.get_review(int(r)) for r in rids]
+    if not rvs or any(not r or r.get('Kind') != 'action' or json.loads(r.get('DraftText') or '{}').get('action') != 'shell_act' for r in rvs):
+        raise ValueError('only held shell steps are approved together')
+    if len({r.get('TaskId') for r in rvs}) != 1: raise ValueError('held steps of one task only')
+    tid, told, done, failed = rvs[0]['TaskId'], [], [], None
+    tok = _batch.set(told)
+    try:
+        for i, rv in enumerate(rvs):
+            out = decide(store, rv, verb, actor=actor)
+            if not out.get('ok'): failed = {'review': rv['ReviewId'], 'step': i + 1, 'error': out.get('send_error') or 'it did not run'}; break
+            done.append({'review': rv['ReviewId'], 'result': out.get('result')})
+    finally: _batch.reset(tok)
+    left = [r['ReviewId'] for r in rvs[len(done) + (1 if failed else 0):]]
+    ran = '; '.join(told) or 'nothing ran'
+    if verb != 'approve': _tell(store, tid, f"The owner dismissed {len(rvs)} held steps: {ran} - NOT done. Do not try them another way - carry on "
+                                            "without them, or ask the owner what they want instead.")
+    elif failed: _tell(store, tid, f"The owner approved {len(rvs)} held steps together. Taskuary ran {len(done)} of them ({ran}); step {failed['step']} "
+                                 f"failed: {failed['error'][:300]}. The rest were not run and still wait on the card. " + NEXT)
+    else: _tell(store, tid, f"The owner approved {len(rvs)} held steps together and Taskuary ran them in order: {ran}. " + NEXT)
+    return {'ok': not failed, 'done': done, 'failed': failed, 'left': left}
+
+
 def declined(store, tid: int, p: dict) -> None:
+    if (told := _batch.get()) is not None: return told.append(f"{p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`)")
     _tell(store, tid, f"The owner did not approve it: {p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`) was NOT done. Do "
                       'not try it another way - carry on without it, or ask the owner what they want instead.')

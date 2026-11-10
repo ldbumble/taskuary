@@ -587,9 +587,12 @@ def press_lines(store, tid: int) -> list:
     """EACH PRESS IS AN EVENT IN THE CHAT (the owner, 2026-11-08: "You handed this to Erin by email"), drawn by the page as a quiet line, never
     a bubble and never a turn: the agent hears them with the owner's next line (owner_did). An approved held step carries what it gave back
     (`result`: its link, the command) - the card that asked turns into this line (the owner, 2026-11-09: "same as email: when you hit send")."""
+    # ...but an approved held step since the owner last wrote is still its CARD in the turn, pressed (the owner, 2026-11-09: "leave the approval
+    # card in the agent turn as well with approved") - drawn there (TaskPage keptPresses), so never a second time as a line
+    last = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, USER_TYPE)) or {}).get('at') or ''
     return [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at,
              **({'result': x[0]} if x and x[0] else {})}
-            for i, at, what, *x in presses(store, tid)]
+            for i, at, what, *x in presses(store, tid) if not (x and str(at) > str(last))]
 def owner_did(store, tid: int) -> list:
     "The owner's presses on task `tid` since its agent last answered, oldest first: ['<time>: <what>']. [] before any answer."
     from .processing_unread import OWNER_ACTORS

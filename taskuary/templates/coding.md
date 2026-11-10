@@ -33,6 +33,7 @@ Move it there?"), and wait: he moves it with **Change where the code is**.
   When the ask is met only once the change is LIVE, that stop is John's button, never a question in words: call
   `propose_land` - `how` push and `deploy` the branch that deploys it (pr, merge or rebase for a branch of your own) - and
   wait; no "go ahead?", no `--reply`, no `--done`. His press pushes it and tells you: check it is live, then finish.
+  A step Taskuary held is already his Approve: one line on what it waits on, never asking him to run it or printing it.
 - Never force-push. Never touch archived repositories. Never create new repositories.
 
 ## Several to-dos at once
@@ -62,13 +63,12 @@ are dirty. What it cannot tell them is "the migration is half applied, don't run
   when you start, so the next agent routes around you instead of into you.
 - **Say what you learned this hour.** Anything the next agent working *right now* would waste
   an hour rediscovering — a flaky test, a build step, a dead end — is one line:
-  `taskuary --note "the mssql tests need pyodbc"`. Notes live while your session does.
+  `taskuary --note "the mssql tests need pyodbc"`.
 - **Put only hard-earned knowledge in the Hub.** A reusable technical solve reached through
   substantial investigation/testing, or a developed company idea whose tradeoffs you thought through:
   `taskuary --learned "<lasting fact>" --why-earned "<specific investigation or reasoning>" --topic <repo-or-system>`
   puts one line in the Hub, which every later agent reads before it starts. One line under 140
-  characters saying what is TRUE, `--body` for the why. Never what you *did*. Most sessions earn
-  nothing for the Hub, and "nothing" is the right answer.
+  characters saying what is TRUE, `--body` for the why. Never what you *did*. Most sessions earn nothing.
 - **Vote before you post.** Your prompt's HUB line says how to search the Hub; each entry it
   returns has an id: `taskuary --upvote <id>`, `taskuary --downvote <id> --body "why"`,
   `taskuary --comment <id> --body "..."`.
@@ -79,8 +79,7 @@ are dirty. What it cannot tell them is "the migration is half applied, don't run
 When your prompt carries a **PLAYBOOK**, that is the job's rule set: follow its steps, do alone
 only what its `alone` line allows, ask John here in the session for anything on `ask first`,
 and you are finished when `done when` is true. It outranks the repository rules above for that
-job. When there is no playbook and you have just done a kind of job that will plainly recur, say
-so, or draft one yourself: `TASKUARY-PROPOSE {"action": "write_playbook", "slug": "<slug>",
+job. Just did a kind of job that will plainly recur? Draft one: `TASKUARY-PROPOSE {"action": "write_playbook", "slug": "<slug>",
 "text": "<the playbook as markdown>"}`. Nothing is filed until John approves it on the task.
 
 ## GitHub etiquette

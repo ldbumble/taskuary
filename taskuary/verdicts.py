@@ -97,12 +97,12 @@ def _now_iso() -> str:
 SAFE_NAME = re.compile(r'[^A-Za-z0-9._ -]+')
 
 
-def attach(store, rid: int, name: str, data: bytes, actor: str = 'owner') -> dict:
+def attach(store, rid: int, name: str, data: bytes, actor: str = 'owner', source: int = None) -> dict:
     with store.review_delivery_edit(int(rid)):
-        return _attach(store, rid, name, data, actor)
+        return _attach(store, rid, name, data, actor, source)
 
 
-def _attach(store, rid: int, name: str, data: bytes, actor: str = 'owner') -> dict:
+def _attach(store, rid: int, name: str, data: bytes, actor: str = 'owner', source: int = None) -> dict:
     """Put a file on a pending reply: copied into the review's own folder, named in its envelope.
 
     The draft said "attached are the PTO accrual files" and the envelope carried nothing, because
@@ -127,7 +127,8 @@ def _attach(store, rid: int, name: str, data: bytes, actor: str = 'owner') -> di
                          'which no mailbox will accept - send a link instead')
     path = outbox_dir(rid) / name
     path.write_bytes(data)
-    files.append({'name': name, 'path': str(path), 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
+    files.append({'name': name, 'path': str(path), 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest(),
+                  **({'attachment': int(source)} if source else {})})        # a file from the task's own mail: checked again at Send
     env['attachments'] = files
     # ...a file said not attached earlier (refused) is attached now: its line comes off the card
     if env.get('not_attached'): env['not_attached'] = [f for f in env['not_attached'] if _safe(f.get('name')) != name]
@@ -288,6 +289,14 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
     if outgoing and not env.get('kind') and str(env.get('channel') or '').lower() == 'email' and not env.get('mailbox'):
         box = outbound.task_mailbox(store, rv.get('TaskId'))
         if box: env['mailbox'] = box
+    # ...A FILE THAT CAME ON THE TASK'S MAIL GOES ONLY WHILE THAT MAIL IS STILL THE TASK'S (agenttools.mail_file): checked at the door it was
+    # attached by, and here again, before anything is claimed (an attempt already made is reconciled as it was, never refused here)
+    for f in (env.get('attachments') or []) if rv.get('DeliveryState') not in ('sending', 'unknown') else []:
+        if not f.get('attachment'): continue
+        from .agenttools import mail_file
+        try: mail_file(store, rv.get('TaskId'), f['attachment'], kept=False)
+        except ValueError as e:
+            return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': f"Nothing was sent: {f.get('name')} - {e}. Take it off and Send again."}
     snapshot ={'envelope': env, 'message': msg, 'body': final, 'status': VERB2STATUS[verb],
                 'actor': actor, 'note': note, 'attempted_at': _now_iso()}
     claim = store.claim_review_delivery(rid, snapshot, rv)

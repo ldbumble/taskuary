@@ -13,7 +13,7 @@ codex_args). The CLI verbs in cli.py stay for a CLI with no MCP.
 
 Results that carry other people's words are fenced (terminal.fence), scrubbed (redact.scrub) and capped, with the cut said in words.
 """
-import json
+import json, re
 from loguru import logger
 
 from . import words
@@ -23,7 +23,8 @@ CAP = 12000                                         # one result; past it the ag
 
 _S = lambda props, need=(): {'type': 'object', 'properties': props, 'required': list(need)}
 _STR, _INT = {'type': 'string'}, {'type': 'integer'}
-_ATTACH = {'type': 'array', 'items': _STR, 'description': 'files in your task folder to attach, by name - a form sign_form signed'}
+_ATTACH = {'type': 'array', 'items': _STR, 'description': 'files to attach: one in your task folder by name (a form sign_form signed), or one '
+           'that came on this task\'s own mail by its id ("attachment 12"), carried as it came'}
 
 # name -> (cls, description, input schema, door). Descriptions say what the tool reads, where from, and what it never does.
 # the `show` tool's worked example, read through the guide tool (guides.py) instead of riding in every tools/list (2026-11-09)
@@ -346,11 +347,11 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'propose_reply':
         who = {k: a[k] for k in ('answers', 'only', 'cc', 'why_to') if a.get(k) not in (None, '')}
         was = verdicts.unsent(store, tid)
-        out = doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach')), **who)
+        out = doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(store, tid, a.get('attach')), **who)
         return _j(replaced(store, doors, tid, was, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place"))
     if name == 'propose_email':
         was = verdicts.unsent(store, tid)
-        out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(tid, a.get('attach')),
+        out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(store, tid, a.get('attach')),
                             a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}),
                             **({'slot': str(a['slot']).strip()} if a.get('slot') else {}))
         return _j(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place"))
@@ -422,17 +423,44 @@ def replaced(store, doors, tid: int, was: list, out, old, why: str):
     return {**o, 'replaced': gone} if gone else {**o, 'not_replaced': w.get('why')}
 
 
-def attached(tid: int, names) -> list:
-    "The files a propose tool names to attach, read from the task's own folder (outputs.named) - a name outside it is a ValueError."
+# A FILE THAT CAME IN THE MAIL IS SENT ON AS IT CAME (the north-star audit, 2026-11-10 - the owner: "job of agent is to be helpful and do as
+# much as possible"): asked to send a document the task received to someone else, the agent could attach only files in its own folder, so
+# it had to save the mail's file there first. It names the file by the id its brief and read_message already show; only a file on a message
+# OF THIS TASK, checked here, at the server's door (server._agent_files) and again at the Send that carries it (verdicts._deliver_review)
+_AID = re.compile(r'^\s*(?:attachment\s*)?#?(\d+)\s*$', re.I)
+def attached(store, tid: int, names) -> list:
+    """The files a propose tool names to attach: one in the task's own folder by name (outputs.named), its bytes - or one that came on
+    this task's own mail by its attachment id (mail_file), by that id. Anything else is a ValueError."""
     import base64
     from . import outputs
     out = []
-    for raw in ([names] if isinstance(names, str) else names or []):
-        p = outputs.named(tid, raw)
+    for raw in ([names] if isinstance(names, (str, int)) else names or []):
+        p = outputs.named(tid, str(raw))
+        if not p and (m := _AID.match(str(raw))): out.append({'name': mail_file(store, tid, m[1])[0], 'attachment': int(m[1])}); continue
         if not p: raise ValueError(f'{raw} is not a file in your task folder ({outputs.folder(tid)}) - nothing was saved. Save the file '
-                                   'there first, or name one that is, and call it again')
+                                   'there first, or name one that is, or a file on this task\'s mail by its attachment id, and call it again')
         out.append({'name': p.name, 'data': base64.b64encode(p.read_bytes()).decode()})
     return out
+
+
+def mail_file(store, tid: int, aid, kept: bool = True) -> tuple:
+    """(name, path) of attachment `aid` - a file that came on a message ON task `tid`, kept under Taskuary's own attachments folder (a Path
+    column pointing anywhere else would make this a local file read). A ValueError says why not. `kept=False`: only whether it is this
+    task's - the Send carries the copy it took."""
+    from pathlib import Path
+    from . import config
+    try: x = store.get_attachment(int(aid)) or {}
+    except (TypeError, ValueError): x = {}
+    m = store.get_message(x.get('MessageId')) if x.get('MessageId') else None
+    if not m or str(m.get('TaskId') or '') != str(tid) or m.get('Channel') == 'assistant':
+        raise ValueError(f'attachment {aid} is not an attachment on this task - read_message lists the ones it has, with their ids')
+    if not kept: return x.get('Name') or 'attachment', None
+    try:
+        p = Path(str(x.get('Path') or '')).resolve()
+        if not x.get('Path') or not p.is_relative_to((config.home() / 'attachments').resolve()) or not p.is_file(): p = None
+    except (OSError, ValueError): p = None
+    if not p: raise ValueError(f"{x.get('Name') or 'that file'} is not kept here - open the original message")
+    return x.get('Name') or p.name, p
 
 
 def own_message(store, tid: int, args: dict) -> bool:

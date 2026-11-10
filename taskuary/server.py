@@ -5548,16 +5548,26 @@ def agent_memory(request: Request, task_id: int, section: str = ''):
     text = learned_cut.whole(store, 'agents', target=f'task:{task_id}', sections=(section,) if section else None)
     return {'text': text, 'says': text or 'nothing learned about the owner yet' + (f' under {learned_cut.TITLE[section]}' if section else '')}
 
-class AgentFile(BaseModel): name: str; data: str                 # data is base64: the CLI reads the file, the server never opens a path it is handed
+# data is base64: the CLI reads the file, the server never opens a path it is handed - or `attachment`, a file on the task's own mail by its id
+class AgentFile(BaseModel): name: str; data: str = ''; attachment: int | None = None
 class AgentReplyBody(BaseModel):
     task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False; to: str = ''; answers: int | None = None
     # ...who hears it, the agent's call (2026-11-06): the sender alone, or who else is copied, and the one line why (wrapup.agent_reply)
     only: bool = False; cc: list[str] | None = None; why_to: str = ''
 
-def _agent_files(files):
+def _agent_files(files, tid: int):
+    "(name, bytes[, attachment id]) of each file an agent hands over - a mail's file only when it is on this task's own mail (agenttools.mail_file)."
     import base64, binascii
-    try: return [(f.name, base64.b64decode(f.data, validate=True)) for f in files]
-    except (binascii.Error, ValueError): raise HTTPException(422, 'an attached file was not valid base64')
+    from . import agenttools
+    out = []
+    for f in files:
+        if f.attachment is not None:
+            try: name, p = agenttools.mail_file(store, tid, f.attachment)
+            except ValueError as e: raise HTTPException(422, str(e))
+            out.append((name, p.read_bytes(), f.attachment)); continue
+        try: out.append((f.name, base64.b64decode(f.data, validate=True)))
+        except (binascii.Error, ValueError): raise HTTPException(422, 'an attached file was not valid base64')
+    return out
 
 @app.post('/api/agent/reply')
 def agent_reply(body: AgentReplyBody, request: Request):
@@ -5567,7 +5577,7 @@ def agent_reply(body: AgentReplyBody, request: Request):
     from . import wrapup
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files), follow_up=body.follow_up, to=body.to,
+    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files, body.task_id), follow_up=body.follow_up, to=body.to,
                               answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to)
 
 class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []; mailbox: str = ''; guessed: list[str] = []
@@ -5579,7 +5589,7 @@ def agent_draft(body: AgentDraftBody, request: Request):
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     from . import wrapup
-    files = _agent_files(body.files)
+    files = _agent_files(body.files, body.task_id)
     out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed)
     return {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)} if out.get('ok') and files else out
 
@@ -5934,13 +5944,10 @@ def agent_sign_form(body: AgentSignBody, request: Request):
     tid = body.task_id
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
     if body.attachment is not None:
-        x = store.get_attachment(int(body.attachment)) or {}
-        m = store.get_message(x.get('MessageId')) or {}
-        if not x or str(m.get('TaskId') or '') != str(tid): raise HTTPException(404, f'{body.attachment} is not an attachment on this task - read_message lists the ones it has')
-        if agenttools.unvouched(store, tid, {'id': m['MessageId']}): raise HTTPException(403, agenttools.UNVOUCHED)
-        p = _attachment_path(x.get('Path'))
-        if not p: raise HTTPException(404, f"{x.get('Name')} is not kept here - open the original message")
-        name, pdf = x.get('Name') or 'form.pdf', p.read_bytes()
+        try: name, p = agenttools.mail_file(store, tid, body.attachment)
+        except ValueError as e: raise HTTPException(404, str(e))
+        if agenttools.unvouched(store, tid, {'id': store.get_attachment(int(body.attachment))['MessageId']}): raise HTTPException(403, agenttools.UNVOUCHED)
+        pdf = p.read_bytes()
     elif body.file:
         p = outputs.named(tid, body.file)
         if not p: raise HTTPException(404, f'{body.file} is not a file in this task\'s folder ({outputs.folder(tid)})')

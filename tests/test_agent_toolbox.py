@@ -62,6 +62,33 @@ class TheServer(unittest.TestCase):
         self.assertFalse(tools['propose_reply']['annotations']['readOnlyHint'])
         self.assertIn('nothing is sent', tools['propose_reply']['description'])
 
+    def test_a_file_that_came_on_this_tasks_mail_is_sent_on_by_its_id_and_checked_again_at_send(self):
+        """The north-star audit, 2026-11-10: asked to send a document the task received on to someone else, the agent could attach only
+        files in its task folder. It names the mail's file by the id its brief shows - only one on a message OF THIS task, checked at the
+        door and again at Send - and the file goes as it came."""
+        from taskuary import outbound, verdicts
+        d = config.home() / 'attachments' / 'toolbox'; d.mkdir(parents=True, exist_ok=True)
+        (d / 'terms.pdf').write_bytes(b'%PDF-1.4 renewal terms'); (d / 'other.pdf').write_bytes(b'%PDF-1.4 not this task')
+        on = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r2', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',
+                                 'FromEmail': 'gail@northwind.example', 'Subject': 'Renewal terms', 'BodyText': 'Terms attached.',
+                                 'SentAt': '2026-10-21 08:00:00', 'Status': 'routed'})
+        aid = self.s.add_attachment({'MessageId': on, 'ExternalId': 'r2:1', 'Name': 'terms.pdf', 'ContentType': 'application/pdf', 'Size': 22,
+                                     'Path': str(d / 'terms.pdf')})
+        far = self.s.add_attachment({'MessageId': self.mid, 'ExternalId': 'r1:1', 'Name': 'other.pdf', 'ContentType': 'application/pdf', 'Size': 21,
+                                     'Path': str(d / 'other.pdf')})
+        text, err = tool(self.tid, 'propose_email', to='paula@northwind.example', subject='Renewal terms', text='Paula - the terms.', attach=[f'attachment {far}'])
+        self.assertTrue(err, 'a file on mail that is not this task\'s is never sent'); self.assertIn('not an attachment on this task', text)
+        text, err = tool(self.tid, 'propose_email', to='paula@northwind.example', subject='Renewal terms', text='Paula - the terms.', attach=[f'attachment {aid}'])
+        self.assertFalse(err, text)
+        rv = self.s.get_review(json.loads(text)['review_id'])
+        [f] = json.loads(rv['Deliver'])['attachments']
+        self.assertEqual((f['name'], f['attachment']), ('terms.pdf', aid)); self.assertEqual(open(f['path'], 'rb').read(), b'%PDF-1.4 renewal terms')
+        other = self.s.create_task({'Title': 'Another matter', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        self.s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (other, on))         # the mail was moved to another task before Send
+        with mock.patch.object(outbound, 'send_out', side_effect=AssertionError('it went')):
+            out = verdicts.decide(self.s, rv, 'approve')
+        self.assertFalse(out['ok']); self.assertIn('Nothing was sent', out['send_error']); self.assertEqual(self.s.get_review(rv['ReviewId'])['Status'], 'pending')
+
     def test_search_and_read_come_back_fenced(self):
         text, err = tool(self.tid, 'search_messages', words='uplift')
         self.assertFalse(err); self.assertIn('Renewal terms', text); self.assertTrue(text.startswith('⟦'))

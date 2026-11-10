@@ -231,7 +231,7 @@ class SupersedeTests(Base):
     def test_the_owners_external_answer_retires_the_draft_and_the_notice_says_so(self):
         tid, first, rid = teams_task(self.s)
         sent = {'ConversationId': 'teams:robin', 'SentAt': stamp(), 'Channel': 'teams', 'BodyText': 'done, reset it'}
-        with reads('covered'): channels.retire_draft_answered_elsewhere(self.s, tid, sent)
+        with reads('covered'): channels.owner_line(self.s, tid, {'channel': 'teams'}, None, sent)      # a reply task no agent works: the one read
         rv = self.s.get_review(rid)
         self.assertEqual(rv['Status'], 'superseded')
         line = server._context_update_line({'after': {'FromName': 'You', 'BodyText': 'done, reset it'}, 'item': {'ref': 'TQ-0001', 'rid': rid, 'tid': tid}})
@@ -264,5 +264,5 @@ class OurAcknowledgementIsNotAnAnswerTests(Base):
         tid, first, rid = teams_task(self.s)
         channels.retire_draft_answered_elsewhere(self.s, tid, self._ack(tid))
         self.assertEqual(self.s.get_review(rid)['Status'], 'pending')
-        with reads('covered'): channels.retire_draft_answered_elsewhere(self.s, tid, self._ack(tid, ext='teams:mine', text='done, reset it'))
+        with reads('covered'): channels.owner_line(self.s, tid, {'channel': 'teams'}, None, self._ack(tid, ext='teams:mine', text='done, reset it'))
         self.assertEqual(self.s.get_review(rid)['Status'], 'superseded')

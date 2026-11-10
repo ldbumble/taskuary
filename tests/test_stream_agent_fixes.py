@@ -48,13 +48,13 @@ def test_a_carry_on_turn_is_never_resume():
     assert turn.endswith(ingest.CARRY_ON_PROMPT) and 'Resume' not in turn
 
 
-# ── F3: the owner's chat line re-reads the draft ───────────────────────────────────────────────────────────────────────────────────
+# ── F3: the owner's chat line re-reads the draft where no agent may take it (a reply task nothing works) ──────────────────────────────────
 def own_line(text): return {'ConversationId': 'teams:robin', 'SentAt': stamp(), 'Channel': 'teams', 'BodyText': text}
 
 
 def test_a_line_that_covers_the_draft_retires_it_with_why():
     s = MemoryStore(); tid, _first, rid = teams_task(s)
-    with reads('covered'): channels.retire_draft_answered_elsewhere(s, tid, own_line('reset it, try now'))
+    with reads('covered'): channels.owner_line(s, tid, {'channel': 'teams'}, None, own_line('reset it, try now'))
     assert s.get_review(rid)['Status'] == 'superseded'
     assert any('yourself - no new response needed.' in c['Body'] and 'reset it' not in c['Body'] for c in s.list_comments(tid))
 
@@ -62,14 +62,14 @@ def test_a_line_that_covers_the_draft_retires_it_with_why():
 def test_a_line_that_covers_part_cuts_the_draft_to_what_is_left():
     s = MemoryStore(); tid, _first, rid = teams_task(s)
     before = s.get_review(rid)
-    with reads('partly', 'The export fix lands tomorrow.'): channels.retire_draft_answered_elsewhere(s, tid, own_line('voice to text is fixed in 18'))
+    with reads('partly', 'The export fix lands tomorrow.'): channels.owner_line(s, tid, {'channel': 'teams'}, None, own_line('voice to text is fixed in 18'))
     rv = s.get_review(rid)
     assert (rv['Status'], rv['DraftText'], rv['MessageId']) == ('pending', 'The export fix lands tomorrow.', before['MessageId'])
 
 
 def test_an_unread_line_keeps_the_draft_and_says_check_it():
     s = MemoryStore(); tid, _first, rid = teams_task(s)
-    with mock.patch('taskuary.llm.build_llm', return_value=None): channels.retire_draft_answered_elsewhere(s, tid, own_line('on it'))
+    with mock.patch('taskuary.llm.build_llm', return_value=None): channels.owner_line(s, tid, {'channel': 'teams'}, None, own_line('on it'))
     assert (s.get_review(rid)['Status'], s.get_review(rid)['DraftText']) == ('pending', 'ok give me 5 mins')
     assert any(channels.CHECK_IT in c['Body'] for c in s.list_comments(tid))
 
@@ -198,37 +198,62 @@ def test_the_owners_own_line_is_drawn_at_the_time_they_wrote_it():
     assert order.index('Ray, which build?') < order.index('Downloads pop up too')
 
 
-# ── the owner's line while a turn works: its closing words are re-read, never a new turn (the owner, 2026-11-09) ─────────────────────
-def mid_turn(s, text='yes 3pm, same room'):
-    import time
+# ── the owner's line on a chat: the agent's to re-plan, never a side read in its name (the owner, 2026-11-09 and 2026-11-10) ──────────────
+CONV = 'wa:erin'
+
+
+def chat_task(s, live=False):
+    "A general task on a WhatsApp chat: Erin asked, the agent answered and left a draft; `live`: its next turn is already at work."
     tid = s.create_task({'Title': 'Budget meeting today?', 'Kind': 'general', 'Status': 'open'}, 'router')
-    s.add_message({'TaskId': tid, 'ExternalId': 'wa1', 'ConversationId': 'wa:gail', 'Channel': 'whatsapp', 'FromName': 'Erin Blake',
-                   'SentAt': stamp(-60), 'BodyText': 'still on for 3pm?', 'Status': 'routed'})
-    t0 = time.time() - 2                                                   # the turn began; the line comes after
-    s.add_message({'TaskId': tid, 'ExternalId': 'wa2', 'ConversationId': 'wa:gail', 'Channel': 'whatsapp', 'FromName': 'You', 'SentAt': stamp(),
-                   'BodyText': text, 'Status': 'context', 'Direction': 'out'})
-    return tid, t0
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'wa1', 'ConversationId': CONV, 'Channel': 'whatsapp', 'FromName': 'Erin Blake',
+                         'FromEmail': 'whatsapp:15550001', 'SentAt': stamp(-600), 'BodyText': 'still on for 3pm? and is the room booked?', 'Status': 'routed'})
+    for who, kind, words in ((general.BRIEF_ACTOR, general.USER_TYPE, 'brief'), ('assistant', general.ASSISTANT_TYPE, 'Drafted the answer.')):
+        s._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', (stamp(-500), s.add_comment(tid, who, kind, words)))
+    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'ConversationId': CONV, 'Kind': 'draft_reply', 'Status': 'pending', 'SentAt': stamp(-600),
+                        'DraftText': 'Hi Erin - yes, 3pm stands, and the room is booked till 4.'})
+    if live: general.OPENING.add(tid)
+    return tid, rid
 
 
-STALE = 'The reply waiting says 3pm today - check your calendar before Send.'
+def say_on_chat(s, text='yes 3pm, same room', at=None):
+    with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(channels, 'reread', side_effect=AssertionError('a side read')), \
+         mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude'}]):
+        channels.ingest_own_message(s, {'external_id': 'me1', 'channel': 'whatsapp', 'conversation_id': CONV, 'sent_at': at or stamp(-60), 'body': text,
+                                        'from_email': 'me'}, 'your line in the chat')
+    return [(c[0][0].__name__, c[0][-1]) for c in spawn.call_args_list]
 
 
-def test_a_turn_the_owners_line_covered_ends_saying_so():
-    s = MemoryStore(); tid, t0 = mid_turn(s)
-    with reads('covered'): reply, summ = general.heard_meanwhile(s, tid, STALE, {'did': 'looked', 'on_you': ['Check the calendar']}, t0)
-    assert channels.COVERED_TURN in reply and 'yes 3pm, same room' not in reply and 'check your calendar' not in reply  # their line is drawn left, never quoted again
-    assert summ['on_you'] == [] and summ['nothing_left'] and hooks.finished(summ)
+def test_the_owners_line_over_a_waiting_draft_wakes_the_agent_and_nothing_else_touches_the_draft():
+    # the owner, 2026-11-09: "if we respond show on left side and then agent reevaluates if action still required" - a second model retired or
+    # cut the agent's draft in its name, and the agent never heard the line until something else woke it
+    s = MemoryStore(); tid, rid = chat_task(s)
+    try: went = say_on_chat(s)
+    finally: general.OPENING.discard(tid)
+    assert [w for w, _ in went] == ['_replan_general'] and 'yes 3pm, same room' in went[0][1] and 'you already answered on WhatsApp' in went[0][1]
+    rv = s.get_review(rid)
+    assert rv['Status'] == 'pending' and rv['DraftText'] == 'Hi Erin - yes, 3pm stands, and the room is booked till 4.'     # the agent's to keep or withdraw
+    lb = general.latest_block(s, tid)
+    assert 'WHAT THE OWNER REPLIED ON THE THREAD THEMSELVES' in lb and 'yes 3pm, same room' in lb and f'THE DRAFT WAITING NOW (rv{rid}' in lb
 
 
-def test_a_turn_the_line_partly_covered_keeps_only_what_is_left():
-    s = MemoryStore(); tid, t0 = mid_turn(s)
-    with reads('partly', 'The room is booked till 4.'): reply, _ = general.heard_meanwhile(s, tid, STALE + ' The room is booked till 4.', None, t0)
-    assert reply == 'The room is booked till 4.'
+def test_the_owners_line_while_a_turn_works_is_its_next_turn():
+    # the night run, 2026-11-09: a turn started a second before the owner's "yes 3pm, same room" ended "check your calendar before Send" - its
+    # closing words were re-read by a side model; now the line is the agent's own next turn, queued behind the one at work
+    s = MemoryStore(); tid, _ = chat_task(s, live=True)
+    try: went = say_on_chat(s)
+    finally: general.OPENING.discard(tid)
+    assert [w for w, _ in went] == ['_replan_pass'] and 'yes 3pm, same room' in went[0][1]
 
 
-def test_no_line_meanwhile_is_no_read():
-    import time
-    s = MemoryStore(); tid, t0 = mid_turn(s)
-    with mock.patch('taskuary.llm.build_llm', side_effect=AssertionError('nothing to re-read')):
-        assert general.heard_meanwhile(s, tid, STALE, None, time.time() + 5) == (STALE, None)
-    with reads('none'): assert general.heard_meanwhile(s, tid, STALE, None, t0) == (STALE, None)
+def test_a_line_with_no_draft_and_no_turn_at_work_stays_context_for_the_next_turn():
+    # the owner, 2026-11-08: "it should show what i sent ... even if it does not trigger as a prompt"
+    s = MemoryStore(); tid, rid = chat_task(s); s.decide_review(rid, 'sent', None, 'owner')
+    assert say_on_chat(s) == [] and 'yes 3pm, same room' in general.latest_block(s, tid)
+
+
+def test_where_no_agent_may_take_the_line_the_one_read_still_settles_the_draft():
+    s = MemoryStore(); s.set_setting('answer_to_agent', 'off', 't'); tid, rid = chat_task(s)
+    with reads('covered'), mock.patch('taskuary.ingest._spawn') as spawn:
+        channels.ingest_own_message(s, {'external_id': 'me1', 'channel': 'whatsapp', 'conversation_id': CONV, 'sent_at': stamp(-60),
+                                        'body': 'yes 3pm, same room', 'from_email': 'me'}, 'your line in the chat')
+    assert not spawn.called and s.get_review(rid)['Status'] == 'superseded'

@@ -785,24 +785,6 @@ def own_replies(store, tid: int, since: str = None) -> list:
                        "AND (TaskId=? OR ConversationId IN (SELECT ConversationId FROM message WHERE TaskId=? AND ConversationId<>'')) "
                        "ORDER BY SentAt, MessageId", (since, tid, tid))
     return [x for x in rows if not ours(x)]
-def heard_meanwhile(store, tid: int, reply: str, summ, t0: float, drafted: str = '', brain=None) -> tuple:
-    """(reply, summ) after what the owner wrote on the thread themselves WHILE this turn worked: the turn's closing words re-read against it in
-    the one light read a waiting draft gets (channels.reread) - never a fresh turn. The night run, 2026-11-09: a turn started a second before the
-    owner's "yes 3pm, same room" ended "the reply waiting says 3pm - check your calendar before Send" over a draft that line had retired.
-    covered -> its words say so and nothing is left on the owner; partly -> cut to what is left; none or unread -> as they were. A reply it
-    drafted in its answer (`drafted`: a marker, which no tool result told of the line) is re-read the same way (channels.reread_draft)."""
-    from datetime import datetime
-    from .channels import reread, reread_draft, COVERED_TURN
-    from .ingest import is_ack
-    since = datetime.fromtimestamp(t0).isoformat(sep=' ', timespec='seconds')        # after its first second: a line before it was in its prompt
-    lines = [w for x in own_replies(store, tid, since) if not is_ack(store, x) and (w := ' '.join(str(x.get('OwnText') or x.get('BodyText') or '').split()))]
-    if not lines: return reply, summ
-    line = ' / '.join(lines)[-2000:]
-    if drafted and (rv := store.pending_review(tid, 'draft_reply')): reread_draft(store, tid, rv, {'BodyText': line}, brain)
-    if not str(reply or '').strip(): return reply, summ
-    got, left = reread(store, tid, reply, line, "THE AGENT'S CLOSING WORDS", brain)
-    if got == 'covered': return f'You answered it yourself while I worked. {COVERED_TURN}', summ and {**summ, 'on_you': [], 'nothing_left': True}
-    return (left, summ) if got == 'partly' and left else (reply, summ)
 def latest_block(store, tid: int, resumed: bool = False) -> str:
     """LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none.
     `resumed`: a CLI that has the conversation already reads the newest message as its turn, so only a draft or a reply that went is news."""
@@ -2891,9 +2873,6 @@ class GeneralSession:
         # the reply goes in the composer") the answer above is the only place it can be read (walk 2026-10-21).
         said = '\n\n'.join(q + (f" ({' / '.join(c)})" if c else '') for q, c in asks if q not in reply)
         reply = '\n\n'.join(x for x in (reply, said) if x) or (closing or '')
-        # ...as it stands after the owner's own line on the thread WHILE it worked (heard_meanwhile): a question that line answered is no ask
-        reply, summ = heard_meanwhile(self.store, self.task_id, reply, summ, t0, drafted or '')
-        asks = [a for a in asks if a[0] in reply]
         if signing is not None and not reply: reply = 'I need the site signed in to go on.'
         if turn is not None and not reply: reply = turn or 'Your turn in the browser.'
         # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question

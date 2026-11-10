@@ -1013,11 +1013,9 @@ def _same_words(a: str, b: str, n: int = 160) -> bool:
     return bool(x) and x == y
 
 
-# ...one read for both things the owner's line can make stale (the owner, 2026-11-09): a draft waiting on their Send, and the closing words of
-# an agent turn that was working when the line came - the night run's turn ended "the reply waiting says 3pm, check your calendar before
-# Send" over the owner's own "yes 3pm, same room" and a draft already retired
-REREAD_SYSTEM = ('You read words written for the owner and not acted on yet - a reply drafted for them to send, or their agent\'s closing '
-                 'words to them - and one line the owner has since written themselves on the same chat. Decide how much of what the words '
+# ...the one read of a draft waiting on the owner's Send against their line on the chat since - only where no agent may take that line (owner_line)
+REREAD_SYSTEM = ('You read words written for the owner and not acted on yet - a reply drafted for them to send - and one line the owner has '
+                 'since written themselves on the same chat. Decide how much of what the words '
                  'answer, report or ask the owner\'s line already covers: "covered" (all of it - nothing more to send or do), "partly" (some '
                  'of it) or "none". For "partly", `left` is the words cut to only what the owner\'s line left open - in their own voice, '
                  'language and greeting, nothing new added, nothing the owner\'s line already said. Reply with JSON '
@@ -1025,17 +1023,16 @@ REREAD_SYSTEM = ('You read words written for the owner and not acted on yet - a 
 REREAD_WANT = {'type': 'object', 'properties': {'covered': {'type': 'string', 'enum': ['covered', 'partly', 'none']}, 'left': {'type': 'string'}},
                'required': ['covered']}
 COVERED, CHECK_IT = 'Your line covers this, nothing more to send.', 'You wrote on the thread since - check the draft still fits.'
-COVERED_TURN = 'That covers what this turn found - nothing left on it.'
 
 
-def reread(store, tid, words: str, line: str, what: str = 'THE DRAFT', brain=None) -> tuple:
-    "(covered | partly | none | None when unread, left): `words` read against the owner's `line` since - one small model call, REREAD_SYSTEM."
+def reread(store, tid, words: str, line: str, brain=None) -> tuple:
+    "(covered | partly | none | None when unread, left): a draft's `words` read against the owner's `line` since - one small model call, REREAD_SYSTEM."
     from .llm import build_llm, ask_json
     try:
         b = brain or build_llm(store, job='judge', task_id=tid)
-        v = (ask_json(b, REREAD_SYSTEM, f"{what}:\n{words[:6000]}\n\nTHE OWNER'S LINE SINCE:\n{line[:2000]}", want=REREAD_WANT,
+        v = (ask_json(b, REREAD_SYSTEM, f"THE DRAFT:\n{words[:6000]}\n\nTHE OWNER'S LINE SINCE:\n{line[:2000]}", want=REREAD_WANT,
                       need=('covered',)).data if b else None) or {}
-    except Exception as e: logger.debug(f'task {tid}: {what.lower()} was not re-read against the owner\'s line - {e}'); v = {}
+    except Exception as e: logger.debug(f'task {tid}: the draft was not re-read against the owner\'s line - {e}'); v = {}
     if not isinstance(v, dict): return None, ''
     return (v.get('covered') if v.get('covered') in ('covered', 'partly', 'none') else None), str(v.get('left') or '').strip()
 
@@ -1066,36 +1063,53 @@ def reread_draft(store, tid, rv: dict, sent: dict, brain=None) -> str:
     return got or 'unread'
 
 
+def answered_drafts(store, tid, sent: dict) -> list:
+    "Task `tid`'s pending replies on the conversation the owner's own line `sent` is on, drafted before it: what that line may have answered."
+    conv, at = sent.get('ConversationId'), sent.get('SentAt')
+    if not conv or not at: return []
+    return [rv for rv in store.list_reviews('pending') if rv.get('TaskId') == tid and rv.get('Kind') != 'action'
+            and rv.get('ConversationId') == conv and (not rv.get('SentAt') or rv['SentAt'] <= at)]
+
+
+# THE OWNER'S LINE ON A CHAT IS THE AGENT'S TO RE-PLAN (the owner, 2026-11-09: "if we respond show on left side and then agent reevaluates if
+# action still required"). A second model read each waiting draft against the line and retired or cut it in the agent's name, and re-read a
+# working turn's closing words the same way - the agent itself heard the line only when something else woke it. Now a line on a chat where
+# the agent's draft waits, or while it works, wakes it to re-plan (ingest.thread_moved, own): it keeps, rewrites or withdraws its own card. A
+# line with neither stays context, heard on the next turn (general.latest_block - the owner, 2026-11-08). The one read (reread_draft) is kept
+# only where no agent may take the line - a task no assistant works, or the owner's switch or a missing AI that lets none run
+def owner_line(store, tid, msg: dict, mid, sent: dict) -> None:
+    from . import ingest
+    if ingest.is_ack(store, sent): return
+    worded = [rv for rv in answered_drafts(store, tid, sent) if str(rv.get('DraftText') or '').strip()]
+    if not worded and not ingest.live_agent(store, tid): return
+    if ingest.thread_moved(store, tid, msg, mid, None, 'router', own=True): return
+    for rv in worded: reread_draft(store, tid, rv, sent)
+
+
 def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict, later: bool = False) -> list:
     """Resolve reply drafts made obsolete by a reply the owner sent in the native app.
 
     A provider sync can land well after triage wrote its draft.  The draft belongs to the
     inbound message it was written against, so an owner line later on that same conversation
     is the missing verdict: the reply already went out.  Action approvals are deliberately
-    excluded -- sending a chat line cannot approve an unrelated proposed action. On a chat the
-    line is re-read against each draft instead (reread_draft) - on its own thread when `later`.
+    excluded -- sending a chat line cannot approve an unrelated proposed action. On a chat a
+    worded draft is left to the task's agent (owner_line) - a taskless one re-read, on its own thread when `later`.
     """
-    conv, sent_at = sent.get('ConversationId'), sent.get('SentAt')
-    if not conv or not sent_at:
-        return []
     # Taskuary's own "On it - I'll get back to you here." promises the answer; it is not one. Filed as the
     # owner's line (or echoed back as one on Teams), it retired the very draft it promised (2026-09-24, TQ-0731)
     from .ingest import is_ack
     if is_ack(store, sent): return []
-    stale = [rv for rv in store.list_reviews('pending')
-             if rv.get('TaskId') == tid and rv.get('Kind') != 'action'
-             and rv.get('ConversationId') == conv
-             and (not rv.get('SentAt') or rv['SentAt'] <= sent_at)]
+    stale = answered_drafts(store, tid, sent)
     if not stale:
         return []
     # ...A CHAT LINE IS ONE LINE, NOT THE REPLY (the owner, 2026-11-09): "voice to text is fixed in 18" from the phone retired a draft that
-    # answered six points, five of which never went out. On a chat the draft is re-read against the owner's line (reread_draft); email keeps
+    # answered six points, five of which never went out. On a chat a worded draft is the task's agent's to re-plan (owner_line); email keeps
     # the retire below - a mail sent from the mailbox is the whole answer. A draft with no words yet (its writer still at work when the
-    # owner answered) has nothing to re-read: the owner's line is the reply it was going to be, retired as before
+    # owner answered) has nothing to re-plan: the owner's line is the reply it was going to be, retired as before
     from .ingest import CHAT_CHANNELS
     if str(sent.get('Channel') or '').lower() in CHAT_CHANNELS:
         worded = [rv for rv in stale if str(rv.get('DraftText') or '').strip()]
-        if worded:
+        if worded and not tid:          # ...a reply to filed chatter has no task, so no agent: the one read stands in
             go = lambda: [reread_draft(store, tid, rv, sent) for rv in worded]
             if later: threading.Thread(target=go, daemon=True, name=f'reread-draft-{tid}').start()
             else: go()
@@ -1200,7 +1214,8 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
         from . import ingest
         # ...but A LINE THE OWNER SAID IN A CHAT is context, never a turn (the owner, 2026-11-08: "it should show what i sent ... even if it
         # does not trigger as a prompt"): it stands in the task's chat as theirs, and the agent hears it on its next turn (general.latest_block)
-        if ingest.is_chat(msg): return 1
+        # - at once where its draft waits or it is at work (owner_line)
+        if ingest.is_chat(msg): owner_line(store, tid, msg, mid, sent); return 1
         if not ingest.is_ack(store, sent):
             ingest.thread_moved(store, tid, msg, mid, None, 'router', own=True)
             # ...and every OTHER open task on the thread hears it too (the stress run, 2026-11-05): a follow-up that was a new ask made a

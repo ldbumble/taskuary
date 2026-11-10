@@ -23,9 +23,14 @@ const outOf = (u) => (u.content || []).filter((c) => c?.type === "content").map(
   || (typeof u.rawOutput === "string" ? u.rawOutput : u.rawOutput?.formatted_output || u.rawOutput?.output || u.rawOutput?.stdout || "");
 // ...and the helper call it runs under, when the adapter says (claude-code-acp's _meta.claudeCode.parentToolUseId; agents.parent_of)
 export const parentOf = (u) => String(u?._meta?.claudeCode?.parentToolUseId || u?._meta?.parentToolUseId || u?._meta?.parentToolCallId || "");
+// A COMPACTION IS THE CLI'S OWN EVENT (the owner, 2026-11-10: "automated compaction? it shoudl not show it please just say it was compacted"): the
+// adapter's `compaction_update`, or - to a client that never asked for those - its "Compact conversation" call, the tool it names `compact`
+const compactionOf = (u, seen) => (u?.sessionUpdate === "compaction_update" ? String(u.compactionId ?? "")
+  : (u?.sessionUpdate === "tool_call" || u?.sessionUpdate === "tool_call_update") && (u._meta?.claudeCode?.toolName === "compact" || seen.has(String(u.toolCallId)))
+    ? String(u.toolCallId) : null);
 export function stepsFromAcp(updates) {
-  const out = [], byId = new Map();
-  let o;
+  const out = [], byId = new Map(), compacts = new Map();
+  let o, cid;
   // ...the agent's words arrive a token at a time: one step per run of chunks, as a log has one per block. A prompt Taskuary sent marks itself
   // its brief (`_meta.taskuary`), as mark_briefs marks a log's
   // ...each step at the moment its first update came in (`_at`, stamped as it was kept): ACP itself carries no time
@@ -37,6 +42,11 @@ export function stepsFromAcp(updates) {
     if (kind === "user_message_chunk") chunk(u._meta?.taskuary === "brief" ? "brief" : "you", textOf(u.content));
     else if (kind === "agent_message_chunk") chunk("said", textOf(u.content));
     else if (kind === "agent_thought_chunk") chunk("thought", textOf(u.content));
+    else if ((cid = compactionOf(u, compacts)) != null) {
+      let c = compacts.get(cid);
+      if (!c) { c = { k: "compact", id: cid, ...(at ? { at } : {}) }; compacts.set(cid, c); out.push(c); }
+      if (u.status) c.status = u.status;
+    }
     else if (kind === "plan") out.push({ k: "plan", items: (u.entries || []).map((e) => ({ text: String(e?.content || ""), status: e?.status || "pending" })), ...(at ? { at } : {}) });
     else if (kind === "tool_call" || kind === "tool_call_update") {
       let s = byId.get(u.toolCallId);
@@ -62,7 +72,7 @@ export function stepsFromAcp(updates) {
     }
   }
   return out.map(({ open, out: streamed, ...s }) => (s.text != null && s.k !== "tool" ? { ...s, text: s.text.trim() }
-    : streamed ? { ...s, output: streamed } : s)).filter((s) => s.k === "tool" || s.k === "plan" || s.text);
+    : streamed ? { ...s, output: streamed } : s)).filter((s) => s.k === "tool" || s.k === "plan" || s.k === "compact" || s.text);
 }
 
 // ── a coding session's steps -> trace events, the one currency ───────────────────────────────────
@@ -167,7 +177,7 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
   const working = (live ? live.working !== false : true), waiting = !!live?.asking || !!permissions?.length;
   const rows = [];
   sessions.forEach((ses, si) => {
-    const steps = (ses.source === "acp" ? stepsFromAcp(ses.updates) : ses.steps || []).map((s) => ({ ...s, at: at(s.at) || at(ses.at) }));
+    const steps = sessionSteps(ses).map((s) => ({ ...s, at: at(s.at) || at(ses.at) }));
     const now = !!ses.live && si === sessions.length - 1 && working;
     let turn = null;
     const close = () => { if (turn) rows.push(turn); turn = null; };
@@ -182,6 +192,9 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
         if (w) rows.push({ kind: "you", at: s.at, text: w });
         return;
       }
+      // ...ONE QUIET LINE where it happened, once done (sessionrecord COMPACTED): under way it is the working line's "Compacting…" (compactingNow),
+      // and one that failed or was cut off says nothing
+      if (s.k === "compact") { if (!s.status || s.status === "completed") { close(); rows.push({ kind: "event", at: s.at, text: COMPACTED }); } return; }
       if (s.k === "gap" || s.k === "screen") return;
       if (!turn) turn = { kind: "turn", at: s.at, sid: ses.sid, steps: [] };
       turn.steps.push(s);
@@ -200,6 +213,14 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
     ? { kind: "turn", id: `r${i}`, at: r.at, running: !!r.running, waiting: !!r.running && waiting, parts: turnParts(eventsOf(r.steps, !!r.running)), answer: lastSaid(r.steps) }
     : { ...r, id: `r${i}` }));
 }
+export const COMPACTED = "Conversation compacted";
+// ...and WHILE IT COMPACTS, the working line says so (the owner, 2026-11-10: "while it's going on show compacting like claude code does"): the live
+// session's newest step a compaction ACP says is still under way. A CLI log marks one only once it is done, so a pty session never says it
+const sessionSteps = (ses) => (ses.source === "acp" ? stepsFromAcp(ses.updates) : ses.steps || []);
+export const compactingNow = ({ sessions = [], live = null } = {}) => {
+  const ses = sessions.at(-1), s = ses?.live && (live ? live.working !== false : true) ? sessionSteps(ses).at(-1) : null;
+  return s?.k === "compact" && !!s.status && !OVER.includes(s.status) && s.status !== "cancelled";
+};
 const cameIn = (mails, from, upto) => (mails || []).some((m) => { const t = at(m.joined || m.at); return t > at(from) && (!upto || t <= at(upto)); });
 const lastSaid = (steps) => [...steps].reverse().find((s) => s.k === "said")?.text || "";
 
@@ -211,6 +232,8 @@ export const partsMessage = (parts) => (parts.length ? [{ type: "data", name: PA
 export const rowMessages = (rows, sid = "coding") => (rows || []).map((r) => (r.kind === "mail"
   ? { id: `${sid}-${r.id}`, role: "user", brief: true, mail: r.mail, content: [{ type: "text", text: r.mail.map((m) => m.words).join("\n") || " " }], createdAt: r.at }
   : r.kind === "you" ? { id: `${sid}-${r.id}`, role: "user", content: [{ type: "text", text: r.text }], createdAt: r.at }
+  // ...a compaction is an event, drawn as a press's quiet line is ("Conversation compacted · 8:21 AM") - never an input, so the turn goes on under it
+  : r.kind === "event" ? { id: `${sid}-${r.id}`, role: "user", press: true, content: [{ type: "text", text: r.text }], createdAt: r.at }
   : { id: `${r.running ? "live-" : ""}${sid}-${r.id}`, role: "assistant", content: partsMessage(r.parts), createdAt: r.at, ...(r.waiting ? { waiting: true } : {}) }));
 
 // WHICH SOURCE a task's chat reads: a coding task, or any task with a coding CLI live on it, is its sessions (codingchat.py); every other is

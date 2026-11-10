@@ -40,6 +40,7 @@ const Step = ({ s }) => {
   if (s.k === "result") return <Typography sx={{ fontSize: 12, color: FAINT, fontStyle: "italic" }}>Its answer — shown above.</Typography>;
   if (s.k === "error") return <Typography sx={{ fontSize: 12, color: "#8a3646" }}>⚠ {s.text}</Typography>;
   if (s.k === "brief") return <BriefLine text={s.text} />;
+  if (s.k === "compact") return <Typography sx={{ fontSize: 11.5, color: FAINT }}>{s.text || "Conversation compacted"}</Typography>;
   if (s.k === "gap") return <Typography sx={{ fontSize: 11.5, color: FAINT }}>… {s.text}</Typography>;
   if (s.k === "screen") return (
     <Box sx={{ ...mono, fontSize: 11, whiteSpace: "pre-wrap", bgcolor: PANEL2, p: 1, borderRadius: 1, maxHeight: 420, overflow: "auto", color: INK }}>{s.text}</Box>);

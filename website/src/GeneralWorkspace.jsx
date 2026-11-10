@@ -27,7 +27,7 @@ import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
 import { baseName, isWork } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { PARTS, chatRows, chatSource, checkBackDue, continues, eventOf, linkWords, partsMessage, rowMessages, turnParts, workCount } from "./chatStream.js";
+import { PARTS, chatRows, chatSource, checkBackDue, compactingNow, continues, eventOf, linkWords, partsMessage, rowMessages, turnParts, workCount } from "./chatStream.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
@@ -173,6 +173,15 @@ const AgentBand = ({ name, provider, work, since, starting = "" }) => {
       <em>{since ? elapsedText(now - since) : provider || name || ""}</em>
     </div>
   );
+};
+
+// ...and WHILE THE CLI COMPACTS ITS CONTEXT, that line says so (chatStream.compactingNow; the owner, 2026-11-10: "while it's going on show
+// compacting like claude code does"), its clock the turn's
+const CompactingBand = ({ since }) => {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  return <div className="tq-aui-working" role="status" aria-live="polite" data-tq-working="compacting">
+    <span className="tq-aui-band-dot" /><span>Compacting…</span>{!!since && <em>{elapsedText(now - since)}</em>}</div>;
 };
 
 // The speaker of the agent's turns. In the dock this IS Taskuary's assistant; on a work window it
@@ -430,13 +439,15 @@ const TurnWork = ({ data }) => {
 // ...its clock from the turn's own start: the server's `turn_started` when it has said it (`since`), and never before the newest input in the chat - the line just
 // typed is in the thread before the server's history has it, and the clock read the owner's line before that one, "249m 53s" over a turn
 // three seconds old (the scenario run, 2026-11-06)
-const AtWork = ({ since, began, ...props }) => {
+const AtWork = ({ since, began, compacting = false, ...props }) => {
   const folded = useAuiState((s) => { const m = s.thread.messages.at(-1);
     return m?.role === "assistant" && live(m) && (m.content || []).some((p) => p.type === "data" && (p.name === PARTS || p.name === "agent_steps")); });
   // ...at Summary the live turn's steps are folded away: its "Working on this…" line stays
   const level = React.useContext(LevelCtx);
   const typed = useAuiState((s) => turnBegan(s.thread.messages.filter((m) => m.role === "user").map((m) => m.createdAt)));
   // ...the server's own start wins when it has said it: a mail that joined mid-turn is newer than the turn and set its clock back to 0s
+  // ...a compaction under way says so whatever is drawn above it: the live steps' last line is the step before it, done
+  if (compacting) return <CompactingBand since={began || Math.max(since || 0, typed || 0) || null} />;
   return folded && level !== "summary" ? null : <AgentBand {...props} since={began || Math.max(since || 0, typed || 0) || null} />;
 };
 // THE AGENT'S TURN BEFORE THE THREAD HAS IT (pendingTurn.js, the owner 2026-11-09): its head - "Agent · 2:05 PM" - and its line, drawn from the
@@ -753,7 +764,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false, waiting = [], box = "",
   onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, turns = null, queued = null, heldStart = null, hint = "", placeholder = "",
-  empty = "", stopShown = false, seed = null }) {
+  empty = "", stopShown = false, seed = null, compacting = false }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -972,9 +983,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   // ...the chat's cards stand at the foot (no turn has summed it up, none holds the draft): what waits beside them there is "Also"
   const footNext = !dock && nextAt?.next && freshNext(nextAt.reviews) && !summed && !working && !cardTurn(nextAt.reviews, (messages || []).map((m) => m.id)) && (!chat || messages?.at(-1)?.role !== "assistant");
   const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : "Answer the agent's question…";
-  const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} began={began} starting={starting} />;
+  const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} began={began} starting={starting} compacting={compacting} />;
   // ...a turn a press asked for counts from the press, and says it is starting until the agent is at work
-  const sentWork = sent && !dock ? <AtWork name={name} provider={provider} work={work} since={sent.at} began={serverBusy ? began : null}
+  const sentWork = sent && !dock ? <AtWork name={name} provider={provider} work={work} since={sent.at} began={serverBusy ? began : null} compacting={compacting}
     starting={serverBusy ? starting : starting || startingLine(name, provider)} /> : atWork;
   const footLines = [...waitingShown(waiting, held, mineDrawn, messages).map((w) => ({ id: `waiting-${w.id}`, text: w.text, at: w.at })), ...notShown(held, mineDrawn)];
   const atFoot = !!sent && footLines.length > 0;
@@ -1142,8 +1153,8 @@ function useCodingChat(tid, on, term) {
     const [wake, stop] = coalesced(load, 2500), off = onLive("task-changed", (ev) => { if (touches(ev, tid)) wake(); });
     return () => { off(); stop(); };
   }, [on, tid, load]);
-  const rows = useMemo(() => (got ? chatRows(got) : []), [got]);
-  return { got, live, rows, load };
+  const rows = useMemo(() => (got ? chatRows(got) : []), [got]), compacting = useMemo(() => !!got && compactingNow(got), [got]);
+  return { got, live, rows, load, compacting };
 }
 // ...the two sources in one stream, in the order things happened (a turn still at work, with no time of its own yet, at the foot)
 const byTime = (ms) => ms.map((m, i) => [String(m.createdAt || "9999").replace("T", " "), i, m]).sort((a, b) => a[0].localeCompare(b[0]) || a[1] - b[1]).map((x) => x[2]);
@@ -1459,7 +1470,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
-        serverBusy={busy || codingBusy} provider={coding ? cc.live?.cli || "" : session?.provider || pickedLabel} name={name} work={work} since={since} began={began}
+        serverBusy={busy || codingBusy} provider={coding ? cc.live?.cli || "" : session?.provider || pickedLabel} name={name} work={work} since={since} began={began} compacting={codingBusy && cc.compacting}
         drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting} waiting={(coding ? cc.got?.waiting : data?.waiting) || []} box={data?.box || ""} seed={seed}
         chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}

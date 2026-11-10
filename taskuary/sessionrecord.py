@@ -10,7 +10,7 @@ that account into one list of steps, and keeps a copy beside the task's artifact
 pruning its logs next month does not take the record with it.
 
 A step is {k, text, name?, file?, at?}: k is `you` (what the agent was told), `brief` (what Taskuary told it - keep_seed),
-`thought`, `said`, `tool` (name + what it was pointed at), `plan` (its todo list) or `error`. Tool OUTPUT is left out on purpose - it is the noise the record
+`thought`, `said`, `tool` (name + what it was pointed at), `plan` (its todo list), `compact` (the CLI compacted its context) or `error`. Tool OUTPUT is left out on purpose - it is the noise the record
 is read past, and the agent's next thought or answer says what it made of it."""
 import json
 import re
@@ -140,11 +140,22 @@ def _hunks(sp) -> list:
             for h in (sp or [])[:50] if isinstance(h, dict) and isinstance(h.get('lines'), list)]
 
 
+# A COMPACTION IS THE CLI'S OWN, NOT ANYONE'S WORDS (the owner, 2026-11-10: "what is this garbage? automated compaction? it shoudl not show it
+# please just say it was compacted"): Claude writes a `compact_boundary` system entry, then the summary it carries on from as a USER entry
+# marked isCompactSummary - drawn as the owner's bubble, "This session is being continued..." and all. One `compact` step in their place
+COMPACTED = 'Conversation compacted'
+def _compact(out: list, at):
+    if not (out and out[-1]['k'] == 'compact'): out.append({'k': 'compact', 'text': COMPACTED, 'at': at})
+
+
 def _claude(path: Path) -> list:
     out, uses = [], {}
     for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
         try: j = json.loads(line)
         except ValueError: continue
+        if j.get('isCompactSummary') or (j.get('type') == 'system' and j.get('subtype') == 'compact_boundary'):
+            if not j.get('isSidechain'): _compact(out, j.get('timestamp'))
+            continue
         if j.get('isMeta') or j.get('isSidechain') or j.get('type') not in ('user', 'assistant'): continue
         at, msg = j.get('timestamp'), j.get('message') or {}
         # ...an edit's result carries the patch Claude wrote, line numbers and all: it replaces the before/after its call was handed
@@ -171,6 +182,7 @@ def _codex(path: Path) -> list:
         try: j = json.loads(line)
         except ValueError: continue
         p, at = j.get('payload') or {}, j.get('timestamp')
+        if j.get('type') == 'compacted': _compact(out, at); continue           # ...and Codex's own compaction, its rollout's `compacted` item
         if j.get('type') == 'event_msg' and p.get('type') == 'user_message' and str(p.get('message') or '').strip():
             out.append({'k': 'you', 'text': _cut(p['message'], YOU_N), 'at': at})
         if j.get('type') != 'response_item': continue
@@ -444,6 +456,9 @@ def queued(text):
     return [('brief', head)] + [('you', n) for n in notes]
 
 
+_CONTINUED = 'This session is being continued from a previous conversation'     # Claude Code's chrome over a compact summary
+
+
 def mark_briefs(tid: int, steps: list) -> list:
     """The told steps that are a seed Taskuary sent, as `brief` - and the owner's words a seed carries ("FROM THE OWNER: ..."), as their own
     `you` line just before it (outcomes.owner_split). A told step headed with those words is ours too, kept seed or not: only Taskuary writes
@@ -459,6 +474,8 @@ def mark_briefs(tid: int, steps: list) -> list:
         a = ''.join(_flat(x.get('text')).split())[:SEED_N]
         return any(s and a and (s.startswith(a) or a.startswith(s)) and min(len(a), len(s)) >= 20 for s in seeds)
     def mark(x):
+        # ...a record SAVED before 2026-11-10 kept the summary as a told step, its structure gone: the CLI's own fixed opening is the one mark left
+        if x.get('k') == 'you' and _flat(x.get('text')).startswith(_CONTINUED): return [{**x, 'k': 'compact', 'text': COMPACTED}]
         if x.get('k') == 'you' and (b := queued(x.get('text'))) is not None: return [{**x, 'k': k, 'text': t} for k, t in b]
         if x.get('k') not in ('you', 'brief') or (x['k'] == 'you' and not ours(x) and not owner_split(x.get('text'))[0]): return [x]
         w, rest = owner_split(x.get('text'))

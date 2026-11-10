@@ -201,6 +201,40 @@ def test_the_owners_words_in_a_resume_seed_are_their_line_and_the_rest_is_ours(h
     assert [(x['k'], x['text']) for x in ses['steps']] == [('you', 'trynow'), ('brief', RESUME_PROMPT)]
 
 
+SUMMARY = ('This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier '
+           'portion of the conversation.\n\n<system-reminder>context</system-reminder>\nSummary:\n1. Primary Request and Intent: Erin Blake asked '
+           'why the March import doubled.')
+
+
+def test_a_compaction_is_one_quiet_step_never_the_owners_line(home):
+    """2026-11-10: Claude compacted its context mid-task, and its summary - written into its log as a user entry - was drawn as the owner's
+    own bubble. The log marks it (a compact_boundary system entry, then the summary marked isCompactSummary): one `compact` step instead."""
+    from taskuary import codingchat
+    s = MemoryStore(); tid = Factory(s).task(title='March import doubled')
+    jsonl(home / '.claude' / 'projects' / 'C--work-ledger' / 'k1.jsonl', [
+        {'type': 'user', 'message': {'content': 'Why did March double?'}, 'timestamp': '2026-11-10T08:00:00Z'},
+        {'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'Reading the importer.'}]}, 'timestamp': '2026-11-10T08:01:00Z'},
+        {'type': 'system', 'subtype': 'compact_boundary', 'content': 'Conversation compacted', 'timestamp': '2026-11-10T08:20:00Z',
+         'compactMetadata': {'trigger': 'auto', 'preTokens': 160000}},
+        {'type': 'user', 'isCompactSummary': True, 'isVisibleInTranscriptOnly': True, 'message': {'role': 'user', 'content': SUMMARY},
+         'timestamp': '2026-11-10T08:20:01Z'},
+        {'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'Found it: the cursor reset.'}]}, 'timestamp': '2026-11-10T08:21:00Z'}])
+    steps, _ = sessionrecord.cli_steps('claude', 'k1')
+    assert [x['k'] for x in steps] == ['you', 'said', 'compact', 'said'] and steps[2]['at'] == '2026-11-10T08:20:00Z'
+    assert not any('continued from a previous conversation' in str(x.get('text')) for x in steps)
+    assert sessionrecord.summarise(steps)['counts']['you'] == 1
+    # ...Codex's rollout says the same with its `compacted` item
+    jsonl(home / '.codex' / 'sessions' / '2026' / '11' / '10' / 'rollout-2026-11-10T08-00-00-k2.jsonl', [
+        {'type': 'event_msg', 'payload': {'type': 'user_message', 'message': 'Why did March double?'}},
+        {'type': 'compacted', 'payload': {'message': 'the earlier turns, summed up'}, 'timestamp': '2026-11-10T08:20:00Z'}])
+    assert [x['k'] for x in sessionrecord.cli_steps('codex', 'k2')[0]] == ['you', 'compact']
+    # ...and a record SAVED before the fix, the summary kept as a told step, reads as the compaction it was
+    s.add_transcript(tid, 'pane-k', 'screen', 'coding', 'C:/work/ledger', 'k9', brain='claude')
+    sessionrecord._saved_path(tid, 'pane-k').write_text(json.dumps({'steps': [{'k': 'you', 'text': SUMMARY[:3000]}, {'k': 'said', 'text': 'Go on.'}]}), encoding='utf-8')
+    [ses] = codingchat.sessions(s, tid)
+    assert [(x['k'], x['text']) for x in ses['steps']] == [('compact', sessionrecord.COMPACTED), ('said', 'Go on.')]
+
+
 def test_sessions_come_newest_first_each_with_its_own_report(home):
     s = MemoryStore(); tid = Factory(s).task(title='Two runs')
     s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)",

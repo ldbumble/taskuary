@@ -219,6 +219,25 @@ class HandingOver(unittest.TestCase):
         self.hand()                                                                   # tried again: the same hand-over
         self.assertEqual(len([r for r in self.ws.open_requests(self.ws.events(self.s, self.tid)) if r['RequestId'].startswith(bg.PRESS)]), 1)
 
+    def test_the_same_press_handed_over_again_is_on_screen_again(self):
+        # the owner, 2026-11-10 ("i cant see the screen"): a client record's Save on portal.vendor.example, handed over, closed (his Done, the
+        # page unmoved), then handed over again by the agent's next turn - recorded under the answered id, it was never open: no card, no
+        # chip, "agent done" and Mark done lit while the step waited on him
+        from taskuary import taskstate
+        self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
+        self.assertTrue(bg.done(self.s, self.tid, rid)); self.heard()
+        self.ws.record(self.s, self.tid, 'run1', 'working', text=self.ws.WAKE, source='api')     # the agent's told turn
+        self.hand()
+        req = bg.handing(self.s, self.tid, 'run1')
+        self.assertIsNotNone(req, 'the second hand-over waits on the owner')
+        self.assertTrue(req['RequestId'].startswith(bg.PRESS)); self.assertNotEqual(req['RequestId'], rid)
+        self.assertEqual(self.ws.asking_of(self.s, self.sess)['request_id'], req['RequestId'])         # the chat's card, live
+        t = {**self.s.get_task(self.tid), 'Kind': 'general'}
+        self.assertFalse(taskstate.done_for_now(self.s, t, {'state': 'asking', 'request': self.ws.asking_of(self.s, self.sess)}))
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True):                          # at rest, or after a restart
+            self.assertEqual(taskstate.open_question(self.s, self.tid)['request_id'], req['RequestId'])
+        self.hand(); self.assertEqual(bg.handing(self.s, self.tid, 'run1')['RequestId'], req['RequestId'])     # still one, not two
+
     def test_the_page_moving_past_the_step_tells_the_agent_it_was_done(self):
         self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
         here = {'href': PAY, 'title': 'Pay for your order', 'there': True}

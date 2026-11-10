@@ -461,14 +461,14 @@ def your_turn(store, tid: int, sid: str, what: str = '', watch=...) -> str:
     # (the owner, 2026-11-04, on a flight search that only asked where and when)
     if not st.get('open') or not _page(st.get('url')):
         text = what or 'The agent needs you to do a step on a web page, and has none open yet'
-        rid = ws.request_id_for(text)
+        rid = ws.fresh_id(store, tid, ws.request_id_for(text))
         ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, source='api')
         return rid
     try: host = urlsplit(str(st.get('url') or '')).hostname or ''
     except ValueError: host = ''
     host = host[4:] if host.startswith('www.') else host
     text = f"Your turn in the browser{f' on {host}' if host else ''}: {what or 'the agent needs you to do a step on the page'}"
-    rid = f'{TURN_PREFIX}{ws.request_id_for(text)}'
+    rid = ws.fresh_id(store, tid, f'{TURN_PREFIX}{ws.request_id_for(text)}')
     chat = hasattr(term.SESSIONS.get(str(sid)), 'send_prompt')
     # ...AND WATCHED (the owner, 2026-11-05: "if we need the user we should wait for them to do it"): the page moving on closes it by itself
     # and the agent goes on - Done stays for a page Taskuary cannot read (browsergate.watch_turn)

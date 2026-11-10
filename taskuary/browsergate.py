@@ -488,7 +488,7 @@ def hand_over(store, tid: int, sid: str, act: dict, pg: dict, v: dict, site: str
     c = control(act, pg)
     btn = f'"{c["name"]}"' if c.get('name') else f'the {c["role"]}' if c.get('role') else 'the button'
     text, url = PRESS_LINE.format(btn=btn), pg.get('url') or ''
-    rid = PRESS + ws.request_id_for(f'{sid} {url} {text}')
+    rid = ws.fresh_id(store, tid, PRESS + ws.request_id_for(f'{sid} {url} {text}'))
     if not handing(store, tid, sid, rid):
         if c.get('ref'):
             try: _run(sid, ['scrollintoview', f"@{c['ref']}"], 15, 'scroll')

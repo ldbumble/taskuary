@@ -56,6 +56,18 @@ def request_id_for(text: str) -> str:
     return hashlib.sha1(' '.join(str(text or '').split()).lower().encode()).hexdigest()[:12]
 
 
+def fresh_id(store, tid: int, rid: str) -> str:
+    """`rid` for an ask raised again: the one still open under it, else an id this task never used. An id once answered stays answered
+    (open_requests), so the same press handed over a second time was recorded under it and never shown: no card, no chip, "agent done"
+    (the owner, 2026-11-10: "i cant see the screen")."""
+    evs = events(store, tid)
+    if (o := next((e['RequestId'] for e in open_requests(evs) if str(e['RequestId']).split('~')[0] == rid), None)): return o
+    used, n = {e['RequestId'] for e in evs}, 2
+    if rid not in used: return rid
+    while f'{rid}~{n}' in used: n += 1
+    return f'{rid}~{n}'
+
+
 def _live(tid: int):
     from . import terminal as term
     return next((x for x in list(term.SESSIONS.values()) if getattr(x, 'task_id', None) == tid and getattr(x, 'alive', False)), None)

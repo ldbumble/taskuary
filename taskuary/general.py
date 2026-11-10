@@ -591,8 +591,6 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if 
            'close_from_assistant': lambda d: 'marked it done',      # every surface's close (concierge.close_task) writes this one row
            # ...a Send and close that sent and did not close (concierge.close_after_send): it read "You send kept open." on the page and to the agent
            'send_kept_open': lambda d: f"asked to close it with that send - it stays open: {'; '.join(d.get('kept') or []) or 'something on it still waits'}",
-           # ...Not now on the landing card (landing.hold): nothing went, and the agent is not to bring it up again (landing.NOT_NOW)
-           'land_held': lambda d: f"pressed Not now on the {d.get('what') or 'push'} - nothing went out, and it is not to be asked for again unprompted",
            # ...and the press that LANDED it: with no phrase of its own the line read "You landed." (agent walk 2, 2026-11-10)
            'landed': lambda d: f"pressed {_land_how(d)} on the agent's work - it went through" + (f" ({d['sha'][:7]})" if d.get('sha') else ''),
            # ...and one the remote or git REFUSED (landing.land): kept as their press, so the card's failure outlives its answer

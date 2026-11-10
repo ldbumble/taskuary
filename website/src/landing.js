@@ -30,8 +30,9 @@ export function landingWords(s) {
     // ...the second button: the other way a push goes, or on its own branch the next likeliest land
     first: firstHow(s, p), second: secondHow(s, p),
     done: s.landed ? `✓ ${DONE[s.landed.how] || HOW[s.landed.how] || s.landed.how}` : "",
-    // ...and put off with Not now (the owner, 2026-11-10), the one line the folded card says under its title
-    held: s.held ? `Not now - nothing ${s.push ? "was pushed" : "landed"}. It waits here for your press.` : "",
+    // ...and passed once the conversation moved on (proposals.move_on, the owner 2026-11-10: "it should stay where it is with buttons grayed
+    // out"): the agent raised it, and raises it again if it is still wanted - the line under its title, nothing pressable
+    passed: s.passed ? "Set aside when you moved on - ask the agent to bring it back." : "",
     doneLine: s.landed ? [String(s.landed.sha || "").slice(0, 7), s.landed.deploy && s.landed.how === "deploy" ? `to ${s.base} and ${s.landed.deploy}` : s.landed.how === "push" ? `to ${s.base}` : ""]
       .filter(Boolean).join(" · ") : "",
   };

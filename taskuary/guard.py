@@ -106,7 +106,7 @@ DENIED = (
     # ...and the doors the 2026-09-02 audit found standing open: releasing the held task of the very
     # sender the hold exists for, landing work, running an executor or a query with a card's
     # credentials, and rewriting the documents that govern the agent
-    (r'POST', r'^/api/tasks/\d+/(release|land|landing(/revert|/hold)?|ci)$', 'releasing a held task, landing its work, putting that off or reverting part of it is the owner\'s decision'),
+    (r'POST', r'^/api/tasks/\d+/(release|land|landing(/revert)?|ci)$', 'releasing a held task, landing its work or reverting part of it is the owner\'s decision'),
     (r'POST', r'^/api/tasks/\d+/dispatch/retry$', 'retrying a queued start is the owner\'s decision'),
     (r'POST', r'^/api/tasks/\d+/offer$', 'accepting what triage offered an agent could do is the owner\'s press'),
     (r'DELETE', r'^/api/tasks/\d+/dispatch$', 'cancelling a queued start is the owner\'s decision'),

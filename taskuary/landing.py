@@ -278,7 +278,10 @@ def state(store, tid: int, full: bool = False) -> dict | None:
            'landed': r.get('landed'), 'proposal': r.get('proposal')}
     out['push'] = None if mine else _unpushed(store, cwd, base, o['commits'], r.get('proposal'), out['repo'])
     out['ask'] = (mine and ahead > 0 and not r.get('landed')) or bool(out['push'])
-    out['held'] = bool(out['ask'] and r.get('held'))             # the owner's Not now stands on it (hold): the card draws folded, no button lit
+    # ...a question the agent RAISED (its proposal) is passed once the conversation moves on (proposals.move_on): greyed, nothing pressable,
+    # until the agent raises it again. Unpushed work with no proposal is the checkout's own fact, raised by no turn - it stays live
+    out['passed'] = bool(out['ask'] and (r.get('proposal') or {}).get('passed') and not r.get('landed'))
+    if out['passed']: out['ask'] = False
     hows = (OWN_HOW if mine else PUSH_HOW[:1 + bool((out['push'] or {}).get('deploy'))]) if out['ask'] else ()
     out['answers'] = [{'how': k, 'label': HOW[k]} for k in hows]
     out['line'] = said(out)
@@ -356,8 +359,9 @@ def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent', depl
     if deploy and not _branch_ok(deploy): raise ValueError(f'{deploy!r} is not a branch name to deploy to')
     if how == 'push' and deploy: how = 'deploy'
     if how == 'deploy' and not deploy: raise ValueError('deploy needs the branch it deploys to: `deploy`')
-    if (w := asked_again(store, tid)): raise ValueError(w)
     r = record(store, tid)
+    # ...raised again after it was passed (pass_over): asking is the agent's to judge, never refused - its card is live again
+    if (r.get('proposal') or {}).pop('passed', None): _save(store, tid, r)
     if deploy:                                    # ...read into the question below: its Push & deploy button is drawn from it
         r['proposal'] = {**(r.get('proposal') or {}), 'deploy': deploy}; _save(store, tid, r)
     s = state(store, tid)
@@ -389,7 +393,7 @@ def from_proposal(store, tid: int, p: dict) -> dict | None:
     a = str((p or {}).get('action') or '').strip()
     if a not in GIT_ACTS: return None
     s = state(store, tid)
-    if not (s and s['ask']): return None
+    if not (s and (s['ask'] or s.get('passed'))): return None        # ...a passed question is raised again
     how = 'pr' if s['own'] and GIT_ACTS[a] in ('', 'pr') else 'push' if not s['own'] else GIT_ACTS[a]
     if s['own'] and how == 'push': how = 'pr'                     # a branch of its own goes out as a pull request, never straight over the base
     return propose(store, tid, how, str(p.get('why') or ''), deploy=str(p.get('deploy') or p.get('target') or '') if not s['own'] else '')
@@ -446,10 +450,10 @@ def push_asked(store, tid: int, cmd: str, cwd: str = '', about: str = '') -> tup
         return False, (f"Taskuary did not run this line: a push from this task's checkout is the owner's {button} button, never a shell step. Run "
                        f"the rest of it without the push, then call propose_land (how {how}{f', deploy {deploy}' if deploy else ''}) - they get "
                        "the button, and Taskuary tells you when it went.")
-    if not s['ask']: return None
-    if (w := asked_again(store, tid)): return True, f'{shellgate.HELD}: {w}'       # ...no second card for a push they put off
+    # ...a passed question is still the owner's press: the agent's own push raises it again, never runs (proposals.move_on)
+    if not (s['ask'] or s.get('passed')): return None
     try:
-        if ((s['proposal'] or {}).get('how'), (s['proposal'] or {}).get('deploy') or '') != ('deploy' if deploy else how, deploy):
+        if s.get('passed') or ((s['proposal'] or {}).get('how'), (s['proposal'] or {}).get('deploy') or '') != ('deploy' if deploy else how, deploy):
             propose(store, tid, how, about, deploy=deploy)
     except ValueError: return None
     return True, (f"{shellgate.HELD}: this push is the owner's {button} button on the task now, not a shell step - {state(store, tid)['line']} Nothing "
@@ -457,51 +461,21 @@ def push_asked(store, tid: int, cmd: str, cwd: str = '', about: str = '') -> tup
                   "one line what waits on it - never ask in words. End your turn now, or go on with work that does not need it.")
 
 
-# NOT NOW (the owner, 2026-11-10: 'Add "Not now"'). The question had no answer but its buttons: an owner not ready to push left the card
-# standing lit, and the agent - never told - asked again a turn later. Not now is a press of its own: nothing goes, the card folds (state
-# 'held' - its buttons stay, none filled), it is a line in the chat and the agent hears it with their next words (general.PRESSES). Asked
-# again before the owner has written on the task, the agent is refused in these words; after, asking is its own to judge from what they
-# wrote - no word list here - and its ask unfolds the card. Their own press on the folded card is the answer as it always was (land).
-NOT_NOW = ("The owner pressed Not now on this: nothing is pushed or landed, and the question waits folded on the task for their own press. "
-           "Do not ask for it again - in words, by a tool or by running it - until they write that they want it. Go on with work that does "
-           "not need it, or end your turn.")
-
-
-def _wrote_since(store, tid: int, after) -> bool:
-    "The owner has written a line of their own on the task after comment `after` - Taskuary's briefs are not theirs."
-    from .general import BRIEF_ACTOR, USER_TYPE
-    return bool(store._one('SELECT 1 AS x FROM comment WHERE TaskId=? AND CommentId>? AND ActorType=? AND Actor<>? LIMIT 1',
-                           (int(tid), int(after or 0), USER_TYPE, BRIEF_ACTOR)))
-
-
-def asked_again(store, tid: int) -> str:
-    "NOT_NOW for an agent asking to land over the owner's Not now - '' with none standing; one the owner has written since is lifted here."
-    r = record(store, tid)
-    if not (h := r.get('held')): return ''
-    if not _wrote_since(store, tid, h.get('after')): return NOT_NOW
-    r.pop('held'); _save(store, tid, r)
-    return ''
-
-
-NOT_NOW_SAID = 'Not now - nothing went out. It waits on the task for your press.'
-def hold(store, tid: int, actor: str = 'owner') -> dict:
-    "The owner's Not now on the landing question: nothing lands, and it stands until they press the card or write on the task."
-    s = state(store, tid)
-    if not s or not s['ask']: raise ValueError((s or {}).get('line') or 'nothing waits to land on this task')
-    r = record(store, tid)
-    # ...ONCE (the stress round, 2026-11-10): a double click, or the desk and the phone, was two "Not now" lines and two for the agent to hear
-    if r.get('held') and not _wrote_since(store, tid, r['held'].get('after')): return {'ok': True, 'held': True, 'already': True, 'says': NOT_NOW_SAID}
-    r['held'] = {'at': time.strftime('%Y-%m-%d %H:%M:%S'),
-                 'after': (store._one('SELECT MAX(CommentId) AS n FROM comment WHERE TaskId=?', (int(tid),)) or {}).get('n') or 0}
-    _save(store, tid, r)
-    store.audit('task', tid, 'land_held', actor, detail={'what': 'push' if s['push'] else 'landing'})
-    return {'ok': True, 'held': True, 'says': NOT_NOW_SAID}
 
 
 def asked(store, tid) -> bool:
-    "Does a landing question of the agent's wait, as the record alone says it (no git - a rail build asks): it proposed one, nothing landed since."
+    """Does a landing question of the agent's wait, as the record alone says it (no git - a rail build asks): it proposed one, nothing landed
+    since, and the conversation has not moved past it (pass_over)."""
     r = record(store, tid); p = r.get('proposal') or {}
-    return bool(p) and str((r.get('landed') or {}).get('at') or '') < str(p.get('at') or '')
+    return bool(p) and not p.get('passed') and str((r.get('landed') or {}).get('at') or '') < str(p.get('at') or '')
+
+
+def pass_over(store, tid: int) -> bool:
+    "The landing question the agent raised, passed as the conversation moves on (proposals.move_on). True when one was."
+    r = record(store, tid); p = r.get('proposal') or {}
+    if not p or p.get('passed') or str((r.get('landed') or {}).get('at') or '') >= str(p.get('at') or ''): return False
+    r['proposal'] = {**p, 'passed': time.strftime('%Y-%m-%d %H:%M:%S')}; _save(store, tid, r)
+    return True
 
 
 class Refused(RuntimeError): pass
@@ -554,10 +528,12 @@ def land(store, tid: int, how: str, actor: str = 'owner') -> dict:
 def _land(store, tid: int, how: str, actor: str) -> dict:
     if how not in HOW: raise ValueError(f"how is one of: {', '.join(HOW)}")
     s = state(store, tid)
+    if s and s.get('passed'):
+        from .proposals import PASSED_SAID
+        raise ValueError(PASSED_SAID)
     if not s or not s['ask']: raise ValueError((s or {}).get('line') or 'nothing to land on this task')
     if how == 'discard' and not s['own']: raise ValueError('discard is only offered for a branch the agent made itself')
     if how not in {a['how'] for a in s['answers']}: raise ValueError(f"{HOW[how]} is not offered here - {s['line']}")
-    if (r := record(store, tid)).pop('held', None): _save(store, tid, r)       # their own press is the answer Not now put off
     if how in PUSH_HOW: return _push(store, tid, s, how, actor)
     cwd, base, br = s['cwd'], s['base'], s['branch']
     head, said_ = head_branch(cwd), ''

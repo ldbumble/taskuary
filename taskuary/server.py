@@ -5868,16 +5868,6 @@ def task_landing_answer(tid: int, body: LandBody, request: Request):
     except ValueError as e: raise HTTPException(422, str(e))
     except RuntimeError as e: raise HTTPException(422, str(e))
 
-@app.post('/api/tasks/{tid}/landing/hold')
-def task_landing_hold(tid: int, request: Request):
-    "The owner's Not now on the landing question (landing.hold): nothing lands, the card folds, and the agent does not ask for it again."
-    from . import landing
-    _owner_only(request, "putting a landing off is the owner's answer")
-    if not store.get_task(tid): raise HTTPException(404, 'no such task')
-    if not hub_agents.developer_mode(store): raise HTTPException(409, 'Developer mode is off (Settings, Developer mode)')
-    try: return landing.hold(store, tid, ACTOR)
-    except ValueError as e: raise HTTPException(422, str(e))
-
 class AgentProposeBody(BaseModel):
     model_config = {'extra': 'allow'}
     task_id: int; action: str; why: str = ''

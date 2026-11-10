@@ -493,6 +493,8 @@ def held_pending(store, tid) -> dict | None:
 # turn (general.latest_block's WITHDRAW_LINE), and the page greys it while that turn runs - only actions are passed by the line itself.
 # Nor the task's own finish (its close-out, its playbook): Taskuary raises those when the work ends, no turn of the agent's does
 SET_ASIDE = 'set aside when you moved on'
+LAND = 'land'                  # move_on's mark for the landing question (landing.pass_over) among the review ids
+LAND_LINE = '- the push/landing question you raised'
 PASSED_SAID = 'This was set aside when you moved on - ask the agent to bring it back.'
 # ...never the one being run on the owner's press right now: Approve tells the agent, and its told turn can begin before the yes is kept
 _PRESSED, PRESS_HOLD = {}, 300
@@ -516,6 +518,10 @@ def move_on(store, tid, before: str = None) -> list:
         from . import permissions
         permissions.set_aside(store, int(tid))
     except Exception as e: logger.debug(f'task {tid}: a permission waiting was not set aside - {e}')
+    try:                                          # ...and the landing question it raised (a Push card)
+        from . import landing
+        if landing.pass_over(store, int(tid)): out.append(LAND)
+    except Exception as e: logger.debug(f'task {tid}: the landing question was not passed - {e}')
     if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out})
     return out
 
@@ -533,14 +539,16 @@ def _passed_line(r: dict) -> str:
 
 def passed_since(store, tid: int, since: str) -> list:
     "The cards of task `tid` passed since `since` (its agent's last answer), as lines for its prompt: '- rv<n>: <what>'."
+    from . import landing
+    p = (landing.record(store, int(tid)).get('proposal') or {})
     return [_passed_line(r) for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='superseded' AND DecideNote=? AND DecidedAt>? "
-                                                 "ORDER BY ReviewId", (int(tid), SET_ASIDE, since or ''))]
+                                                 "ORDER BY ReviewId", (int(tid), SET_ASIDE, since or ''))] + ([LAND_LINE] if str(p.get('passed') or '') > (since or '') else [])
 
 
 def passed_note(store, rids: list) -> str:
     "PASSED_TOLD with the cards `rids` - for a coding agent, whose next prompt is the line that passed them; '' with none."
-    rows = [r for r in (store.get_review(int(x)) for x in rids or []) if r]
-    return f"{PASSED_TOLD}\n" + '\n'.join(_passed_line(r) for r in rows) if rows else ''
+    rows = [_passed_line(r) for r in (store.get_review(int(x)) for x in rids or [] if x != LAND) if r] + ([LAND_LINE] if LAND in (rids or []) else [])
+    return f"{PASSED_TOLD}\n" + '\n'.join(rows) if rows else ''
 
 
 def owed(store, tid: int) -> bool:

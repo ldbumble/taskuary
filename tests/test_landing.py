@@ -281,29 +281,34 @@ class LandingTests(unittest.TestCase):
         self.assertTrue(landing.push_asked(self.s, self.tid, 'git push', self.cwd)[0])
         self.assertTrue(landing.push_asked(self.s, self.tid, 'git push -u origin HEAD', self.cwd)[0])
 
-    # ── NOT NOW (the owner, 2026-11-10: 'Add "Not now"'): the push question could only be answered by pushing. Put off, it folds, it is a
-    # line in the chat, and the agent - which asked again a turn later - is refused until the owner has written on the task
-    def test_not_now_folds_the_question_and_the_agent_cannot_ask_again_until_the_owner_writes(self):
-        from taskuary import general
+    # ── NO NOT NOW (the owner, 2026-11-10: "why ddo we need not now card? just hit next ... SHouldn't we just get rid of it totally"): the
+    # push card the agent raised is a card like any other - passed once the conversation moves on, raised again if still wanted
+    def test_a_push_card_the_agent_raised_is_passed_when_the_conversation_moves_on_and_raised_again(self):
+        from taskuary import proposals
         self.on_master_with_origin(); self.dev()
         landing.propose(self.s, self.tid, 'push', 'the fix is ready')
-        self.assertFalse(landing.state(self.s, self.tid)['held'])
-        self.assertTrue(landing.hold(self.s, self.tid)['ok'])
+        self.assertTrue(landing.state(self.s, self.tid)['ask'])
+        self.assertIn(proposals.LAND, proposals.move_on(self.s, self.tid))
         s = landing.state(self.s, self.tid)
-        self.assertTrue(s['held']); self.assertTrue(s['ask'], 'the buttons stay: Push is still one press'); self.assertFalse(self.pushed())
-        self.assertIn('Not now on the push', general.presses(self.s, self.tid)[-1][2])
-        # ...asked again by the tool, a proposal or its own shell, the agent is told why not - and the shell line draws no second card
-        with self.assertRaises(ValueError) as e: landing.propose(self.s, self.tid, 'push', 'ready now?')
-        self.assertIn('Not now', str(e.exception))
-        with self.assertRaises(ValueError): landing.from_proposal(self.s, self.tid, {'action': 'push'})
-        held, said = landing.push_asked(self.s, self.tid, 'git push origin master', self.cwd)
-        self.assertTrue(held); self.assertIn('Not now', said); self.assertTrue(landing.state(self.s, self.tid)['held'])
-        # ...Taskuary's own brief is not the owner writing; once they have, asking again is the agent's to judge - and its ask unfolds the card
-        self.s.add_comment(self.tid, general.BRIEF_ACTOR, general.USER_TYPE, 'A mail joined the task.')
-        with self.assertRaises(ValueError): landing.propose(self.s, self.tid, 'push')
-        self.s.add_comment(self.tid, 'owner', general.USER_TYPE, 'ok, push it now')
-        self.assertTrue(landing.propose(self.s, self.tid, 'push', 'the owner asked for it')['ok'])
-        self.assertFalse(landing.state(self.s, self.tid)['held'])
+        self.assertTrue(s['passed']); self.assertFalse(s['ask'], 'nothing pressable')
+        with self.assertRaises(ValueError) as e: landing.land(self.s, self.tid, 'push')
+        self.assertEqual(str(e.exception), proposals.PASSED_SAID); self.assertFalse(self.pushed())
+        self.assertIn(proposals.LAND_LINE, proposals.passed_note(self.s, [proposals.LAND]))
+        # ...its own `git push` over a passed card is still held - raised again, never run
+        self.assertTrue(landing.push_asked(self.s, self.tid, 'git push origin master', self.cwd)[0]); self.assertFalse(self.pushed())
+        self.assertTrue(landing.state(self.s, self.tid)['ask'])
+        proposals.move_on(self.s, self.tid)
+        # ...the agent asks again, and is never refused for a hold: a live card again
+        self.assertTrue(landing.propose(self.s, self.tid, 'push', 'still needed')['ok'])
+        self.assertTrue(landing.state(self.s, self.tid)['ask'])
+
+    def test_unpushed_work_no_turn_raised_stays_live_as_the_checkout_says(self):
+        from taskuary import proposals
+        self.on_master_with_origin(); self.dev()
+        before = landing.state(self.s, self.tid)
+        self.assertNotIn(proposals.LAND, proposals.move_on(self.s, self.tid))
+        self.assertEqual(landing.state(self.s, self.tid)['ask'], before['ask'])
+        self.assertFalse(landing.state(self.s, self.tid)['passed'])
 
     def test_a_push_the_remote_refuses_is_kept_and_its_agent_is_told_the_way_past(self):
         """A FAILURE IS KEPT WHERE IT HAPPENED (rules part 4): someone pushed to origin first, so the owner's Push was refused - "pull and rebase,
@@ -323,20 +328,6 @@ class LandingTests(unittest.TestCase):
         [said] = told
         self.assertIn('was refused', said); self.assertIn('rebase', said)
         self.assertTrue(landing.state(self.s, self.tid)['ask'], 'the question stays: Push is still one press once the agent has rebased')
-
-    def test_not_now_pressed_twice_is_one_press(self):
-        "A double click, or the desk and the phone: the second Not now finds the question already folded - one line, one thing the agent hears."
-        from taskuary import general
-        self.on_master_with_origin(); landing.propose(self.s, self.tid, 'push', 'the fix is ready')
-        first, again = landing.hold(self.s, self.tid), landing.hold(self.s, self.tid)
-        self.assertTrue(first['ok'] and again['ok'] and again['held'])
-        self.assertEqual(sum('Not now' in what for _, _, what, *_ in general.presses(self.s, self.tid)), 1)
-
-    def test_the_owners_own_push_ends_not_now(self):
-        self.on_master_with_origin(); landing.hold(self.s, self.tid)
-        with mock.patch('taskuary.waitroom.add'): self.assertTrue(landing.land(self.s, self.tid, 'push')['ok'])
-        self.assertTrue(self.pushed()); self.assertNotIn('held', landing.record(self.s, self.tid))
-        with self.assertRaises(ValueError): landing.hold(self.s, self.tid)          # nothing waits to land now
 
     def test_a_push_onto_another_branch_is_push_and_deploy(self):
         for cmd in ('git push origin master:deploy', 'git push origin HEAD:deploy', 'git push origin master && git push origin master:deploy'):
@@ -418,7 +409,6 @@ class LandingTests(unittest.TestCase):
 class LandingDoorTests(unittest.TestCase):
     def test_landing_is_the_owners_and_proposing_is_the_agents(self):
         self.assertEqual(guard.classify('POST', '/api/tasks/7/landing')[0], 'deny')
-        self.assertEqual(guard.classify('POST', '/api/tasks/7/landing/hold')[0], 'deny')
         self.assertEqual(guard.classify('POST', '/api/agent/propose-land')[0], 'agent')
         self.assertEqual(guard.classify('GET', '/api/tasks/7/landing')[0], 'read')
 
@@ -430,4 +420,3 @@ class LandingDoorTests(unittest.TestCase):
             c = TestClient(server.app); tid = Factory(server.store).task(title='x', kind='coding')
             self.assertIsNone(c.get(f'/api/tasks/{tid}/landing').json()['data'])
             self.assertEqual(c.post(f'/api/tasks/{tid}/landing', json={'how': 'rebase'}).status_code, 409)
-            self.assertEqual(c.post(f'/api/tasks/{tid}/landing/hold').status_code, 409)

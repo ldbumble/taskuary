@@ -412,16 +412,37 @@ def text(raw) -> str:
     return raw.decode('utf-8', errors='replace')
 
 
+# ...ONE LINE THAT SAYS WHY, never git's list of files (the owner, 2026-11-10: "no idea what this is" over "U site/demo/assets/...js / U ...").
+# By the tools' own grammar, not by meaning: a status entry, a commit line or a bare path is not a reason, and git, gh and WSL put theirs on
+# an `error:` / `fatal:` line; else its first line, where WSL says it
+_LISTED = re.compile(r'^([ MADRCU?!]{1,2}\s+\S+|[0-9a-f]{7,40}\s.*|[^\s:]+[/\\][^\s]+)$')
+_SAYS_WHY = re.compile(r'^(error|fatal|ERROR|FATAL)\b')
 def failed(said: str, rc: int) -> str:
-    "What the owner reads when the held step failed: its first lines, which are where WSL, git and gh say why."
+    "What the owner reads when the held step failed: the one line where WSL, git or gh says why."
     lines = [l.strip() for l in str(said or '').splitlines() if l.strip()]
-    return f"The held step failed: {' / '.join(lines[:4])[:300] or f'exit {rc}'}"
+    told = [l for l in lines if not _LISTED.match(l) and not l.lower().startswith('hint:')] or lines
+    why = next((l for l in told if _SAYS_WHY.match(l)), told[0] if told else '')
+    return f"The held step failed: {why[:240] or f'exit {rc}'}"
+
+
+# THE OWNER'S PRESS NEVER RACES THE AGENT IN ITS OWN FOLDER (the owner, 2026-11-10: "no idea what this is. it's broken"): a second Approve
+# re-ran a failed push while the agent was mid-merge in that checkout, and it failed again. A step its own agent's turn is still working
+# beside waits for that turn to end - said in words, nothing run
+BUSY = 'The agent is working in that folder right now, so nothing was run - press it again once its turn has ended.'
+def mid_turn(store, tid: int, sid: str) -> str:
+    "BUSY while the agent session that held a step is in a turn, else ''."
+    from . import terminal as term, workerstate as ws
+    s = term.SESSIONS.get(str(sid or ''))
+    if s is None or not getattr(s, 'alive', False): return ''
+    st = ws.status(store, tid)
+    return BUSY if getattr(s, 'busy', False) or (str(st.get('sid')) == str(sid) and st.get('state') == 'working') else ''
 
 
 def perform(store, tid: int, p: dict, run=None) -> dict:
     """The owner's yes: run the held command, as it was, in the folder it was held in. `run`: the runner (tests stand one in)."""
     cmd, cwd = str(p.get('command') or ''), str(p.get('cwd') or '')
     if not cmd: raise RuntimeError('this held step names no command')
+    if (busy := mid_turn(store, tid, p.get('sid'))): raise RuntimeError(busy)
     if cwd and not os.path.isdir(cwd): raise RuntimeError(f'the folder it was held in is gone ({cwd}) - nothing was done')
     def go(argv, folder):
         from . import spawn
@@ -437,6 +458,7 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
     return {'performed': p.get('what') or cmd[:200], 'said': said[-300:]}
 
 
+FAILED, NOT_RUN = 'it failed - the agent was told and goes on from there', 'not run - a step before it failed'
 # ONE APPROVE FOR A TURN'S HELD STEPS (approve_steps): each step is approved through the one decide door, in order; the agent hears once, at the end
 _batch = contextvars.ContextVar('shellgate_batch', default=None)
 
@@ -449,6 +471,8 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
         raise ValueError('only held shell steps are approved together')
     if len({r.get('TaskId') for r in rvs}) != 1: raise ValueError('held steps of one task only')
     tid, told, done, failed = rvs[0]['TaskId'], [], [], None
+    if verb == 'approve' and (busy := mid_turn(store, tid, json.loads(rvs[0].get('DraftText') or '{}').get('sid'))):
+        return {'ok': False, 'done': [], 'failed': None, 'left': [r['ReviewId'] for r in rvs], 'busy': busy}
     tok = _batch.set(told)
     try:
         for i, rv in enumerate(rvs):
@@ -459,8 +483,16 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
     left = [r['ReviewId'] for r in rvs[len(done) + (1 if failed else 0):]]
     ran = '; '.join(told) or 'nothing ran'
     if verb != 'approve': _tell(store, tid, f"The owner dismissed {len(rvs)} held steps: {ran} - NOT done. {OWNER_NO}")
-    elif failed: _tell(store, tid, f"The owner approved {len(rvs)} held steps together. Taskuary ran {len(done)} of them ({ran}); step {failed['step']} "
-                                 f"failed: {failed['error'][:300]}. The rest were not run and still wait on the card. " + NEXT, wake=bool(done))
+    elif failed:
+        # ...A STEP THAT FAILED IS OVER, AND THE AGENT'S (the owner, 2026-11-10: "no idea what this is. it's broken"): the card read "1 of 2 ran -
+        # the rest wait" with Approve still lit under the failure, and the agent - told they still waited - worked the failure while the owner's
+        # next press ran the same step into it again. The card is now its record: the failed step and those after it settled, never pressable;
+        # the agent is started on what failed, and what it holds next is a new card in its new turn
+        for r in [failed['review'], *left]: store.decide_review(r, 'superseded', None, 'taskuary', FAILED if r == failed['review'] else NOT_RUN)
+        _tell(store, tid, f"The owner approved {len(rvs)} held steps together. Taskuary ran {len(done)} of them ({ran}); step {failed['step']} "
+                          f"failed: {failed['error'][:300]}. Nothing on that card waits on the owner now - the steps after it were not run. Find out "
+                          "why and put it right if you can; a step still needed is run again by you and held as a new card for their press. " + NEXT,
+              wake=True)
     else: _tell(store, tid, f"The owner approved {len(rvs)} held steps together and Taskuary ran them in order: {ran}. " + NEXT, wake=True)
     return {'ok': not failed, 'done': done, 'failed': failed, 'left': left}
 

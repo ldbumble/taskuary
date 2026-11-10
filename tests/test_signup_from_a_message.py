@@ -191,7 +191,7 @@ class TheOffer(unittest.TestCase):
         b = browserview.brief(held=True, open_now=False)
         self.assertIn('NO BROWSER IS OPEN', b); self.assertIn('agent-browser open <url>', b)
         self.assertIn('never a browser tool of your own CLI', b); self.assertIn('IF A STEP FAILS OR IS REFUSED', b)
-        self.assertIn('"held for the owner"', b); self.assertIn('THEY press it on the page themselves', b)
+        self.assertIn('"held for the owner"', b); self.assertIn('THEY press it', b)
         self.assertIn('never a browser tool of your own CLI', browserview.brief())          # the open browser says it too
         gone = browserview.NOT_SET_UP.format(where='Connections')
         self.assertIn('The browser is not set up - install agent-browser under Connections', gone)

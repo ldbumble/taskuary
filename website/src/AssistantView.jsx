@@ -38,7 +38,7 @@ import { BACK, advisedIn, aimed, navEnd, navOff, onPressed, onPressing, press as
 import { deskPress, notePress as notePressed } from "./pressLog.js";
 import { forgetTasks, heldTask, notePile, pageRead, prefetchTask, recRead, watchReads, watchRecs } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
-import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js";
+import { hint as btnHint, howFar, label as btn, liveVerb, verbOfRow } from "./buttons.js";
 import { readTurn, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive, taskIdsOf } from "./live.js";
@@ -923,7 +923,8 @@ function BarVerbs({ owner, chips, busy, onChip, quiet = false }) {
   // the item's key in the id: the end of the walk offers one "open" chip per item, and one id kept only the last - "Open TQ-0001" opened
   // TQ-0010. The verb stays LAST so isDone's /:done$/ still finds a done chip
   useVerbs(owner, chips.map((c, i) => ({ id: `chat:${c.key ? `${c.key}:` : ""}${c.verb || c.label}`, label: c.label, group: c.verb === "next" ? "next" : "decide",
-    tone: i === 0 && c.verb !== "next" && !quiet && !c.bar ? "p" : "s", title: c.hint || "", disabled: busy, ...(c.bar ? { bar: true } : {}), run: () => onChip(c) })), chips.length > 0);
+    tone: i === 0 && c.verb !== "next" && !quiet && !c.bar ? "p" : "s", title: c.hint || "", disabled: busy, ...(c.bar ? { bar: true } : {}),
+    run: (e, a) => onChip(c, undefined, a || e?.currentTarget) })), chips.length > 0);
   return null;
 }
 
@@ -1296,6 +1297,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [old, setOld] = useState(null);               // an earlier chat, read-only
   const [modelEl, setModelEl] = useState(null);         // the composer's model picker, open (chatAi)
   const [remindOn, setRemindOn] = useState(null);      // the walk's Remind me: { task, anchor }
+  const [howOn, setHowOn] = useState(null);            // Not for me's how far: { at, c, how } - the pressed button and its answers
   const [slotsOn, setSlotsOn] = useState(null);        // the walk's Propose a new time / Find a time: { item, act, anchor }
   // THE ASSISTANT'S LIT BUTTON (assistantLight.js): a typed act lights the row's own verb for it until a press or the table moves on
   const [lit, setLit] = useState(null);
@@ -2740,7 +2742,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // verb goes to the same proposal endpoint a card button uses, with the target explicit. The two that
   // are not proposals keep their own immediate behaviour - a reply DRAFTS (PW-126), Next moves the walk
   // and puts down what it left. An OPTIONS choice is not a verb at all: it goes back as the owner's words.
-  const runChip = async (c, anchor) => {
+  // `at`: the button pressed, where a question of its own opens (Not for me's how far)
+  const runChip = async (c, anchor, at = null) => {
     if (busy || resetting || !c || (c.verb === "next" && deferredChat.current.size)) return;   // ...one move at a time: a press over one does nothing
     if (c.ask) { send(c.ask); return; }
     if (c.verb === "newtask") { browseRef.current?.("new", {}); return; }
@@ -2819,6 +2822,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
       return;
     }
+    // NOT FOR ME ASKS HOW FAR ON THE DESK TOO (the owner, 2026-11-10: "yes on 1"): the phone asks it with numbered answers; here they are a
+    // small menu under the pressed button (buttons.json `choices`), one press to pick - that answer runs once, as its own verb, and nothing
+    // is carried onto the next item (452dc79fa: the chip that offered them after the press rode onto the next bar)
+    if (liveVerb(c.verb) === "not_ours" && !c.how && at && howFar(item).length > 1) { setHowOn({ at, c, how: howFar(item) }); return; }
     setBusy(true); setErr("");
     try {
       // Prep me is gone (buttons.json `removed`): an old saved chip of a removed verb runs as the verb it became, or not at all
@@ -3767,6 +3774,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} said={remindOn.said} onClose={() => setRemindOn(null)}
         act={remindOn.key ? async (until) => { const { error, data } = await leave(remindOn.key, "remind", { until }); if (error) throw error; return data?.left || { remindAt: until }; } : null}
         onDone={(out) => remindReceipt(out, remindOn.path ? null : remindOn.task.TaskId, remindOn.ref, remindOn.key)} />}
+      {howOn && <Menu open anchorEl={howOn.at} onClose={() => setHowOn(null)} data-tq-how-far=""
+        anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}>
+        {howOn.how.map(([verb, words]) => <MenuItem key={verb} dense data-tq-how={verb} sx={{ fontSize: 12.5 }}
+          onClick={() => { const h = howOn; setHowOn(null); runChip({ ...h.c, verb, how: true }); }}>{words}</MenuItem>)}
+      </Menu>}
       {slotsOn && <SlotPicker mid={slotsOn.item.mid} act={slotsOn.act} anchor={slotsOn.anchor || document.body} onClose={() => setSlotsOn(null)}
         onRefused={(data) => calendarDrafted(data, slotsOn.item)} onPick={(slot) => calendarAnswer(slotsOn.item, slotsOn.act, slot)} />}
       {old && <div className="tq-old-banner"><span>You are reading an earlier chat.</span>
@@ -3956,7 +3968,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           <div className="tq-dock-line">
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
-          <ActionRow advised={stripPick || setupLit} hold={rowHold} early={rowEarly} />
+          <ActionRow advised={stripPick || setupLit} hold={rowHold} early={rowEarly} says={!litNow && !setupLit ? rowWhy({ recommended: tableAdvice }) : ""} />
           {!chatApart && composeBox}
           </div>
           </div>

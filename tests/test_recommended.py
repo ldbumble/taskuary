@@ -244,3 +244,34 @@ def test_a_row_with_no_agent_is_walked_as_before(s):
     asked = []
     concierge.present_turn(s, it, llm=lambda *a, **k: asked.append(a) or 'Erin wants badge access.', record=True)
     assert asked, 'the walk words it as it did'
+
+
+def test_a_row_with_nothing_lit_carries_the_line_the_phone_says(s):
+    """A row with nothing lit says why on the desk too (the owner, 2026-11-10: "if it's consistent do it"): what the desk's row reads
+    (the task's own read, the rail's item on the table) carries the very sentence advisor.decide gives the phone, with no verb."""
+    tid = agent_task(s, kind='coding')
+    line = 'Stopped mid-work: the test database was not reachable.'
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'stopped', 'line': line}), \
+         mock.patch.object(advisor, 'offered', return_value=verbs('close', 'reply')):
+        phone = advisor.decide(s, f'task:{tid}', preread=False, off=False)
+        assert (phone['verb'], phone['line']) == (None, line)
+        assert rulebook.recommended(s, item(tid)) is None, 'the plain read still fills nothing'
+        desk = rulebook.recommended(s, item(tid), unlit=True)
+        assert (desk['verb'], desk['why'], desk['state']) == (None, line, 'stopped')
+        assert rulebook.recommended_task(s, tid)['why'] == phone['line'], 'the task page reads the same words'
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'stopped', 'line': ''}):
+        assert rulebook.recommended(s, item(tid), verbs('close'), unlit=True) is None, 'no line, nothing to say'
+
+
+def test_review_changes_stays_on_the_row_after_the_session_is_gone(s):
+    """Work left to review keeps Review changes on its row with no session open (the owner, 2026-11-10: "yes, keep it"): the same fact that
+    lights it (rulebook.changes_waiting) offers it, so the lit button has the landing card's diff to open."""
+    tid = s.create_task({'Title': 'Fix the ledger export', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+    it = {'key': f'task:{tid}', 'kind': 'agentdone', 'lane': 'yours', 'tid': tid}     # its agent finished; no session stands
+    assert not concierge._shows(s, it, 'review_changes'), 'nothing to review, nothing offered'
+    s._exec("INSERT INTO boardnote (TaskId, Agent, Cwd, Kind, Body, CreatedAt) VALUES (?, 'codex', '/w', 'ready', 'Ready to push.', ?)",
+            (tid, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+    assert rulebook.changes_waiting(s, tid) and not s.resumable_session(tid)
+    assert concierge._shows(s, it, 'review_changes'), 'offered with no session open'
+    assert 'review_changes' in [v['verb'] for v in advisor.offered(s, it)]
+    assert (rulebook.recommended(s, it) or {}).get('verb') == 'review_changes', 'and lit'

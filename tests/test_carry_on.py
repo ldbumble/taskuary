@@ -172,12 +172,12 @@ class CodingCarryOnTests(unittest.TestCase):
         out, spawned = ingested(s, mail(**AGAIN))
         self.assertEqual((out['task_id'], spawned), (tid, ['_continue_coding']))
         self.assertTrue(any('coding agent reopens its own session' in c['Body'] for c in s.list_comments(tid)))
-        self.assertIn(tid, ingest.CODING_OPENING)
+        self.assertIn(tid, general.OPENING)
         with mock.patch.object(terminal, 'start_on_task') as start: ingest._continue_coding(s, tid)
         args, kw = start.call_args
         self.assertEqual((args[1], args[2], args[4], args[5]), (tid, 'coder', None, 'router'))     # no instruction: resume_seed says what is new
         self.assertEqual((kw['resume'], kw['cwd'], kw['brain']), ('cli-conv-1', self.cwd, 'cli:claude'))
-        self.assertNotIn(tid, ingest.CODING_OPENING)
+        self.assertNotIn(tid, general.OPENING)
 
     def test_a_full_house_queues_the_reopen_and_a_free_slot_reopens_it(self):
         from taskuary import blackboard
@@ -186,7 +186,7 @@ class CodingCarryOnTests(unittest.TestCase):
         self.assertEqual((s.get_dispatch(tid)['Turn'], s.get_dispatch(tid)['Agent']), ('carry_on', 'coder'))
         with mock.patch.object(ingest, 'has_room', return_value=True), mock.patch.object(terminal, 'start_on_task') as start: blackboard.drain(s)
         self.assertEqual(start.call_args.kwargs['resume'], 'cli-conv-1')                                    # its own session, not a fresh one
-        self.assertIsNone(s.get_dispatch(tid)); self.assertNotIn(tid, ingest.CODING_OPENING)
+        self.assertIsNone(s.get_dispatch(tid)); self.assertNotIn(tid, general.OPENING)
 
     def test_a_line_whose_session_ended_reopens_it_by_itself(self):
         # ..."Continue picks it up" left the line owed with nothing running (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible")
@@ -197,7 +197,7 @@ class CodingCarryOnTests(unittest.TestCase):
                 ingest._pass_coding(s, tid, {**mail(**AGAIN), 'message_id': None})
             self.assertEqual([c[0][0].__name__ for c in spawn.call_args_list], ['_continue_coding'])
             self.assertFalse([c for c in s.list_comments(tid) if 'Continue picks it up' in c['Body']])
-        finally: ingest.CODING_OPENING.discard(tid)
+        finally: general.OPENING.discard(tid)
 
     def test_not_when_coding_starts_are_switched_off(self):
         s = store(coding_auto_enabled='0'); tid = coding_task(s, self.cwd)

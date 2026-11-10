@@ -39,8 +39,8 @@ test("the chat draws its held lines through notShown, and a failed answer takes 
   assert.match(gw, /\.\.\.notShown\(held, mineDrawn\)\];[\s\S]*\{footLines\.map\(\(l\) =>/);
   assert.doesNotMatch(gw, /\{held\.map\(\(l\) => <div key=\{l\.id\}/);
   assert.match(gw, /\.catch\(\(x\) => \{ setHeld\(\(h\) => h\.filter\(\(l\) => l\.id !== id\)\); setSent\(null\); c\.setText\(w\)/);
-  // ...and a coding source's lines are held the same way, on the same road: its typed lines are the thread's own (chatStream.rowMessages)
-  assert.match(gw, /\(road \? road\(w, files\.map\(\(a\) => a\.path\)\) : api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant\/messages`/);
+  // ...and a coding source's lines are held the same way, on the same road - one post for every agent (general.take_line, 2026-11-10)
+  assert.match(gw, /api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant\/messages`, \{ text: w, attachments: files\.map\(\(a\) => a\.path\), line_id: id \}, \{ timeout: 0 \}\)\s*\.then\(\(\) => road\?\.\(\)\)/);
 });
 
 // 2. THE FILES LEAVE THE BOX WITH THE SEND. They were cleared only when the agent's whole turn was done - minutes of chips over a box that had
@@ -94,8 +94,8 @@ test("every tq-aui-composer is the one OneBox, and it always has the paperclip a
   assert.match(read("GeneralWorkspace.jsx"), /<OneBox root=\{ComposerPrimitive\.Root\}/);
   assert.match(box, /<PromptBox /);
   assert.match(read("ItemSections.jsx"), /<PromptBox /);
-  // ...and a coding CLI's files reach it named after the words by their paths
-  assert.match(read("GeneralWorkspace.jsx"), /const said = withImages\(w, files\);/);
+  // ...and a coding CLI's files reach it named after the words by their paths - the server's one road names them (waitroom._lines)
+  assert.match(read("GeneralWorkspace.jsx"), /attachments: files\.map\(\(a\) => a\.path\), line_id: id/);
 });
 
 // ...AND EVERY BOX ON A TASK PAGE (the owner, 2026-11-06: "stop building each unique prompt box. it should be shared"): Continue's note and the

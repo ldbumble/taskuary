@@ -97,9 +97,12 @@ export const turnOf = (messages, at) => {
   const turns = (messages || []).filter((m) => m?.role === "assistant" && m.id), t = msOf(at);
   return turns.length ? (turns.filter((m) => m.createdAt && msOf(m.createdAt) <= t).at(-1) || turns.at(-1)).id : null;
 };
+// ...and NEVER AT THE FOOT (the owner, 2026-11-10: "it's just a row in the chat"): a card the server names no answered turn for was raised by the
+// turn still at work - the newest - and one whose named turn is not drawn stands by its time
 export const placeCards = (cards, messages, turns) => { const ids = new Set((messages || []).map((m) => m.id));
+  const newest = (messages || []).filter((m) => m?.role === "assistant" && m.id).at(-1)?.id || null;
   return (cards || []).map((c) => { const named = turns && c.rid != null ? turns[c.rid] ?? null : undefined;
-    return { ...c, after: named === undefined || (named && !ids.has(named)) ? turnOf(messages, c.at) : named }; }); };
+    return { ...c, after: named && ids.has(named) ? named : named === null ? newest : turnOf(messages, c.at) }; }); };
 // ...the payload's `drafts` (general.draft_turns: {review, turn, at, stale, before}) read onto the reviews they name
 export const withTurns = (reviews, drafts) => (drafts?.length ? (reviews || []).map((r) => { const d = drafts.find((x) => x?.review === r?.ReviewId);
   return d ? { ...r, turn: d.turn, stale: !!d.stale, drafted_at: d.at, before: d.before } : r; }) : reviews || []);

@@ -39,19 +39,21 @@ class PillTests(unittest.TestCase):
 
 class OneRoadTests(unittest.TestCase):
     def test_a_regular_agent_resumes_its_conversation_with_the_note_first(self):
+        """A note is a line the owner typed, and takes the one road every typed line takes (general.take_line, 2026-11-10): kept as his, then
+        his conversation's next turn - the mail since and the Assistant's words ride as Taskuary's, never in his line."""
+        from taskuary import general
         s = MemoryStore()
         tid = s.create_task({'Title': 'Draft the vendor letter', 'Kind': 'general', 'Status': 'open'}, 'o')
-        session = mock.Mock()
+        session = mock.Mock(alive=True)
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=True), \
              mock.patch('taskuary.general.provider_options', return_value=['x']), \
              mock.patch('taskuary.general.start_session', return_value=session), \
              mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
             out = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'use the new letterhead'}).json()
         self.assertEqual(out['kind'], 'general')
-        # the note leads what Taskuary adds (nothing came in since, so no news): the owner's words, then Resume's (2026-11-03)
         args, kw = session.send_prompt.call_args
-        self.assertEqual(args[0], 'FROM THE OWNER: use the new letterhead\n\n' + continuity.RESUME_PROMPT)
-        self.assertEqual((kw['brief'], kw['kept']), (True, True))
+        self.assertEqual(args[0], 'use the new letterhead')
+        self.assertEqual(kw['waiting'], general.waiting_lines(s, tid)[0]['id'], 'the line it kept, which the turn takes')
 
     def test_a_general_continue_says_a_turn_is_coming_until_its_thread_has_run(self):
         """The page reloads /assistant as soon as /continue-work answers - before the thread has a session - and polls only while
@@ -68,30 +70,34 @@ class OneRoadTests(unittest.TestCase):
 
     def test_a_general_continue_writes_the_owners_note_before_it_answers(self):
         """The page reads the conversation the moment /continue-work answers: the note written by the turn, once its CLI had started,
-        was missed, and showed seconds later under an agent already "working" (the owner, 0.3.9.51). Written once, by the door."""
+        was missed, and showed seconds later under an agent already "working" (the owner, 0.3.9.51). Kept once, by the one road, before it answers."""
         from taskuary import general
         s = MemoryStore()
         tid = s.create_task({'Title': 'Compare payroll vendors', 'Kind': 'general', 'Status': 'open'}, 'o')
-        session, held = mock.Mock(), []
+        session, held = mock.Mock(alive=True), []
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=True), \
              mock.patch('taskuary.general.provider_options', return_value=['x']), \
              mock.patch('taskuary.general.start_session', return_value=session), \
              mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=lambda: held.append(target))):
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'look at the south office first'})
-            said = [c['Body'] for c in s.list_comments(tid) if c.get('ActorType') == general.USER_TYPE]
-            self.assertEqual(said, ['look at the south office first'], 'on the conversation before the turn runs')
+            self.assertEqual([w['text'] for w in general.waiting_lines(s, tid)], ['look at the south office first'], 'kept before the turn runs')
+            self.assertTrue(general.line_state(s, tid)['working'], 'and at work from the answer on')
             held[0]()
-        self.assertTrue(session.send_prompt.call_args.kwargs['kept'], 'and the turn does not write it a second time')
+        self.assertIsNotNone(session.send_prompt.call_args.kwargs['waiting'], 'and the turn does not write it a second time')
         general.OPENING.discard(tid)
 
     def test_a_coding_agent_reopens_its_own_session_or_a_fresh_one(self):
+        from taskuary import general, ingest, terminal
         s = MemoryStore()
         tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=False), \
-             mock.patch.object(server, '_resumable', return_value=({'Agent': 'coding'}, '')), \
-             mock.patch.object(server, 'continue_session', return_value={'session': 'sid'}) as reopen:
-            out = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'run the tests first'}).json()
-        self.assertTrue(out['resumed']); self.assertEqual(reopen.call_args[0][1].instruction, 'run the tests first')
+             mock.patch.object(ingest, '_resumable_coding', return_value=({'Agent': 'coding', 'Cwd': '/w', 'ExtId': 'conv-1'}, '')), \
+             mock.patch.object(server, '_brainless', return_value=''), mock.patch.object(server, '_refresh_chat_context', return_value={}), \
+             mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)), \
+             mock.patch.object(terminal, 'start_on_task', return_value={'sid': 'sid'}) as reopen:
+            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'run the tests first'}).json()
+        self.assertEqual(reopen.call_args.kwargs['resume'], 'conv-1'); self.assertIn('run the tests first', reopen.call_args.kwargs['instruction'])
+        general.answered(tid, every=True)
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=False), \
              mock.patch.object(server, '_resumable', return_value=(None, 'no saved session')), \
              mock.patch.object(server, 'continue_task', return_value={'session': 'sid'}) as fresh:
@@ -101,18 +107,20 @@ class OneRoadTests(unittest.TestCase):
     def test_continue_stays_on_the_cli_that_made_the_conversation_even_when_it_cannot_reopen(self):
         """TQ-0887 shape: codex made the conversation, codex could not reopen it - the way on is a fresh CODEX session with the
         handover, never the default CLI (the owner, 2026-09-30: "it should start as codex if i hit continue of course")."""
-        from fastapi import HTTPException
+        from taskuary import general, ingest, terminal
         s = MemoryStore()
         tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=False), \
-             mock.patch.object(server, '_resumable', return_value=({'Agent': 'coding', 'Brain': 'codex'}, '')), \
-             mock.patch.object(server, 'continue_session', side_effect=HTTPException(422, 'codex is out of sessions')), \
-             mock.patch.object(server, 'continue_task', return_value={'session': 'sid'}) as fresh:
-            out = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'check the E09 mails'}).json()
-        self.assertFalse(out['resumed'])
-        self.assertEqual(fresh.call_args[0][1].brain, 'codex')
-        self.assertIn('check the E09 mails', fresh.call_args[0][1].instruction)
-        self.assertIn('fresh codex session', s.list_comments(tid)[-1]['Body'])
+             mock.patch.object(ingest, '_resumable_coding', return_value=({'Agent': 'coding', 'Brain': 'codex', 'Cwd': '/w', 'ExtId': 'conv-1'}, '')), \
+             mock.patch.object(server, '_brainless', return_value=''), mock.patch.object(server, '_refresh_chat_context', return_value={}), \
+             mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)), \
+             mock.patch.object(terminal, 'start_on_task', side_effect=[ValueError('codex is out of sessions'), {'sid': 'sid'}]) as start:
+            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'check the E09 mails'}).json()
+        fresh = start.call_args_list[-1].kwargs
+        self.assertEqual(fresh['brain'], 'codex'); self.assertNotIn('resume', fresh)
+        self.assertIn('check the E09 mails', fresh['instruction'])
+        self.assertTrue(any('fresh codex session' in c['Body'] for c in s.list_comments(tid)))
+        general.answered(tid, every=True)
 
 
 class CodexResumeModelTests(unittest.TestCase):

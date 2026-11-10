@@ -59,7 +59,8 @@ test("a running turn shows its steps open, the newest six, and ONE clock - its w
   assert.match(ws, /plural\(cut, "earlier step"\)/);
   assert.match(ws, /const stepsWord = \(parts\) => \{ const n = workCount\(parts\); return n \? plural\(n, "step"\) : "Along the way"; \};/, "an ended turn folds to N steps");
   assert.doesNotMatch(ws, /<Ticking|data-tq-working-for/, "the head's \"working 0:03\" is gone (the owner, 2026-11-06)");
-  assert.match(ws, /<span>Working on this…<\/span>\s*<em>\{since \? elapsedText\(now - since\)/);
+  assert.doesNotMatch(ws, /Working on this…<\/span>/, "no working line: the head's clock (RunClock) and the spin");
+  assert.match(ws, /· \{when\(new Date\(start\)\)\} · ran \{elapsedText\(Math\.max\(0, now - start\)\)\}/);
   assert.match(ws, /since: session\.turn_started \* 1000/, "the turn's own start, from the server");
   assert.match(read("AgentStepRows.jsx"), /<CircularProgress size=\{10\}/);
 });
@@ -72,4 +73,13 @@ test("a turn's run is counted from the newest thing above it, not the row just a
   assert.equal(turnStamp({ start: turnBegan([t("19:55"), t("21:10"), t("20:40")]), end: t("21:50") }), "ran 40s");
   assert.equal(turnBegan([null, undefined]), null);
   assert.match(read("GeneralWorkspace.jsx"), /turnBegan\(ms\.slice\(0, i\)\.map\(\(m\) => m\.createdAt\)\)/);
+});
+
+// ONE WAY TO STOP AN AGENT MID-RUN, ON THE RUNNING TURN (the owner, 2026-11-10: "we should have x button for agent to stop in middle of the
+// work"): a small x on the turn's head, calling the chat's own stop road
+test("the running turn's head carries the x that stops it, on the chat's own stop road", () => {
+  const ws = read("GeneralWorkspace.jsx"), clock = ws.slice(ws.indexOf("const RunClock"), ws.indexOf("const AgentNameCtx"));
+  assert.match(clock, /stop = React\.useContext\(StopCtx\)/);
+  assert.match(clock, /\{stop && <IconButton size="small" data-tq-stop-run="" aria-label="Stop the agent"[^>]*onClick=\{stop\}/);
+  assert.match(ws, /<StopCtx\.Provider value=\{dock \? null : onStop\}>/);
 });

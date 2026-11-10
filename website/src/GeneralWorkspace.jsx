@@ -151,28 +151,25 @@ const Thinking = ({ provider }) => (
 //
 // Four facts, said once, above the trail. Nothing here is new information - the trace and the task
 // already carried all of it (agentWork.js).
-const AgentBand = ({ name, provider, work, since, starting = "" }) => {
-  const [now, setNow] = useState(() => Date.now()), [shown] = useState(() => Date.now());
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+// ...NO WORDS, ONLY THE SPIN (the owner, 2026-11-10: "don't want the working... thing. we should never see that ever. it should show agent and
+// time and how long it's running rightg away. under it it can spin like normal"): the turn's head says who, when and how long (RunClock); under
+// it, while it has said nothing more, the dots the stream always had - starting or at work alike, never a line of words of their own
+const AgentBand = ({ name, provider, work, starting = "" }) => {
   const doing = doingNow(work);
-  // STARTED, NOTHING SAID YET: one line - "Starting the researcher on Codex…" - and its clock, never a tall empty pane with a spinner at
-  // its foot while the CLI comes up (the owner, 2026-10-21: "it stayed like that for a while")
-  // ...the same quiet line as "Working on this…", no box around it (the owner, 2026-11-05: no boxes), and its clock from no earlier than this
-  // line came up: a turn carried on by new mail has no input of its own yet, and it counted from the one before - "62m 16s" at its start
-  if (starting && !work.steps.length) return (
-    <div className="tq-aui-working" role="status" aria-live="polite" data-tq-starting-line="">
-      <span className="tq-aui-band-dot" /><span>{starting}</span>
-      <em>{elapsedText(now - Math.max(since || 0, shown))}</em>
-    </div>
-  );
-  // ...and then ONE QUIET LINE (the closeout-in-chat spec, 2026-11-04): "Working on this…" and its clock. The band said who, what now, which
-  // step, a meter and its sources - live lines scrolling past while the owner waits; the steps fold under this line (WorkSteps) instead
-  return (
-    <div className="tq-aui-working" role="status" aria-live="polite" data-tq-working="" title={doing || undefined}>
-      <span className="tq-aui-band-dot" /><span>Working on this…</span>
-      <em>{since ? elapsedText(now - since) : provider || name || ""}</em>
-    </div>
-  );
+  return <div className="tq-aui-thinking" role="status" aria-label={`${provider || name || "The agent"} is at work`} title={doing || undefined}
+    data-tq-working="" {...(starting && !work.steps.length ? { "data-tq-starting-line": "" } : {})}><i /><i /><i /></div>;
+};
+// THE TURN'S HEAD, FROM THE PRESS: its time and how long it has run, counting - the same element before the agent's first word and after it
+// ...and the ONE way to stop an agent mid-run, on the turn it stops (the owner, 2026-11-10: "we should have x button for agent to stop in middle
+// of the work"): the chat's own stop road (onStop), nothing else
+const StopCtx = React.createContext(null);
+const RunClock = ({ start }) => {
+  const [now, setNow] = useState(() => Date.now()), stop = React.useContext(StopCtx);
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  return <span data-tq-ran="" data-tq-run-clock="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
+    · {when(new Date(start))} · ran {elapsedText(Math.max(0, now - start))}
+    {stop && <IconButton size="small" data-tq-stop-run="" aria-label="Stop the agent" title="Stops this turn - the chat stays, and what you type next carries on"
+      onClick={stop} sx={{ ml: 0.5, p: 0.25, verticalAlign: "-3px" }}><CloseIcon sx={{ fontSize: 13 }} /></IconButton>}</span>;
 };
 
 // ...and WHILE THE CLI COMPACTS ITS CONTEXT, that line says so (chatStream.compactingNow; the owner, 2026-11-10: "while it's going on show
@@ -459,10 +456,8 @@ const PendingTurn = ({ busy, sent, at, foot = false, atFoot = false, children })
   const due = pendingTurn(thread, { busy, sent });
   if (!due) return busy && !foot ? children : null;
   if (foot !== atFoot) return null;
-  const t = new Date(sent?.at || at || shown);
   return <div className="tq-aui-message tq-aui-agent" data-tq-pending-turn="">
-    <div className="tq-aui-role">{name}<span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
-      · {when(t)}</span></div>
+    <div className="tq-aui-role">{name}<RunClock start={+new Date(sent?.at || at || shown)} /></div>
     <div className="tq-aui-agent-body">{children}</div></div>;
 };
 // WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
@@ -477,6 +472,7 @@ const RanFor = () => {
   const running = useAuiState((s) => live(s.message)), since = useAuiState((s) => s.message.metadata?.custom?.since);
   const start = running ? since || before : before, t = running && start ? new Date(start) : at ? new Date(at) : null;
   if (!t || Number.isNaN(+t)) return null;
+  if (running) return <RunClock start={+t} />;
   const ran = running ? "" : turnStamp({ start: before, end: t });
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
     · {when(t)}{ran ? ` · ${ran}` : ""}</span>;
@@ -979,7 +975,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     // thing should show right away working"): only an answer to its question set it, so a line typed to a coding agent at rest stood under the
     // working line the server drew a beat later, and through a start of ten seconds and more nothing said it was being worked on
     setSent(sentNow(runtime.thread.getState().messages, Date.now(), busyNow.current));
-    (road ? road(w, files.map((a) => a.path)) : api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id }, { timeout: 0 }))
+    // ...ONE ROAD ON THE SERVER TOO, whatever agent works the task (general.take_line, the owner 2026-11-10): kept, at work, then handed on
+    api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id }, { timeout: 0 })
+      .then(() => road?.())
       .catch((x) => { setHeld((h) => h.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))); if (files.length) onAttachBack(files); });
   };
   const sendArrow = <ComposerPrimitive.Send className="tq-aui-send" aria-label={!dock && asking ? "Send your answer" : "Send"} onClick={answerTyped}><SendIcon fontSize="small" /></ComposerPrimitive.Send>;
@@ -998,7 +996,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   // ...the turn a line asked for stands UNDER that line, wherever the line is drawn - never over it (the owner, 2026-11-10)
   const atFoot = footLines.length > 0;
   return (
-    <AssistantRuntimeProvider runtime={runtime}><LandingCtx.Provider value={landAt && !dock ? { after: landAt, node: landNode } : null}><TurnCardsCtx.Provider value={dock ? [] : placed}>
+    <AssistantRuntimeProvider runtime={runtime}><LandingCtx.Provider value={landAt && !dock ? { after: landAt, node: landNode } : null}><TurnCardsCtx.Provider value={dock ? [] : placed}><StopCtx.Provider value={dock ? null : onStop}>
       <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>
         <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport">
           {/* ...where the chat is home, the ask as triage read it is its first line (ChatCtx) */}
@@ -1080,10 +1078,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             <Typography component="span" sx={{ display: "block", color: "var(--tq-text, #292824)", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>{hasReply(nextAt.reviews) ? "Suggested reply" : "Next steps"}</Typography>{nextAt.next}</Box>}
           {/* ...the branch's landing, where the task works in a checkout (landing.has_checkout): in its turn (LandingCtx), here only before any */}
           {!dock && !landAt && landNode}
-          {/* ...a pressed card with no agent turn to stand in yet stands here */}
-          {!dock && placed.filter((c) => !c.after && !c.waits).map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}
-          {/* ...and one that waits, raised by a turn that has not answered yet */}
-          {!dock && <TurnAsks cards={placed.filter((c) => !c.after && c.waits)} also={!!footNext && placed.some((c) => c.also)} sx={{ mx: { xs: 1, sm: 2 } }} />}
+          {/* ...NO "WAITING ON YOU" BOX AT THE FOOT (the owner, 2026-11-10: "it's just a row in the chat"): a card stands in the turn that raised
+              it (placeCards); only a chat with no agent turn at all draws one here, as its one row */}
+          {!dock && placed.filter((c) => !c.after).map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}
           {/* ...A START HELD FOR A NEW SENDER says so under what came in, with its Run anyway (HeldStart, the owner, 2026-11-09) */}
           {!dock && heldStart}
           {/* ...A START WAITING FOR A SLOT is the agent's own line in the chat, not a strip over it (the owner, 2026-11-08) */}
@@ -1131,13 +1128,13 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             <div className="tq-aui-hint">{hint || "Enter sends · Shift+Enter adds a line · paste, drop or attach a file"}</div></>}
           </div>
       </ThreadPrimitive.Root>
-    </TurnCardsCtx.Provider></LandingCtx.Provider></AssistantRuntimeProvider>
+    </StopCtx.Provider></TurnCardsCtx.Provider></LandingCtx.Provider></AssistantRuntimeProvider>
   );
 }
 
 // A CODING SESSION AS THIS CHAT'S SOURCE (codingchat.py): every session's steps or ACP updates, the mail that came in, the live CLI and what it
 // waits on the owner for - read again while a CLI runs, when the task moves, and when the page's own session (`term`) changes
-function useCodingChat(tid, on, term) {
+function useCodingChat(tid, on, term, cuts = []) {
   const [got, setGot] = useState(null);
   // ...each read that brought something new counted (`moves`), so the poll below calms while the chat stands still (pollCalming)
   const last = useRef(""), moves = useRef(0);
@@ -1153,15 +1150,18 @@ function useCodingChat(tid, on, term) {
   useEffect(() => { load(); }, [pageLive?.sid, pageLive?.alive, load]);
   // ...every 2.5 s while a CLI runs, stretching to 10 s while reads bring nothing new (2026-11-09: at up to 1.7 s a read on a busy home,
   // the same answer nearly every time); a new step, or a task-changed poke (read at once below), brings it back to 2.5 s
-  useEffect(() => (live ? pollCalming(true, async () => { const was = moves.current; await load(); return moves.current !== was; }, 2500, 10000, false)
-    : undefined), [!!live, load]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and while a start is in flight for a line, before any CLI is up (`working`): every second, so its first word shows at once
+  const going = !!live || !!got?.working;
+  useEffect(() => (going ? pollCalming(true, async () => { const was = moves.current; await load(); return moves.current !== was; }, got?.working && !live ? 1000 : 2500, 10000, false)
+    : undefined), [going, !!live, load]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...and a task-changed poke reads it too - a burst of them (a busy agent's hooks) once per 2.5 s, never two reads at a time (coalesced)
   useEffect(() => {
     if (!on) return undefined;
     const [wake, stop] = coalesced(load, 2500), off = onLive("task-changed", (ev) => { if (touches(ev, tid)) wake(); });
     return () => { off(); stop(); };
   }, [on, tid, load]);
-  const rows = useMemo(() => (got ? chatRows(got) : []), [got]), compacting = useMemo(() => !!got && compactingNow(got), [got]);
+  const cutKey = cuts.join("|"), compacting = useMemo(() => !!got && compactingNow(got), [got]);
+  const rows = useMemo(() => (got ? chatRows({ ...got, cuts }) : []), [got, cutKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   return { got, live, rows, load, compacting };
 }
 // ...the two sources in one stream, in the order things happened (a turn still at work, with no time of its own yet, at the foot)
@@ -1196,7 +1196,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ONE CHAT, WHATEVER THE SOURCE (chatStream.chatSource): a coding task's sessions, or the general agent's conversation - and how much of the
   // work it draws (chatDetail.js): this task's own choice, else its kind's default from Settings. Off a task's own chat (the dock, the Wall), as ever
   const source = dock ? "general" : chatSource(task, term), coding = source === "coding";
-  const cc = useCodingChat(task.TaskId, coding, term), defaults = useChatDefaults(), own = useOwnDetail(task.TaskId);
+  const cc = useCodingChat(task.TaskId, coding, term, (chat && !dock ? turnCards || [] : []).map((c) => c.at)), defaults = useChatDefaults(), own = useOwnDetail(task.TaskId);
   const level = chat && !dock ? detailFor({ source, settings: defaults, own }) : "steps";
   useEffect(() => { if (cc.got) setRevision((k) => k + 1); }, [cc.got]);
   attachmentsRef.current = attachments;
@@ -1294,7 +1294,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // for the whole first answer (the owner, 2026-09-14: "it looked like it did not start").
   // ...and the moment the PAGE learns a start is under way (`opening`, the task's own read of general.OPENING): this pane may have loaded
   // before it, idle, and polled nothing - "Starting…" waited ~10 s for something else to read it again (the owner, 2026-11-04)
-  const busy = !!data?.session?.busy || !!data?.starting || (!dock && opening);
+  // ...`working`: the one fact both chats' payloads carry (general.line_state) - a start in flight for a line, or a turn at work
+  const busy = !!data?.working || !!data?.session?.busy || !!data?.starting || (!dock && opening);
   // ...and whether this turn has drawn anything yet: its trace holds more than what Taskuary itself writes as a turn opens - the `start`,
   // the prompt it sent and the CLI's launch line (server's run-tail reads them the same way: ours, not news)
   const drawn = (data?.session?.trace || []).some((e) => e?.type && !["start", "prompt"].includes(e.type) && !(e.type === "tool" && e.name === "cli"));
@@ -1389,12 +1390,11 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     return coding ? byTime([...general, ...turns]) : general; })();
   // ...and what typing does there: into the running CLI as its next line, or the session picked back up with these words leading - the files
   // named to the CLI by their paths after the words (promptImages.withImages), as every coding CLI reads a file
-  const road = coding ? (w, files) => { const said = withImages(w, files);
-    return (cc.live ? api.post(`/api/tasks/${task.TaskId}/waitroom`, { text: said }) : api.post(`/api/tasks/${task.TaskId}/continue-work`, { note: said }))
-      .then(() => { onChanged?.(); setTimeout(cc.load, 1200); }); } : null;
+  // ...and what a coding source reads once a line is in: its own sessions (the line itself goes the one road, holdText)
+  const road = coding ? () => { onChanged?.(); cc.load(); } : null;
   // ...its screen is a card only on the pty road, and only while it asks (codingchat.live_of `asking`); over ACP Stop ends the turn
   const acp = cc.live?.transport === "acp", screenAsks = coding && !!cc.live?.asking && !acp && !!cc.live?.sid, perms = coding ? cc.got?.permissions || [] : [];
-  const codingBusy = coding && !!cc.live?.working && !screenAsks && !perms.length;
+  const codingBusy = coding && (!!cc.got?.working || !!cc.live?.working) && !screenAsks && !perms.length;
   const codingCards = coding ? <>
     {/* WHAT THE AGENT WAITS ON THE OWNER'S PRESS FOR (permissions.py): one card each, answered here or on a bound chat */}
     <PermissionCards taskId={task.TaskId} items={perms} onAnswered={cc.load} />
@@ -1412,7 +1412,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...a coding turn at work counts from its own start, as a general one from the server's `turn_started`: the live session's `turnStarted`
   // (codingchat.live_of), else its first step - never the owner's last line drawn, two days back under a resumed session ("2947m 55s", 2026-11-08)
   const codingAt = coding ? shownMessages.find((m) => String(m.id).startsWith("live-"))?.createdAt : null;
-  const since = turnStart(shownMessages), began = session?.busy && session?.turn_started ? session.turn_started * 1000
+  // ...and its clock, from the press where a press began it (general.line_state `turnStarted`), the same read for both
+  const turnAt = (coding ? cc.got : data)?.turnStarted;
+  const since = turnStart(shownMessages), began = turnAt ? turnAt * 1000 : session?.busy && session?.turn_started ? session.turn_started * 1000
     : coding && cc.live?.working && cc.live?.turnStarted ? cc.live.turnStarted * 1000 : codingAt ? +asUtc(codingAt) || null : null;
   // name the backend that is thinking. The session's own provider is the truth once it has one; on
   // a first turn there is no session yet, so fall back to the one the picker is showing.

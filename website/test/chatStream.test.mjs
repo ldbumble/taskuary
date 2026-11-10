@@ -142,10 +142,11 @@ test("the highlighter colours by language and keeps every character", () => {
   assert.deepEqual(tokens("x", ""), [{ t: "", s: "x" }]);
 });
 
-test("the one chat's box, on a coding source, types into the running CLI, or picks the session back up", () => {
+test("the one chat's box, on a coding source, takes the one road a chat's line takes (general.take_line, 2026-11-10)", () => {
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /\/api\/tasks\/\$\{task\.TaskId\}\/waitroom/);
-  assert.match(src, /\/api\/tasks\/\$\{task\.TaskId\}\/continue-work/);
+  assert.doesNotMatch(src, /\/api\/tasks\/\$\{task\.TaskId\}\/waitroom`/, "no second road for a coding line");
+  assert.doesNotMatch(src, /\/api\/tasks\/\$\{task\.TaskId\}\/continue-work`, \{ note/);
+  assert.match(src, /api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant\/messages`, \{ text: w, attachments: files\.map\(\(a\) => a\.path\), line_id: id \}, \{ timeout: 0 \}\)\s*\.then\(\(\) => road\?\.\(\)\)/);
   assert.match(src, /\/api\/tasks\/\$\{tid\}\/coding-chat/);
 });
 
@@ -226,7 +227,7 @@ test("a turn that ended on a question is not working, though its session is aliv
   assert.equal(rows({ working: true }, [{ id: "p1" }]).at(-1).waiting, true);
   assert.equal(rows({ working: true, asking: true }).at(-1).waiting, true);
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /const codingBusy = coding && !!cc\.live\?\.working && !screenAsks && !perms\.length;/);
+  assert.match(src, /const codingBusy = coding && \(!!cc\.got\?\.working \|\| !!cc\.live\?\.working\) && !screenAsks && !perms\.length;/);
 });
 
 test("the general chat's ACP trace keeps the words where they were said: the answer takes only what came after the last call", async () => {
@@ -241,4 +242,14 @@ test("the general chat's ACP trace keeps the words where they were said: the ans
   assert.deepEqual(live, ["Running the suite.", "Ran pytest", "Quick update: half of it passed.", "All 212 pass."]);
   // ...filed: the answer leaves the trail, every earlier line stays where it stood
   assert.deepEqual(stepsOf(trace, { keepStart: false, answer: "All 212 pass." }).map((s) => s.summary), live.slice(0, 3));
+});
+
+// ONLY WHAT THE OWNER TYPED IS HIS (codingchat.owned, 2026-11-10): a user-role message the adapter sent itself - a slash command's output - is
+// marked the agent's by the server, which records every line he typed, and is drawn as the agent's words, never in his bubble
+test("a user-role update the server marks as the agent's is drawn as the agent's words", () => {
+  const steps = stepsFromAcp([
+    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "merge it in" }, _meta: { taskuary: "owner" } },
+    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "Compacted: 3 files read" }, _meta: { taskuary: "agent" } },
+  ]);
+  assert.deepEqual(steps.map((s) => [s.k, s.text]), [["you", "merge it in"], ["said", "Compacted: 3 files read"]]);
 });

@@ -288,7 +288,7 @@ def test_a_question_on_a_coding_task_whose_agent_stopped_carries_that_agent_on()
     s.set_setting('coding_auto_enabled', '1', 't')
     with mock.patch.object(ingest, '_resumable_coding', return_value=(True, '')), mock.patch.object(ingest, 'has_room', return_value=True):
         try: _rv, went, ok = handed(s, tid)
-        finally: ingest.CODING_OPENING.discard(tid)          # the start is mocked away, so nothing lets go of it
+        finally: general.OPENING.discard(tid)          # the start is mocked away, so nothing lets go of it
     assert ok and went == ['_continue_coding'], (went, lines(s, tid))
     assert any('the coding agent reopens its own session here by itself' in x for x in lines(s, tid))
 
@@ -380,7 +380,7 @@ def test_a_reply_owed_on_a_coding_task_nothing_ran_on_starts_its_coding_agent():
     "A coding task stays coding: the question goes to a coding agent, started as a fresh task's would be - never the general one beside it."
     s = store(); tid = general_ask(s, kind='coding')
     try: _rv, spawned, went = handed(s, tid)
-    finally: ingest.CODING_OPENING.discard(tid); general.OPENING.discard(tid)
+    finally: general.OPENING.discard(tid); general.OPENING.discard(tid)
     assert went and spawned == ['_auto_code'] and s.get_task(tid)['Kind'] == 'coding', (spawned, lines(s, tid))
 
 

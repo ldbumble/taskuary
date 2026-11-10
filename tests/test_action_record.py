@@ -295,3 +295,20 @@ class TheOwnersWordsInAnEmptyBox(Acts):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+def test_a_yes_its_agent_was_handed_is_said_once_not_again_under_what_the_owner_did():
+    """THE SAME FACT, ONE SENTENCE (the owner's rules, part 3): an approved card woke its agent with "The owner pressed Approve on what you set
+    up, and it went through" - and the same turn's WHAT THE OWNER DID said "pressed Approve on rv1 and it was done" again. A yes its agent was
+    handed is said by that handing alone; one nobody was told of is still said there."""
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Post the Payworth notice', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Set up the post - press Approve.')
+    told, kept = [], s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{}', 'Reason': 'post it'})
+    time.sleep(1.1)
+    s.decide_review(kept, 'approved', '{}', 'owner')
+    assert any(f'rv{kept}' in d for d in general.owner_did(s, tid)), 'not handed to anyone yet: said under what the owner did'
+    with mock.patch.object(general, 'tell', side_effect=lambda st, t, said, actor='owner': told.append(said) or 'told'):
+        assert general.approved(s, tid, 'Approve', 'post - {"url": "https://social.example/p/1"}', review=kept) == 'told'
+    assert len(told) == 1 and 'went through' in told[0]
+    assert not any(f'rv{kept}' in d for d in general.owner_did(s, tid)), 'handed once - never a second time in the prompt'

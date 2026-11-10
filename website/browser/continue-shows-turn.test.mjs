@@ -43,11 +43,37 @@ async function agentWorld(t) {
 const pageText = (page) => page.evaluate(() => document.querySelector("[data-tq-task-page]")?.innerText || "");
 const inTask = (page, re, timeout = 30000) => page.waitForFunction((src) => new RegExp(src).test(document.querySelector("[data-tq-task-page]")?.innerText || ""),
   { timeout, polling: 50 }, re.source).catch(async () => { throw new Error(`no ${re} on the task:\n${(await pageText(page)).slice(0, 2000)}`); });
-// the pane says the agent is on it: its working line or a typing mark (the box says "Message the agent…" working or not - the owner, 2026-11-06)
-const working = (page) => page.evaluate(() => {
+// THE TURN HE ASKED FOR STANDS UNDER HIS LINE, AS ITS OWN HEAD (the owner, 2026-11-10: "don't want the working... thing. we should never see that
+// ever. it should show agent and time and how long it's running rightg away. under it it can spin like normal"): below his newest bubble, a
+// turn head with its running clock ("· 2:05 PM · ran 3s"); nothing of the turn's - head, spin - above the bubble; no line of the old words
+// ...sampled every 50 ms from the press to the answer: the head under his line within 500 ms, and in every sample after it until the answer
+async function underway(page, line, answer, pressed) {
+  let first = null; const bad = [];
+  while (Date.now() - pressed < 30000) {
+    if (answer.test(await pageText(page))) break;
+    const why = await working(page, line), ok = why === "", at = Date.now() - pressed;
+    if (ok && first == null) first = at;
+    if (!ok && at > 500) bad.push(`${at}: ${why}`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.ok(answer.test(await pageText(page)), `no answer:\n${(await pageText(page)).slice(-800)}`);
+  assert.ok(first != null && first <= 500, `the turn's head stood under the line at ${first} ms:\n${(await pageText(page)).slice(-800)}`);
+  assert.deepEqual(bad, [], `samples with no head under his line, or something of the turn above it (ms from the press): ${bad.slice(0, 4).join(" / ")}`);
+}
+const working = (page, line) => page.evaluate((said) => {
   const pane = document.querySelector("[data-tq-task-page]");
-  return !!pane && (/working|thinking|Continuing…/i.test(pane.innerText) || !!pane.querySelector(".tq-typing, [data-tq-starting], [aria-busy='true']"));
-});
+  if (!pane) return "no task page";
+  if (/Working on this|Working on it|Continuing…/.test(pane.innerText)) return "the old working words";
+  const mine = [...pane.querySelectorAll(".tq-aui-user-bubble, .tq-aui-user")].filter((e) => e.innerText.includes(said)).pop();
+  if (!mine) return "his line is not drawn";
+  const bottom = mine.getBoundingClientRect().bottom;
+  // ...inside the chat stream: the header chip at the top of the task ("agent working") is not part of the turn and stays
+  const stream = mine.closest(".tq-aui-viewport") || pane;
+  const turn = [...stream.querySelectorAll("[data-tq-run-clock], [data-tq-pending-turn], .tq-aui-thinking, [data-tq-working]")];
+  const above = turn.find((e) => e.getBoundingClientRect().top < bottom - 1);
+  if (above) return `above his line: ${above.outerHTML.slice(0, 160)}`;
+  return turn.some((e) => e.matches("[data-tq-run-clock]") && /ran \d/.test(e.innerText)) ? "" : `no running head: ${turn.map((e) => e.outerHTML.slice(0, 80)).join(" | ") || "nothing"}`;
+}, line);
 
 test("a stopped general agent: Continue and a line typed after it show at once, working, then the answer", { timeout: 300000 }, async (t) => {
   const w = await agentWorld(t);
@@ -81,17 +107,14 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   const pressed = Date.now();
   await inTask(page, /look at the south office first/, 1500);
   assert.ok(Date.now() - pressed < 1500, "the note shows with the press's answer");
-  assert.ok(await working(page), `the pane says nothing is under way:\n${(await pageText(page)).slice(-800)}`);
-  await inTask(page, /Starting with the south office/, 30000);
+  await underway(page, "look at the south office first", /Starting with the south office/, pressed);
   assert.ok(Date.now() - pressed > 1000, "the answer cannot land with the press: the fake thinks 2.5 s");
 
   // ...AND THE NEXT LINE TYPED INTO THE SAME BOX: the same - at once, working, the answer
   const box = await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 15000 });
   await page.waitForFunction(() => !document.querySelector("[data-tq-task-page] .tq-aui-input")?.disabled, { timeout: 30000 });
   await box.type("and the north office?"); await page.keyboard.press("Enter");
-  await inTask(page, /and the north office\?/, 3000);
-  assert.ok(await working(page), `the pane says nothing is under way:\n${(await pageText(page)).slice(-800)}`);
-  await inTask(page, /The north office runs Trainly today/, 30000);
+  await underway(page, "and the north office?", /The north office runs Trainly today/, Date.now());
   const text = await pageText(page);
   assert.ok(text.indexOf("and the north office?") < text.indexOf("The north office runs Trainly"), "the answer stands under the owner's line");
   assert.deepEqual(errors, []);

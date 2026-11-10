@@ -209,7 +209,7 @@ class HandingOver(unittest.TestCase):
     def test_an_agents_click_on_pay_becomes_a_hand_over_not_a_proposal(self):
         why = self.hand()['hookSpecificOutput']
         self.assertEqual(why['permissionDecision'], 'deny')
-        self.assertIn('they check it and press it themselves', why['permissionDecisionReason'])
+        self.assertIn('a card in this task waiting for it', why['permissionDecisionReason'])
         self.assertEqual(self.pending(), [])                                          # no Approve card
         req = bg.handing(self.s, self.tid, 'run1')
         self.assertTrue(req['RequestId'].startswith(bg.PRESS) and req['RequestId'].startswith(browserview.TURN_PREFIX))
@@ -218,6 +218,25 @@ class HandingOver(unittest.TestCase):
         self.assertTrue(bg.waiting(self.s, self.tid, 'run1')); self.assertTrue(hooks.held_for(self.s, self.tid, 'run1'))
         self.hand()                                                                   # tried again: the same hand-over
         self.assertEqual(len([r for r in self.ws.open_requests(self.ws.events(self.s, self.tid)) if r['RequestId'].startswith(bg.PRESS)]), 1)
+
+    def test_the_same_press_handed_over_again_is_on_screen_again(self):
+        # the owner, 2026-11-10 ("i cant see the screen"): a client record's Save on portal.vendor.example, handed over, closed (his Done, the
+        # page unmoved), then handed over again by the agent's next turn - recorded under the answered id, it was never open: no card, no
+        # chip, "agent done" and Mark done lit while the step waited on him
+        from taskuary import taskstate
+        self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
+        self.assertTrue(bg.done(self.s, self.tid, rid)); self.heard()
+        self.ws.record(self.s, self.tid, 'run1', 'working', text=self.ws.WAKE, source='api')     # the agent's told turn
+        self.hand()
+        req = bg.handing(self.s, self.tid, 'run1')
+        self.assertIsNotNone(req, 'the second hand-over waits on the owner')
+        self.assertTrue(req['RequestId'].startswith(bg.PRESS)); self.assertNotEqual(req['RequestId'], rid)
+        self.assertEqual(self.ws.asking_of(self.s, self.sess)['request_id'], req['RequestId'])         # the chat's card, live
+        t = {**self.s.get_task(self.tid), 'Kind': 'general'}
+        self.assertFalse(taskstate.done_for_now(self.s, t, {'state': 'asking', 'request': self.ws.asking_of(self.s, self.sess)}))
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True):                          # at rest, or after a restart
+            self.assertEqual(taskstate.open_question(self.s, self.tid)['request_id'], req['RequestId'])
+        self.hand(); self.assertEqual(bg.handing(self.s, self.tid, 'run1')['RequestId'], req['RequestId'])     # still one, not two
 
     def test_the_page_moving_past_the_step_tells_the_agent_it_was_done(self):
         self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
@@ -238,6 +257,18 @@ class HandingOver(unittest.TestCase):
         note = bg.owner_said(self.s, self.tid, 'run1', "don't - wrong card")
         self.assertIn('NOT pressed', note); self.assertIn('"Pay $42.00"', note)
         self.hand(); self.assertEqual(bg.owner_said(self.s, self.tid, 'run1', browserview.TURN_BACK), '')     # their Done is theirs, as it is
+
+    def test_words_instead_of_the_press_leave_nothing_waiting_and_the_agent_hears_so(self):
+        # the owner, 2026-11-10: "i cant see the screen" closed the hand-over; the agent, told only "NOT pressed", answered that Save was
+        # "held for your press in the browser pane beside this chat" - the chip read "agent done" and Mark done was lit, which was the truth
+        from taskuary import taskstate
+        self.hand()
+        note = bg.owner_said(self.s, self.tid, 'run1', 'i cant see the screen')
+        self.ws.record(self.s, self.tid, 'run1', 'working', source='api')             # his line is the agent's next turn
+        self.assertIsNone(bg.handing(self.s, self.tid, 'run1')); self.assertIsNone(taskstate.open_question(self.s, self.tid))
+        self.assertIn('nothing waits for their press now', note)
+        self.assertIn('run the same command again', note); self.assertIn('never ask them in words to click it', note)
+        self.hand(); self.assertIsNotNone(bg.handing(self.s, self.tid, 'run1'))      # ...and that brings it back in front of him
 
     def test_a_pane_answered_in_words_hears_it_was_not_done(self):
         pane = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, cli='claude')
@@ -284,6 +315,18 @@ class HandingOver(unittest.TestCase):
         self.assertIn('stopped watching the page', note); self.assertIn('Look at the page as it is now', note)
         self.ws.record(self.s, self.tid, 'run1', 'working', source='api')           # ...and that line is the agent's next turn
         self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))
+
+    def test_the_agent_is_told_the_step_is_a_card_never_a_screen_to_point_at(self):
+        # the owner, 2026-11-10: "please click Save at the bottom of the page in the browser pane" - "i cant see the screen". The pane is drawn
+        # only when the app shows it; the agent is told what is true wherever the owner stands, and never to ask for the click in words
+        handed = self.hand()['hookSpecificOutput']['permissionDecisionReason']
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True): self.s._exec("DELETE FROM worker_event"); carded = self.hand()
+        carded = carded['hookSpecificOutput']['permissionDecisionReason']
+        for said in (handed, carded, browserview.brief(held=True), browserview.offer(held=True)):
+            self.assertNotIn('beside', said); self.assertNotIn('WATCHING', said)
+        self.assertNotIn('in this browser', handed)
+        for said in (handed, carded, browserview.HOLD_LINE):
+            self.assertIn('card in this task', said); self.assertIn('never ask', said.lower())
 
     def test_the_brief_says_to_fill_it_and_leave_the_last_press_to_the_owner(self):
         self.assertIn('fill in everything first', browserview.brief(held=True))

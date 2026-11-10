@@ -56,7 +56,10 @@ const railStatus_ = (item, cantSend = false, page = null) => {
 
 };
 // ...and the line under the row on the table: the rail's `why` ("An agent is working on this ...") goes with the lane it explains
-export const rowWhy = (item, page = null) => (agentGone(item, page) ? taskStateMeta(page.state)?.hint || "" : item?.why || "");
+// ...but A ROW WITH NOTHING LIT SAYS WHY in its state's own sentence (the owner, 2026-11-10: "if it's consistent do it"): the server's
+// line for it (rulebook.recommended `unlit`, the line advisor.decide gives the phone), the same words on the row, the task and the phone
+export const unlitWhy = (rec) => (rec && !rec.verb && rec.why) || "";
+export const rowWhy = (item, page = null) => (agentGone(item, page) ? taskStateMeta(page.state)?.hint || "" : unlitWhy(item?.recommended) || item?.why || "");
 // a TASK'S STATE (taskstate.py: a lane, or `theirs`, `agentdone`, `closed`, `dropped`) - the Tasks list's row, and a task with no rail row
 export const stateStatus = (key) => {
   const m = key && taskStateMeta(key);

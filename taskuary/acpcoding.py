@@ -144,8 +144,8 @@ class ACPCoding:
         prompt"): a line typed here mid-turn went straight to the session's queue in memory - on no screen, in no record, gone with a restart.
         Kept on the task, it is drawn as the owner's on every screen until a turn takes it. A session on no task has no room: its prompt."""
         if not (self.store and self.task_id): return self.prompt(line)
-        from . import waitroom
-        threading.Thread(target=lambda: waitroom.add(self.store, self.task_id, line, 'owner'), daemon=True).start()
+        from . import general                  # ...the one road every line the owner types takes (general.take_line, 2026-11-10)
+        threading.Thread(target=lambda: general.take_line(self.store, self.task_id, line, wait=False), daemon=True).start()
 
     # ── what the rest of Taskuary reads off a session ──────────────────────────────────────────────────────────────────────
     def idle(self) -> float: return round(time.time() - self.last, 1)
@@ -247,8 +247,8 @@ class ACPCoding:
         idled-out session woken by a line he typed opened with nothing queued, dropped to "at rest" - its working line gone under his words -
         and took the line only when the waiting room next looked. The waiting notes are handed over now, by the waiting room's own road,
         and the session stays at work from the wake to the answer."""
-        if not (self.store and self.task_id and self.store.waiting_notes(self.task_id)): return False
         from . import waitroom
+        if not (self.store and self.task_id and (self.store.waiting_notes(self.task_id) or waitroom._lines(self.store, self.task_id))): return False
         self.busy = False                                   # the waiting room hands notes to a session at rest - for this one call
         try: got = waitroom.deliver(self.store, self.task_id).get('delivered')
         except Exception as e: got = 0; logger.debug(f'acp coding {self.sid}: the waiting notes were not handed over on wake - {e}')
@@ -265,6 +265,8 @@ class ACPCoding:
         if self.cli not in FELL_BACK:
             FELL_BACK.add(self.cli); logger.warning(f'acp: {self.cli} coding session did not start over ACP ({e}) - running it in its terminal')
         if not self.fallback:
+            from . import general
+            general.answered(self.task_id, every=True)
             self.store.add_comment(self.task_id, 'router', 'agent', f'{self.cli} did not start over ACP ({str(e)[:200]}).'); return self._emit_end()
         self.store.add_comment(self.task_id, 'router', 'agent', f'{self.cli} did not start over ACP ({str(e)[:200]}) - it runs in its terminal instead.')
         try: self.fallback()
@@ -292,6 +294,13 @@ class ACPCoding:
         with self._qlock: self._q.append(item)
         self._wake.set()
         return True
+
+    def carries(self, shown: list):
+        """The owner's own lines the opening prompt carries (waitroom.reopen_coding), drawn as his when it goes - the seed is Taskuary's brief.
+        Onto the newest prompt still queued; one already gone gets them as a line of their own."""
+        with self._qlock:
+            if self._q: t, b, s, d = self._q[-1]; self._q[-1] = (t, b, list(s) + list(shown), d); return
+        if shown: self.prompt(' '.join(x['text'] if isinstance(x, dict) else x for x in shown), shown=shown)
 
     def steerable(self) -> bool:
         "Does a prompt now go into the running turn: a turn on, and an adapter that said at initialize it takes words mid-turn (acp.can_steer)."
@@ -321,7 +330,11 @@ class ACPCoding:
     def _show(self, items: list):
         "Each prompt as the chat, the transcript and the Terminal draw it: the owner's own lines as theirs, Taskuary's words as its brief."
         for t, brief, shown, _d in [i for i in items if id(i) not in self._drawn]:
-            for s in shown: self._record({'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': s}}); self.history.append(('you', s))
+            for s in shown:
+                # ...marked his, with the row it was kept as (general.take_line): only what he typed is drawn as his (codingchat.marked)
+                w, line = (s['text'], s.get('line')) if isinstance(s, dict) else (s, None)
+                self._record({'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': w},
+                              '_meta': {'taskuary': 'owner', **({'line': line} if line else {})}}); self.history.append(('you', w))
             self._record({'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': t},
                           **({'_meta': {'taskuary': 'brief'}} if brief or shown else {})})
             self.history.append(('brief' if brief or shown else 'you', t))
@@ -342,6 +355,12 @@ class ACPCoding:
         self.seeded = self.seeded or text
         self.witness.note({'k': 'turn'})
         self._event('UserPromptSubmit', prompt=text)
+        # ...a turn that takes the owner's typed lines runs from his press, its clock never restarting (general.take_line, the owner 2026-11-10) - after the
+        # turn's own start record, which stamps its clock now (hooks._events)
+        if (took := sum(isinstance(s, dict) and bool(s.get('line')) for _t, _b, shown, _d in items for s in shown)):
+            from . import general
+            self.turn_at = general.PRESSED.get(self.task_id) or self.turn_at
+            general.answered(self.task_id, took)
         self.steps = agents.ACPSteps(self._trace, self.cli, self.held)
         self.gate = acpgate.answerer({'store': self.store, 'task_id': self.task_id, 'cli': self.cli, 'cwd': self.cwd, 'sid': self.sid},
                                      self._trace, self.held)
@@ -495,6 +514,8 @@ class ACPCoding:
     def _gone(self):
         "Its process ended by itself: filed, and the task released as a pty's exit releases it (Term._pump's ending)."
         if not self.alive: return
+        from . import general
+        general.answered(self.task_id, every=True)          # ...no turn will take the lines it was opened for: never "working" over nothing
         self.alive, self.ended, self.busy = False, time.time(), False
         self._wake.set()
         self.keep(); self.release_asks(); self._emit_end()

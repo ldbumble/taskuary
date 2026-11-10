@@ -579,7 +579,7 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the send went, its close did not run - {e}")
         # ...EVERY yes that went, not only one its turn said it waits on (the owner, 2026-11-09) - a held step's own road tells its agent
         if proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed'):
-            try: general.approved(store, rv['TaskId'], *pressed(rv, out), actor)
+            try: general.approved(store, rv['TaskId'], *pressed(rv, out), actor, review=rv.get('ReviewId'))
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it went - {e}")
     return out
 

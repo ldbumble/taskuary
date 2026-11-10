@@ -5279,12 +5279,13 @@ class SQLiteStore:
         rows = self._rows('SELECT * FROM comment WHERE TaskId=? ORDER BY CommentId', (task_id,))
         return rows if internal else [c for c in rows if not is_internal(c)]
     def drop_comment(self, comment_id): self._exec('DELETE FROM comment WHERE CommentId=?', (comment_id,))
-    def take_lines(self, task_id, kind, as_kind, words=str) -> list:
+    def take_lines(self, task_id, kind, as_kind, words=str, ids=None) -> list:
         """THE OWNER'S LINES KEPT FOR A TURN, taken by it (general.send_prompt): each `kind` row moved to the END of the conversation as an
         `as_kind` row - its words read out of the kept body by `words`, the time it was typed kept - so the conversation reads in the order the
         agent read it. In one step under the lock: two turns never take one line. [the rows as they waited], oldest first."""
         with self.lock:
-            got = [dict(r) for r in self.cx.execute('SELECT * FROM comment WHERE TaskId=? AND ActorType=? ORDER BY CommentId', (task_id, kind))]
+            got = [dict(r) for r in self.cx.execute('SELECT * FROM comment WHERE TaskId=? AND ActorType=? ORDER BY CommentId', (task_id, kind))
+                   if ids is None or r['CommentId'] in ids]       # `ids`: only the lines a session was handed - one kept since waits for its turn
             for r in got:
                 self.cx.execute('DELETE FROM comment WHERE CommentId=?', (r['CommentId'],))
                 self.cx.execute('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt,LineId) VALUES (?,?,?,?,?,?)',

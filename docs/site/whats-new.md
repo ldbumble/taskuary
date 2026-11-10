@@ -2,6 +2,56 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.35 - 2026-11-10
+
+- The owner's Reject reads as theirs on the step
+- An agent can take back a playbook it proposed
+- A question on a coding task carries its stopped agent on
+- "Always allow" is decided by what the command does, not by its words
+- A rule that is the same every run is a script step, and an agent can offer to keep one
+- A step that waits on the owner is set up as its card, and the agent says what it does once pressed
+- The agent asks the owner the one fact only they have, instead of drafting a guess as their answer
+- A turn Taskuary starts is headed as Taskuary's words, never as the owner's ask
+- A full house queues a carry-on, re-plan or fold turn, and a free slot runs it
+- A line whose agent session ended carries that agent on by itself
+- One gate decides whether a line may reach a task's agent by itself
+- An approval reaches a coding agent whose session ended, by the one road every Taskuary word to an agent takes
+- A shell command that sends data to an outside web address is held for the owner's press on both gates, like a push
+- An agent can send on a file that came in on the task's own mail by its attachment id, checked at the door and again at Send
+- The owner's rules for how this product is built, written down
+- A compaction is one quiet line in the coding chat, and the working line says Compacting while one runs
+- An edited guide takes the new wording on what follows a press
+- An automated sender is nobody to reply to: a finished run on its notice raises no reply card
+- A draft the thread moved past is told to its agent as written before the newest message, never as written for it
+- The coding chat draws as the owner's only what a human typed, and keeps the line they typed mid-turn
+- A coding turn over ACP that fails says so in its chat, with the way past it
+- The reworded agent guide and what the store carries of it agree again
+- A card's press is said once: the rows its act writes are the card's, and a Publish press says what it did
+- Not now pressed twice is one press
+- A landing press that git or the remote refuses is kept on the task, and the agent is handed the way past it
+- The owner's line on a chat wakes the task's agent to re-plan; no side model edits its draft or its closing words
+- A reply is owed only to somebody who reads one: a machine's or the owner's own question is the agent's task, never an empty reply owed
+- A chase goes to the person the task waits on, never to a machine that wrote on its thread since
+- What waits for an agent slot starts when an assistant's turn frees one, and again after a restart
+- A calendar answer the owner changes is replaced, never turned down, and its Send tells the agent what the calendar was told
+- A resumed conversation's record keeps each session's own turns, never the log twice
+- An edit that failed or never ran is drawn as a failed step, not "Edited", and a call ACP never finished is not drawn done
+- An agent that ran --done has said how its run ended: the report's model no longer judges the outcome
+- A late answer wakes the task's agent once to chase it, and lights Chase where no agent woke
+- Work a coding agent left unpushed lights Review changes, unless its landing card already asks
+- An agent stopped with its work unfinished lights Continue
+- An ask no agent started on lights Send to agent
+- A note Taskuary typed into a session before it marked its notes is drawn as its line, never the owner's
+- A line typed to an agent at rest is drawn with the agent at work under it from the press, and the server says so until the answer
+- A phish filed FYI lights Not for me, and a duplicate lights Split or merge
+- A row with nothing lit says why in its state's one sentence; the untouched state goes
+- The bar under the chat holds Back and Next only, and an item offers only the moves it has
+- A reply owed at a run's end is the agent's to write: no writer drafts it, and an agent that ended its own run is asked for it once
+- A general agent's short turn is read from its own record first: the turn judge is asked only when the record cannot tell
+- Opening a long task reads the owner's addresses once, and Not ours's how-far stays its own question, not a button
+- The Assistant's pill counts only its own answers the owner has not seen; nothing on a task reaches its chat
+- A late answer starts a first agent on a task none has worked, through the start check every start uses
+
 ## 0.3.11.34 - 2026-11-10
 
 - One reader for the links a message keeps behind its words, and read_message has them

@@ -1255,7 +1255,12 @@ def _shows(store, it: dict, b: str, known: dict = None) -> bool:
     # ...Run another agent only where one ever ran (the owner, 2026-11-09): a task held for a new sender is an agent's, and nothing ran on it
     if b == 'run_another': return _agent_running(tid) or bool(saved() or store.last_transcript(tid) or store.list_runs(int(tid))
                                                               or (story() or {}).get('kind') not in (None, 'held', 'idle', 'queued', 'none'))
-    if b in ('review_changes', 'share'): return _agent_holds(store, it) or bool(saved())
+    # ...and Review changes on work left to review after its session is gone (the owner, 2026-11-10: "yes, keep it"): the same fact that lights
+    # it (rulebook.changes_waiting), so the lit button always has something to open - the landing card's own diff (TaskPage `diff`)
+    if b == 'review_changes':
+        from . import rulebook
+        return _agent_holds(store, it) or bool(saved()) or bool(tid and rulebook.changes_waiting(store, int(tid)))
+    if b == 'share': return _agent_holds(store, it) or bool(saved())
     # Share stands on a task's row whenever no agent is at work on it (TaskPage: a Result to share, or a summary to email)
     if b == 'share_result': return not _agent_running(it['tid'])
     if b == 'attach': return bool(it.get('rid'))
@@ -4547,7 +4552,7 @@ def present_turn(store, item: dict, actor: str = 'owner', picked: bool = False, 
                        card_for(item) | {'chips': chips})
     # ...and the one move its row fills, on the desk's card as the rail's item on the table carries it (server._pile_payload)
     from . import rulebook
-    rec = {'recommended': rulebook.recommended(store, item)} if routes() and item.get('kind') != 'idea' else {}
+    rec = {'recommended': rulebook.recommended(store, item, unlit=True)} if routes() and item.get('kind') != 'idea' else {}
     return {'item': item | {'chips': chips} | rec, 'say': say, 'options': options, 'chips': chips, 'left': left}
 
 

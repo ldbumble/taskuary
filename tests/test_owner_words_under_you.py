@@ -23,7 +23,7 @@ def said(s, tid):
 class Chat:
     "A live general session's chat: it keeps what it is handed."
     def __init__(self, s, tid): self.store, self.task_id, self.sid, self.alive, self.buf, self.sent = s, tid, 'g', True, '', []
-    def send_prompt(self, text, **kw): self.sent.append((text, kw))
+    def send_prompt(self, text, *a, **kw): self.sent.append((text, kw))
     def waiting(self): return True
 
 
@@ -85,7 +85,10 @@ class AssistantDoors(unittest.TestCase):
              mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude'}]):
             r = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'carry on, skip the zip', 'context': 'Carry on; leave q3-receipts.zip out.'})
             self.assertEqual(r.status_code, 200, r.text)
-            time.sleep(0.3)
-        rows = said(s, tid)
-        self.assertIn(('owner', 'carry on, skip the zip'), rows)
-        self.assertTrue(any(w == 'taskuary' and f'{general.RELAY} Carry on; leave q3-receipts.zip out.' in b for w, b in rows))
+            end = time.time() + 10
+            while not ses.sent and time.time() < end: time.sleep(0.05)       # the turn runs behind the answer
+        # ...kept as his by the one road (general.take_line), and what the Assistant added is Taskuary's, told to the agent with the turn
+        self.assertEqual([w['text'] for w in general.waiting_lines(s, tid)], ['carry on, skip the zip'])
+        self.assertTrue(any(f'{general.RELAY} Carry on; leave q3-receipts.zip out.' in (kw.get('delivery_instructions') or '') for _t, kw in ses.sent), ses.sent)
+        self.assertFalse(any(w == 'owner' and 'q3-receipts' in b for w, b in said(s, tid)), "the Assistant's words never under his name")
+        general.answered(tid, every=True)

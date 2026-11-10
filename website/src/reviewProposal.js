@@ -298,18 +298,23 @@ export const heldCard = (reviews) => {
   const rs = [...(reviews || [])].sort((a, b) => a.ReviewId - b.ReviewId), ps = rs.map((r) => proposalFrom(r) || {});
   const n = rs.length, lead = (p) => heldLead(p).lead;
   const whys = [...new Set(ps.map((p) => p.why || "it leaves this computer"))];
+  // ...a step whose press FAILED is over and its agent's (shellgate.approve_steps, the owner 2026-11-10: "no idea what this is. it's broken"):
+  // settled with its error kept, never waiting under a lit Approve
   const steps = rs.map((r, i) => ({ id: r.ReviewId, text: lead(ps[i]), command: String(ps[i].command || ""),
-    state: r.Status === "pending" ? "waiting" : ["approved", "edited"].includes(r.Status) ? "ran" : "dismissed", result: resultOf(r),
+    state: r.Status === "pending" ? "waiting" : ["approved", "edited"].includes(r.Status) ? "ran" : r.ActError ? "failed" : "dismissed", result: resultOf(r),
     error: String(r.ActError || "") }));
   const waiting = steps.filter((s) => s.state === "waiting"), ran = steps.filter((s) => s.state === "ran");
-  // ...the step an earlier press failed on (store.review_act_failed), said as that press said it - it still waits, so the card does too
-  const bad = waiting.find((s) => s.error);
-  const pressed = waiting.length ? null : ran.length ? "approved" : "dismissed";
+  // ...the step a press failed on, in one sentence: the card's own "Step 2 failed:" leads it, never a second "The held step failed:" after it
+  const bad = steps.find((s) => s.state === "failed") || waiting.find((s) => s.error), k = steps.indexOf(bad) + 1;
+  const why = bad ? bad.error.replace(/^The held step failed:\s*/, "") : "";
+  const pressed = waiting.length ? null : steps.some((s) => s.state === "failed") ? "failed" : ran.length ? "approved" : "dismissed";
   return { title: n > 1 ? `${lead(ps[0])} - ${n} steps` : lead(ps[0]), why: `Held before it ran - ${whys.join("; ")}.`,
     folder: ps[0].where || ps[0].cwd || "the agent's folder", steps, waiting: waiting.map((s) => s.id), pressed,
-    said: pressed === "approved" ? (n > 1 ? `${ran.length} of ${n} ran` : "it ran") : pressed === "dismissed" ? "nothing was run" : ran.length ? `${ran.length} of ${n} ran - the rest wait` : "",
+    said: pressed === "approved" ? (n > 1 ? `${ran.length} of ${n} ran` : "it ran")
+      : pressed === "failed" ? `${n > 1 ? `${ran.length} of ${n} ran, step ${k} failed` : "it failed"} - the agent was told and goes on from there`
+      : pressed === "dismissed" ? "nothing was run" : ran.length ? `${ran.length} of ${n} ran` : "",
     url: ran.map((s) => s.result?.url).filter(Boolean).at(-1) || "",
-    error: !bad ? "" : n > 1 ? `Step ${steps.indexOf(bad) + 1} failed: ${bad.error}` : bad.error };
+    error: !bad ? "" : n > 1 ? `Step ${k} failed: ${why}` : `It failed: ${why}` };
 };
 // ...and once pressed it stays in the turn, pressed, until the owner writes again (general.press_lines draws it as a line from then on)
 export const keptHeld = (reviews, comments) => {

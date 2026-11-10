@@ -108,7 +108,7 @@ import { askNote, closeoutOf, splitHeld } from "./reviewProposal.js";
 import SentCard from "./SentCard.jsx";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
-import LandingCard from "./LandingCard.jsx";
+import LandingCard, { LANDING_DIFF } from "./LandingCard.jsx";
 import { readingOf } from "./threadReading.js";
 import AiUsed from "./AiUsed.jsx";
 import CodeChanges from "./CodeChanges.jsx";
@@ -2518,6 +2518,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)), title: hintOfRow("reply") }] : []),
       // done off the app - a call - closes with what came of it: the card opens in the conversation, under the item. It is Mark
       // done with words, so it registers with Mark done and the row stands it beside that (actionRow.rowOf)
+      // REVIEW CHANGES STAYS AFTER THE SESSION IS GONE (the owner, 2026-11-10: "yes, keep it"): lit on work left to review (rulebook
+      // changes_waiting), it opens the task's own landing card's diff - one road to the diff (LandingCard LANDING_DIFF); the checkout's
+      // drawer only where no card stands to take it
+      ...(!liveSession && filled("review_changes") ? [{ id: "diff", group: "agent", label: labelOfRow("diff"), title: hintOfRow("diff"), run: () => {
+        const ask = { taskId: t.TaskId, handled: false }; window.dispatchEvent(new CustomEvent(LANDING_DIFF, { detail: ask })); if (!ask.handled) setDiffOpen(true); } }] : []),
       ...(noteable && !liveSession ? [{ id: "close-note", group: "more", label: labelOfRow("close-note"), run: (e, a) => setNoteAt(steady(a || e?.currentTarget)),
         title: hintOfRow("close-note") }] : []),
       ...(liveSession ? [

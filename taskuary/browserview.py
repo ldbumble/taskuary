@@ -461,14 +461,14 @@ def your_turn(store, tid: int, sid: str, what: str = '', watch=...) -> str:
     # (the owner, 2026-11-04, on a flight search that only asked where and when)
     if not st.get('open') or not _page(st.get('url')):
         text = what or 'The agent needs you to do a step on a web page, and has none open yet'
-        rid = ws.request_id_for(text)
+        rid = ws.fresh_id(store, tid, ws.request_id_for(text))
         ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, source='api')
         return rid
     try: host = urlsplit(str(st.get('url') or '')).hostname or ''
     except ValueError: host = ''
     host = host[4:] if host.startswith('www.') else host
     text = f"Your turn in the browser{f' on {host}' if host else ''}: {what or 'the agent needs you to do a step on the page'}"
-    rid = f'{TURN_PREFIX}{ws.request_id_for(text)}'
+    rid = ws.fresh_id(store, tid, f'{TURN_PREFIX}{ws.request_id_for(text)}')
     chat = hasattr(term.SESSIONS.get(str(sid)), 'send_prompt')
     # ...AND WATCHED (the owner, 2026-11-05: "if we need the user we should wait for them to do it"): the page moving on closes it by itself
     # and the agent goes on - Done stays for a page Taskuary cannot read (browsergate.watch_turn)
@@ -666,10 +666,9 @@ def set_viewport(sid: str, w: int, h: int) -> bool:
 # ends at a payment, a form or any button that can't be undone is filled in and left on that page for them (browsergate.hand_over).
 HOLD_LINE = ('WHEN THE WORK ENDS AT A PAYMENT, A FORM TO SUBMIT OR ANY BUTTON THAT CAN\'T BE UNDONE (pay, order, submit for real, send, post, '
              'delete, cancel): fill in everything first, then run the command for that last button as you would. Taskuary refuses it with '
-             '"held for the owner" and hands them the page as you left it, scrolled to that button - THEY press it on the page themselves, '
-             'and you are told when they have and what the page shows (or that they did not). Then end your turn in one short line and run '
-             'no browser command until you hear back; never try the same act another way, and never ask the owner in words whether to '
-             'submit, register or pay. ')
+             '"held for the owner" and puts that button in front of them as a card in this task - THEY press it, and you are told when '
+             'they have and what the page shows (or that they did not). Then end your turn in one short line and run no browser command '
+             'until you hear back; never try the same act another way, and never ask the owner in words whether to submit, register or pay, or to click it. ')
 ASK_FIRST_LINE = ('TASKUARY CANNOT HOLD YOUR BROWSER COMMANDS ON THIS AI: nothing stops a press once you run it. So when the work ends at a '
                   'payment, a form to submit or any button that can\'t be undone (pay, order, submit for real, send, post, delete, cancel), '
                   'NEVER press it: fill in everything, leave the page on that button and end your turn with a final line '
@@ -693,8 +692,8 @@ SAY_WHY = ('IF A STEP FAILS OR IS REFUSED, your answer says which step, what the
            'thing the owner can do about it (sign in on the site in the browser pane, approve the held step on the task, send another '
            'message to open the browser again) - never only that you could not. ')
 OFFER_HEAD = ('NO BROWSER IS OPEN for this task yet, but Taskuary keeps one for you: if the work needs a web page - a link in a message to '
-              'follow, a form to fill, a site to sign in to - run `agent-browser open <url>` and it opens beside this chat, where the owner '
-              'watches it. Searching and reading the web needs no browser: use your own web search and fetch for that, and open this one '
+              'follow, a form to fill, a site to sign in to - run `agent-browser open <url>` and it opens for you; the owner sees it only '
+              'when Taskuary shows it to them. Searching and reading the web needs no browser: use your own web search and fetch for that, and open this one '
               'only for a page you must see or act on. NEVER use --session, --headed, profile listing, or launch Chrome separately. ')
 NOT_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET (agent-browser is not installed). Do not use a browser tool of your own CLI '
               'or of another app instead - Taskuary cannot show those to the owner or hold their presses, and they fail here. If the work needs a web page, do what you can without it (read the message, find the link), then tell the owner in one line: '
@@ -723,7 +722,7 @@ STRANGER_LINE = ('NO BROWSER ON THIS TASK: it carries a message from someone the
 TURN_LINE = ('NEVER SOLVE, CLICK OR WORK AROUND A CAPTCHA, an "I\'m not a robot" box, a puzzle or any other check that a human is at the '
              'page - not even to try - and never ask the owner whether you may. That, and any step only the owner can do on the page '
              '(a sign-in or code you cannot type, a card number), is THEIRS: leave the page on it and end your turn with a final line '
-             '[[TASKUARY-YOURTURN: <what they need to do on the page, in a few words>]]. Taskuary hands them this browser beside your session; '
+             '[[TASKUARY-YOURTURN: <what they need to do on the page, in a few words>]]. Taskuary shows them this page; '
              'they do it and hand it back, and their "Done" is your next message - then look at the page and go on. Run no browser '
              'command until then. ')
 
@@ -732,7 +731,8 @@ def brief(held: bool = True, open_now: bool = True) -> str:
     this only rides when the owner asked for a browser, so it can afford to say how to drive
     it and where the line is. `held`: this session's own hook can refuse a browser act (browsergate).
     `open_now`: the browser is already up; else it is OFFERED - opened by the agent's first `open`."""
-    head = ('A BROWSER IS OPEN for this task and the owner is WATCHING it beside this session. '
+    # ...and nobody is said to be watching it (the owner, 2026-11-05: hidden unless they are needed on it; 2026-11-10: "i cant see the screen")
+    head = ('A BROWSER IS OPEN for this task. The owner sees it only when Taskuary shows it to them - never say it is on their screen. '
             'Drive the existing tab with `agent-browser` - it is already bound and restored, so '
             'NEVER use --session, --headed, profile listing, or launch Chrome separately. Navigate '
             'with `agent-browser open <url>`. ') if open_now else OFFER_HEAD

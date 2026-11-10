@@ -87,23 +87,27 @@ class ContinueBringsTheMailTests(unittest.TestCase):
         session = mock.Mock()
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=True),              mock.patch('taskuary.general.provider_options', return_value=['x']),              mock.patch('taskuary.general.start_session', return_value=session),              mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'answer Paula first'})
-        turn = session.send_prompt.call_args[0][0]
-        at = [turn.index(x) for x in ('versus the vendor gateway', 'FROM THE OWNER: answer Paula first', continuity.RESUME_PROMPT)]
-        self.assertEqual(at, sorted(at))
-        said = [(c['Actor'], c['Body']) for c in s.list_comments(tid, internal=True) if c.get('ActorType') == general.USER_TYPE]
-        self.assertEqual([a for a, _ in said], [general.BRIEF_ACTOR, 'owner'])        # the news as Taskuary's line, then the owner's note
-        self.assertEqual(said[1][1], 'answer Paula first')
+        # ...his note is his line, taken by the one road (general.take_line, 2026-11-10); the mail since rides with it as Taskuary's
+        args, kw = session.send_prompt.call_args
+        self.assertEqual(args[0], 'answer Paula first')
+        self.assertIn('versus the vendor gateway', kw['delivery_instructions'])
+        self.assertEqual([w['text'] for w in general.waiting_lines(s, tid)], ['answer Paula first'], 'kept as his until the turn takes it')
+        general.answered(tid, every=True)
 
     def test_a_coding_agents_instruction_is_the_owners_note_alone(self):
+        from taskuary import ingest, terminal
         s, tid = reopened()
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=False), \
-             mock.patch.object(server, '_resumable', return_value=({'Agent': 'coding'}, '')), \
-             mock.patch.object(server, 'continue_session', return_value={'session': 'sid'}) as reopen:
+             mock.patch.object(ingest, '_resumable_coding', return_value=({'Agent': 'coding', 'Cwd': '/w', 'ExtId': 'conv-1'}, '')), \
+             mock.patch.object(server, '_brainless', return_value=''), mock.patch.object(server, '_refresh_chat_context', return_value={}), \
+             mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)), \
+             mock.patch.object(terminal, 'start_on_task', return_value={'sid': 'sid'}) as reopen:
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'scope the build'})
-            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={})
         # the mail rode the instruction once: labelled FROM THE OWNER, clipped at the tty's ~1 KB command line, left unsent on the
         # prompt (2026-10-14). terminal.resume_seed names the new mail and the context file that holds it; the note is the owner's.
-        self.assertEqual([c[0][1].instruction for c in reopen.call_args_list], ['scope the build', None])
+        said = reopen.call_args.kwargs['instruction']
+        self.assertIn('scope the build', said); self.assertNotIn('vendor gateway', said)
+        general.answered(tid, every=True)
 
 
 class AdvisorReadsTheStoryTests(unittest.TestCase):
@@ -136,13 +140,19 @@ class ClosedConversationTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         start.assert_called_once()
 
-    def test_a_closed_task_that_is_not_a_chat_still_refuses(self):
+    def test_a_closed_coding_task_typed_into_reopens_by_the_same_rule(self):
+        """ONE ROAD (general.take_line, the owner 2026-11-10: "coding and general use the same code when it comes to interactions"): a closed
+        coding task was refused "press Reopen, then Continue" while a chat task typed into opened again - now both open the same way."""
+        from taskuary import waitroom
         s, tid = reopened()
         s.update_task(tid, {'Status': 'done', 'Kind': 'coding'}, 'owner')
-        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.start_session') as start:
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.start_session') as start, \
+             mock.patch.object(waitroom, 'deliver', return_value={'delivered': 1, 'state': 'restarted'}):
             r = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/messages', json={'text': 'one more thing'})
-        self.assertEqual((r.status_code, r.json()['detail']), (409, server.CLOSED_CHAT))
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(s.get_task(tid)['Status'], 'open')
         start.assert_not_called()
+        general.answered(tid, every=True)
 
     def test_the_writer_is_told_what_went_back_and_who_wrote_since(self):
         s, tid = reopened()

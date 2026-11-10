@@ -21,10 +21,12 @@ test("in a general chat a card stands in the turn the server names, never the on
   assert.equal(placeCards(cards, chat, { 7: "comment-2", 8: "comment-4" })[1].waits, true, "the card is handed on whole");
 });
 
-test("a card no answer has followed waits at the chat's foot, and moves into the turn that answers", () => {
-  const card = [{ key: "rv9", rid: 9, at: "2026-11-05 11:05:00", waits: true }];
-  assert.deepEqual(after(card, { 9: null }), [null]);
-  assert.deepEqual(after(card, {}), [null], "a review the chat has not read yet is not guessed into the newest turn");
+// ...NEVER AT THE FOOT (the owner, 2026-11-10: "approve should be there then once that's done it shoudl continue after it not above it.. it's
+// just a row in the chat"): a card no answer has followed was raised by the turn at work - the newest - and stands in it
+test("a card no answer has followed stands in the newest turn, and moves into the turn that answers", () => {
+  const card = [{ key: "rv9", rid: 9, at: "2026-11-05 11:05:00", waits: true }], newest = chat.filter((m) => m.role === "assistant").at(-1).id;
+  assert.deepEqual(after(card, { 9: null }), [newest]);
+  assert.deepEqual(after(card, {}), [newest], "never the foot");
   const answered = [...chat, { id: "comment-6", role: "assistant", createdAt: "2026-11-05 11:06:00" }];
   assert.deepEqual(after(card, { 9: "comment-6" }, answered), ["comment-6"]);
 });
@@ -48,11 +50,12 @@ test("the task page hands every waiting ask to its turn, and draws it in its own
     assert.ok(page.includes(k), "a pressed card names its review too");
 });
 
-test("the chat draws a waiting card once: in its turn or at the foot, and never in the foot's own boxes where the page places them", () => {
+test("the chat draws a waiting card once, in its turn - the foot's \"Waiting on you\" box is gone", () => {
   const gw = read("GeneralWorkspace.jsx");
   assert.match(gw, /mine = React\.useContext\(TurnCardsCtx\)\.filter\(\(c\) => c\.after === id\), pressed = mine\.filter\(\(c\) => !c\.waits\)/);
   assert.match(gw, /<TurnAsks cards=\{mine\.filter\(\(c\) => c\.waits\)\} also=\{holds && !!work\?\.next && freshNext\(work\.reviews\) && mine\.some\(\(c\) => c\.also\)\} \/>/);
-  assert.match(gw, /<TurnAsks cards=\{placed\.filter\(\(c\) => !c\.after && c\.waits\)\} also=\{!!footNext && placed\.some\(\(c\) => c\.also\)\}/);
+  assert.equal((gw.match(/<TurnAsks /g) || []).length, 1, "drawn in a turn only - no box of its own at the chat's foot");
+  assert.match(gw, /\{!dock && placed\.filter\(\(c\) => !c\.after\)\.map\(/, "only a chat with no agent turn at all draws a card under it, as its one row");
   assert.match(gw, /\{!dock && !turnCards && !!drafts\?\.length && \(/); assert.match(gw, /\{!dock && !turnCards && !!acts\?\.length && \(/);
   assert.match(gw, /turns=\{coding \? null : data\?\.turns\}/);
   // ...under the words the block said, counted per turn, and marked for the agent room's rest (TaskPage's :has([data-tq-waits]))
@@ -66,4 +69,18 @@ test("what the foot's boxes said over a held act and a playbook is said over its
   assert.match(askNote(act({ action: "browser_act", what: "Press Renew", url: "https://portal.vendor.example/renew" })), /^The agent's browser waits for your yes\./);
   assert.match(askNote(act({ action: "amend_playbook", name: "Renewals", text: "# Renewals" })), /^Approve saves this playbook to Reports → Playbooks/);
   assert.equal(askNote(act({ action: "close_task", why: "the folder is clear" })), "", "a card that says itself gets no line over it");
+});
+
+// A TURN THAT GOES ON PAST ITS CARD IS TWO ROWS, THE CARD BETWEEN (the owner, 2026-11-10: "it should continue after it not above it"): an ACP
+// turn an Approve lets carry on draws what it did next under the card, never over it
+test("a coding turn that goes on past a card is split at the card, so its next steps stand under it", async () => {
+  const { chatRows, rowMessages } = await import("../src/chatStream.js");
+  const ups = [{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Committing." }, _at: "2026-11-10 12:00:01" },
+    { sessionUpdate: "tool_call", toolCallId: "m", kind: "execute", title: "Merge newest master; list conflicts", status: "in_progress", _at: "2026-11-10 12:00:09" }];
+  const ses = [{ sid: "s", source: "acp", live: true, at: "2026-11-10 12:00:00", updates: ups }];
+  assert.equal(chatRows({ sessions: ses }).filter((r) => r.kind === "turn").length, 1, "no card: one turn");
+  const rows = chatRows({ sessions: ses, cuts: ["2026-11-10 12:00:05"] }).filter((r) => r.kind === "turn");
+  assert.equal(rows.length, 2);
+  const msgs = rowMessages(rows);
+  assert.deepEqual(after([{ key: "held:7", rid: 7, at: "2026-11-10 12:00:05", waits: true }], null, msgs), [msgs[0].id], "the card stands after the part before it");
 });

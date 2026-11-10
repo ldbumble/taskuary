@@ -8,6 +8,7 @@ only knows how to match replies to its own requests hangs here - which is the po
 Set in its environment, for the tests that need more:
   FAKE_ACP_FAIL=init     it dies at initialize, as an adapter that cannot start does
   FAKE_ACP_SPAWN=<secs>  it takes that long to start before it reads anything, as npx fetching an adapter does
+  FAKE_ACP_THINK=<secs>  each turn takes that long before its first word, as a model thinking does
   FAKE_ACP_FAIL=turn     its first turn answers with an error after a word, as an overloaded model's does
   FAKE_ACP_RESUME=1      it offers session/resume (no replay) beside session/load
   FAKE_ACP_ASK=<command> the permission it asks for is to run that shell command (kind execute)
@@ -114,6 +115,7 @@ for line in sys.stdin:
         reply(mid, {'configOptions': options()})
     elif method == 'session/prompt':
         STARTS += 1
+        if os.environ.get('FAKE_ACP_THINK'): __import__('time').sleep(float(os.environ['FAKE_ACP_THINK']))
         said = ' '.join(str(b.get('text') or '') for b in msg['params'].get('prompt') or [])
         _heard = f"heard: {said} [mode={SET['mode']} model={SET['model']} effort={SET['effort']} turn={STARTS}" + (f' resumed={RESUMED}' if RESUMED else '') + ']'
         update('agent_message_chunk', content={'type': 'text', 'text': 'Looking. '})

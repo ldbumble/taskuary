@@ -16,7 +16,10 @@ test("a running turn says so, whichever backend is answering", () => {
   assert.match(view, /\{dock \? serverBusy && atWork\s*: <PendingTurn busy=\{serverBusy\}/);
   assert.match(view, /serverBusy=\{busy \|\| codingBusy\} provider=\{coding \? cc\.live\?\.cli \|\| "" : session\?\.provider \|\| pickedLabel\} name=\{name\}/);
   assert.match(view, /const Thinking = \(/);
-  assert.match(view, /const AgentBand = \(\{ name, provider, work, since, starting = "" \}\)/);
+  assert.match(view, /const AgentBand = \(\{ name, provider, work, starting = "" \}\)/);
+  // ...the spin only, no words: the head says who, when and how long (the owner, 2026-11-10: "don't want the working... thing")
+  const band = view.slice(view.indexOf("const AgentBand"), view.indexOf("const RunClock"));
+  assert.match(band, /<i \/><i \/><i \/><\/div>/); assert.doesNotMatch(band, /Working on this|<span>\{starting\}/);
 });
 
 test("the working line reports the turn quietly, and never invents a total it was not told", () => {
@@ -39,7 +42,7 @@ test("a turn the SERVER started before this pane opened is still a turn in fligh
   // exactly like a walk that never started (the owner, 2026-09-14).
   const view = read("GeneralWorkspace.jsx");
   // ...and one the page already knows of (`opening`, the task detail's `starting`) before this pane has read it (2026-11-04)
-  assert.match(view, /const busy = !!data\?\.session\?\.busy \|\| !!data\?\.starting \|\| \(!dock && opening\);/);
+  assert.match(view, /const busy = !!data\?\.working \|\| !!data\?\.session\?\.busy \|\| !!data\?\.starting \|\| \(!dock && opening\);/);
   const poll = view.slice(view.indexOf("const busy ="), view.indexOf("const pasted ="));
   // ...and a wait on the page, which Taskuary itself can answer (a sign-in typed from the vault, 2026-11-04)
   assert.match(poll, /if \(!busy && !onPage\) return undefined;/, "one definition of work in flight drives the poll");

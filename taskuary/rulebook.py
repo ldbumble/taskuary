@@ -447,7 +447,7 @@ def agent_word(store, tid) -> str | None:
     return 'nothing_left' if summ.get('nothing_left') else ''
 
 
-def _recommended(store, it: dict, verbs: list | None, f: dict | None) -> dict | None:
+def _recommended(store, it: dict, verbs: list | None, f: dict | None, unlit: bool = False) -> dict | None:
     from . import advisor, checkback
     if it.get('kind') == 'idea': return None                # an idea is the Advisor's own row, and its light the Advisor's
     verbs = advisor.offered(store, it) if verbs is None else verbs
@@ -471,15 +471,19 @@ def _recommended(store, it: dict, verbs: list | None, f: dict | None) -> dict | 
     elif tid and (said := agent_word(store, tid)) is not None: v, why = (pick('close'), NOTHING_LEFT) if said == 'nothing_left' else (None, '')
     # ...and with no word of an agent's over it, the move the state's own fact names (MOVES)
     else: v = pick('close') if st in OVER else None if st == 'unpushed' and landing_asks(store, tid) else pick(*MOVES.get(st, ()))
-    return {'verb': v, 'label': advisor._label(verbs, v, it), 'why': why, 'state': st} if v else None
+    if v: return {'verb': v, 'label': advisor._label(verbs, v, it), 'why': why, 'state': st}
+    # ...and A ROW WITH NOTHING LIT SAYS WHY, on the desk as on the phone (the owner, 2026-11-10: "if it's consistent do it"): `unlit` asks for
+    # the state's own sentence with no verb - the very line advisor.decide says for it, read off the same facts
+    return {'verb': None, 'label': '', 'why': f['line'], 'state': st} if unlit and f.get('line') else None
 
 
-def recommended(store, item: dict, verbs: list = None, f: dict = None) -> dict | None:
+def recommended(store, item: dict, verbs: list = None, f: dict = None, unlit: bool = False) -> dict | None:
     """{verb, label, why, state} - the one move the item's row fills - or None for nothing filled. `verbs`: the row's buttons where the
-    caller read them already (advisor.offered); `f`: its facts. Never raises: a row that cannot be read fills nothing."""
+    caller read them already (advisor.offered); `f`: its facts; `unlit`: a row with nothing filled still comes back with its state's line
+    (verb None) where it has one - what a row draws. Never raises: a row that cannot be read fills nothing."""
     from . import advisor
     try:
-        with advisor.reading(): return _recommended(store, item or {}, verbs, f) if item else None
+        with advisor.reading(): return _recommended(store, item or {}, verbs, f, unlit) if item else None
     except Exception as e:
         logger.warning(f"rulebook: no recommended move for {(item or {}).get('key')} - {e}"); return None
 
@@ -496,7 +500,7 @@ def recommended_task(store, tid, known: dict = None) -> dict | None:
             verbs = advisor.offered(store, item, known) if item and item.get('kind') != 'idea' else None
         except Exception as e:
             logger.debug(f'rulebook: no card for task {tid} - {e}'); item = verbs = None
-        return recommended(store, item, verbs)
+        return recommended(store, item, verbs, unlit=True)
 
 
 def chase_thread(store, item: dict) -> dict | None:

@@ -320,9 +320,9 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),
                                          'url': pg['url'], 'site': site, 'what': v['what'], 'why': v['why']}, 'agent')
             store.audit('task', tid, 'browser_act_held', 'taskuary', 'system', {'verb': a['verb'], 'site': site, 'why': v['why']})
-        return _deny(f"{HELD}: {v['what']} ({v['why']}). It is on the task for the owner to approve; once they do, Taskuary runs this "
-                     "exact command in your browser and tells you what happened. Do not try it another way. End your turn now, or "
-                     "go on with work that does not need it.")
+        return _deny(f"{HELD}: {v['what']} ({v['why']}). It is now a card in this task for the owner's press; once they approve it, Taskuary "
+                     "runs this exact command in your browser and tells you what happened. Never ask them in words to approve or click it, and "
+                     "do not try it another way. End your turn now, or go on with work that does not need it.")
     if (browserview.ENDED_ON.get(str(sid)) or ('',))[0] == 'failed': browserview.ended_on(sid)     # it went on past the failure
     return {}
 
@@ -488,7 +488,7 @@ def hand_over(store, tid: int, sid: str, act: dict, pg: dict, v: dict, site: str
     c = control(act, pg)
     btn = f'"{c["name"]}"' if c.get('name') else f'the {c["role"]}' if c.get('role') else 'the button'
     text, url = PRESS_LINE.format(btn=btn), pg.get('url') or ''
-    rid = PRESS + ws.request_id_for(f'{sid} {url} {text}')
+    rid = ws.fresh_id(store, tid, PRESS + ws.request_id_for(f'{sid} {url} {text}'))
     if not handing(store, tid, sid, rid):
         if c.get('ref'):
             try: _run(sid, ['scrollintoview', f"@{c['ref']}"], 15, 'scroll')
@@ -498,10 +498,12 @@ def hand_over(store, tid: int, sid: str, act: dict, pg: dict, v: dict, site: str
         ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, choices=[browserview.TURN_DONE] if chat else None, source='api')
         store.audit('task', tid, 'browser_act_handed', 'taskuary', 'system', {'verb': act.get('verb'), 'site': site, 'why': v.get('why')})
         if watch: threading.Thread(target=watch, args=(store, tid, sid, rid), daemon=True, name=f'press-watch-{tid}').start()
-    return _deny(f"{HELD}: {v['what']} ({v['why']}) is the owner's own press. Taskuary handed them the page as you left it, scrolled to "
-                 f"{btn}: they check it and press it themselves in this browser. End your turn now with one short line to the owner (no "
-                 "marker - the page is already theirs) and run no browser command until you are told what happened: that they pressed it "
-                 "and what the page shows then, or that they did not. Never press it yourself or try it another way.")
+    # ...SAID AS IT IS, NOT WHERE IT SITS ON A SCREEN (the owner, 2026-11-10: "i cant see the screen"): told "they press it themselves in this
+    # browser", the agent sent him to "the browser pane" in prose - a pane that is not drawn unless the app shows it. The app knows; the agent does not
+    return _deny(f"{HELD}: {v['what']} ({v['why']}) is the owner's own press. It is now a card in this task waiting for it, the page left as "
+                 f"you filled it on {btn}. End your turn now with one short line saying what is ready for them (no marker) - never ask them in "
+                 "words to click anything, and never say where it is on their screen. Run no browser command until you are told what "
+                 "happened: that they pressed it and what the page shows then, or that they did not. Never press it yourself or try it another way.")
 
 
 def _look(c, name: str) -> dict | None:
@@ -589,14 +591,45 @@ def pressed(store, tid: int, rid: str, now: dict) -> bool:
     return True
 
 
+def gone(sid: str) -> bool:
+    "Is the page a step was handed over on gone: no live session of ours under its id (idled, stopped, a restart), or its browser closed?"
+    from . import browserview, terminal as term
+    s = term.SESSIONS.get(str(sid))
+    return not (s is not None and getattr(s, 'alive', False)) or not browserview.state(str(sid), fresh=True).get('open')
+
+
+# A STEP ON A PAGE THAT IS GONE SAYS SO, AND ITS ONE PRESS IS THE MOVE THAT WORKS (the owner, 2026-11-10: "i cant see the screen"). A hand-over
+# outlives its browser - a restart, a stopped session - and its card still read "press Save on the page" with Done, over no page at all; the
+# Done told the agent the owner had finished. Its press now has the agent open the page again and put the step back in front of them.
+GONE_LINE = ('The page for this step has closed, so it cannot be done there now - nothing was pressed. {again} has the agent open it again '
+             'and put the step back in front of you.')
+def shown_ask(req: dict | None) -> dict | None:
+    "An open ask as the task draws it: a step handed over on a page that is gone, said so, with Try again for its press."
+    from . import browserview, buttons
+    if not req or not str(req.get('request_id') or '').startswith(browserview.TURN_PREFIX) or not gone(req.get('sid')): return req
+    again = buttons.label('try_again')
+    return {**req, 'text': GONE_LINE.format(again=again), 'choices': [again], 'gone': True}
+
+
 def done(store, tid: int, rid: str) -> bool:
     """THE VIEW'S DONE IS THE OWNER'S PRESS (the spine audit, 2026-11-09). It went to a chat as words typed in their name - a bubble they
     never wrote, a turn of its own, known here only by matching those words. It closes the hand-over as the page moving on does, and the
     agent is told by Taskuary that they SAY it is done: nothing saw the page move, so it looks first. A resting agent is started on it.
-    False when the hand-over was closed already (a second press, or the watch got there first)."""
-    h = _close(store, tid, rid, 'Done')
+    False when the hand-over was closed already (a second press, or the watch got there first). On a page that is gone (shown_ask) the press
+    is its Try again: the agent opens the page again and hands the step back."""
+    from . import browserview, buttons, workerstate as ws
+    req = next((r for r in ws.open_requests(ws.events(store, tid)) if r['RequestId'] == rid), None)
+    lost = bool(req) and gone(req['Sid'])
+    h = _close(store, tid, rid, 'Try again' if lost else 'Done')
     if not h: return False
     turn = h.get('kind') == 'turn' or not str(rid).startswith(PRESS)
+    if lost:
+        store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h['site'], 'why': 'the page had closed'})
+        url = browserview.last_page(tid) or 'its address'
+        _tell(store, tid, f"The page you handed the owner ({h.get('what') or h.get('btn') or 'a step on it'}, on {h['site']}) closed before it could be done "
+                          f"there, so Taskuary cannot tell whether it was. They pressed {buttons.label('try_again')}: open it again (`agent-browser open {url}`), "
+                          "look, and if the step still needs them, bring the page back to it and hand it over again the way you did before.", wake=True)
+        return True
     step = f"the step you handed them ({h.get('what') or 'on the page'})" if turn else f"pressing {h['btn']}"
     store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '' if turn else h['btn'], 'by': 'done'})
     _tell(store, tid, f"The owner pressed Done: they say they finished {step} on the page. Taskuary did not see the page move - "
@@ -629,7 +662,14 @@ def owner_said(store, tid: int, sid: str, text: str) -> str:
         return (f"THE OWNER SPOKE WHILE {h.get('btn') or 'the button'} WAITED FOR THEIR PRESS, after Taskuary had stopped watching the page - "
                 "it cannot say whether they pressed it. Look at the page as it is now before anything else; never press it yourself.")
     store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h.get('site'), 'why': 'answered in words'})
+    # ...AND NOTHING WAITS ON THEM NOW, said so (the owner, 2026-11-10: "i cant see the screen"): told only that it was not pressed, the agent
+    # answered that Save was "held for your press in the browser pane beside this chat" - no card, no pane, "agent done", Mark done lit
     return (f"THE OWNER ANSWERED IN WORDS INSTEAD OF PRESSING {h.get('btn') or 'the button'} on the page you handed them. As far as Taskuary "
-            "saw, it was NOT pressed - the page is as you left it. Do what they say; never press it yourself.")
+            f"saw, it was NOT pressed - the page is as you left it, and nothing waits for their press now. Do what they say. {AGAIN_HOLD}")
+
+
+# how a step comes back in front of the owner: the only road, and the only time the agent may say it waits on them
+AGAIN_HOLD = ('If the step is still wanted, run the same command again - Taskuary holds it again as a card for their press. Never say it is '
+              'held or waiting until Taskuary has said so, never ask them in words to click it, and never press it another way.')
 
 

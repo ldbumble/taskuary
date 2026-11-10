@@ -61,9 +61,9 @@ def cancel(store, tid: int, actor: str = 'owner') -> dict:
 # (rulebook.LATE) is a check-back come due, set here on the reminders' clock and handed over by due() below - a full house waits for the
 # next tick - where the owner's own line would wake that agent (ingest.wake_why). Its audit row is the record: nothing wakes it again
 # until something moves on the task. Where none may wake, the row lights Chase instead (rulebook._recommended).
-def woke(store, tid) -> bool:
-    "Whether this lateness already woke the task's agent: a late wake recorded after the task's newest message."
-    r = store._one("SELECT MAX(CreatedAt) AS at FROM audit WHERE EntityType='task' AND EntityId=? AND Action='check_back' AND Actor='late'", (int(tid),)) or {}
+def woke(store, tid, actor: str = 'late') -> bool:
+    "Whether this lateness already woke the task's agent (`actor` 'held': was refused its first one): a record after the task's newest message."
+    r = store._one("SELECT MAX(CreatedAt) AS at FROM audit WHERE EntityType='task' AND EntityId=? AND Action='check_back' AND Actor=?", (int(tid), actor)) or {}
     if not r.get('at'): return False
     m = store._one('SELECT MAX(IFNULL(SentAt,CreatedAt)) AS at FROM message WHERE TaskId=?', (int(tid),)) or {}
     return str(m.get('at') or '').replace('T', ' ')[:19] <= str(r['at']).replace('T', ' ')[:19]
@@ -76,12 +76,28 @@ def late(store, now: datetime = None) -> int:
     for t in store._rows("SELECT TaskId FROM task WHERE Status NOT IN ('done','dropped') AND IFNULL(CheckBackAt,'')='' "
                          "AND (Status='waiting' OR IFNULL(WatchBack,'')='quiet' OR IFNULL(DoneWhen,'')<>'')"):
         tid = t['TaskId']
-        if woke(store, tid) or ingest.wake_why(store, tid, {}, None, None, own=True): continue
+        if woke(store, tid) or woke(store, tid, 'held'): continue
+        # ...AND A TASK NO AGENT HAS WORKED GETS ITS FIRST ONE (the owner, 2026-11-10: "yes"): no conversation to wake was a lateness nobody
+        # took up. It starts through the check every start passes (auto_start_ok) - a refusal (the switch, a stranger held) said once on the
+        # task, and Chase stays lit (woke is False) - with the same turn; a full house queues it as a carry-on turn waits (ingest.queue_turn)
+        first = (why := ingest.wake_why(store, tid, {}, None, None, own=True)) == 'no agent conversation'
+        if why and not first: continue
         it = advisor._item(store, 'task', tid, build=False)
         f = rulebook.facts(store, it, advisor.offered(store, it)) if it else {}
         if f.get('state') not in rulebook.LATE or not f.get('line'): continue
-        store.update_task(tid, {'CheckBackAt': _stamp(now), 'CheckBackWhat': LATE.format(line=f['line'].rstrip('.'))[:WHAT_CHARS]}, 'assistant')
-        store.audit('task', tid, 'check_back', 'late', 'agent', {'state': f['state'], 'line': f['line']})
+        what = LATE.format(line=f['line'].rstrip('.'))[:WHAT_CHARS]
+        if first:
+            m = store._one("SELECT * FROM message WHERE TaskId=? AND IFNULL(Direction,'in')<>'out' ORDER BY MessageId DESC LIMIT 1", (int(tid),))
+            ok, no = ingest.auto_start_ok(store, ingest._from_row(m) if m else {}, (m or {}).get('MessageId'), 'general', own=not m)
+            if not ok:
+                ingest.not_started(store, tid, no); store.audit('task', tid, 'check_back', 'held', 'agent', {'state': f['state'], 'why': str(no)})
+                continue
+            if not ingest.has_room(store):
+                ingest.queue_turn(store, tid, TURN.format(what=what))
+                store.audit('task', tid, 'check_back', 'late', 'agent', {'state': f['state'], 'line': f['line'], 'queued': True})
+                n += 1; continue
+        store.update_task(tid, {'CheckBackAt': _stamp(now), 'CheckBackWhat': what}, 'assistant')
+        store.audit('task', tid, 'check_back', 'late', 'agent', {'state': f['state'], 'line': f['line'], **({'first': True} if first else {})})
         n += 1
     return n
 

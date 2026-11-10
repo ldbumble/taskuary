@@ -92,6 +92,23 @@ def test_missing_native_session_falls_back_to_saved_history_and_says_so():
     assert store.saved_session(tid)['NativeId'] == 'replacement'
 
 
+def test_a_session_closed_under_its_turn_stops_it_and_starts_no_fresh_conversation():
+    """Mark done on a working agent closes its session and its CLI dies under the turn: that is a stop, never "could not resume" - the whole
+    turn was said again to a fresh conversation on the closed task, and its answer landed there 25 s later (the agent walk, 2026-11-09)."""
+    import threading
+    store = MemoryStore(); connect(store); tid = task(store)
+    session = general.GeneralSession(store, tid, pick='cli:claude')
+    session.cli_sid = 'live'; session._remember_session()
+    def killed(system, user, **kw): session.close(learn=False, report=False); raise RuntimeError('the agent process ended')
+    again = mock.Mock(return_value='Both drafts are still waiting for your Send.')
+    stop = threading.Event()
+    with mock.patch.object(llm, 'build_llm', side_effect=[killed, again]), pytest.raises(general.Stopped):
+        session.send_prompt('Carry on', cancel=stop)
+    assert not again.called, 'nothing was asked of a second conversation'
+    assert stop.is_set(), 'the turn is told to stop: a brain with no process to kill reads this'
+    assert not [c for c in store.list_comments(tid, internal=True) if c.get('ActorType') == general.ASSISTANT_TYPE]
+
+
 def test_backup_provider_receives_history_without_primary_session_id():
     store = MemoryStore(); connect(store); connect(store, 'codex')
     store.set_setting('triage_backup_ai', 'cli:codex', 'owner')

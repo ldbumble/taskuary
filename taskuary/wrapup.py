@@ -836,6 +836,9 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # with "no session transcript" while the whole answer sat on screen (owner, 2026-09-07).
     session = general.session_for(tid)
     if general.handles(task) and (session or general.chat_rows(store, tid)):
+        # NOTHING TO READ FIRST: this conversation is the task's own comments, so a press waiting on the harvest (writeup.start) may answer
+        # now, and a restart runs this ending again from them - Mark done held the page for the whole ending, its AI calls included (12.9 s)
+        if on_harvest: on_harvest({'general': True})
         # what it was still asking leads its result (left_open) - filed BEFORE the session's own close files the answer plain
         left = left_open(unanswered(store, tid))
         if left: general.report_note(store, tid, lead=left)
@@ -895,7 +898,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [pbd] if pbd else [],
                 'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')),
                 'send_block': fin.get('send_block') or '', 'freshness': fin.get('freshness') or 'unchecked'}
-    if harvested:          # harvested already - by a write-up that was interrupted (writeup.resume): the session is gone
+    if harvested and 'text' in harvested:          # harvested already - by a write-up that was interrupted (writeup.resume): the session is gone
         text, agent, found, final_message, cut = (harvested[k] for k in ('text', 'agent', 'found', 'final_message', 'cut'))
     else: text, agent, found, final_message, cut = _harvest(store, tid, final_message)
     if not text.strip(): raise ValueError('nothing to wrap up - this task has no session transcript')

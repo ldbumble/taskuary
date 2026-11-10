@@ -551,6 +551,7 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if 
            'split_into_task': lambda d: f"split part of it off as its own task: {d.get('title') or ''}".rstrip(': '),
            'set_repo': lambda d: 'changed where its code lives', 'set_workstream': lambda d: 'changed its workstream',
            'not_coding': lambda d: 'said it is not coding work', 'funnel_later': lambda d: 'put it for later',
+           'close_from_assistant': lambda d: 'marked it done',      # every surface's close (concierge.close_task) writes this one row
            'offer': lambda d: f"accepted the offer: {_cut(' '.join(str(d.get('offer') or '').split()), 200)}".rstrip(': '),
            # ...and the answer on an agent's permission card, said with what it allowed ("You permission answered." told nobody anything)
            'permission_answered': lambda d: f"{ANSWERED.get(d.get('answer'), 'answered')}: {d.get('asked') or 'what the agent asked'}",
@@ -2410,7 +2411,7 @@ class GeneralSession:
                 # ...but never a turn its CLI died part-way through: it may have done some of the work, and a fresh conversation
                 # saying the whole thing again would do it twice (clipool.MID_TURN) - that turn ends, and Continue picks it up
                 from .clipool import MID_TURN
-                if not self.cli_sid or (cancel is not None and cancel.is_set()) or MID_TURN in str(e): raise
+                if not self.cli_sid or (cancel is not None and cancel.is_set()) or getattr(self, 'closing', False) or MID_TURN in str(e): raise
                 logger.info(f'assistant could not resume {self.cli_sid} on task {self.task_id}; starting a new one')
                 self.cli_sid = ''
                 self.resume_notice = 'The original session could not be resumed. Restored from the saved conversation.'
@@ -2821,6 +2822,10 @@ class GeneralSession:
 
     def close(self, learn=True, report=True):
         self.closing = True          # a turn running now ends because of this, not on its own (send_prompt: stopped, not failed)
+        # ...and is TOLD so: a brain with no process to kill (an API card) reads only this, and a CLI killed below must not be taken
+        # for one that "could not resume" - the whole turn was said again to a fresh conversation, on a task just marked done
+        c = getattr(self, '_cancel', None)
+        if c is not None: c.set()
         # Coding sessions already ask this at wrap. General sessions used to bypass that branch,
         # so everything the assistant learned about the business disappeared with the chat even
         # though the Hub explicitly holds more than technical facts. A session boundary is the

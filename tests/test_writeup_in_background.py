@@ -134,6 +134,54 @@ def test_a_restart_mid_job_finishes_from_the_saved_harvest(world):
     wrapup.forget(tid)
 
 
+def chat_task(s):
+    from taskuary import general
+    tid = s.create_task({'Title': 'Post the hardware store charge', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Post the hardware store charge.'); s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, SESSION)
+    return tid
+
+
+def test_mark_done_on_a_chat_agents_task_answers_before_its_ending_asks_any_ai(world):
+    """A chat agent's conversation is the task's own comments: its ending has no session to read first, so the press has nothing to wait
+    for (the agent walk, 2026-11-09: Mark done held the page 12.9 s - the whole ending, its AI calls included, ran inside the press)."""
+    from taskuary import general
+    make, _ = world
+    s, _coding = make(); c = TestClient(server.app); tid = chat_task(s)
+    gate, asked = threading.Event(), threading.Event()
+    def slow(system, user, **kw): asked.set(); gate.wait(8); return brain(system, user, **kw)
+    with mock.patch('taskuary.llm.build_llm', return_value=slow):
+        c.post(f'/api/tasks/{tid}/wrap', json={'close': False, 'no_reply': True, 'background': True, 'then_close': True})
+        assert writeup.running(tid) and not gate.is_set(), 'the press answered while the ending was still at work'
+        assert json.loads(s.get_setting(writeup.PREFIX + str(tid))).get('harvest'), 'what a restart finishes it from is saved'
+        assert asked.wait(10), 'the ending does ask its AI - behind the press'
+        gate.set(); assert writeup.wait_for(tid, 30)
+    assert (s.get_task(tid) or {}).get('Status') == 'done'
+    assert any(str(x.get('Body') or '').startswith(wrapup.REPORT) for x in s.list_comments(tid, internal=True))
+    # ...and the press is one line in the chat, in the button's own words ("You close from assistant." was the audit row's name)
+    assert [x['content'][0]['text'] for x in general.press_lines(s, tid)] == ['You marked it done.']
+    wrapup.forget(tid)
+
+
+def test_a_restart_mid_ending_of_a_chat_agents_task_runs_the_ending_again(world):
+    """...and a restart in those seconds loses nothing: the conversation is still on the task, so the ending is run again and the task closes -
+    it read "restarted before the session was read" and stayed open."""
+    make, _ = world
+    s, _coding = make(); c = TestClient(server.app); tid = chat_task(s)
+    gate = threading.Event()
+    def stuck(system, user, **kw): gate.wait(10); raise RuntimeError('the process went away')
+    with mock.patch('taskuary.llm.build_llm', return_value=stuck):
+        c.post(f'/api/tasks/{tid}/wrap', json={'close': False, 'no_reply': True, 'background': True, 'then_close': True})
+        saved = s.get_setting(writeup.PREFIX + str(tid))
+        writeup._JOBS.clear(); wrapup.forget(tid)
+    s.set_setting(writeup.PREFIX + str(tid), saved, 'test')
+    assert writeup.resume(s) == 1 and writeup.wait_for(tid, 30)
+    gate.set()
+    assert (s.get_task(tid) or {}).get('Status') == 'done'
+    assert [str(x.get('Body') or '') for x in s.list_comments(tid, internal=True) if writeup.FAILED in str(x.get('Body') or '')] == []
+    assert sum(str(x.get('Body') or '').startswith(wrapup.REPORT) for x in s.list_comments(tid, internal=True)) == 1, 'the answer is filed once'
+    wrapup.forget(tid)
+
+
 # WHAT THE WRITE-UP IS DOING NOW (the owner, 2026-10-21): Stop and save opens Close out at once, and its pending block says the job's
 # real stage - read from the job, never a timer - until the draft replaces it.
 def stages_of(monkeypatch):

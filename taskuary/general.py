@@ -2187,6 +2187,13 @@ class GeneralSession:
                 # ...and never on an empty tab (the owner, 2026-11-04: "no browser should open if we don't have a URL"): up already, or on
                 # the page it was last on - else OFFERED, and the agent's first `agent-browser open <url>` launches it (browserview.on_demand)
                 # ...and on that page only while the owner has a part on it (page_needs_owner): else it is offered, its address said
+                # ...AND A COMPUTER WITH NO BROWSER YET IS GIVEN ONE (browserruntime), never a chore for the owner: a task that asked for a
+                # browser waits for it here, each step said in the turn; one that is only offered it is not held up - the download runs
+                # behind the turn and the agent is told it is on its way
+                setup_why, coming = '', False
+                if browserview.can_set_up():
+                    if self.browser_wanted: setup_why = browserview.set_up(lambda s: self._remember_trace('progress', 'browser', s))
+                    elif browser_offered(self.store, self.task_id, self.pick): setup_why = browserview.set_up_soon(); coming = not setup_why
                 was = browserview.last_page(self.task_id) if self.browser_wanted else ''
                 last = was if was and page_needs_owner(self.store, self.task_id) else ''
                 if self.browser_wanted and (browserview.state(self.sid, fresh=True).get('open') or (last and browserview.start(self.sid, last))):
@@ -2198,7 +2205,7 @@ class GeneralSession:
                              (f' It was last on {was} - open it again only if the work still needs it.' if was else '')
                 elif self.browser_wanted:
                     # a browser that did not open is SAID - in the turn and to the agent - not left for it to guess at (2026-10-25)
-                    why = browserview.FAILED_WHY if browserview.installed() else 'agent-browser is not installed on this computer'
+                    why = browserview.FAILED_WHY if browserview.installed() else setup_why or 'agent-browser is not installed on this computer'
                     self.browser_failed = why
                     self._emit(f'\x1b[33mThe browser did not open: {why}.\x1b[0m\r\n')
                     self._remember_trace('progress', 'browser', f'The browser did not open: {why}. Send another message to try again.')
@@ -2206,9 +2213,10 @@ class GeneralSession:
                 elif browser_offered(self.store, self.task_id, self.pick):
                     # ...and a task nobody marked still gets the browser OFFERED, so a link in a message is followed in Taskuary's own
                     # browser and not in a tool of the CLI's own that nobody can watch or hold (browserview.OWN_ONLY, 2026-10-28)
-                    if browserview.installed():
+                    if browserview.installed() or coming:
                         browser_tools, browser_offer = True, True
-                        system = f'{system}\n\n{browserview.offer(held=self.holds_browser())}'
+                        system = f'{system}\n\n{browserview.offer(held=self.holds_browser())}' + (f' {browserview.SETTING_UP}' if coming else '')
+                    elif setup_why: system = f'{system}\n\n{browserview.NO_SET_UP.format(why=setup_why)}'
                     else:
                         from . import words as places
                         system = f"{system}\n\n{browserview.NOT_SET_UP.format(where=places.name('ai_apps'))}"
@@ -2336,7 +2344,11 @@ class GeneralSession:
                 from . import browserview
                 stranger = _origin_of(self.store, self.task_id) == 'stranger'
                 looped = apiagent.can(brain)
-                browser = looped and not stranger and browserview.installed()
+                # ...on a computer with no browser yet too: Taskuary fetches its own behind the turn (browserruntime), and the first browser
+                # call waits for it (apiagent.run_tool) - the agent is never told to send the owner off to install one
+                coming = looped and not stranger and browserview.can_set_up()
+                if coming: browserview.set_up_soon()
+                browser = looped and not stranger and (coming or browserview.installed())
                 if looped:
                     api_tools = apiagent.tools_for(self.task_id, self.sid, browser, stranger, hands=full_hands(self.store))
                     # ...nothing to do with them (a stranger's task whose toolbox did not answer): the plain way, as before
@@ -2350,7 +2362,7 @@ class GeneralSession:
                     system = f'{system}\n\n{apiagent.BRIEF}'
                 elif not stranger:
                     # ...and where it cannot, the next real step as the owner's question - never "cannot be done from here" (2026-11-09)
-                    if self.browser_wanted: self._remember_trace('progress', 'browser', NO_BROWSER_LINE)
+                    if self.browser_wanted and not apiagent.can(brain): self._remember_trace('progress', 'browser', NO_BROWSER_LINE)     # true of a card that takes no tools, and only of it
                     system = f'{system}\n\n{apiagent.no_browser_line() if apiagent.can(brain) else apiagent.no_tools_line()}'
             if self.cli_sid:
                 # an opening turn's 'turn' IS the instruction, which the history never saw

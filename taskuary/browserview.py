@@ -63,7 +63,26 @@ _KIND = re.compile(r'"type"\s*:\s*"(frame|url)"')
 _SEQ, _ACK = re.compile(r'"seq"\s*:\s*(\d+)'), re.compile(r'"type"\s*:\s*"ack"')
 
 
-def installed() -> bool: return bool(shutil.which('agent-browser'))
+def installed() -> bool:
+    "A browser an agent can use right now: the owner's own agent-browser on PATH, or Taskuary's own with its Chrome (browserruntime)."
+    from . import browserruntime as rt
+    p = shutil.which('agent-browser')
+    return rt.whole() if not p or rt.mine(p) else True
+def can_set_up() -> bool:
+    "No browser here yet, and Taskuary can fetch its own for this computer."
+    from . import browserruntime as rt
+    return not installed() and rt.can()
+def set_up(say=None) -> str:
+    "Fetch Taskuary's own browser and wait for it, `say` hearing each step. '' once there is one, else why not - in words for the owner."
+    if installed(): return ''
+    from . import browserruntime as rt
+    try: rt.ensure(say); return ''
+    except RuntimeError as e: return str(e)
+def set_up_soon() -> str:
+    "The same, behind the turn. '' while the first try is under way, else why the last one failed - and a new try is begun either way."
+    from . import browserruntime as rt
+    was = rt._STATE['failed']; rt.start()
+    return '' if installed() else was
 
 
 def program() -> str:
@@ -71,7 +90,8 @@ def program() -> str:
     cmd.exe, which reads & | < > ^ in an argument as its own: the owner's address bar opened https://portal.example/?app=1&return=...
     as ?app=1 and ran `return=...` as a command, and the page sat on a white loading spinner (2026-11-03). An approved fill or eval
     with an & in it was cut the same way. The shim only starts the .exe beside it, so that is what is run."""
-    p = shutil.which('agent-browser') or ''
+    from . import browserruntime
+    p = shutil.which('agent-browser') or browserruntime.find()
     if os.name == 'nt' and p.lower().endswith(('.cmd', '.bat')):
         import platform
         arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x64'
@@ -678,6 +698,18 @@ OFFER_HEAD = ('NO BROWSER IS OPEN for this task yet, but Taskuary keeps one for 
 NOT_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET (agent-browser is not installed). Do not use a browser tool of your own CLI '
               'or of another app instead - Taskuary cannot show those to the owner or hold their presses, and they fail here. If the work needs a web page, do what you can without it (read the message, find the link), then tell the owner in one line: '
               '"The browser is not set up - install agent-browser under {where}, then ask me again." ')
+# ...AND A COMPUTER WITHOUT ONE IS GIVEN ONE, NOT A CHORE (the owner, 2026-11-09: "it asks for cli tool why??"). Taskuary fetches its own
+# browser (browserruntime) - behind the turn for a task that was only offered it, so the agent is told it is on its way; and when the
+# download could not be made, the real reason is the owner's line, never a settings page to go and install something on
+SETTING_UP = ('IT IS STILL BEING SET UP on this computer - a one-time download Taskuary started by itself, a few minutes. If `agent-browser` '
+              'is not found when you run it, the download has not finished: do the rest of the work first, then wait a minute and try '
+              'again, for up to five minutes. If it is still not there, tell the owner in one line: "The browser is still being set up on '
+              'this computer - ask me again in a few minutes." Never tell them to install anything. ')
+NO_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET: Taskuary tried to set its own up and could not ({why}). Do not use a browser '
+             'tool of your own CLI or of another app instead - Taskuary cannot show those to the owner or hold their presses, and they fail '
+             'here. If the work needs a web page, do what you can without it, then tell the owner in one line: "The browser could not be '
+             'set up on this computer: {why}. Ask me again and Taskuary tries again." ')
+COMING = 'The browser is being set up on this computer (a one-time download) - try again in a few minutes'
 # ...and a stranger's task (origin.py: a message on it is from someone the owner has not vouched for) gets no browser: a link in a
 # stranger's mail is the oldest way to talk an agent into a form. Said, so the answer is the reason and the press, not "could not"
 STRANGER_LINE = ('NO BROWSER ON THIS TASK: it carries a message from someone the owner has not vouched for ({why}), and a link in such a '
@@ -780,5 +812,5 @@ def hint() -> str:
     in the pane, never by the agent (the transcript becomes the report). Short on purpose: the
     seed rides a tty line with a hard cap, and the CLI documents its own commands
     (`agent-browser skills get core`)."""
-    if not shutil.which('agent-browser'): return ''
+    if not installed(): return ''
     return 'BROWSER: agent-browser is installed; Never type passwords/codes - to sign in, end the turn with [[TASKUARY-SIGNIN: <domain>]].'

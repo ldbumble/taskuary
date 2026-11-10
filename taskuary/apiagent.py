@@ -214,6 +214,7 @@ def env_of(store, tid: int, sid: str) -> dict:
     return {**os.environ, **terminal.session_env('assistant', tid, sid=sid), **browserview.env(sid), **HEADLESS_ENV}
 
 
+SAY = {}                       # (tid, sid) -> how this turn says a step of Taskuary's own (the browser being set up) in the chat
 BRAINS = {}                    # (tid, sid) -> the brain this turn runs on: web_search asks it, with its own search on
 
 
@@ -295,7 +296,11 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
         from . import agenttools
         return agenttools.show_files(store, tid, a.get('files') or [])
     if name in HANDS: return _hands(store, tid, sid, name, a)
-    if not bv.installed(): raise ValueError('the browser is not set up on this computer')
+    if not bv.installed():
+        # NO BROWSER ON THIS COMPUTER YET: Taskuary fetches its own and the call waits for it, each step said in the turn (browserruntime)
+        why = bv.set_up(SAY.get((tid, sid))) if bv.can_set_up() else 'agent-browser is not installed'
+        if why: raise ValueError(f'the browser could not be set up on this computer: {why}. Tell the owner that in one plain line, in these '
+                                 'words, and that asking again tries again - never send them to a settings page to install it')
     if name == 'browser_open':
         u = _url(a.get('url'))
         if not bv.state(sid, fresh=True).get('open'):
@@ -346,6 +351,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
     from . import llm
     tools = tools if tools is not None else [*BROWSER, SHOW]
     BRAINS[(tid, sid)] = brain
+    if trace: SAY[(tid, sid)] = lambda s: trace('progress', 'browser', s)
     content = ([{'type': 'image_url', 'image_url': {'url': f'data:{ct};base64,{llm.vision_safe(ct, b64)}'}} for ct, b64 in images]
                + [{'type': 'text', 'text': user}]) if images else user
     msgs = [{'role': 'system', 'content': system}, {'role': 'user', 'content': content}]

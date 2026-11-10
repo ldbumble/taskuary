@@ -133,6 +133,9 @@ def _walk_settled(timeout: float = WALK_WAIT) -> bool:
 @asynccontextmanager
 async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())
+    try:                                              # Taskuary's own browser, where a CLI agent's shell finds it by name
+        from . import browserruntime; browserruntime.on_path()
+    except Exception as e: logger.warning(f'browser folder not put on PATH: {e}')
     # ONE LIVE TASKUARY PER DATA FOLDER (instance.py): every way in - the CLI, the desktop, --server-only - comes through here
     from . import instance, hooks as _hooks
     if not instance.claim(_hooks.base_url()):
@@ -2503,13 +2506,14 @@ def assistant_browser(task_id: int):
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
     if not general.handles(task): raise HTTPException(422, 'a browser belongs to an assistant conversation')
-    if not browserview.installed():
+    if not browserview.installed() and not browserview.can_set_up():
         raise HTTPException(422, f"agent-browser is not installed - {words.name('ai_apps')} lists it")
     store.tag_task(task_id, browserview.WANTS, actor=ACTOR)
     session = general.session_for(task_id)
     if session:
         session.browser_wanted = True                 # the next turn hands the CLI its browser brief
-        threading.Thread(target=browserview.start, args=(session.sid,), daemon=True).start()
+        # ...on a computer with no browser yet, Taskuary's own is fetched first (browserruntime)
+        threading.Thread(target=lambda sid=session.sid: browserview.set_up() or browserview.start(sid), daemon=True).start()
     return _assistant_payload(task_id, session)
 
 class DesktopMarkBody(BaseModel): on: bool = True
@@ -8217,6 +8221,7 @@ def teamsweb_signin(cid: int):
     from . import browserview, teamsweb
     c = _ms_card(cid)
     if not teamsweb.personal(c): raise HTTPException(409, 'this Teams card is set to a work or school account')
+    if browserview.can_set_up(): raise HTTPException(409, (why := browserview.set_up_soon()) and f'The browser could not be set up on this computer: {why}' or browserview.COMING)
     if not browserview.installed(): raise HTTPException(409, teamsweb.NO_BROWSER)
     sid = teamsweb.sid_of(cid)
     if not browserview.start(sid, teamsweb.HOME): raise HTTPException(503, 'the browser did not start - press Sign in again')

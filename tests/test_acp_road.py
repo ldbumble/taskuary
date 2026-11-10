@@ -2,6 +2,7 @@
 Taskuary's own rules answering each permission, the run's model and effort as session options, a kept conversation holding its
 connection between turns, and a switch to turn it off. The agent here is tests/fake_acp_server.py; no vendor CLI is installed."""
 import json, sys, threading
+from types import SimpleNamespace
 from pathlib import Path
 from unittest import mock
 
@@ -75,6 +76,29 @@ def test_a_held_push_is_the_owners_buttons_and_their_answer_is_the_answer(option
     # answered on the spot: no Approve card waits as well
     assert not s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
     assert not permissions.pending(tid, s)
+
+
+def test_the_owners_reject_reaches_the_agent_as_the_owners_no_and_their_allow_says_nothing():
+    """Agent walk 2, 2026-11-10: Reject reached the agent as the adapter's "User refused permission to run tool" - the same sentence it
+    gets when Taskuary blocks a step by itself - and it ended its turn asking for the same push again."""
+    from taskuary import browsergate
+    for option, heard in (('reject_once', True), ('allow_once', False)):
+        s = STORE[0] = MemoryStore()
+        tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+        told = []
+        sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: told.append((text, as_owner)))
+        with mock.patch.object(shellgate, 'trusted', return_value=''), mock.patch('taskuary.workerstate._live', return_value=sess), \
+             mock.patch('taskuary.terminal.stranger_now', return_value=False):
+            t = _answering(option)
+            run(profile(), env={'FAKE_ACP_ASK': 'git push origin main'}, store=s, task_id=tid)
+            t.join(5)
+            for _ in range(100):
+                if told or not heard: break
+                threading.Event().wait(0.05)
+        if not heard: assert told == []; continue
+        [(text, as_owner)] = told
+        assert not as_owner and browsergate.OWNER_NO in text and 'git push origin main' in text and "not a block of Taskuary's" in text
+        assert 'do not ask for the same step again' in text
 
 
 def test_the_automatic_rules_still_answer_first_and_never_reach_the_owner():

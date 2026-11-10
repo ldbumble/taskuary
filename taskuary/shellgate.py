@@ -30,7 +30,7 @@ somewhere else, a pipe into Remove-Item - is held, never let through for being h
 """
 import contextvars, json, ntpath, os, re, shlex, shutil, subprocess, tempfile
 from loguru import logger
-from .browsergate import _segments, _deny, _tell, NEXT
+from .browsergate import _segments, _deny, _tell, not_approved, NEXT, OWNER_NO
 
 HELD = 'Taskuary held this for the owner'
 # ...said to the agent the hold covers, as the browser's hold is (browserview.HOLD_LINE): told nothing, a general agent asked "Should I delete
@@ -431,8 +431,7 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
     finally: _batch.reset(tok)
     left = [r['ReviewId'] for r in rvs[len(done) + (1 if failed else 0):]]
     ran = '; '.join(told) or 'nothing ran'
-    if verb != 'approve': _tell(store, tid, f"The owner dismissed {len(rvs)} held steps: {ran} - NOT done. Do not try them another way - carry on "
-                                            "without them, or ask the owner what they want instead.")
+    if verb != 'approve': _tell(store, tid, f"The owner dismissed {len(rvs)} held steps: {ran} - NOT done. {OWNER_NO}")
     elif failed: _tell(store, tid, f"The owner approved {len(rvs)} held steps together. Taskuary ran {len(done)} of them ({ran}); step {failed['step']} "
                                  f"failed: {failed['error'][:300]}. The rest were not run and still wait on the card. " + NEXT, wake=bool(done))
     else: _tell(store, tid, f"The owner approved {len(rvs)} held steps together and Taskuary ran them in order: {ran}. " + NEXT, wake=True)
@@ -441,5 +440,4 @@ def approve_steps(store, rids: list, decide, actor: str = 'owner', verb: str = '
 
 def declined(store, tid: int, p: dict) -> None:
     if (told := _batch.get()) is not None: return told.append(f"{p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`)")
-    _tell(store, tid, f"The owner did not approve it: {p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`) was NOT done. Do "
-                      'not try it another way - carry on without it, or ask the owner what they want instead.')
+    _tell(store, tid, not_approved(f"{p.get('what') or 'the step'} (`{str(p.get('command') or '')[:200]}`)"))

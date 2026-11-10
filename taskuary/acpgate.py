@@ -121,12 +121,18 @@ def owner_asks(ctx: dict) -> bool:
 
 def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
     "(answer, why) once the owner has answered a held call (permissions.ask) - or not: then the Approve card, and a refusal."
-    from . import permissions, shellgate
+    from . import permissions, shellgate, workerstate as ws
     store, tid, late = ctx['store'], int(ctx['task_id']), []
     req = {**permissions.from_acp(params), 'sid': str(ctx.get('sid') or (params or {}).get('sessionId') or '')}
     got = permissions.ask(store, tid, req, timed_out=lambda: late.append(1))
     if got.startswith('allow'): return ALLOWED, 'the owner allowed it'
-    if not late: return REFUSED, 'the owner said no'
+    if not late:
+        # ...and the agent hears WHOSE no it was: the adapter's refusal reads the same for Taskuary's own block (browsergate.OWNER_NO). Into
+        # the turn it is in where the adapter steers, else as its next words; a run with no session of ours hears it with the owner's next line
+        if ws._live(tid):
+            r = permissions.normal(req)
+            shellgate.declined(store, tid, {'what': permissions.asked(r | permissions.held_for(r, str(ctx.get('cwd') or ''))), 'command': r['command']})
+        return REFUSED, 'the owner said no'
     tc = (params or {}).get('toolCall') or {}
     raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
     t, cwd = tool_of(tc), str(raw.get('cwd') or ctx.get('cwd') or '')

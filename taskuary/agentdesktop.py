@@ -368,6 +368,5 @@ def perform(store, tid: int, p: dict, run=None) -> dict:
 
 
 def declined(store, tid: int, p: dict) -> None:
-    from .browsergate import _tell
-    _tell(store, tid, f"The owner did not approve it: {p.get('what') or p.get('command')} was NOT done. Do not try it another way - "
-                      'carry on without it, or ask the owner what they want instead.')
+    from .browsergate import declined as said
+    said(store, tid, p)

@@ -392,9 +392,13 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
     return {'performed': p.get('what') or p.get('command'), 'site': p.get('site'), 'page': now}
 
 
-def declined(store, tid: int, p: dict) -> None:
-    _tell(store, tid, f"The owner did not approve it: {p.get('what') or p.get('command')} was NOT done. Do not try it another way - "
-                      'carry on without it, or ask the owner what they want instead.')
+# THE OWNER'S NO IS SAID AS THEIRS, AND ONCE (agent walk 2, 2026-11-10): Reject on a held push reached the agent as the adapter's "User
+# refused permission to run tool" - the sentence it also gets when Taskuary blocks a step by itself - so it ended its turn asking for the
+# same push again. One sentence for every road a no comes by (a dismissed card, the held steps of a turn, the Allow/Reject buttons)
+OWNER_NO = ("That is the owner's own answer, not a block of Taskuary's. Do not try it another way and do not ask for the same step again - "
+            'carry on without it, and ask only if you need to know what they want instead.')
+def not_approved(what) -> str: return f'The owner did not approve it: {what} was NOT done. {OWNER_NO}'
+def declined(store, tid: int, p: dict) -> None: _tell(store, tid, not_approved(p.get('what') or p.get('command')))
 
 
 # the turn an approval wakes says what happened. ...AND NOTHING ABOUT WHAT DID NOT (agent walk 2, 2026-11-10): told "(with its link, if it
@@ -602,8 +606,7 @@ def not_pressed(store, tid: int, rid: str, why: str) -> bool:
     h = _close(store, tid, rid, why)
     if not h: return False
     step = f"do the step you handed them ({h.get('what') or 'on the page'})" if h.get('kind') == 'turn' else f"press {h['btn']}"
-    _tell(store, tid, f"The owner did not {step}: {why}. It was NOT done - the page is as you left it. Do not do it yourself or try it "
-                      "another way; carry on without it, or ask the owner what they want instead.")
+    _tell(store, tid, f"The owner did not {step}: {why}. It was NOT done - the page is as you left it. Do not do it yourself. {OWNER_NO}")
     store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h['site'], 'why': why})
     return True
 

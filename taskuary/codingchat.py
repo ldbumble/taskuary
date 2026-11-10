@@ -143,7 +143,12 @@ def chat(store, tid: int) -> dict:
     from . import acpcoding, permissions
     t = _live(int(tid)) or (acpcoding.IDLED.get(int(tid)) if acpcoding.idled(int(tid), store) else None)
     from .landing import has_checkout
-    return {'task': int(tid), 'sessions': sessions(store, tid), 'mails': mails(store, tid), 'live': live_of(t),
+    # A LINE MOVES ONE WAY - waiting, then drawn in its session - so the waiting ones are read FIRST: read after the sessions, a line that
+    # was taken between the two reads was in neither, and the owner's words left the chat for one look (CI, 2026-11-10). One caught in
+    # both is drawn where the session has it
+    held, sess = waiting(store, tid, t), sessions(store, tid)
+    drawn = {str((u.get('content') or {}).get('text') or '') for s in sess[-1:] for u in s.get('updates') or [] if u.get('sessionUpdate') == 'user_message_chunk'}
+    return {'task': int(tid), 'sessions': sess, 'mails': mails(store, tid), 'live': live_of(t),
             'checkout': has_checkout(store, tid, getattr(t, 'cwd', '') or ''),
-            'waiting': waiting(store, tid, t),
+            'waiting': [w for w in held if not (str(w['id']).startswith('q') and w['text'] in drawn)],
             'permissions': permissions.pending(int(tid), store)}         # what the agent waits on the owner's button for

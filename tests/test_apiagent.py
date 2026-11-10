@@ -723,6 +723,22 @@ class CodingOnACardTests(unittest.TestCase):
             self.assertEqual(session.cwd, 'elsewhere')
         finally: terminal.SESSIONS.pop(session.sid, None)
 
+    def test_a_session_that_is_gone_leaves_nothing_behind_it(self):
+        from taskuary import llm as llm_mod
+        seen = []
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): seen.append(dict(apiagent.BRAINS)); return {'content': 'Done.'}
+        session = self.g.GeneralSession(self.s, self.tid)
+        session.pick, session.provider, session.model = f'connector:{self.cid}', 'Org AI', ''
+        k = (self.tid, session.sid)
+        with mock.patch.object(llm_mod, 'build_llm', return_value=Brain()), mock.patch.object(bv, 'installed', return_value=True),              mock.patch.object(bv, 'state', return_value={'open': False}), mock.patch.object(bv, 'close'), mock.patch.object(bv, 'keep_page'),              mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
+            session.send_prompt('fix add()', echo=False)
+            self.assertIn(k, seen[0])                                                   # the turn had its brain while it ran...
+            for d in (apiagent.BRAINS, apiagent.STOPS, apiagent.SAY): self.assertNotIn(k, d)       # ...and none of it once it ended
+            self.assertIn(k, apiagent.OFFERED)                                          # what it may call stays while the session lives
+            session.close(learn=False, report=False)
+        for d in (apiagent.OFFERED, apiagent.TOOLBOX, apiagent.STRANGERS): self.assertNotIn(k, d)
+
     def test_a_note_another_agent_sent_it_is_heard_on_its_next_turn(self):
         from taskuary import llm as llm_mod
         other = self.s.create_task({'Title': 'sub() adds', 'Summary': 'fix it', 'Kind': 'coding', 'Status': 'open'}, 'owner')

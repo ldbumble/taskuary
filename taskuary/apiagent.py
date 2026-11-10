@@ -372,6 +372,14 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
 TOOLBOX, STRANGERS, OFFERED = {}, set(), {}   # ...and OFFERED: every name a turn was offered - nothing else runs          # (tid, sid) -> the Taskuary tool names this turn was offered; the sessions on a stranger's task
 
 
+def forget(tid: int, sid: str):
+    """A SESSION THAT IS GONE KEEPS NOTHING HERE. What each was offered stayed for every session there had ever been, until the app was
+    closed. Asked by a session with no turn on (general: idled out, closed), never under one: `call` reads these, and every turn that
+    comes after says them again first (tools_for)."""
+    for d in (TOOLBOX, OFFERED): d.pop((tid, sid), None)
+    STRANGERS.discard((tid, sid))
+
+
 def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=None, hands: bool = True) -> list:
     """What an API session is offered this turn: Taskuary's toolbox (the CLI's, gated as the CLI's), and the browser on the owner's own task
     where agent-browser is installed. `show` is the server's where its toolbox answered, else the local one."""
@@ -484,3 +492,5 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
         # ...kept once the model has answered at all: a turn stopped or failed part-way keeps what it did, so Continue goes on from there.
         # Its pictures are not carried (the model saw them; their bytes would ride on every later call)
         if history is not None and begun: mine['content'] = user; _settle(msgs); history[:] = msgs[1:]
+        # ...and what was this TURN's goes with it - its brain, its Stop switch, its way to say a step: a step still under way has read its own
+        for d in (SAY, STOPS, BRAINS): d.pop((tid, sid), None)

@@ -2629,6 +2629,7 @@ class GeneralSession:
         finally:
             self.busy, self.last, self.spoke = False, time.time(), True
             self._cancel = None
+            if not self.alive: self._forget_tools()          # closed under this turn (close): it was not close's to drop while the turn ran
             from . import clipool
             self.cli_up = clipool.is_live(f'general:{self.task_id}')       # watched while it sits idle (cli_gone)
             # ...the turn ended in this process, filed or failed: nothing is left for a restart to keep. One whose session was killed under it
@@ -2905,6 +2906,7 @@ class GeneralSession:
         except Exception as e: logger.debug(f'the browser of task {self.task_id} was not closed on idle: {e}')
         IDLED[self.task_id] = self.sid
         terminal.SESSIONS.pop(self.sid, None)
+        self._forget_tools()
         for loop, q in list(self.subs):
             try: loop.call_soon_threadsafe(q.put_nowait, None)
             except RuntimeError: pass
@@ -2912,6 +2914,11 @@ class GeneralSession:
         logger.info(f'task {self.task_id}: its agent was idle for {int(idle_for())}s and closed quietly - the next input starts it again')
         handraise.moved(self.task_id)
         return True
+
+    def _forget_tools(self):
+        "What an AI card's turns were offered is dropped with the session (apiagent.forget) - it comes back idle as this sid, and is told again."
+        from . import apiagent
+        apiagent.forget(self.task_id, self.sid)
 
     def stop(self) -> bool:
         """Stop the answer being written now - the STOP BUTTON, and nothing else.
@@ -2972,6 +2979,7 @@ class GeneralSession:
             try: terminal.release_held(self.store, self.task_id, 'assistant')
             except Exception as e: logger.debug(f'the held reply on task {self.task_id} stayed held: {e}')
         self.alive, self.ended = False, time.time()
+        if not getattr(self, 'busy', False): self._forget_tools()
         if was_alive:
             from . import browserview
             try: browserview.keep_page(self.task_id, browserview.state(self.sid, fresh=True).get('url'))

@@ -6,6 +6,7 @@ sat on "running PreToolUse hook" and looked stuck. Now the hook lets go at once,
 request it recorded is what puts the task in the waiting-on-you lane - 👋 "<agent> asked you: ..." on the rail, the Board
 and the agent's work line. A stranger's session is still held, and its permit still waits on Allow/Deny."""
 import json, threading, time, unittest
+from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -56,6 +57,10 @@ class TheOwnersQuestion(Base):
         live = [{'taskId': self.tid, 'agent': 'coding', 'sid': 'run1', 'tail': SPIN, **term.worker_fields(self.s, self.t)}]
         card = funnel.from_agents(self.s, live_state=live)[0]
         self.assertEqual((card['lane'], card['asking'], card['held']), ('blocked', True, False))
+        # nothing is asked on the rail (the owner, 2026-11-10): the row says it waits, the question is the card's - and the phone's alert's
+        self.assertEqual((card['why'], card['tail']), (ws.says('parked', card['agent']), [Q]))
+        with mock.patch.object(funnel, 'notices', return_value=[]): al = funnel.alerts(self.s, [card])
+        self.assertIn(f'asked you: {Q}', al[0]['text'])
         lanes = json.loads((Path(funnel.__file__).parent / 'lanes.json').read_text(encoding='utf-8'))['lanes']
         self.assertEqual(next(l for l in lanes if l['key'] == 'blocked')['mark'], '👋', 'the existing waiting-on-you emoji, nothing new')
 

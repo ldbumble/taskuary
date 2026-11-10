@@ -2253,7 +2253,9 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         # screen's question. A stall has nothing to answer - saying "answer it below" over a rate limit
         # sent the owner typing at a wall.
         sub = ws.sub_state(True, bool(item.get('asking')), {'kind': item['request_kind']} if item.get('request_kind') else None)
-        line = item['why'] if item.get('request_kind') and item.get('why') else ws.says(sub, item.get('agent') or task_kinds.SHOWN, item['tail'][-1] if sub == 'asking' and item.get('tail') else '')
+        # ...and a QUESTION's words are the request's own (its `tail`): the row's `why` no longer carries them (funnel.rail_line)
+        asked = item['tail'][-1] if sub == 'asking' and item.get('tail') else ''
+        line = item['why'] if item.get('request_kind') and item.get('why') and not asked else ws.says(sub, item.get('agent') or task_kinds.SHOWN, asked)
         if sub == 'stalled': return f"{line} ({item.get('ref') or item['title']}) - it picks up again on its own when the limit lifts. Nothing is lost."
         # "answer it below" only where somebody is listening - a stopped, saved or paused run has nobody (a stall is answered above)
         ans = not item.get('paused') and item.get('lane') not in ('stopped', 'saved')

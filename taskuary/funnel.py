@@ -26,6 +26,13 @@ from .funnel_presentation import present as _present, attach as _attach
 from .processing_order import attention_band, gave_up, priority_rank
 from .workerstate import says as agent_says, sub_state, request_line   # funnel.says is a message's subject
 
+
+# NOTHING IS ASKED ON THE RAIL (the owner, 2026-11-10: "why would we ask anything in the assistant rail? remove that no need for that
+# ever"): a row whose agent asked says only that it waits on you - the question is the card inside the task, where it is answered. An
+# approval or a stall is no question, and keeps its words
+def rail_line(agent, req: dict) -> str:
+    return agent_says('parked', agent) if sub_state(req=req) == 'asking' else request_line(agent, req)
+
 # ONE VOCABULARY, in taskuary/lanes.json - the words, roles and marks a lane wears, loaded here and
 # imported by the desktop (website/src/funnelPile.js) from the same file. They were two hand-kept
 # tables in two languages and had already drifted: this file said a report lane reads 'landed' while
@@ -912,7 +919,7 @@ def paused_conversation(store, item: dict, st=None) -> dict:
             if (q := taskstate.open_question(store, tid)):
                 return item | {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'asking': True, 'agent': 'assistant', 'mode': 'assistant',
                                'tail': [str(q.get('text') or '')[:300]], 'request_id': q.get('request_id'), 'request_kind': q.get('kind'),
-                               'since': _ts(q.get('at')) or item.get('since'), 'why': request_line(None, q)}
+                               'since': _ts(q.get('at')) or item.get('since'), 'why': rail_line(None, q)}
             if item.get('lane') in ('yours', 'queued') and not store.waiting_on_owner(tid) and st.key == 'agentdone':
                 return item | {k: v for k, v in chat_done(store, task).items() if k in ('key', 'kind', 'lane', 'who', 'why', 'chat_done')}
             return item
@@ -972,7 +979,7 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
             out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                              tid=tid, agent=agent, priority=task.get('Priority'), since=req.get('at') or t.get('started'), asking=req.get('kind') == 'input_needed', tail=[str(req.get('text') or '')[:300]], sid=t.get('sid'),
                              channel=src, mode=t.get('mode') or 'terminal', request_id=req.get('request_id'), request_kind=req.get('kind'), choices=list(req.get('choices') or []),
-                             why=request_line(agent, req), questions=list(t.get('questions') or []), held=bool(t.get('held'))))
+                             why=rail_line(agent, req), questions=list(t.get('questions') or []), held=bool(t.get('held'))))
             continue
         # ONE READING of "is it asking" (A15, 2026-09-25): the session's own state and sentence (terminal.worker_fields,
         # general.info) - the rail read the screen with a question regex of its own, and could say "asked you" where the
@@ -1855,7 +1862,9 @@ def alerts(store, items: list = None) -> list:
         # a minute apart in two wordings (2026-09-29 audit) - an interruption to say there is nothing to do
         elif i['kind'] == 'agent' and i['lane'] == 'blocked':
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': 'agent', 'lane': i['lane'], 'asking': bool(i.get('asking')),
-                        'text': f"{i.get('why') or agent_says('parked', i.get('agent') or task_kinds.SHOWN)} ({i.get('ref') or i['title']})"})
+                        # ...with the question's own words where it asked: an alert is read where there is no card (the phone), and the row's
+                        # `why` no longer carries them (rail_line)
+                        'text': f"{agent_says('asking', i.get('agent'), i['tail'][-1]) if i.get('asking') and i.get('request_kind') and i.get('tail') else i.get('why') or agent_says('parked', i.get('agent') or task_kinds.SHOWN)} ({i.get('ref') or i['title']})"})
         elif i['lane'] == 'asked' and i['kind'] in ('asked', 'todo') and i.get('who'):
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': 'asked', 'lane': 'asked', 'text': f"{i['who']} asked you: {i['title']}"})
         elif i['lane'] in ('time', 'approve') and i['kind'] != 'meeting':      # a meeting further out is not yet news

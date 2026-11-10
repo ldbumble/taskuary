@@ -45,7 +45,7 @@ def test_the_browser_offer_is_short_and_its_rules_are_one_read_away():
     for want in ('NO BROWSER IS OPEN', 'agent-browser open <url>', 'never a browser tool of your own CLI', 'guide `browser`', 'NEVER type a password',
                  'CAPTCHA'):
         assert want in held, want
-    assert 'THEY press it on the page themselves' in held and 'TASKUARY CANNOT HOLD' in asks and 'TASKUARY CANNOT HOLD' not in held
+    assert 'THEY press it' in held and 'TASKUARY CANNOT HOLD' in asks and 'TASKUARY CANNOT HOLD' not in held
     assert len(held) < len(browserview.brief(held=True, open_now=False)) / 2
     g = guides.read('browser')
     for want in ('TASKUARY-SIGNIN', 'TASKUARY-YOURTURN', 'snapshot -i -c', 'WHEN YOU ASK FOR A SIGN-IN'): assert want in g, want

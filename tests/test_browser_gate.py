@@ -209,7 +209,7 @@ class HandingOver(unittest.TestCase):
     def test_an_agents_click_on_pay_becomes_a_hand_over_not_a_proposal(self):
         why = self.hand()['hookSpecificOutput']
         self.assertEqual(why['permissionDecision'], 'deny')
-        self.assertIn('they check it and press it themselves', why['permissionDecisionReason'])
+        self.assertIn('a card in this task waiting for it', why['permissionDecisionReason'])
         self.assertEqual(self.pending(), [])                                          # no Approve card
         req = bg.handing(self.s, self.tid, 'run1')
         self.assertTrue(req['RequestId'].startswith(bg.PRESS) and req['RequestId'].startswith(browserview.TURN_PREFIX))
@@ -315,6 +315,18 @@ class HandingOver(unittest.TestCase):
         self.assertIn('stopped watching the page', note); self.assertIn('Look at the page as it is now', note)
         self.ws.record(self.s, self.tid, 'run1', 'working', source='api')           # ...and that line is the agent's next turn
         self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))
+
+    def test_the_agent_is_told_the_step_is_a_card_never_a_screen_to_point_at(self):
+        # the owner, 2026-11-10: "please click Save at the bottom of the page in the browser pane" - "i cant see the screen". The pane is drawn
+        # only when the app shows it; the agent is told what is true wherever the owner stands, and never to ask for the click in words
+        handed = self.hand()['hookSpecificOutput']['permissionDecisionReason']
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True): self.s._exec("DELETE FROM worker_event"); carded = self.hand()
+        carded = carded['hookSpecificOutput']['permissionDecisionReason']
+        for said in (handed, carded, browserview.brief(held=True), browserview.offer(held=True)):
+            self.assertNotIn('beside', said); self.assertNotIn('WATCHING', said)
+        self.assertNotIn('in this browser', handed)
+        for said in (handed, carded, browserview.HOLD_LINE):
+            self.assertIn('card in this task', said); self.assertIn('never ask', said.lower())
 
     def test_the_brief_says_to_fill_it_and_leave_the_last_press_to_the_owner(self):
         self.assertIn('fill in everything first', browserview.brief(held=True))

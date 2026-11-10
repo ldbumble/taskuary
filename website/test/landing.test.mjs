@@ -113,3 +113,18 @@ test("Not now folds the push card: its buttons stay, none filled, and the press 
   assert.match(body, /data-tq-act-state=\{s\.held \? "held" : s\.ask \? "waiting"/);
   assert.match(body, /const sub = s\.held \? w\.held :/);
 });
+
+// REVIEW CHANGES STAYS AFTER THE SESSION IS GONE (the owner, 2026-11-10: "yes, keep it"): lit on work left to review, the row's button opens
+// the landing card's own diff - one road to the diff, never a second viewer; the checkout's drawer only where no card stands to take it
+test("the row's Review changes with no session open opens the landing card's diff", async () => {
+  const { readFileSync } = await import("node:fs");
+  const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
+  const card = read("LandingCard.jsx"), page = read("TaskPage.jsx");
+  assert.match(card, /export const LANDING_DIFF = "tq-landing-diff";/);
+  assert.match(card, /window\.addEventListener\(LANDING_DIFF, on\)/);
+  assert.match(card, /e\.detail\.handled = true; seeRef\.current\(\);/);
+  // ...the listener stands before the card's early return: hooks in one order on every render
+  assert.ok(card.indexOf("window.addEventListener(LANDING_DIFF") < card.indexOf("if (!s || (!s.ask && !s.landed && !s.changed)) return null;"));
+  assert.match(page, /!liveSession && filled\("review_changes"\) \? \[\{ id: "diff"/);
+  assert.match(page, /window\.dispatchEvent\(new CustomEvent\(LANDING_DIFF, \{ detail: ask \}\)\); if \(!ask\.handled\) setDiffOpen\(true\);/);
+});

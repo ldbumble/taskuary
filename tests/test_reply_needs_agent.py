@@ -215,6 +215,18 @@ def arrived(s, m, llm, wrote=True):
     return out, went
 
 
+def test_a_new_tasks_agent_is_at_work_from_the_moment_it_is_set_going():
+    """The audit, 2026-11-10: a mail that made a general task set its agent going on a thread, and the page read in the seconds before that
+    thread brought the CLI up said "yours" with nothing at work - a hand-over to the agent on a reply was marked at once, a new task was not."""
+    import threading
+    s, gate = store(), threading.Event()
+    with mock.patch.object(ingest, '_auto_general', side_effect=lambda *a: gate.wait(5)), mock.patch.object(senders, 'wrote_to', return_value=True), \
+         mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
+        tid = ingest_message(s, mail(body='Can you draft a pilot plan for the new site?'), llm=says(intent='task', kind='general'))['task_id']
+        try: assert general.line_state(s, tid)['working'], 'at work before its thread has run'
+        finally: gate.set(); general.OPENING.discard(tid)
+
+
 def test_a_reply_that_reads_as_steering_an_ai_starts_no_agent_by_itself():
     """The hand-over was set going before triage's reading of the mail was on file, and read the message back off its row - which did not
     hold that reading yet. A mail triage read as written to steer an AI started an agent on it."""

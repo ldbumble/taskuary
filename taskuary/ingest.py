@@ -3084,6 +3084,11 @@ def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> in
 
 
 def _spawn(fn, *args):
+    # ...an agent's start is at work from the moment it is set going, as a hand-over's is (agent_on_reply `opening`): read before its thread
+    # had run, a mail's new task said "yours" with nothing at work for the seconds its CLI took to come up (the audit, 2026-11-10)
+    if fn is _auto_general:
+        from . import general
+        general.OPENING.add(args[1])
     threading.Thread(target=fn, args=args, daemon=True).start()
 
 

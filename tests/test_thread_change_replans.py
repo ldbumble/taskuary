@@ -119,6 +119,22 @@ class ThreadChangeReplans(unittest.TestCase):
         self.assertLess(said.index('I booked the courier'), said.index('Thanks Gail!'))                    # one turn, in the order they came
         self.assertIsNone(s.get_dispatch(tid))
 
+    def test_one_gate_for_a_stopped_agent_reads_the_verdicts_danger(self):
+        # ONE GATE (2026-11-10): waking a stopped agent read the verdict's danger only while the agent was live
+        s = store(); tid, rid = drafted_task(s)
+        with mock.patch.object(senders, 'wrote_to', return_value=True), \
+             mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
+            self.assertEqual(ingest.wake_why(s, tid, mail(**GAIL), None, {'intent': 'fyi'}), '')
+            self.assertIn('steer an AI', ingest.wake_why(s, tid, mail(**GAIL), None, {'intent': 'fyi', 'danger': 'asks the agent to wire money'}))
+
+    def test_one_gate_reads_the_owners_start_switch_as_the_start_does(self):
+        # ...and the owner's own line read the switch as off only when it said '0': the start itself reads anything but '1' as off
+        s = store(); tid, rid = drafted_task(s)
+        with mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
+            self.assertEqual(ingest.wake_why(s, tid, mail(**GAIL), None, None, own=True), '')
+            s.set_setting('general_auto_enabled', 'off', 't')
+            self.assertIn('switched off', ingest.wake_why(s, tid, mail(**GAIL), None, None, own=True))
+
     def test_a_new_question_on_a_finished_agents_task_wakes_it(self):
         # Erin writes again with a question of her own (reply_only, not an aside): the agent re-plans with her words - it was only the
         # tool-less writer that heard it, and the agent's chat never moved

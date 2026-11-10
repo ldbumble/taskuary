@@ -70,6 +70,20 @@ class CarryOnTests(unittest.TestCase):
         self.assertEqual(spawned, [])
         self.assertTrue(ingest.carry_on_why(s, tid, mail(**AGAIN), None, {'intent': 'task'}))
 
+    def test_the_owners_off_switch_for_lines_to_agents_holds_a_carry_on_too(self):
+        # ONE GATE (2026-11-10): answer_to_agent=off stopped a pass-in and a wake but carried a stopped conversation on - quiet, as on those roads
+        s = store(); tid = finished_task(s)
+        s.set_setting('answer_to_agent', 'off', 't')
+        self.assertEqual(ingested(s, mail(**AGAIN))[1], [])
+        self.assertEqual(ingest.carry_on_why(s, tid, mail(**AGAIN), None, {'intent': 'task'}), 'passing lines to the agent is switched off')
+        self.assertFalse([c for c in s.list_comments(tid) if c['Body'].startswith(ingest.NOT_STARTED)])
+
+    def test_a_dismissed_task_starts_nothing_and_says_nothing(self):
+        s = store(); tid = finished_task(s); s.update_task(tid, {'Status': 'dropped'}, 't')
+        with mock.patch.object(senders, 'wrote_to', return_value=True):
+            self.assertFalse(ingest._carry_on(s, tid, mail(**AGAIN), None, {'intent': 'task'}, 't'))
+        self.assertFalse([c for c in s.list_comments(tid) if c['Body'].startswith(ingest.NOT_STARTED)])
+
     def test_a_question_is_the_agents_replan_not_a_second_drafter(self):
         # ...one drafter on a task its agent works (the owner, 2026-11-09): the quick writer's draft of the same line was withdrawn as stale
         s = store(); finished_task(s)
@@ -259,6 +273,12 @@ class PassInTests(unittest.TestCase):
         self.assertEqual((out['task_id'], spawned), (tid, []))
         self.assertTrue(any("Sam Rook's new message was not passed to the agent" in c['Body'] and 'waits for you' in c['Body']
                             for c in s.list_comments(tid)))
+
+    def test_a_dismissed_tasks_live_agent_is_not_handed_the_line(self):
+        # ONE GATE (2026-11-10): passing in checked no task state at all, while a carry-on held a dismissed task back
+        s = store(); tid = finished_task(s); s.update_task(tid, {'Status': 'dropped'}, 't')
+        with mock.patch.object(general, 'session_for', return_value=mock.Mock(busy=True)), mock.patch.object(senders, 'wrote_to', return_value=True):
+            self.assertEqual(ingest.pass_in_why(s, tid, mail(**AGAIN), None, {'intent': 'task'}), 'the task is closed')
 
     def test_the_owners_off_switch_means_never(self):
         s = store(answer_to_agent='off'); tid = finished_task(s); s.update_task(tid, {'Kind': 'coding'}, 't')

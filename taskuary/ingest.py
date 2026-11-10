@@ -239,7 +239,7 @@ def danger(store, msg: dict, mid=None, verdict: dict = None) -> str:
     return ''
 
 
-def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
+def auto_start_ok(store, msg: dict, mid: int, kind: str, own: bool = False) -> tuple:
     """May this task start ITS worker by itself? (ok, why-not). Both kinds start by default (owner,
     2026-09-05, PW-069): coding opens its CLI, general opens its assistant session, a personal `task`
     is the owner's and starts nothing. Each kind has its own switch; a kind needs its worker to be
@@ -250,7 +250,7 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
     said = senders._said
     # MAIL THAT TRIES TO STEER AN AI STARTS NOTHING BY ITSELF (the Advisor design rev 2, the owner's ruling 2026-10-28): what triage or
     # ranking read it as trying to make an AI do (message.Danger - the model's reading, never a word list) holds the start for the owner
-    if (d := danger(store, msg, mid)): return False, said(f'It reads as an attempt to steer an AI ({d}) - nothing starts until you press.')
+    if not own and (d := danger(store, msg, mid)): return False, said(f'It reads as an attempt to steer an AI ({d}) - nothing starts until you press.')
     if kind == 'general':
         if cfg.get('general_auto_enabled', '1') != '1': return False, said(f"Starting an agent by itself is switched off in {words.name('coding')}.")
         from . import general
@@ -258,7 +258,7 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
     elif kind == 'coding':
         if not auto_code_enabled(cfg): return False, said(f"Starting the coding agent by itself is switched off in {words.name('coding')}.")
     else: return False, said('A person has to do this one, so it is on your list.')
-    return senders.start_known(store, msg, mid)
+    return (True, '') if own else senders.start_known(store, msg, mid)      # `own`: the owner's own line or press - no sender to check
 
 
 def _start_workflow(store, msg: dict, intent: dict, actor: str, note: str = '') -> dict | None:
@@ -2097,20 +2097,11 @@ def carry_on_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
     from . import general
     t = store.get_task(tid) or {}
     if not follow or follow.get('degraded') or follow.get('intent') != 'task': return 'not new work'
-    if msg.get('no_auto'): return 'the channel waits for the owner'
-    # ...nor a line that reads as steering an AI (the owner, 2026-10-28): it waits for the owner's press
-    if (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d}) - it waits for you'
-    if t.get('Status') == 'dropped': return 'the task was dismissed'
     if live_agent(store, tid): return 'an agent is live on it'
-    if general.handles(t):
-        if not general.history(store, tid): return 'no conversation to carry on'
-        kind = 'general'
-    elif t.get('Kind') == 'coding':
-        if not (rs := _resumable_coding(store, tid))[0]: return rs[1]
-        kind = 'coding'
-    else: return 'it is your own task, so no agent works it'
-    ok, why = auto_start_ok(store, msg, mid, kind)
-    return '' if ok else str(why)
+    kind = 'general' if general.handles(t) else t.get('Kind')
+    lack = ('it is your own task, so no agent works it' if kind not in task_kinds.AGENT else 'no conversation to carry on'
+            if kind == 'general' and not general.history(store, tid) else _resumable_coding(store, tid)[1] if kind == 'coding' else '')
+    return reach_why(store, tid, msg, mid, follow, kind, lack=lack)
 
 
 def pass_in_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
@@ -2119,11 +2110,29 @@ def pass_in_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
     pass in the new message no?" It is the default now for related new work; answer_to_agent=off still means never. A sender
     who may not start an agent by themselves (senders.known) is never typed into one - their words wait for the owner."""
     if not follow or follow.get('degraded') or follow.get('intent') != 'task': return 'not new work'
+    if (live := live_agent(store, tid)) not in task_kinds.AGENT: return 'no live session to pass it to'
+    return reach_why(store, tid, msg, mid, follow, live)
+
+
+# MAY THIS LINE REACH THE TASK'S AGENT BY ITSELF - ONE ANSWER (the owner, 2026-11-10: "job of agent is to be helpful and do as much as
+# possible"). Carrying a stopped agent on, passing a line into a live one and waking one to re-plan each re-derived these checks, and
+# they had drifted: answer_to_agent=off stopped two of the three, one let a dismissed task through, one read the verdict's danger only
+# while the agent was live. Each road now asks only what is its own (new work, a conversation to carry on) and this for the rest.
+def reach_why(store, tid, msg: dict, mid, follow: dict | None, kind: str, own: bool = False, lack: str = '') -> str:
+    """'' when this line may reach the task's `kind` agent by itself, else why not. A LIVE agent hears it where its sender may start
+    one (senders.start_known); a STOPPED one is carried on only where a fresh task would have started it (auto_start_ok). `own`: the
+    owner's own line or press - no sender to check, nothing of theirs read as steering. `lack`: what the road itself is missing (no
+    conversation to carry on), said only past the gate - a road that starts a first agent on it instead never passes a held channel."""
+    live = live_agent(store, tid)
+    if (follow or {}).get('degraded'): return 'triage could not read it'
+    if not joinable(store, tid): return 'the task is closed'      # dismissed: a done task new work reopens first (land_on)
     if store.get_setting('answer_to_agent') == 'off': return 'passing lines to the agent is switched off'
     if msg.get('no_auto'): return 'the channel waits for the owner'
-    if live_agent(store, tid) not in task_kinds.AGENT: return 'no live session to pass it to'
-    if (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d}) - it waits for you'
-    ok, why = senders.start_known(store, msg, mid)
+    if live and live != kind: return 'another agent is live on it'
+    # ...nor a line that reads as steering an AI (the owner, 2026-10-28): it waits for the owner's press
+    if not own and (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d}) - it waits for you'
+    if lack or (own and live): return lack
+    ok, why = senders.start_known(store, msg, mid) if live else auto_start_ok(store, msg, mid, kind, own=own)
     return '' if ok else str(why)
 
 
@@ -2246,7 +2255,7 @@ def first_agent(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> 
 # WHY NO AGENT STARTED IS ALWAYS SAID (the owner, 2026-10-28: "yes" - "No agent started: auto-start is off in Settings"). carry_on_why
 # answered "not an agent's task" and wrote it nowhere, so a task that needed an agent sat looking as if nobody had got round to it.
 # Silent only where nothing was asked of an agent (no new work) or one is already on it (_pass_in says its own why).
-_QUIET_CARRY = ('not new work', 'an agent is live on it')
+_QUIET_CARRY = ('not new work', 'an agent is live on it', 'the task is closed', 'passing lines to the agent is switched off')
 NOT_STARTED = 'No agent started:'
 
 
@@ -2443,7 +2452,7 @@ def mark_browser(store, tid, actor: str = 'triage') -> bool:
 
 
 # Only a line that WOULD have gone in says why it did not: the switch off, or no new work, is silence.
-_QUIET = ('not new work', 'passing lines to the agent is switched off', 'no live session to pass it to')
+_QUIET = ('not new work', 'passing lines to the agent is switched off', 'no live session to pass it to', 'the task is closed')
 
 
 def _pass_in(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bool:
@@ -2626,21 +2635,8 @@ def wake_why(store, tid, msg: dict, mid, follow: dict | None, own: bool = False)
     # by itself - the reply writer's own redraft (attach, above) is that task's road
     # A turn still OPENING counts (the night run, 2026-11-09: a colleague answered the group 6s into the task's quick call, the line went
     # unheard, and the turn asked the owner for a password nobody needed any more)
-    live = live_agent(store, tid)
-    if not live and not general.history(store, tid): return 'no agent conversation'
-    if (follow or {}).get('degraded'): return 'triage could not read it'
-    if store.get_setting('answer_to_agent') == 'off': return 'passing lines to the agent is switched off'
-    if msg.get('no_auto'): return 'the channel waits for the owner'
-    if live not in ('', 'general'): return 'another agent is live on it'
-    if own:
-        if live: return ''
-        if store.get_setting('general_auto_enabled') == '0': return f"Starting an agent by itself is switched off in {words.name('coding')}."
-        return '' if general.provider_options(store) else f"No AI is set up for an agent to run on yet ({words.name('ai')})."
-    if live:
-        if (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d}) - it waits for you'
-        ok, why = senders.start_known(store, msg, mid)
-    else: ok, why = auto_start_ok(store, msg, mid, 'general')
-    return '' if ok else str(why)
+    if not live_agent(store, tid) and not general.history(store, tid): return 'no agent conversation'
+    return reach_why(store, tid, msg, mid, follow, 'general', own)
 
 
 def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, own: bool = False) -> bool:

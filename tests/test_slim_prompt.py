@@ -68,8 +68,11 @@ def test_each_rule_is_said_once_and_true():
     for once in ('Check each step by what the tool returned', 'Never the same failing call', 'Deliver one final file'):
         assert system.count(once) <= 1, once
     # the new lines, each in one place
-    for want in ("beats triage's", 'their most likely answer', 'never close with an offer'):
+    for want in ("beats triage's", 'never a guess written as their answer', 'never close with an offer'):
         assert want in system, want
+    # ...and AGENT.md agrees with it: "draft their most likely answer ... ask only when it hangs on someone else" (2026-11-08) told the same
+    # agent the opposite of the owner's newer word, for the same case - a fact or choice only the owner has
+    assert 'their most likely answer' not in system and 'truly hangs on someone else' not in system
     # the reply is the agent's to write or to ask about (the owner, 2026-11-10: "think through what the user would want and ask clarifying
     # question, if you know the answer then just create reply") - said once
     for once in ('A MESSAGE THAT NEEDS AN ANSWER IS YOURS TO ANSWER', 'ask them that one thing here in the task instead of drafting a guess'):

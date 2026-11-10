@@ -483,16 +483,19 @@ def asked_again(store, tid: int) -> str:
     return ''
 
 
+NOT_NOW_SAID = 'Not now - nothing went out. It waits on the task for your press.'
 def hold(store, tid: int, actor: str = 'owner') -> dict:
     "The owner's Not now on the landing question: nothing lands, and it stands until they press the card or write on the task."
     s = state(store, tid)
     if not s or not s['ask']: raise ValueError((s or {}).get('line') or 'nothing waits to land on this task')
     r = record(store, tid)
+    # ...ONCE (the stress round, 2026-11-10): a double click, or the desk and the phone, was two "Not now" lines and two for the agent to hear
+    if r.get('held') and not _wrote_since(store, tid, r['held'].get('after')): return {'ok': True, 'held': True, 'already': True, 'says': NOT_NOW_SAID}
     r['held'] = {'at': time.strftime('%Y-%m-%d %H:%M:%S'),
                  'after': (store._one('SELECT MAX(CommentId) AS n FROM comment WHERE TaskId=?', (int(tid),)) or {}).get('n') or 0}
     _save(store, tid, r)
     store.audit('task', tid, 'land_held', actor, detail={'what': 'push' if s['push'] else 'landing'})
-    return {'ok': True, 'held': True, 'says': 'Not now - nothing went out. It waits on the task for your press.'}
+    return {'ok': True, 'held': True, 'says': NOT_NOW_SAID}
 
 
 def asked(store, tid) -> bool:

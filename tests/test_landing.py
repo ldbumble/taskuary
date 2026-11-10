@@ -305,6 +305,14 @@ class LandingTests(unittest.TestCase):
         self.assertTrue(landing.propose(self.s, self.tid, 'push', 'the owner asked for it')['ok'])
         self.assertFalse(landing.state(self.s, self.tid)['held'])
 
+    def test_not_now_pressed_twice_is_one_press(self):
+        "A double click, or the desk and the phone: the second Not now finds the question already folded - one line, one thing the agent hears."
+        from taskuary import general
+        self.on_master_with_origin(); landing.propose(self.s, self.tid, 'push', 'the fix is ready')
+        first, again = landing.hold(self.s, self.tid), landing.hold(self.s, self.tid)
+        self.assertTrue(first['ok'] and again['ok'] and again['held'])
+        self.assertEqual(sum('Not now' in what for _, _, what, *_ in general.presses(self.s, self.tid)), 1)
+
     def test_the_owners_own_push_ends_not_now(self):
         self.on_master_with_origin(); landing.hold(self.s, self.tid)
         with mock.patch('taskuary.waitroom.add'): self.assertTrue(landing.land(self.s, self.tid, 'push')['ok'])

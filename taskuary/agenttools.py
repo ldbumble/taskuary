@@ -348,13 +348,13 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         who = {k: a[k] for k in ('answers', 'only', 'cc', 'why_to') if a.get(k) not in (None, '')}
         was = verdicts.unsent(store, tid)
         out = doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(store, tid, a.get('attach')), **who)
-        return _j(replaced(store, doors, tid, was, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place"))
+        return _j(said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place")))
     if name == 'propose_email':
         was = verdicts.unsent(store, tid)
         out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(store, tid, a.get('attach')),
                             a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}),
                             **({'slot': str(a['slot']).strip()} if a.get('slot') else {}))
-        return _j(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place"))
+        return _j(said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place")))
     if name == 'sign_form':
         out = doors['sign'](tid, a)
         return out['says'] if out.get('says') else _j(out)
@@ -402,6 +402,12 @@ def show_files(store, tid: int, paths) -> str:
     if not rows: raise ValueError('nothing was shown - ' + '; '.join(why))
     said = f"Shown in the owner's chat under your answer: {', '.join(r['name'] for r in rows)}." + (f" Not shown - {'; '.join(why)}." if why else '')
     return f'{said} {FILES_MARK}{json.dumps(rows, ensure_ascii=False, separators=(",", ":"))}'
+
+
+def said_once(o):
+    "A draft that stands, with how it is spoken of (selfclose.CARD_SAID): the owner sees it as a card - its words are never said again."
+    from .selfclose import CARD_SAID
+    return {**o, 'shown': CARD_SAID} if isinstance(o, dict) and o.get('ok') else o
 
 
 def replaced(store, doors, tid: int, was: list, out, old, why: str):

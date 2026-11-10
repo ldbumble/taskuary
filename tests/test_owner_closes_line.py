@@ -37,3 +37,12 @@ def test_a_draft_is_said_in_a_line_and_its_words_are_the_cards():
     # ...a session that drafts by marked block writes the words once, in the block: there the block IS the draft
     assert 'the block IS the draft' in selfclose.REPLY_LINE and 'the block IS the draft' in selfclose.DRAFT_LINE
     assert 'the block IS the draft' not in tooled and 'never as text in the conversation' not in marked
+
+
+def test_the_draft_tools_answer_says_the_same_one_sentence():
+    # the owner, 2026-11-10: on a turn that REPLACED a waiting reply the agent quoted the new one whole, and its scratch folder's path under it -
+    # the tool's own answer said nothing of the card. One sentence (selfclose.CARD_SAID): in the guide every general turn carries, and in the answer
+    from taskuary import agenttools
+    assert selfclose.CARD_SAID in selfclose.owner_closes_line() and 'nor the path of a file it carries' in selfclose.CARD_SAID
+    assert agenttools.said_once({'ok': True, 'review_id': 7})['shown'] == selfclose.CARD_SAID
+    assert 'shown' not in agenttools.said_once({'ok': False, 'why': 'nothing was saved'})

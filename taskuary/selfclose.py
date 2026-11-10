@@ -299,6 +299,12 @@ CHAT_LINE = (
     f'question, offered options, or still need something; a conversation that is still going is '
     f'not an ending, and neither is an answer the owner may want to push back on.')
 
+# ...SAID ONCE (the agent walk, 2026-11-10): each draft stood twice - its subject and body quoted in the answer, over the card that showed the
+# same words - and the owner, 2026-11-10: a replaced reply was quoted whole, with its scratch folder's path under it. One sentence, read
+# from the guide every general turn carries (owner_closes_line) and from the draft tools' own answer (agenttools.propose_reply/propose_email)
+CARD_SAID = ('After you set up a reply or an email, say in one line what you set up and for whom, and any assumption you made in it (an address '
+             "you guessed, a date you picked) - never repeat the draft's words, nor the path of a file it carries, in your answer: its card under "
+             'your answer shows them.')
 HANDLES_LINE = ('An id Taskuary gives a draft or a card (rv4, the review number a tool returned) is its handle for your tools and your '
                 'withdraw line - the owner never sees it: to them, name a thing by what it is and whom it is to.')
 # ...and WHERE THE OWNER CLOSES IT (no CHAT_LINE: nobody wrote in, or the owner keeps the task to finish): the agent said "I couldn't
@@ -313,10 +319,7 @@ def owner_closes_line() -> str:
             f'WHERE YOUR DRAFTS ARE: this task is one chat. Every email or reply you draft shows as a card under your answer, with its own '
             f'{label("approve")} - say it is "below" or "ready to send". There is no other screen or tab for it; never send the owner '
             f'anywhere else, even where an earlier turn of this conversation did. '
-            # ...and SAID ONCE (the agent walk, 2026-11-10): each draft stood twice - its subject and body quoted in the answer, over the
-            # card that showed the same words
-            f'After you set up a reply or an email, say in one line what you set up and for whom, and any assumption you made in it (an '
-            f'address you guessed, a date you picked) - never repeat the draft\'s words in your answer: the card shows them. '
+            f'{CARD_SAID} '
             # ...and NAMED AS THE OWNER KNOWS IT (agent walk 2, 2026-11-10: "send it after rv3", "set up for your Send (review 5)")
             f'{HANDLES_LINE}')
 

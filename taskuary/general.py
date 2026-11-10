@@ -1778,26 +1778,35 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     mails = detail.get('messages') or []
     if not stranger: mails = with_thread(store, mails)
     # ...each by its id, so a mail cut here is one the agent can open whole
-    if len(mails) > SOURCE_MAILS: sources.append(compacted_mail(mails[:-SOURCE_MAILS]))
+    # ...and A RUN OF CHAT LINES IS ONE ENTRY (the stress run, 2026-11-10): eleven lines one person typed in a minute were eleven mails to
+    # the window - the three that said what was wanted went to the one-line "earlier mail", and "pls" and "thx" each stood in full
+    runs = chat_runs(mails)
+    if len(runs) > SOURCE_MAILS: sources.append(compacted_mail([m for r in runs[:-SOURCE_MAILS] for m in r]))
     # ...WHERE EACH WAS WRITTEN, AND UNDER WHAT SUBJECT WHEN IT CHANGES (the stress run, 2026-11-10): a task holding a mail and a chat line on
     # another matter read as one flat list of senders and bodies - nothing said the third message came by another road. A long one keeps
     # its last lines too (triage.both_ends: the ask is as often under the story as over it)
     from .routing import norm_subject
     from .triage import both_ends
     said_subject = None
-    for m in mails[-SOURCE_MAILS:]:
-        who = m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
-        subj, was = str(m.get('Subject') or '').strip(), said_subject
-        said_subject = norm_subject(subj) if subj else said_subject
-        where = ''.join(f' · {x}' for x in (m.get('Channel'), f'"{_flat(subj, 140)}"' if subj and norm_subject(subj) != was else '') if x)
+    def wrote(m):
         files = store.list_attachments(m['MessageId'])
         # ...each BY THE ID ITS TOOLS TAKE (the stress run, 2026-11-10): "ATTACHMENTS: contract-draft.pdf" named a file read_attachment and
         # sign_form could only reach after a read_message to learn its number
         tag = lambda a: ', '.join(str(x) for x in (f"attachment {a['AttachmentId']}" if a.get('AttachmentId') else '', a.get('Path')) if x)
         file_line = ('\nATTACHMENTS: ' + '; '.join(str(a.get('Name') or 'file') + (f' ({tag(a)})' if tag(a) else '') for a in files[:8])) if files else ''
         long = len(str(m.get('BodyText') or '')) > SOURCE_CHARS
-        body = both_ends(str(m.get('BodyText') or ''), SOURCE_CHARS) + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '')
-        sources.append(f"FROM {who} ({m.get('SentAt') or ''}) [m{m['MessageId']}]{where}{EARLIER if m.get('_earlier') else ''}\n{body}{file_line}")
+        return both_ends(str(m.get('BodyText') or ''), SOURCE_CHARS) + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '') + file_line
+    for run in runs[-SOURCE_MAILS:]:
+        m = run[0]
+        who = m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
+        subj, was = str(m.get('Subject') or '').strip(), said_subject
+        said_subject = norm_subject(subj) if subj else said_subject
+        where = ''.join(f' · {x}' for x in (m.get('Channel'), f'"{_flat(subj, 140)}"' if subj and norm_subject(subj) != was else '') if x)
+        if len(run) > 1:
+            sources.append(f"FROM {who} ({m.get('SentAt') or ''} to {run[-1].get('SentAt') or ''}){where} - {len(run)} lines they wrote one after another, "
+                           'oldest first; a later line can take back an earlier one\n' + '\n'.join(f"[m{x['MessageId']}] {wrote(x)}" for x in run))
+            continue
+        sources.append(f"FROM {who} ({m.get('SentAt') or ''}) [m{m['MessageId']}]{where}{EARLIER if m.get('_earlier') else ''}\n{wrote(m)}")
     # ...and a STRANGER's task has no hub read to carry the record of what came in (context.for_prompt is closed to it): whom each message
     # went to, the addresses behind its words, how each reached the task - facts about these very messages, so they ride in their file
     if stranger and (came := _ctx_came(store, tid)): sources.append(came)
@@ -1969,6 +1978,18 @@ def with_thread(store, mails: list) -> list:
             for c in sorted({m['ConversationId'] for m in mails if m.get('ConversationId')})
             for m in store.thread_messages(c) if m.get('Status') == 'history' and m['MessageId'] not in have]
     return sorted(mails + past, key=lambda m: str(m.get('SentAt') or '')) if past else mails
+
+
+def chat_runs(mails: list) -> list:
+    "The task's messages as the entries its agent reads: the lines one person wrote one after another in one chat are ONE entry, a mail its own."
+    from .ingest import CHAT_CHANNELS
+    out = []
+    for m in mails:
+        k = ((m.get('Channel'), m.get('ConversationId'), m.get('FromEmail') or m.get('FromName')) if str(m.get('Channel') or '').lower() in CHAT_CHANNELS
+             and not m.get('_earlier') else None)
+        if k and out and out[-1][0] == k: out[-1][1].append(m)
+        else: out.append((k, [m]))
+    return [run for _k, run in out]
 
 
 def compacted_mail(mails) -> str:

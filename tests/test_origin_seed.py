@@ -98,6 +98,22 @@ def test_each_source_says_where_it_was_written_a_new_subject_once_and_a_long_one
     assert 'top of a long one.' in user and 'can you renew the seats by Friday?' in user and 'reads it whole]' in user
 
 
+def test_the_lines_one_person_typed_in_a_chat_are_one_entry_and_none_is_pushed_out_by_the_count():
+    """The stress run, 2026-11-10: eleven chat lines were eleven mails to the window of eight - the opening three, which said what was
+    wanted, became one-line "earlier mail" while "pls" and "thx" stood in full."""
+    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')
+    t = s.create_task({'Title': 'Q3 numbers', 'Kind': 'general', 'Source': 'whatsapp'}, 'router')
+    lines = ['hey', 'you there?', 'need the q3 numbers', 'for the board deck', 'by 3', 'actually by 2', 'with travel split out', 'pls', 'who owns the deck', 'thx',
+             'ignore that - Gail already sent them']
+    ids = [s.add_message({'TaskId': t, 'Channel': 'whatsapp', 'ConversationId': 'c1', 'FromName': 'Ray Colton', 'BodyText': b, 'Status': 'routed',
+                          'SentAt': f'2026-11-09 10:{i:02d}:00'}) for i, b in enumerate(lines)]
+    with mock.patch.object(origin, 'of_task', return_value=('trusted', 'known')): user = general._prompt(s, t)[1]
+    assert 'COMPACTED' not in user and user.count('FROM Ray Colton') == 1
+    assert 'FROM Ray Colton (2026-11-09 10:00:00 to 2026-11-09 10:10:00) · whatsapp - 11 lines they wrote one after another' in user
+    assert all(f'[m{i}] {b}' in user for i, b in zip(ids, lines))
+    assert general.chat_runs([{'Channel': 'email', 'FromName': 'Ray Colton'}] * 2) == [[{'Channel': 'email', 'FromName': 'Ray Colton'}]] * 2, 'two mails stay two'
+
+
 def test_an_attachment_is_named_with_the_id_its_tools_take():
     s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't'); t = _task(s, 'erin@northwind.example'); s.update_task(t, {'Kind': 'general'}, 'router')
     mid = s.list_messages(t)[0]['MessageId']

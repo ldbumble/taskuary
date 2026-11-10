@@ -25,7 +25,7 @@ jobs:
           python3 - <<'PY'
           import json, os
           results = json.loads(os.environ['JOB_RESULTS'])
-          failed = {name: job['result'] for name, job in results.items() if job['result'] != 'success'}
+          failed = {name: job['result'] for name, job in results.items() if job['result'] not in ('success', 'skipped')}
           if failed:
               raise SystemExit(f'Required CI jobs did not pass: {failed}')
           print('All required CI jobs passed')
@@ -36,7 +36,10 @@ jobs:
       fail-fast: false
       matrix:
         # Windows and macOS on the newest Python only (the owner, 2026-10-29: the Linux runs held a release for no one using them)
-        os: [windows-latest, macos-latest]
+        # ...and AN ORDINARY PUSH RUNS THE CORE ONLY (the owner, 2026-11-10: "can we remove any non core ci test runs to make it faster"):
+        # the suite on Windows, the web build and the smoke set. macOS, the docker image and the one-file exe are checked where they ship -
+        # a release commit, a pull request, a run started by hand - so a push takes three test jobs, not six, and nothing queues behind macOS
+        os: ${{ fromJSON((startsWith(github.event.head_commit.message, 'Release ') || github.event_name != 'push') && '["windows-latest","macos-latest"]' || '["windows-latest"]') }}
         python: ["3.12"]
         # three parts in parallel (tools/test_shard.py): one Windows job took 20-24 of 35 minutes and a slow runner timed out; as halves
         # the slower Windows half still took 16 min of pytest, the longest wait in a release (2026-11-09) - thirds bring it near 10
@@ -136,6 +139,7 @@ jobs:
         working-directory: website
 
   docker:
+    if: startsWith(github.event.head_commit.message, 'Release ') || github.event_name != 'push'
     # proves the image builds, serves the UI, persists across restart, and the
     # token gate still works when TASKUARY_TOKEN is set. The regression desk is
     # seeded into the regression volume first so /api/feed is a real Timeline.
@@ -193,7 +197,7 @@ jobs:
 
   build-exe:
     # push only: a fork PR must not mint the one-file exe (untrusted code + upload)
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'Release ')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

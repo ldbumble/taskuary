@@ -1441,9 +1441,10 @@ def _mention(store, msg: dict, tid: int, intent: dict, actor: str, notes_note: s
 def joinable(store, tid, shut: bool = True):
     """MAY A MESSAGE LAND ON THIS TASK - the one answer (the spine audit, 2026-11-09). It exists and was not DROPPED: a dropped task is
     not a task, or was folded away, and nothing comes back to it. `shut=False` wants it open as well - for a road that may not reopen
-    a closed one. Returns the id, or None."""
+    a closed one. And it is WORK: the app's own chat is stored as a task and is no one's job (store.WORK). Returns the id, or None."""
+    from .store import INTERNAL_TASK_BASE
     t = store.get_task(tid) if tid else None
-    return tid if t and t.get('Status') != 'dropped' and (shut or t.get('Status') != 'done') else None
+    return tid if t and t['TaskId'] < INTERNAL_TASK_BASE and t.get('Status') != 'dropped' and (shut or t.get('Status') != 'done') else None
 
 
 def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = 'thread', *, fail: dict = None, cfg: dict = None,

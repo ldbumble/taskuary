@@ -269,6 +269,10 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 # instead, or every New chat used a TQ number (125 of 261 in two weeks, 2026-10-09) and the owner's
 # numbering read as skipping.
 INTERNAL_TASK_BASE = 1_000_000_000
+# WORK IS WHAT HAS A TQ NUMBER. The app's own conversations (the Assistant's chat) are stored as tasks above the base and are nobody's
+# job: the lists triage is shown of the owner's open work leave them out, and no message lands on one (ingest.joinable). The chat was
+# "the owner's own task, touched a minute ago" on every arrival, and a reply on a closed thread was read as its job and joined it
+WORK = f't.TaskId<{INTERNAL_TASK_BASE}'
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 # the mails an Advisor line names in its words ("Erin mid 41 vs Gail mid 42"): Came from (idea_sources) and what its trust rests on
 # (origin.idea_rests_on) read them the same way - every one, uncapped, for the trust
@@ -3143,7 +3147,7 @@ class SQLiteStore:
             "SELECT t.TaskId, t.Title, t.Status, t.Kind, t.Summary, t.Source, t.OriginBase, IFNULL(t.UpdatedAt, t.CreatedAt) Touched, "
             "       GROUP_CONCAT(DISTINCT lower(m.FromEmail)) Senders, GROUP_CONCAT(DISTINCT m.ConversationId) Convs "
             "  FROM task t LEFT JOIN message m ON m.TaskId=t.TaskId "
-            " WHERE t.Status NOT IN ('done','dropped') "
+            f" WHERE t.Status NOT IN ('done','dropped') AND {WORK} "
             " GROUP BY t.TaskId ORDER BY IFNULL(t.UpdatedAt, t.CreatedAt) DESC LIMIT ?", (limit,))
     def tasks_open_brief(self, limit=40):
         """The OPEN tasks and Watching items, newest activity first, each with what triage read it to ask (ThreadJson), the channel and the
@@ -3156,7 +3160,7 @@ class SQLiteStore:
             f"       IFNULL(t.UpdatedAt, t.CreatedAt) Touched, {first.format('Channel')} Channel, {first.format('FromName')} FromName, "
             "       (SELECT GROUP_CONCAT(DISTINCT lower(IFNULL(m.FromEmail, m.FromName))) FROM message m WHERE m.TaskId=t.TaskId) Senders, "
             "       (SELECT GROUP_CONCAT(Title, ' ; ') FROM (SELECT b.Title FROM batch_item b WHERE b.TaskId=t.TaskId ORDER BY b.Place, b.ItemId)) Items "
-            "  FROM task t WHERE t.Status NOT IN ('done','dropped') ORDER BY IFNULL(t.UpdatedAt, t.CreatedAt) DESC, t.TaskId DESC LIMIT ?", (limit,))
+            f"  FROM task t WHERE t.Status NOT IN ('done','dropped') AND {WORK} ORDER BY IFNULL(t.UpdatedAt, t.CreatedAt) DESC, t.TaskId DESC LIMIT ?", (limit,))
     def task_people(self, tids) -> dict:
         """{TaskId: [{name, email, channel}]} - who wrote on each task, by display name, never the owner's own lines: what a name on
         another channel is compared against (context.same_name)."""
@@ -3183,7 +3187,7 @@ class SQLiteStore:
         What they had in hand when they sent a mail of their own (context.worked_before)."""
         return self._rows(
             "SELECT t.TaskId, t.Title, t.Summary, MAX(a.CreatedAt) Touched FROM audit a JOIN task t ON t.TaskId=CAST(a.EntityId AS INTEGER) "
-            " WHERE a.EntityType='task' AND a.Actor='owner' AND a.CreatedAt>=? AND a.CreatedAt<=? AND t.Status NOT IN ('done','dropped') "
+            f" WHERE a.EntityType='task' AND a.Actor='owner' AND a.CreatedAt>=? AND a.CreatedAt<=? AND t.Status NOT IN ('done','dropped') AND {WORK} "
             " GROUP BY t.TaskId ORDER BY Touched DESC LIMIT ?", (since, before, limit))
     def owner_started(self, conversation_id):
         """The owner's own sent message that STARTED this thread, when no task holds the thread yet - else None."""

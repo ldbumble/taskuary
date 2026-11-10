@@ -70,6 +70,23 @@ class ClosedThreadJoinsOpenJob(unittest.TestCase):
         self.assertTrue(any(c['Body'].startswith(f'Joined from {ingest.task_ref(self.a)}') for c in self.s.list_comments(self.b)))
         self.assertEqual(self.s.get_message(r['message_id'])['TaskId'], self.b)
 
+    def test_the_apps_own_chat_is_nobodys_job(self):
+        """The Assistant's chat is stored as a task the owner 'worked on' a minute ago. It was shown to triage as the owner's open work on
+        every arrival, a reply on a closed thread was named the same job as it, and the mail landed in the chat: its task never
+        reopened, and the mail went when the chat was archived."""
+        from taskuary import general
+        dock = general.dock_task(self.s)[0]['TaskId']
+        self.s.add_comment(dock, 'owner', 'human', 'what is on my list about the payer mapping?')
+        seen = []
+        r = mail(self.s, 'b', self.ASK, brain(seen, same_as=dock))
+        shown = json.loads(seen[-1][1])
+        self.assertNotIn(dock, [w['tid'] for w in shown['open_work']])
+        self.assertNotIn(str(dock), json.dumps([v for k, v in shown.items() if k != 'open_work']), 'nor on any other list triage reads')
+        self.assertEqual((r['status'], r['task_id']), ('attached', self.a), 'named all the same, it is not a landing')
+        self.assertEqual(self.s.get_task(self.a)['Status'], 'open'); self.assertEqual(self.s.list_messages(dock), [])
+        r = mail(self.s, 'c', 'A new ask altogether: please send the October statement.', brain(same_as=dock), conv='AAQk-other')
+        self.assertNotIn(r['task_id'], (dock, None), 'new mail opens its own task')
+
     def test_a_different_job_reopens_the_closed_thread_task_as_before(self):
         r = mail(self.s, 'b', self.ASK, brain(same_as=None))
         self.assertEqual((r['status'], r['task_id']), ('attached', self.a))

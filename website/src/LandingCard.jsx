@@ -45,6 +45,14 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
     catch (e) { setErr(e?.response?.data?.detail || "It did not land"); }
     setBusy("");
   };
+  // NOT NOW (the owner, 2026-11-10): the push put off is a press too. Nothing goes; the card folds to its title and its buttons, none of them
+  // filled; it is a line in the chat, and the agent is told not to ask for it again (landing.hold)
+  const hold = async () => {
+    setBusy("hold"); setErr(""); setSure(false);
+    try { await api.post(`/api/tasks/${taskId}/landing/hold`); load(); onChanged?.(); }
+    catch (e) { setErr(e?.response?.data?.detail || "It was not held"); }
+    setBusy("");
+  };
   // REVIEW: only on the agent's own branch while it waits to land - the base is every agent's, and what landed is history
   const files = diff ? parseUnified(diff) : [], { src, gen } = landingFiles(s.files);
   const reviewing = !!s.ask && !!s.own;
@@ -60,9 +68,9 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
   const label = (h) => (s.answers || []).find((a) => a.how === h)?.label || h;
   const rest = (s.answers || []).map((a) => a.how).filter((h) => h !== w.first && h !== w.second);
   const tip = s.push ? `up to ${String(s.push.tip || "").slice(0, 7)}${s.push.deploy ? ` · deploys to ${s.push.deploy}` : ""}` : s.own && s.ask ? `${plural(s.ahead, "commit")} ahead` : "";
-  const sub = [tip, `+${s.plus || 0} −${s.minus || 0}`, s.ask && s.proposal?.why].filter(Boolean).join(" · ");
+  const sub = s.held ? w.held : [tip, `+${s.plus || 0} −${s.minus || 0}`, s.ask && s.proposal?.why].filter(Boolean).join(" · ");
   const link = { ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } };
-  const press = (h, tone) => (
+  const press = (h, tone0, tone = s.held ? "t" : tone0) => (
     <Button key={h} size="small" disableElevation disabled={!!busy} data-tq-land={h} variant={tone === "p" ? "contained" : tone === "s" ? "outlined" : "text"}
       title={tone === "p" ? w.hint : undefined}
       sx={{ ...btn, ...(h === "discard" ? { color: ALERT_INK, borderColor: BORDER } : tone === "p" ? {} : { color: tone === "s" ? INK : DIM, borderColor: BORDER }) }}
@@ -73,11 +81,11 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
   // over Push and Push & deploy): the press it waits on and how big it is, the commit and where it goes once, the files and the diff a press
   // away; once pressed it STAYS in its turn as the press it took and what came of it, as the held steps' card does (HeldSteps)
   return (
-    <Box data-tq-landing="" data-tq-act-state={s.ask ? "waiting" : s.landed ? "pressed" : "resting"}
+    <Box data-tq-landing="" data-tq-act-state={s.held ? "held" : s.ask ? "waiting" : s.landed ? "pressed" : "resting"}
       sx={inChat ? { my: 1, px: 1.25, py: 0.9, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" } : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-      <Typography data-tq-landing-title="" sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>{w.title}</Typography>
+      <Typography data-tq-landing-title="" sx={{ fontSize: 13.5, fontWeight: s.held ? 600 : 700, color: s.held ? DIM : INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>{w.title}</Typography>
       <Typography noWrap data-tq-landing-sub="" title={[sub, w.shared].filter(Boolean).join(" - ")} sx={{ fontSize: 11.5, color: FAINT }}>{sub}</Typography>
-      {!!s.files?.length && <Box sx={{ display: "flex", gap: 1.5, mt: 0.4 }}>
+      {!!s.files?.length && !s.held && <Box sx={{ display: "flex", gap: 1.5, mt: 0.4 }}>
         <Typography {...pressable(() => setFiles((o) => !o))} data-tq-landing-files="" aria-expanded={filesOpen} sx={link}>
           {filesOpen ? "Hide the files" : "Show the files"}</Typography>
         <Typography {...pressable(seeDiff)} data-tq-landing-diff="" sx={link}>{reviewing ? "See the diff · review it" : "See the diff"}</Typography>
@@ -111,6 +119,8 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
       </Dialog>
       {s.ask ? <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.6 }}>
         {w.first && press(w.first, "p")}{w.second && press(w.second, "s")}{rest.map((h) => press(h, "t"))}
+        {!!s.push && !s.held && !sure && <Button size="small" disabled={!!busy} data-tq-land-hold="" sx={{ ...btn, color: DIM }}
+          startIcon={busy === "hold" ? <CircularProgress size={12} color="inherit" /> : null} onClick={hold}>Not now</Button>}
         {sure && <Button size="small" sx={{ ...btn, color: DIM }} onClick={() => setSure(false)}>Keep it</Button>}
       </Box> : s.landed && <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.6 }}>
         {/* ...the press it took, drawn pressed, and what came of it on the same line */}

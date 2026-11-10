@@ -98,3 +98,18 @@ test("the landing card is one title, the files folded, one filled button and the
   assert.match(body, /data-tq-pressed=\{s\.landed\.how\}/, "the press it took stays drawn");
   assert.doesNotMatch(body, /LAND THE BRANCH/);
 });
+
+// the owner, 2026-11-10: 'Add "Not now"' - the push question could only be answered by pushing, and the agent asked again a turn later
+test("Not now folds the push card: its buttons stay, none filled, and the press goes down the hold road", () => {
+  const s = { own: false, shared: true, base: "master", commits: 1, changed: 5, plus: 116, minus: 9, ask: true, held: true,
+    push: { tip: "3a1b9a81c0ffee", ahead: 1, to: "master", deploy: "" }, answers: [{ how: "push", label: "Push" }] };
+  assert.equal(landingWords(s).held, "Not now - nothing was pushed. It waits here for your press.");
+  assert.equal(landingWords({ ...s, held: false }).held, "");
+  assert.equal(landingWords(s).first, "push", "Push is still one press away");
+  const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
+  assert.match(body, /api\.post\(`\/api\/tasks\/\$\{taskId\}\/landing\/hold`\)/);
+  assert.match(body, /\{!!s\.push && !s\.held && !sure && <Button[^>]*data-tq-land-hold=""/, "offered on a push that is asked, never twice");
+  assert.match(body, /const press = \(h, tone0, tone = s\.held \? "t" : tone0\) =>/, "held: no button is the lit one");
+  assert.match(body, /data-tq-act-state=\{s\.held \? "held" : s\.ask \? "waiting"/);
+  assert.match(body, /const sub = s\.held \? w\.held :/);
+});

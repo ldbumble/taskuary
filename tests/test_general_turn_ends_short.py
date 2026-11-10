@@ -191,6 +191,16 @@ class AnOwnersAskAnsweredWithNothingTests(unittest.TestCase):
         asked = s.last_worker_event(tid, skip=ws.NOTES)
         self.assertEqual((asked['Kind'], asked['Text']), ('input_needed', general.COULD_NOT), 'the normal ask: the agent waits on the owner')
 
+    def test_a_turn_with_no_words_at_all_is_the_same_turn_that_said_nothing(self):
+        """The audit, 2026-11-10: a CLI's turn that ended on tool calls alone came back '' - filed as "the model returned an empty response",
+        the session ended and Continue lit, the owner's ask unanswered. It is the turn that said nothing: woken once, then its one question."""
+        s = MemoryStore(); a_claude(self); tid = researcher(s)
+        seen = turn(s, tid, '', judge=self.no_judge)
+        self.assertEqual(len(seen['prompts']), 2, 'woken once')
+        said = [c['Body'] for c in s.list_comments(tid) if c['ActorType'] == general.ASSISTANT_TYPE]
+        self.assertEqual(said[-1], general.COULD_NOT)
+        self.assertEqual(s.last_worker_event(tid, skip=ws.NOTES)['Kind'], 'input_needed', 'its question waits - never a failure')
+
     def test_a_woken_turn_that_answers_keeps_its_own_words(self):
         s = MemoryStore(); a_claude(self); tid = researcher(s)
         seen = turn(s, tid, [self.EMPTY, 'I could not tell what to say to the vendor - keep the 12 seats, or change them?'], judge=self.no_judge)

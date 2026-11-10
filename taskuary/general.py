@@ -2834,7 +2834,9 @@ class GeneralSession:
         """File one turn's answer: its markers read, its draft, question or close raised, the reply kept as the task's comment.
         A general turn and a quick answer (quickwork) both end here, so the two can never file differently."""
         src = 'quick' if self.quick else 'api'     # quickwork.only_quick reads a task's runs by this source
-        if not reply: raise RuntimeError('the model returned an empty response')
+        # ...A TURN THAT SAID NO WORD AT ALL is the turn that said nothing (SILENT), woken once and then asking - never "the model returned an
+        # empty response" over a Continue (the audit, 2026-11-10 - the owner: "if you have nothing to reply just ask what should i reply?")
+        if not reply and is_dock(self.store.get_task(self.task_id)): raise RuntimeError('the model returned an empty response')
         from . import playbooks
         reply = playbooks.collect_setup_draft(self.store, self.task_id, reply)
         # a connector card's walk: the card's tools (save a field, run Test, ask for one step) out of the reply (aisetup.collect)

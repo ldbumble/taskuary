@@ -462,6 +462,33 @@ Monday job straight away. <strong>Run now</strong> runs it now.</li>
 <li>A run of steps with nothing waiting on it is done when its last step runs; a draft it wrote
 waits on its own task, which the step names.</li>
 </ul>
+<h3 id="rules-as-code-a-script-step">Rules as code: a script step<a class="anchor" href="#rules-as-code-a-script-step" aria-label="Link to this section">#</a></h3>
+<p>A rule that is the same on every run - a threshold, a match between two lists, arithmetic over
+rows - does not need a model to re-judge it each time. Add a source step of type <strong>Python script
+on this computer</strong>: the script reads the earlier step&#39;s rows on stdin, prints JSON rows (or CSV,
+or plain text), and an <strong>AI judgment</strong> step after it reads what it printed.</p>
+<p>An example: step 1 reads the open invoices from an export, step 2 is the script that adds a 2% late
+fee to every invoice more than thirty days old, step 3 asks the AI which customers to write to.</p>
+<pre><code class="language-python">import json, sys
+rows = [json.loads(line) for line in sys.stdin if line.strip()]
+print(json.dumps([{&quot;invoice&quot;: r[&quot;invoice&quot;], &quot;fee&quot;: round(r[&quot;amount&quot;] * 0.02, 2)} for r in rows if r[&quot;days&quot;] &gt; 30]))
+</code></pre>
+<ul>
+<li>Paste the script into the step, or point the step at <strong>your own <code>.py</code> file</strong>. It runs with
+Python&#39;s standard library, in an empty temporary folder, for at most its time limit (120 seconds
+unless you set another, 900 at most). A non-zero exit fails the step, with the script&#39;s last
+error lines as the reason.</li>
+<li><strong>Only what you saved runs.</strong> Nothing an earlier step read is ever pasted into the script or
+its path - it arrives as data on stdin. The script is not an agent tool: no agent&#39;s call can run
+one. The Assistant cannot create or change one for you; it opens the editor, where you read the
+script before saving. A repair after a failed run never rewrites a script by itself - it waits
+for your yes.</li>
+<li>When the composer drafts a routine from your words and a rule fits, it writes the script for
+you; you read it in the editor before you save.</li>
+<li>An agent that wrote a script while doing a job you will have again can offer to keep it: a
+<strong>Save this as a routine</strong> card with the script shown whole. Approve saves it; nothing is saved
+or run before your press.</li>
+</ul>
 <h2 id="playbooks">Playbooks<a class="anchor" href="#playbooks" aria-label="Link to this section">#</a></h2>
 <p>The third shelf on the Reports page, beside Reports and Routines. A <strong>playbook</strong> is how this
 company does one kind of job - when it starts, which connections it uses, the steps, what an agent

@@ -123,6 +123,7 @@ export const LOGOS = {
       <path fill="#e9e3d8" d="M14 2v5h5z" />
     </S>
   ),
+  python_script: (p) => <T p={p} bg="#3776AB" text="py" size={10.5} />,
   anthropic: (p) => (
     <S {...p}>
       <rect x="2" y="2" width="20" height="20" rx="5" fill="#D97757" />

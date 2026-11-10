@@ -333,6 +333,11 @@ def isolated_runtime_boundaries():
         except OSError:
             return False
         args = [str(x) for x in command[1:]]
+        # ...and a script a TEST wrote, run the one way reports.run_python_script runs one: isolated (-I), a single file, and that
+        # file inside this run's own temp root - never a path on the machine (tests/test_script_step.py)
+        if args[:1] == ['-I'] and len(args) == 2:
+            try: Path(args[1]).resolve().relative_to(_TEST_ROOT); return True
+            except (ValueError, OSError): return False
         if args[:1] == ['-c']:
             script = args[1] if len(args) > 1 else ''
             # Exact hashes of the synthetic stdin/PTY programs reviewed at checkpoint 2689679,

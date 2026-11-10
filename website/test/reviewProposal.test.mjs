@@ -181,6 +181,27 @@ test("a break-out card says the new task and what moves to it, and its result na
     { said: "Approved · moved to its own task", what: "TQ-0009 is the new task: Renew the Trainly seats", url: "", command: "" });
 });
 
+test("a save-as-routine card shows the script whole and read-only, with when it runs on its own line", () => {
+  const script = "import sys, json\nprint(json.dumps([]))";
+  const p = { action: "save_routine", title: "Late fees", script, runs: "daily 07:00", prompt: "Say which invoices carry a fee.",
+    reads: { type: "local_file", path: "C:/exports/ar-*.csv" } };
+  const rv = { Kind: "action", DraftText: JSON.stringify(p), Reason: 'the agent proposes to save a script as the routine "Late fees", to run daily 07:00' };
+  assert.equal(reviewText(rv), `It reads: C:/exports/ar-*.csv · local file\n\n${script}\n\nThen an AI step reads what it printed: Say which invoices carry a fee.`);
+  assert.equal(reviewText({ Kind: "action", DraftText: JSON.stringify({ action: "save_routine", title: "Late fees", script }) }), script);
+  const card = proposalPresentation(rv);
+  assert.deepEqual([card.title, card.destinationLabel, card.destination, card.readOnly], ["Save this as a routine", "It runs", "daily 07:00 · Late fees", true]);
+  const done = { ...p, result: { source: 7, link: "#report=7", said: 'Saved the routine "Late fees" - it runs daily 07:00.' } };
+  assert.deepEqual(resultOf({ Kind: "action", Status: "approved", FinalText: JSON.stringify(done) }),
+    { said: "Approved · saved the routine", what: 'Saved the routine "Late fees" - it runs daily 07:00.', url: "", command: "" });
+});
+
+test("a Python script is a source type on this computer, its script in a multi-line box", () => {
+  const view = readFileSync(new URL("../src/ReportsView.jsx", import.meta.url), "utf8");
+  assert.match(view, /python_script: \[\["the script - Python, run as written[^"]*", "script", "multiline",/);
+  assert.match(view, /\["This computer", \["local_file", "python_script", "sqlite", "mcp"\]\]/);
+  assert.match(readFileSync(new URL("../src/reportWords.js", import.meta.url), "utf8"), /python_script: "Python script on this computer"/);
+});
+
 test("the section says Also waiting on you only under something else that waits", () => {
   const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.match(page, /\$\{asksBelow \? "Also waiting on you" : "Waiting on you"\}\$\{liveAsks > 1 \? ` · \$\{liveAsks\}` : ""\}/);

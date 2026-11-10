@@ -268,6 +268,37 @@ under Reports and never goes through triage; its agent works it like any other t
 - A run of steps with nothing waiting on it is done when its last step runs; a draft it wrote
   waits on its own task, which the step names.
 
+### Rules as code: a script step
+
+A rule that is the same on every run - a threshold, a match between two lists, arithmetic over
+rows - does not need a model to re-judge it each time. Add a source step of type **Python script
+on this computer**: the script reads the earlier step's rows on stdin, prints JSON rows (or CSV,
+or plain text), and an **AI judgment** step after it reads what it printed.
+
+An example: step 1 reads the open invoices from an export, step 2 is the script that adds a 2% late
+fee to every invoice more than thirty days old, step 3 asks the AI which customers to write to.
+
+```python
+import json, sys
+rows = [json.loads(line) for line in sys.stdin if line.strip()]
+print(json.dumps([{"invoice": r["invoice"], "fee": round(r["amount"] * 0.02, 2)} for r in rows if r["days"] > 30]))
+```
+
+- Paste the script into the step, or point the step at **your own `.py` file**. It runs with
+  Python's standard library, in an empty temporary folder, for at most its time limit (120 seconds
+  unless you set another, 900 at most). A non-zero exit fails the step, with the script's last
+  error lines as the reason.
+- **Only what you saved runs.** Nothing an earlier step read is ever pasted into the script or
+  its path - it arrives as data on stdin. The script is not an agent tool: no agent's call can run
+  one. The Assistant cannot create or change one for you; it opens the editor, where you read the
+  script before saving. A repair after a failed run never rewrites a script by itself - it waits
+  for your yes.
+- When the composer drafts a routine from your words and a rule fits, it writes the script for
+  you; you read it in the editor before you save.
+- An agent that wrote a script while doing a job you will have again can offer to keep it: a
+  **Save this as a routine** card with the script shown whole. Approve saves it; nothing is saved
+  or run before your press.
+
 ## Playbooks
 
 The third shelf on the Reports page, beside Reports and Routines. A **playbook** is how this

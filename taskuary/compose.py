@@ -35,7 +35,7 @@ MAX_PEEKS = 3         # schema look-ups per compose: a table, its columns, and o
 # what a config of this type MUST carry to run at all. A composed report with only a title is a
 # form the owner has to finish - which is the thing the composer exists to spare them.
 REQUIRED = {'agent': ('prompt|skill',), 'intacct': ('object',), 'intacct_fields': ('object',), 'mssql': ('query',), 'database': ('query',), 'sqlite': ('db', 'query'),
-            'rest': ('url',), 'local_file': ('path',), 'winrm': ('script',), 's3_object': ('bucket',), 'cloudwatch_logs': ('log_group',),
+            'rest': ('url',), 'local_file': ('path',), 'python_script': ('script|path',), 'winrm': ('script',), 's3_object': ('bucket',), 'cloudwatch_logs': ('log_group',),
             'metric': ('name',), 'amazon_report': ('report_type',), 'amazon_invoice_pdf': ('invoice',),       # metric_check with no name is valid: it checks every one
             # files (files.py). smb_read takes no required path - the card's root IS a folder, and
             # "what is in the share" is a valid report; every write needs to be told where.
@@ -176,6 +176,11 @@ FLOW_RULES = (
     '- Every read or write a catalog type can do is a "source" step with a REAL query, object or path: peek at the schema, never guess. '
     'Use only types whose ready flag is true.\n'
     '- "ai" only where a judgement, a summary or a draft is needed. When a later step depends on it, its output is yes_no or fields.\n'
+    # ...and RULES ARE CODE (the owner, 2026-11-10): what is the same on every run is computed, never re-judged by a model each time
+    '- A rule that is the same on every run and plain code can compute - a threshold, a match between two lists, arithmetic over rows, '
+    'a file transform - is a "source" step of type python_script: you write the script (standard library only; it reads the earlier '
+    'step\'s rows from stdin, given as its "input", and prints JSON rows), and an "ai" step after it reads what it printed. The owner '
+    'reads the script before saving. Never use it for a judgement, and never peek with it.\n'
     '- "task" opens a task, "draft" leaves an email for the owner to approve - that is how results land; neither needs a connection.\n'
     '- "agent" ONLY when the work needs an agent\'s hands - a web page, open-ended investigation - and it is always the last step. A job '
     'that is nothing but that is ONE agent step (or just "prompt").\n'
@@ -425,6 +430,8 @@ def _peek(store, spec):
     from .reports import REGISTRY, resolve_cfg
     t = (spec or {}).get('type')
     if t not in REGISTRY: return f'(no such lookup type: {t})'
+    # a look-up READS; a script is code nobody has read yet, and what this model was shown may have been written by anybody
+    if t == 'python_script': return '(a script is never run as a look-up - it runs only once the owner has read and saved it)'
     try:
         head, body = REGISTRY[t](resolve_cfg(store, {**spec, 'max_rows': SCHEMA_ROWS}))
         return f'{head}\n{body[:6000]}'

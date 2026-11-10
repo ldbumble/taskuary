@@ -56,7 +56,7 @@ const row = (r, sid) => ({ runId: r.run_id, sourceId: sid, at: r.at, type: "flow
 
 // the recording predates the `writes` flag on /api/report-types (flow.writes): the demo says it for the types its steps use
 const DEMO_WRITES = new Set(["smb_write", "smb_move", "sftp_put", "sftp_move", "intacct_create", "intacct_update", "quickbooks_bill", "quickbooks_expense",
-  "mcp", "winrm", "agent", "assistant", "taskuary", "handbook_write", "hub_write", "kb_reindex"]);
+  "mcp", "winrm", "python_script", "agent", "assistant", "taskuary", "handbook_write", "hub_write", "kb_reindex"]);
 
 export function installDemoWorkflows(state) {
   for (const t of state["/api/report-types"]?.data || []) if (t.writes === undefined) t.writes = DEMO_WRITES.has(t.type);

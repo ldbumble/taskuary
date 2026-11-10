@@ -253,6 +253,49 @@ _DAYS = {'0': 'Sundays', '1': 'Mondays', '2': 'Tuesdays', '3': 'Wednesdays', '4'
          '7': 'Sundays', '1-5': 'weekdays', '*': 'daily'}
 
 
+# A SCRIPT AN AGENT WROTE ON A JOB, KEPT AS A ROUTINE (the owner, 2026-11-10: "agent should be able to after building one should say
+# should we save this"). The agent proposes it (proposals 'save_routine'); the owner reads the script on the card, and their Approve is
+# the save - the one door by which anything but the editor puts a script on a schedule. The steps are the ones the editor would hold: an
+# optional read (never a write), the script with that read on its stdin, and an AI step where its output wants reading.
+CLOCK = ('cron', 'daily_at', 'every_minutes')
+def script_routine(store, p: dict) -> tuple:
+    "(the routine's config, '') from a save_routine proposal - or ({}, why it cannot be saved), by the editor's own checks."
+    from . import flow
+    from .reports import schedule_error
+    title, script = ' '.join(str(p.get('title') or '').split())[:120], str(p.get('script') or '')
+    if not title or not script.strip(): return {}, 'save_routine needs `title` and `script` (the Python source, whole)'
+    reads, steps = p.get('reads'), []
+    if reads:
+        if not isinstance(reads, dict) or flow.writes(reads.get('type')):
+            return {}, '`reads` is one read from a connected system, a file or a sheet (a source type and its keys) - never a write, and never a script'
+        steps.append({**{k: v for k, v in reads.items() if k not in flow.STEP_KEYS}, 'id': 's1', 'kind': 'source', 'label': str(reads.get('label') or 'Read')[:80]})
+    steps.append({'id': f's{len(steps) + 1}', 'kind': 'source', 'label': 'Run the script', 'type': 'python_script', 'script': script,
+                  **({'input': '{{s1}}'} if reads else {})})
+    if str(p.get('prompt') or '').strip():
+        steps.append({'id': f's{len(steps) + 1}', 'kind': 'ai', 'label': 'Read what it found', 'output': 'text',
+                      'prompt': f"{str(p['prompt']).strip()}\n\n{{{{{steps[-1]['id']}}}}}"})
+    cfg = {'type': 'agent', 'access': 'write', 'title': title, 'goal': ' '.join(str(p.get('why') or '').split())[:300], 'flow': steps,
+           **{k: p[k] for k in CLOCK if p.get(k)}}
+    ok, why = flow.validate(store, steps)
+    if not ok: return {}, why
+    if why := schedule_error(cfg): return {}, why
+    if any(x.get('Channel') == 'report' and str(x.get('Address') or '').casefold() == title.casefold() for x in store.list_sources(active_only=False)):
+        return {}, f'a routine or report named {title!r} already exists - give this one its own name'
+    return cfg, ''
+
+
+def save_script_routine(store, p: dict, actor: str) -> dict:
+    "The owner's Approve on a save_routine card: the routine, saved as the editor saves one - checked again now, switched on, never run here."
+    cfg, why = script_routine(store, p)
+    if why: raise RuntimeError(f'{why} - nothing was saved')
+    sid = store.save_source({'Channel': 'report', 'Address': cfg['title'], 'Owner': actor, 'Active': 1, 'ConfigJson': json.dumps(cfg)}, actor)
+    store.audit('source', sid, 'routine_saved', actor, detail={'title': cfg['title'], 'steps': len(cfg['flow']), 'runs': runs_words(cfg)})
+    return {'source': sid, 'link': f'#report={sid}', 'said': f"Saved the routine \"{cfg['title']}\" - it runs {runs_words(cfg)}."}
+
+
+def runs_words(cfg: dict) -> str: return when_words(cfg) if any(cfg.get(k) for k in CLOCK) else 'when you run it'
+
+
 def when_words(cfg: dict) -> str:
     """The clock as the owner says it - "Mondays 08:00" - for the common crons; anything else as reports.schedule_words says it."""
     from .reports import schedule_words

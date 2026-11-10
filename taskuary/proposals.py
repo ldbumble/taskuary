@@ -97,6 +97,10 @@ ACTIONS = {
     # (where agent should suggest break out to new task)"): the agent names what goes, the owner's press runs the task page's own split
     # (reshape.split_task) - nothing moves before it
     'break_out': ('break part of this task out into a task of its own', ('title',), None),
+    # A SCRIPT WRITTEN ON THE JOB, KEPT AS A ROUTINE (the owner, 2026-11-10: "agent should be able to after building one should say should
+    # we save this"): the card shows the script whole, and the owner's press is the save (workflows.save_script_routine) - nothing is
+    # saved or run before it, and it is the one door by which an agent's script ever reaches a schedule
+    'save_routine': ('save this script as a routine', ('title', 'script'), None),
 }
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook before the act ran - never an agent's marker
 # ...each by its own gate, which runs it on the owner's yes (perform) and tells its agent their no (declined) - and where it was held, as its
@@ -372,6 +376,13 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     if ok and p.get('action') == 'break_out':
         p, miss = break_out(store, task_id, p)
         if miss: ok, why = False, miss
+    if ok and p.get('action') == 'save_routine':
+        from . import origin, workflows
+        # ...never from work a stranger started: what their mail said may be what wrote the script
+        cfg, miss = ({}, "a script from a task a stranger started is not offered as a routine") if origin.of_task(store, task_id)[0] == 'stranger' \
+            else workflows.script_routine(store, p)
+        if miss: ok, why = False, miss
+        else: p = {**p, 'title': cfg['title'], 'runs': workflows.runs_words(cfg), 'steps': [s['label'] for s in cfg['flow']]}
     if ok and p.get('action') in ('comment_issue', 'close_issue') and not linked(store, task_id):
         ok, why = False, f"{NO_LINK} - a comment or an issue on a repository you name is a run_tool (the guide tool's `propose` topic)"
     if not ok:
@@ -381,7 +392,8 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         return None
     # a close-out is not the agent's ask ("proposes to merge the pull request this task opened" was said of a stranger's PR), and
     # neither is a workflow's own repair or write, raised by the run itself (flow.py) with no agent anywhere on the task
-    said = tool_words(store, p) if p['action'] == 'run_tool' else break_out_words(p) if p['action'] == 'break_out' else why
+    said = (tool_words(store, p) if p['action'] == 'run_tool' else break_out_words(p) if p['action'] == 'break_out'
+            else f"save a script as the routine \"{p['title']}\", to run {p['runs']}" if p['action'] == 'save_routine' else why)
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
     # ...a shell step by what it does, never its raw line: the card folds the command under "Show the command"
     reason = (f"held before it ran, {HELD_IN[p['action']]}: {p.get('what') or ('a step' if p['action'] == 'shell_act' else p.get('command'))}"
@@ -739,6 +751,9 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
         if miss: raise RuntimeError(f'{miss} - nothing was moved')
         new = reshape.split_task(store, tid, {'title': p['title'], 'summary': str(p.get('summary') or ''), 'items': p['items']}, None, p['messages'], actor)
         out = {'task': new, 'ref': task_ref(new), 'said': f"{task_ref(new)} is the new task: {p['title'][:120]}"}
+    elif a == 'save_routine':
+        from . import workflows
+        out = workflows.save_script_routine(store, p, actor)
     else:                                   # run_tool
         from .reports import REGISTRY, resolve_cfg
         # the owner approved THIS query, so it may commit - the one road to a write on a read-level SQL card

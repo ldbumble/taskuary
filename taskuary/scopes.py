@@ -136,6 +136,7 @@ ACTIONS = {
     # ── admin: destructive, structural, or arbitrary code ─────────────────────────────
     'delete': 'admin', 'close': 'admin', 'archive': 'admin', 'manage': 'admin',
     'winrm': 'admin',        # Invoke-Command on a remote box is the sharpest edge we ship
+    'python_script': 'admin',    # ...and code on THIS one (reports.run_python_script): it has no card, so no agent's call reaches it at all
 }
 
 # Where each connection starts: FULL, the way a CLI agent with full permissions can already do anything its credentials
@@ -177,6 +178,7 @@ QUIET_WRITES = frozenset({
     'smb_write', 'smb_move', 'sftp_put', 'sftp_move', 'sharepoint_save', 'onedrive_save',
     'handbook_write', 'handbook_vote', 'hub_write', 'hub_vote', 'hub_comment', 'kb_reindex',
     'winrm',                                       # runs on a box the owner named; its reach is that box, and admin gates it
+    'python_script',                               # a script the owner saved, run by a report or a routine of theirs - never an agent's tool
     # each answers the owner or Taskuary's own store: an agent run's words are drafts, and the Assistant posts to the owner
     'agent', 'assistant', 'taskuary', 'calendar', 'google_sheets', 'sharepoint_list', 'sharepoint_file',
     # named in the catalogue, not built (reports.PLANNED): they run nothing yet

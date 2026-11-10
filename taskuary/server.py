@@ -1505,6 +1505,8 @@ def _run_kind(op: dict, background: BackgroundTasks):
             if not patch: raise HTTPException(422, 'say what to change - config is the keys to change')
             if 'title' in patch and not str(patch['title'] or '').strip(): raise HTTPException(422, 'a report needs a title')
             new = {**cfg, **patch}
+            from .reports import OWNER_SAVES_CODE, code_in
+            if code_in(new) != code_in(cfg): raise HTTPException(422, f'Not changed: {OWNER_SAVES_CODE}.')
             store.save_source({'SourceId': tid, 'ConfigJson': json.dumps(new)}, ACTOR)
             store.audit('source', tid, 'edit', 'assistant', detail={'title': title, 'changed': sorted(patch)})
             return {'title': new.get('title') or title, 'changed': sorted(patch)}
@@ -1857,6 +1859,8 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # the same road the Reports tab takes (validate, then save_source) - never an assistant-only path (PW-194)
         from . import compose
         cfg = dict(p.get('config') or {})
+        from .reports import OWNER_SAVES_CODE, code_in
+        if code_in(cfg): raise RuntimeError(f'Not created: {OWNER_SAVES_CODE}')
         ok, why = compose.validate(store, cfg)
         if not ok: raise RuntimeError(why)
         title = str(cfg.get('title') or '').strip()

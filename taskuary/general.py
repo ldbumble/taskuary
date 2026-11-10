@@ -1521,6 +1521,13 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO. Be the helpful assistant: whatever 
            "{{\"action\": \"break_out\", \"title\": ..., \"summary\": ..., \"messages\": [the m-ids of the messages that are the other "
            "matter], \"items\": [the ids of its to-dos]}} - it shows as a card, and the owner's one press moves that part to a task of its "
            "own. A follow-up, a correction or a second question on the same matter stays here; then go on with what this task is about\n"
+           # ...AND A RULE WORTH KEEPING (the owner, 2026-11-10: "agent should be able to after building one should say should we save this")
+           "- a script you wrote to do this job, when the job will come again and its rule is the same every time: once it has run and "
+           "its output is right, propose {{\"action\": \"save_routine\", \"title\": ..., \"script\": <the Python source, whole, standard "
+           "library only, reading its rows from stdin and printing JSON rows>, \"reads\": <optional: the one read that feeds it, a source "
+           "type and its keys>, \"prompt\": <optional: what an AI step should say about its output>, \"daily_at\": \"07:00\" (or cron, or "
+           "every_minutes; none = run on demand)}} - the owner reads the script on the card, and their press saves the routine. Never "
+           "ask \"should I save this?\" in prose, and never for a one-off\n"
            "Never hand the owner a copy-and-paste job (\"paste this into LinkedIn\", \"post it yourself\") for a road that exists. Next steps "
            "may instead be the one question you need answered first, or a part that is the owner's to do - say why (no road reaches it: "
            "name the connection that would; or it is theirs to decide). When the work is an answer, a finding or a check, answer it "

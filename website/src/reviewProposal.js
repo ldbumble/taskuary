@@ -58,6 +58,10 @@ export const reviewText = (review) => {
   if (proposal?.action === "run_tool") return toolBody(proposal);
   // a part of the task going to a task of its own (proposals.break_out): the new task's title, what it is, and each thing that moves
   if (proposal?.action === "break_out") return [proposal.summary, proposal.moves].filter(Boolean).join("\n\n");
+  // a script to keep as a routine (proposals 'save_routine'): what feeds it, the script whole, and what the AI step is asked about its output
+  if (proposal?.action === "save_routine") return [
+    proposal.reads ? `It reads: ${toolWhere(proposal.reads)}` : "", String(proposal.script || ""),
+    proposal.prompt ? `Then an AI step reads what it printed: ${proposal.prompt}` : ""].filter(Boolean).join("\n\n");
   // the WHAT is the context line already (proposals.queue's Reason); the box is the exact command Approve runs, once - with no AI the card
   // said "agent-browser click @e12" three times over (2026-10-25)
   if (["browser_act", "shell_act", "desktop_act"].includes(proposal?.action)) return proposal.command ? `Approve runs: ${proposal.command}` : proposal.what || "";
@@ -213,6 +217,19 @@ export const proposalPresentation = (review) => {
     rejectLabel: "Dismiss",
     readOnly: true,
   };
+  // A SCRIPT THE AGENT WROTE ON THE JOB, KEPT AS A ROUTINE (proposals 'save_routine', the owner 2026-11-10): the script stands whole and
+  // read-only in the box - Approve saves exactly that as a routine (workflows.save_script_routine) and runs nothing
+  if (proposal?.action === "save_routine") return {
+    kind: "action",
+    title: "Save this as a routine",
+    context: review.Reason || "Proposed · nothing is saved or run until you approve",
+    destinationLabel: "It runs",
+    destination: `${proposal.runs || "when you run it"} · ${proposal.title || ""}`,
+    approveLabel: APPROVE,
+    busyLabel: "saving…",
+    rejectLabel: "Dismiss",
+    readOnly: true,
+  };
   if (proposal?.action === "repair_workflow") return {
     kind: "action",
     title: "Repair this routine's steps",
@@ -249,7 +266,7 @@ export const reviewStatusLabel = (status) => REVIEW_STATUS[status] || String(sta
 // it did in words, its link, and the command it ran folded - read off the receipt the server keeps (proposals.receipt). Null while it waits
 const VERB = { shell_act: "ran", browser_act: "ran on the page", desktop_act: "ran", comment_issue: "commented", close_issue: "closed",
   merge_pr: "merged", land: "landed", open_pr: "opened the pull request", push_direct: "pushed", close_item: "closed", run_tool: "done",
-  break_out: "moved to its own task" };
+  break_out: "moved to its own task", save_routine: "saved the routine" };
 export const resultOf = (review) => {
   if (review?.Kind !== "action" || !["approved", "edited"].includes(review?.Status)) return null;
   let p = {};
@@ -257,7 +274,7 @@ export const resultOf = (review) => {
   const r = p.result || {}, url = r.url || (/https?:\/\/\S+/.exec(String(r.said || "")) || [""])[0].replace(/[.,)]+$/, "");
   // ...a yes the page refused (browsergate._perform's `refused`) is over, and did nothing: it never reads "ran on the page"
   if (r.refused) return { said: "Approved · not done", what: String(r.refused), url: "", command: String(p.command || "") };
-  const what = String(p.about || p.what || r.performed || r.commented || r.closed || r.merged || (r.task ? r.said : "") || "").trim();
+  const what = String(p.about || p.what || r.performed || r.commented || r.closed || r.merged || (r.task || r.source ? r.said : "") || "").trim();
   return { said: `Approved · ${VERB[p.action] || "done"}`, what, url, command: String(p.command || "") };
 };
 

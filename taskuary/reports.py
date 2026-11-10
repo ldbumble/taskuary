@@ -428,6 +428,120 @@ def run_winrm(cfg):
     return f'{len(out.splitlines())} lines from {host}', out[:BODY_CHARS]
 
 
+# RULES AS CODE (the owner, 2026-11-10: a routine whose rules are "deterministic ... coded into python", run by the routine, with AI
+# reading what comes out - and "if they have python script they can tell you run python script on this data every day"). A rule that is
+# the same every time is a script the owner read and saved, run by plain code; only the reading of its output is a model's.
+# WHAT RUNS IS WHAT WAS SAVED: `script` and `path` never take a token (flow.CODE_KEYS) - what a step read reaches the script as its
+# stdin and nothing else - and a repair that would change either waits for the owner (flow.targets). No agent can call it: the type
+# has no connection card, and /api/tools/run runs nothing without one.
+SCRIPT_TIMEOUT, SCRIPT_MAX_TIMEOUT, SCRIPT_ERR_LINES = 120, 900, 8
+_NOT_THE_CHILDS = ('TASKUARY_', 'TQ_', '_PYI', '_MEI', 'PYTHONPATH', 'PYTHONHOME', 'PYTHONSTARTUP')
+
+
+def script_python() -> list:
+    "The interpreter a script runs on: this one - or, from the sealed app, the Python on this computer."
+    import shutil, sys
+    if not getattr(sys, 'frozen', False): return [sys.executable]
+    for name, args in (('python', []), ('python3', []), ('py', ['-3'])):
+        if exe := shutil.which(name): return [exe, *args]
+    raise RuntimeError('running a script needs Python installed on this computer (python.org) - none was found')
+
+
+def script_env() -> dict:
+    "The child's environment: the computer's own, with nothing Taskuary put there (its home, its tokens, its app's paths)."
+    return {k: v for k, v in os.environ.items() if not k.upper().startswith(_NOT_THE_CHILDS)}
+
+
+def script_file(path) -> 'Path':
+    "The owner's own script, where it may be run from: a .py file on this computer, never one kept in Taskuary's home or its install."
+    from pathlib import Path
+    from . import config
+    p = Path(str(path)).expanduser().resolve()
+    if not p.is_file(): raise RuntimeError(f'{p} is not a file on this machine')
+    if p.suffix.lower() != '.py': raise RuntimeError(f'{p.name} is not a Python script (.py)')
+    own = (config.home().resolve(), Path(__file__).resolve().parent)
+    # ...mail's attachments and every agent's scratch land under the home: a file there is not the owner's own script
+    if any(p == r or r in p.parents for r in own): raise RuntimeError("a script kept in Taskuary's own folders is not run - keep it in a folder of yours")
+    return p
+
+
+def _kill_tree(p) -> None:
+    try:
+        if os.name == 'nt': spawn.run(['taskkill', '/PID', str(p.pid), '/T', '/F'], capture_output=True, timeout=15)
+        else:
+            import signal
+            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+    except Exception as e: logger.debug(f'python_script: the tree of {p.pid} was not killed - {e}')
+    try: p.kill()
+    except Exception: pass
+
+
+def script_rows(out: str):
+    "The rows a script printed - a JSON array of objects, JSON lines, or a delimited table with a header - else None: it printed text."
+    import csv
+    text = out.strip()
+    if text[:1] in '[{':
+        try:
+            data = json.loads(text) if text[0] == '[' else [json.loads(l) for l in text.splitlines() if l.strip()]
+            if data and all(isinstance(r, dict) for r in data): return data
+        except ValueError: pass
+        return None
+    lines = text.splitlines()
+    if len(lines) < 2: return None
+    try: delim = csv.Sniffer().sniff(text[:4000], delimiters=',;\t|').delimiter
+    except csv.Error: return None
+    n = lines[0].count(delim)
+    return _rows_from_text(text, delim) if n and all(l.count(delim) >= n for l in lines[1:20] if l.strip()) else None
+
+
+def code_in(cfg) -> list:
+    """Every script, and script file, a report's or a routine's config would run. Only the owner's own save in the editor - where they
+    read it - adds or changes one: never the Assistant's hands (server._run_kind), never a repair by itself (flow.targets)."""
+    cfg = cfg if isinstance(cfg, dict) else {}
+    parts = [cfg, *(cfg.get('sources') or []), *(cfg.get('flow') or [])]
+    return sorted((str(p.get('script') or ''), str(p.get('path') or '')) for p in parts if isinstance(p, dict) and p.get('type') == 'python_script')
+OWNER_SAVES_CODE = ('it runs a script on this computer, and a script is saved only by the owner, from the editor, where they read it first - '
+                    'open it there for them (New, then Routine or Report) instead')
+
+
+def run_python_script(cfg):
+    """{"script": "<Python source>" or "path": "C:/scripts/late_fees.py", "input": "{{s1}}"} - run a Python script on THIS computer
+    (standard library only) and read what it prints: JSON rows or CSV for rows, else text. `input` reaches it on stdin; script and
+    path take no {{tokens}}. For a RULE that is the same every run and code can compute - a threshold, a match, arithmetic over rows.
+
+    The script does the rule, and an AI step after it reads the output: judgement stays an AI step. `timeout` in seconds (120, at most
+    900). A non-zero exit, or running past its time, is the step failing, with the last lines it wrote to stderr as the reason."""
+    import subprocess, tempfile
+    from pathlib import Path
+    src, path = str(cfg.get('script') or ''), str(cfg.get('path') or '').strip()
+    if bool(src.strip()) == bool(path): raise RuntimeError('a script step runs `script` (the code, kept here) or `path` (your own .py file) - one of them')
+    try: limit = min(SCRIPT_MAX_TIMEOUT, max(1, int(cfg.get('timeout') or SCRIPT_TIMEOUT)))
+    except (TypeError, ValueError): limit = SCRIPT_TIMEOUT
+    lim, mine = row_limit(cfg)
+    with tempfile.TemporaryDirectory(prefix='taskuary-script-') as tmp:
+        if path: run_it, name = script_file(path), Path(path).name
+        else:
+            run_it, name = Path(tmp) / 'script.py', 'the script'
+            run_it.write_text(src, encoding='utf-8')
+        # -I: no site of the user's, no PYTHON* variable, no script folder on the path - the script and the standard library
+        p = spawn.popen([*script_python(), '-I', str(run_it)], cwd=tmp, env=script_env(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace',
+                        **({} if os.name == 'nt' else {'start_new_session': True}))
+        try: out, err = p.communicate(str(cfg.get('input') or ''), timeout=limit)
+        except subprocess.TimeoutExpired:
+            _kill_tree(p)
+            try: p.communicate(timeout=5)
+            except Exception: pass
+            raise RuntimeError(f'{name} ran past its {plural(limit, "second")} and was stopped')
+    if p.returncode != 0:
+        last = ' | '.join((err or out or '').strip().splitlines()[-SCRIPT_ERR_LINES:])[:600]
+        raise RuntimeError(f'{name} stopped with exit code {p.returncode}' + (f': {last}' if last else ''))
+    rows = script_rows(out or '')
+    if rows is not None: return rows_out(rows, lim, unit=f'rows from {name}', mine=mine)
+    text = (out or '').strip()
+    return f'{plural(len(text.splitlines()), "line")} from {name}', text[:BODY_CHARS]
+
+
 def run_mcp(cfg):
     """{"cmd", "args", "tool", "tool_args"} - call any MCP server's tool. See mcp.py."""
     from .mcp import run_report
@@ -756,7 +870,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'brave_search': _research('brave'), 'serpapi': _research('serpapi'),
             'serper': _research('serper'), 'scrapingbee': _research('scrapingbee'),
             'apify': _research('apify'),
-            'local_file': run_local_file,
+            'local_file': run_local_file, 'python_script': run_python_script,
             'aws': run_aws, 's3_object': run_s3, 'cloudwatch_logs': run_cwlogs,
             'azure': run_azure, 'azure_blob': run_azblob, 'azure_logs': run_azlogs,
             'entra_users': run_entra_users, 'entra_groups': run_entra_groups,

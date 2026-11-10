@@ -65,7 +65,7 @@ export const TYPE_LABELS = {
   metric: "A certified number (Assistant \u2192 Numbers)", metric_check: "Re-prove the certified numbers",
   digest: "Taskuary digest", evening_inbox: "End-of-day brief", automate: "Automation ideas (own data)", assistant: "Advisor — its notes for you (how it speaks: Settings, Docs)",
   agent: "AI agent — run a skill or a prompt",
-  local_file: "File on this computer",
+  local_file: "File on this computer", python_script: "Python script on this computer",
   google_sheets: "Google Sheet", sharepoint_list: "SharePoint list", sharepoint_file: "SharePoint file",
   exa: "Exa — search the web", tavily: "Tavily — search + answer",
   firecrawl: "Firecrawl — read a page", reader: "Jina Reader — read a page (no key)",

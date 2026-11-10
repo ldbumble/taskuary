@@ -22,7 +22,7 @@ AI runs three times at most: once at setup (compose.compose_workflow drafts the 
 demand after a failure (repair, which only ever PROPOSES a changed list unless the owner set repair to auto).
 A workflow with no `flow` is one agent step (steps_of), so every workflow saved before this runs exactly as it did.
 """
-import json, re, time
+import hashlib, json, re, time
 from datetime import datetime
 from loguru import logger
 
@@ -45,6 +45,15 @@ AI_TYPES = ('digest',)          # a read the reports road runs with a model insi
 # what a step connects with is the step's as saved: a token in one would let a row or a mail choose where the card's credentials
 # go (reports.CONNECTION_KEYS). `url` is the page a read reads - pasting a link an earlier step found into it is the point.
 FIXED = ('type', 'connector_id')
+# WHAT A STEP READ NEVER BECOMES CODE (reports.run_python_script): the script a step runs, and the file it runs, are what the owner
+# saved - no token is ever laid into them, not even an input's. What an earlier step read reaches the script as its stdin (`input`).
+CODE_KEYS = {'python_script': ('script', 'path')}
+CODE_PASTE = ('the script is run exactly as saved - nothing can be pasted into it or into its path. Hand what an earlier step read '
+              'to it as `input` (it arrives on stdin), and read it there')
+def code_keys(s: dict) -> tuple: return CODE_KEYS.get((s or {}).get('type'), ())
+def pasted_code(s: dict) -> list: return [k for k in code_keys(s) if _refs(s.get(k))]
+
+
 def fixed_keys() -> tuple:
     from .reports import CONNECTION_KEYS
     return (*FIXED, *sorted(CONNECTION_KEYS - {'url', 'connector_id'}))
@@ -124,6 +133,9 @@ def targets(flow) -> set:
             out |= {f"write:{t}:{cid}:{' '.join(v.lower().split())}:{o.strip(chr(34) + '[]`').lower()}"
                     for v, o in SQL_WRITE.findall(str(s.get('query') or s.get('script') or ''))}
             if str(s.get('method') or 'GET').upper() not in ('GET', 'HEAD'): out.add(f"method:{card_of(t)}:{cid}:{str(s['method']).upper()}")
+            # THE CODE A STEP RUNS is a place of its own: a repair that rewrote a script, or pointed the step at another file, runs
+            # something the owner never read - so it always waits for their yes, whatever the model calls its size
+            out |= {f"code:{t}:{k}:{hashlib.sha256(str(s.get(k) or '').encode()).hexdigest()[:16]}" for k in code_keys(s) if s.get(k)}
     return out
 
 
@@ -206,6 +218,7 @@ def validate(store, flow, strict: bool = False) -> tuple:
             t, pasted = s.get('type'), [k for k in fixed_keys() if _refs(s.get(k))]
             if pasted: return False, f"{at}: {', '.join(pasted)} cannot come from an earlier step - it says where the step connects"
             if pasted_sql(s): return False, f"{at}: {SQL_PASTE}"
+            if pasted_code(s): return False, f"{at}: {CODE_PASTE}"
             if t not in REGISTRY or t in PLANNED: return False, f'{at}: unknown system type {t!r}'
             if t in NOT_A_STEP: return False, f'{at}: {t} is not a step - use the agent step for work that needs an agent'
             if strict:
@@ -322,7 +335,8 @@ def _source(store, step, ctx, llm, tid, dry, warns, title):
     from . import artifacts, proposals, reports
     raw = {k: v for k, v in step.items() if k not in STEP_KEYS and not str(k).startswith('_')}
     if pasted_sql(raw): raise RuntimeError(SQL_PASTE)       # saved before validate refused it: what a step read never rewrites a query
-    cfg = {**render(raw, ctx, warns), **{k: raw[k] for k in fixed_keys() if k in raw}}; t, w = cfg.get('type'), writes(cfg.get('type'))
+    if pasted_code(raw): raise RuntimeError(CODE_PASTE)
+    cfg = {**render(raw, ctx, warns), **{k: raw[k] for k in (*fixed_keys(), *code_keys(raw)) if k in raw}}; t, w = cfg.get('type'), writes(cfg.get('type'))
     try: reports.gate(store, cfg)
     except PermissionError as e:
         if not w: raise

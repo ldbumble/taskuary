@@ -112,6 +112,12 @@ export const FIELDS = {
     ["last N lines (text and log files only)", "tail", "text", "50"],
     ["sheet name (xlsx only, blank = the first)", "sheet", "text", ""],
     ["path into the JSON (json only)", "path_expr", "text", "items"], AI_FIELD],
+  // RULES AS CODE (reports.run_python_script): the script is shown whole, in its box, and is what runs - read it before you save
+  python_script: [["the script - Python, run as written (leave empty to run a file of yours)", "script", "multiline",
+      "import sys, json\nrows = [json.loads(l) for l in sys.stdin if l.strip()]\nprint(json.dumps([r for r in rows if r['days'] > 30]))"],
+    ["or your own .py file on this computer", "path", "text", "C:/scripts/late_fees.py"],
+    ["what it reads on stdin (in a routine: an earlier step, like {{s1}})", "input", "multiline", "{{s1}}"],
+    ["stop it after this many seconds", "timeout", "text", "120"], AI_FIELD],
   intacct: [["object", "object", "text", "GLENTRY \u00b7 APBILL \u00b7 VENDOR \u00b7 GLACCOUNT \u00b7 LOCATION \u00b7 GLBUDGETITEM"],
     ["fields (comma separated \u2014 blank = every field on the object)", "fields", "csv_list",
       "RECORDNO, VENDORID, TOTALDUE, WHENDUE"],
@@ -215,6 +221,7 @@ const PLACEHOLDER_FOR = {
   database: "open orders by customer, newest first",
   sqlite: "the last 50 rows of the events table",
   local_file: "the newest census export in C:/exports, totalled by site",
+  python_script: "run my late-fee script and tell me which invoices it flags",
   google_sheets: "the headcount tab of our staffing sheet",
   sharepoint_list: "open requests in the Ops site's Requests list",
   rest: "the open incidents from our status API",
@@ -227,7 +234,7 @@ const PLACEHOLDER_FOR = {
 
 const TYPE_GROUPS = [
   ["Taskuary itself", ["taskuary", "taskuary_data"]],
-  ["This computer", ["local_file", "sqlite", "mcp"]],
+  ["This computer", ["local_file", "python_script", "sqlite", "mcp"]],
   ["Files & sheets", ["google_sheets", "sharepoint_list", "sharepoint_file"]],
   ["Databases", ["mssql", "database"]],
   ["AWS", ["aws", "s3_object", "cloudwatch_logs"]],

@@ -543,14 +543,14 @@ _ATTR_RE = re.compile(r'(slot|to|subject)\s*=\s*(?:"([^"]*)"|(\S+))', re.I)
 # email - one the checklist owes or one the work turned up; a session with the tools hears DRAFT_TOOL_LINE in its place (general.by_tool)
 DRAFT_LINE = (f'EMAILS THIS TASK NEEDS: write each email as {DRAFT_OPEN} slot=<id> subject="<subject>"]]<the email>{DRAFT_CLOSE} - the one '
               'way you draft an email here, and the block IS the draft: its words are written once, there, and nowhere else in your answer. '
-              'A checklist line marked "-> email to" is an email this task already owes, and `slot` is the id on that line: your email to '
-              'that person fills that line, never a second email beside it. An email the checklist does not list takes to=<address> in '
+              'A checklist line marked "-> email to" is an email that only you write - write it or ask the owner what it needs; '
+              '`slot` is its id, and your email fills it, never a second beside it. An email the checklist does not list takes to=<address> in '
               'place of slot - and beside slot, when the line names a person and you found their address. '
               'The subject is written for its reader, never the title of this task; to someone who mailed on this task, "Re: " their subject. '
               "Each waits for the owner's approval - nothing is sent until they approve it.")
-DRAFT_TOOL_LINE = ('EMAILS THIS TASK ALREADY OWES: a checklist line marked "-> email to" is an email the task is waiting for, and the id on '
-                   'that line is its `slot`. When the email you write is that line\'s email, call propose_email with `slot` set to that id: '
-                   'it fills the line, never a second email beside it. Leave `slot` out only for an email the checklist does not list.')
+DRAFT_TOOL_LINE = ('EMAILS THIS TASK ALREADY OWES: a checklist line marked "-> email to" is an email only you will write - write it, or '
+                   'ask the owner what it needs. propose_email with `slot` set to that line\'s id and its words in `text` '
+                   'fills the line, never a second email beside it. Leave `slot` out only for an email the checklist does not list.')
 
 
 def draft_markers(text: str) -> tuple:

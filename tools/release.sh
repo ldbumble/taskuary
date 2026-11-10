@@ -199,6 +199,9 @@ EOF
 say "write what's new in $V"
 python tools/whatsnew.py "$V" || die "whatsnew failed"
 
+# PAGES WRITTEN FROM CODE ARE WRITTEN HERE, not policed on every push (the owner, 2026-11-10: a stale docs page failed a 30-minute run -
+# "that's stupid. who cares about that"): a release regenerates them, so what ships is right; between releases a page may lag its source
+TASKUARY_HOME="$(mktemp -d)" python -m taskuary.toolcatalog >/dev/null || die "the tools page was not written"
 say "build the UI, the demo and the docs"
 (cd website && "${N[@]}" npm run build >/dev/null && "${N[@]}" npm run build:demo >/dev/null && "${N[@]}" npm run build:docs >/dev/null) || die "a build failed"
 
@@ -210,7 +213,7 @@ if [ "${SKIP_GATES:-}" != 1 ]; then
   # (`|| true`: grep finds nothing in the good case and exits 1, which set -e + pipefail would take for a failure)
   U=$(cd website && { npm exec --yes --package=node@22 --package=eslint@10.10.0 -- eslint -c eslint.undef.mjs -f json src 2>/dev/null | grep -o '"ruleId":"no-undef"' || true; } | wc -l)
   [ "$U" = 0 ] || die "$U undefined names (eslint no-undef)"
-  TASKUARY_HOME="$(mktemp -d)" python -m pytest -q -p no:cacheprovider tests/test_docs_manifest.py tests/test_promptmap_and_catalog.py \
+  TASKUARY_HOME="$(mktemp -d)" TASKUARY_RELEASE_GATE=1 python -m pytest -q -p no:cacheprovider tests/test_docs_manifest.py tests/test_promptmap_and_catalog.py \
     tests/test_stand_ins_stay_out_of_code.py tests/test_timewords.py tests/test_task_tools.py > /tmp/release-py.log 2>&1 || { grep -E "^FAILED" /tmp/release-py.log; die "version/docs pytest gates failed"; }
 fi
 

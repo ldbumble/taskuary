@@ -40,24 +40,17 @@ test("opening a general task reads state without starting an agent", () => {
   assert.doesNotMatch(mount.slice(0, before), /assistant\/session/);
 });
 
-test("every live agent ends the same way, and never without being written up", () => {
+test("no live agent offers a Stop and save beside its chat - the x on its running turn is the one stop", () => {
   const tasks = taskSource();
   const start = tasks.indexOf("{term?.alive && !inRow && (", tasks.indexOf("Agent running"));
   const controls = tasks.slice(start, tasks.indexOf("{report &&", start));
   assert.ok(start >= 0);
-  // Three controls all ended the session and differed only in what they wrote down - a result, a
-  // handover note, or nothing - which is unreadable as three labels (the owner, 2026-09-16: "save
-  // result vs end session vs stop session???"). One ending now, and it writes up either way.
-  assert.match(controls, />\{labelOfRow\("save-end"\)\}<\/Button>/);
-  // and NO way to end one without that write-up (the owner: "meaning no stop without saving")
+  // the owner, 2026-11-10: "no need for stop and save button" - nor any other ending beside the chat
+  assert.doesNotMatch(controls, /save-end|wrapUp/);
   assert.doesNotMatch(controls, />Stop session<\/Button>/);
   assert.doesNotMatch(controls, /handover<\/Button>/);
-  // the parity this has always guarded: the ending is not gated on a coding session, so a general
-  // agent ends exactly as a coding one does
-  assert.doesNotMatch(controls, /liveCodingSession && <Button[^>]*>\{labelOfRow\("save-end"\)/);
-  // ...and the action row (layout B) registers the same ending for the canvas, gated on the live session alone
-  assert.match(tasks, /const stopSave = \{ id: "save-end", group: "agent", lead: !pendingReview, fill: [^,]+, label: labelOfRow\("save-end"\)/);
-  assert.match(tasks, /\.\.\.\(liveSession \? \[[\s\S]{0,400}\.\.\.\(!pendingReview && !chatPane \? \[stopSave\] : \[\]\),/);
+  // ...nor the action row, on any kind of agent
+  assert.doesNotMatch(tasks, /id: "save-end"|stopSave/);
 });
 
 test("task references use readable sans-serif digits", () => {

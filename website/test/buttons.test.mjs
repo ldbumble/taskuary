@@ -44,12 +44,12 @@ test("a removed verb is never drawn: an old word lands on the verb it became, Pr
   for (const r of Object.keys(REMOVED)) assert.ok(!(r in VERBS), r);
 });
 
-// THE ADVISOR FILLS THE REAL BUTTON: its verb (advisor.py) is not the task page's id - close/done, defer/remind, stop_agent/save-end -
+// THE ADVISOR FILLS THE REAL BUTTON: its verb (advisor.py) is not the task page's id - close/done, defer/remind -
 // and matching only ids drew a second button beside the real one. buttons.json's `row` lists are the map.
 test("the Advisor's verb finds the task page's own button for the same act, by buttons.json's row ids", () => {
-  const list = [v("reply", "decide", { tone: "p" }), v("redraft", "decide"), v("continue", "agent"), v("save-end", "agent"), v("start-agent", "agent"),
+  const list = [v("reply", "decide", { tone: "p" }), v("redraft", "decide"), v("continue", "agent"), v("start-agent", "agent"),
     v("done", "more"), v("remind", "more"), v("close-note", "more"), v("nat", "more"), v("hand", "more"), v("reshape", "more"), v("next", "next")];
-  for (const [verb, id] of [["close", "done"], ["defer", "remind"], ["stop_agent", "save-end"], ["regular_agent", "start-agent"], ["redraft", "redraft"],
+  for (const [verb, id] of [["close", "done"], ["defer", "remind"], ["regular_agent", "start-agent"], ["redraft", "redraft"],
     ["reply", "reply"], ["continue", "continue"], ["close_note", "close-note"], ["remove", "nat"], ["forward", "hand"], ["split", "reshape"]]) {
     const pick = { verb, label: label(verb) };
     assert.equal(advisedIn(list, pick)?.id, id, `${verb} -> ${id}`);

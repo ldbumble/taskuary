@@ -25,11 +25,12 @@ test("the desk: nothing lit is recorded as nothing lit, with every live button -
   assert.deepEqual(got, { pressed: "close", lit: "", live: ["close", "next", "approve", "redraft"], greyed: ["remove"] });   // a greyed button is no choice - but kept as greyed (A4)
 });
 
-test("the desk: what the row filled is what was lit - the Advisor's pick, Next under a 'nothing to do' line, a running agent's Stop", () => {
+test("the desk: what the row filled is what was lit - the Advisor's pick, Next under a 'nothing to do' line", () => {
   const snap = { ref: "", list: [v("continue", "agent"), v("done", "more"), v("next", "next")] };
   assert.equal(deskPress(snap, { verb: "continue", label: "Continue" }, "done").lit, "continue");
   assert.equal(deskPress(snap, { verb: "next" }, "next").lit, "next");
-  assert.equal(deskPress({ ref: "", list: [v("save-end", "agent", { fill: true }), v("next", "next")] }, null, "next").lit, "stop_agent");
+  // ...and nothing a row fills by itself: a running agent's Stop and save did, and is gone (the owner, 2026-11-10)
+  assert.equal(deskPress({ ref: "", list: [v("diff", "agent", { fill: true }), v("next", "next")] }, null, "next").lit, "");
 });
 
 test("the Tasks tab: a button is known by its one name, and the filled one is what was lit", () => {

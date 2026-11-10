@@ -17,8 +17,7 @@
 //             a typed ref, a link in a reply and the walk's end chip - each, and each reloaded
 //
 // The rules, checked at every step:
-//   DARK      the bar is dark only when the Advisor spoke, and then on one button (the owner, 2026-10-17: "keep it ai") - save a running
-//             agent's own Stop and save, which the row darkens itself (the owner, 2026-10-20)
+//   DARK      the bar is dark only when the Advisor spoke, and then on one button (the owner, 2026-10-17: "keep it ai")
 //   SEEN      the card on the table shows more than its header
 //   FIX       an error on screen has a way out on the row - a verb that is not Next
 //   RECEIPT   an item that leaves the rail is named in the chat - its card, folded with the badge of what was pressed
@@ -61,10 +60,8 @@
 //             the Advisor for the person, or drew the old row panel ("CLEAR FROM TIMELINE", "Talk it through", "undefined in chat")
 //   HEAD      the task view's header takes more than one row - at 1366 on every road a task opens by, and at 390 (2026-10-21)
 //   PHONE     at 390px the page scrolls sideways (a tooltip ran 200px off it), or a word stands a letter a line (the FYI subjects)
-//   STOPSAVE  Stop and save on a live session (a plain shell, a slow brain - stopsave) drew no pending write-up line within 500 ms, or the
-//             draft never took its place in Close out (the owner, 2026-10-21: "it looks frozen")
 //
-//   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--throttle 4] [--only walk,sweep,faults,cards,links,search,table,based,stopsave]
+//   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--throttle 4] [--only walk,sweep,faults,cards,links,search,table,based]
 //
 // It builds the page from THIS checkout's source into a scratch folder (--no-build: the committed bundle) and starts its own servers
 // on throwaway homes (never the owner's 7787).
@@ -81,10 +78,10 @@ import { LEVEL_ORDER as SECTION_KEYS } from "./src/lanes.js";
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 // no --port: every server takes a port the system says is free - two walks on one box (or a walk beside the browser suite) collided
-// on the fixed 7799..7802 and one of them "never came up" (2026-10-18). --port N pins N, N+1, ... N+5 (stopsave), as before.
+// on the fixed 7799..7802 and one of them "never came up" (2026-10-18). --port N pins N, N+1, ... as before.
 const throttle = Number(arg("--throttle", 1));
 const fixed = process.argv.includes("--port"), port = Number(arg("--port", 7799)), keep = process.argv.includes("--keep"), build = !process.argv.includes("--no-build");
-const only = new Set(String(arg("--only", "walk,sweep,faults,cards,links,search,table,based,stopsave")).split(","));
+const only = new Set(String(arg("--only", "walk,sweep,faults,cards,links,search,table,based")).split(","));
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -109,7 +106,7 @@ const WALK_SKIP = {
   "block_sender": "a rule in Settings: the card's third answer, now a page of its own, not a chip under Not ours",
   "not_ours_kind": "No more ideas like this: the chip under an idea's Not ours receipt (proposalCard.followUps)",
   "coding_agent": "an answer inside Send to agent's question; the faults pass starts one through it",
-  "stop_agent": "Stop and save ends a live session - the demo's agents are recordings with no session to save",
+  "stop_agent": "no button on the desk (the owner, 2026-11-10: \"no need for stop and save button\") - the x on a running turn stops it",
   "answer_agent": "no button on any row (the owner, 2026-10-20: \"we don't need that button\") - an agent's question is answered in its own pane",
   "continue": "Continue resumes a stopped agent's session - none in the demo world has one",
   "make_report": "offered only on a workflow whose steps all read - every demo workflow acts, and describing a new one asks the AI, which neither world has",
@@ -204,7 +201,7 @@ async function serve(n, opts = {}) {
     catch (e) { if (fixed || tries >= 1) throw e; }
   }
 }
-async function serveOn(p, { faults = false, linking = false, plant = false, stopsave = false } = {}) {
+async function serveOn(p, { faults = false, linking = false, plant = false } = {}) {
   const home = mkdtempSync(join(tmpdir(), "tq-deadend-"));
   const launchPy = `
 import sys, pathlib
@@ -253,46 +250,13 @@ if ${plant ? "True" : "False"}:
         funnel.invalidate()
         st.set_setting('deadend_planted_mid', str(m['MessageId']), 'walk')
     threading.Thread(target=_plant, daemon=True).start()
-if ${stopsave ? "True" : "False"}:
-    # STOP AND SAVE'S WORLD: one task a colleague wrote in about, a brain that takes its time (the write-up must still be running
-    # when Close out's pending block is checked), and a plain shell as its session - opened by the pass, never a coding CLI
-    import json, time
-    from taskuary import llm, terminal, firstrun
-    def _brain(system, user, **kw):
-        time.sleep(1.5)
-        if 'determination' in str(system): return json.dumps({'determination': 'Posted the charge.', 'actions': 'Created bill 1043',
-                                                              'summary': 'Matched the charge and posted the bill.', 'outcome': 'did_work'})
-        if 'playbook' in str(system).lower() or 'entries' in str(system): return json.dumps({'entries': [], 'playbook': None})
-        return 'Hi Gail,\\n\\nThe hardware store charge is posted as bill 1043.\\n\\nAlex'
-    llm.build_llm = lambda *a, **k: _brain
-    _transcript_for = terminal.transcript_for
-    def _transcript(store, tid):
-        text, agent, sid = _transcript_for(store, tid)
-        return (text if text.strip() else 'matched the hardware store charge to vendor 87 and posted bill 1043'), agent, sid
-    terminal.transcript_for = _transcript
-    st = server.store; st.set_setting(firstrun.DISMISSED, '1', 'walk')
-    _tid = st.create_task({'Title': ${JSON.stringify(STOPSAVE_TITLE)}, 'Kind': 'coding', 'Status': 'open'}, 'owner')
-    st.add_message({'TaskId': _tid, 'ExternalId': 'stopsave-1', 'Channel': 'email', 'Subject': 'The hardware store charge',
-                    'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'BodyText': 'Could you post the hardware store charge?',
-                    'SentAt': '2026-10-21 09:00:00'})
-    # ...and one whose result cannot be saved: the write-up fails, and Close out must say so with its ways on
-    from taskuary import session_artifacts
-    _coding = session_artifacts.coding
-    def _save(store, tid, *a, **k):
-        if (store.get_task(tid) or {}).get('Title') == ${JSON.stringify(STOPSAVE_FAILS)}: raise OSError('the disk is full')
-        return _coding(store, tid, *a, **k)
-    session_artifacts.coding = _save
-    _bad = st.create_task({'Title': ${JSON.stringify(STOPSAVE_FAILS)}, 'Kind': 'coding', 'Status': 'open'}, 'owner')
-    st.add_message({'TaskId': _bad, 'ExternalId': 'stopsave-2', 'Channel': 'email', 'Subject': 'The fuel card statement',
-                    'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'BodyText': 'And the fuel card statement?',
-                    'SentAt': '2026-10-21 09:05:00'})
-sys.argv =['taskuary'${faults || stopsave ? "" : ", '--demo'"}, '--no-browser', '--port', '${p}']; cli.main()`;
+sys.argv =['taskuary'${faults ? "" : ", '--demo'"}, '--no-browser', '--port', '${p}']; cli.main()`;
   // the demo reads no typed words: what the walk types is answered from a recording it writes, by the exact words (demo.ANSWERS_ENV)
   const answers = join(home, "demo_answers.json");
   const env = { ...process.env, TASKUARY_HOME: home, TASKUARY_ALLOW_TEST_HOME: "1", TASKUARY_DEMO_ANSWERS: answers,
-                ...(faults ? { TASKUARY_FAULTS: "1" } : stopsave ? {} : { TASKUARY_DEMO: "1" }) };
+                ...(faults ? { TASKUARY_FAULTS: "1" } : { TASKUARY_DEMO: "1" }) };
   if (!faults) delete env.TASKUARY_FAULTS;
-  if (faults || stopsave) delete env.TASKUARY_DEMO;
+  if (faults) delete env.TASKUARY_DEMO;
   const srv = spawn("python", ["-c", launchPy], { cwd: root, env, stdio: ["ignore", "ignore", "pipe"] });
   let errTail = ""; srv.stderr.on("data", (d) => { errTail = (errTail + d).slice(-6000); });
   const base = `http://127.0.0.1:${p}`;
@@ -311,7 +275,7 @@ sys.argv =['taskuary'${faults || stopsave ? "" : ", '--demo'"}, '--no-browser', 
   }
   const H = { "X-Taskuary-Token": token, "Content-Type": "application/json" };
   const api = async (method, path, body) => { const r = await fetch(`${base}${path}`, { method, headers: H, body: body ? JSON.stringify(body) : undefined }); return r.json().catch(() => ({})); };
-  if (faults || stopsave) await api("POST", "/api/setup/dismiss", { dismissed: true });
+  if (faults) await api("POST", "/api/setup/dismiss", { dismissed: true });
   // ...and where the server's own last traceback stands, for a CALLS 500 to say where it broke (CI keeps no server log)
   const where = () => errTail.split(/\r?\n/).filter((l) => /^\s*File "|Error\b|Exception\b/.test(l)).slice(-5).map((l) => l.trim()).join(" | ");
   const record = (said) => writeFileSync(answers, JSON.stringify(said));
@@ -418,7 +382,7 @@ const look = async (page) => { const s = await readPage(page); for (const w of s
 const readPage = (page) => page.evaluate(() => {
   const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const row = document.querySelector("[data-tq-row]"), chat = document.querySelector(".tq-chat-body");
-  const verbs = row ? [...row.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), id: b.getAttribute("data-tq-verb") || "", dark: b.classList.contains("p"), own: b.hasAttribute("data-tq-own"), next: b.hasAttribute("data-tq-next") || b.hasAttribute("data-tq-walk-back"), off: b.disabled })) : [];
+  const verbs = row ? [...row.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), id: b.getAttribute("data-tq-verb") || "", dark: b.classList.contains("p"), next: b.hasAttribute("data-tq-next") || b.hasAttribute("data-tq-walk-back"), off: b.disabled })) : [];
   // ...and the moves off the bar, by their ids (MOVES less the row: the title bar, the panes' spines and strips - the owner, 2026-10-29)
   const moves = [...document.querySelectorAll(["[data-tq-spine-moves]", "[data-tq-pane-moves]", "[data-tq-head-moves]", "[data-tq-pane-strip]"].map((m) => `${m} button[data-tq-verb]`).join(", "))]
     .filter(vis).map((b) => ({ word: b.innerText.trim(), id: b.getAttribute("data-tq-verb"), off: b.disabled }));
@@ -478,10 +442,8 @@ const readPage = (page) => page.evaluate(() => {
 const sig = (s) => JSON.stringify([s.verbs.map((v) => v.id + v.word + v.off), s.cardBtns.map((b) => b.word + b.off), s.rail.map((r) => r.key), s.nmsg, s.last,
   s.errs, s.pops, s.url, s.focus, s.ref, s.card?.text || 0, s.folded]);
 
-const darkOwn = (v) => !!v?.own && v.id === "save-end";
 const judge = (s, at) => {
-  // ...but for ONE button the row darkens itself (the owner, 2026-10-20): a running agent's own Stop and save, the Advisor quiet over it
-  const dark = s.verbs.filter((v) => v.dark && !darkOwn(v));
+  const dark = s.verbs.filter((v) => v.dark);
   if (s.card || s.ref) {
     if (!s.decided && dark.length) note("DARK", at, `"${dark.map((v) => v.word).join('", "')}" dark with no Advisor decision over it`);
     if (s.advice && dark.length > 1) note("DARK", at, `the Advisor spoke and ${dark.length} buttons are dark - ${JSON.stringify(s.verbs.map((v) => v.word))} / "${s.adv.slice(0, 80)}"`);
@@ -1487,91 +1449,8 @@ async function based() {
   await page.close(); srv.stop();
 }
 
-// STOPSAVE: Stop and save on a live session shows the write-up under way AT THE PRESS - the server job's own stage, one line in the Agent
-// pane where Stop was pressed (832bb274: one Stop, one spinner) - and the draft then stands in Close out, no reload (the owner, 2026-10-21:
-// "it looks frozen"); only a failed write-up, with its Try again, stands in Close out. A world of
-// its own: a plain shell as the task's session (never a real coding CLI) and a brain that takes its time, so the job is still writing
-// when the block must already be up.
-const PENDING_BY = 500, STOPSAVE_TITLE = "Post the hardware store charge", STOPSAVE_FAILS = "Post the fuel card statement";
-async function stopsave() {
-  const srv = await serve(5, { stopsave: true });
-  let tid = "";
-  for (let i = 0; i < 40 && !tid; i++) {
-    tid = ((await srv.api("GET", "/api/tasks")).data || []).find((t) => t.Title === STOPSAVE_TITLE)?.TaskId || "";
-    if (!tid) await wait(500);
-  }
-  if (!tid) { note("STOPSAVE", "stopsave", "the task to stop and save was never seeded"); srv.stop(); return; }
-  const term = await srv.api("POST", "/api/terminals", { task_id: Number(tid) });
-  if (!term?.sid) { note("STOPSAVE", "stopsave", `no shell session opened on the task: ${JSON.stringify(term).slice(0, 160)}`); srv.stop(); return; }
-  const page = await pageOn(srv, "stopsave");
-  await page.goto(`${srv.base}/#task=${tid}`, { waitUntil: "load" });
-  let btn = null;
-  for (let t = 0; t < 20000 && !btn; t += 500) { btn = (await rowHandle(page, "stop_agent")).asElement(); if (!btn) await wait(500); }
-  if (!btn) { note("STOPSAVE", page.step, "the live session's task page offers no Stop and save"); await page.close(); srv.stop(); return; }
-  // the press, and the clock from it: the pending block in Close out, on screen - then the draft standing where it stood
-  await page.evaluate(() => { window.__tqPress = 0; window.__tqPending = 0; window.__tqDraft = 0; });
-  await page.evaluate(() => {
-    const vis = (e) => { const r = e?.getBoundingClientRect(); return !!r && r.width > 0 && r.height > 0 && r.top < innerHeight && r.bottom > 0; };
-    const tick = () => {
-      const now = performance.now(), block = [...document.querySelectorAll("[data-tq-writeup=pending]")].find(vis);
-      if (!window.__tqPending && block) window.__tqPending = now;
-      const card = document.querySelector("[data-tq-closeout]");
-      if (window.__tqPending && !window.__tqDraft && card && !document.querySelector("[data-tq-writeup=pending]")
-        && /Hi Gail/.test(card.innerText + [...card.querySelectorAll("textarea")].map((t) => t.value).join(" "))) window.__tqDraft = now;
-      if (!window.__tqDraft) requestAnimationFrame(tick);
-    };
-    document.addEventListener("click", () => { if (!window.__tqPress) { window.__tqPress = performance.now(); requestAnimationFrame(tick); } }, { capture: true, once: true });
-  });
-  const href = await page.evaluate(() => location.href);
-  await btn.click(); mark("stop_agent", page.step);
-  let r = {};
-  for (let t = 0; t < 40000; t += 250) { r = await page.evaluate(() => ({ press: window.__tqPress, pending: window.__tqPending, draft: window.__tqDraft,
-    stage: document.querySelector("[data-tq-writeup]")?.getAttribute("data-tq-writeup-stage") || "", failed: !!document.querySelector('[data-tq-writeup="failed"]') }));
-    if (r.draft || r.failed) break; await wait(250); }
-  const ms = (a) => Math.round(a - r.press);
-  if (!r.pending) note("STOPSAVE", page.step, "Stop and save drew no pending write-up line");
-  else if (ms(r.pending) > PENDING_BY) note("STOPSAVE", page.step, `the pending write-up line took ${ms(r.pending)} ms to show - over ${PENDING_BY} ms`);
-  if (r.failed) note("STOPSAVE", page.step, "the write-up failed in a world where it cannot");
-  else if (!r.draft) {
-    const d = await srv.api("GET", `/api/tasks/${tid}`);
-    note("STOPSAVE", page.step, `the draft never took the pending line's place in Close out (the write-up: ${JSON.stringify(d.writeup)}, ${(d.reviews || []).length} review(s), `
-      + `last note "${String((d.comments || []).slice(-1)[0]?.Body || "").slice(0, 120)}"; Close out reads "${
-        (await page.evaluate(() => document.querySelector("[data-tq-closeout]")?.innerText || "")).replace(/\s+/g, " ").slice(0, 300)}")`);
-  }
-  if (await page.evaluate(() => location.href) !== href) note("STOPSAVE", page.step, "the page moved while the reply was written");
-  walked.push(`stopsave: pending Close out at ${r.pending ? ms(r.pending) : "-"} ms, the draft in its place at ${r.draft ? ms(r.draft) : "-"} ms`);
-  await page.close();
-  // ...and a write-up that fails: Close out says so with its ways on - never an empty Close out - and Try again writes it up again
-  const bad = ((await srv.api("GET", "/api/tasks")).data || []).find((t) => t.Title === STOPSAVE_FAILS)?.TaskId;
-  const t2 = bad ? await srv.api("POST", "/api/terminals", { task_id: Number(bad) }) : null;
-  if (!t2?.sid) { note("STOPSAVE", "stopsave fails", "no shell session opened on the task whose write-up fails"); srv.stop(); return; }
-  const p2 = await pageOn(srv, "stopsave fails");
-  await p2.goto(`${srv.base}/#task=${bad}`, { waitUntil: "load" });
-  let b2 = null;
-  for (let t = 0; t < 20000 && !b2; t += 500) { b2 = (await rowHandle(p2, "stop_agent")).asElement(); if (!b2) await wait(500); }
-  const failedBlock = async () => { for (let t = 0; t < 20000; t += 250) { const f = await p2.$('[data-tq-closeout] [data-tq-writeup="failed"]'); if (f) return f; await wait(250); } return null; };
-  if (!b2) note("STOPSAVE", p2.step, "the live session's task page offers no Stop and save");
-  else {
-    await b2.click(); p2.expect.add(`/api/tasks/${bad}/wrap`);
-    const f = await failedBlock();
-    const ways = f ? await f.evaluate((e) => [...e.querySelectorAll("button")].map((b) => b.innerText.trim())) : [];
-    if (!f) note("STOPSAVE", p2.step, "a write-up that failed left Close out without saying so");
-    else if (!ways.includes(label("try_again"))) note("STOPSAVE", p2.step, `the failed write-up offers no ${label("try_again")} (it offers ${JSON.stringify(ways)})`);
-    else {
-      await p2.evaluate((w) => [...document.querySelectorAll('[data-tq-writeup="failed"] button')].find((b) => b.innerText.trim() === w)?.click(), label("try_again"));
-      mark("try_again", p2.step);
-      let again = false;
-      for (let t = 0; t < 3000 && !again; t += 50) { again = !!(await p2.$('[data-tq-writeup="pending"]')); if (!again) await wait(50); }
-      if (!again) note("STOPSAVE", p2.step, `${label("try_again")} on the failed write-up showed no pending block - the press did nothing on screen`);
-      else if (!(await failedBlock())) note("STOPSAVE", p2.step, `${label("try_again")} ran, failed again, and Close out did not say so`);
-      walked.push(`stopsave: a failed write-up says so in Close out, with ${ways.join(" and ")}, and ${label("try_again")} runs it again`);
-    }
-  }
-  await p2.close(); srv.stop();
-}
-
 browser = await launch();
-const phases = { walk, sweep, faults, cards, links, search: searchPass, table, based, stopsave };
+const phases = { walk, sweep, faults, cards, links, search: searchPass, table, based };
 for (const [name, run] of Object.entries(phases)) {
   if (!only.has(name)) continue;
   try { await run(); } catch (e) { note("CRASH", name, `the ${name} pass did not finish: ${e.message.split("\n")[0]}`); }

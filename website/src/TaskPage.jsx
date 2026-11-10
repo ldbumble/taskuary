@@ -319,7 +319,7 @@ export const tabW = (w) => (w > 0 ? Math.round(Math.min(TAB_W, Math.max(TAB_MIN,
 // ...a press on the reply's, the close's or the agent's own move opens the chat it is in (a draft's own are "<review>:<verb>"); Came from's act
 // where they stand
 const CHAT_VERBS = new Set(["reply", "done", "close-note", "hand", "accept_invite", "decline_invite", "propose_time", "find_time",
-  "continue", "run-another", "send-general", "start-agent", "save-end", "diff", "fix", "strong-again"]);
+  "continue", "run-another", "send-general", "start-agent", "diff", "fix", "strong-again"]);
 const MINI_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: MINI_W,
   border: 0, bgcolor: "var(--tq-panel, #fff)", color: INK, display: "flex", flexDirection: "column", alignItems: "center", gap: 1.25, py: 1.5, px: 0, boxSizing: "border-box",
   "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,
@@ -1057,7 +1057,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     } catch (e) {
       if (stale(id)) return;
       setWritingUpAt(null); findTerm(id);      // nothing was written up: the session comes back as it was
-      setErr(e?.response?.data?.detail || "Could not save the agent's work - press Stop and save again.");
+      setErr(e?.response?.data?.detail || "Could not save the agent's work - try again.");
     } finally { if (wrapFlight.current === id) wrapFlight.current = null; }
   };
   // Pausing is not finishing: no report, no reply draft, the task stays open. What it worked
@@ -2504,8 +2504,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     ...(heldRepo || (!isGeneral && canCode) ? [{ id: "repo", group: heldRepo ? "decide" : "more", tone: heldRepo ? "p" : undefined, label: btn("pick_repo", repoOf(t) ? "set" : null), run: pickRepo,
       title: heldRepo ? heldWhy : btnHint("pick_repo") }] : []),
   ];
-  // ...and DARK while the agent is running (the owner, 2026-10-20): not over a turn that finished or a question - those are waiting
-  const stopSave = { id: "save-end", group: "agent", lead: !pendingReview, fill: liveSession && agentState === AGENT.working && !pendingReview, label: labelOfRow("save-end"), disabled: !!wrapping, run: wrapUp, title: hintOfRow("save-end") };
   const rowVerbs = !t ? [] : !notDone || reopening === selected
     ? [{ id: "reopen", group: "decide", tone: "s", label: reopening === selected ? "Reopening…" : labelOfRow("reopen"), run: reopen,
       disabled: reopening === selected, why: "it is reopening", title: hintOfRow("reopen") }]
@@ -2528,12 +2526,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ...(noteable && !liveSession ? [{ id: "close-note", group: "more", label: labelOfRow("close-note"), run: (e, a) => setNoteAt(steady(a || e?.currentTarget)),
         title: hintOfRow("close-note") }] : []),
       ...(liveSession ? [
-        // STOP AND SAVE LEADS A LIVE SESSION'S ROW (owner-approved, 2026-10-20) - working, or idle after its turn, or asking: it stands
-        // where Answer it stood. A reply waiting on the owner's approval leads instead (its Send, under the draft), and this one stays
-        // in the agent's group beside Review changes
-        ...(!pendingReview && !chatPane ? [stopSave] : []),
+        // NO STOP AND SAVE (the owner, 2026-11-10: "no need for stop and save button"): the x on the running turn is the one stop, and
+        // typing carries the work on
         ...(liveCodingSession ? [{ id: "diff", group: "agent", label: labelOfRow("diff"), run: () => setDiffOpen(true), title: hintOfRow("diff") }] : []),
-        ...(pendingReview && !chatPane ? [stopSave] : []),
         ...(notDone && !chatPane ? [runAnother] : []),
       ] : continueHere ? [
         // ...not a second Connect an AI on the canvas (the owner, 2026-10-26: "why would we need connect an ai? if you don't get through ai
@@ -3371,16 +3366,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {liveCodingSession && <Button size="small" variant="outlined" sx={liveCtl} startIcon={<DifferenceIcon sx={{ fontSize: 13 }} />}
                         title="A viewer of the agent's diff. Nothing is approved or committed here."
                         onClick={() => setDiffOpen(true)}>{labelOfRow("diff")}</Button>}
-                      {/* ONE ENDING. Three buttons all ended the session and differed only in what they
-                          wrote down - a result, a handover note, or nothing - and the labels buried the
-                          half they shared (the owner, 2026-09-16: "save result vs end session vs stop
-                          session???"). It writes the session up either way now: on a run that finished
-                          that is its result, and on one that did not it is where it got to, which is
-                          what the handover note was for.
-                          Task completion stays separate (PW-217/218): this ends the AGENT. */}
-                      <Button size="small" variant="outlined" sx={liveCtl} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 13 }} />}
-                        title="Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it."
-                        onClick={wrapUp}>{labelOfRow("save-end")}</Button>
+                      {/* NO STOP AND SAVE BESIDE THE CHAT (the owner, 2026-11-10: "no need for stop and save button"): the x on the running
+                          turn stops the agent, and typing carries the work on */}
                       {/* A STUCK AGENT (a rate limit, a token ceiling) had only the two moves above, and neither gets the work done:
                           the way on is another agent - startCodingAgent pauses this one and files its handover first */}
                       {!isGeneral && agentState === AGENT.waiting && subState(term) === "stalled" && (

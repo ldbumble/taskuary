@@ -236,7 +236,7 @@ const ROOM = 4;                                            // how many chips the
 const isDone = (v) => v.id === "done" || /:done$/.test(String(v.id));
 // THE ADVISOR'S PICK (advisor.py, {verb, label}) as the row verb it names: the same id (the task registers `reply`, `continue`), the
 // chip's own words, or the task's own id for the same act read off buttons.json's `row` lists - the Advisor's `close` is the row's
-// `done`, `defer` its `remind`, `stop_agent` its `save-end` - so it fills the REAL button and never draws a second one beside it
+// `done`, `defer` its `remind` - so it fills the REAL button and never draws a second one beside it
 // (it drew a second Reply on the strip, 2026-10-13). An old saved pick of a removed verb (`done`, `later`) lands on the live one.
 const sameAct = (v, pick) => {
   const verb = liveVerb(pick?.verb);
@@ -307,12 +307,6 @@ export function rowOf({ list, ref, end: last = false, off = "" }, pick = null) {
     const fill = (xs) => xs.map((v) => (v.id === advised.id ? primary : v));
     decide = fill(decide); agent = fill(agent); more = fill(more);
   }
-  // ...WITH ONE EXCEPTION, the owner's (2026-10-20): while an agent is RUNNING its row's Stop and save is dark with no Advisor line -
-  // the Advisor stays quiet over a working agent, and the one move there is ending it. A verb asks for that with `fill`; it is
-  // marked `own` so the dead-end walk's DARK rule can tell it from the Advisor's
-  // ...and only while the strip says NOTHING: under a line ("it says when it needs you", "Connect an AI") the line's own move is the lit
-  // one, and a dark Stop and save beside it invited stopping an agent that needed nothing (the UI audit's C2, 2026-10-21; advice.stripWord)
-  if (!advised && !pick) agent = agent.map((v) => (v.fill ? { ...v, tone: "p", own: true } : v));
   // MARK DONE IS ALWAYS ON THE BAR, beside Next - never behind More (the owner, 2026-10-06: "mark done should show next to next on every
   // single task not inside the more button"). With no decision waiting it leads the bar; dark only when it is the advice.
   const done = more.find((v) => v.id === "done");
@@ -365,7 +359,7 @@ export const TYPES = [["move", ""], ["change", "Change"]];
 export const NAV = "Nav";                 // the pill Back and Next share, labelled like the types
 const TYPE_OF = {
   reply: "reply", approve: "reply", send_close: "reply", redraft: "reply", palt: "reply", reject: "reply", email: "reply", hand: "reply", attach: "reply", "email-file": "reply", copy: "reply",
-  "start-agent": "agent", "run-another": "agent", "strong-again": "agent", continue: "agent", "send-general": "agent", diff: "agent", "save-end": "agent",
+  "start-agent": "agent", "run-another": "agent", "strong-again": "agent", continue: "agent", "send-general": "agent", diff: "agent",
   done: "close", "close-note": "close", reopen: "close",
   remind: "task", watch: "task", nat: "task", reshape: "task",
   // what the task's pills used to change (section 1's redesign, 2026-10-16): the pills read now, the row changes
@@ -489,8 +483,7 @@ export const shortParts = (m) => ({ ...m, back: m.backShort ?? m.back, next: m.n
 // chat (the owner, 2026-11-06: no Close out) - to Agent; Not a task and Remind me, about where the task came from, to Came from (2026-10-29). Folded, a pane carries them on its
 // spine, between its name and its status; open, inside it - and never on the bar. A press opens that pane and starts the step there
 // (TaskPage's "a press opens its section"). ...and THE BAR IS BACK AND NEXT ALONE (the owner, 2026-10-29): what acts on the whole task -
-// Mark done first, Change, Share, Close with a note, Attach a file - goes to the task's title bar (`head`, `change`, `share`), and a live
-// agent's Stop and save to its pane's strip (`live`).
+// Mark done first, Change, Share, Close with a note, Attach a file - goes to the task's title bar (`head`, `change`, `share`).
 // The task page's verbs say which pane is open (`laid`; none where it lays no panes - a phone, the Tasks
 // tab): carried WITH the verbs, so the row never draws a set where the item's moves and the panes they ride on disagree (row-draws-once).
 // The row draws the rest and hands the stage moves here, by pane (putSpineVerbs, useSpineVerbs)
@@ -498,7 +491,7 @@ const CHAT_STAGE = new Set(["reply", "redraft", "chase", "accept_invite", "decli
 const FROM_STAGE = new Set(["nat", "remind", "watch"]);
 // ...a verb may name its pane itself (`stage`): an FYI's Should be a task rides its Came from, where a task's Not a task does
 export const stageOf = (v) => { const k = String(v?.id || "").split(":").pop(), t = typeOf(v);
-  return v?.stage || (CHAT_STAGE.has(k) ? "agent" : FROM_STAGE.has(k) ? "from" : t === "agent" && k !== "save-end" && k !== "diff" ? "agent" : ""); };
+  return v?.stage || (CHAT_STAGE.has(k) ? "agent" : FROM_STAGE.has(k) ? "from" : t === "agent" && k !== "diff" ? "agent" : ""); };
 const NONE = [], ITEM_OWN = new Set(["mine"]);
 let spineVerbs = {}, spineSig = "";
 const spineSubs = new Set(), spineSub = (f) => { spineSubs.add(f); return () => spineSubs.delete(f); }, spineDraw = () => spineSubs.forEach((f) => f());
@@ -552,7 +545,7 @@ export function splitRow(row, on, desk = false) {
 export const TASK_GROUPS = [
   ["finish", "Finish", ["done", "reopen", "close-note", "send_close", "approve", "elsewhere"]],
   ["later", "Pass on", ["hand", "remind", "nat", "watch", "defer", "let_go", "not_ours", "not_ours_sender", "not_ours_kind", "block_sender"]],
-  ["agent", "Agent", ["run-another", "send-general", "start-agent", "continue", "strong-again", "rerun", "diff", "attach", "email-file", "save-end", "prepare",
+  ["agent", "Agent", ["run-another", "send-general", "start-agent", "continue", "strong-again", "rerun", "diff", "attach", "email-file", "prepare",
     "reply", "redraft", "palt", "reject", "chase", "email", "copy", "accept_invite", "decline_invite", "propose_time", "find_time"]],
   ["more", "More", ["share", "change"]],
 ];

@@ -568,6 +568,17 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')
         close.assert_called_once_with('only-the-session')
 
+    def test_the_x_on_a_pty_turn_stops_it_with_the_cli_s_own_key_and_keeps_the_session(self):
+        """The x on the running turn is the one stop (the owner, 2026-11-10: "we should have x button for agent to stop in middle of the
+        work"); over a pty it answered stopped=False and did nothing. Esc stops the CLI's turn; the session stays for the next line."""
+        tid = c.post('/api/tasks', json={'Title': 'stop mid-turn', 'Kind': 'coding'}).json()['taskId']
+        live = mock.Mock(sid='pty-session', alive=True)
+        with mock.patch.object(server.hub_term, 'session_for', return_value=live), mock.patch.object(server.hub_term, 'is_acp', return_value=False), \
+             mock.patch.object(server.hub_term, 'close') as close:
+            out = c.post(f'/api/tasks/{tid}/agent/cancel').json()
+        self.assertEqual(out, {'stopped': True})
+        live.write.assert_called_once_with('\x1b'); close.assert_not_called()
+
     def test_continue_does_not_silently_replace_a_removed_profile(self):
         tid = c.post('/api/tasks', json={'Title': 'continue it', 'Kind': 'coding'}).json()['taskId']
         server.store.add_transcript(tid, 'gone-session', 'work', 'removed-agent', os.getcwd())

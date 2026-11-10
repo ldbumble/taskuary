@@ -4462,7 +4462,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         # and the machinery (2026-11-02). An agent is named as the owner meets it (kinds.json `shown_`), and the way on is a button they have
         raise HTTPException(409, f'{task_kinds.SHOWN} is already working on this task - press {buttons.label("continue")} to give it more to do'
                                  + ('' if not requested or requested == task_kind else
-                                    f', or {buttons.label("stop_agent")} first to hand the task to a different agent'))
+                                    ', or stop it with the x on its turn first to hand the task to a different agent'))
     if requested and requested != task_kind:
         was_kind, was_route = operations.verdict_of_task(store, tid)
         store.update_task(tid, {'Kind': requested}, ACTOR)
@@ -11409,9 +11409,14 @@ def close_terminal(sid: str):
 @app.post('/api/tasks/{task_id}/agent/cancel')
 def cancel_task_agent(task_id: int):
     """Stop THIS TURN of a coding session over ACP (acpcoding.py): session/cancel - the conversation stays, and what is typed next carries
-    on. A pty has no such stop (its Esc is the terminal's); the session itself ends at /agent/stop."""
+    on. A pty's turn is stopped by the key its CLI stops on, Esc - the x on the turn was the one stop left there and did nothing (the owner,
+    2026-11-10: "we should have x button for agent to stop in middle of the work"); the session itself ends at /agent/stop."""
     live = hub_term.session_for(task_id)
-    return {'stopped': bool(live and hub_term.is_acp(live) and live.cancel())}
+    if not live: return {'stopped': False}
+    if hub_term.is_acp(live): return {'stopped': bool(live.cancel())}
+    if not getattr(live, 'alive', False): return {'stopped': False}
+    live.write('\x1b')
+    return {'stopped': True}
 
 @app.post('/api/tasks/{task_id}/agent/stop')
 def stop_task_agent(task_id: int):

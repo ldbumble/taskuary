@@ -1222,13 +1222,18 @@ class NonCoderWordsTests(unittest.TestCase):
         self.assertNotEqual(concierge.chips_for(MemoryStore(), fine)[0]['verb'], 'rerun')
         self.assertNotIn('make it a task', concierge.fallback(fine, False, store=MemoryStore()).lower())     # U11: read and passed
 
-    def test_an_agent_asking_is_answered_in_its_pane_and_its_row_leads_with_stop_and_save(self):
+    def test_an_agent_asking_is_answered_in_its_pane_and_the_desk_offers_no_stop_and_save(self):
         """U7 put "Answer it" first on an asking agent's card; the owner took the button away (2026-10-20: "we don't need that
-        button") - the question is answered in the agent's own pane, and the live agent's row leads with Stop and save."""
+        button") - the question is answered in the agent's own pane. Nor Stop and save on the desk (the owner, 2026-11-10: "no need for
+        stop and save button"): the x on the running turn stops it. The phone, with no turn to put an x on, keeps it first."""
         it = {'key': 'agent:7', 'kind': 'agent', 'lane': 'blocked', 'tid': 7, 'title': 'Totals', 'asking': True, 'agent': 'the assistant', 'tail': ['Which month?']}
         for item in (it, {**it, 'asking': False, 'request_kind': 'stalled'}, {**it, 'lane': 'working', 'asking': False}):
             chips = concierge.chips_for(None, item)
             self.assertNotIn('answer_agent', [c['verb'] for c in chips])
+            self.assertNotIn('stop_agent', [c['verb'] for c in chips])
+            tok = concierge.DELIVERY.set(concierge.PHONE)
+            try: chips = concierge.chips_for(None, item)
+            finally: concierge.DELIVERY.reset(tok)
             self.assertEqual((chips[0]['verb'], chips[0]['label']), ('stop_agent', 'Stop and save'))
         # ...nor brought back on the desk by the model naming it (the owner, 2026-11-10: "Never need that button"); the phone keeps it
         # as a numbered choice (remote_assistant: an empty pick asks what to tell the agent)

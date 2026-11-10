@@ -1109,6 +1109,9 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     # NO "ANSWER IT" BUTTON (owner-approved, 2026-10-20: "we don't need that button"): an agent's question is answered by typing in its
     # own pane, right above the row - and the button was even the lit one over a FINISHED agent whose reply waited on the owner's
     # approval. A typed answer still reaches it (decide, the phone).
+    # ...NOR STOP AND SAVE ON THE DESK (the owner, 2026-11-10: "no need for stop and save button"): the x on the running turn is the one
+    # stop, and typing carries the work on. The phone keeps its stop as a choice - it has no turn to put an x on
+    if routes(): verbs = [v for v in verbs if v != 'stop_agent']
     # A REPORT THAT FAILED says "run it again" - so Run it again leads, where there is a report to run (B7)
     if item.get('kind') == 'report' and item.get('bad') and item.get('source_id'): verbs = ['rerun'] + [v for v in verbs if v != 'rerun']
     first = canon_verb(first) if first else first             # an old word typed (Later, Handled) promotes the button it became
@@ -1292,8 +1295,9 @@ def row_buttons(store, it: dict, known: dict = None) -> list:
         # REPLY on a task with no message of its own answers whom it owes - a promise task's own mail (funnel.reply_to, the task
         # page's `owed`); only Reply reads it, so filing or forwarding never reaches the owner's sent mail on another task
         owed = it if it.get('mid') else it | {'mid': funnel.reply_to(store, int(it['tid']))}
+        # ...and the phone's stop, which has no x on a turn to press (the desk's is gone: the owner, 2026-11-10, "no need for stop and save button")
         out = [{'verb': v, 'label': buttons.label(v)} for v, d in buttons.VERBS.items()
-               if d.get('row') and not cannot(owed if v == 'reply' else it, v, store) and _shows(store, it, v, known) and not (v == 'regular_agent' and _agent_holds(store, it))]
+               if (d.get('row') or (v == 'stop_agent' and not routes())) and not cannot(owed if v == 'reply' else it, v, store) and _shows(store, it, v, known) and not (v == 'regular_agent' and _agent_holds(store, it))]
     else: out = [{'verb': c['verb'], 'label': c['label']} for c in chips_for(store, it) if c.get('verb') and c['verb'] != 'next']
     # ...and a report's or a dashboard's Share, which its card draws on the row while it is the item (ReportCard, DashboardCard) - a run
     # that failed has nothing to share. Seen here so the Advisor knows the row has it; no rule lights it (rulebook: report_ok, dashboard)

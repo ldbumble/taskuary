@@ -214,11 +214,12 @@ class AuditFixTests(_Rail):
     where the row's own move is right, and what it hands the owner and the chat is in plain words."""
     def test_an_agent_waiting_on_you_is_answered_in_its_pane_never_by_a_lit_answer_it(self):
         """No "Answer it" button (owner-approved, 2026-10-20): it was even the lit one over a finished agent whose reply waited on the
-        owner's approval. The Advisor is never offered it and its prompt never names it; a live agent's row leads with Stop and save."""
+        owner's approval. The Advisor is never offered it and its prompt never names it - nor Stop and save (the owner, 2026-11-10: "no need
+        for stop and save button"): the x on the running turn stops it."""
         s = MemoryStore(); t = s.create_task({'Title': 'x', 'Status': 'in_progress'}, 'owner')
         with mock.patch.object(advisor.concierge, '_agent_running', return_value=True):
             vs = advisor.offered(s, {'kind': 'agent', 'lane': 'blocked', 'tid': t, 'asking': True, 'key': f'agent:{t}'})
-        self.assertNotIn('answer_agent', [v['verb'] for v in vs]); self.assertIn('stop_agent', [v['verb'] for v in vs])
+        self.assertNotIn('answer_agent', [v['verb'] for v in vs]); self.assertNotIn('stop_agent', [v['verb'] for v in vs])
         self.assertNotIn('next', [v['verb'] for v in vs]); self.assertNotIn('Answer it', advisor.SYSTEM)
         self.assertIn('answered in its own pane', advisor.SYSTEM)
 

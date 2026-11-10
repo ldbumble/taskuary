@@ -79,7 +79,7 @@ class SamePressTwiceTests(Base):
             detail = r.json()['detail']
             self.assertIn('Agent is already working on this task', detail)
             for jargon in ('agent type', 'assistant is', 'session'): self.assertNotIn(jargon, detail)
-        self.assertIn('Stop and save', detail)                   # ...the coding press: the way to another agent is a button they have
+        self.assertIn('stop it with the x on its turn', detail)                   # ...the coding press: the way to another agent is a button they have
 
 
 if __name__ == '__main__':

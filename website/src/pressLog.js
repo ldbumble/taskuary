@@ -8,7 +8,7 @@ import { VERBS, verbOfRow } from "./buttons.js";
 export const verbOf = (id) => verbOfRow(id) || String(id || "").split(":").pop() || "";
 
 // THE DESK: what its row drew at the press, read through the same rowOf the row is drawn with - the filled verb (the Advisor's pick,
-// Next under a "nothing to do" line, a running agent's own Stop and save) and every button that could be pressed, the card's own
+// Next under a "nothing to do" line) and every button that could be pressed, the card's own
 // moves under the draft among them
 export function deskPress(snap, pick, id) {
   const r = rowOf(snap, pick);

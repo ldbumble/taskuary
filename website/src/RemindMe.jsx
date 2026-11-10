@@ -54,7 +54,7 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, act = null, 
           {away ? `Away until ${remindDay(task.RemindAt)}` : "Bring it back on…"}</Typography>
         {live && !away ? (
           <Typography sx={{ fontSize: 12, color: "var(--tq-danger, #7a2f3c)" }}>
-            An agent is still open on this task. Press Stop and save first, then put it away.</Typography>
+            An agent is still open on this task. Stop it with the x on its turn, or let it go idle, then put it away.</Typography>
         ) : <>
           {/* THE DAY THE OWNER SAID leads (the owner, 2026-10-27): "remind me Monday" lit this picker with no Monday in it */}
           {said?.until && said?.day && !away && (

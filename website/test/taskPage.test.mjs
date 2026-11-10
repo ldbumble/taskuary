@@ -83,10 +83,9 @@ test("the task header has no chips: its one pill is the status, the rail's own m
 });
 // the owner, 2026-10-19: "never get between a coder and their coding cli" - the question drawn over the terminal behind Show details is gone
 // ...and NO "Answer it" on the row (owner-approved, 2026-10-20: "we don't need that button"): the question is answered in the pane
-// right above it. Stop and save stands in its place on a LIVE session - working, idle after its turn, or asking - and leads the row,
-// unless a reply waits on the owner's approval: then the reply's Send leads and Stop and save waits in the agent's group, after
-// Review changes. An ENDED session has neither (G7).
-test("an agent waiting on you keeps its terminal in view; its row has no Answer it, and Stop and save leads a live session", () => {
+// right above it - and no Stop and save either (the owner, 2026-11-10: "no need for stop and save button"): the x on the running turn
+// is the one stop, and typing carries the work on.
+test("an agent waiting on you keeps its terminal in view; its row has no Answer it and no Stop and save", () => {
   const page = src("TaskPage.jsx");
   assert.doesNotMatch(page, /id: "answer_agent"|answerAgent|askKey/);
   // ...nor under another name: a run left asking is Continued, its box showing the question, and nothing over it is filled (the owner,
@@ -94,43 +93,34 @@ test("an agent waiting on you keeps its terminal in view; its row has no Answer 
   for (const f of ["TaskPage.jsx", "ContinueBox.jsx", "AssistantView.jsx"]) assert.doesNotMatch(src(f), /"answer_agent"/, f);
   assert.match(page, /\{ id: "continue", group: "agent", lead: !pendingReview && !runFix && !leftAsking,/);
   assert.doesNotMatch(page, /data-tq-agent-asks|seenAsk|>Show details</);
-  assert.match(page, /const stopSave = \{ id: "save-end", group: "agent", lead: !pendingReview,/);
-  assert.match(page, /\.\.\.\(liveSession \? \[\s+(\/\/[^\n]*\n\s+)*\.\.\.\(!pendingReview && !chatPane \? \[stopSave\] : \[\]\),\s+\.\.\.\(liveCodingSession \? \[\{ id: "diff"[^\n]*\n\s+\.\.\.\(pendingReview && !chatPane \? \[stopSave\] : \[\]\),/,
-    "first on the row while nothing waits on approval; after Review changes when a reply does");
+  assert.doesNotMatch(page, /"save-end"|stopSave/);
 });
 
-// WHILE AN AGENT IS RUNNING, Stop and save is DARK with no Advisor line (the owner, 2026-10-20) - and that alone is excused by the
-// dead-end walk's DARK rule
-test("a running agent's Stop and save is dark on its own; the Advisor's pick outranks it, and nothing else darkens itself", async () => {
+// NOTHING DARKENS ITSELF: a running agent's Stop and save did (the owner, 2026-10-20), the one exception the dead-end walk excused - it is
+// gone (the owner, 2026-11-10: "no need for stop and save button"), and so is the exception
+test("no verb on the row darkens itself; only the Advisor's pick is dark", async () => {
   const { rowOf } = await import("../src/actionRow.js");
   const v = (id, group, extra = {}) => ({ id, group, label: id, tone: "s", promote: true, ...extra });
-  const list = [v("save-end", "agent", { lead: true, fill: true }), v("diff", "agent"), v("done", "more"), v("next", "next")];
+  const list = [v("continue", "agent", { lead: true, fill: true }), v("diff", "agent"), v("done", "more"), v("next", "next")];
   const dark = (r) => [...r.decide, ...r.agent, ...r.more].filter((x) => x.tone === "p");
-  assert.deepEqual(dark(rowOf({ ref: "", list })).map((x) => [x.id, !!x.own]), [["save-end", true]], "running: Stop and save, marked the row's own");
-  const advised = rowOf({ ref: "", list }, { verb: "review_changes", label: "diff" });
-  assert.ok(!dark(advised).some((x) => x.own), "the Advisor spoke: its pick is the one dark button");
-  assert.deepEqual(dark(rowOf({ ref: "", list: list.map((x) => ({ ...x, fill: false })) })), [], "a finished turn or a question: nothing dark");
-  const page = src("TaskPage.jsx");
-  assert.match(page, /const stopSave = \{ id: "save-end", group: "agent", lead: !pendingReview, fill: liveSession && agentState === AGENT\.working && !pendingReview,/);
-  assert.match(src("ActionRow.jsx"), /data-tq-verb=\{v\.id\} data-tq-for=\{v\.at\} data-tq-own=\{v\.own \? "" : undefined\}/);
-  const walk = readFileSync(new URL("../deadend_check.mjs", import.meta.url), "utf8");
-  assert.match(walk, /const darkOwn = \(v\) => !!v\?\.own && v\.id === "save-end";/, "the walk excuses that one button and no other");
-  assert.match(walk, /const dark = s\.verbs\.filter\(\(v\) => v\.dark && !darkOwn\(v\)\);/);
-  assert.match(walk, /own: b\.hasAttribute\("data-tq-own"\)/);
+  assert.deepEqual(dark(rowOf({ ref: "", list })), [], "nothing said: nothing dark");
+  assert.deepEqual(dark(rowOf({ ref: "", list }, { verb: "review_changes", label: "diff" })).map((x) => x.id), ["diff"], "the Advisor's pick");
+  assert.doesNotMatch(src("ActionRow.jsx"), /data-tq-own/);
+  assert.doesNotMatch(readFileSync(new URL("../deadend_check.mjs", import.meta.url), "utf8"), /darkOwn|data-tq-own/);
 });
 
 test("the row puts a leading agent verb first and Mark done beside it (actionRow.rowOf)", async () => {
   const { rowOf, clustersOf } = await import("../src/actionRow.js");
   const v = (id, group, extra = {}) => ({ id, group, label: id, tone: "s", promote: true, ...extra });
-  // a live session, nothing waiting on approval: Stop and save leads, Mark done does not take the lead from it
-  const live = rowOf({ ref: "", list: [v("save-end", "agent", { lead: true }), v("diff", "agent"), v("done", "more"), v("next", "next")] });
-  assert.deepEqual(live.agent.map((x) => x.id), ["save-end", "diff", "done"]);
+  // nothing waiting on approval: the agent's lead (Continue) leads, Mark done does not take the lead from it
+  const live = rowOf({ ref: "", list: [v("continue", "agent", { lead: true }), v("diff", "agent"), v("done", "more"), v("next", "next")] });
+  assert.deepEqual(live.agent.map((x) => x.id), ["continue", "diff", "done"]);
   assert.equal(live.decide.length, 0);
-  assert.deepEqual(clustersOf(live).find((c) => c.type === "move").shown.map((x) => x.id), ["done", "save-end", "diff"], "Mark done, then the agent's lead");
-  // ...a reply waiting: its Send leads (a decision), and Stop and save waits after Review changes
-  const waiting = rowOf({ ref: "", list: [v("r1:approve", "decide", { tone: "p" }), v("diff", "agent"), v("save-end", "agent"), v("done", "more", { promote: false }), v("next", "next")] });
+  assert.deepEqual(clustersOf(live).find((c) => c.type === "move").shown.map((x) => x.id), ["done", "continue", "diff"], "Mark done, then the agent's lead");
+  // ...a reply waiting: its Send leads (a decision), and the agent's moves wait after it
+  const waiting = rowOf({ ref: "", list: [v("r1:approve", "decide", { tone: "p" }), v("diff", "agent"), v("run-another", "agent"), v("done", "more", { promote: false }), v("next", "next")] });
   assert.equal(waiting.decide[0].id, "r1:approve");
-  assert.deepEqual(waiting.agent.slice(0, 2).map((x) => x.id), ["diff", "save-end"]);
+  assert.deepEqual(waiting.agent.slice(0, 2).map((x) => x.id), ["diff", "run-another"]);
 });
 
 // THE TASK'S OWN RECOMMENDED MOVE (the owner, 2026-11-09: "the agents while running should recommend actions, no assistant"): U12 brought

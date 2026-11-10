@@ -129,7 +129,8 @@ class AgentOpen(ValueError):
     """Remind me on a task whose agent session is still open: the doors answer 409 with this."""
 
 
-OPEN_SAYS = 'An agent is still open on this task - press Stop and save first, then put it away.'
+# ...said by the one stop there is (the owner, 2026-11-10: "no need for stop and save button"): the x on its running turn; an idle one closes by itself
+OPEN_SAYS = 'An agent is still open on this task - stop it with the x on its turn, or let it go idle, then put it away.'
 
 
 def agent_open(tid: int) -> bool:

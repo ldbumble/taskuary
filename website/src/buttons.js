@@ -11,7 +11,7 @@ export const liveVerb = (verb) => (verb && verb in REMOVED ? REMOVED[verb] : ver
 const of = (verb) => VERBS[liveVerb(verb)] || null;
 export const label = (verb, state) => { const v = of(verb); return !v ? "" : (state && v.states?.[state]) || v.label; };
 export const hint = (verb, state) => { const v = of(verb); return !v ? "" : (state && v.state_hints?.[state]) || v.hint || ""; };
-// the task page's row registers its own ids (`done`, `remind`, `save-end`); each verb lists the ids that are the same act
+// the task page's row registers its own ids (`done`, `remind`); each verb lists the ids that are the same act
 const ROW = Object.fromEntries(Object.entries(VERBS).flatMap(([k, v]) => (v.row || []).map((r) => [r, k])));
 export const verbOfRow = (rowId) => ROW[String(rowId || "").split(":").pop()] || null;
 export const labelOfRow = (rowId, state) => label(verbOfRow(rowId), state);

@@ -124,10 +124,8 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   // ...and a general conversation is wrappable once its provider session is gone (server.py/wrapup.py, 2026-09-07)
   assert.match(source, /const canWrap = !!term \|\| !!detail\?\.transcript \|\| hasGeneralHistory/);
   assert.match(source, /conversation: generalStarted/);
-  // ...under the one name every ending wears, a chat's and a coding run's alike (2026-09-25)
-  // ...ONE name for the write-up, live or ended (2026-10-02: "Save result" and "Stop and save" were one button twice)
-  // ...but only while there is a session to stop: an ended one is closed out by Mark done (owner-approved, 2026-10-20)
-  assert.ok(source.includes('onClick={wrapUp}>{labelOfRow("save-end")}</Button>'), "the live session's close-out");
+  // ...and no Stop and save at all (the owner, 2026-11-10: "no need for stop and save button") - the write-up runs on Mark done
+  assert.ok(!source.includes('"save-end"'), "no Stop and save");
   assert.ok(!source.includes(">Save result<") && !source.includes('label: "Save result"'));
   assert.ok(!source.includes("Save this conversation's result") && !source.includes("Save stopped run result"));
   // interrupted work says so on the task page, not only in the list row - on the status pill's hover now (the redesign, 2026-10-21)
@@ -235,13 +233,10 @@ test("a session's new word is a change the task page takes, and the same word is
   assert.equal(sessionWord(null), "");
 });
 
-// STOP AND SAVE ONLY WHILE THERE IS SOMETHING TO STOP (owner-approved, 2026-10-20): a stopped run offered it (G7), and so did one
-// that failed, finished or was cut off by a restart - every one of its doors on the task page is the live session's now
-test("an ended session offers no Stop and save anywhere on the task page - only the live session's row and controls", () => {
+// NO STOP AND SAVE ANYWHERE (the owner, 2026-11-10: "no need for stop and save button"): it was the live session's only, after an ended
+// one offered it too (owner-approved, 2026-10-20); now the x on the running turn is the one stop, and typing carries the work on
+test("no session offers a Stop and save anywhere on the task page, live or ended", () => {
   const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
   assert.doesNotMatch(page, /canSave|endedByStop/, "no second road to the write-up for a session that has ended");
-  assert.equal((page.match(/\{ id: "save-end"/g) || []).length, 1, "one row verb");
-  const live = page.indexOf("...(liveSession ? ["), uses = [...page.matchAll(/\[stopSave\]/g)].map((m) => m.index);
-  assert.ok(uses.length === 2 && uses.every((at) => at > live && at - live < 900), "...and it is the live session's");
-  assert.equal((page.match(/>\{labelOfRow\("save-end"\)\}<\/Button>/g) || []).length, 1, "one button: the live controls'");
+  assert.doesNotMatch(page, /"save-end"|stopSave/);
 });

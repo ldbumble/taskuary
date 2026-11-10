@@ -1115,8 +1115,10 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               onMic={(t) => { const c = runtime.thread.composer, was = c.getState().text; c.setText(was.trim() ? `${was.trimEnd()} ${t}` : t); }}
               /* stopping is an ACT: closing this page is not one. The button tells the server to stop the run; abandoning the tab just detaches
                  from it (server.py) - and A TURN THIS PANE DID NOT START has the same stop (the owner, 2026-11-05): a turn woken by new mail, or one
-                 running when the page was opened, runs on the server, and the runtime's Cancel stays hidden */
-              extra={<><ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label="Stop response" onClick={onStop}><CloseIcon fontSize="small" /></ComposerPrimitive.Cancel>
+                 running when the page was opened, runs on the server, and the runtime's Cancel stays hidden
+                 ...ONLY IN THE DOCK, which draws no turn head: a task's chat stops on the x of its running turn alone (the owner, 2026-11-10:
+                 "we should have x button for agent to stop in middle of the work" - one stop, not a second one in the box) */
+              extra={dock && <><ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label="Stop response" onClick={onStop}><CloseIcon fontSize="small" /></ComposerPrimitive.Cancel>
                 {(road ? stopShown : working) && <ThreadPrimitive.If running={false}><button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"
                   title="Stops this turn - the chat stays, and what you type next carries on" onClick={onStop}><CloseIcon fontSize="small" /></button></ThreadPrimitive.If>}</>}
               /* THE ARROW WHILE IT WORKS (the owner, 2026-11-10: "Arrow works too"): the runtime's Send is off for as long as a turn this pane

@@ -65,8 +65,9 @@ class AgentStatesAgreeTests(unittest.TestCase):
             self.assertEqual((sess['waiting'], sess['state']), (True, 'asking'), kind)
             self.assertIn('inter-company rows', sess['request']['text'])
             self.assertEqual(item['request_kind'], 'input_needed')
-            # ...answered in its own pane: its row leads with Stop and save, and has no Answer it (owner-approved, 2026-10-20)
-            self.assertEqual(concierge.chips_for(self.s, item)[0]['verb'], 'stop_agent')
+            # ...answered in its own pane: its row has no Answer it (owner-approved, 2026-10-20), nor a Stop and save on the desk (the owner,
+            # 2026-11-10: "no need for stop and save button") - the x on the running turn stops it
+            self.assertNotIn('stop_agent', [c['verb'] for c in concierge.chips_for(self.s, item)])
             self.assertNotIn('answer_agent', [c['verb'] for c in concierge.row_buttons(self.s, item)])
             self.assertEqual(workerstate.status(self.s, tid)['state'], 'input_needed')
 
@@ -87,7 +88,8 @@ class AgentStatesAgreeTests(unittest.TestCase):
 
     def test_an_ended_session_offers_no_stop_only_a_live_one_does(self):
         """Failed, finished or cut off by a restart, a session that has ENDED has nothing to stop (owner-approved, 2026-10-20): its
-        chips, its row's buttons (what the Advisor may light) and a pick of it carry no Stop and save. A working one still does."""
+        chips, its row's buttons (what the Advisor may light) and a pick of it carry no Stop and save. A working one only on the phone, which has
+        no x on a turn to press (the owner, 2026-11-10: "no need for stop and save button")."""
         verbs = lambda item, f: [c['verb'] for c in f(self.s, item)]
         for kind in ('coding', 'general'):
             for st in ('finished', 'failed', 'stopped-saved'):
@@ -97,7 +99,10 @@ class AgentStatesAgreeTests(unittest.TestCase):
                 if item.get('lane') == 'stopped': self.assertIn('nothing to stop', concierge.cannot(item, 'stop_agent', self.s), f'{kind}-{st}')
             working = self.pile[self.w[f'{kind}-working']]
             self.assertEqual(concierge.cannot(working, 'stop_agent', self.s), '', f'{kind}-working')
-            self.assertIn('stop_agent', verbs(working, concierge.row_buttons), f'{kind}-working')
+            self.assertNotIn('stop_agent', verbs(working, concierge.row_buttons), f'{kind}-working on the desk')
+            tok = concierge.DELIVERY.set(concierge.PHONE)
+            try: self.assertIn('stop_agent', verbs(working, concierge.row_buttons), f'{kind}-working on the phone')
+            finally: concierge.DELIVERY.reset(tok)
 
 
 if __name__ == '__main__': unittest.main()

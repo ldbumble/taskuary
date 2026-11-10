@@ -40,7 +40,7 @@ test("the way back into an agent's session leads, outlined, and Mark done stands
 });
 
 test("a live session: Mark done is not promoted, and Next is outlined too", () => {
-  const r = rowOf({ ref: "", list: [v("save-end", "agent"), v("done", "more", { promote: false }), v("next", "next")] });
+  const r = rowOf({ ref: "", list: [v("diff", "agent"), v("done", "more", { promote: false }), v("next", "next")] });
   assert.deepEqual(filled(r), []);
   assert.ok(r.agent.some((x) => x.id === "done" && x.tone === "s") && !r.more.some((x) => x.id === "done"));
 });
@@ -139,17 +139,17 @@ test("the row in three: the moves that finish or advance it in one pill, the tas
   const { clustersOf, typeOf } = await import("../src/actionRow.js");
   const row = rowOf({ ref: "", list: [v("reply", "decide", { tone: "p", label: "Write reply" }), v("email", "agent", { label: "Send out results" }),
     v("hand", "more", { label: "Hand it to a person" }), v("continue", "agent", { label: "Continue" }), v("run-another", "agent"),
-    v("save-end", "more"), v("done", "more"), v("close-note", "more"), v("remind", "more"), v("nat", "more"), v("next", "next")] });
+    v("done", "more"), v("close-note", "more"), v("remind", "more"), v("nat", "more"), v("next", "next")] });
   const g = Object.fromEntries(clustersOf(row).map((c) => [c.type, c]));
   assert.deepEqual(clustersOf(row).map((c) => c.type), ["move", "change"]);
   // ...Mark done, the agent's move, the reply's - then the rest of their families, in that order
-  assert.deepEqual(g.move.shown.map((x) => x.id), ["done", "continue", "reply", "email", "hand", "run-another", "save-end", "close-note"]);
+  assert.deepEqual(g.move.shown.map((x) => x.id), ["done", "continue", "reply", "email", "hand", "run-another", "close-note"]);
   assert.deepEqual(g.change.shown.map((x) => x.id), ["remind", "nat"], "Remind me first");
   // the Advisor's pick behind the arrow comes into view, filled
-  const picked = clustersOf(rowOf({ ref: "", list: [v("continue", "agent", { label: "Continue" }), v("run-another", "agent"), v("save-end", "more", { label: "Stop and save" })] },
-    { verb: "stop_agent", label: "Stop and save" }));
-  assert.equal(typeOf({ id: "save-end" }), "agent");
-  assert.ok(picked[0].shown.some((x) => x.id === "save-end" && x.tone === "p"));
+  const picked = clustersOf(rowOf({ ref: "", list: [v("continue", "agent", { label: "Continue" }), v("diff", "agent"), v("run-another", "more", { label: "Run another agent" })] },
+    { verb: "run_another", label: "Run another agent" }));
+  assert.equal(typeOf({ id: "run-another" }), "agent");
+  assert.ok(picked[0].shown.some((x) => x.id === "run-another" && x.tone === "p"));
   assert.equal(typeOf({ id: "123:approve" }), "reply");                 // a draft's own verbs, by the act
   assert.equal(typeOf({ id: "w:Make a task" }), "act");                  // a card's own words lead, unlabelled
 });
@@ -304,13 +304,13 @@ test("no word stands twice: a word on the bar is not repeated, nor behind More",
 });
 
 test("a live session's Mark done stands on the bar, outlined, and Next is outlined too - room or not", () => {
-  const live = [v("diff", "agent", { label: "Review changes" }), v("save-end", "agent", { label: "Stop and save" }),
+  const live = [v("diff", "agent", { label: "Review changes" }),
     v("run-another", "agent", { label: "Run another agent" }), v("done", "more", { label: "Mark done", promote: false, beside: true }), v("next", "next")];
   const r = rowOf({ ref: "", list: live });
-  assert.deepEqual(r.agent.map((x) => x.id), ["diff", "save-end", "run-another", "done"]);
+  assert.deepEqual(r.agent.map((x) => x.id), ["diff", "run-another", "done"]);
   assert.equal(r.agent.find((x) => x.id === "done").tone, "s");
   assert.equal(r.next.tone, "s");
-  const full = rowOf({ ref: "", list: [v("a1", "agent"), v("a2", "agent"), v("a3", "agent"), v("a4", "agent"), ...live.slice(3)] });
+  const full = rowOf({ ref: "", list: [v("a1", "agent"), v("a2", "agent"), v("a3", "agent"), v("a4", "agent"), ...live.slice(2)] });
   assert.ok(full.agent.some((x) => x.id === "done") && !full.more.some((x) => x.id === "done"), "never behind More (2026-10-06)");
 });
 
@@ -410,12 +410,11 @@ test("every mounted card registers under its own key, never a name another copy 
   assert.doesNotMatch(body, /put\(owner,/);
 });
 
-// THE LIT BUTTON FOLLOWS THE LINE (the UI audit's C2, 2026-10-21): a running agent's Stop and save darkens itself only while the
-// Advisor has said nothing at all. Once the strip says something - "An agent is working on this - it says when it needs you", or
-// "Connect an AI" - the button lit is that line's move, and Stop and save stays outlined: it invited stopping an agent that needed nothing.
-test("a working agent's Stop and save is dark only when the strip says nothing; a line lights its own move", () => {
-  const list = [v("save-end", "agent", { fill: true }), v("done", "more", { promote: false }), v("next", "next")];
-  assert.deepEqual(filled(rowOf({ ref: "", list })), ["save-end"], "nothing said: the row's own move");
+// THE LIT BUTTON FOLLOWS THE LINE (the UI audit's C2, 2026-10-21) - and nothing darkens itself: the one that did, a running agent's Stop
+// and save, is gone (the owner, 2026-11-10: "no need for stop and save button"); the x on the running turn stops it
+test("no verb on a working agent's row fills itself; a line lights its own move", () => {
+  const list = [v("diff", "agent", { fill: true }), v("done", "more", { promote: false }), v("next", "next")];
+  assert.deepEqual(filled(rowOf({ ref: "", list })), [], "nothing said: nothing filled");
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "next" })), ["next"], "'it says when it needs you': Next, and only Next");
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "ai" })), [], "'Connect an AI': its own chip is the move, nothing on the row");
 });

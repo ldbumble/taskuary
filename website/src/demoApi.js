@@ -149,7 +149,7 @@ const read = (url) => {
     const key = new URLSearchParams(query(url)).get("key");
     const item = scriptedAssistant.pile.items.find((i) => i.key === key);
     // real verbs only, each in its buttons.json words - the demo offered Tomorrow, Draft a follow-up and Handled, none of them a button
-    const verbs = { review: ["redraft", "not_ours", "defer"], agent: ["stop_agent", "defer"], asked: ["mine", "not_ours", "not_ours_sender"],
+    const verbs = { review: ["redraft", "not_ours", "defer"], agent: ["defer"], asked: ["mine", "not_ours", "not_ours_sender"],
       fyi: ["not_ours_sender", "mine"], idea: ["mine", "not_ours", "not_ours_kind"], report: ["rerun"] }[item?.kind] || [];
     return { key, chips: verbs.map((verb) => ({ verb, label: label(verb), hint: hint(verb) })) };
   }

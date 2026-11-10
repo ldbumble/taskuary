@@ -455,7 +455,8 @@ def withdraw(store, tid: int, why: str, by: str, which='', keep: int = 0) -> dic
 
 def unsent(store, tid: int) -> list:
     """What the agent may still take back on task `tid`, newest first: its reply draft, its emails (slots), its posts and other proposals -
-    each {rid, kind, to, what}. Never a close-out or a playbook (Taskuary's, not the agent's), and never anything already sent."""
+    each {rid, kind, to, what}. Never a close-out or what Taskuary's own ledger put on a playbook (theirs, not the agent's), and never
+    anything already sent. A playbook the agent proposed, or lessons it added to one, is its own to take back (the owner, 2026-11-10)."""
     from . import proposals
     out = []
     for rv in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('pending','held') AND DeliveryClaim IS NULL "
@@ -465,7 +466,7 @@ def unsent(store, tid: int) -> list:
         except (TypeError, ValueError): d = {}
         if not isinstance(d, dict): d = {}
         if k == 'action':
-            if d.get('closeout') or d.get('action') in (*proposals.PLAYBOOKS, *proposals.CLOSEOUT) or str(rv.get('Reason') or '').startswith('the workflow'): continue
+            if d.get('closeout') or d.get('action') in proposals.CLOSEOUT or d.get('block') or str(rv.get('Reason') or '').startswith('the workflow'): continue
             to, what = str(d.get('type') or d.get('action') or ''), f"the proposal ({' '.join(str(rv.get('Reason') or d.get('action')).split())[:160]})"
         elif k in ('draft', 'draft_reply', 'slot'):
             to = ', '.join(d.get('to') or []) if isinstance(d.get('to'), list) else str(d.get('to') or '')

@@ -1338,6 +1338,10 @@ class ApiTests(unittest.TestCase):
         # a chat hand-off needs a chat: this task never came from one
         self.assertEqual(c.post(f'/api/tasks/{tid}/handoff',
                                 json={'to': 'ross', 'channel': 'teams', 'text': 'x'}).status_code, 422)
+        # ...and a send with no words is refused: it used to have the model write the forward and send it in one step, unseen
+        with mock.patch.object(server.outbound, 'draft_handoff', return_value='Erin - yours.') as d, mock.patch.object(server.outbound, 'send_email') as send:
+            no = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'erin@northwind.example', 'text': '  '})
+        self.assertEqual((no.status_code, d.called, send.called), (422, False, False))
 
     def test_a_live_session_is_visible_work(self):
         """A pty session is not a 'run', so the board used to show a task as Queued while its

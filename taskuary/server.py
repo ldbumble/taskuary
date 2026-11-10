@@ -4829,7 +4829,11 @@ def handoff(task_id: int, body: HandoffBody):
     t = store.get_task(task_id)
     if not t: raise HTTPException(404, 'task not found')
     try:
-        text = (body.text or '').strip() or outbound.draft_handoff(store, task_id, body.to or 'a colleague', body.note)
+        text = (body.text or '').strip()
+        # only the DRAFT is the model's. A send with no words wrote the forward and sent it in the same step, unseen (the spine audit,
+        # 2026-11-09): what goes is what the owner was shown
+        if not text and not body.draft_only: raise HTTPException(422, 'write what it says first')
+        text = text or outbound.draft_handoff(store, task_id, body.to or 'a colleague', body.note)
         # a forward by email is an email from the owner: signed once, in the draft they see and in what goes (signatures.py)
         if body.channel == 'email': text = responder.with_signature(text, responder.signature_for(store))
         if body.draft_only: return {'draft': text}

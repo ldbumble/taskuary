@@ -50,7 +50,7 @@ def _decide(s, syn, item, key=None):
 # 2026-11-09): a draft that waits fills its Send, a run that is over fills Mark done, a failed run fills its own Try again - and an ask, a
 # report, an FYI and an agent at work or asking fill nothing, and a late wait no agent was woken for fills Chase
 MATRIX = [
-    ('Badge access for the new AP clerk', 'asked', None, False),
+    ('Badge access for the new AP clerk', 'asked', 'regular_agent', False),     # no agent took it: Send to agent (2026-11-10)
     ('did the overnight import finish', 'unsendable', None, False),
     ('AP cutover - Thursday?', 'draft_ready', 'send_close', False),
     ('Lease renewal for the Elm Street office', 'failed_cause', None, False),     # a send the server refused is never lit to go again

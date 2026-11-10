@@ -437,8 +437,8 @@ LATE = frozenset({'waiting_late', 'waiting_overdue', 'waiting_late_usual', 'goal
 NOTHING_LEFT = 'Its agent said nothing is left to do'
 # THE MOVE A STATE'S OWN FACT NAMES (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible. it shoudl prompt you,
 # should i deploy"): these lit nothing, and their line was hidden too - work left unpushed is looked at, an agent stopped with its work
-# unfinished is carried on
-MOVES = {'unpushed': ('review_changes',), 'stopped': ('continue',)}
+# unfinished is carried on, and an ask no agent started on is handed to one, as needs_agent is
+MOVES = {'unpushed': ('review_changes',), 'stopped': ('continue',), 'asked': ('regular_agent',), 'asked_late': ('regular_agent',)}
 
 
 def landing_asks(store, tid) -> bool:

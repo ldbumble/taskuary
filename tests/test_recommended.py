@@ -76,6 +76,17 @@ def test_a_reply_nothing_has_written_fills_the_agents_start(s):
         assert rulebook.recommended(s, item(tid), verbs('reply', 'close')) is None, 'no agent to start: nothing is filled'
 
 
+def test_an_ask_no_agent_started_on_fills_send_to_agent(s):
+    """Someone asked, no agent started by itself (the switch, a stranger, a full house), and nothing was lit: Send to agent is the move, as
+    for a reply nothing has written - and where an agent already holds the task its row draws none, so nothing is filled."""
+    tid = agent_task(s, kind='todo', summary=None)
+    for st in ('asked', 'asked_late'):
+        with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': 'Erin Blake asked 3 days ago.'}):
+            r = rulebook.recommended(s, item(tid), verbs('reply', 'regular_agent', 'close'))
+            assert (r['verb'], r['why']) == ('regular_agent', 'Erin Blake asked 3 days ago.'), st
+            assert rulebook.recommended(s, item(tid), verbs('reply', 'close')) is None, st
+
+
 def test_a_run_that_is_over_fills_mark_done_where_no_summary_was_written(s):
     """A coding agent's terminal writes no summary, and a task no agent touched has none: the facts say it is over."""
     tid = agent_task(s, kind='coding')
@@ -84,7 +95,7 @@ def test_a_run_that_is_over_fills_mark_done_where_no_summary_was_written(s):
             r = rulebook.recommended(s, item(tid), verbs('close', 'defer'))
             assert (r['verb'], r['why'], r['state']) == ('close', 'Finished at 10:02; nothing since.', st)
     # ...and where it is not over - stopped mid-work, work not pushed, an ask, a wait - nothing is filled
-    for st in ('asked', 'asked_late', 'own', 'untouched', 'fyi', 'report_ok'):
+    for st in ('own', 'untouched', 'fyi', 'report_ok'):
         with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': ''}):
             assert rulebook.recommended(s, item(tid), verbs('close', 'continue', 'reply', 'review_changes')) is None, st
 

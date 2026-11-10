@@ -16,7 +16,7 @@ class StatusTests(_Rail):
         rev = advisor.revision(s, 'task', t)
         with mock.patch.object(advisor, 'notice'), mock.patch.object(advisor, '_INFLIGHT', {('task', t, rev, 2, None)}):
             got = advisor.status(s, f'task:{t}')
-        self.assertEqual((got['verb'], got['line'], 'pending' in got), (None, '', False))
+        self.assertEqual((got['verb'], got['line'], 'pending' in got), ('regular_agent', '', False))     # an ask no agent took: Send to agent (2026-11-10)
 
     def test_an_obvious_move_is_silent_whatever_the_model_dropped(self):
         s = MemoryStore(); t = self._stopped_task(s)
@@ -54,4 +54,4 @@ class StatusTests(_Rail):
         s = MemoryStore(); t = self._asked_task(s)
         with mock.patch.object(server, 'store', s), mock.patch.object(advisor, 'notice'):
             got = TestClient(server.app).get('/api/advice', params={'key': f'task:{t}'}).json()
-        self.assertEqual((got['verb'], got['label'], got['line'], got['state'], got['by']), (None, '', '', 'asked', 'agent'))
+        self.assertEqual((got['verb'], got['label'], got['line'], got['state'], got['by']), ('regular_agent', 'Send to agent', '', 'asked', 'agent'))

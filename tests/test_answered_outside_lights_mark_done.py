@@ -43,13 +43,13 @@ def test_mark_done_is_lit_where_the_owner_answered_in_teams():
     assert r['verb'] == 'close' and re.search(r'^Your reply went .*nothing since', r['why']), 'the reply that went is its reason'
 
 
-def test_nothing_answered_or_asked_again_lights_nothing_and_names_no_section():
+def test_nothing_answered_or_asked_again_is_not_over_and_names_no_section():
     s = MemoryStore(); tid = teams_task(s, answered=False)
     d = read(s, tid)
-    assert d.get('section') is None and d['verb'] is None, d
+    assert d.get('section') is None and d['verb'] == 'regular_agent', d          # an ask no agent took: Send to agent (2026-11-10)
     s = MemoryStore(); tid = teams_task(s, again=True)
     d = read(s, tid)
-    assert d.get('section') is None and d['verb'] is None, 'she wrote again after the answer: it is not over'
+    assert d.get('section') is None and d['verb'] == 'regular_agent', 'she wrote again after the answer: it is not over'
 
 
 def test_the_facts_say_the_answer_and_name_no_section():

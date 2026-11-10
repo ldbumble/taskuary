@@ -990,7 +990,7 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         # 2026-11-10): its row said "Taskuary is waiting on you" - it is the task's wrap-up, "agent done", until something is typed again. A
         # reply or an email it drafted still waits on you. One reading with the task's own state (taskstate.done_for_now)
         from . import taskstate
-        if not asking and taskstate.done_for_now(store, task, t):
+        if not asking and taskstate.done_for_now(store, task, {**t, 'mode': t.get('mode') or 'terminal'}):       # a row with no mode is a pane's, as below
             out.append(chat_done(store, task, t.get('started'))); continue
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                          tid=tid, agent=agent, priority=task.get('Priority'), asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',

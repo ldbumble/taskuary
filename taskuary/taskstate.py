@@ -197,7 +197,8 @@ def done_for_now(store, t: dict, session: dict) -> bool:
     tid = t['TaskId']
     if t.get('ReviewStatus') == 'pending' or store.waiting_on_owner(tid): return False
     from .general import handles
-    if handles(t): return True
+    # ...a chat agent in its own chat; one of its kind run in a pane (a routine's run) is read by its turns, as a coding agent is
+    if handles(t) and (session.get('mode') or 'assistant') == 'assistant': return True
     from . import landing, workerstate as ws
     evs = [e for e in ws.events(store, tid, session.get('sid')) if e['Kind'] not in ws.NOTES]
     return bool(evs) and evs[-1]['Kind'] == 'turn_end' and not landing.asked(store, tid)

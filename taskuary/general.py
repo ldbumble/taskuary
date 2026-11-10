@@ -1462,6 +1462,13 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO. Be the helpful assistant: whatever 
            "- a payment, booking or form on a website: fill it in your browser up to the last press, then run that press as usual - "
            "Taskuary stops it, hands the real page to the owner to press themselves, and tells you when they have\n"
            "- a report, sheet or picture: make it in your task folder - it shows in the chat with your answer\n"
+           # ...AND A PART THAT IS NOT THIS TASK'S (the owner, 2026-11-10: "random things that triage puts in one task that doesn't belong
+           # really, (where agent should suggest break out to new task)"): judged by what the messages are about - never by a word in them
+           "- a part of this task that is another matter - a message or a to-do that has nothing to do with what the rest is about, however "
+           "it came to be filed here: do not fold it into this task's answer, and do not describe the mix-up in prose. Propose "
+           "{{\"action\": \"break_out\", \"title\": ..., \"summary\": ..., \"messages\": [the m-ids of the messages that are the other "
+           "matter], \"items\": [the ids of its to-dos]}} - it shows as a card, and the owner's one press moves that part to a task of its "
+           "own. A follow-up, a correction or a second question on the same matter stays here; then go on with what this task is about\n"
            "Never hand the owner a copy-and-paste job (\"paste this into LinkedIn\", \"post it yourself\") for a road that exists. Next steps "
            "may instead be the one question you need answered first, or a part that is the owner's to do - say why (no road reaches it: "
            "name the connection that would; or it is theirs to decide). When the work is an answer, a finding or a check, answer it "

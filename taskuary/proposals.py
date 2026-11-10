@@ -93,6 +93,10 @@ ACTIONS = {
     'shell_act': ("run this step of the agent's", ('sid', 'command'), None),
     # ...and a desktop act that can't be undone, HELD the same way (agentdesktop.py, 2026-10-31): approving it runs that exact command
     'desktop_act': ("do this in an app on the owner's desktop", ('sid', 'args'), None),
+    # A PART OF THE TASK THAT IS ANOTHER JOB (the owner, 2026-11-10: "random things that triage puts in one task that doesn't belong really,
+    # (where agent should suggest break out to new task)"): the agent names what goes, the owner's press runs the task page's own split
+    # (reshape.split_task) - nothing moves before it
+    'break_out': ('break part of this task out into a task of its own', ('title',), None),
 }
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook before the act ran - never an agent's marker
 # WHAT NO AGENT MAY ASK FOR, AND THE MARKS NONE MAY PUT ON ITS OWN ASK - one list for both doors: the marker (parse) and the tool
@@ -257,6 +261,29 @@ def collect(store, task_id: int, transcript: str, actor='agent') -> list:
 WHERE_KEYS = ('path', 'to', 'folder', 'table', 'url', 'bucket', 'key', 'container', 'blob', 'channel', 'list', 'database', 'item')
 
 
+# WHAT A BREAK-OUT MOVES, AS THE TASK HOLDS IT NOW - read when it is filed and again at the press (a message may have left the task between):
+# the messages by the ids the agent's brief carries (m12), the to-dos by theirs. `moves` is the card's words for them, one line each
+def _many(x) -> list: return list(x) if isinstance(x, (list, tuple)) else [] if x in (None, '') else [x]
+def break_out(store, tid, p: dict) -> tuple:
+    "(the proposal with its messages and to-dos as ids the task has, '') - or (p, why it cannot go)."
+    from .mailsearch import message_id
+    try: want = list(dict.fromkeys(message_id(x) for x in _many(p.get('messages'))))
+    except ValueError as e: return p, str(e)
+    msgs, todo = {m['MessageId']: m for m in store.list_messages(int(tid))}, {i.get('id'): i for i in store.task_checklist(int(tid))}
+    items = list(dict.fromkeys(str(x) for x in _many(p.get('items'))))
+    if off := [f'm{m}' for m in want if m not in msgs] + [i for i in items if i not in todo]:
+        return p, f"{', '.join(off)}: not on this task - name its own messages (their m-ids) and to-dos (their ids)"
+    if not want and not items: return p, 'break_out needs what goes to the new task: `messages` (their m-ids), `items` (to-do ids), or both'
+    if len(want) == len(msgs): return p, 'that moves every message off this task - break out only the part that is another matter'
+    line = lambda m: f"{m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'message'}: " \
+                     + ' '.join(str(m.get('BodyText') or m.get('Subject') or '').split())[:140]
+    moves = [line(msgs[m]) for m in want] + [f"to-do: {todo[i]['text']}" for i in items]
+    return {**p, 'title': str(p['title']).strip()[:200], 'messages': want, 'items': items, 'moves': '\n'.join(moves)}, ''
+def break_out_words(p: dict) -> str:
+    n = [plural(len(p[k]), w) for k, w in (('messages', 'message'), ('items', 'to-do')) if p.get(k)]
+    return f"move {' and '.join(n)} to a task of its own, \"{p['title'][:120]}\""
+
+
 # A REFUSAL THAT STEERS (the owner, 2026-11-05, from the open-source assistants: a tool's error says what to try next): "the reason is on
 # the task" sent the agent to a page it cannot read - it is told the reason, and the next move
 def refusal_line(why) -> str:
@@ -310,6 +337,9 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
             p = cat.with_defaults(p, conf)
             if bad := next((f for f in act['fields'] if f['key'] in p and not cat.choice_ok(f, p[f['key']])), None):
                 ok, why = False, f"{bad['key']} must be one of: {', '.join(str(c['value']) for c in bad['choices'])}"
+    if ok and p.get('action') == 'break_out':
+        p, miss = break_out(store, task_id, p)
+        if miss: ok, why = False, miss
     if not ok:
         store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
         store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why})
@@ -317,7 +347,7 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         return None
     # a close-out is not the agent's ask ("proposes to merge the pull request this task opened" was said of a stranger's PR), and
     # neither is a workflow's own repair or write, raised by the run itself (flow.py) with no agent anywhere on the task
-    said = tool_words(store, p) if p['action'] == 'run_tool' else why
+    said = tool_words(store, p) if p['action'] == 'run_tool' else break_out_words(p) if p['action'] == 'break_out' else why
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
     reason = (f"held before it ran, in the agent's browser: {p.get('what') or p.get('command')}" + (f" - {p['why']}" if p.get('why') else '') if p['action'] == 'browser_act' else
               f"held before it ran, in the agent's shell: {p.get('what') or 'a step'}" + (f" - {p['why']}" if p.get('why') else '') if p['action'] == 'shell_act' else
@@ -686,6 +716,13 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
         from . import trackers
         out = trackers.close_out(store, p)
         out['said'] = trackers.said(out)
+    elif a == 'break_out':
+        from . import reshape
+        from .store import task_ref
+        p, miss = break_out(store, tid, p)
+        if miss: raise RuntimeError(f'{miss} - nothing was moved')
+        new = reshape.split_task(store, tid, {'title': p['title'], 'summary': str(p.get('summary') or ''), 'items': p['items']}, None, p['messages'], actor)
+        out = {'task': new, 'ref': task_ref(new), 'said': f"{task_ref(new)} is the new task: {p['title'][:120]}"}
     else:                                   # run_tool
         from .reports import REGISTRY, resolve_cfg
         # the owner approved THIS query, so it may commit - the one road to a write on a read-level SQL card

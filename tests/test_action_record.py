@@ -121,6 +121,60 @@ class AnApprovedHeldStepWakesItsAgent(Acts):
         self.assertEqual(told, []); self.assertTrue(any('No agent is running' in n for n in self.notes()))
 
 
+class APartThatIsAnotherJob(Acts):
+    """Triage joined a second matter to the task - a chat line, a mail on another subject. The agent asks to break it out through the one
+    record every ask of its takes; the owner's press runs the task page's own split. It had no way to ask: the mix-up came back as prose."""
+    def setUp(self):
+        super().setUp()
+        f = Factory(self.s)
+        self.fix = f.message(self.tid, from_name='Erin Blake', subject='Ledger fix review', body='Two comments on the rounding change.')
+        self.other = f.message(self.tid, from_name='Ray Colton', subject='Parking permits', body='Can you renew the two parking permits by Friday?')
+        self.s._write_checklist(self.tid, [{'id': 'a1', 'text': 'Answer the review'}, {'id': 'b2', 'text': 'Renew the parking permits'}], 'triage')
+        self.ask = {'action': 'break_out', 'title': 'Renew the parking permits', 'summary': 'Ray asks for two permits renewed by Friday.',
+                    'messages': [f'm{self.other}'], 'items': ['b2'], 'why': 'the permits have nothing to do with the ledger review'}
+
+    def queue(self, **kw):
+        q = proposals.queue(self.s, self.tid, agenttools.proposal_of({**self.ask, **kw, 'task_id': self.tid}), refused=(why := []))
+        return (q and self.s.get_review(q['reviewId'])), why
+
+    def test_it_is_a_card_that_says_what_goes_and_moves_nothing(self):
+        rv, _ = self.queue()
+        p = json.loads(rv['DraftText'])
+        self.assertEqual((rv['Kind'], rv['Status'], p['messages'], p['items']), ('action', 'pending', [self.other], ['b2']))
+        self.assertIn('move 1 message and 1 to-do to a task of its own, "Renew the parking permits"', rv['Reason'])
+        self.assertIn('Ray Colton: Can you renew', p['moves']); self.assertIn('to-do: Renew the parking permits', p['moves'])
+        self.assertEqual(len(self.s.list_messages(self.tid)), 2, 'nothing moves before the press')
+
+    def test_the_press_runs_the_split(self):
+        rv, _ = self.queue()
+        out = verdicts.decide(self.s, rv, 'approve')
+        self.assertTrue(out['ok'], out)
+        new = out['result']['task']
+        self.assertEqual([m['MessageId'] for m in self.s.list_messages(new)], [self.other])
+        self.assertEqual([m['MessageId'] for m in self.s.list_messages(self.tid)], [self.fix])
+        self.assertEqual(([i['id'] for i in self.s.task_checklist(new)], [i['id'] for i in self.s.task_checklist(self.tid)]), (['b2'], ['a1']))
+        self.assertEqual(self.s.get_task(new)['Title'], 'Renew the parking permits')
+        self.assertTrue(any('split part of it off' in what for _, _, what, *_ in general.presses(self.s, self.tid)), 'its agent hears the press')
+
+    def test_what_is_not_on_the_task_is_refused_with_the_way_on(self):
+        for kw, said in (({'messages': ['m99999'], 'items': []}, 'not on this task'), ({'messages': [], 'items': []}, 'needs what goes'),
+                         ({'messages': [self.fix, self.other]}, 'every message'), ({'title': ''}, 'needs title')):
+            with self.subTest(kw):
+                rv, why = self.queue(**kw)
+                self.assertIsNone(rv); self.assertIn(said, why[0])
+
+    def test_a_message_gone_by_the_press_moves_nothing(self):
+        rv, _ = self.queue()
+        self.s.attach_message(self.other, Factory(self.s).task('Parking'))
+        out = verdicts.decide(self.s, rv, 'approve')
+        self.assertEqual((out['ok'], out['status']), (False, 'pending')); self.assertIn('not on this task', out['send_error'])
+        self.assertEqual([i['id'] for i in self.s.task_checklist(self.tid)], ['a1', 'b2'])
+
+    def test_the_agent_is_told_it_can(self):
+        self.assertIn('break_out', agenttools.TOOLS['propose'][1])
+        self.assertIn('"action": "break_out"', general.action_line(self.s))
+
+
 class TheOwnersWordsInAnEmptyBox(Acts):
     def test_typed_over_a_merge_with_no_summary_they_are_its_body(self):
         from taskuary import ci, ghcloseout, github, outcomes

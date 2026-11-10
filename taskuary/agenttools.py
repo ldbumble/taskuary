@@ -206,7 +206,8 @@ TOOLS = {
                            "comment), close_issue, open_pr, land, push {deploy?: the branch that deploys it} (on a coding task "
                            "these three are the landing card's Push / Push & deploy / PR buttons), run_tool {type, connector_id, ...} (a send, post or order on one of"
                            " their systems - a post, a new GitHub issue and a Jira, Monday or Linear write are the guide tool's "
-                           "`propose` topic), write_playbook {slug, text}, settings {changes}. Always give `why`. It puts an Approve "
+                           "`propose` topic), write_playbook {slug, text}, settings {changes}, break_out {title, summary, messages: [m-ids], items: "
+                           "[to-do ids]} (a part of this task that is another matter, to a task of its own). Always give `why`. It puts an Approve "
                            "button in front of the owner - nothing happens until they press it. `replaces`: as on propose_email.",
                 {'type': 'object', 'properties': {'action': _STR, 'why': _STR}, 'required': ['action', 'why'],
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),

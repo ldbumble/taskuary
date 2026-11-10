@@ -108,21 +108,51 @@ class Metered:
     it wraps, and proxies attributes (a failover sets session_id and last_pick DURING a call)."""
     def __init__(self, store, rid, brain):
         for k, v in (('_store', store), ('_rid', rid), ('_brain', brain)): object.__setattr__(self, k, v)
-    def __call__(self, *a, **kw):
+    def __call__(self, *a, **kw): return self._metered(object.__getattribute__(self, '_brain'), a, kw)
+    def _metered(self, f, a, kw):
         from .brainroute import rid_of
         rid = rid_of(object.__getattribute__(self, '_rid'))      # the route row is written here, on the first call (brainroute.Lazy)
-        m, t0 = {}, time.monotonic()
+        m, t0, out = {}, time.monotonic(), None
         tok = _METER.set(m)
-        try: return object.__getattribute__(self, '_brain')(*a, **kw)
+        try: out = f(*a, **kw); return out
         finally:
             _METER.reset(tok)
-            record(object.__getattribute__(self, '_store'), rid, int((time.monotonic() - t0) * 1000), m)
+            ms = int((time.monotonic() - t0) * 1000)
+            record(object.__getattribute__(self, '_store'), rid, ms, m)
+            job = getattr(getattr(object.__getattribute__(self, '_rid'), 'r', None), 'job', '') or 'a call'
+            logger.debug(f"ai {job} (route {rid}): in {m.get('in', f'~{est(*a)} (est.)')}, cached {m.get('cached', '?')}, "
+                         f"out {m.get('out', f'~{est(out)} (est.)')}, {ms} ms")
     def __bool__(self): return bool(object.__getattribute__(self, '_brain'))
-    def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
+    def __getattr__(self, k):
+        v = getattr(object.__getattribute__(self, '_brain'), k)
+        # EVERY STEP OF AN AGENT'S LOOP IS A CALL (apiagent.turn's brain.chat): only the one-shot call was metered, so a turn of thirty
+        # steps on an AI card read as one row with no tokens - the calls that cost the most were the ones nobody counted (2026-11-10)
+        if k != 'chat' or not callable(v): return v
+        def chat(*a, **kw): return self._metered(v, a, kw)
+        return chat
     def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
 
 
 def metered(store, rid, brain): return Metered(store, rid, brain) if brain and rid else brain
+
+
+def est(*parts) -> int:
+    "Tokens a call's words come to, ESTIMATED as characters / 4 - for the log where a provider gave no count, never stored as one."
+    import json
+    return sum(len(p if isinstance(p, str) else json.dumps(p, default=str)) for p in parts if p is not None) // 4
+
+
+def today(store, day: str = None) -> dict:
+    """{job: {'calls', 'in', 'cached', 'out'}} for one day (today by default), every call counted - what the Settings page's AI section
+    reads to answer "what did the AI cost today, and for what" (the owner, 2026-11-10: "they spent 25 dollars in one day?")."""
+    day = day or datetime.now().strftime('%Y-%m-%d')
+    out = {}
+    for r in store.brain_routes_since(f'{day} 00:00:00'):
+        if str(r.get('At') or '')[:10] != day: continue
+        g = out.setdefault(r.get('Job') or 'triage', {'calls': 0, 'in': 0, 'cached': 0, 'out': 0})
+        g['calls'] += int(r.get('Calls') or 0)
+        for k, c in (('in', 'TokensIn'), ('cached', 'Cached'), ('out', 'TokensOut')): g[k] += int(r.get(c) or 0)
+    return out
 
 
 # ── an agent session in a pane: counted when it is saved ─────────────────────────────────────────────────────────────────────────

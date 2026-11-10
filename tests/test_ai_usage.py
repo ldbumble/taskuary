@@ -203,3 +203,20 @@ def test_retention_keeps_what_was_used_for_ninety_days_and_the_reason_for_thirty
     assert brainroute.trim(s, now) == 1
     left = sorted(s.brain_routes(None, limit=10), key=lambda r: r['At'])
     assert [bool(r['Why']) for r in left] == [False, True]
+
+
+def test_every_step_of_an_agents_loop_is_counted_and_todays_totals_say_by_job():
+    """The owner, 2026-11-10: "they spent 25 dollars in one day?" - an AI card agent's steps (brain.chat) went past the meter: a turn of
+    many calls read as one row with no tokens. Each step is a call on the route row now, and today() totals the day by job."""
+    from taskuary import apiagent
+    s = MemoryStore(); rid = brainroute.Lazy(s, brainroute.Route('general', 'standard', 'connector:1', '', 'main', [], 'fixed', 'test'))
+    body = {'model': 'flash', 'choices': [{'message': {'content': 'ok'}}], 'usage': {'prompt_tokens': 9000, 'completion_tokens': 50,
+                                                                                     'prompt_tokens_details': {'cached_tokens': 8000}}}
+    brain = llm._Scrubbed(aiusage.metered(s, rid, llm.make_llm('hipaa_ai', {'base_url': 'https://ai.northwind.example/v1'}, 'k')))
+    assert apiagent.can(brain)
+    with mock.patch('taskuary.llm.requests.post', return_value=_post(body)):
+        for _ in range(3): brain.chat([{'role': 'user', 'content': 'go'}], [])
+    r = _row(s, rid())
+    assert (r['Calls'], r['TokensIn'], r['Cached'], r['TokensOut']) == (3, 27000, 24000, 150)
+    assert aiusage.today(s, str(r['At'])[:10])['general'] == {'calls': 3, 'in': 27000, 'cached': 24000, 'out': 150}
+    assert not apiagent.can(aiusage.metered(s, rid, lambda system, user, **kw: 'ok')), 'a brain with no loop gains none from the meter'

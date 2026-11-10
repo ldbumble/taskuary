@@ -102,6 +102,7 @@ NO_TOOLS = ('THIS AI CANNOT DRIVE A BROWSER (its card takes no tools). If the wo
 
 
 class ToolsRefused(RuntimeError): "The card's model would not take tools at all - its first call was refused."
+class Lost(RuntimeError): "The conversation carried from earlier turns was turned down on this turn's first call - it is said again, whole (general)."
 _REFUSED = re.compile(r' error (400|422)\b')
 
 
@@ -344,39 +345,92 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
     return out
 
 
+BUDGET = 300_000               # the conversation one call carries, in characters (~75K tokens)
+DROPPED = '(dropped to save room - run it again if you need it)'
+
+
+def _size(m: dict) -> int:
+    c = m.get('content')
+    said = len(c) if isinstance(c, str) else sum(len(p.get('text') or '') for p in c or [])      # a picture is not counted by its bytes
+    return said + sum(len((t.get('function') or {}).get('arguments') or '') for t in m.get('tool_calls') or [])
+
+
+def _fit(msgs: list, keep: int = 6):
+    """Under BUDGET, in place: the oldest tool answers go first (their calls stay, so the model still sees what it did), then whole turns
+    after the first, oldest first. Never the system, the first message (the task, said in full) or the newest `keep`."""
+    over = sum(map(_size, msgs)) - BUDGET
+    for m in msgs[2:-keep]:
+        if over <= 0: return
+        if m.get('role') == 'tool' and m.get('content') != DROPPED: over -= _size(m) - len(DROPPED); m['content'] = DROPPED
+    while over > 0:
+        nxt = next((j for j in range(3, len(msgs) - keep) if msgs[j].get('role') == 'user'), None)
+        if nxt is None: return
+        over -= sum(map(_size, msgs[2:nxt])); del msgs[2:nxt]
+
+
+def _settle(msgs: list):
+    "Every call answered, in place: one a stopped turn never ran is told so - a call left open has the next turn's first call turned down."
+    at = max((i for i, m in enumerate(msgs) if m.get('tool_calls')), default=None)
+    if at is None: return
+    done = {m.get('tool_call_id') for m in msgs[at + 1:] if m.get('role') == 'tool'}
+    msgs.extend({'role': 'tool', 'tool_call_id': i, 'content': 'not run - the turn ended first'}
+                for c in msgs[at]['tool_calls'] if (i := c.get('id') or str((c.get('function') or {}).get('name') or '')) not in done)
+
+
 def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: int, trace=None, cancel=None, tools=None,
-         steps: int = MAX_STEPS, images=None) -> str:
+         steps: int = MAX_STEPS, images=None, history: list = None) -> str:
     """One turn of an API brain with tools: call, run, answer back, until it answers in words. `trace(kind, name, detail)` sees each
-    step as a CLI's do (tool_call / tool_result), so the pane and the chat draw them the same - a `show` among them as its pictures."""
+    step as a CLI's do (tool_call / tool_result), so the pane and the chat draw them the same - a `show` among them as its pictures.
+
+    `history` IS THE CARD'S OWN CONVERSATION (the spine audit, 2026-11-09), kept by its session as a CLI keeps its own: the turn opens on
+    it and leaves this turn in it - what it called, what came back, what it said, and what a stopped turn had done. Every turn used to
+    be one system and one user message, so whatever the agent had read with its tools was gone by the owner's next line - only its own
+    last answer came back, as chat text - and it opened the same pages and files again. Kept under BUDGET (_fit)."""
     from . import llm
     tools = tools if tools is not None else [*BROWSER, SHOW]
     BRAINS[(tid, sid)] = brain
     if trace: SAY[(tid, sid)] = lambda s: trace('progress', 'browser', s)
     content = ([{'type': 'image_url', 'image_url': {'url': f'data:{ct};base64,{llm.vision_safe(ct, b64)}'}} for ct, b64 in images]
                + [{'type': 'text', 'text': user}]) if images else user
-    msgs = [{'role': 'system', 'content': system}, {'role': 'user', 'content': content}]
-    for i in range(steps):
-        if cancel is not None and cancel.is_set(): raise RuntimeError('stopped')
-        try: m = brain.chat(msgs, tools, max_tokens)
-        except RuntimeError as e:
-            # a model behind a gateway that turns `tools` down on the FIRST call: the turn is asked the plain way instead (general)
-            if i == 0 and _REFUSED.search(str(e)): raise ToolsRefused(str(e)) from e
-            raise
-        calls = m.get('tool_calls') or []
-        if not calls: return llm.said_text(m)
-        msgs.append({k: v for k, v in m.items() if v is not None})          # as sent: a Gemini model's thought signature rides on it
-        for c in calls:
-            f = c.get('function') or {}
-            name = str(f.get('name') or '')
-            try: a = json.loads(f.get('arguments') or '{}') or {}
-            except ValueError: a = {}
-            if trace: trace('tool_call', name, {'args': a})
-            try: out, err = run_tool(store, tid, sid, name, a), False
+    mine = {'role': 'user', 'content': content}
+    msgs, begun = [{'role': 'system', 'content': system}, *(history or []), mine], False
+    def said(m):
+        text = llm.said_text(m)
+        if text: msgs.append({'role': 'assistant', 'content': text})
+        return text
+    try:
+        for i in range(steps):
+            # ...stopped before its first answer, a conversation under way still heard the line: the next turn says only its own
+            if cancel is not None and cancel.is_set(): begun = begun or bool(history); raise RuntimeError('stopped')
+            _fit(msgs)
+            try: m = brain.chat(msgs, tools, max_tokens)
             except Exception as e:
-                out, err = f'{name} failed: {e}', True
-                logger.info(f'apiagent: task {tid} {name} failed - {e}')
-            if trace: trace('tool_result', name, {'result': out, 'is_error': err})
-            msgs.append({'role': 'tool', 'tool_call_id': c.get('id') or name, 'content': _cut(out)})
-    # out of steps: one last answer in words, no more tools - where it got and what is left
-    msgs.append({'role': 'user', 'content': 'You are out of steps for this turn. Say what you did, what you found, and what is left.'})
-    return llm.said_text(brain.chat(msgs, tools, max_tokens, tool_choice='none'))
+                # ...the conversation it was handed is what this call could not take (too long for the model now, or a gateway that
+                # dropped it): nothing of this turn has run, so it is asked again with the conversation said whole (general)
+                if i == 0 and history: raise Lost(str(e)) from e
+                # a model behind a gateway that turns `tools` down on the FIRST call: the turn is asked the plain way instead (general)
+                if i == 0 and isinstance(e, RuntimeError) and _REFUSED.search(str(e)): raise ToolsRefused(str(e)) from e
+                raise
+            begun = True
+            calls = m.get('tool_calls') or []
+            if not calls: return said(m)
+            msgs.append({k: v for k, v in m.items() if v is not None})          # as sent: a Gemini model's thought signature rides on it
+            for c in calls:
+                f = c.get('function') or {}
+                name = str(f.get('name') or '')
+                try: a = json.loads(f.get('arguments') or '{}') or {}
+                except ValueError: a = {}
+                if trace: trace('tool_call', name, {'args': a})
+                try: out, err = run_tool(store, tid, sid, name, a), False
+                except Exception as e:
+                    out, err = f'{name} failed: {e}', True
+                    logger.info(f'apiagent: task {tid} {name} failed - {e}')
+                if trace: trace('tool_result', name, {'result': out, 'is_error': err})
+                msgs.append({'role': 'tool', 'tool_call_id': c.get('id') or name, 'content': _cut(out)})
+        # out of steps: one last answer in words, no more tools - where it got and what is left
+        msgs.append({'role': 'user', 'content': 'You are out of steps for this turn. Say what you did, what you found, and what is left.'})
+        return said(brain.chat(msgs, tools, max_tokens, tool_choice='none'))
+    finally:
+        # ...kept once the model has answered at all: a turn stopped or failed part-way keeps what it did, so Continue goes on from there.
+        # Its pictures are not carried (the model saw them; their bytes would ride on every later call)
+        if history is not None and begun: mine['content'] = user; _settle(msgs); history[:] = msgs[1:]

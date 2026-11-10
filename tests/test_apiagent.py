@@ -72,6 +72,60 @@ class OneRoundTripTests(unittest.TestCase):
         self.assertEqual(len(asked), 4)
         self.assertEqual(asked[-1], {'tool_choice': 'none'})
 
+    def test_the_next_turn_is_a_turn_of_the_same_conversation(self):
+        "What it called and what came back is still in front of it: every turn was one system and one user message."
+        steps = iter([{'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'c1', 'type': 'function', 'function': {'name': 'browser_look', 'arguments': '{}'}}]},
+                      {'role': 'assistant', 'content': 'Three claims were denied.'}, {'role': 'assistant', 'content': "The second is Gail's."}])
+        heard, kept = [], []
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): heard.append([dict(m) for m in msgs]); return next(steps)
+        with mock.patch.object(apiagent, 'run_tool', return_value='PAGE denials: 3') as ran, mock.patch.object(llm, 'vision_safe', lambda ct, b: b):
+            apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys one', 'the whole task', 500, history=kept, images=[('image/png', 'AAAA')])
+            said = apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys two', "which is Gail's?", 500, history=kept)
+        self.assertEqual(said, "The second is Gail's."); ran.assert_called_once()
+        self.assertEqual([m['role'] for m in heard[2]], ['system', 'user', 'assistant', 'tool', 'assistant', 'user'])
+        self.assertEqual([heard[2][i]['content'] for i in (0, 1, 3, 4, 5)],
+                         ['sys two', 'the whole task', 'PAGE denials: 3', 'Three claims were denied.', "which is Gail's?"])
+        self.assertIsInstance(heard[0][1]['content'], list, 'the picture went with the turn it was sent on - and is not carried')
+        self.assertEqual([m['role'] for m in kept], ['user', 'assistant', 'tool', 'assistant', 'user', 'assistant'])
+
+    def test_a_carried_conversation_turned_down_on_the_first_call_is_lost_not_tools_refused(self):
+        kept = [{'role': 'user', 'content': 'the whole task'}, {'role': 'assistant', 'content': 'Done.'}]
+        class Brain:
+            def chat(self, *a, **kw): raise RuntimeError('gateway error 400 at https://gateway.example: too many tokens')
+        with self.assertRaises(apiagent.Lost): apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'and now?', 500, history=kept)
+        self.assertEqual(len(kept), 2)
+        with self.assertRaises(apiagent.ToolsRefused): apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'go', 500, history=[])
+        stop = __import__('threading').Event(); stop.set()
+        with self.assertRaisesRegex(RuntimeError, 'stopped'): apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'no - the July one', 500, history=kept, cancel=stop)
+        self.assertEqual(kept[-1], {'role': 'user', 'content': 'no - the July one'}, 'stopped before an answer, the line was still said')
+
+    def test_a_turn_that_ends_part_way_keeps_what_it_did_with_every_call_answered(self):
+        two = {'tool_calls': [{'id': k, 'function': {'name': 'browser_look', 'arguments': '{}'}} for k in 'ab']}
+        kept, n = [], iter(range(9))
+        class Brain:
+            def chat(self, *a, **kw): return two
+        def trace(kind, name, detail):
+            if kind == 'tool_result' and next(n): raise RuntimeError('stopped')
+        with mock.patch.object(apiagent, 'run_tool', return_value='PAGE'), self.assertRaises(RuntimeError):
+            apiagent.turn(Brain(), MemoryStore(), 1, 's', 'sys', 'go', 500, history=kept, trace=trace)
+        self.assertEqual([(m['role'], m.get('tool_call_id'), m.get('content')) for m in kept[2:]],
+                         [('tool', 'a', 'PAGE'), ('tool', 'b', 'not run - the turn ended first')])
+
+    def test_a_long_conversation_drops_its_oldest_tool_answers_then_its_oldest_turns(self):
+        call = lambda k: {'role': 'assistant', 'tool_calls': [{'id': k, 'function': {'name': 'file_read', 'arguments': '{}'}}]}
+        def talk(): return [{'role': 'system', 'content': 'sys'}, {'role': 'user', 'content': 'the whole task'},
+                            call('a'), {'role': 'tool', 'tool_call_id': 'a', 'content': 'x' * 600}, {'role': 'assistant', 'content': 'one'},
+                            {'role': 'user', 'content': 'two'}, call('b'), {'role': 'tool', 'tool_call_id': 'b', 'content': 'y' * 600},
+                            {'role': 'assistant', 'content': 'done'}, {'role': 'user', 'content': 'three'}]
+        msgs = talk()
+        with mock.patch.object(apiagent, 'BUDGET', 1000): apiagent._fit(msgs, keep=2)
+        self.assertEqual([m['content'] for m in msgs if m['role'] == 'tool'], [apiagent.DROPPED, 'y' * 600])
+        self.assertEqual(len(msgs), 10, 'its calls stay: it still sees what it did')
+        msgs = talk()
+        with mock.patch.object(apiagent, 'BUDGET', 60): apiagent._fit(msgs, keep=2)
+        self.assertEqual([m.get('content') for m in msgs], ['sys', 'the whole task', 'two', None, apiagent.DROPPED, 'done', 'three'])
+
     def test_an_act_that_cannot_be_undone_is_held_not_run(self):
         held = {'hookSpecificOutput': {'permissionDecisionReason': 'Taskuary held this for the owner: submit the appeal'}}
         with mock.patch.object(bv, 'installed', return_value=True), \
@@ -112,6 +166,42 @@ class TheSessionTests(unittest.TestCase):
             def chat(self, msgs, tools, max_tokens, **kw): return {'content': 'The sign-in page is open.\n[[TASKUARY-SIGNIN: portal.example]]'}
         with mock.patch('taskuary.signin.needs') as needs: self._turn(Brain())
         self.assertEqual(needs.call_args[0][3], 'portal.example')
+
+    def test_its_second_turn_is_the_turn_alone_on_the_conversation_it_kept(self):
+        from taskuary import general, llm as llm_mod
+        heard = []
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): heard.append([dict(m) for m in msgs]); return {'content': f'answer {len(heard)}'}
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Read the denials on the scheduling portal', 'Summary': 'the August period', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        session = general.GeneralSession(s, tid)
+        session.pick, session.provider, session.model = 'connector:1', 'HIPAA AI', ''
+        with mock.patch.object(llm_mod, 'build_llm', return_value=Brain()), mock.patch.object(bv, 'installed', return_value=True), \
+             mock.patch.object(bv, 'state', return_value={'open': False}), mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
+            session.send_prompt('read the denials', echo=False)
+            session.send_prompt('and which is the oldest?', echo=False)
+            self.assertEqual([m['role'] for m in heard[1]], ['system', 'user', 'assistant', 'user'])
+            self.assertEqual(heard[1][1], heard[0][1], 'the task, said in full once')
+            self.assertIn('the August period', heard[1][1]['content']); self.assertNotIn('the August period', heard[1][3]['content'])
+            self.assertIn('and which is the oldest?', heard[1][3]['content'])
+            # ...and turned down on a later first call (too long for the model now), it is said again whole - once, on a fresh one
+            class Full(Brain):
+                def chat(self, msgs, *a, **kw):
+                    if len(msgs) > 2: raise RuntimeError('hipaa_ai error 400 at https://gateway.example: too many tokens')
+                    return super().chat(msgs, *a, **kw)
+            with mock.patch.object(llm_mod, 'build_llm', return_value=Full()): session.send_prompt('go on', echo=False)
+        self.assertEqual([m['role'] for m in heard[2]], ['system', 'user'])
+        self.assertIn('the August period', heard[2][1]['content']); self.assertIn('and which is the oldest?', heard[2][1]['content'])
+        self.assertEqual([m['role'] for m in session.card_msgs], ['user', 'assistant'])
+        # ...and with nothing answering at all, what it had is still its own - with the line it was just told
+        class Down(Brain):
+            def chat(self, *a, **kw): raise RuntimeError('hipaa_ai could not be reached')
+        with mock.patch.object(llm_mod, 'build_llm', return_value=Down()), mock.patch.object(bv, 'installed', return_value=True), \
+             mock.patch.object(bv, 'state', return_value={'open': False}), mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
+            try: session.send_prompt('and the newest?', echo=False)
+            except Exception: pass
+        self.assertEqual([m['role'] for m in session.card_msgs], ['user', 'assistant', 'user'])
+        self.assertIn('and the newest?', session.card_msgs[-1]['content'])
 
     def test_a_model_that_refuses_tools_is_asked_the_plain_way(self):
         seen = []

@@ -1969,6 +1969,7 @@ class GeneralSession:
         self._input, self._lock = '', threading.Lock()
         self._cancel = None                  # the stop switch for the answer being written now
         self.cli_sid = ''                    # the CLI's OWN conversation, resumed turn to turn
+        self.card_msgs, self.card_key = [], None      # ...and an API card's, kept here: what it said, called and was answered (apiagent.turn)
         from . import continuity
         self.resume_notice = ''
         if (saved.get('Pick') == self.pick and continuity.can_resume(store, self.pick)
@@ -2451,6 +2452,10 @@ class GeneralSession:
                     # ...nothing to do with them (a stranger's task whose toolbox did not answer): the plain way, as before
                     looped = any(t['function']['name'] != 'show' for t in api_tools)
                 if looped:
+                    # ...and ITS CONVERSATION SO FAR, where this is still the AI and the trust it was had under (as a CLI's id, above)
+                    from . import continuity
+                    key = (continuity.context_key(self.store, self.pick, self.model), stranger)
+                    if self.card_key != key: self.card_msgs, self.card_key = [], key
                     system = f'{system}\n\n{apiagent.TOOLS_BRIEF}\n\n{apiagent.where_line(self.store, self.task_id)}'
                     # ...ONE WAY TO WRITE A REPLY, as on a CLI with the toolbox: propose_reply, not the marker line beside it. Swapped
                     # where the turn is asked, never here: a card that then refuses tools is asked the plain way, and needs the block
@@ -2463,7 +2468,7 @@ class GeneralSession:
                     if self.browser_wanted and not apiagent.can(brain): self._remember_trace('progress', 'browser', NO_BROWSER_LINE)     # true of a card that takes no tools, and only of it
                     system = f'{system}\n\n{apiagent.no_browser_line() if apiagent.can(brain) else apiagent.no_tools_line()}'
             whole = user                 # the conversation said in full: what a fresh one hears where this one cannot be picked back up
-            if self.cli_sid:
+            if self.cli_sid or (looped and self.card_msgs):
                 # an opening turn's 'turn' IS the instruction, which the history never saw
                 user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
                 if (lb := turn_facts(self.store, self.task_id, resumed=True)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
@@ -2479,7 +2484,7 @@ class GeneralSession:
                 nonlocal looped, system
                 if looped:
                     try: return str(apiagent.turn(brain, self.store, self.task_id, self.sid, by_tool(system) if api_tooled else system, user, limit,
-                                                  trace=visible, cancel=cancel, images=_images(paths), tools=api_tools) or '').strip()
+                                                  trace=visible, cancel=cancel, images=_images(paths), tools=api_tools, history=self.card_msgs) or '').strip()
                     except apiagent.ToolsRefused as e:
                         logger.info(f'task {self.task_id}: {self.provider} took no tools - asked the plain way ({str(e)[:160]})')
                         looped, system = False, f"{system.replace(apiagent.BRIEF, '').replace(apiagent.TOOLS_BRIEF, '')}\n\n{apiagent.no_tools_line()}"
@@ -2492,9 +2497,11 @@ class GeneralSession:
                 # ...but never a turn its CLI died part-way through: it may have done some of the work, and a fresh conversation
                 # saying the whole thing again would do it twice (clipool.MID_TURN) - that turn ends, and Continue picks it up
                 from .clipool import MID_TURN
-                if not self.cli_sid or (cancel is not None and cancel.is_set()) or getattr(self, 'closing', False) or MID_TURN in str(e): raise
-                logger.info(f'assistant could not resume {self.cli_sid} on task {self.task_id}; starting a new one')
-                self.cli_sid = ''
+                # ...and a card whose own conversation was turned down on the turn's first call (apiagent.Lost) is the same case
+                if (not (self.cli_sid or isinstance(e, apiagent.Lost)) or (cancel is not None and cancel.is_set()) or getattr(self, 'closing', False)
+                        or MID_TURN in str(e)): raise
+                logger.info(f"assistant could not resume {self.cli_sid or 'its conversation'} on task {self.task_id}; starting a new one ({str(e)[:160]})")
+                self.cli_sid, kept, self.card_msgs = '', self.card_msgs, []
                 self.resume_notice = 'The original session could not be resumed. Restored from the saved conversation.'
                 self._remember_session()
                 # THE SAME TURN, ON THE SAME BRAIN, UNDER THE SAME INSTRUCTIONS (the spine audit, 2026-11-09): this was a second copy of
@@ -2504,7 +2511,11 @@ class GeneralSession:
                 # tools was asked without them. Only what "resumed" changes is said again: no id, and the conversation in full
                 brain = llm_mod.build_llm(self.store, **{**build_args, 'resume': None}, job='general')
                 if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
-                reply = ask(brain, whole + files)
+                try: reply = ask(brain, whole + files)
+                except Exception:
+                    # nothing answered at all (the network): what it had is still its own, with the line it was just told
+                    if kept and not self.card_msgs: self.card_msgs = [*kept, {'role': 'user', 'content': user + files}]
+                    raise
             actual = getattr(brain, 'last_pick', '')
             if isinstance(actual, str) and actual and actual != self.pick:
                 choice = next((o for o in provider_options(self.store) if o['pick'] == actual), None)

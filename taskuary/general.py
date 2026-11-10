@@ -1791,9 +1791,10 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         said_subject = norm_subject(subj) if subj else said_subject
         where = ''.join(f' · {x}' for x in (m.get('Channel'), f'"{_flat(subj, 140)}"' if subj and norm_subject(subj) != was else '') if x)
         files = store.list_attachments(m['MessageId'])
-        file_line = ('\nATTACHMENTS: ' + '; '.join(
-            str(a.get('Name') or 'file') + (f" ({a.get('Path')})" if a.get('Path') else '')
-            for a in files[:8])) if files else ''
+        # ...each BY THE ID ITS TOOLS TAKE (the stress run, 2026-11-10): "ATTACHMENTS: contract-draft.pdf" named a file read_attachment and
+        # sign_form could only reach after a read_message to learn its number
+        tag = lambda a: ', '.join(str(x) for x in (f"attachment {a['AttachmentId']}" if a.get('AttachmentId') else '', a.get('Path')) if x)
+        file_line = ('\nATTACHMENTS: ' + '; '.join(str(a.get('Name') or 'file') + (f' ({tag(a)})' if tag(a) else '') for a in files[:8])) if files else ''
         long = len(str(m.get('BodyText') or '')) > SOURCE_CHARS
         body = both_ends(str(m.get('BodyText') or ''), SOURCE_CHARS) + (f"\n[cut to fit - read_message m{m['MessageId']} reads it whole]" if long else '')
         sources.append(f"FROM {who} ({m.get('SentAt') or ''}) [m{m['MessageId']}]{where}{EARLIER if m.get('_earlier') else ''}\n{body}{file_line}")

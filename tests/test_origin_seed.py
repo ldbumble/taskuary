@@ -98,6 +98,13 @@ def test_each_source_says_where_it_was_written_a_new_subject_once_and_a_long_one
     assert 'top of a long one.' in user and 'can you renew the seats by Friday?' in user and 'reads it whole]' in user
 
 
+def test_an_attachment_is_named_with_the_id_its_tools_take():
+    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't'); t = _task(s, 'erin@northwind.example'); s.update_task(t, {'Kind': 'general'}, 'router')
+    mid = s.list_messages(t)[0]['MessageId']
+    aid = s.add_attachment({'MessageId': mid, 'Name': 'contract-draft.pdf', 'ContentType': 'application/pdf'})
+    assert f'ATTACHMENTS: contract-draft.pdf (attachment {aid})' in general._prompt(s, t)[1]
+
+
 def test_a_strangers_file_carries_the_record_of_what_came_in():
     from taskuary import context
     s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't'); t = _task(s, 'someone@vendor.example'); s.update_task(t, {'Kind': 'general'}, 'router')

@@ -574,6 +574,11 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
     return out
 
 
+def _reply_waiting(store, tid):
+    "The task's newest reply still waiting for a Send - never an act or one of its emails."
+    return store._one("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind NOT IN ('action','slot') ORDER BY ReviewId DESC LIMIT 1", (tid,))
+
+
 def pressed(rv: dict, out: dict) -> tuple:
     "(the press, what it did) of an answered review, in words for its agent."
     if rv.get('Kind') == 'action':
@@ -620,18 +625,14 @@ def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = N
         # ...and a reply still holding a blank stops the press BEFORE the merge: "Done on GitHub, but the reply was not sent" over a
         # [REASON] left in it is half an act the owner never meant (blanks.py, the owner, 2026-10-30)
         if rv.get('TaskId'):
-            waiting = store._one("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind NOT IN ('action','slot') ORDER BY ReviewId DESC LIMIT 1",
-                                 (rv['TaskId'],))
-            if waiting:
+            if waiting := _reply_waiting(store, rv['TaskId']):
                 from . import signatures
                 typed = signatures.unsigned(reply_text, signatures.for_review(store, waiting)).strip()
                 gap = None if blanks_ok else _blanked(reply_text if typed else waiting.get('DraftText'))
                 if gap: return gap
         out = decide(store, rv, verb_in, final_text, note, actor, learn_async)
         if not out.get('ok') or not rv.get('TaskId'): return out
-        reply = store._one("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind NOT IN ('action','slot') ORDER BY ReviewId DESC LIMIT 1",
-                           (rv['TaskId'],))
-        if reply:
+        if reply := _reply_waiting(store, rv['TaskId']):
             from . import signatures         # the signature alone in the box is no reply text: the filed draft goes, as with an empty box
             if not signatures.unsigned(reply_text, signatures.for_review(store, reply)).strip(): reply_text = ''
             sent =(_post_with_closeout(store, rv, reply, reply_text, actor, blanks_ok) if _carried(store, rv, reply)

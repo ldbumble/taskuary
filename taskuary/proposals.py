@@ -99,6 +99,12 @@ ACTIONS = {
     'break_out': ('break part of this task out into a task of its own', ('title',), None),
 }
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook before the act ran - never an agent's marker
+# ...each by its own gate, which runs it on the owner's yes (perform) and tells its agent their no (declined) - and where it was held, as its
+# card says it. One table: the card's reason (queue), the yes (execute) and the no (settle) each spelled the three out
+HELD_IN = {'browser_act': "in the agent's browser", 'shell_act': "in the agent's shell", 'desktop_act': 'on your desktop'}
+def _gate(a: str):
+    from . import agentdesktop, browsergate, shellgate
+    return {'browser_act': browsergate, 'shell_act': shellgate, 'desktop_act': agentdesktop}[a]
 # WHAT NO AGENT MAY ASK FOR, AND THE MARKS NONE MAY PUT ON ITS OWN ASK - one list for both doors: the marker (parse) and the tool
 # (agenttools.proposal_of). They were two, and had drifted (the spine audit, 2026-11-09): the tool's did not name the held steps, so an agent
 # could file a "held step" of its own - a command of its choosing, on the card the owner reads as one Taskuary stopped
@@ -364,9 +370,9 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
     # neither is a workflow's own repair or write, raised by the run itself (flow.py) with no agent anywhere on the task
     said = tool_words(store, p) if p['action'] == 'run_tool' else break_out_words(p) if p['action'] == 'break_out' else why
     # ...nor a held browser act: the agent did not propose it, it tried it, and the hook stopped it (browsergate.check)
-    reason = (f"held before it ran, in the agent's browser: {p.get('what') or p.get('command')}" + (f" - {p['why']}" if p.get('why') else '') if p['action'] == 'browser_act' else
-              f"held before it ran, in the agent's shell: {p.get('what') or 'a step'}" + (f" - {p['why']}" if p.get('why') else '') if p['action'] == 'shell_act' else
-              f"held before it ran, on your desktop: {p.get('what') or p.get('command')}" + (f" - {p['why']}" if p.get('why') else '') if p['action'] == 'desktop_act' else
+    # ...a shell step by what it does, never its raw line: the card folds the command under "Show the command"
+    reason = (f"held before it ran, {HELD_IN[p['action']]}: {p.get('what') or ('a step' if p['action'] == 'shell_act' else p.get('command'))}"
+              + (f" - {p['why']}" if p.get('why') else '') if p['action'] in HELD_ACTS else
               f"finishing it: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else trackers.words(p) if p['action'] == 'close_item' else 'close the issue it came from'}"
               if p.get('closeout') else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {said}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
     rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason})
@@ -569,15 +575,8 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
     tid = rv.get('TaskId')
     if tid and _action(rv) in PLAYBOOKS: return playbook_answered(store, tid, actor)
     if not tid: return
-    if _action(rv) == 'browser_act' and verb not in ('approve', 'edit'):           # dismissed: the waiting agent hears it was not done
-        from . import browsergate
-        browsergate.declined(store, tid, json.loads(rv.get('DraftText') or '{}'))
-    if _action(rv) == 'shell_act' and verb not in ('approve', 'edit'):
-        from . import shellgate
-        shellgate.declined(store, tid, json.loads(rv.get('DraftText') or '{}'))
-    if _action(rv) == 'desktop_act' and verb not in ('approve', 'edit'):
-        from . import agentdesktop
-        agentdesktop.declined(store, tid, json.loads(rv.get('DraftText') or '{}'))
+    # a held step dismissed: the waiting agent hears it was not done
+    if _action(rv) in HELD_ACTS and verb not in ('approve', 'edit'): _gate(_action(rv)).declined(store, tid, json.loads(rv.get('DraftText') or '{}'))
     # a pull request opened on the owner's yes AFTER the agent finished is still a task that ends by merging it
     if _action(rv) in ('land', 'open_pr') and verb in ('approve', 'edit') and (store.get_task(tid) or {}).get('Status') != 'dropped':
         due = closeout_due(store, tid)
@@ -718,15 +717,7 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
         if p.get('was') != now: raise RuntimeError('the steps have changed since this fix was written - run the workflow again, or Fix with AI on it')
         d = flow.apply(store, p['source_id'], p['flow'], actor, p.get('why') or '')       # re-validated there, and audited
         out = {'workflow': int(p['source_id']), 'changed': flow.diff_text(d)[:1200]}
-    elif a == 'browser_act':
-        from . import browsergate
-        out = browsergate.perform(store, tid, p)
-    elif a == 'shell_act':
-        from . import shellgate
-        out = shellgate.perform(store, tid, p)
-    elif a == 'desktop_act':
-        from . import agentdesktop
-        out = agentdesktop.perform(store, tid, p)
+    elif a in HELD_ACTS: out = _gate(a).perform(store, tid, p)
     elif a == 'close_item':
         from . import trackers
         out = trackers.close_out(store, p)

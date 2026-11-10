@@ -1,11 +1,11 @@
 """AN APPROVAL IS AN EVENT, AND THE AGENT GOES ON (the owner, 2026-11-09: "i hit approve why was this then an input on the right side?? ... once i
 approve it should say sent and what to do next, not a new prompt on right side"). Taskuary's note to the agent after the press is never
 recorded as the owner's line, on any transport; the press itself is an event with its result; every yes that went wakes the agent."""
-import json, time, unittest
+import json, threading, time, unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from taskuary import general, landing, proposals, sessionrecord, shellgate as sg, terminal as term, verdicts
+from taskuary import general, landing, proposals, sessionrecord, shellgate as sg, terminal as term, verdicts, waitroom, workerstate as ws
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
@@ -104,6 +104,82 @@ class EveryYesCarriesOn(unittest.TestCase):
             landing._landed(self.s, self.tid, 'pr', 'Pushed fix-export and opened pull request #12 into main: ' + SAID, 'owner')
         [n] = self.s.waiting_notes(self.tid)
         self.assertEqual(n['CreatedBy'], 'router'); self.assertIn('Open a PR', n['Note'])
+
+
+class ParkedOnItsOwnQuestion(unittest.TestCase):
+    """The agent walk, 2026-11-09: the agent had asked "Should the reply go out as drafted?" and the owner pressed Send. Taskuary's note
+    about the press reached it as the owner's ANSWER to that question: their bubble in the chat ("You: The owner pressed Send on what you
+    set up..."), their words in the record the Advisor learns the owner from - and the press itself waited twelve seconds on the turn."""
+    Q = 'Should the reply to Erin go out as drafted?'
+    def setUp(self):
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Answer Erin on the renewal'); general._WOKEN.clear()
+
+    def parked(self, **kw):
+        return SimpleNamespace(sid='run1', task_id=self.tid, alive=True, waiting=lambda: True, **kw)
+
+    def asked(self, sess):
+        self.assertTrue(ws.record(self.s, self.tid, sess.sid, 'input_needed', text=self.Q, source='judge'))
+        self.assertEqual(waitroom.state(self.s, self.tid)[0], 'asking')
+
+    def after(self):
+        [ev] = [e for e in ws.events(self.s, self.tid) if e['Kind'] == 'answered']
+        self.assertNotEqual(ev.get('Source'), 'owner', 'the owner said nothing: the Advisor reads an owner answer as their own words')
+        self.assertEqual(self.s.waiting_notes(self.tid), [])
+        said = [c for c in self.s.list_comments(self.tid, internal=True) if c.get('ActorType') == general.USER_TYPE and c.get('Actor') != general.BRIEF_ACTOR]
+        self.assertEqual(said, [], 'nothing filed as typed by the owner')
+
+    def test_a_chat_agent_hears_it_as_taskuarys_brief_and_the_press_does_not_wait_on_its_turn(self):
+        told, turn = [], threading.Event()
+        def send_prompt(text, **kw): told.append((text, kw)); turn.wait(5)
+        sess = self.parked(send_prompt=send_prompt)
+        with mock.patch.dict(term.SESSIONS, {'a': sess}, clear=True):
+            self.asked(sess)
+            t0 = time.time()
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), 'told')
+            self.assertLess(time.time() - t0, 2, 'the press answered before the turn it began had run')
+            end = time.time() + 5
+            while not told and time.time() < end: time.sleep(.01)
+            turn.set()
+            [(text, kw)] = told
+            self.assertTrue(kw.get('brief'), "Taskuary's brief in the chat (general.BRIEF_ACTOR) - never the owner's line")
+            self.assertIn('pressed Send', text); self.assertIn('what comes next', text)
+            self.after()
+
+    def test_on_a_pty_it_is_kept_as_a_seed_the_record_reads_as_a_brief(self):
+        typed = []
+        sess = self.parked(cli='claude', write=lambda s: typed.append(s), n=0)
+        with mock.patch.dict(term.SESSIONS, {'a': sess}, clear=True), mock.patch.object(term, 'in_box', return_value=None), \
+             mock.patch.object(term, 'SEED_CHUNK_GAP', 0), mock.patch.object(term, 'SEED_ENTER', 0), mock.patch.object(term, 'chooser_in', return_value=False):
+            self.asked(sess)
+            landing._landed(self.s, self.tid, 'merge', 'Merged the branch into main (f0ce6ca).', 'owner')
+            end = time.time() + 5
+            while not ''.join(typed).strip() and time.time() < end: time.sleep(.01)
+            time.sleep(.3)
+            self.after()
+        steps = sessionrecord.mark_briefs(self.tid, [{'k': 'you', 'text': ''.join(typed).strip()}])
+        self.assertEqual([x['k'] for x in steps], ['brief'], steps)
+
+    def test_over_acp_it_is_a_prompt_marked_taskuarys(self):
+        got = []
+        sess = self.parked(acp=True, prompt=lambda text, brief=False, shown=None, done=None: got.append((text, brief)),
+                           say=lambda *a, **k: self.fail("Taskuary's note went in as the owner's prompt"))
+        with mock.patch.dict(term.SESSIONS, {'a': sess}, clear=True), mock.patch.object(term, 'chooser_in', return_value=False):
+            self.asked(sess)
+            self.assertEqual(general.approved(self.s, self.tid, 'Send', 'the reply was sent'), 'told')
+            self.after()
+        [(text, brief)] = got
+        self.assertTrue(brief); self.assertIn('pressed Send', text)
+
+    def test_the_owners_own_answer_is_still_theirs(self):
+        told = []
+        sess = self.parked(send_prompt=lambda text, **kw: told.append((text, kw)))
+        with mock.patch.dict(term.SESSIONS, {'a': sess}, clear=True):
+            self.asked(sess)
+            self.assertEqual(waitroom.add(self.s, self.tid, 'Yes, send it as it is')['state'], 'answered')
+        [(text, kw)] = told
+        self.assertEqual(text, 'Yes, send it as it is'); self.assertFalse(kw.get('brief'))
+        [ev] = [e for e in ws.events(self.s, self.tid) if e['Kind'] == 'answered']
+        self.assertEqual(ev.get('Source'), 'owner')
 
 
 class InputsAreTypedOrCameIn(unittest.TestCase):

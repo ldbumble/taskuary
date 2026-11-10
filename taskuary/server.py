@@ -550,6 +550,7 @@ class DispatchBody(BaseModel):
     # The button says "Send to agent".  The task's Kind remains authoritative once a task
     # exists; this hint is only how an unpromoted message says which kind of task to create.
     kind: str | None = None
+    app_words: bool = False         # the instruction is Taskuary's own (an accepted offer's job), never a line the owner typed: its brief
     # A GOAL'S PRESS STARTS ITS STEP: Send to agent on a goal dispatches the step's own task, and a start that failed was left on the
     # step - a task nobody had pressed - while the goal's card showed the error under a line that never moved (the matrix's verify,
     # 2026-10-20). `via` is the goal the press was made on; a failed start is left there, where it was pressed and is read.
@@ -3149,9 +3150,12 @@ def accept_offer(task_id: int, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     offer = ingest.offer_of(store, task_id)
     if not offer: raise HTTPException(409, 'there is no offer on this task to accept')
-    out = dispatch_task(task_id, DispatchBody(kind='general', instruction=ingest.OFFER_JOB.format(offer=offer)), background)
+    # ...the job is Taskuary's words about the press, and the press is the owner's line in the chat ("You accepted the offer: ...",
+    # general.PRESSES): sent as typed, the whole of OFFER_JOB stood in their bubble (the agent walk, 2026-11-09)
+    out = dispatch_task(task_id, DispatchBody(kind='general', instruction=ingest.OFFER_JOB.format(offer=offer), app_words=True), background)
     if isinstance(out, dict) and (out.get('started') or out.get('existing')):
         store.tag_task(task_id, ingest.OFFER_TAG, actor=ACTOR)
+        store.audit('task', task_id, 'offer', ACTOR, detail={'offer': offer})
         store.add_comment(task_id, ACTOR, 'agent', f'You accepted the offer: {offer}')
     return out
 
@@ -4480,7 +4484,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         # session with nothing said, drew no Starting… and never polled (2026-11-04)
         if prompt:
             def turn():
-                try: session.send_prompt(prompt, brief=not typed)
+                try: session.send_prompt(prompt, brief=not typed or body.app_words)
                 finally: general.OPENING.discard(tid)
             general.OPENING.add(tid)
             background.add_task(turn)

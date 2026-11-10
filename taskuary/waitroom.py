@@ -228,7 +228,7 @@ def _deliver(store, tid: int) -> dict:
         if out.get('state') == 'not_a_choice':
             return {'delivered': 0, 'state': 'not_a_choice', 'why': out.get('why') or '', 'left': len(pending)}
         if not out.get('delivered'):
-            term.type_into(t, text)
+            term.type_into(t, text, **ws._as(who))
             store.add_comment(tid, who, 'human', f'Answered the agent: {text[:500]}')
         store.deliver_waiting([x['WId'] for x in notes], 'answered')
         store.audit('task', tid, 'waitroom_deliver', 'router', 'agent', {'n': len(notes), 'how': 'answered', 'left': left})

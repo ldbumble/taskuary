@@ -248,6 +248,9 @@ def test_accepting_the_offer_starts_the_assistant_with_that_job():
         assert r.status_code == 200, r.text
         prompt = ses.send_prompt.call_args[0][0]
         assert OFFER in prompt and "waits for the owner's yes" in prompt and 'Nothing is sent' in prompt
+        # ...the job is Taskuary's words about a press, never a line the owner typed (the agent walk, 2026-11-09: it stood in their bubble)
+        assert ses.send_prompt.call_args[1].get('brief') is True
+        assert [m for m in general.press_lines(s, tid) if 'accepted the offer' in m['content'][0]['text']], general.press_lines(s, tid)
         assert s.get_task(tid)['Kind'] == 'general' and ingest.offer_of(s, tid) == ''
         assert c.post(f'/api/tasks/{tid}/offer').status_code == 409                 # taken once
 

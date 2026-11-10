@@ -367,6 +367,21 @@ def release_all() -> bool:
         return bool(HELD)
 
 
+# WHOSE WORDS AN ANSWER IS (the agent walk, 2026-11-09). The waiting room's own notes - a press that went, a branch that landed - reach an
+# agent parked on a question as the thing that lets the question go. They are Taskuary's, never the owner's: the note stood in their bubble
+# ("You: The owner pressed Send on what you set up..."), went into the record the Advisor learns the owner's words from, and the press
+# itself waited twelve seconds on the turn it began. Its writer is the room's 'router'; anyone else answering is the owner
+def ours(actor) -> bool: return actor == 'router'
+def said_by(actor) -> str: return 'taskuary' if ours(actor) else 'owner'
+def _as(actor) -> dict: return {'brief': True} if ours(actor) else {}
+def _brief(sess, text):
+    "Taskuary's note as a chat agent's next turn, on its own thread: nobody who pressed a button waits for the turn that follows."
+    def go():
+        try: sess.send_prompt(text, brief=True)
+        except Exception as e: logger.warning(f"task {getattr(sess, 'task_id', '?')}: Taskuary's note did not reach its agent - {e}")
+    threading.Thread(target=go, daemon=True, name='brief').start()
+
+
 def _answer_held(store, tid, h, answers: dict, actor) -> dict:
     """Answers for a held ask: kept until every question has one, then the hook is let go with all of them."""
     with _HELD_LOCK:
@@ -374,7 +389,7 @@ def _answer_held(store, tid, h, answers: dict, actor) -> dict:
             if rid in h['rids']: h['answers'][rid] = text
         done = len(h['answers']) >= len(h['rids'])
     for rid, text in answers.items():
-        if rid in h['rids']: record(store, tid, h['sid'], 'answered', request_id=rid, text=text, source='owner')
+        if rid in h['rids']: record(store, tid, h['sid'], 'answered', request_id=rid, text=text, source=said_by(actor))
     if done:
         h['event'].set()
         store.add_comment(tid, actor, 'human', 'Answered the agent: ' + '; '.join(h['answers'][r] for r in h['rids']) + ' - delivered with its question.')
@@ -421,10 +436,10 @@ def answer_group(store, tid: int, answers: dict, actor: str = 'owner') -> dict:
     from . import terminal as term
     try:
         said = '\n'.join(f"{i}. {r['text']} - {answers[r['request_id']]}" for i, r in enumerate(reqs, 1))
-        if hasattr(sess, 'send_prompt'): sess.send_prompt(said)
+        if hasattr(sess, 'send_prompt'): _brief(sess, said) if ours(actor) else sess.send_prompt(said)
         elif getattr(sess, 'cli', '') == 'codex':
             # codex asked in words: its answers are its next turn, through its own queue (typed only if that refuses)
-            if not term.queue_codex(sess, said): term.type_into(sess, said)
+            if not term.queue_codex(sess, said): term.type_into(sess, said, **_as(actor))
         elif all(r.get('choices') for r in reqs) and all(r.get('source') == 'hook' for r in reqs):
             term.answer_form(sess, [(r.get('choices') or [], answers[r['request_id']]) for r in reqs])
         else:
@@ -433,7 +448,7 @@ def answer_group(store, tid: int, answers: dict, actor: str = 'owner') -> dict:
     except Exception as e:
         store.add_comment(tid, actor, 'human', f'Answers could not be delivered to the agent: {str(e)[:200]}')
         return {'delivered': False, 'state': 'failed', 'why': str(e)[:200]}
-    for r in reqs: record(store, tid, sess.sid, 'answered', request_id=r['request_id'], text=answers[r['request_id']], source='owner')
+    for r in reqs: record(store, tid, sess.sid, 'answered', request_id=r['request_id'], text=answers[r['request_id']], source=said_by(actor))
     store.add_comment(tid, actor, 'human', 'Answered the agent: ' + '; '.join(f"{r['text'][:80]} - {answers[r['request_id']][:200]}" for r in reqs)
                       + f' - delivered (run {sess.sid}).')
     store.audit('task', tid, 'worker_answer', actor, detail={'request_ids': [r['request_id'] for r in reqs], 'sid': sess.sid})
@@ -509,15 +524,20 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', ow
         # ...a chat is handed the owner's own words, with what the Assistant added to them folded as Taskuary's (general.say_relayed)
         if hasattr(sess, 'send_prompt'):
             from . import general
-            general.say_relayed(sess, owner or send, send) if owner else sess.send_prompt(send)
-        elif words and term.queue_codex(sess, send): pass
-        else: term.type_into(sess, send)
+            if ours(actor): _brief(sess, send)
+            else: general.say_relayed(sess, owner or send, send) if owner else sess.send_prompt(send)
+        elif words and term.queue_codex(sess, send):
+            if ours(actor):
+                from . import sessionrecord
+                sessionrecord.keep_seed(tid, send)          # its `you` step in the record reads as Taskuary's brief (mark_briefs)
+        else: term.type_into(sess, send, **_as(actor))
     except Exception as e:
         store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - could not be delivered to {who}: {str(e)[:200]}')
         return {'delivered': False, 'state': 'failed', 'why': str(e)[:200]}
     words = ' '.join(str(owner or text).split())          # the record reads what the owner said, not the Assistant's version
-    record(store, tid, sess.sid, 'answered', request_id=request_id, text=words, source='owner')
-    store.add_comment(tid, actor, 'human', f'Answered "{req["text"][:160]}": {words[:500]} - delivered to {who} (run {sess.sid}).')
+    record(store, tid, sess.sid, 'answered', request_id=request_id, text=words, source=said_by(actor))
+    store.add_comment(tid, actor, 'human', f'Told {who} (run {sess.sid}), which was asking "{req["text"][:160]}": {words[:500]}' if ours(actor) else
+                      f'Answered "{req["text"][:160]}": {words[:500]} - delivered to {who} (run {sess.sid}).')
     store.audit('task', tid, 'worker_answer', actor, detail={'request_id': request_id, 'sid': sess.sid})
     return {'delivered': True, 'state': 'delivered', 'sid': sess.sid}
 
@@ -559,7 +579,8 @@ def answer_open(store, tid: int, text: str, actor: str = 'owner', owner: str = N
     req = asking_of(store, sess) if sess else None
     if not req: return {'delivered': False, 'state': 'no_request', 'why': 'no open request from a live run'}
     qs = question_group(store, sess)
-    if len(qs) > 1 and req.get('kind') != 'approval_needed':
+    # ...and Taskuary's note is never split over a group of questions as if it answered each: it is told once, to the one that is showing
+    if len(qs) > 1 and req.get('kind') != 'approval_needed' and not ours(actor):
         return {**answer_group(store, tid, split_answers(text, qs), actor), 'path': delivery_path(sess), 'request_id': qs[0]['request_id']}
     return {**answer(store, tid, req['request_id'], text, actor, owner=owner), 'path': delivery_path(sess), 'request_id': req['request_id']}
 

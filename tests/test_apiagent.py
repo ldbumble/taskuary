@@ -124,10 +124,41 @@ class OneRoundTripTests(unittest.TestCase):
         asked.clear()
         class Circling:
             def chat(self, msgs, tools, max_tokens, **kw): asked.append((kw, msgs[-1]['content'])); return {'content': 'Stuck on the list.'} if kw else look
-        with mock.patch.object(apiagent, 'run_tool', return_value='PAGE') as ran, mock.patch.object(apiagent, 'STUCK', 5):
+        with mock.patch.object(apiagent, 'run_tool', return_value='PAGE') as ran, mock.patch.object(apiagent, 'IDLE_STEPS', 5):
             self.assertEqual(apiagent.turn(Circling(), MemoryStore(), 1, 's', 'sys', 'go', 500), 'Stuck on the list.')
+        self.assertEqual(ran.call_count, 6, 'the first PAGE was news; five more of it were not')
+        self.assertEqual(asked[-1][0], {'tool_choice': 'none'}); self.assertIn('last 5 steps brought nothing', asked[-1][1])
+
+    def test_a_small_model_searching_again_in_other_words_for_the_same_hits_is_stopped(self):
+        """The owner, 2026-11-10: "are we leaking tokens?" - other arguments every time never tripped "the same call", and a turn whose
+        answers held nothing new ran on, each step sending more. Steps that find nothing new end it (the `agent_idle_steps` setting)."""
+        n, asked = iter(range(999)), []
+        class Wandering:
+            def chat(self, msgs, tools, max_tokens, **kw):
+                asked.append(kw)
+                return {'content': 'Nothing more.'} if kw else {'tool_calls': [{'id': f'c{len(asked)}', 'function': {'name': 'search_mail', 'arguments': json.dumps({'q': f'renewal {next(n)}'})}}]}
+        hits = '\n'.join(f'[m{i}] Erin Blake - Payworth renewal' for i in range(10))
+        s = MemoryStore(); s.set_setting('agent_idle_steps', '4', 'owner')
+        with mock.patch.object(apiagent, 'run_tool', side_effect=lambda *a: '\n'.join(reversed(hits.splitlines())) if len(asked) % 2 else hits) as ran:
+            self.assertEqual(apiagent.turn(Wandering(), s, 1, 's', 'sys', 'go', 500), 'Nothing more.')
         self.assertEqual(ran.call_count, 5)
-        self.assertEqual(asked[-1][0], {'tool_choice': 'none'}); self.assertIn('the same call 5 times in a row', asked[-1][1])
+
+    def test_a_call_sends_old_tool_answers_as_a_line_and_keeps_them_whole(self):
+        "Every step sent every earlier answer in full; the conversation kept still has them, and what is sent before them never changes."
+        page = lambda k: f'PAGE {k} ' + 'x' * 5000
+        seen = []
+        class Reader:
+            def chat(self, msgs, tools, max_tokens, **kw):
+                seen.append(json.dumps(msgs)); k = len(seen)
+                return {'content': 'Read all eight.'} if k > 8 else {'tool_calls': [{'id': f'c{k}', 'function': {'name': 'file_read', 'arguments': json.dumps({'path': f'f{k}.txt'})}}]}
+        kept = []
+        with mock.patch.object(apiagent, 'run_tool', side_effect=lambda s, t, i, n, a: page(a['path'])):
+            apiagent.turn(Reader(), MemoryStore(), 1, 's', 'sys ' * 2000, 'go', 500, history=kept)
+        self.assertLess(len(seen[-1]), 8000 + 3 * 5100 + 6 * 400 + 2000, 'the last call carries three answers whole, the rest as lines')
+        self.assertTrue('the answer to file_read' in seen[-1] and 'f1.txt' in seen[-1] and 'call it again' in seen[-1])
+        self.assertEqual(sum(len(m.get('content') or '') > 5000 for m in kept if m['role'] == 'tool'), 8, 'what is kept is whole')
+        same = lambda a, b: next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+        self.assertTrue(all(same(a, b) >= 8000 for a, b in zip(seen, seen[1:])), 'the system and the task lead every call, byte for byte')
 
     def test_stop_ends_the_turn_at_once_under_a_model_call_or_a_tool(self):
         "Stop was read between steps: it waited out the model's answer, the page, the command."

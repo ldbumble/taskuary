@@ -7,7 +7,7 @@ action is the goal, and the browser road already exists: agent-browser, the sign
 
 So the turn is a loop of the card's own chat-completions `tools` (llm.make_llm's `chat`): the model calls a tool, the server runs
 it, the answer goes back - until it answers in words, as a CLI's turn does. Nothing counts its steps (the owner, 2026-11-04: an agent
-at work is never ended for running long - only finishing or Stop ends it); only going in circles does (STUCK). And Stop ends it AT
+at work is never ended for running long - only finishing or Stop ends it); only steps that bring nothing new do (idle_steps). And Stop ends it AT
 ONCE, mid-call or mid-tool (_await). The tools are the CLI road's own, run by the server rather than a shell:
 - browser_open / browser_look / browser_click / browser_fill / browser_press / browser_screenshot - `agent-browser` in THIS task's
   named session (browserview), so the pane shows it. Every act goes through browsergate.check first, exactly as a CLI's shell
@@ -23,8 +23,8 @@ import json, re, shlex
 from pathlib import Path
 from loguru import logger
 
-STUCK = 30                     # the same call with the same answer, this many times in a row: going in circles, not working
-CAP = 12_000                   # one tool answer, as the model reads it
+IDLE_STEPS = 8                 # steps in a row whose answers held nothing the turn had not read already: going in circles, not working
+CAP = 12_000                  # one tool answer, as the model reads it
 WAIT = 45.0                    # one browser act
 
 _S = lambda props, need=(): {'type': 'object', 'properties': props, 'required': list(need)}
@@ -399,8 +399,15 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
     return out
 
 
-BUDGET = 300_000               # the conversation one call carries, in characters (~75K tokens)
+BUDGET = 300_000               # the conversation KEPT, in characters (~75K tokens)
 DROPPED = '(dropped to save room - run it again if you need it)'
+# WHAT ONE CALL SENDS (the owner, 2026-11-10: "they spent 25 dollars in one day? 32 million tokens?"): every step of a turn sent the whole
+# conversation again, every earlier tool answer in full - a turn of twelve reads paid for the first page twelve times. A call now sends the
+# answers of the last KEEP_STEPS steps whole and an older one as a line naming the call, which the agent can make again; the conversation
+# kept is untouched. Older answers stay stubbed once stubbed, so what goes before them is the same bytes call after call (the provider's
+# prompt cache), and the whole is held under the `agent_request_chars` setting.
+KEEP_STEPS, REQUEST_CHARS = 3, 120_000
+def _stub(name, args, n) -> str: return f'(the answer to {name}({str(args or "")[:160]}), {n:,} characters, is not repeated here - call it again if you need it)'
 
 
 def _size(m: dict) -> int:
@@ -409,10 +416,10 @@ def _size(m: dict) -> int:
     return said + sum(len((t.get('function') or {}).get('arguments') or '') for t in m.get('tool_calls') or [])
 
 
-def _fit(msgs: list, keep: int = 6):
-    """Under BUDGET, in place: the oldest tool answers go first (their calls stay, so the model still sees what it did), then whole turns
-    after the first, oldest first. Never the system, the first message (the task, said in full) or the newest `keep`."""
-    over = sum(map(_size, msgs)) - BUDGET
+def _fit(msgs: list, keep: int = 6, budget: int = None):
+    """Under `budget` (BUDGET), in place: the oldest tool answers go first (their calls stay, so the model still sees what it did), then whole
+    turns after the first, oldest first. Never the system, the first message (the task, said in full) or the newest `keep`."""
+    over = sum(map(_size, msgs)) - (budget or BUDGET)
     for m in msgs[2:-keep]:
         if over <= 0: return
         if m.get('role') == 'tool' and m.get('content') != DROPPED: over -= _size(m) - len(DROPPED); m['content'] = DROPPED
@@ -420,6 +427,27 @@ def _fit(msgs: list, keep: int = 6):
         nxt = next((j for j in range(3, len(msgs) - keep) if msgs[j].get('role') == 'user'), None)
         if nxt is None: return
         over -= sum(map(_size, msgs[2:nxt])); del msgs[2:nxt]
+
+
+def sent(msgs: list, budget: int = REQUEST_CHARS, keep: int = KEEP_STEPS) -> list:
+    "What one call sends of the conversation `msgs`: tool answers older than the last `keep` steps as a stub (_stub), the whole under `budget`."
+    steps = [i for i, m in enumerate(msgs) if m.get('tool_calls')]
+    cut = steps[-keep] if len(steps) >= keep else 0
+    calls = {c.get('id') or (c.get('function') or {}).get('name'): c.get('function') or {} for m in msgs[:cut] for c in m.get('tool_calls') or []}
+    out = []
+    for i, m in enumerate(msgs):
+        c = m.get('content')
+        if i < cut and m.get('role') == 'tool' and isinstance(c, str) and len(c) > 300:
+            f = calls.get(m.get('tool_call_id')) or {}
+            m = {**m, 'content': _stub(f.get('name') or 'a tool', f.get('arguments'), len(c))}
+        out.append(dict(m))
+    _fit(out, budget=budget)
+    return out
+
+
+def _setting(store, key: str, default: int) -> int:
+    try: return max(1, int(store.get_setting(key) or default))
+    except (TypeError, ValueError, AttributeError): return default
 
 
 def _settle(msgs: list):
@@ -449,7 +477,8 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                + [{'type': 'text', 'text': user}]) if images else user
     mine = {'role': 'user', 'content': content}
     msgs, begun = [{'role': 'system', 'content': system}, *(history or []), mine], False
-    why, last, again = 'You are out of steps for this turn.', None, 0
+    why, read, idle = 'You are out of steps for this turn.', set(), 0
+    budget, idle_n = _setting(store, 'agent_request_chars', REQUEST_CHARS), _setting(store, 'agent_idle_steps', IDLE_STEPS)
     stopped = lambda: cancel is not None and cancel.is_set()
     def said(m):
         text = llm.said_text(m)
@@ -460,7 +489,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
             # ...stopped before its first answer, a conversation under way still heard the line: the next turn says only its own
             if stopped(): begun = begun or bool(history); raise RuntimeError('stopped')
             _fit(msgs)
-            try: m = _await(lambda: brain.chat(msgs, tools, max_tokens), cancel)
+            try: m = _await(lambda: brain.chat(sent(msgs, budget), tools, max_tokens), cancel)
             except Exception as e:
                 if stopped(): begun = begun or bool(history); raise
                 # ...the conversation it was handed is what this call could not take (too long for the model now, or a gateway that
@@ -473,6 +502,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
             calls = m.get('tool_calls') or []
             if not calls: return said(m)
             msgs.append({'role': 'assistant', **{k: v for k, v in m.items() if v is not None}})          # as sent: a Gemini model's thought signature rides on it
+            new = False
             for c in calls:
                 f = c.get('function') or {}
                 name = str(f.get('name') or '')
@@ -486,13 +516,19 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                     logger.info(f'apiagent: task {tid} {name} failed - {e}')
                 if trace: trace('tool_result', name, {'result': out, 'is_error': err})
                 msgs.append({'role': 'tool', 'tool_call_id': c.get('id') or name, 'content': _cut(out)})
-                again, last = (again + 1 if (name, a, out) == last else 0), (name, a, out)
-            if again >= STUCK - 1:
-                why = f'You have made the same call {again + 1} times in a row and had the same answer each time.'
-                logger.info(f'apiagent: task {tid} going in circles on {name} - asked for where it got'); break
+                # PROGRESS IS SOMETHING NEW READ (the owner, 2026-11-10: "are we leaking tokens?"): a small model calling a search again
+                # with other words, or a page that failed again, is not working - a line no earlier answer of this turn held is
+                lines = {' '.join(l.split()) for l in str(out).splitlines() if l.strip()} if not err else set()
+                new, read = new or bool(lines - read), read | lines
+            idle = 0 if new else idle + 1
+            if idle >= idle_n:
+                why = f'Your last {idle} steps brought nothing you had not read already.'
+                logger.info(f'apiagent: task {tid} made {idle} steps with nothing new - asked for where it got')
+                if trace: trace('progress', 'agent', f'Stopped after {idle} steps that found nothing new - say what to try next and it carries on.')
+                break
         # going in circles (or out of a caller's own bound): one last answer in words, no more tools - where it got and what is left
         msgs.append({'role': 'user', 'content': f'{why} Say what you did, what you found, and what is left.'})
-        return said(_await(lambda: brain.chat(msgs, tools, max_tokens, tool_choice='none'), cancel))
+        return said(_await(lambda: brain.chat(sent(msgs, budget), tools, max_tokens, tool_choice='none'), cancel))
     finally:
         # ...kept once the model has answered at all: a turn stopped or failed part-way keeps what it did, so Continue goes on from there.
         # Its pictures are not carried (the model saw them; their bytes would ride on every later call)

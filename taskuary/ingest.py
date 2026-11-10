@@ -2172,8 +2172,9 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
     # a conversation of quick answers carries on quick while the task still reads quick: one call at a fraction of a desk (quickwork._take)
     quick = not coding and quickwork.only_quick(store, tid) and _reads_quick(store, tid)
     if not quick and not has_room(store):
-        not_started(store, tid, f'{busy_words(store)} - {general.carry_on(store.get_task(tid))}')
-        return False
+        queue_turn(store, tid)
+        store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general', 'queued': True})
+        return True
     (CODING_OPENING if coding else general.OPENING).add(tid)
     store.add_comment(tid, 'router', 'agent', f'{_who_said(msg)} wrote again with new work - the '
                       + ('coding agent reopens its own session' if coding else 'assistant carries on its conversation') + ' here by itself.')
@@ -2182,6 +2183,27 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
     elif coding: _spawn(_continue_coding, store, tid)
     else: _spawn(_continue_general, store, tid, msg, mid)
     return True
+
+
+# A FULL HOUSE QUEUES A TURN AS IT QUEUES A START (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible"): a
+# carried-on, re-planning or folded turn that found every slot taken said "type to carry on" and was gone - nothing picked it up when a
+# slot freed. It waits in the start queue (dispatchq) as what it is - Turn 'carry_on', the conversation told what came in since
+# (carry_on_turn, read when it runs), or 'replan', the turns in Brief in the order they came - and the drain runs it (queued_turn)
+def queue_turn(store, tid, turn: str = '') -> None:
+    from . import general
+    q, t = store.get_dispatch(tid) or {}, store.get_task(tid) or {}
+    said = '\n\n---\n\n'.join(x for x in [q.get('Brief') if q.get('Turn') else '', turn] if x)
+    agent = 'assistant' if general.handles(t) else ((_resumable_coding(store, tid)[0] or {}).get('Agent') or '')
+    store.enqueue_dispatch(tid, None, agent, busy_words(store), brief=said or None, turn='carry_on' if not turn or q.get('Turn') == 'carry_on' else 'replan')
+    if not q: store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {busy_words(store)}, and it starts by itself when there is room.')
+
+
+def queued_turn(store, tid, turn: str, said: str = '') -> None:
+    "Run a turn queue_turn held, now a slot is free: a coding task's own session reopened, else the assistant handed its turn."
+    from . import general
+    if not general.handles(store.get_task(tid) or {}): CODING_OPENING.add(tid); return _continue_coding(store, tid)
+    general.OPENING.add(tid)
+    _replan_general(store, tid, '\n\n---\n\n'.join(x for x in [carry_on_turn(store, tid) if turn == 'carry_on' else '', said] if x))
 
 
 # THE FIRST REAL ASK ON A ROW NO AGENT HAS WORKED STARTS ONE (the owner, 2026-11-09): a colleague's opening "Alex!" was read as a watch, his
@@ -2627,9 +2649,7 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
     if live_agent(store, tid):
         _spawn(_replan_pass, store, tid, {**msg, 'message_id': mid}, turn)
         return True
-    if not has_room(store):
-        not_started(store, tid, f'{busy_words(store)} - {general.carry_on(store.get_task(tid))}')
-        return False
+    if not has_room(store): queue_turn(store, tid, turn); return True
     general.OPENING.add(tid)
     store.add_comment(tid, 'router', 'agent', ('You answered' if own else f'{_who_said(msg)} wrote') +
                       ' on the thread - the assistant looks again at what is left to do here.')
@@ -2685,9 +2705,7 @@ def folded_in(store, tid, src, title: str, msgs: list, result: str = '', drafts:
     if live_agent(store, tid):
         _spawn(_replan_pass, store, tid, msg, turn)
         return True
-    if not has_room(store):
-        not_started(store, tid, f'{busy_words(store)} - {general.carry_on(store.get_task(tid))}')
-        return False
+    if not has_room(store): queue_turn(store, tid, turn); return True
     general.OPENING.add(tid)
     store.add_comment(tid, 'router', 'agent', f'{task_ref(src)} was folded in - the assistant takes what it brought into the work here.')
     _spawn(_replan_general, store, tid, turn)

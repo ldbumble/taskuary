@@ -102,6 +102,23 @@ class ThreadChangeReplans(unittest.TestCase):
                                             'from_email': 'erin@northwind.example', 'sent_at': '2026-11-03 10:10'}), intent='fyi')
         self.assertEqual((names(first), names(second)), (['_replan_general'], ['_replan_pass']))   # queued behind the live turn, no second start
 
+    def test_a_full_house_queues_the_replan_and_a_free_slot_runs_every_line(self):
+        # ...never "type to carry on" for a turn nobody picks up (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible")
+        from taskuary import blackboard
+        s = store(); tid, rid = drafted_task(s)
+        with mock.patch.object(ingest, 'has_room', return_value=False):
+            _out, first = ingested(s, mail(**GAIL), intent='fyi', thread=ANSWERED)
+            ingested(s, mail(**{**GAIL, 'external_id': 'x3', 'body': 'Thanks Gail!', 'from_name': 'Erin Blake',
+                                'from_email': 'erin@northwind.example', 'sent_at': '2026-11-03 10:10'}), intent='fyi')
+        self.assertEqual((names(first), s.get_dispatch(tid)['Turn']), ([], 'replan'))
+        self.assertFalse([c for c in s.list_comments(tid) if 'type to carry on' in c['Body']])
+        ses = mock.Mock()
+        with mock.patch.object(ingest, 'has_room', return_value=True), mock.patch.object(general, 'start_session', return_value=ses):
+            blackboard.drain(s)
+        said = ses.send_prompt.call_args[0][0]
+        self.assertLess(said.index('I booked the courier'), said.index('Thanks Gail!'))                    # one turn, in the order they came
+        self.assertIsNone(s.get_dispatch(tid))
+
     def test_a_new_question_on_a_finished_agents_task_wakes_it(self):
         # Erin writes again with a question of her own (reply_only, not an aside): the agent re-plans with her words - it was only the
         # tool-less writer that heard it, and the agent's chat never moved

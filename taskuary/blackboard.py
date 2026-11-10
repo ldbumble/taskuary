@@ -494,13 +494,18 @@ def drain(store):
             if not has_room(store): return                                        # a capacity wait is not an attempt (PW-086)
             # BehindTaskId is history now: likely overlap is advisory and rides into the briefing at
             # startup; an old row parked behind another task is simply due (PW-171)
-            b = q.get('BehindTaskId')
+            b, turn = q.get('BehindTaskId'), q.get('Turn')
             t = store.get_task(q['TaskId']) or {}
-            if t.get('Status') not in ('open', 'in_progress') or _occupied(q['TaskId']):
+            from . import general
+            # ...a queued TURN is a stopped agent's next one (ingest.queue_turn): a task waiting on someone still hears it, and an
+            # assistant the owner opened meanwhile takes it next - only a coding session already open makes it moot
+            if t.get('Status') not in ('open', 'in_progress', *(('waiting',) if turn else ())) or (_occupied(q['TaskId']) and not (turn and general.handles(t))):
                 store.clear_dispatch(q['TaskId']); continue
             try:
-                from . import general
-                if general.handles(t):
+                if turn:
+                    from .ingest import queued_turn
+                    queued_turn(store, q['TaskId'], turn, q.get('Brief') or '')
+                elif general.handles(t):
                     from .ingest import _start_general
                     # a queued GENERAL task opens its assistant session, not a CLI (PW-069). Its failure is counted and
                     # re-armed inside; clearing the row here wrote "Started" over a launch that never happened (PW-073/085)

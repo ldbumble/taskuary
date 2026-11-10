@@ -68,6 +68,13 @@ class FoldTellsAgentTests(unittest.TestCase):
         self.fold()
         self.assertEqual(self.s.get_review(self.rid)['Status'], 'superseded')
 
+    def test_a_full_house_queues_the_fold_turn(self):
+        # ...it waits its turn and runs when a slot frees (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible")
+        with mock.patch.object(ingest, 'has_room', return_value=False): out, calls = self.fold()
+        q = self.s.get_dispatch(self.b)
+        self.assertEqual((out['agent_told'], calls, q['Turn']), (True, [], 'replan'))
+        self.assertTrue(q['Brief'].startswith(f'{general.FOLD_HEAD}{task_ref(self.a)}'))
+
     def test_no_agent_conversation_starts_nothing(self):
         c = self.s.create_task({'Title': 'fresh', 'Kind': 'general'}, 'owner')
         with mock.patch('taskuary.ingest._spawn') as spawn: out = reshape.merge_tasks(self.s, self.a, c)

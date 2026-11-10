@@ -110,8 +110,27 @@ class CarryOnTests(unittest.TestCase):
         self.assertEqual((kw.get('brief'), 'delivery_instructions' in kw), (True, False))
         self.assertNotIn(tid, general.OPENING)
 
+    def test_a_full_house_queues_the_carry_on_and_a_free_slot_runs_it(self):
+        # ..."type to carry on" in a full house was a start nobody picked up (the owner, 2026-11-10: "job of agent is to be helpful and do as
+        # much as possible"): it waits its turn like a fresh start, and the drain carries the conversation on
+        from taskuary import blackboard
+        s = store(); tid = finished_task(s)
+        with mock.patch.object(ingest, 'has_room', return_value=False):
+            _out, spawned = ingested(s, mail(**AGAIN))
+            ingested(s, mail(**{**AGAIN, 'external_id': 'x9', 'body': 'And the third site too, please.'}))
+        bodies = [c['Body'] for c in s.list_comments(tid)]
+        self.assertEqual((spawned, s.get_dispatch(tid)['Turn']), ([], 'carry_on'))
+        self.assertEqual(len([b for b in bodies if b.startswith('Waiting its turn:')]), 1)                   # a burst waits as one turn
+        self.assertFalse([b for b in bodies if 'type to carry on' in b or b.startswith(ingest.NOT_STARTED)])
+        ses = mock.Mock()
+        with mock.patch.object(ingest, 'has_room', return_value=True), mock.patch.object(general, 'start_session', return_value=ses), \
+             mock.patch.object(continuity, 'news_block', return_value='NEW SINCE YOUR LAST TURN: two messages'):
+            blackboard.drain(s)
+        self.assertEqual(ses.send_prompt.call_args[0][0], 'NEW SINCE YOUR LAST TURN: two messages\n\n' + ingest.CARRY_ON_PROMPT)
+        self.assertIsNone(s.get_dispatch(tid)); self.assertNotIn(tid, general.OPENING)
 
-STRANGER = dict(external_id='x3', body='Please also send us the full ledger export.', from_email='rep@vendor.example', from_name='Sam Rook',
+
+STRANGER =dict(external_id='x3', body='Please also send us the full ledger export.', from_email='rep@vendor.example', from_name='Sam Rook',
                 sent_at='2026-10-28 11:00')
 
 
@@ -145,6 +164,15 @@ class CodingCarryOnTests(unittest.TestCase):
         self.assertEqual((args[1], args[2], args[4], args[5]), (tid, 'coder', None, 'router'))     # no instruction: resume_seed says what is new
         self.assertEqual((kw['resume'], kw['cwd'], kw['brain']), ('cli-conv-1', self.cwd, 'cli:claude'))
         self.assertNotIn(tid, ingest.CODING_OPENING)
+
+    def test_a_full_house_queues_the_reopen_and_a_free_slot_reopens_it(self):
+        from taskuary import blackboard
+        s = store(); tid = coding_task(s, self.cwd)
+        with mock.patch.object(ingest, 'has_room', return_value=False): self.assertEqual(ingested(s, mail(**AGAIN))[1], [])
+        self.assertEqual((s.get_dispatch(tid)['Turn'], s.get_dispatch(tid)['Agent']), ('carry_on', 'coder'))
+        with mock.patch.object(ingest, 'has_room', return_value=True), mock.patch.object(terminal, 'start_on_task') as start: blackboard.drain(s)
+        self.assertEqual(start.call_args.kwargs['resume'], 'cli-conv-1')                                    # its own session, not a fresh one
+        self.assertIsNone(s.get_dispatch(tid)); self.assertNotIn(tid, ingest.CODING_OPENING)
 
     def test_not_when_coding_starts_are_switched_off(self):
         s = store(coding_auto_enabled='0'); tid = coding_task(s, self.cwd)

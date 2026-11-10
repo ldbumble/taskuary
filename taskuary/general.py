@@ -1921,10 +1921,13 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     rows = chat_rows(store, tid, run=True)
     last = rows[-1] if rows else {}
     ask = _cut(last.get('Body'), OWNER_ASK_CHARS) if sources and not dock and last.get('ActorType') == USER_TYPE else ''
+    # ...and a turn Taskuary started - a sender's new line, a press, a check-back come due - is headed as Taskuary's, never the owner's (the
+    # agent map, 2026-11-10: "THE OWNER'S ASK" stood over "These are their words, not the owner's")
+    lead = ("TASKUARY'S WORDS ON THIS TURN - not the owner's" if is_brief(last) else "THE OWNER'S ASK - what they want done") + ' about the task and the material below'
     rd = '' if stranger or dock else reading_block(store, tid)      # ...and triage's reading right under the task: GOAL_LINE reads it first
     # ...and a coding task on an AI card, where it works and who else is in there - with the task, as its CLI's seed says it
     code = coding_brief(store, tid, stranger, opening=not any(r.get('ActorType') == ASSISTANT_TYPE for r in rows)) if tid in ON_CARD else ''
-    head = ((f"THE OWNER'S ASK - what they want done about the task and the material below:\n{ask}\n\n" if ask else '')
+    head = ((f"{lead}:\n{ask}\n\n" if ask else '')
             + f"TASK {detail.get('ref') or tid}\n" + ours(f"TITLE: {task.get('Title') or ''}\n")
             + ours(f"SUMMARY: {task.get('Summary') or ''}\n") + f"STATUS: {task.get('Status') or ''}\n"
             + ours(chk) + "\n"

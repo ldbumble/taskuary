@@ -89,6 +89,16 @@ class OwnerWordsLeadThePrompt(unittest.TestCase):
         self.assertTrue(user.startswith("THE OWNER'S ASK"), user[:120])
         self.assertLess(user.index('the total on page two'), user.index('SOURCE MATERIAL'))     # the mail (or its file, from a stranger)
 
+    def test_a_turn_taskuary_started_is_headed_as_taskuarys_never_the_owners(self):
+        s = MemoryStore()
+        t = s.create_task({'Title': 'March invoice batch', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        s.add_message({'TaskId': t, 'Channel': 'email', 'Subject': 'March invoice batch', 'FromName': 'Gail Moreno',
+                       'FromEmail': 'gail@northwind.example', 'BodyText': 'Is page two fixed yet?', 'Status': 'routed'})
+        s.add_comment(t, general.BRIEF_ACTOR, general.USER_TYPE, "NEW MESSAGE ON THIS TASK from Gail Moreno - these are their words, not the owner's")
+        user = general._prompt(s, t)[1]
+        self.assertTrue(user.startswith("TASKUARY'S WORDS ON THIS TURN - not the owner's"), user[:120])
+        self.assertNotIn("THE OWNER'S ASK", user)
+
     def test_no_material_no_lead(self):
         s = MemoryStore()
         t = s.create_task({'Title': 'Plan the launch', 'Kind': 'general', 'Status': 'open'}, 'owner')

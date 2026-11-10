@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { heldCard, heldGroups, keptHeld } from "../src/reviewProposal.js";
+import { heldCard, heldGroups, keptHeld, splitHeld } from "../src/reviewProposal.js";
 
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const step = (id, turn, command, about, status = "pending", extra = {}) => ({ ReviewId: id, TaskId: 7, Kind: "action", Status: status,
@@ -42,11 +42,28 @@ test("pressed, the card stays in the turn with the press it took and what came o
   const said = (at) => [{ ActorType: "assistant_user", CreatedAt: at }];
   assert.deepEqual(keptHeld([done(1)], said("2026-11-09 10:00:00")).map((r) => r.ReviewId), [1]);
   assert.deepEqual(keptHeld([done(1)], said("2026-11-09 10:10:00")), []);
+  // ...and after that it is still the card, in its own turn (the owner, 2026-11-09: "compact the land") - never a line in its place
+  const ask = { ReviewId: 9, TaskId: 7, Kind: "action", Status: "pending", DraftText: JSON.stringify({ action: "write_playbook", slug: "x" }) };
+  const { asks, past } = splitHeld([{ ...done(1), CreatedAt: "2026-11-09 09:58:00" }, { ...done(2), CreatedAt: "2026-11-09 09:58:01" }, ask], [ask]);
+  assert.deepEqual(asks.map((g) => g.key), ["rv9"]);
+  assert.deepEqual(past.map((g) => [g.held, g.at, g.reviews.map((r) => r.ReviewId)]), [[true, "2026-11-09 09:58:00", [1, 2]]], "one card, in its turn");
+  // ...while one of its steps still waits the card waits whole, the ones that ran ticked in it
+  const halfway = splitHeld([done(1), step(2, 4, "git push origin master", "Push master")], []);
+  assert.deepEqual([halfway.asks.map((g) => g.reviews.length), halfway.past], [[2], []]);
+});
+
+test("a pressed card - held steps approved, a reply sent - is drawn in the turn that set it up, whatever came after", () => {
+  const page = read("TaskPage.jsx"), chat = read("GeneralWorkspace.jsx");
+  assert.match(page, /const turnCards = \[\.\.\.pressedHeld\.map\(\(g\) =>/);
+  assert.match(page, /node: <SentCard id=\{r\.ReviewId\}/);
+  assert.match(page, /turnCards=\{turnCards\}/);
+  assert.match(chat, /after: turnOf\(messages, c\.at\)/, "placed in the turn that began at or before it");
+  assert.match(chat, /\{pressed\.map\(\(c\) => <React\.Fragment key=\{c\.key\}>\{c\.node\}<\/React\.Fragment>\)\}/);
 });
 
 test("the task page draws a turn's held steps as one HeldSteps card, one Approve through the batch door", () => {
   const page = read("TaskPage.jsx"), card = read("HeldSteps.jsx");
-  assert.match(page, /heldGroups\(\[\.\.\.kept, \.\.\.asks\]/);
+  assert.match(page, /const \{ asks: askCards, past: pressedHeld \} = splitHeld\(allReviews, asks\)/);
   assert.match(page, /g\.held\s*\n?\s*\? <HeldSteps/);
   assert.match(card, /api\.post\("\/api\/reviews\/steps", \{ ids: c\.waiting, verb \}/);
   assert.equal((card.match(/data-tq-held-approve/g) || []).length, 1, "one Approve on the card");

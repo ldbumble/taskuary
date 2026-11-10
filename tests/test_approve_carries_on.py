@@ -58,10 +58,9 @@ class HeldStep(unittest.TestCase):
         self.s._exec("INSERT INTO comment (TaskId, Actor, ActorType, Body, CreatedAt) VALUES (?, 'owner', ?, 'Thanks - now the changelog', '2000-01-01')",
                      (self.tid, general.USER_TYPE))      # ...an owner line whose time is before the press: still the card
         self.assertEqual(general.press_lines(self.s, self.tid), [])
-        self.s._exec("UPDATE comment SET CreatedAt='2999-01-01' WHERE Body='Thanks - now the changelog'")    # ...the owner wrote again: a line
-        [p] = general.press_lines(self.s, self.tid)
-        self.assertTrue(p['press']); self.assertTrue(p['content'][0]['text'].startswith('You approved: '), p)
-        self.assertEqual(p['result']['url'], SAID); self.assertIn('gh pr comment 12', p['result']['command'])
+        self.s._exec("UPDATE comment SET CreatedAt='2999-01-01' WHERE Body='Thanks - now the changelog'")
+        # ...the owner wrote again: still the card, in its turn (the owner, 2026-11-09: "compact the land") - never a line in its place
+        self.assertEqual(general.press_lines(self.s, self.tid), [])
         kept = json.loads(self.s.get_review(self.rv['ReviewId'])['FinalText'])
         self.assertEqual(kept['result']['said'], SAID, 'the card keeps what it did, to read as its result')
 

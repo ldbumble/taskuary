@@ -47,7 +47,7 @@ import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
 import { noteKey, noteOf, onYouLine, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
 import { fmtDate, fmtTime } from "./dates.js";
-import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
+import { deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision from "./ReviewDecision.jsx";
@@ -84,7 +84,6 @@ import SendIcon from "@mui/icons-material/Send";
 import { Divider, ListItemText } from "@mui/material";
 import { NoAgentChat } from "./AgentSummary.jsx";
 import { chatReplyShown } from "./agentSummary.js";
-import { sentLine } from "./sentLine.js";
 import ThreadReading from "./ThreadReading.jsx";
 import { latestDrafts } from "./agentDraftAsk.js";
 import { LastView } from "./BrowserPane.jsx";
@@ -106,7 +105,8 @@ import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
   AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
-import { closeoutOf, heldGroups, keptHeld } from "./reviewProposal.js";
+import { closeoutOf, splitHeld } from "./reviewProposal.js";
+import SentCard from "./SentCard.jsx";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
 import LandingCard from "./LandingCard.jsx";
@@ -2713,7 +2713,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...an act with its card (a post, a tracker comment) is drawn in the turn that set it up (GeneralWorkspace, ActionCard) - never here again
   const asks = proposals.filter((p) => !isCardReview(p));
   // ...a turn's held steps are ONE card, and a pressed one stays in the turn, pressed (heldGroups, keptHeld; the owner, 2026-11-09)
-  const kept = keptHeld(allReviews, detail?.comments), askCards = heldGroups([...kept, ...asks].sort((a, b) => a.ReviewId - b.ReviewId));
+  const { asks: askCards, past: pressedHeld } = splitHeld(allReviews, asks), kept = askCards.flatMap((g) => (g.held ? g.reviews : [])).filter((r) => r.Status !== "pending");
+  // ...AND ONCE THE OWNER WRITES AGAIN EACH PRESSED CARD STAYS IN ITS TURN (the owner, 2026-11-09: "leave the card in the turn with the pressed
+  // button"): the held steps it approved, and every reply that went - drawn by the chat in the turn that set it up (GeneralWorkspace turnCards)
+  const turnCards = [...pressedHeld.map((g) => ({ key: g.key, at: g.at,
+      node: <HeldSteps reviews={g.reviews} onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /> })),
+    ...allReviews.filter((r) => r.Kind !== "action" && r.Kind !== "slot" && ["approved", "edited", "sent"].includes(r.Status) && r.ReviewId !== sentHere?.id)
+      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", node: <SentCard id={r.ReviewId} text={r.FinalText || r.DraftText} channel={r.Channel || ""}
+        to={replyContext(r)} subject={deliverySubject(r)} at={r.DecidedAt} /> }))];
+  // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
+  const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
   const liveAsks = askCards.filter((g) => g.reviews.some((r) => r.Status === "pending")).length;
   const asksBelow = !!(pendingReview || moreDrafts.length || owesEmails || (handInPane && handoff) || calAsk?.invite);
   const chatBody = () => <>
@@ -2764,7 +2773,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {pendingReview
                   ? (inRow ? "" : "Nothing is sent until you approve it.")
                   : sentReview
-                  ? `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. ${String(t?.Status || "") === "done" ? "The task closed with it." : liveSession ? "The task stays open while its agent is still working." : "The task stays open until you mark it done."}`
+                  ? `${sentCarded ? "" : `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. `}${String(t?.Status || "") === "done" ? "The task closed with it." : liveSession ? "The task stays open while its agent is still working." : "The task stays open until you mark it done."}`
                   : inRow ? "" /* the chip already says "not drafted" */ : "A reply is optional. Starting or stopping an agent does not send one."}
               </Typography>
             </Box>
@@ -2808,7 +2817,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   once the item has ended, where it named a sender nothing is going to
                   ...and beside an email the task owes it is the REPLY's To, said so (the owner, 2026-11-02): under the owed
                   address it read as that email's To. The email wears its own (SlotList) */}
-              {(replyMessage || sentReview) && (!ended || sentReview || unsentReview) && chatReplyShown({ replyMessage, pendingReview, sentReview, unsentReview }) && (
+              {(replyMessage || sentReview) && (!ended || sentReview || unsentReview) && !(sentCarded && !pendingReview) && chatReplyShown({ replyMessage, pendingReview, sentReview, unsentReview }) && (
               <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
                 <Typography sx={{ ...label, flexShrink: 0 }} data-tq-reply-to="">{owesEmails ? "Reply to" : "To"}</Typography>
                 <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 600 }}>
@@ -2858,7 +2867,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               )}
               {/* the words that LEFT: an edit before the send is the FinalText - the draft read "keep it active" over a
                   mail that had said something else (2026-10-13) */}
-              {(sentReview?.FinalText || sentReview?.DraftText) && (
+              {!sentCarded && (sentReview?.FinalText || sentReview?.DraftText) && (
                 <Box sx={{ mt: 0.9, pl: 1, borderLeft: `2px solid ${BORDER}` }}>
                   <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
                     What was sent{sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}</Typography>
@@ -2914,7 +2923,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const waits = !!(pendingReview || moreDrafts.length || proposals.length || owesEmails || handoff);
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
-  const chatCards = sentHere ? <SentHere {...sentHere} /> : !["done", "dropped"].includes(t?.Status) && (waits || kept.length || upFailed
+  const chatCards = sentHere ? <SentCard {...sentHere} /> : !["done", "dropped"].includes(t?.Status) && (waits || kept.length || upFailed
     || chatReplyShown({ replyMessage, pendingReview, sentReview: null, unsentReview: null }) || calAsk?.invite) ? <Box ref={cardsRef} data-tq-chat-cards="" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{chatBody()}</Box> : null;
   return (
@@ -3507,6 +3516,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         came={home ? { label: cameFrom(sourceMessage) ? `From ${cameFrom(sourceMessage)}` : sources.length ? cameFromLabel(sources) : fromWorkflow ? `Routine · ${fromWorkflow.title}` : "Came from",
                           title: "Where this came from - opens it", onOpen: twoUp ? () => openSection("from") : null } : null}
                         closedLine={closedSaid} term={term}
+                        turnCards={turnCards}
                         landing={canCode && detail?.checkout && <LandingCard key={`land-${t.TaskId}`} taskId={t.TaskId} inChat
                           onChanged={() => { loadDetail(selected); onChanged?.(); }} />}
                         onChanged={() => { findTerm(selected); loadDetail(selected); onChanged?.(); }} />
@@ -3728,15 +3738,8 @@ const Fold = ({ title, children }) => (
 // `quiet`: a step with nothing in it - smaller and dimmer, so the step that holds the move is the one read (2026-10-25)
 // `sec`: the section it heads in the desk's three (2026-10-27) - then its line is the sections' one style (SectionHead): "2 · AGENT", one dim
 // descriptor (its own title where that is not the section's name, its description), "up to here" where the task is
-// THE REPLY THAT JUST WENT, where its draft stood (TaskPage sentHere): its words read-only and one line - where it went, and that the task is
-// closing (or why it stays open) - never a box that vanishes with nothing said
+// THE REPLY THAT JUST WENT, where its draft stood (TaskPage sentHere): its card, pressed - SentCard
 const SENT_BEAT = 900;
-const SentHere = (p) => (
-  <Box data-tq-sent-here={p.id || ""} sx={{ mt: 0.75 }}>
-    <Typography sx={{ fontSize: 13.5, lineHeight: 1.5, color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere", pl: 1.5, borderLeft: "3px solid #dcd6ca" }}>{p.text}</Typography>
-    <Typography role="status" data-tq-sent-line="" sx={{ mt: 0.75, fontSize: 13, color: "#47654a", fontWeight: 600 }}>✓ {sentLine(p)}</Typography>
-  </Box>
-);
 
 const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false, sec = null, here = false, sub = undefined }) => (
   <Box {...pressable(onToggle)} aria-expanded={onToggle ? !folded : undefined} data-tq-quiet={quiet ? "" : undefined}

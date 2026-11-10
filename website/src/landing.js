@@ -4,6 +4,9 @@ import { generated } from "./diffView.js";
 
 export const HOW = { rebase: "Rebase and fast-forward", merge: "Merge commit", pr: "Open a PR", discard: "Discard", push: "Push", deploy: "Push & deploy" };
 
+// ...AND WHAT A PRESS DID, said on the button it took (the card stays in its turn - the owner, 2026-11-09: "compact the land")
+export const DONE = { rebase: "Rebased", merge: "Merged", pr: "PR opened", discard: "Discarded", push: "Pushed", deploy: "Pushed and deployed" };
+
 export function landingWords(s) {
   if (!s) return {};
   const stat = `${n(s.changed || 0, "file")} changed, +${s.plus || 0} −${s.minus || 0}`
@@ -22,8 +25,27 @@ export function landingWords(s) {
     landed: s.landed ? `Landed · ${HOW[s.landed.how] || s.landed.how}${s.landed.deploy ? ` to ${s.landed.deploy}` : ""}` : "",
     // ...ON A BRANCH EVERYONE COMMITS TO, said: what it counts is this task's own commits and edits, never the branch's whole history since
     shared: s.shared ? `${s.base} is shared with other agents and releases - this counts only this task's own commits and edits.` : "",
+    // ONE TITLE LINE (the owner, 2026-11-09: "compact the land"): what the press does and how big it is - the files fold behind Show the files
+    title: landingTitle(s),
+    // ...the second button: the other way a push goes, or on its own branch the next likeliest land
+    first: firstHow(s, p), second: secondHow(s, p),
+    done: s.landed ? `✓ ${DONE[s.landed.how] || HOW[s.landed.how] || s.landed.how}` : "",
+    doneLine: s.landed ? [String(s.landed.sha || "").slice(0, 7), s.landed.deploy && s.landed.how === "deploy" ? `to ${s.base} and ${s.landed.deploy}` : s.landed.how === "push" ? `to ${s.base}` : ""]
+      .filter(Boolean).join(" · ") : "",
   };
 }
+
+const files = (s) => n(s.changed || 0, "file");
+function landingTitle(s) {
+  const p = s.push;
+  if (p && s.ask) return `Push ${n(p.ahead || 0, "commit")} to ${s.base}${p.deploy ? " and deploy" : ""} - ${files(s)}`;
+  if (s.own && (s.ask || s.landed)) return `Land ${s.branch} into ${s.base} - ${n(s.commits || s.ahead || 0, "commit")}, ${files(s)}`;
+  if (s.landed) return `${s.landed.how === "deploy" ? "Push and deploy" : "Push"} ${s.base} - ${files(s)}`;
+  return `Worked on ${s.branch} - ${files(s)}`;
+}
+// ...the one filled button: the agent's pick, else the furthest a push goes, else the first way to land
+function firstHow(s, p) { const hs = (s.answers || []).map((a) => a.how); return p?.how && hs.includes(p.how) ? p.how : s.push ? hs.at(-1) || "" : hs[0] || ""; }
+function secondHow(s, p) { const f = firstHow(s, p); return (s.answers || []).map((a) => a.how).find((h) => h !== f && h !== "discard") || ""; }
 
 // THE CARD'S FILE LIST, AS THE DIFF VIEW ORDERS IT: the source first, the generated files (a build's bundles, lock files) apart, folded
 export const landingFiles = (files) => ({ src: (files || []).filter((f) => !generated(f.path)), gen: (files || []).filter((f) => generated(f.path)) });

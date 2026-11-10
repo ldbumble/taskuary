@@ -13,7 +13,8 @@ import { landingFiles, landingWords } from "./landing.js";
 import { hunkText, parseUnified } from "./diffView.js";
 import DiffView from "./DiffView.jsx";
 import { plural } from "./timeWords.js";
-import { ACCENT, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
+import { FOCUS_RING, pressable } from "./pressable.js";
+import { ALERT_INK, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const btn = { minHeight: 32, py: 0, px: 1.4, fontSize: 12.5, textTransform: "none" };
 
@@ -26,10 +27,10 @@ export const SHOWN = 8;
 export default function LandingCard({ taskId, onChanged, onState, inChat = false }) {
   const [s, setS] = useState(null), [diff, setDiff] = useState(null), [busy, setBusy] = useState(""), [said, setSaid] = useState(""),
     [err, setErr] = useState(""), [sure, setSure] = useState(false), [marks, setMarks] = useState({}), [open, setOpen] = useState(false),
-    [diffErr, setDiffErr] = useState("");
+    [diffErr, setDiffErr] = useState(""), [filesOpen, setFiles] = useState(false);
   const load = () => api.get(`/api/tasks/${taskId}/landing`).then(({ data }) => { setS(data?.data || null); onState?.(data?.data || null); })
     .catch(() => { setS(null); onState?.(null); });
-  useEffect(() => { setS(null); setDiff(null); setOpen(false); setSaid(""); setErr(""); setSure(false); setMarks({}); load(); }, [taskId]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setS(null); setDiff(null); setOpen(false); setSaid(""); setErr(""); setSure(false); setMarks({}); setFiles(false); load(); }, [taskId]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!s || (!s.ask && !s.landed && !s.changed)) return null;
   const w = landingWords(s);
   // THE DIFF OPENS AT THE PRESS (the owner, 2026-11-09: it waited for the read, and the button felt dead for a second): the window first, saying
@@ -56,25 +57,37 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
     catch (e) { setErr(e?.response?.data?.detail || "Nothing was reverted"); }
     setBusy("");
   };
+  const label = (h) => (s.answers || []).find((a) => a.how === h)?.label || h;
+  const rest = (s.answers || []).map((a) => a.how).filter((h) => h !== w.first && h !== w.second);
+  const tip = s.push ? `up to ${String(s.push.tip || "").slice(0, 7)}${s.push.deploy ? ` · deploys to ${s.push.deploy}` : ""}` : s.own && s.ask ? `${plural(s.ahead, "commit")} ahead` : "";
+  const sub = [tip, `+${s.plus || 0} −${s.minus || 0}`, s.ask && s.proposal?.why].filter(Boolean).join(" · ");
+  const link = { ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } };
+  const press = (h, tone) => (
+    <Button key={h} size="small" disableElevation disabled={!!busy} data-tq-land={h} variant={tone === "p" ? "contained" : tone === "s" ? "outlined" : "text"}
+      title={tone === "p" ? w.hint : undefined}
+      sx={{ ...btn, ...(h === "discard" ? { color: ALERT_INK, borderColor: BORDER } : tone === "p" ? {} : { color: tone === "s" ? INK : DIM, borderColor: BORDER }) }}
+      startIcon={busy === h ? <CircularProgress size={12} color="inherit" /> : null}
+      onClick={() => answer(h)}>{h === "discard" && sure ? `Yes, discard ${plural(s.ahead, "commit")}` : label(h)}</Button>);
+  const url = s.landed?.url || (said.match(/https?:\/\/\S+/) || [""])[0];
+  // ONE TITLE, ONE LINE UNDER IT, THE FILES FOLDED, ONE FILLED BUTTON (the owner, 2026-11-09: "compact the land" - it listed every changed file
+  // over Push and Push & deploy): the press it waits on and how big it is, the commit and where it goes once, the files and the diff a press
+  // away; once pressed it STAYS in its turn as the press it took and what came of it, as the held steps' card does (HeldSteps)
   return (
-    <Box data-tq-landing="" sx={inChat ? { my: 1.5, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }
-      : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-      <Typography sx={{ color: ACCENT, fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", mb: 0.4 }}>LAND THE BRANCH</Typography>
-      <Typography variant="body2" sx={{ color: INK }}>
-        <Box component="span" sx={{ ...mono, fontWeight: 600 }}>{s.branch}</Box>
-        {s.own ? <> into <Box component="span" sx={mono}>{s.base}</Box></> : null}
-        <Box component="span" sx={{ color: DIM }}> · {w.stat}</Box>
-      </Typography>
-      {s.shared && <Typography variant="caption" data-tq-landing-shared="" sx={{ display: "block", color: FAINT }}>{w.shared}</Typography>}
-      {!!s.files?.length && (
-        <Box sx={{ mt: 0.5 }}>
-          {src.slice(0, SHOWN).map((f) => <FileLine key={f.path} f={f} />)}
-          {src.length > SHOWN && <Typography variant="caption" sx={{ display: "block", color: FAINT }}>and {src.length - SHOWN} more</Typography>}
-          {!!gen.length && <Box component="details" data-tq-landing-generated="" sx={{ "& > summary": { cursor: "pointer", color: FAINT, fontSize: 11 } }}>
-            <summary>Generated · {plural(gen.length, "file")}</summary>{gen.map((f) => <FileLine key={f.path} f={f} />)}</Box>}
-          <Button size="small" sx={{ ...btn, minHeight: 0, p: 0, mt: 0.3, color: DIM, display: "flex" }} data-tq-landing-diff="" onClick={seeDiff}>
-            {reviewing ? "See the diff · review it" : "See the diff"}</Button>
-        </Box>)}
+    <Box data-tq-landing="" data-tq-act-state={s.ask ? "waiting" : s.landed ? "pressed" : "resting"}
+      sx={inChat ? { my: 1, px: 1.25, py: 0.9, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" } : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+      <Typography data-tq-landing-title="" sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>{w.title}</Typography>
+      <Typography noWrap data-tq-landing-sub="" title={[sub, w.shared].filter(Boolean).join(" - ")} sx={{ fontSize: 11.5, color: FAINT }}>{sub}</Typography>
+      {!!s.files?.length && <Box sx={{ display: "flex", gap: 1.5, mt: 0.4 }}>
+        <Typography {...pressable(() => setFiles((o) => !o))} data-tq-landing-files="" aria-expanded={filesOpen} sx={link}>
+          {filesOpen ? "Hide the files" : "Show the files"}</Typography>
+        <Typography {...pressable(seeDiff)} data-tq-landing-diff="" sx={link}>{reviewing ? "See the diff · review it" : "See the diff"}</Typography>
+      </Box>}
+      {filesOpen && <Box data-tq-landing-list="" sx={{ mt: 0.4 }}>
+        {src.slice(0, SHOWN).map((f) => <FileLine key={f.path} f={f} />)}
+        {src.length > SHOWN && <Typography variant="caption" sx={{ display: "block", color: FAINT }}>and {src.length - SHOWN} more</Typography>}
+        {!!gen.length && <Box component="details" data-tq-landing-generated="" sx={{ "& > summary": { cursor: "pointer", color: FAINT, fontSize: 11 } }}>
+          <summary>Generated · {plural(gen.length, "file")}</summary>{gen.map((f) => <FileLine key={f.path} f={f} />)}</Box>}
+      </Box>}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth={false} data-tq-landing-dialog=""
         slotProps={{ paper: { sx: { width: "min(1400px, 96vw)", height: "90vh", m: 1 } } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
@@ -96,23 +109,17 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
             Revert {plural(picked.length, "marked part")}</Button>}
         </DialogContent>
       </Dialog>
-      {s.ask && <>
-        <Typography variant="body2" data-tq-landing-question="" sx={{ mt: 0.9, color: INK, fontWeight: 600 }}>{w.question}</Typography>
-        {w.proposal && <Typography variant="caption" data-tq-landing-proposal="" sx={{ display: "block", color: DIM }}>{w.proposal}</Typography>}
-        <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 0.7 }}>
-          {s.answers.map((a) => (
-            <Button key={a.how} size="small" disableElevation disabled={!!busy} data-tq-land={a.how}
-              variant={w.primary === a.how ? "contained" : "outlined"}
-              sx={{ ...btn, ...(a.how === "discard" ? { color: "#7a2f3c", borderColor: BORDER } : w.primary === a.how ? {} : { color: INK, borderColor: BORDER }) }}
-              startIcon={busy === a.how ? <CircularProgress size={12} color="inherit" /> : null}
-              onClick={() => answer(a.how)}>{a.how === "discard" && sure ? `Yes, discard ${plural(s.ahead, "commit")}` : a.label}</Button>))}
-          {sure && <Button size="small" sx={{ ...btn, color: DIM }} onClick={() => setSure(false)}>Keep it</Button>}
-        </Box>
-        <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.5 }}>{w.hint}</Typography>
-      </>}
-      {said && <Typography variant="body2" sx={{ mt: 0.7, color: "#47654a" }}>{said}</Typography>}
-      {!said && s.landed && <Typography variant="body2" sx={{ mt: 0.7, color: "#47654a" }}>✓ {w.landed}</Typography>}
-      {err && <Typography variant="body2" sx={{ mt: 0.7, color: "#7a2f3c" }}>{err}</Typography>}
+      {s.ask ? <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.6 }}>
+        {w.first && press(w.first, "p")}{w.second && press(w.second, "s")}{rest.map((h) => press(h, "t"))}
+        {sure && <Button size="small" sx={{ ...btn, color: DIM }} onClick={() => setSure(false)}>Keep it</Button>}
+      </Box> : s.landed && <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.6 }}>
+        {/* ...the press it took, drawn pressed, and what came of it on the same line */}
+        <Button size="small" variant={s.landed.how === "discard" ? "outlined" : "contained"} disableElevation disabled data-tq-pressed={s.landed.how}
+          sx={{ ...btn, "&.Mui-disabled": s.landed.how === "discard" ? { color: FAINT } : { bgcolor: "#dfe8dd", color: "#47654a" } }}>{w.done}</Button>
+        <Typography data-tq-act-done="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{said ? said.replace(url, "").replace(/[:\s]+$/, "") : w.doneLine}
+          {url && <> · <a href={url} target="_blank" rel="noreferrer">{url.replace(/^https?:\/\//, "").slice(0, 70)}</a></>}</Typography>
+      </Box>}
+      {err && <Typography role="alert" variant="body2" sx={{ mt: 0.7, color: ALERT_INK }}>{err}</Typography>}
     </Box>
   );
 }

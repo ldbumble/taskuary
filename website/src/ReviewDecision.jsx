@@ -388,7 +388,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) {
         // ...with what went and where (`said`): the chat keeps the sent card in place, marked, while the task closes (TaskPage SentHere)
         setSent(verb === "approve"); setBusy(false); await onSent({ closes: closesIt && shut && verb === "approve" && (data.reply ? !!data.reply.ok : true),
-          said: verb === "approve" ? { text: value, channel: r.Channel || "", to: replyContext(r), id: r.ReviewId } : null }); return;
+          said: verb === "approve" ? { text: value, channel: r.Channel || "", to: replyContext(r), subject: deliverySubject(r), id: r.ReviewId } : null }); return;
       }
       onChanged?.();
     } catch (e) {

@@ -69,6 +69,32 @@ test("unpushed commits on the shared base are Push and Push & deploy buttons, an
   assert.equal(landingWords({ ...s, push: { ...s.push, deploy: "" }, answers: s.answers.slice(0, 1) }).question, "Push 1 commit to origin/master, up to 3a1b9a8?");
   assert.equal(landingWords({ own: true, ask: true, answers: [] }).question, "How should it land?");
   const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
-  assert.match(body, /\{s\.ask && <>[\s\S]*\{w\.question\}[\s\S]*s\.answers\.map\(\(a\) => \([\s\S]*data-tq-land=\{a\.how\}[\s\S]*onClick=\{\(\) => answer\(a\.how\)\}/);
+  assert.match(body, /data-tq-land=\{h\}[\s\S]*onClick=\{\(\) => answer\(h\)\}/);
+  assert.match(body, /\{s\.ask \? <Box[\s\S]*\{w\.first && press\(w\.first, "p"\)\}\{w\.second && press\(w\.second, "s"\)\}/);
   assert.match(body, /api\.post\(`\/api\/tasks\/\$\{taskId\}\/landing`, \{ how \}\)/, "Push and Push & deploy go down the landing road");
+});
+
+// the owner, 2026-11-09: "compact the land" - 26 files listed over Push and Push & deploy; then the card went once pressed
+test("the landing card is one title, the files folded, one filled button and the other beside it - and stays pressed once it landed", () => {
+  const s = { own: false, shared: true, base: "master", commits: 1, changed: 26, plus: 38, minus: 38, ask: true,
+    push: { tip: "3a1b9a81c0ffee", ahead: 1, to: "master", deploy: "deploy" },
+    answers: [{ how: "push", label: "Push" }, { how: "deploy", label: "Push & deploy" }] };
+  const w = landingWords(s);
+  assert.equal(w.title, "Push 1 commit to master and deploy - 26 files");
+  assert.deepEqual([w.first, w.second], ["deploy", "push"]);
+  const solo = { ...s, push: { ...s.push, deploy: "" }, answers: s.answers.slice(0, 1) };
+  assert.equal(landingWords(solo).title, "Push 1 commit to master - 26 files");
+  assert.deepEqual([landingWords(solo).first, landingWords(solo).second], ["push", ""]);
+  const own = { own: true, branch: "fix-export", base: "master", ahead: 2, commits: 2, changed: 4, ask: true,
+    answers: ["rebase", "merge", "pr", "discard"].map((how) => ({ how, label: HOW[how] })) };
+  assert.equal(landingWords(own).title, "Land fix-export into master - 2 commits, 4 files");
+  assert.deepEqual([landingWords(own).first, landingWords(own).second], ["rebase", "merge"]);
+  assert.equal(landingWords({ ...own, proposal: { how: "merge" } }).second, "rebase", "never Discard as the second");
+  const done = landingWords({ ...s, ask: false, push: null, answers: [], landed: { how: "deploy", sha: "3a1b9a81c0ffee", deploy: "deploy" } });
+  assert.equal(done.done, "✓ Pushed and deployed");
+  assert.equal(done.doneLine, "3a1b9a8 · to master and deploy");
+  const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
+  assert.match(body, /\{filesOpen && <Box data-tq-landing-list=""/, "the file list waits behind Show the files");
+  assert.match(body, /data-tq-pressed=\{s\.landed\.how\}/, "the press it took stays drawn");
+  assert.doesNotMatch(body, /LAND THE BRANCH/);
 });

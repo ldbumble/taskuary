@@ -273,3 +273,12 @@ export const keptHeld = (reviews, comments) => {
   const last = (comments || []).filter((c) => c.ActorType === "assistant_user").map((c) => String(c.CreatedAt || "")).sort().at(-1) || "";
   return (reviews || []).filter((r) => isHeldStep(r) && r.Status !== "pending" && String(r.DecidedAt || "") > last);
 };
+// ...AND ONCE PRESSED IT IS THE CARD IN THE TURN THAT HELD IT, for good (the owner, 2026-11-09: "compact the land" - after the owner wrote again
+// it gave way to a one-line summary, and the task's comments carry no owner line to tell "since" by): `asks` the cards still waiting - every
+// other ask, and a turn's held steps while any of them waits (the ones that ran ticked in it) - and `past` each turn's pressed card, with when
+// its turn held it (GeneralWorkspace's turn cards)
+export const splitHeld = (reviews, asks) => {
+  const gs = heldGroups([...(reviews || []).filter(isHeldStep), ...(asks || []).filter((r) => !isHeldStep(r))].sort((a, b) => a.ReviewId - b.ReviewId));
+  const waits = (g) => !g.held || g.reviews.some((r) => r.Status === "pending");
+  return { asks: gs.filter(waits), past: gs.filter((g) => !waits(g)).map((g) => ({ ...g, at: g.reviews[0].CreatedAt || "" })) };
+};

@@ -67,7 +67,7 @@ test("Close out draws Send and close first and filled, Send beside it; only Send
   assert.match(moves, /id: no\("approve"\)[^\n]*tone: "s"/);
   assert.match(moves, /run: \(\) => decide\("approve", false, true\), title: closeTitle/);
   assert.match(moves, /run: \(\) => decide\("approve", false, false\), title: sendTitle/);
-  assert.match(rd, /await onSent\(\{ closes: closesIt && shut && verb === "approve" && \(data\.reply \? !!data\.reply\.ok : true\),\n\s+said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: replyContext\(r\), id: r\.ReviewId \} : null \}\); return;/);
+  assert.match(rd, /await onSent\(\{ closes: closesIt && shut && verb === "approve" && \(data\.reply \? !!data\.reply\.ok : true\),\n\s+said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: replyContext\(r\), subject: deliverySubject\(r\), id: r\.ReviewId \} : null \}\); return;/);
   assert.match(rd, /const closeTitle = `\$\{to\} - \$\{closeThen\}`, sendTitle = `\$\{to\} - \$\{stays\}`;/);
   // ...while an agent works the hover and the line say it stays open - the server keeps it so (concierge.close_after_send)
   assert.match(rd, /const closeThen = liveWork \? `the task stays open while \$\{liveWork\}` : "then the task closes";/);

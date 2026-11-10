@@ -5,3 +5,6 @@ export const sentLine = ({ channel, to, closing, kept }) => {
   const c = String(channel || "").toLowerCase(), on = SENT_ON[c] || (to ? `Sent to ${to}` : "Sent");
   return `${on}${closing ? " - closing the task" : kept ? `. The task stays open: ${kept}` : ""}`;
 };
+// ...and on the sent card (SentCard): its title, and the line beside its pressed "✓ Sent"
+export const sentTitle = ({ to, subject }) => (subject ? `${/^re:/i.test(subject) ? "" : "Re: "}${subject}` : to ? `Reply to ${to}` : "Your reply");
+export const sentSaid = (p) => sentLine(p).replace(/^Sent ?/, "");

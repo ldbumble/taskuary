@@ -2,9 +2,10 @@
 "Next." - the owner's "Clear all the FYI, please." was answered "Next." (2026-10-20). No real model is ever asked: the scripted brains
 answer, and the CLI and API builders raise if anything reaches for one."""
 import unittest
+from contextlib import ExitStack
 from unittest import mock
 
-from taskuary import concierge, demo
+from taskuary import agents, concierge, demo
 from tests import assistant_queries as Q
 
 # what no tool or desk button does today - a new tool takes its ask off this list on purpose (ASK OWNER before building one)
@@ -16,11 +17,43 @@ UNSUPPORTED = {'archive all the read mail', 'use dark mode', 'make the font bigg
 PHONE_UNREACHABLE = {'review_changes', 'run_another', 'attach', 'copy', 'share_result', 'strong_again'}   # strong_again: the task page's own press (the router, 2026-10-25)
 
 
+class Corpus:
+    """The corpus run a part at a time, over one seeded world. All of it in one setUpClass was one test's two minutes, then four once
+    the rail had one builder - and past pytest's faulthandler_timeout (120 s) the watchdog dumps every thread's stack while the main
+    thread runs, which on Windows CI crashed the run with an access violation in whatever the main thread was doing (a store read,
+    2026-11-10; _strptime before it). No test carries more than a part: TheCorpusRuns runs each under its own test's clock, and
+    whoever asks for the rows first - one test run by name - runs the parts still missing.
+    The world is the corpus's own, as it was in setUpClass: its owner has no coding tool and developer mode off, where a test's
+    home has both (conftest.no_connection_brains) - so the app's own reads of them are put back while a part runs."""
+    PARTS, done, seeds, world = 8, {}, [], []
+
+    @classmethod
+    def part(cls, i) -> list:
+        if i not in cls.done:
+            seed = demo.seed
+            with ExitStack() as st:
+                for n in ('connection_brains', 'default_pick', 'coding_ready', 'developer_mode'):
+                    if (real := getattr(getattr(agents, n), 'real', None)): st.enter_context(mock.patch.object(agents, n, real))
+                st.enter_context(mock.patch.object(demo, 'seed', lambda s: cls.seeds.append(s) or seed(s)))
+                if not cls.world: cls.world.append(Q.seeded())
+                cls.done[i] = Q.run_all(Q.CASES[i::cls.PARTS], cls.world[0])
+        return cls.done[i]
+
+    @classmethod
+    def rows(cls) -> list:
+        by = {id(r['q']): r for i in range(cls.PARTS) for r in cls.part(i)}
+        return [by[id(q)] for q in Q.CASES]
+
+
+class TheCorpusRuns(unittest.TestCase):
+    "Each part of the corpus in a test of its own (Corpus), ahead of the class that reads them all."
+for _i in range(Corpus.PARTS):
+    setattr(TheCorpusRuns, f'test_part_{_i}_of_the_asks_is_run', lambda self, i=_i: self.assertEqual(len(Corpus.part(i)), len(Q.CASES[i::Corpus.PARTS])))
+
+
 class EverydayAsks(unittest.TestCase):
     @classmethod
-    def setUpClass(cls):
-        seed, cls.seeds = demo.seed, []
-        with mock.patch.object(demo, 'seed', lambda s: cls.seeds.append(s) or seed(s)): cls.rows = Q.run_all()
+    def setUpClass(cls): cls.rows, cls.seeds = Corpus.rows(), Corpus.seeds
 
     def test_the_demo_world_is_seeded_once_and_each_turn_has_its_own_copy(self):
         # two seedings a turn took run_all past faulthandler's 120 s on Windows CI, where the watchdog's dump of the running main

@@ -591,14 +591,45 @@ def pressed(store, tid: int, rid: str, now: dict) -> bool:
     return True
 
 
+def gone(sid: str) -> bool:
+    "Is the page a step was handed over on gone: no live session of ours under its id (idled, stopped, a restart), or its browser closed?"
+    from . import browserview, terminal as term
+    s = term.SESSIONS.get(str(sid))
+    return not (s is not None and getattr(s, 'alive', False)) or not browserview.state(str(sid), fresh=True).get('open')
+
+
+# A STEP ON A PAGE THAT IS GONE SAYS SO, AND ITS ONE PRESS IS THE MOVE THAT WORKS (the owner, 2026-11-10: "i cant see the screen"). A hand-over
+# outlives its browser - a restart, a stopped session - and its card still read "press Save on the page" with Done, over no page at all; the
+# Done told the agent the owner had finished. Its press now has the agent open the page again and put the step back in front of them.
+GONE_LINE = ('The page for this step has closed, so it cannot be done there now - nothing was pressed. {again} has the agent open it again '
+             'and put the step back in front of you.')
+def shown_ask(req: dict | None) -> dict | None:
+    "An open ask as the task draws it: a step handed over on a page that is gone, said so, with Try again for its press."
+    from . import browserview, buttons
+    if not req or not str(req.get('request_id') or '').startswith(browserview.TURN_PREFIX) or not gone(req.get('sid')): return req
+    again = buttons.label('try_again')
+    return {**req, 'text': GONE_LINE.format(again=again), 'choices': [again], 'gone': True}
+
+
 def done(store, tid: int, rid: str) -> bool:
     """THE VIEW'S DONE IS THE OWNER'S PRESS (the spine audit, 2026-11-09). It went to a chat as words typed in their name - a bubble they
     never wrote, a turn of its own, known here only by matching those words. It closes the hand-over as the page moving on does, and the
     agent is told by Taskuary that they SAY it is done: nothing saw the page move, so it looks first. A resting agent is started on it.
-    False when the hand-over was closed already (a second press, or the watch got there first)."""
-    h = _close(store, tid, rid, 'Done')
+    False when the hand-over was closed already (a second press, or the watch got there first). On a page that is gone (shown_ask) the press
+    is its Try again: the agent opens the page again and hands the step back."""
+    from . import browserview, buttons, workerstate as ws
+    req = next((r for r in ws.open_requests(ws.events(store, tid)) if r['RequestId'] == rid), None)
+    lost = bool(req) and gone(req['Sid'])
+    h = _close(store, tid, rid, 'Try again' if lost else 'Done')
     if not h: return False
     turn = h.get('kind') == 'turn' or not str(rid).startswith(PRESS)
+    if lost:
+        store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h['site'], 'why': 'the page had closed'})
+        url = browserview.last_page(tid) or 'its address'
+        _tell(store, tid, f"The page you handed the owner ({h.get('what') or h.get('btn') or 'a step on it'}, on {h['site']}) closed before it could be done "
+                          f"there, so Taskuary cannot tell whether it was. They pressed {buttons.label('try_again')}: open it again (`agent-browser open {url}`), "
+                          "look, and if the step still needs them, bring the page back to it and hand it over again the way you did before.", wake=True)
+        return True
     step = f"the step you handed them ({h.get('what') or 'on the page'})" if turn else f"pressing {h['btn']}"
     store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '' if turn else h['btn'], 'by': 'done'})
     _tell(store, tid, f"The owner pressed Done: they say they finished {step} on the page. Taskuary did not see the page move - "

@@ -2316,6 +2316,10 @@ def _workerstate():
     from . import workerstate
     return workerstate
 
+def _browsergate():
+    from . import browsergate
+    return browsergate
+
 
 def _assistant_payload(task_id: int, session=None):
     from . import general, proposals as _proposals
@@ -2392,7 +2396,8 @@ def _assistant_payload(task_id: int, session=None):
             # something" over an empty canvas, its question only in the rail row's hover (the UI audit's W6, 2026-10-21)
             # ...and a chat agent's question after its process idled out or the server restarted (taskstate.open_question, the owner 2026-11-07):
             # still open, and `resting` - typing answers it as the next turn, which starts the agent again
-            'asking': (_workerstate().asking_of(store, asker) if (asker := session or _workerstate()._live(task_id))
+            # ...and a step handed over on a page that has closed since says so, its one press bringing it back (browsergate.shown_ask)
+            'asking': _browsergate().shown_ask(_workerstate().asking_of(store, asker) if (asker := session or _workerstate()._live(task_id))
                        else {**q, 'resting': True} if general.handles(task) and (q := taskstate.open_question(store, task_id)) else None),
             # pages its Claude session published (claude_artifacts) and files it chose to show (selfclose.SHOW_LINE) - the
             # conversation draws each under the answer that made it, and lists any it cannot place at its foot

@@ -21,6 +21,7 @@ class DoneIsAPress(unittest.TestCase):
         self.sess = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, send_prompt=lambda text, as_owner=True, **k: self.told.append((text, as_owner)))
         live = mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': self.sess}, clear=True); live.start()
         self.addCleanup(live.stop); self.addCleanup(bg.HANDS.clear)
+        up = mock.patch.object(browserview, 'state', return_value={'open': True, 'url': PAY}); up.start(); self.addCleanup(up.stop)
 
     def turn(self):
         "The agent handed the page over for a step only a person can do."
@@ -92,7 +93,23 @@ class DoneIsAPress(unittest.TestCase):
         rid, woke = self.turn(), []
         with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(general, 'tell', lambda s, t, w, *a: woke.append(w) or 'woke'):
             self.assertTrue(ws.answer(self.s, self.tid, rid, '', press=True)['delivered'])
-        self.assertIn('The owner pressed Done', woke[0]); self.assertEqual(self.open(), [])
+        self.assertIn('open it again', woke[0]); self.assertEqual(self.open(), [])
+
+    def test_a_step_whose_page_closed_says_so_and_its_press_brings_it_back(self):
+        # the owner, 2026-11-10 ("i cant see the screen"): a record's Save handed over on portal.vendor.example, then the session gone (a
+        # restart, a stop) and its browser with it. The card still read "press Save on the page" with Done over no page, and Done told the
+        # agent he had finished. It says the page closed, and its one press has the agent open it again and hand the step back
+        from taskuary import taskstate
+        rid, woke = self.press(), []
+        bg.HANDS.clear()
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True), mock.patch.object(browserview, 'state', return_value={'open': False}),                 mock.patch.object(general, 'tell', lambda s, t, w, *a: woke.append(w) or 'woke'):
+            ask = bg.shown_ask({**taskstate.open_question(self.s, self.tid), 'resting': True})
+            self.assertIn('has closed', ask['text']); self.assertNotIn('on the page. I', ask['text'])
+            self.assertEqual(ask['choices'], ['Try again']); self.assertEqual(ask['request_id'], rid)
+            self.assertTrue(ws.answer(self.s, self.tid, rid, '', press=True)['delivered'])
+        self.assertIn('open it again', woke[0]); self.assertNotIn('they say they finished', woke[0])
+        self.assertEqual(self.open(), []); self.assertEqual(self.lines(), [], 'nothing was pressed on the page')
+        self.assertEqual(bg.shown_ask({'request_id': rid, 'sid': 'run1', 'text': 'x'})['text'], 'x')   # live, its page up: as it was
 
     def test_another_run_on_the_task_is_never_handed_the_press(self):
         rid = self.turn()

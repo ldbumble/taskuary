@@ -257,6 +257,16 @@ def test_a_reply_owed_that_no_road_takes_to_an_agent_says_so():
     assert any(x.startswith('No agent started: passing lines to the agent is switched off - ') for x in lines(s, tid))
 
 
+def test_a_question_on_a_coding_task_whose_agent_is_not_running_says_whose_the_reply_is():
+    "No coding agent is started for a question by itself - and the task says so, never a reply owed that looks as if somebody were on it."
+    s = store(coding_auto_enabled='0')
+    out, went = arrived(s, mail(body='late_fee in northwind/ledger is wrong - fix it.'), says(intent='task', kind='coding')); tid = out['task_id']
+    assert s.get_task(tid)['Kind'] == 'coding' and went == []
+    _o, went = arrived(s, mail(**{**WORK, 'body': 'Which branch will it land on?'}), says(intent='reply_only', kind='task', refines=False))
+    assert went == ['reply_to_agent'] and s.get_task(tid)['Kind'] == 'coding' and s.pending_review(tid, kind='draft')
+    assert any(x.startswith("No agent started: the reply is the coding agent's to write, and none is running on it - ") for x in lines(s, tid))
+
+
 def test_a_second_line_while_the_first_start_is_on_its_way_starts_no_second_agent():
     "A general task's agent was set going a beat ago and has nothing to show yet: a question right behind it is not a second start."
     s = store()

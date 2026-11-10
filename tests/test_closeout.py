@@ -39,7 +39,8 @@ def with_pr(s, **over):
 def finish(s, tid, pr=OPEN, **kw):
     prev, wrapup.REFRESH = wrapup.REFRESH, None
     try:
-        with mock.patch('taskuary.responder.write_draft', return_value='Fixed - it runs tonight.'), \
+        # ...no writer at a run's end (2026-11-10): the reply is the agent's own, or owed
+        with mock.patch('taskuary.responder.write_draft', side_effect=AssertionError('a second voice drafted the reply')), \
              mock.patch.object(github, 'pr', return_value=pr):
             return wrapup.finish(s, tid, {'summary': 'the export reads the new view', 'outcome': 'did_work'}, None, 'coding', **kw)
     finally: wrapup.REFRESH = prev
@@ -163,6 +164,7 @@ class ReplyAndCloseOutTests(unittest.TestCase):
         s = armed(MemoryStore()); tid = with_pr(s)
         s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Channel': 'email', 'Subject': 'Export broken', 'FromName': 'Erin Blake',
                        'FromEmail': 'erin@northwind.example', 'BodyText': 'The nightly export is empty - can you fix it?', 'Status': 'routed'})
+        wrapup.agent_reply(s, tid, 'Fixed - it runs tonight.', 'coding')             # the agent's own reply, written in its run
         finish(s, tid)
         return s, tid
 

@@ -45,14 +45,15 @@ class NoHook(unittest.TestCase):
 
 class FreshnessTests(NoHook):
 
-    def test_the_conversation_is_refreshed_before_the_reply_is_drafted_and_an_unchanged_chain_drafts_as_before(self):
+    def test_the_conversation_is_refreshed_before_the_reply_is_raised_and_an_unchanged_chain_raises_it_as_before(self):
         s = MemoryStore(); tid, mid = task_with(s)
         wrapup.REFRESH = refresh_that(newer=False)
         order = []
         wrapup.REFRESH.calls = order
-        with mock.patch('taskuary.responder.write_draft', side_effect=lambda *a, **k: order.append('draft') or 'Fixed.'):
+        real = wrapup.raise_reply
+        with mock.patch.object(wrapup, 'raise_reply', side_effect=lambda *a, **k: order.append('reply') or real(*a, **k)):
             out = wrapup.finish(s, tid, REP, None, 'coding')
-        self.assertEqual(order, [(tid, mid), 'draft'])                                   # refresh, then the draft
+        self.assertEqual(order, [(tid, mid), 'reply'])                                   # refresh, then the reply
         self.assertEqual((out['drafting'], out['message_id'], out['freshness']), (True, mid, 'fresh'))
         rv = s.list_reviews('pending')[0]
         self.assertEqual(rv['Stale'], 0); self.assertEqual(s.get_task(tid)['Status'], 'waiting')
@@ -99,13 +100,11 @@ class FreshnessTests(NoHook):
                                               'BodyText': 'Actually - September too, please.', 'Status': 'routed'})
             return {'polled': True, 'newer': True, 'added': 1}
         wrapup.REFRESH = poll
-        with mock.patch('taskuary.responder.write_draft', return_value='Both months are done.') as wd:
-            out = wrapup.finish(s, tid, REP, None, 'coding')
+        out = wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual((out['drafting'], out['message_id'], out['freshness']), (True, newer['mid'], 'changed'))
         rv = s.list_reviews('pending')[0]
-        self.assertEqual(rv['MessageId'], newer['mid'])                                  # the draft answers the newest ask
+        self.assertEqual(rv['MessageId'], newer['mid'])                                  # the reply owed answers the newest ask
         self.assertIn('thread moved on', rv['Reason'])
-        self.assertIn('September too', wd.call_args.args[3])                            # the result is drafted against the current ask
 
     def test_a_refresh_that_fails_leaves_the_draft_visibly_unresolved(self):
         s = MemoryStore(); tid, mid = task_with(s)
@@ -160,7 +159,7 @@ class CompletionScopeTests(NoHook):
                 self.assertEqual(s.get_task(tid)['Status'], 'waiting')
                 self.assertEqual((s.get_review(rid)['Status'], s.get_review(rid)['MessageId']), ('pending', mid))
                 self.assertEqual(s.get_review(rid)['DraftText'], 'Retained draft')
-                self.assertEqual(draft.call_args.args[2], rid)
+                self.assertEqual(result['owed'], rid); draft.assert_not_called()
                 send.assert_not_called()
                 self.assertEqual([s.get_message(mid), s.get_message(other)], messages)
                 self.assertEqual(s.funnel_states(), receipts)
@@ -231,28 +230,26 @@ class ResultAndReviewTests(NoHook):
 
     def test_a_repeated_completion_reuses_the_one_review_and_never_sends(self):
         s = MemoryStore(); tid, mid = task_with(s)
-        with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as wd, mock.patch.object(outbound, 'reply_to_message') as send:
-            wrapup.finish(s, tid, REP, None, 'coding'); wrapup.finish(s, tid, REP, None, 'coding')
+        with mock.patch.object(outbound, 'reply_to_message') as send:
+            one, two = wrapup.finish(s, tid, REP, None, 'coding'), wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual(len(s.list_reviews('pending')), 1); send.assert_not_called()
-        self.assertEqual(wd.call_count, 2)                                                # rewritten, not duplicated
-        self.assertEqual(wd.call_args_list[0].args[2], wd.call_args_list[1].args[2])     # the same review id both times
+        self.assertEqual(one['owed'], two['owed'])                                        # the same review both times, never a second
 
     def test_a_held_review_is_the_one_reused(self):
         s = MemoryStore(); tid, mid = task_with(s)
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'early guess', 'Reason': 'needs a reply'})
         s.hold_reviews(tid, 'the agent is looking at it')
-        with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as wd:
-            wrapup.finish(s, tid, REP, None, 'coding')
-        self.assertEqual(wd.call_args.args[2], rid); self.assertEqual(len(s.list_reviews('pending')), 1)
+        out = wrapup.finish(s, tid, REP, None, 'coding')
+        self.assertEqual(out['owed'], rid); self.assertEqual(len(s.list_reviews('pending')), 1)
 
 
 class UnsupportedSendTests(NoHook):
     """PW-237: the always-draft rule - a channel that cannot carry the reply hides Send, it does not hide the answer."""
-    def test_a_channel_that_cannot_send_still_gets_its_draft_and_says_why_send_is_hidden(self):
+    def test_a_channel_that_cannot_send_still_gets_its_reply_and_says_why_send_is_hidden(self):
         s = MemoryStore(); tid, mid = task_with(s, 'github')
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as wd, mock.patch.object(outbound, 'reply_to_message') as send:
             out = wrapup.finish(s, tid, REP, None, 'coding')
-        wd.assert_called_once(); send.assert_not_called()
+        wd.assert_not_called(); send.assert_not_called()                                 # the reply owed is raised, its agent's to write
         self.assertEqual((out['drafting'], out['message_id'], out['can_send']), (True, mid, False))
         self.assertIn('GitHub', out['send_block'])
         rv = s.list_reviews('pending')[0]

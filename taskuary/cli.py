@@ -318,9 +318,9 @@ def main():
     ap.add_argument('--downvote', type=int, metavar='ID', help='this Hub entry is wrong or stale - say why with --body')
     ap.add_argument('--comment', type=int, metavar='ID', help='add to a Hub entry without re-posting it: the text goes in --body')
     ap.add_argument('--done', metavar='SUMMARY', nargs='?', const='',
-                    help='finish the task this session is working: close it, file the report from '
-                         'this transcript, and draft the reply the sender gets (you are not '
-                         'sending it - the owner approves it). Give one sentence on what you did '
+                    help='finish the task this session is working: close it and file the report from '
+                         'this transcript. Save the reply the sender gets first (--reply) - one owed and not '
+                         'saved is asked of you. Give one sentence on what you did '
                          'or found. Do not run this while waiting on the owner.')
     # ...and how it WAITS on somebody else (waiton.py): their reply brings the task back to the owner, with Continue
     ap.add_argument('--waiting-on', metavar='WHO',

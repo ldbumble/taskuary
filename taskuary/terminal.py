@@ -1290,7 +1290,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         if extra: t.seeded, t.accepted = seed, True   # the CLI submits it itself; kept so harvest drops the echo
         else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified
     # A reply drafted from the mail alone promises what this session has not worked out yet, so
-    # it stops waiting on the task and comes back rewritten from the report - see wrapup.raise_reply.
+    # it stops waiting on the task and comes back as the agent's to write - see wrapup.raise_reply.
     if task_id:
         # ONE START, whatever the door (A22, 2026-09-25): the interruption is over, a saved session is live again, and the
         # task is no longer queued - the task page's own terminal door skipped all three and left them stale

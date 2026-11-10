@@ -121,6 +121,28 @@ def live(jobs, now: float = None) -> list:
 
 def agents(jobs) -> list: return [j for j in jobs or [] if isinstance(j, dict) and j.get('kind') == 'agent']
 
+
+# WHAT A HEADLESS TURN PUT ASIDE, BY ITS OWN RECORD (the owner's rule: "no model call where stored facts already answer"): its trace says
+# which sub-agents and background jobs it started and which came back. A sub-agent's call answered is a sub-agent finished; a background
+# job's start answers at once, so whether it still runs is Claude's own transcript's to say (`pending`, at `path`).
+def _aside(e) -> str:
+    "'agent' / 'job' for a traced tool call that started work aside, else ''"
+    args = (e.get('detail') or {}).get('args') if isinstance(e.get('detail'), dict) else None
+    if isinstance(args, dict) and (args.get('run_in_background') is True or args.get('mode') == 'async'): return 'job'
+    return 'job' if e.get('name') == 'Monitor' else 'agent' if e.get('name') in ('Task', 'Agent') else ''
+
+
+def left(trace, path=None):
+    """The work a turn left running, by the data: the jobs still running, [] when everything it started has ended, None when the data
+    cannot tell - it started nothing aside (what it says it waits on is then for a model to read), or a background job's end is in no
+    record this can read."""
+    if path and (running := pending(path)): return running
+    calls = [e for e in trace or [] if e.get('type') == 'tool_call' and _aside(e)]
+    if not calls: return None
+    back = {e.get('name') for e in trace or [] if e.get('type') == 'tool_result'}
+    if any(_aside(e) == 'job' for e in calls) and not path: return None
+    return [] if all((e.get('detail') or {}).get('tool_call_id') in back for e in calls if _aside(e) == 'agent') else None
+
 def summary(jobs) -> str:
     "'1 shell, 1 monitor still running' - the words Claude's own footer uses"
     n = {}

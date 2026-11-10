@@ -124,5 +124,53 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
         self.assertEqual(s.last_worker_event(tid, skip=ws.NOTES)['Kind'], 'turn_end')
 
 
+class TheTurnsOwnRecordAnswersFirstTests(unittest.TestCase):
+    """"No model call where stored facts already answer" (the owner's rule, 2026-11-10): what the turn put aside - sub-agents, background
+    jobs - is in its own record. Still running wakes it, all of it back does not, and only a turn that put nothing aside is read."""
+    def no_model(self, *a, **k): raise AssertionError('a model was asked what the record already says')
+
+    def test_a_subagent_that_came_back_is_finished_and_no_model_is_asked(self):
+        from taskuary import background
+        s = MemoryStore(); tid = researcher(s)
+        ws.record(s, tid, 'g5', 'turn_end', text=SHORT, source='api')
+        trace = [{'type': 'tool_call', 'name': 'Task', 'detail': {'tool_call_id': 't1', 'args': {'description': 'app walkthrough'}}},
+                 {'type': 'tool_result', 'name': 't1', 'detail': {'result': 'the walkthrough notes'}}]
+        self.assertEqual(background.left(trace), [])
+        woke = []
+        hooks.judge_ended(s, tid, 'g5', SHORT, brain=self.no_model, wait=True, then=woke.append, jobs=background.left(trace))
+        self.assertEqual(woke, [])
+
+    def test_work_still_running_wakes_it_without_a_model(self):
+        import os, tempfile, time
+        from datetime import datetime, timezone
+        from taskuary import background
+        s = MemoryStore(); tid = researcher(s)
+        ws.record(s, tid, 'g6', 'turn_end', text=SHORT, source='api')
+        use = {'type': 'tool_use', 'id': 'u1', 'name': 'Bash', 'input': {'command': 'pull the walkthrough', 'run_in_background': True}}
+        res = {'timestamp': datetime.now(timezone.utc).isoformat(), 'toolUseResult': {'backgroundTaskId': 'b1'},
+               'message': {'content': [{'type': 'tool_result', 'tool_use_id': 'u1'}]}}
+        fd, path = tempfile.mkstemp(suffix='.jsonl'); os.close(fd); self.addCleanup(os.remove, path)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(json.dumps({'message': {'content': [use]}}, separators=(',', ':')) + chr(10) + json.dumps(res, separators=(',', ':')) + chr(10))
+        trace = [{'type': 'tool_call', 'name': 'Bash', 'detail': {'tool_call_id': 'u1', 'args': use['input']}},
+                 {'type': 'tool_result', 'name': 'u1', 'detail': {'result': 'started b1'}}]
+        jobs = background.left(trace, path)
+        self.assertEqual([j['kind'] for j in jobs], ['shell'])
+        self.assertIsNone(background.left(trace))                    # ...a background job with no record of its end: the data cannot tell
+        woke = []
+        hooks.judge_ended(s, tid, 'g6', SHORT, brain=self.no_model, wait=True, then=woke.append, jobs=jobs)
+        self.assertEqual(woke, ['1 shell still running'])
+
+    def test_a_turn_that_put_nothing_aside_is_left_to_the_model(self):
+        from taskuary import background
+        self.assertIsNone(background.left([{'type': 'tool_call', 'name': 'WebSearch', 'detail': {'tool_call_id': 'w1', 'args': {}}},
+                                           {'type': 'tool_result', 'name': 'w1', 'detail': {}}]))
+        s = MemoryStore(); tid = researcher(s)
+        ws.record(s, tid, 'g7', 'turn_end', text=SHORT, source='api')
+        woke = []
+        hooks.judge_ended(s, tid, 'g7', SHORT, brain=verdict(True, 'the walkthrough'), wait=True, then=woke.append, jobs=None)
+        self.assertEqual(woke, ['the walkthrough'])
+
+
 if __name__ == '__main__':
     unittest.main()

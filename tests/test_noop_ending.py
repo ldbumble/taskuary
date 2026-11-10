@@ -50,17 +50,18 @@ class NoOpEndingTests(unittest.TestCase):
         self.assertEqual((out['drafting'], out['message_id']), (True, mid))
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 
-    def test_finished_state_is_visible_before_slow_reply_drafting(self):
-        """Closing the terminal is immediate; drafting may not be. The task must stop claiming
-        an agent is in progress before the potentially slow AI call begins."""
+    def test_finished_state_is_visible_before_the_reply_is_raised(self):
+        """Closing the terminal is immediate. The task stops claiming an agent is in progress before its reply is raised - and no
+        writer drafts it at all now (the owner, 2026-11-10): it waits as the reply owed, the agent's to write."""
         s = MemoryStore(); tid, _ = task_with(s, 'ap@client.com', 'Is the importer fixed?')
-        seen = []
-        def drafting(*_args, **_kwargs):
-            seen.append((s.get_task(tid)['Status'], len(s.list_reviews('pending'))))
-            return 'It is fixed.'
-        with mock.patch('taskuary.responder.write_draft', side_effect=drafting):
-            wrapup.finish(s, tid, {'summary': 'fixed', 'outcome': 'did_work'}, None, 'coding')
-        self.assertEqual(seen, [('waiting', 1)])
+        seen, real = [], wrapup.raise_reply
+        def raising(*a, **k):
+            seen.append(s.get_task(tid)['Status']); return real(*a, **k)
+        with mock.patch.object(wrapup, 'raise_reply', side_effect=raising), \
+             mock.patch('taskuary.responder.write_draft', side_effect=AssertionError('a second voice drafted the reply')):
+            out = wrapup.finish(s, tid, {'summary': 'fixed', 'outcome': 'did_work'}, None, 'coding')
+        self.assertEqual(seen, ['waiting'])
+        self.assertEqual((len(s.list_reviews('pending')), s.get_review(out['owed']).get('DraftText') or ''), (1, ''))
 
     def test_work_done_on_an_automated_notice_drafts_no_reply_either(self):
         """The owner, 2026-11-10: "it's replying to a no reply email ... github emails are not supposed to be respodned to". A coding

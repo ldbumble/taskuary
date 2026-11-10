@@ -755,16 +755,17 @@ def resolution_of(store, task_id: int):
     return report
 
 
-def write_draft(store, task_id: int, review_id: int, resolution: str = None, actor: str = 'system', llm=None, nudge: str = None,
-                pressed: bool = False) -> str:
+def write_draft(store, task_id: int, review_id: int, actor: str = 'system', llm=None, nudge: str = None, pressed: bool = False) -> str:
     """The one door every reply comes through - and there is only one road behind it now.
 
     An agent named `responder` used to take this over and run HEADLESS: a CLI opened, worked
     and closed where nobody could watch it, interrupt it or answer it. That is the thing this
     app exists to replace, so it is gone. Coding work goes to a real session you can see
     (terminal.start_on_task); a reply is two sentences and belongs to the main AI, which
-    writes it here in under a second and parks it for approval. `pressed`: the owner pressed for this draft (ASKED) - never put down as no reply."""
-    return draft_for_review(store, task_id, review_id, llm, resolution, nudge, pressed)
+    writes it here in under a second and parks it for approval. `pressed`: the owner pressed for this draft (ASKED) - never put down as no reply.
+    ONLY THE OWNER'S PRESS ASKS IT (Draft with AI, Redraft, a chase): a reply owed at arrival or at a run's end is the task's agent's to write
+    (ingest.reply_to_agent, wrapup.raise_reply - the owner, 2026-11-10: "no more triage creates draft. agent should be doing it")."""
+    return draft_for_review(store, task_id, review_id, llm, None, nudge, pressed)
 
 
 def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str = None) -> str:

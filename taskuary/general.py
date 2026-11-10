@@ -2909,8 +2909,10 @@ class GeneralSession:
         # A TURN THAT ENDED SHORT is not one waiting on the owner: read by the turn judge (hooks.judge_ended), it wakes the agent once to
         # do what it said it would - never a failure in the chat (the owner, 2026-11-05: "failure means nothing to the user")
         if not asks and signing is None and turn is None and closing is None and not is_dock(self.store.get_task(self.task_id)):
-            from . import hooks
-            hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ)
+            from . import background, hooks, sessionrecord
+            try: path = sessionrecord.READERS['claude'][0](self.cli_sid) if self.cli_sid and self.pick.startswith('cli:') and _cli_of_pick(self.store, self.pick) == 'claude' else None
+            except Exception as e: logger.debug(f'task {self.task_id}: its CLI log was not found - {e}'); path = None
+            hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ, jobs=background.left(self.trace, path))
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         # ...and the files this turn wrote, as it left them: a later turn rewrites them in place (outputs.keep_turn, the owner 2026-11-07)
         from . import outputs

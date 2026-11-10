@@ -75,6 +75,13 @@ class PathTests(unittest.TestCase):
         cliinstall.ensure_on_path(d, persist=False)
         self.assertEqual(os.environ['PATH'], before)
 
+    def test_a_test_never_writes_the_durable_path(self):
+        """A suite that installed a fake CLI into a temp folder left that folder on the real user PATH, for good."""
+        import tempfile
+        with mock.patch.object(cliinstall, 'persist_windows') as win, mock.patch.object(cliinstall, 'persist_posix') as posix:
+            cliinstall.ensure_on_path(Path(tempfile.mkdtemp()))
+        self.assertFalse(win.called or posix.called)
+
     def test_a_shell_opened_tomorrow_gets_it_too(self):
         """The rc file is the only PATH a new terminal reads, and appending twice is a bug that
         only shows up as a rc file with forty identical lines in it."""

@@ -32,7 +32,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from . import pathcache, spawn
+from . import config, pathcache, spawn
 
 WINDOWS = os.name == 'nt'
 MARK = '# added by Taskuary'                       # the rc line's fingerprint, so we append once
@@ -450,7 +450,8 @@ def ensure_on_path(d, persist: bool = True) -> bool:
     changed = str(d) not in here
     if changed: os.environ['PATH'] = os.pathsep.join([*here, str(d)]) if here != [''] else str(d)
     pathcache.forget()
-    if persist:
+    # ...and never from a test: a suite that installs a fake CLI into a temp folder left that folder on the real user PATH for good
+    if persist and not config._under_test():
         try: (persist_windows(d) if WINDOWS else persist_posix(d, Path.home()))
         except Exception as e: logger.warning(f'could not put {d} on the durable PATH: {e}')
     return changed

@@ -235,9 +235,25 @@ class ACPCoding:
         threading.Thread(target=self._watch, daemon=True).start()
         while self.alive:
             self._wake.wait(1.0); self._wake.clear()
-            with self._qlock: items, self._q = self._q, []
+            # ...drawn BEFORE it leaves the queue: between the two the owner's line was in neither, and a read then named it nowhere (2026-11-10)
+            with self._qlock: items = list(self._q)
+            if items: self._show(items); self._drawn.update(map(id, items))
+            with self._qlock: self._q = self._q[len(items):]
             if items: self._turn(items)
-            elif self.busy and self.client: self._idle(turn=False)      # reopened with nothing to say: back at its prompt
+            elif self.busy and self.client and not self._take_waiting(): self._idle(turn=False)      # reopened with nothing to say: back at its prompt
+
+    def _take_waiting(self) -> bool:
+        """REOPENED FOR THE OWNER'S LINE, IT GOES STRAIGHT ON TO IT (the owner, 2026-11-10: "the agnt thing should show right away working"): an
+        idled-out session woken by a line he typed opened with nothing queued, dropped to "at rest" - its working line gone under his words -
+        and took the line only when the waiting room next looked. The waiting notes are handed over now, by the waiting room's own road,
+        and the session stays at work from the wake to the answer."""
+        if not (self.store and self.task_id and self.store.waiting_notes(self.task_id)): return False
+        from . import waitroom
+        self.busy = False                                   # the waiting room hands notes to a session at rest - for this one call
+        try: got = waitroom.deliver(self.store, self.task_id).get('delivered')
+        except Exception as e: got = 0; logger.debug(f'acp coding {self.sid}: the waiting notes were not handed over on wake - {e}')
+        self.busy = bool(got) or self.busy
+        return bool(got)
 
     def _fell_back(self, e):
         """The adapter did not get as far as a session: nothing ran, so today's pty takes its place - said once in the log per CLI and

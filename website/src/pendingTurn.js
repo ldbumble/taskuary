@@ -9,7 +9,7 @@ export const live = (m) => m?.status?.type === "running" || String(m?.id || "").
 const answers = (ms) => (ms || []).filter((m) => m?.role === "assistant").length;
 
 // what the press keeps, before any request goes: when, and how many answers the thread had then
-export const sentNow = (thread, at = Date.now()) => ({ at, answers: answers(thread) });
+export const sentNow = (thread, at = Date.now(), busy = false) => ({ at, answers: answers(thread), busy });     // `busy`: a turn already at work then
 
 // ...let go once the thread has a turn after it: the reply (or the live turn) is the thread's own from there
 export const settled = (thread, sent) => !!sent && answers(thread) > sent.answers;

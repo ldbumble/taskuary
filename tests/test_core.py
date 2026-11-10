@@ -246,7 +246,7 @@ class CoreTests(unittest.TestCase):
         rv = s.list_reviews('pending')[0]
         self.assertEqual(rv['TaskId'], out['task_id'])
         self.assertFalse((rv.get('DraftText') or '').strip())              # owed, not written
-        self.assertEqual([(c.args[0].__name__, c.args[2:]) for c in spawn.call_args_list], [('reply_to_agent', (out['task_id'], rv['ReviewId']))])
+        self.assertEqual([(c.args[0].__name__, c.args[2:4]) for c in spawn.call_args_list], [('reply_to_agent', (out['task_id'], rv['ReviewId']))])
 
     def test_skip_policy_hides_flood_senders(self):
         s = MemoryStore()

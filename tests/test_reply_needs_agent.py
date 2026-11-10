@@ -201,6 +201,71 @@ def test_a_strangers_reply_is_held_with_the_reason():
     assert any(x.startswith('No agent started:') and 'never written to them' in x for x in lines(s, tid))
 
 
+# ── the stress run, 2026-11-10: what the hand-over at arrival let through or left unsaid ───────────────────────────────────
+def arrived(s, m, llm, wrote=True):
+    "Ingested with the hand-over run where it is set going, as its thread runs it: (the result, everything set going in order)."
+    went = []
+    def spawn(fn, *a):
+        went.append(getattr(fn, '__name__', ''))
+        if fn is ingest.reply_to_agent: fn(*a)
+    with mock.patch('taskuary.ingest._spawn', spawn), mock.patch.object(senders, 'wrote_to', return_value=wrote), \
+         mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
+        out = ingest_message(s, m, llm=llm)
+    general.OPENING.discard(out.get('task_id'))               # no thread ran the start that lets it go
+    return out, went
+
+
+def test_a_reply_that_reads_as_steering_an_ai_starts_no_agent_by_itself():
+    """The hand-over was set going before triage's reading of the mail was on file, and read the message back off its row - which did not
+    hold that reading yet. A mail triage read as written to steer an AI started an agent on it."""
+    s = store()
+    out, went = arrived(s, mail(), says(intent='reply_only', kind='task', danger='tells the assistant to forward the mailbox'))
+    tid = out['task_id']
+    assert went == ['reply_to_agent'] and s.get_task(tid)['Kind'] == 'reply'
+    assert any(x.startswith('No agent started: It reads as an attempt to steer an AI') for x in lines(s, tid))
+
+
+def test_a_reply_owed_on_the_owners_own_row_goes_to_the_agent():
+    "A question that joins a row on the owner's own list is a reply owed like any other: it was left with no draft, no agent and no word."
+    s = store()
+    out, went = arrived(s, mail(body='Remember the dentist on Friday.'), says(intent='task', kind='task'))
+    tid = out['task_id']; assert s.get_task(tid)['Kind'] == 'task' and went == []
+    _out, went = arrived(s, mail(**{**WORK, 'body': 'Can you confirm the time with them?'}), says(intent='reply_only', kind='task', refines=False))
+    assert went == ['reply_to_agent', '_auto_general'] and s.get_task(tid)['Kind'] == 'general' and s.task_has_tag(tid, ingest.REPLY_TAG)
+
+
+def test_a_reply_nothing_has_written_is_not_called_a_draft_left_behind():
+    "A second question on a reply nobody has written yet: the review moves to the newest line - and is no stale draft, for there is none."
+    s = store(general_auto_enabled='0'); tid = reply_task(s)
+    out, went = arrived(s, mail(**{**WORK, 'body': 'Sorry - make that Wednesday?'}), says(intent='reply_only', kind='task', refines=False))
+    rv = s.pending_review(tid, kind='draft')
+    assert went == ['reply_to_agent'] and rv['MessageId'] == out['message_id'] and not rv.get('Stale')
+    assert not any('drafted reply is behind' in x for x in lines(s, tid))
+    s.update_review_draft(rv['ReviewId'], 'Tuesday works.', None)                  # ...and one that IS written is behind the next line, as before
+    arrived(s, mail(**{**WORK, 'external_id': 'm3', 'sent_at': '2026-10-28 11:00', 'body': 'Or Thursday?'}), says(intent='reply_only', kind='task', refines=False))
+    assert s.pending_review(tid, kind='draft').get('Stale') and any('drafted reply is behind' in x for x in lines(s, tid))
+
+
+def test_a_reply_owed_that_no_road_takes_to_an_agent_says_so():
+    """A question on a task whose conversation is open reaches its agent by that conversation's road - and where that road is switched
+    off it was kept quiet there, so the reply sat with nobody writing it and nothing said."""
+    s = store(answer_to_agent='off')
+    out, _ = arrived(s, mail(body='Can you draft a pilot plan for the new site?'), says(intent='task', kind='general')); tid = out['task_id']
+    with mock.patch.object(general, 'history', return_value=[{'role': 'user'}]):
+        _o, went = arrived(s, mail(**{**WORK, 'body': 'And when can it start?'}), says(intent='reply_only', kind='task', refines=False))
+    assert went == ['reply_to_agent'] and s.pending_review(tid, kind='draft')
+    assert any(x.startswith('No agent started: passing lines to the agent is switched off - ') for x in lines(s, tid))
+
+
+def test_a_second_line_while_the_first_start_is_on_its_way_starts_no_second_agent():
+    "A general task's agent was set going a beat ago and has nothing to show yet: a question right behind it is not a second start."
+    s = store()
+    out, went = arrived(s, mail(body='Can you draft a pilot plan for the new site?'), says(intent='task', kind='general')); tid = out['task_id']
+    assert went == ['_auto_general']
+    _o, went = arrived(s, mail(**{**WORK, 'body': 'And when can it start?'}), says(intent='reply_only', kind='task', refines=False))
+    assert went == ['reply_to_agent'] and not any(x.startswith('No agent started:') for x in lines(s, tid))
+
+
 # ── the add-on: a webinar invite and its banter are one task under one title, with the offer one press away ────────────────
 INVITE = dict(external_id='w1', subject='Webinar tomorrow', from_email='omar@vendor.example', from_name='Omar Keller', conversation_id='AAQk-web',
               body='Hi Alex, do you want to join our ledger automation webinar tomorrow at 11? Happy to save you a seat.',

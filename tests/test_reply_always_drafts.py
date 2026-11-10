@@ -43,7 +43,7 @@ class AlwaysDraftTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Kind'], 'reply')
         rv = s.pending_review(tid)
         self.assertIsNotNone(rv); self.assertEqual(rv['MessageId'], out['message_id'])
-        self.assertIn(('reply_to_agent', (s, tid, rv['ReviewId'])), spawned)
+        self.assertIn(('reply_to_agent', (s, tid, rv['ReviewId'])), [(f, a[:3]) for f, a in spawned])
         self.assertFalse((rv.get('DraftText') or '').strip())          # owed, the agent's to write
         reason = s.message_routes(out['message_id'])[-1]['Reason']
         self.assertIn('replies are off for teams', reason); self.assertNotIn('filed instead of drafted', reason)

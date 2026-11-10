@@ -226,7 +226,7 @@ class SupersedeTests(Base):
         with mock.patch.object(ingest, '_spawn') as spawn:
             ingest.ingest_message(self.s, {**mail('Dana - it is in the shared folder.', 'm:gail'), 'from_email': 'gail@northwind.example',
                                            'from_name': 'Gail Moreno'}, llm=llm)
-        self.assertEqual([(c.args[0], c.args[2:]) for c in spawn.call_args_list], [(ingest.reply_to_agent, (tid, rid))])
+        self.assertEqual([(c.args[0], c.args[2:4]) for c in spawn.call_args_list], [(ingest.reply_to_agent, (tid, rid))])
 
     def test_the_owners_external_answer_retires_the_draft_and_the_notice_says_so(self):
         tid, first, rid = teams_task(self.s)

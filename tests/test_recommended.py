@@ -87,6 +87,17 @@ def test_an_ask_no_agent_started_on_fills_send_to_agent(s):
             assert rulebook.recommended(s, item(tid), verbs('reply', 'close')) is None, st
 
 
+def test_a_phish_is_put_down_and_a_duplicate_folded_as_their_own_facts_say(s):
+    """Each state's own line named its move - "Not ours is its move", "fold it into that one" - and nothing was lit."""
+    tid = agent_task(s, kind='todo', summary=None)
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'fyi_danger', 'line': ''}):
+        assert rulebook.recommended(s, item(tid, kind='fyi'), verbs('mine', 'regular_agent', 'not_ours'))['verb'] == 'not_ours'
+        assert rulebook.recommended(s, item(tid, kind='fyi'), verbs('regular_agent', 'remove'))['verb'] == 'remove', "a task's row says it Not for me"
+    with mock.patch.object(rulebook, 'facts', return_value={'state': 'duplicate', 'line': 'Same ask as TQ-0001 - fold it into that one.'}):
+        r = rulebook.recommended(s, item(tid), verbs('reply', 'split', 'remove'))
+        assert (r['verb'], r['why']) == ('split', 'Same ask as TQ-0001 - fold it into that one.')
+
+
 def test_a_run_that_is_over_fills_mark_done_where_no_summary_was_written(s):
     """A coding agent's terminal writes no summary, and a task no agent touched has none: the facts say it is over."""
     tid = agent_task(s, kind='coding')

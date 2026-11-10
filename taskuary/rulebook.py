@@ -288,7 +288,7 @@ def state(store, item: dict, verbs: list) -> tuple:
         return ('waiting_late', {'who': who, 'days': days}) if days >= CHASE_DAYS else ('waiting', {})
     if kind == 'idea': return 'idea', {}
     # A PHISH FILED FYI IS PUT DOWN, NEVER HANDED ON (the owner, 2026-10-30): its row lit Send to agent - the one press that feeds a scam to
-    # an agent. Not ours is its move, at once and with no model read, and Send to agent waits in the ▾ (FyiCard's Foot `tuck`)
+    # an agent. Not ours is its move, lit (MOVES), and Send to agent waits in the ▾ (FyiCard's Foot `tuck`)
     if kind == 'fyi' and it.get('danger'): return 'fyi_danger', {}
     if kind == 'fyi': return 'fyi', {}
     ins = _inbound(store, it)
@@ -437,8 +437,10 @@ LATE = frozenset({'waiting_late', 'waiting_overdue', 'waiting_late_usual', 'goal
 NOTHING_LEFT = 'Its agent said nothing is left to do'
 # THE MOVE A STATE'S OWN FACT NAMES (the owner, 2026-11-10: "job of agent is to be helpful and do as much as possible. it shoudl prompt you,
 # should i deploy"): these lit nothing, and their line was hidden too - work left unpushed is looked at, an agent stopped with its work
-# unfinished is carried on, and an ask no agent started on is handed to one, as needs_agent is
-MOVES = {'unpushed': ('review_changes',), 'stopped': ('continue',), 'asked': ('regular_agent',), 'asked_late': ('regular_agent',)}
+# unfinished is carried on, an ask no agent started on is handed to one (as needs_agent is), a phish filed FYI is put down ("Not ours is its
+# move"), and the duplicate of a pair is folded into the one that stays ("fold it into that one")
+MOVES = {'unpushed': ('review_changes',), 'stopped': ('continue',), 'asked': ('regular_agent',), 'asked_late': ('regular_agent',),
+         'fyi_danger': ('not_ours', 'remove'), 'duplicate': ('split', 'remove')}
 
 
 def landing_asks(store, tid) -> bool:

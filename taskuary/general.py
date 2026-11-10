@@ -702,6 +702,9 @@ NOT_GONE = {'failed': 'pressed Send on {n} and IT DID NOT GO ({why}) - it still 
             'unknown': 'pressed Send on {n} and it MAY have gone ({why}) - never send it or set it up again unless they ask'}
 # ...and an ACT whose press failed (store.review_act_failed): the agent that set it up heard nothing, and read its card as still unpressed
 ACT_FAILED = 'pressed the button on {n} and IT FAILED ({why}) - it still waits on its card for their press; never do it another way unless they ask'
+# ...and one that WENT is said as done: an approved merge, post or split read "approved (sent, if it sends)" - a letter's words for an act that
+# sends nothing, leaving its agent to guess whether it had run (the stress round, 2026-11-10)
+ACT_DONE = 'pressed Approve on {n} and it was done'
 def _decided(store, r) -> str:
     "One review the owner pressed, in words for its agent: what became of it - and what went, when they changed its text first."
     n, state, why = f"rv{r['ReviewId']}", r.get('DeliveryState') or '', ' '.join(str(r.get('Reason') or '').split())[:160]
@@ -710,6 +713,7 @@ def _decided(store, r) -> str:
     was = (store._one('SELECT Text FROM draft_snapshot WHERE ReviewId=? ORDER BY Id DESC LIMIT 1', (r['ReviewId'],)) or {}).get('Text')
     went = str(r.get('FinalText') or '')
     changed = state == 'sent' and bool(went.split()) and (was.split() != went.split() if was else r['Status'] == 'edited')
+    if r.get('Kind') == 'action' and r['Status'] in ('approved', 'edited'): return ACT_DONE.format(n=n) + (f' ({why[:120]})' if why else '')
     return (f"{'approved and sent' if state == 'sent' and r['Status'] == 'approved' else DECIDED[r['Status']]} {n}" + (f' ({why[:120]})' if why else '')
             + (f' - they changed your text first; what went: {_quote(went, 600)}' if changed else ''))
 # A PRESS THE AGENT SAID IT WAITS ON WAKES IT, ONCE (the owner, 2026-11-08): a press is otherwise a line it hears with the owner's next one -

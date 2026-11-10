@@ -140,7 +140,8 @@ class APressThatFailed(Acts):
         with mock.patch.object(proposals, 'execute', return_value={'commented': 'northwind/ledger#7', 'url': SAID}), mock.patch.object(general, 'approved'):
             self.assertTrue(verdicts.decide(self.s, self.s.get_review(rv['ReviewId']), 'approve')['ok'])
         did = ' | '.join(general.owner_did(self.s, self.tid))
-        self.assertNotIn('IT FAILED', did); self.assertIn(f"approved (sent, if it sends) rv{rv['ReviewId']}", did)
+        self.assertNotIn('IT FAILED', did); self.assertIn(f"pressed Approve on rv{rv['ReviewId']} and it was done", did)
+        self.assertNotIn('if it sends', did, 'an act that ran is not said in a letter\'s words')
 
     def test_a_held_step_that_failed_says_so_on_its_row(self):
         sg.check(self.s, self.tid, 'run1', 'git push origin fix-export', 'Bash', HELD)

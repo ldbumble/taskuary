@@ -99,6 +99,7 @@ class ACPCoding:
         self.turn_at = time.time()                                # when the turn at work began: its clock (codingchat.live_of `turnStarted`)
         self._q, self._qlock, self._wake, self._steer_lock = [], threading.Lock(), threading.Event(), threading.Lock()
         self._echoes = {}                                         # steered words -> when sent: the adapter's echo of them is not a line of its own
+        self._drawn = set()                                       # ids of steered items already drawn: a steer that falls back to the next turn is not drawn twice
         self.touched, self.calls, self.history, self.has_output, self._live_at = {}, {}, [], False, 0.
         self.held, self.steps, self.gate, self.turns = {}, None, None, 0
 
@@ -288,18 +289,22 @@ class ACPCoding:
             # mid-turn under a uuid of its own, the adapter takes it for words typed in another client - and the echo can beat the reply.
             # Drawn beside our own line, the owner's one "merge and deploy" read "merge and deploymerge and deploy" (2026-11-09).
             self._echoes[item[0]] = time.time()
+            # ...and DRAWN before it too: drawn on the reply, the line raced the adapter's answer and turn end on the reader thread - the
+            # owner's words landed under the agent's reply to them, and a turn read as over had no line at all (CI, 2026-11-10). Words the
+            # turn could not take still go to the next one, drawn once: here.
+            self._show([item]); self._drawn.add(id(item))
             try: got = self.client.steer(item[0]) if self.steerable() else ''
             except Exception as e: got = ''; logger.debug(f'acp coding {self.sid}: the steer was not taken - {e}')
             if got != 'injected': self._echoes.pop(item[0], None)
             if got == 'injected':
-                self._show([item]); self.witness.note({'k': 'turn'})
+                self._drawn.discard(id(item)); self.witness.note({'k': 'turn'})
                 return item[3] and item[3](True)
             with self._qlock: self._q.append(item)
             self._wake.set()
 
     def _show(self, items: list):
         "Each prompt as the chat, the transcript and the Terminal draw it: the owner's own lines as theirs, Taskuary's words as its brief."
-        for t, brief, shown, _d in items:
+        for t, brief, shown, _d in [i for i in items if id(i) not in self._drawn]:
             for s in shown: self._record({'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': s}}); self.history.append(('you', s))
             self._record({'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': t},
                           **({'_meta': {'taskuary': 'brief'}} if brief or shown else {})})
@@ -316,7 +321,7 @@ class ACPCoding:
     def _turn(self, items: list):
         from . import agents, acpgate
         text = '\n\n'.join(t for t, *_ in items)
-        self._show(items)
+        self._show(items); self._drawn.difference_update(map(id, items))
         self.busy, self.seeding, self.accepted, self.stop_reason, self.turn_at = True, False, True, None, time.time()
         self.seeded = self.seeded or text
         self.witness.note({'k': 'turn'})

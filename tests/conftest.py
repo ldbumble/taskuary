@@ -556,6 +556,16 @@ def no_sessions_left_behind():
     terminal.SESSIONS.clear(); terminal.SESSIONS.update(was)
 
 
+@pytest.fixture(autouse=True, scope='module')
+def no_calendar_left_behind():
+    """faults.world holds its calendar fresh for good (assistant._AGENDA, a meeting twenty minutes out): a module that built it and never
+    put it back handed that meeting to every module after it - on CI's order the walk led with it and the rail carried it, two red
+    tests a shard later (2026-11-10). Per module, not per test: a module-scoped world may share its calendar across its own tests."""
+    from taskuary import assistant
+    was = dict(assistant._AGENDA); yield
+    assistant._AGENDA.clear(); assistant._AGENDA.update(was)
+
+
 @pytest.fixture(autouse=True, scope='session')
 def agents_can_start():
     """A bare store connects no brain, so every agent button would be greyed and the Advisor's check refuse them all (advisor.checked) -

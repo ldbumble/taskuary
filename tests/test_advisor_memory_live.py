@@ -170,8 +170,10 @@ def _home():
 
 @pytest.fixture(scope='module')
 def filled():
-    from taskuary import terminal
-    sessions = dict(terminal.SESSIONS)
+    from taskuary import assistant, terminal
+    # faults.world holds its calendar fresh for good (a meeting twenty minutes out): put back the one it found, or every later
+    # module's walk leads with that meeting and its rail carries it (CI, 2026-11-10: two red tests a shard later)
+    sessions, agenda = dict(terminal.SESSIONS), dict(assistant._AGENDA)
     try:
         with _home():
             s, by, syn = world(True)
@@ -181,6 +183,7 @@ def filled():
             yield s, by, syn, b, got
     finally:
         for sid in [x for x in terminal.SESSIONS if x not in sessions]: terminal.SESSIONS.pop(sid, None)
+        assistant._AGENDA.clear(); assistant._AGENDA.update(agenda)
 
 
 def test_the_planted_lines_reach_every_prompt_the_model_reads(filled):

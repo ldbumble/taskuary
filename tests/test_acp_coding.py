@@ -212,6 +212,26 @@ def test_a_steer_the_adapter_echoes_back_is_one_line_not_two(world, monkeypatch)
     assert ups.count('merge and deploy') == 1 and not t._echoes
 
 
+def test_a_steered_line_is_drawn_above_the_answer_even_when_the_turn_ends_first(world, monkeypatch):
+    """The adapter answers the steer, replies and ends the turn in one breath: drawn only once the steer's own reply woke its thread, the
+    owner's line landed under the agent's answer to it - and a turn read as over had no line at all (CI on Windows, 2026-11-10)."""
+    from taskuary import acp
+    s, tid, repo = world
+    for k in ('FAKE_ACP_HANG', 'FAKE_ACP_STEER', 'FAKE_ACP_STEER_ECHO'): monkeypatch.setenv(k, '1')
+    real = acp.ACPClient.steer
+    def slow(self, text, **kw): got = real(self, text, **kw); time.sleep(0.5); return got        # the turn ends before the steer returns
+    monkeypatch.setattr(acp.ACPClient, 'steer', slow)
+    t = open_(s, tid, repo, seed='look at the totals')
+    assert until(lambda: t.in_turn) and t.steerable()
+    assert waitroom.add(s, tid, 'merge and deploy', 'owner')['state'] == 'steered'
+    assert idle(t)
+    ups = codingchat.acp_updates(tid, t.sid)
+    mine = [i for i, u in enumerate(ups) if u['sessionUpdate'] == 'user_message_chunk' and '_meta' not in u and u['content']['text'] == 'merge and deploy']
+    answer = [i for i, u in enumerate(ups) if u['sessionUpdate'] == 'agent_message_chunk' and u['content']['text'].startswith('steered:')]
+    assert len(mine) == 1 and answer and mine[0] < answer[0], ups
+    until(lambda: not t._drawn)                                                                    # the slowed steer returns: nothing left marked
+
+
 @pytest.mark.parametrize('steer', [True, False], ids=['steered', 'queued'])
 def test_a_note_two_deliveries_race_for_is_handed_over_once(world, monkeypatch, steer):
     """The owner typed one line while the agent worked and the chat drew it twice: their POST's deliver steered it in, and before that

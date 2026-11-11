@@ -1,19 +1,38 @@
 // THE CONVERSATION, WALKED ON THE REAL CLI WITH A PER-FRAME SAMPLER (not a test: nothing here runs in CI). node real-conv.mjs <name> <general|acp|pty> [steps...]
 // Each animation frame the page writes down what the chat holds - the items in order (their names, where each stands), what waits by the box,
 // the scroll - and the rules are read off the frames afterwards (check): his line once from the frame it is heard, nothing new above what was
-// drawn, the working line under it in that frame, the scroll never going back, a waiting line never in the conversation.
+// drawn, the working line under it in that frame, the scroll never going back, a waiting line never in the conversation, and words that
+// name a button only where that button can be pressed in the same frame.
 import path from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { api, connect, open, shot, save, sleep, type, press, buttons, out, info } from "./real-lib.mjs";
 import { record } from "./recorder.mjs";
 
-const sampler = () => {
+// THE BUTTONS' OWN NAMES (taskuary/buttons.json, one name per button) and the ones a card draws: what "names a button" is read against
+const NAMES = [...new Set([...Object.values(JSON.parse(await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "taskuary", "buttons.json"), "utf8")).verbs).map((v) => v.label || v.name || v),
+  "Approve", "Reject", "Allow once", "Trust", "Withdraw", "Not now"].filter((x) => typeof x === "string" && x))];
+
+const sampler = (names) => {
   window.__frames = []; let last = "";
+  const seen = new Set(names), esc = (s) => s.replace(/[^A-Za-z0-9 ]/g, "\\$&");
+  // ...named: a name of several words anywhere; a single word only as a name in the middle of a sentence or marked ("your Send", `Send`) -
+  // "Send me the list" names nothing
+  const namedIn = (text) => [...seen].filter((n) => new RegExp(n.includes(" ") ? `(^|[^A-Za-z])${esc(n)}($|[^A-Za-z])` : `([a-z,] |["'\`*(])${esc(n)}($|[^A-Za-z])`).test(text));
   const tick = () => {
     const vp = document.querySelector("[data-tq-task-page] .tq-aui-viewport");
     if (vp) {
       const items = [...vp.querySelectorAll("[data-tq-item]")].map((e) => [e.getAttribute("data-tq-item"), e.getAttribute("data-tq-turn") || "", Math.round(e.getBoundingClientRect().top - vp.getBoundingClientRect().top + vp.scrollTop)]);
       const pend = [...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].map((e) => e.getAttribute("data-tq-pending-item"));
       const f = { items, pend, top: Math.round(vp.scrollTop), h: vp.scrollHeight, ch: vp.clientHeight, working: !!vp.querySelector("[data-tq-working]"), cards: vp.querySelectorAll("[data-tq-turn-cards] button:not([disabled])").length };
+      // WORDS THAT NAME A BUTTON, AND THE BUTTON (the owner: never "press X" with nothing to press): the newest thing in the chat, where it is
+      // the agent's answer - an older one named a button he has pressed since
+      const shown = [...document.querySelectorAll("[data-tq-task-page] button")].filter((b) => b.getBoundingClientRect().width > 0).map((b) => [b.innerText.trim().replace(/\s+/g, " "), !b.disabled]);
+      vp.querySelectorAll("[data-tq-turn-cards] button").forEach((b) => { const n = b.innerText.trim().replace(/\s+/g, " "); if (n.length > 2 && n.length < 40 && /^[A-Z]/.test(n)) seen.add(n); });
+      const tail = [...vp.querySelectorAll("[data-tq-item]")].pop(), said = tail?.hasAttribute("data-tq-turn") ? [...tail.querySelectorAll("[data-tq-said]")].map((e) => e.innerText).join(" / ") : "";
+      const named = said ? namedIn(said) : [];
+      if (named.length) { f.named = named; f.unlit = named.filter((n) => !shown.some(([b, on]) => on && b === n)); if (!f.unlit.length) delete f.unlit; }
       const sig = JSON.stringify(f);
       if (sig !== last) { last = sig; window.__frames.push({ t: Math.round(performance.now()), ...f }); }
     }
@@ -42,6 +61,8 @@ export function check(frames) {
       // his line, the frame it enters the conversation: a turn at work right under it
       ids.forEach((id, i) => { if (!was.has(id) && /^(l|s)[0-9a-z]/.test(id) && !f.items.slice(i + 1).some((x) => x[1] === "starting" || x[1] === "working")) say(f.t, `${id} heard with no turn at work under it in that frame`); });
     }
+    // words that name a button, with no such button to press in that frame (said once per run of frames that lack it)
+    if (f.unlit?.length && JSON.stringify(f.unlit) !== JSON.stringify(prev?.unlit || [])) say(f.t, `the agent's words name ${f.unlit.map((n) => `"${n}"`).join(", ")} and no such button is lit`);
     ids.filter((id) => !id.startsWith("t:")).forEach((id) => heard.add(id)); prev = f;
   }
   return bad;
@@ -73,7 +94,7 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
   await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 120000 });
   await sleep(2500);                    // ...the task's own page, not the one a walk before this left open: its box took the first line and went away
   const rec = await record(page, path.join(out, "video", name));
-  await page.evaluate(sampler);
+  await page.evaluate(sampler, NAMES);
   const snap = async (n) => { await shot(page, `${name}-${n}`); const c = await api(`/api/tasks/${tid}/conversation`); await save(`${name}-${n}-list.json`, c);
     console.log(`[${n}]`, c.items.map((x) => `${x.kind}${x.state ? ":" + x.state : ""}${x.cards?.length ? "+" + x.cards.length + "c" : ""}`).join(" "), "| pending", c.pending.length, "| working", c.working); };
   for (const s of steps.length ? steps : ["rest", "say:Make it one paragraph shorter.", "rest"]) {
@@ -92,6 +113,16 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
         else api(`/api/tasks/${tid}/assistant/messages`, { text: w, line_id: `lflood${name}${i}` }).catch(() => {});      // not waited for: typed as fast as he can
         await sleep(150); } }
     else if (k === "snap") await snap(arg || "snap");
+    // ...the three ways a turn ends with his lines still waiting: his own stop (the x on the turn), its process dying under it, the app restarting
+    else if (k === "stop") console.log("stop", await page.evaluate(() => { const b = document.querySelector("[data-tq-task-page] [data-tq-stop-run]"); b?.click(); return !!b; }));
+    else if (k === "kill") console.log("kill", JSON.stringify(await api("/api/fixture/session", { taskId: tid, state: "killed" })));
+    else if (k === "restart") { await writeFile(path.join(out, "restart"), ""); const end = Date.now() + 120000;
+      while (existsSync(path.join(out, "restart")) && Date.now() < end) await sleep(500);
+      console.log("restart", existsSync(path.join(out, "restart")) ? "NOT DONE" : "done"); await sleep(3000); }
+    else if (k === "count") { const c = await api(`/api/tasks/${tid}/conversation`); const w = (x) => String(x.text || x.words || "");
+      const on = c.items.filter((x) => ["line", "arrival"].includes(x.kind)).map((x) => (w(x).match(/flood line (\d+) of/) || [])[1]).filter(Boolean).map(Number);
+      const pe = c.pending.map((x) => (w(x).match(/flood line (\d+) of/) || [])[1]).filter(Boolean).map(Number);
+      console.log(`COUNT on canvas ${new Set(on).size} (drawn twice ${on.length - new Set(on).size}) | by the box ${pe.length} | both ${pe.filter((n) => on.includes(n)).length} | in order ${on.every((n, i) => !i || on[i - 1] < n)} | order ${on.join(",")}`); }
   }
   const fr = await frames(page), bad = check(fr);
   await save(`${name}-frames.json`, fr); await save(`${name}-findings.txt`, bad.join("\n") || "no rule broken");

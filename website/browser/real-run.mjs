@@ -1,7 +1,7 @@
 // A scratch instance on the person's real CLI, kept up for a walk driven from other scripts (real-lib.mjs). Not a test: nothing here runs in CI.
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { startHarness } from "./harness.mjs";
@@ -23,8 +23,10 @@ page.on("pageerror", (e) => console.log("PAGEERROR", e.message));
 await page.goto(h.ui, { waitUntil: "domcontentloaded" });
 await writeFile(path.join(out, "info.json"), JSON.stringify({ ui: h.ui, api: h.fixtureApi, token: h.token, home: h.home, ws: page.browser().wsEndpoint(), git, pid: process.pid }));
 console.log("READY", h.ui, h.home);
-const stop = path.join(out, "stop");
+const stop = path.join(out, "stop"), again = path.join(out, "restart");
 let n = 0;
-while (!existsSync(stop)) { await new Promise((r) => setTimeout(r, 2000)); if (++n % 5 === 0) await writeFile(path.join(out, "server.log"), h.log()); }
+while (!existsSync(stop)) { await new Promise((r) => setTimeout(r, 1000)); if (++n % 10 === 0) await writeFile(path.join(out, "server.log"), h.log());
+  // ...`restart` beside it: the server stopped and started again on the same home and port, the page left open (real-conv's `restart` step)
+  if (existsSync(again)) { await writeFile(path.join(out, `server-${Date.now()}.log`), h.log()); await h.restart({ down: 1500 }); rmSync(again, { force: true }); console.log("RESTARTED"); } }
 await writeFile(path.join(out, "server.log"), h.log());
 await h.close();

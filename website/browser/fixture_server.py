@@ -125,10 +125,20 @@ def _install_fresh_routes(app, store):
 
     @app.post("/api/fixture/session")
     def fixture_session(body: dict = Body(...)):
-        "The task's live session put where time would put it: `ended` (closed, forgotten) or `idled` (closed quietly, the next line wakes it)."
+        """The task's live session put where time would put it: `ended` (closed, forgotten) or `idled` (closed quietly, the next line wakes it) -
+        or `killed`: its process dies under it, as a crash takes it - nothing of Taskuary's closes it (a recorded walk: a turn that fails)."""
         from taskuary import terminal
         tid = int(body["taskId"]); t = general._live_of(tid)
         if t is None: return {"ok": False, "why": "no live session"}
+        if body.get("state") == "killed":
+            import subprocess
+            from taskuary import clipool
+            ps = [p for p in (getattr(getattr(t, "client", None), "p", None), getattr(clipool._POOL.get(f"general:{tid}"), "p", None), getattr(t, "pty", None)) if p is not None]
+            for p in ps:
+                # ...the whole tree: a CLI is node under a shell, and the shell alone dying leaves it at work
+                if os.name == "nt" and getattr(p, "pid", None): subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True)
+                else: p.kill()
+            return {"ok": bool(ps)}
         if body.get("state") == "idled":
             t.last -= 10 ** 6; was = general.idle_for; general.idle_for = lambda: 0
             try: ok = t.idle_out()

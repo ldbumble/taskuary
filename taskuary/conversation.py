@@ -355,7 +355,9 @@ def items(store, tid: int) -> dict:
         aid, text = m['id'].split('-')[1], m['content'][0]['text']
         h, it = led.get(('press', aid)), {'id': f'p:{aid}', 'kind': 'press' if m.get('press') else 'note', 'at': m['createdAt'], 'text': text, **({'stop': True} if text == stop else {})}
         if not h and at_work and ep(m['createdAt']) + 1 > began and m.get('press') and text != stop: pend.append(it)
-        else: put(h['At'] if h else ep(m['createdAt']), 0 if h else -1, it, h['HId'] if h else 0)
+        # ...A PRESS NOBODY HEARD YET STANDS AFTER ALL OF ITS OWN SECOND - its stamp is no finer: a stop pressed in the second its turn's line was
+        # heard sorted above that line, and the stop's mark fell on the answer before it (a same-second tie, seen as a flash and a red test)
+        else: put(h['At'] if h else ep(m['createdAt']) + 0.999, 0 if h else -1, it, h['HId'] if h else 0)
 
     # in order - and an input nobody heard never cuts a turn's work in two: it stands after the turn it came in under
     out, held, run = [], [], None

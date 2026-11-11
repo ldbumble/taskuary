@@ -395,7 +395,10 @@ class DripTests(unittest.TestCase):
             waitroom.add(s, tid, 'and rename the flag')                                       # ...his own queued note keeps its drip
             self.assertEqual(len(s.waiting_notes(tid)), 10); self.assertEqual(t.typed(), '')   # working: all of it waits
             t._idle = terminal.IDLE_WAITING + 5
-            self.assertEqual(waitroom.tick(s), 9); time.sleep(0.4)
+            self.assertEqual(waitroom.tick(s), 9)
+            # ...typed on a thread of its own: waited for by what is typed and the pane's own "typing", never by a clock (0.4 s was short on CI)
+            end = time.time() + 20
+            while time.time() < end and ('flood 9 of 9' not in t.typed() or t.typing or len(s.waiting_notes(tid)) > 1): time.sleep(.05)
             typed = t.typed()
             for i in range(1, 10): self.assertEqual(typed.count(f'flood {i} of 9'), 1)
             self.assertEqual(typed.count(' '.join(ingest.REPLAN.split())[:200]), 1)

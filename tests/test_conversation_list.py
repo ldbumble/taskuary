@@ -147,6 +147,21 @@ class TheList(unittest.TestCase):
         self.assertEqual(ids[-3:], ['l-two', *drawn, 'l-three'])
         self.assertEqual([x['state'] for x in got['items'] if x['kind'] == 'turn'][0], 'done')                 # the answer above was never stopped
 
+    def test_a_stop_pressed_in_the_second_its_line_was_heard_still_stands_under_that_line(self):
+        """A press is stamped by the whole second: one made in the second the turn's own line was heard sorted above it by the tie, and the
+        stopped mark fell on the finished answer before - order by what happened, never by the clock's grain."""
+        self.say('Suggest two.', 'l-one'); self.rest()
+        self.brain.delay = 30
+        self.say('Compare both in detail.', 'l-two', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.brain.delay = 0
+        self.assertTrue(general.stop_turn(self.s, self.tid))
+        sec = int(conversation.ep(general.press_lines(self.s, self.tid)[-1]['createdAt']))
+        self.s._exec("UPDATE heard SET At=? WHERE TaskId=? AND (Ref='l-two' OR Kind='turn' AND At>=(SELECT At FROM heard WHERE Ref='l-two'))", (sec + 0.9, self.tid))
+        got = self.list(); ids = [x['id'] for x in got['items'] if x['kind'] in ('line', 'press')]
+        self.assertEqual((ids[:2], len(ids)), (['l-one', 'l-two'], 3), self.kinds(got))
+        self.assertEqual([x['state'] for x in got['items'] if x['kind'] == 'turn'][0], 'done')
+
     def test_a_turn_is_on_disk_from_its_start_so_a_restart_at_any_point_says_it_was_cut(self):
         "The recorded restart, 2026-11-11: cut while its CLI was still coming up, the turn left his line heard with nothing under it."
         from taskuary import sessionrecord

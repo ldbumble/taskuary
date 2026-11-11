@@ -2,6 +2,11 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.42 - 2026-11-11
+
+- A page the agent shows stays on the turn that made it, in both kinds of chat
+- A general turn that dies says so in the chat instead of spinning on
+
 ## 0.3.11.41 - 2026-11-11
 
 - The general chat and the coding chat say the same thing at a mid-turn line, a stop and a dead agent

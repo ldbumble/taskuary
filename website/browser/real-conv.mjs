@@ -58,7 +58,8 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     const got = await api("/api/ingest/push", { channel: "email", subject: "Offsite venue", from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`,
       body: "Hi Alex,\n\nCan you suggest two venues for the March offsite, about 40 people, and tell me which one you would pick? A short answer is fine.\n\nThanks,\nGail" });
     console.log("push", JSON.stringify(got).slice(0, 200)); tid = got.task_id;
-  } else { const got = await api("/api/fixture/coding", { git: info.git, real: true, pty: road === "pty" }); tid = got.taskId; }
+  } else { const got = await api("/api/fixture/coding", { git: info.git, real: true, pty: road === "pty", conversation: `conv-${name}` }); tid = got.taskId; }
+  const subject = road === "general" ? "Re: Offsite venue" : "Re: Ledger totals";
   const { browser, page } = await connect();
   await page.reload({ waitUntil: "domcontentloaded" }); await sleep(3000);
   await open(page, tid);
@@ -73,13 +74,13 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     else if (k === "say") { await type(page, arg); await sleep(300); }
     else if (k === "busy") await untilWorking(page);                     // wait until a turn is at work
     else if (k === "wait") await sleep(Number(arg));
-    else if (k === "mail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: "email", subject: "Re: Offsite venue", from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
+    else if (k === "mail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: "email", subject, from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
     else if (k === "press") console.log(await press(page, new RegExp(arg), "[data-tq-task-page]"));
     else if (k === "flood") { const n = Number(arg) || 50;
       // ...three voices, mixed: the sender on the channel, his own replies on that channel, lines typed here
       for (let i = 0; i < n; i++) { const w = `flood line ${i + 1} of ${n}: note ${i + 1}`;
-        if (road === "general" && i % 3 === 1) api("/api/fixture/own-reply", { id: `own-${name}-${i}`, conversation: `conv-${name}`, subject: "Re: Offsite venue", body: w }).catch((e) => console.log("own", e.message));
-        else if (road === "general" && i % 3 === 0) api("/api/ingest/push", { channel: "email", subject: "Re: Offsite venue", from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: w }).catch(() => {});      // a mail's triage takes its time: never waited for either
+        if (i % 3 === 1) api("/api/fixture/own-reply", { id: `own-${name}-${i}`, conversation: `conv-${name}`, subject, body: w }).catch((e) => console.log("own", e.message));
+        else if (i % 3 === 0) api("/api/ingest/push", { channel: "email", subject, from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: w }).catch(() => {});      // a mail's triage takes its time: never waited for either
         else api(`/api/tasks/${tid}/assistant/messages`, { text: w, line_id: `lflood${name}${i}` }).catch(() => {});      // not waited for: typed as fast as he can
         await sleep(150); } }
     else if (k === "snap") await snap(arg || "snap");

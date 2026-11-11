@@ -126,7 +126,7 @@ def test_a_draft_the_thread_moved_past_is_never_called_written_for_the_newest_me
     assert [c[0][0].__name__ for c in spawn.call_args_list] == ['_replan_general']           # the agent is woken to answer it
     said = general.latest_block(s, tid)
     assert 'THE NEWEST MESSAGE - from Erin Blake' in said and 'budget sheet' in said
-    assert f'THE DRAFT WAITING NOW (rv{rid}' in said and 'written for this message' not in said and 'BEFORE the newest message' in said
+    assert 'THE DRAFT WAITING NOW (' in said and 'written for this message' not in said and 'BEFORE the newest message' in said
 
 
 # ── F6, F11: the to-do list and the owner's reminder ───────────────────────────────────────────────────────────────────────────────
@@ -233,7 +233,7 @@ def test_the_owners_line_over_a_waiting_draft_wakes_the_agent_and_nothing_else_t
     rv = s.get_review(rid)
     assert rv['Status'] == 'pending' and rv['DraftText'] == 'Hi Erin - yes, 3pm stands, and the room is booked till 4.'     # the agent's to keep or withdraw
     lb = general.latest_block(s, tid)
-    assert 'WHAT THE OWNER REPLIED ON THE THREAD THEMSELVES' in lb and 'yes 3pm, same room' in lb and f'THE DRAFT WAITING NOW (rv{rid}' in lb
+    assert 'WHAT THE OWNER REPLIED ON THE THREAD THEMSELVES' in lb and 'yes 3pm, same room' in lb and 'THE DRAFT WAITING NOW (' in lb
 
 
 def test_the_owners_line_while_a_turn_works_is_its_next_turn():

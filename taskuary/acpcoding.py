@@ -434,7 +434,7 @@ class ACPCoding:
         lines = self._his(*items)
         if self.store and self.task_id:
             from . import conversation
-            conversation.hear(self.store, self.task_id, turn=True, sid=self.sid)       # the turn begins: what it is told below is heard here
+            conversation.hear(self.store, self.task_id, turn=True, sid=getattr(self, 'sid', ''))       # the turn begins: what it is told below is heard here
             try:
                 proposals.move_on(self.store, self.task_id)
                 if (lb := general.turn_facts(self.store, self.task_id, resumed=True)): text = f'{lb}\n\n{text}'

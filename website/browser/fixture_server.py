@@ -90,6 +90,12 @@ def _install_fresh_routes(app, store):
         conn = {"cmd": "claude", "cwd": str(repo)} | ({} if body.get("real") else {"acp_cmd": [sys.executable, fake]})
         for name in ("coding", "claude"): store.upsert_agent(name, "coding", "cli", json.dumps(conn))
         tid = store.create_task({"Title": body.get("title") or "Comment the ledger totals", "Kind": "coding", "Status": "in_progress"}, "owner")
+        # ...`conversation`: the task came from a colleague's mail on that thread, so what is pushed on it later joins this task (a recorded flood)
+        if body.get("conversation"):
+            store.set_setting("owner_name", "Alex Doyle", "owner"); store.set_setting("owner_email", "alex@northwind.example", "owner")
+            store.add_message({"TaskId": tid, "ExternalId": f"fx-coding-{tid}", "ConversationId": body["conversation"], "Channel": "email", "FromName": "Gail Moreno",
+                               "FromEmail": "gail@northwind.example", "ToEmail": "alex@northwind.example", "Subject": "Ledger totals", "Status": "routed",
+                               "BodyText": "Hi Alex, could someone comment the totals function in the ledger? Thanks, Gail"})
         return {"taskId": tid, "repo": str(repo)}
 
     @app.post("/api/fixture/mail-task")

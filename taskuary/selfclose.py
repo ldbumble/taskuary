@@ -302,9 +302,9 @@ CHAT_LINE = (
 # ...SAID ONCE (the agent walk, 2026-11-10): each draft stood twice - its subject and body quoted in the answer, over the card that showed the
 # same words - and the owner, 2026-11-10: a replaced reply was quoted whole, with its scratch folder's path under it. One sentence, read
 # from the guide every general turn carries (owner_closes_line) and from the draft tools' own answer (agenttools.propose_reply/propose_email)
-CARD_SAID = ('After you set up a reply or an email, say in one line what you set up and for whom, and any assumption you made in it (an address '
-             "you guessed, a date you picked) - never repeat the draft's words, nor the path of a file it carries, in your answer: its card under "
-             'your answer shows them.')
+CARD_SAID = ('After you set up a reply, an email or an act, say in ONE short line what you set up and for whom, with any assumption you made in '
+             'it (an address you guessed, a date you picked), and stop: its card under your answer shows its words, the file it carries, that it '
+             'waits for the press and that nothing went - never repeat any of that, nor what it replaced.')
 HANDLES_LINE = ('An id Taskuary gives a draft or a card (rv4, the review number a tool returned) is its handle for your tools and your '
                 'withdraw line - the owner never sees it: to them, name a thing by what it is and whom it is to.')
 # ...and WHERE THE OWNER CLOSES IT (no CHAT_LINE: nobody wrote in, or the owner keeps the task to finish): the agent said "I couldn't
@@ -317,7 +317,7 @@ def owner_closes_line() -> str:
             # ...and where what it drafts is (the owner, 2026-11-05: a draft said to be in a section that no longer exists): earlier turns of the
             # conversation may still name another screen - the page they were written for is gone
             f'WHERE YOUR DRAFTS ARE: this task is one chat. Every email or reply you draft shows as a card under your answer, with its own '
-            f'{label("approve")} - say it is "below" or "ready to send". There is no other screen or tab for it; never send the owner '
+            f'{label("approve")}. There is no other screen or tab for it; never send the owner '
             f'anywhere else, even where an earlier turn of this conversation did. '
             f'{CARD_SAID} '
             # ...and NAMED AS THE OWNER KNOWS IT (agent walk 2, 2026-11-10: "send it after rv3", "set up for your Send (review 5)")
@@ -341,9 +341,7 @@ _REPLY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?REPLY(?:\s+(?P<who>[^\]]*?))?\s*\]
 _WHO_RE = re.compile(r'(to|answers|only|cc|why)\s*=\s*(?:"([^"]*)"|(\S+))', re.I)
 REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who asked will get, put exactly that '
               f'text between {REPLY_OPEN} and {REPLY_CLOSE}. It becomes the reply waiting on the owner\'s approval, '
-              f'in your words - nothing is sent until they approve it. The owner reads it as its own card under Next steps, after your answer, never '
-              f'in it: the block IS the draft, so its words are written once, there, and nowhere else in your answer. Say the reply is '
-              f'drafted and waits for their Send, under your answer - never on another screen or tab, which a task does not have. A file '
+              f'in your words: the block IS the draft, so its words are written once, there, and nowhere else in your answer. A file '
               f'it sends rides only if you name it on its own '
               f'line: [[TASKUARY-ATTACH: <full path>]] - a file you made in your working folder, or one listed under '
               f'ATTACHED FILES. Never say a file is attached unless you named it that way. Who hears it is yours to decide, in the opening '
@@ -365,9 +363,8 @@ SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"abou
                 f'"answer_is_result": <true when your words above the block ARE what the owner asked for - the answer, the list, the link - so they '
                 f'show beside it; false when this block says it all>, "after_press": <"handoff" only when you will carry on once the '
                 f'owner hands this to a person - that press wakes you once (a press on a card you set up always does); else leave it out>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. You are talking TO the owner in their own chat: say "you" and "your", never their name or '
-                f'"they" ("You asked...", "This is ready for your Mark done") - above the block and in it. A drafted reply is '
-                f'already its own card with Send under Next steps, and so is a post or any act you proposed; a question you ask is shown on its own: none '
-                f'is ever an on_you step - on_you is only what is truly the owner\'s, with why. A draft\'s Send card IS the confirmation: never '
+                f'"they" ("You asked...", "This is ready for your Mark done") - above the block and in it. A card you set up (a reply, a post, '
+                f'an act) and a question you ask are never an on_you step - on_you is only what is truly the owner\'s, with why. A draft\'s Send card IS the confirmation: never '
                 f'also ask "shall I send?", "anyone else to copy?" or "does this look right?". When you '
                 f'need the owner, say what you got and what you are unsure about in one or two plain sentences above it; ask '
                 f'(through [[TASKUARY-ASK]]) only the question you cannot go on without. When the owner\'s newest message CORRECTS you, add "corrections": '
@@ -506,13 +503,19 @@ LATEST_LINE = ('LATEST MESSAGE WINS: your answer is to the newest message, read 
 NO_NEW_LINE = ('NO NEW MESSAGE STARTED THIS TURN: the last message on the task is one you have answered - never answer it again. This turn '
                'is about the rest of what you are told here. A draft still waiting stays as it is unless that undoes it; never draft again '
                'what already went out below.')
+# EACH DUTY ONCE, IN THE STARTUP CONTEXT (the owner, 2026-11-11: "why would an agent say the same thing twice?"): the rules above rode EVERY
+# turn of a chat's agent, beside the same duty in its startup lines (REPLY_LINE, WHERE YOUR DRAFTS ARE, the summary's), and an agent says
+# back what it is told more than once - "ready for your Send below", then "Nothing has been sent", then "the new draft takes the place of
+# the old one". A chat's agent is told them once (DRAFTS_ONCE, general.prompt_parts) and a turn carries only its facts under a short head
+LATEST_HEAD, NO_NEW_HEAD = 'A NEW MESSAGE STARTED THIS TURN.', 'NO NEW MESSAGE STARTED THIS TURN: the last message on the task is one you have answered.'
 WITHDRAW_MARK = '[[TASKUARY-WITHDRAW: <why, one line>]]'
 # ...and any unsent thing it set up, as withdraw_draft takes it (verdicts.withdraw): an agent with no shell took back only the reply draft,
 # so an email to the wrong person stood beside the right one with its Send (agent-flow audit, 2026-11-07)
 WITHDRAW_LINE = (f'To withdraw the pending draft, put {WITHDRAW_MARK} on its own line - or, with a shell, run `taskuary --withdraw-draft "<why>"` '
                  '(the withdraw_draft tool). An email, a post or another proposal you set up: [[TASKUARY-WITHDRAW which=<its review id or who it '
-                 'was to>: <why>]], one line each. It is kept under Not sent for the owner; nothing is sent or deleted. A review id (rv7) is '
-                 'for these markers only: the owner sees cards, never ids, so say what the card is, not its id.')
+                 'was to>: <why>]], one line each. It is kept under Not sent, never deleted.')
+DRAFTS_ONCE = (f'{LATEST_LINE} A turn that says no new message started it never answers the last one again, and leaves a waiting draft as it is '
+               f'unless what it is told undoes it. {WITHDRAW_LINE}')
 _WITHDRAW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?WITHDRAW\b\s*(?:which\s*=\s*(?:"([^"]*)"|([^\s:\]]+)))?\s*:?\s*(.*?)\s*\]\][ \t]*\n?',
                           re.I | re.M)
 def withdraw_markers(text: str) -> tuple:
@@ -550,8 +553,7 @@ DRAFT_LINE = (f'EMAILS THIS TASK NEEDS: write each email as {DRAFT_OPEN} slot=<i
               'A checklist line marked "-> email to" is an email that only you write - write it or ask the owner what it needs; '
               '`slot` is its id, and your email fills it, never a second beside it. An email the checklist does not list takes to=<address> in '
               'place of slot - and beside slot, when the line names a person and you found their address. '
-              'The subject is written for its reader, never the title of this task; to someone who mailed on this task, "Re: " their subject. '
-              "Each waits for the owner's approval - nothing is sent until they approve it.")
+              'The subject is written for its reader, never the title of this task; to someone who mailed on this task, "Re: " their subject.')
 DRAFT_TOOL_LINE = ('EMAILS THIS TASK ALREADY OWES: a checklist line marked "-> email to" is an email only you will write - write it, or '
                    'ask the owner what it needs. propose_email with `slot` set to that line\'s id and its words in `text` '
                    'fills the line, never a second email beside it. Leave `slot` out only for an email the checklist does not list.')

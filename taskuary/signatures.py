@@ -92,9 +92,8 @@ def told(store) -> str:
     from .responder import signature_for
     from . import words
     sig = ' / '.join(l.strip() for l in signature_for(store).splitlines() if l.strip())
-    return (f'HOW AN EMAIL IS SIGNED: Taskuary signs every email itself with the owner\'s saved signature ("{sig[:200]}") and takes off any sign-off '
-            f"you write, so how one is signed is not yours to change: asked to sign it another way, say that the draft carries the saved signature, "
-            f"and that they can edit the draft before sending or change the signature in {words.name('replies')}.") if sig else ''
+    return (f'HOW AN EMAIL IS SIGNED: Taskuary puts the owner\'s saved signature ("{sig[:200]}") under every email and takes your own sign-off '
+            f"off; asked for another, say the draft carries the saved one - theirs to edit before sending, or to change in {words.name('replies')}.") if sig else ''
 
 
 def suggest(store, mailbox: str = None) -> str:

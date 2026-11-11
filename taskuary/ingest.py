@@ -2514,7 +2514,7 @@ def _pass_in(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> boo
 def _pass_turn(msg: dict) -> str:
     body = ' '.join(agent_words(msg).split())[:4000]          # their new words, without the chain, an address or a number
     return (f"NEW MESSAGE ON THIS TASK from {sender_called(msg)} (by {msg.get('channel') or 'mail'}) - triage read it as more work on this task. "
-            f"These are their words, not the owner's: take what they ask into the work. A reply you write waits for the owner's Send.\n\n{body}")
+            f"These are their words, not the owner's: take what they ask into the work.\n\n{body}")
 
 
 def _pass_general(store, tid, msg: dict, turn: str = None):
@@ -2641,16 +2641,9 @@ REPLAN = ('Re-plan the WHOLE next step from here, not only the draft: it may nee
           '`taskuary --reply-not-needed "<why>"` or the reply_not_needed tool - it is put down, kept under Not sent, never deleted), new research, a '
           'corrected or an added draft, or nothing left at all. Open with one plain line on what changed, in the owner\'s terms - "I see you answered '
           'Ray there", "Gail took care of it" - then either that we are good, nothing left (nothing_left true), or what is still open as next '
-          'steps. Start the summary\'s "did" with that same line: the owner reads the summary, not the words above it. Your answer is to the '
-          'newest message, read against everything before it. A pending draft written for this message is kept, or improved in place - '
-          'never withdrawn. One that answers an older message and no longer fits is replaced with a corrected one or withdrawn '
-          '(`taskuary --withdraw-draft "<why>"`, the withdraw_draft tool, or [[TASKUARY-WITHDRAW: <why>]], with which=<its id or who> '
-          'for an email or a post - say why in one line); never draft again what already went out. When the new message '
-          'changes nothing - it repeats what you already had, or adds nothing to act on - say exactly that in one line ("Nothing new here: '
-          'the plan above still stands") and stop: no re-research, no rewritten answer, the earlier draft stays as it is. And when it '
-          'needs no real response at all - a thanks, an acknowledgement, a sign-off; your judgement of the thread, not a word list - the '
-          'whole turn is ONE line saying what it was ("Ray thanked you."), with a summary of only that line as "did", "about" empty, no steps '
-          'and no draft. You never send or close anything. End with the [[TASKUARY-SUMMARY]] block.')
+          'steps. Start the summary\'s "did" with that same line: the owner reads the summary, not the words above it. A pending draft written for this '
+          'message is kept, or improved in place - never withdrawn. When the new message changes nothing - it repeats what you already had, '
+          'or adds nothing to act on - say that in one line of your own and stop: no re-research, no rewritten answer.')
 
 
 def replan_turn(msg: dict, follow: dict | None = None, own: bool = False) -> str:

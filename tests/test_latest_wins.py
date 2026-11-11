@@ -52,10 +52,11 @@ def the_owners_day(s):
 def test_a_correction_after_a_pending_draft_names_the_newest_message_and_the_draft():
     s = MemoryStore(); tid, _, _, rid = the_owners_day(s)
     system, turn = general._prompt(s, tid)
-    assert selfclose.LATEST_LINE in turn and 'THE NEWEST MESSAGE' not in system
+    # ...and each rule ONCE, in the startup context (selfclose.DRAFTS_ONCE): the turn carries the facts under a short head
+    assert selfclose.DRAFTS_ONCE in system and selfclose.LATEST_LINE not in turn and selfclose.LATEST_HEAD in turn and 'THE NEWEST MESSAGE' not in system
     assert 'THE NEWEST MESSAGE - from the owner (in this chat)' in turn and FIX in turn
-    assert f'THE DRAFT WAITING NOW (rv{rid}, to Gail Moreno, drafted at 02:48 PM' in turn and 'BEFORE the newest message' in turn
-    assert OLD in turn and selfclose.WITHDRAW_LINE in turn
+    assert 'THE DRAFT WAITING NOW (to Gail Moreno, drafted at 02:48 PM' in turn and f'rv{rid}' not in turn and 'BEFORE the newest message' in turn
+    assert OLD in turn and selfclose.WITHDRAW_LINE in system and selfclose.WITHDRAW_LINE not in turn
 
 
 def test_already_sent_replies_are_in_the_turns_context():
@@ -102,7 +103,7 @@ def test_a_new_mail_is_the_newest_message_and_the_replan_says_latest_wins():
                        'FromEmail': 'gail@northwind.example', 'BodyText': 'Actually I need the December one.', 'Status': 'routed'})
     at(s, 'message', 'MessageId', m, '2026-11-06 15:40:00')
     assert general.newest_message(s, tid)['who'] == 'Gail Moreno'
-    assert 'withdraw' in ingest.REPLAN and 'newest message' in ingest.REPLAN
+    assert 'TASKUARY-WITHDRAW' not in ingest.REPLAN and 'withdraw' in selfclose.DRAFTS_ONCE and 'newest message' in selfclose.DRAFTS_ONCE      # said once, at startup
 
 
 def test_the_agents_new_draft_supersedes_the_old_one():

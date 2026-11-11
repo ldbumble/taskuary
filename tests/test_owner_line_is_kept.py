@@ -40,7 +40,7 @@ class OwnerLineIsKept(unittest.TestCase):
 
     def end(self):
         if (g := general.session_for(self.tid)): g.close(learn=False, report=False)
-        general.drop_session(self.tid); general.IDLED.pop(self.tid, None)
+        general.drop_session(self.tid); general.IDLED.pop(self.tid, None); general.answered(self.tid, every=True)
 
     def said(self): return [(c['ActorType'], c['Body']) for c in general.chat_rows(self.s, self.tid)]
 
@@ -87,7 +87,10 @@ class OwnerLineIsKept(unittest.TestCase):
         r = c.post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Cheapest first, please.'})
         first.join(15)
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json()['reply'], 'Answer 2.')                                  # answered on a fresh session...
+        self.assertTrue(r.json().get('kept'))                                             # a line sent while a turn works is kept and answered at once...
+        end = time.time() + 15
+        while (general.ASSISTANT_TYPE, 'Answer 2.') not in self.said() and time.time() < end: time.sleep(0.05)
+        self.assertIn((general.ASSISTANT_TYPE, 'Answer 2.'), self.said())                 # ...and answered on a fresh session
         self.assertEqual([b for t, b in self.said() if t == general.USER_TYPE].count('Cheapest first, please.'), 1)    # ...the line said once
         self.assertNotIn('reload the page', general.ENDED)
 
@@ -110,10 +113,13 @@ class OwnerLineIsKept(unittest.TestCase):
         until(lambda: getattr(general.session_for(self.tid), 'busy', False))
         held = [say('ok', 'held-2'), say('ok', None), say('ok', 'held-3')]
         for i, t in enumerate(held): t.start(); until(lambda n=i + 1: len(general.waiting_lines(self.s, self.tid)) >= n)
-        self.assertEqual([(w['text'], w.get('line')) for w in server._assistant_payload(self.tid)['waiting']], [('ok', 'held-2'), ('ok', None), ('ok', 'held-3')])
+        # ...and a line the page gave no name gets one here (general.new_line_id): the ledger says by it that the agent heard it
+        waits = [(w['text'], w.get('line')) for w in server._assistant_payload(self.tid)['waiting']]
+        self.assertEqual([(w, n) for w, n in waits if n in ('held-2', 'held-3')], [('ok', 'held-2'), ('ok', 'held-3')])
+        made = waits[1][1]; self.assertTrue(made and made.startswith('s'))
         for t in [first, *held]: t.join(15)
         mine = [(m['content'][0]['text'], m.get('line')) for m in server._assistant_payload(self.tid)['messages'] if m['role'] == 'user']
-        self.assertEqual(mine, [('Compare three tools.', 'held-1'), ('ok', 'held-2'), ('ok', None), ('ok', 'held-3')])
+        self.assertEqual(mine, [('Compare three tools.', 'held-1'), ('ok', 'held-2'), ('ok', made), ('ok', 'held-3')])
 
     def test_the_chats_door_takes_the_name_and_a_long_one_is_cut(self):
         self.brain.delay = 0

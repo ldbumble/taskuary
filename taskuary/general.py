@@ -821,7 +821,7 @@ def own_heard(store, tid: int) -> list:
     ours = went_from_here(store, tid)
     return [x for x in (store.get_message(i) for i in conversation.with_turn(store, tid))
             if x and (x.get('Direction') == 'out' or x.get('Status') == 'context') and not ours(x)]
-def latest_block(store, tid: int, resumed: bool = False) -> str:
+def latest_block(store, tid: int, resumed: bool = False, rules: bool = True) -> str:
     """LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none.
     `resumed`: a CLI that has the conversation already reads the newest message as its turn, so only a draft or a reply that went is news."""
     from . import selfclose
@@ -850,7 +850,9 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     # ...and the cards it raised that the conversation moved past (proposals.move_on): old news, said once in the turn after
     passed = proposals.passed_since(store, tid, last) if last else []
     if not (rv or sent or answered or others or handed or did or own or asked or nowhere or refused or passed): return ''
-    out = [selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE]
+    # `rules` False: an agent whose startup context says the rules once (selfclose.DRAFTS_ONCE) - the turn carries the facts alone
+    out = [(selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE) if rules else selfclose.NO_NEW_HEAD if heard else selfclose.LATEST_HEAD]
+    wd = f'\n{selfclose.WITHDRAW_LINE}' if rules else ''
     if new: out.append(f"{'THE LAST MESSAGE, WHICH YOU ANSWERED' if heard else 'THE NEWEST MESSAGE'} - from {new['who']}, at {clock(new['at'])}: "
                        f"{_quote(new['words'], 600)}")
     if rv:
@@ -865,12 +867,12 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         before = not mine and not heard and bool(new) and (bool(rv.get('Stale')) or at < new['at'])
         out.append(f"THE DRAFT WAITING NOW ({'to ' + to + ', ' if to else ''}drafted at {clock(at)}"
                    f"{' - written for this message - keep it or improve it' if mine else ' - BEFORE the newest message' if before else ''}): "
-                   f"{_quote(rv['DraftText'], 1500)}\n{selfclose.WITHDRAW_LINE}")
+                   f"{_quote(rv['DraftText'], 1500)}{wd}")
     # ...each letter with its words (the audit's real turn, 2026-11-10: asked to make the email shorter, the agent read only "the email to
     # paula@..." and asked the owner what it said)
     if others: out.append('ALSO SET UP AND NOT SENT - take back any the newest message undoes:\n' + '\n'.join(
         f"- rv{x['rid']}: {x['what']}" + (f": {_quote(x['text'], 600)}" if x.get('text') else '') for x in others)
-        + ('' if rv else f'\n{selfclose.WITHDRAW_LINE}'))
+        + ('' if rv else wd))
     if nowhere: out.append('AN EMAIL YOU DRAFTED HAS NO ADDRESS:\n' + '\n'.join(f'- rv{r}: {slots.to_missing(w)}' for r, w in nowhere))
     if refused: out.append('WHAT YOU PROPOSED IN YOUR LAST TURN WAS NOT PUT ON A CARD - the owner has no button for it:\n' + '\n'.join(
         f'- {a}: {proposals.refusal_line(why)}' for a, why in refused))
@@ -906,10 +908,10 @@ def came_in(store, mids, said=()) -> str:
             + '\n'.join(f"- {x.get('FromName') or x.get('FromEmail') or 'someone'}, {clock(x.get('SentAt') or x.get('CreatedAt'))}: {_quote(mail_row(store, x)['words'], 1500)}" for x in rows))
 
 
-def turn_facts(store, tid: int, task: dict = None, resumed: bool = False) -> str:
+def turn_facts(store, tid: int, task: dict = None, resumed: bool = False, rules: bool = True) -> str:
     "latest_block for a task's turn - none on the dock or a setup walk. Said in the turn, not the system prompt (_prompt)."
     task = task if task is not None else store.get_task(tid) or {}
-    return '' if is_dock(task) or task.get('SourceRef') in ('connector:setup', SETUP_REF) else latest_block(store, tid, resumed)
+    return '' if is_dock(task) or task.get('SourceRef') in ('connector:setup', SETUP_REF) else latest_block(store, tid, resumed, rules)
 
 def draft_turns(store, tid: int) -> list:
     """Each pending reply draft and the turn it belongs to, for the chat: {review, turn ('comment-<id>' of the answer that left it, None before
@@ -1648,7 +1650,7 @@ WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: a turn that asks still does 
              "record after the write. Never assume a click, an upload or a form fill landed.\n"
              "DONE MEANS THE GOAL IS MET AND CHECKED, not boxes ticked. A part that is unmet, or that you could not check, is named in your "
              "summary - nothing_left is false then. You still never close the task: the owner does. A turn that ends on the owner's Send or "
-             "decision is finished: say so plainly - no \"check it before you press Send\" unless something real is uncertain, and then name it.")
+             "decision is finished - no \"check it before you press Send\" unless something real is uncertain, and then name it.")
 # PLAYBOOKS LEARN (the owner, 2026-11-05, from Hermes' skills that patch themselves): a turn that found its way the hard way leaves the next
 # agent the way. The model says whether there is a lesson - no word triggers it; the owner's yes on the playbook's card files it
 # (playbooks.take_lesson), and one with no playbook to go in lands in LEARNED.md, the one road every learned fact takes
@@ -2014,7 +2016,8 @@ def prompt_parts(store, tid: int) -> tuple[str, list, str]:
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
     # ...the LATEST facts ride in the TURN, never the system prompt: they change every turn, and a CLI's system prompt is its process's
     # command line (a hashed --append-system-prompt-file), so in the system prompt each turn started a new process (clipool's one per chat)
-    lb = turn_facts(store, tid, task)
+    lb = turn_facts(store, tid, task, rules=False)
+    if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system += f'\n\n{selfclose.DRAFTS_ONCE}'
     md = store.checklist_markdown(tid, ids=True, shell=False) if hasattr(store, 'checklist_markdown') else ''    # the slot's id: its road is in the brief (by_tool)
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
     from .terminal import TICK_HEAD, _tickable
@@ -2754,7 +2757,7 @@ class GeneralSession:
             if kept_conv:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
                 user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
-                if (lb := turn_facts(self.store, self.task_id, resumed=True)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
+                if (lb := turn_facts(self.store, self.task_id, resumed=True, rules=False)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
                 if turn_said: user, whole = f'{turn_said}\n\n{user}', f'{turn_said}\n\n{whole}'
                 if is_dock(self.store.get_task(self.task_id)):
                     user += f'\n\n{dock_snapshot(self.store)}'

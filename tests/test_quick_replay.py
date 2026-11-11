@@ -60,3 +60,12 @@ def test_a_stranger_task_says_which_road_made_it_one():
     out = qr.replay(s, now=datetime.now())
     assert (out['quick'], out['deep:stranger']) == (1, 3)
     assert {k: v for k, v in out.items() if k.startswith('stranger:')} == {'stranger:later': 1, 'stranger:opener': 1, 'stranger:taskuary-wrote': 1}
+
+
+def test_run_on_a_copy_of_a_live_database_it_reads_what_the_log_beside_it_holds(capsys, tmp_path):
+    "A live home's database keeps its newest rows in the log beside it (WAL): a copy of the file alone read as an empty home."
+    from taskuary.store import SQLiteStore
+    s = SQLiteStore(tmp_path / 'taskuary.db')
+    s.create_task({'Title': 'Northwind job', 'Kind': 'general', 'OriginBase': 'owner'}, 'triage')
+    assert qr.main(['--db', str(tmp_path / 'taskuary.db')]) == 0
+    assert 'general: 1' in capsys.readouterr().out

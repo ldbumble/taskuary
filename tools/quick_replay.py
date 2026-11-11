@@ -54,10 +54,8 @@ def main(argv=None):
     p.add_argument('--db', required=True); p.add_argument('--days', type=int, default=14); p.add_argument('--ask', type=int, default=0)
     a = p.parse_args(argv)
     tmp = Path(tempfile.mkdtemp(prefix='quick-replay-')); db = tmp / 'taskuary.db'
-    shutil.copy(a.db, db)
-    os.environ['TASKUARY_HOME'] = str(tmp / 'home')          # before any taskuary import: nothing may open the real home
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from loguru import logger; logger.remove(); logger.add(sys.stderr, level='WARNING')
+    for x in ('', '-wal', '-shm'):                           # ...with what a live database has not yet written into its file
+        if Path(a.db + x).is_file(): shutil.copy(a.db + x, str(db) + x)
     from taskuary.store import SQLiteStore
     try:
         for k, v in replay(SQLiteStore(db), a.days, ask=a.ask).items(): print(f'{k}: {v}')
@@ -65,4 +63,9 @@ def main(argv=None):
     return 0
 
 
-if __name__ == '__main__': sys.exit(main())
+if __name__ == '__main__':
+    os.environ['TASKUARY_HOME'] = tempfile.mkdtemp(prefix='quick-replay-home-')     # before any taskuary import: nothing may open the real home
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from loguru import logger; logger.remove(); logger.add(sys.stderr, level='WARNING')
+    try: sys.exit(main())
+    finally: shutil.rmtree(os.environ['TASKUARY_HOME'], ignore_errors=True)

@@ -12,7 +12,7 @@ Timing (seconds, env, defaults measured against claude 2.1 on the owner's machin
   FAKE_CLAUDE_THINK  time to first token on a warm process, before any input is counted   0.7
   FAKE_CLAUDE_PREFILL per 10K characters of input the provider has not seen in this session 0.25
   FAKE_CLAUDE_TPS    output tokens a second (a token ~4 characters)                        70
-What it SAYS comes from FAKE_CLAUDE_SCRIPT, a JSON list of {"when": regex, "first": text, "then": text}: the owner's words are
+What it SAYS comes from FAKE_CLAUDE_SCRIPT, a JSON list of {"when": regex, "first": text, "then": text, "wait": seconds}: the owner's words are
 found where the Assistant puts them ("The owner says: " on a first round, "The owner asked: " on a look-up's second round,
 "FROM THE OWNER: " in a Continue's turn - server.continue_work), the
 first rule whose regex matches answers - `first` on a first round, `then` once it has looked something up, or `exit` with that code
@@ -59,6 +59,7 @@ def answer(prompt: str) -> str:
         if not re.search(r['when'], prompt if r.get('anywhere') else said, re.I): continue
         if r.get('exit') is not None: log('exit', code=r['exit']); sys.exit(r['exit'])   # a CLI that dies mid-turn (website/browser/agent-journey)
         for p in r.get('post') or []: act(p)
+        time.sleep(r.get('wait') or 0)                   # a long turn, for a stop pressed while it works
         return r.get('then' if then else 'first') or r.get('first') or 'Ok.'
     return 'Ok.'
 

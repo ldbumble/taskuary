@@ -85,7 +85,7 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, act = null, 
               onChange={(e) => e.target.value && set(e.target.value)}
               style={{ font: "inherit", fontSize: 13, padding: "4px 6px", borderRadius: 6, border: "1px solid var(--tq-border, #d8d1c5)" }} />
           </Box>
-        </>}
+        </>
         {away && <Button size="small" disabled={busy} onClick={() => set("none")} sx={{ justifySelf: "start", fontSize: 11 }}>Bring it back now</Button>}
         {err && <Typography sx={{ fontSize: 11.5, color: "var(--tq-danger, #7a2f3c)" }}>{err}</Typography>}
       </Box>

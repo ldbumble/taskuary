@@ -70,6 +70,16 @@ class EveryPressOfTheOwnersIsSaidInWords(Acts):
         self.assertEqual(self.lines()[-1], f'You merged {task_ref(other)} into this task.')
         self.assertEqual(self.lines(other), [f'You merged this task into {task_ref(self.tid)}.'])
 
+    def test_the_x_on_a_turn_is_one_press_whatever_agent_works_it(self):
+        # ...a general chat's turn stopped read "cancelled" as a failure, a coding one's nothing at all (the side-by-side walk, 2026-11-11)
+        chat = SimpleNamespace(stop=lambda: True)
+        with mock.patch.object(general, 'session_for', return_value=chat): self.assertTrue(general.stop_turn(self.s, self.tid))
+        with mock.patch.object(general, 'session_for', return_value=None), mock.patch.object(term, 'cancel_turn', return_value=True):
+            self.assertTrue(general.stop_turn(self.s, self.tid))
+        with mock.patch.object(general, 'session_for', return_value=None), mock.patch.object(term, 'cancel_turn', return_value=False):
+            self.assertFalse(general.stop_turn(self.s, self.tid), 'nothing at work: nothing stopped, nothing said')
+        self.assertEqual(self.lines(), ['You stopped the agent.', 'You stopped the agent.'])
+
     def test_the_task_a_break_out_made_says_where_it_came_from(self):
         f = Factory(self.s); f.message(self.tid, from_name='Erin Blake', body='Where is the Payworth invoice?')
         mid = f.message(self.tid, from_name='Erin Blake', body='Also, can we renew the Trainly seats?')

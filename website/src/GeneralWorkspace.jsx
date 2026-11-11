@@ -128,9 +128,10 @@ export const messagesWithTrace = (messages, session, keepStart = true) => {
   // the chat showed the question, no reply, and no reason, over a task still chipped "agent
   // working" (TQ-0496 - codex exited 1 refusing the model it was configured with). A turn's
   // last word is its record when there is no other.
-  const tail = out[out.length - 1];
+  // ...the newest TURN, above any press made since: a stopped turn's trail stood under "You stopped the agent" (the side-by-side walk, 2026-11-11)
+  const at = out.findLastIndex((m) => !m.press), tail = out[at];
   if (tail?.role === "assistant") tail.content = [...stepsPart(trace, { keepStart, answer: textOf(tail) }), ...tail.content];
-  else out.push({ id: `trace-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: stepsPart(trace, { keepStart }) });
+  else out.splice(at + 1, 0, { id: `trace-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: stepsPart(trace, { keepStart }) });
   return out;
 };
 
@@ -502,7 +503,7 @@ const AtWork = ({ since, began, compacting = false, ...props }) => {
 // ...`foot`: the turn answers a line held at the chat's foot (an answer sent on the server's road), so its row stands under that line
 const PendingTurn = ({ busy, sent, at, began = null, foot = false, feed, held = false, children }) => {
   const atFoot = useFoot(feed).length > 0;
-  const thread = useAuiState((s) => s.thread.messages), name = React.useContext(AgentNameCtx);
+  const thread = useAuiState((s) => s.thread.messages);
   const due = pendingTurn(thread, { busy, sent, began, held });
   // ...its clock from the EARLIEST start it has been told while it stands, never a later one (the owner, 2026-11-10: from the press, never
   // restarting): a coding turn's server start moved from the press to the adapter's turn as it came up, and "ran 9s" read "ran 2s"
@@ -511,9 +512,18 @@ const PendingTurn = ({ busy, sent, at, began = null, foot = false, feed, held = 
   else first.current = Math.min(first.current ?? Date.now(), Number.isFinite(told) ? told : Infinity);
   if (!due) return busy && !foot && !turnOver(thread, { sent, began }) ? children : null;   // ...nor its spin, the turn over
   if (foot !== atFoot) return null;
-  return <div className="tq-aui-message tq-aui-agent" data-tq-pending-turn="">
-    <div className="tq-aui-role">{name}<RunClock start={first.current} /></div>
-    <div className="tq-aui-agent-body">{children}</div></div>;
+  return <TurnHead start={first.current}>{children}</TurnHead>;
+};
+// THE HEAD OF A TURN NOT IN THE THREAD: the agent's name and its running clock over its working - a turn a press asked for (PendingTurn), and the
+// turn at work under a line typed while it works (the side-by-side walk, 2026-11-11: a general chat drew only its dots there, a coding chat this head)
+const TurnHead = ({ start, children }) => <div className="tq-aui-message tq-aui-agent" data-tq-pending-turn="">
+  <div className="tq-aui-role">{React.useContext(AgentNameCtx)}<RunClock start={start} /></div>
+  <div className="tq-aui-agent-body">{children}</div></div>;
+// ...the turn at work's own: counted from where that turn began (RanFor's start for it), never from a later press
+const AtWorkHead = ({ or, children }) => {
+  const start = useAuiState((s) => { const ms = s.thread.messages, i = ms.findLastIndex((m) => m.role === "assistant" && live(m));
+    return i < 0 ? null : turnFrom(ms[i].metadata?.custom?.since, turnBegan(ms.slice(0, i).map((m) => m.createdAt))); });
+  return <TurnHead start={start ?? or}>{children}</TurnHead>;
 };
 // WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
 // each answer in a chat task, its time and the time from what it answered (the message before it) to the answer
@@ -531,7 +541,8 @@ const RanFor = () => {
   const start = running ? began : before, t = running && start ? new Date(start) : ended ? asUtc(ended) : at ? new Date(at) : null;
   if (!t || Number.isNaN(+t)) return null;
   if (running) return <RunClock start={+t} />;
-  const ran = running ? "" : turnStamp({ start: before, end: t });
+  // ...and one his line passed while it still works has not ended: no "ran", which read "ran 0s" over a turn at work (the side-by-side walk)
+  const ran = isLive ? "" : turnStamp({ start: before, end: t });
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
     · {when(t)}{ran ? ` · ${ran}` : ""}</span>;
 };
@@ -862,6 +873,10 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           // work and must not leave a blank pane merely because it lacks Claude/Codex JSON (agentSteps.stepsOf).
           events.push(event);
           yield { content: content() };
+        } else if (event.type === "error" && event.code === "stopped") {
+          // ...stopped by his x: no failure - the server's copy, with his press's line (general.stop_turn), as a coding chat draws it
+          onSent(event.payload);
+          return;
         } else if (event.type === "error") {
           // ...and the page is told the turn is over: the session the stream's `start` handed it stayed "Agent is working", with Stop
           // and save, over a CLI that had died mid-turn - and nothing polls a session the server no longer has (the agents walk, 2026-10-26)
@@ -1123,7 +1138,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               time it was typed, then this screen's own not yet kept; all of them waiting for the agent until a turn takes them (2026-11-07) */}
           <FootLines waiting={waiting} held={held} messages={messages} hint={!(sent || serverBusy)} />
           {/* ...and a turn at work while one of his lines waits draws its working UNDER that line: nothing above a new prompt (the owner, 2026-11-10) */}
-          <ThreadPrimitive.If running><WhileLines feed={feed} waits>{atWork}</WhileLines></ThreadPrimitive.If>
+          <ThreadPrimitive.If running><WhileLines feed={feed} waits>{dock ? atWork : <AtWorkHead or={pressedAt}>{atWork}</AtWorkHead>}</WhileLines></ThreadPrimitive.If>
           {/* ...and the turn its answer asked for, under it (PendingTurn `foot`) */}
           <ThreadPrimitive.If running={false}><PendingTurn busy={serverBusy} sent={sent} began={began} foot feed={feed} held={!!heldStart}>{sentWork}</PendingTurn></ThreadPrimitive.If>
           {/* ...a chat no turn has summed up yet: its cards (TaskPage's chatCards), under the thread */}

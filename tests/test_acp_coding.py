@@ -168,6 +168,19 @@ def test_a_turn_that_fails_says_so_in_the_chat_and_typing_carries_on(world, monk
     assert 'heard: try again' in [x for k, x in t.history if k == 'said'][-1]
 
 
+def test_an_agent_that_dies_mid_turn_is_said_as_a_chat_cli_that_did(world, monkeypatch, tmp_path):
+    """ONE SENTENCE FOR ONE FACT (the side-by-side walk, 2026-11-11): a coding agent that died holding a turn read "The turn failed: the agent stopped
+    during session/prompt: - type to carry on."; a general chat's CLI that died the same way says clipool.MID_TURN."""
+    from taskuary.clipool import MID_TURN
+    s, tid, repo = world
+    (script := tmp_path / 'script.json').write_text(json.dumps([{'when': 'break now', 'exit': 3}]))
+    monkeypatch.setenv('FAKE_ACP_SCRIPT', str(script))
+    t = open_(s, tid, repo, seed='break now')
+    assert until(lambda: any(u['sessionUpdate'] == 'error' for u in codingchat.acp_updates(tid, t.sid)))
+    [e] = [u for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'error']
+    assert e['content']['text'].startswith(MID_TURN) and 'session/prompt' not in e['content']['text'], e['content']['text']
+
+
 def test_a_note_from_the_waiting_room_is_drawn_as_the_owners_words(world):
     s, tid, repo = world
     t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)

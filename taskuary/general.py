@@ -587,6 +587,7 @@ HANDED_OFF = 'Handed off to '
 # ...Remind me says what it did and where the task is now, as Send and close does (the owner, 2026-11-10: "it should show reminded for now")
 PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - put away until then" if d.get('to') else 'took the reminder off',
            'watch': lambda d: 'chose Watch it - it waits quietly for a reply', 'unwatch': lambda d: 'stopped watching it',
+           'stopped_turn': lambda d: 'stopped the agent',       # the x on a turn at work (stop_turn)
            'priority': lambda d: f"changed its priority from {d.get('from')} to {d.get('to')}",
            'handoff': lambda d: f"handed this to {d.get('to')} by {d.get('channel')}", 'reopened': lambda d: 'reopened it', 'reopen': lambda d: 'reopened it',
            'split_into_task': lambda d: f"split part of it off as its own task: {d.get('title') or ''}".rstrip(': '),
@@ -3387,6 +3388,16 @@ def say_line(store, tid: int, text: str, attachments=None, connector_id=None, mo
             end = time.time() + 3                  # ...a session still closing (_end_soon) is let go first
             while ses.alive and time.time() < end: time.sleep(0.05)
             drop_session(tid)
+
+
+def stop_turn(store, tid: int) -> bool:
+    """THE x ON A TURN AT WORK, whatever agent works it (the side-by-side walk, 2026-11-11: a stopped general turn read "cancelled" as a failure,
+    a coding one said nothing): the turn stops, the session stays, and the press is a line in the chat, as every press is (press_lines)."""
+    from . import terminal
+    s = session_for(tid)
+    if not (s.stop() if s else terminal.cancel_turn(tid)): return False
+    store.audit('task', tid, 'stopped_turn', 'owner')
+    return True
 
 
 def session_for(tid: int):

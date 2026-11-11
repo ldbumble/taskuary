@@ -131,7 +131,11 @@ class ACPClient:
                 if sent: sent()                           # ...once it is on its way: a cancel then is this request's (prompt)
             m = q.get(timeout=timeout or self.timeout)
             if m is None:
-                raise ACPAgentError(f'the agent stopped during {method}' + (f': {"".join(self._err)[:300]}' if self._err else ''))
+                err = ''.join(self._err).strip()[:300]
+                # ...a turn it died holding is said as a chat CLI's that died mid-turn (clipool.MID_TURN): one sentence for one fact, whatever the agent
+                from .clipool import MID_TURN
+                if method == 'session/prompt': raise ACPAgentError(f"{MID_TURN} ({err or 'the agent exited'})")
+                raise ACPAgentError(f'the agent stopped during {method}' + (f': {err}' if err else ''))
             if 'error' in m: raise ACPAgentError(f"{method}: {m['error'].get('message', m['error'])}")
             return m.get('result')
         finally: self._waiters.pop(mine, None)            # a reply to a request we gave up on is dropped by the pump

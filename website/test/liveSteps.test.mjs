@@ -103,5 +103,5 @@ test("the coding chat's running turn and every running head count by turnFrom, f
 test("the pending turn's clock keeps the earliest start it was told while it stands", () => {
   const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(gw, /else first\.current = Math\.min\(first\.current \?\? Date\.now\(\), Number\.isFinite\(told\) \? told : Infinity\);/);
-  assert.match(gw, /<RunClock start=\{first\.current\} \/>/);
+  assert.match(gw, /<TurnHead start=\{first\.current\}>/);
 });

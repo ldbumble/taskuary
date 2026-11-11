@@ -19,6 +19,7 @@ import { headUnderLine, turnWatched, watchTurn } from "./turnWatch.mjs";
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, "..", "..");
 const SCRIPT = [{ when: "south", first: "Starting with the south office: two sites, both already on Payworth." },
   { when: "north", first: "The north office runs Trainly today; switching saves about 2 a head." },
+  { when: "take your time", first: "Read every contract.", wait: 5 }, { when: "west", first: "The west office has no payroll vendor yet." },
   { when: ".", first: "Compared three vendors: Payworth is cheapest at 4 a head, Trainly 6, Spendly 7." }];
 
 async function agentWorld(t) {
@@ -103,5 +104,17 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   await underway(page, "and the north office?", /The north office runs Trainly today/);
   const text = await pageText(page);
   assert.ok(text.indexOf("and the north office?") < text.indexOf("The north office runs Trainly"), "the answer stands under the owner's line");
+
+  // ...AND A LINE TYPED WHILE A TURN STILL WORKS (the side-by-side walk, 2026-11-11): under it only the dots, no head - the turn above read
+  // finished, "ran 0s", while it worked on. The coding chat drew the head under it; so does this one now
+  await box.type("take your time"); await page.keyboard.press("Enter");
+  await page.waitForFunction(() => /take your time/.test(document.querySelector("[data-tq-task-page] .tq-aui-viewport")?.innerText || "")
+    && document.querySelector("[data-tq-task-page] [data-tq-run-clock]"), { timeout: 15000, polling: 50 });
+  await new Promise((r) => setTimeout(r, 1500));
+  await page.evaluate(() => document.querySelector("[data-tq-task-page] .tq-aui-input")?.focus());
+  await page.keyboard.type("and the west office");
+  await press(page, "and the west office", /The west office has no payroll vendor/);
+  await underway(page, "and the west office", /The west office has no payroll vendor/);
+  assert.ok(!/ran 0s/.test(await pageText(page)), "no turn reads it ran 0s");
   assert.deepEqual(errors, []);
 });

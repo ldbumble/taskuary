@@ -2571,8 +2571,7 @@ def assistant_cancel(task_id: int):
     """The stop button. The ONLY thing that stops an answer being written - walking away does
     not (see the stream's docstring)."""
     from . import general
-    session = general.session_for(task_id)
-    return {'stopped': bool(session and session.stop())}
+    return {'stopped': general.stop_turn(store, task_id)}
 
 @app.post('/api/tasks/{task_id}/assistant/stream')
 async def assistant_stream(task_id: int, body: AssistantMessageBody):
@@ -2638,7 +2637,9 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
             if session is not None and not cancel.is_set() and not general.is_dock(store.get_task(task_id)):
                 end = time.time() + 3
                 while session.alive and time.time() < end: time.sleep(0.05)
-            put({'type': 'error', 'error': str(e)})
+            # ...a turn the owner stopped is no failure: the page draws the server's copy, his press its line there (general.stop_turn)
+            if cancel.is_set(): put({'type': 'error', 'code': 'stopped', 'error': str(e), 'payload': _assistant_payload(task_id, session)})
+            else: put({'type': 'error', 'error': str(e)})
 
     threading.Thread(target=work, daemon=True).start()
 
@@ -11435,7 +11436,8 @@ def cancel_task_agent(task_id: int):
     """Stop THIS TURN of a coding session over ACP (acpcoding.py): session/cancel - the conversation stays, and what is typed next carries
     on. A pty's turn is stopped by the key its CLI stops on, Esc - the x on the turn was the one stop left there and did nothing (the owner,
     2026-11-10: "we should have x button for agent to stop in middle of the work"); the session itself ends at /agent/stop."""
-    return {'stopped': hub_term.cancel_turn(task_id)}
+    from . import general
+    return {'stopped': general.stop_turn(store, task_id)}
 
 @app.post('/api/tasks/{task_id}/agent/stop')
 def stop_task_agent(task_id: int):

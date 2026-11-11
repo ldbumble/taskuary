@@ -22,7 +22,8 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_MODELS=<a,b>  the model values it offers (default opus,sonnet)
   FAKE_DIRECTOR=<folder> each turn's words come from a scenario (fake_director.py), no permission asked; a session/cancel ends it meanwhile
   FAKE_ACP_SCRIPT=<file>  fake_claude's script: the first rule whose `when` the owner's words match answers `first`, after its `post`s ran
-                         as the agent's own `taskuary --reply` would (fake_director.post) - a coding agent filing a reply, no permission asked
+                         as the agent's own `taskuary --reply` would (fake_director.post) - a coding agent filing a reply, no permission asked;
+                         `wait` seconds before it answers, `exit` a code it dies with mid-turn
 It offers config options (mode, model, effort) the way claude-agent-acp and codex-acp do, and says what they were set to.
 """
 import json, os, re, sys
@@ -126,11 +127,19 @@ for line in sys.stdin:
         _heard = f"heard: {said} [mode={SET['mode']} model={SET['model']} effort={SET['effort']} turn={STARTS}" + (f' resumed={RESUMED}' if RESUMED else '') + ']'
         rule = next((r for r in (json.load(open(os.environ['FAKE_ACP_SCRIPT'], encoding='utf-8')) if os.environ.get('FAKE_ACP_SCRIPT') else [])
                      if re.search(r['when'], said, re.I)), None)
+        if rule and rule.get('exit') is not None: sys.exit(rule['exit'])   # an agent that dies mid-turn, as fake_claude's `exit`
         if rule:
             # ...each post the shell call a real agent makes for it, reported running before it files and done after - never a card ahead of its turn
             for i, p in enumerate(rule.get('post') or []):
                 update('tool_call', toolCallId=f'post_{i}', title='taskuary', kind='execute', status='in_progress', rawInput={'command': f"taskuary {p['path'].rsplit('/', 1)[-1]}"})
                 post(p); update('tool_call_update', toolCallId=f'post_{i}', status='completed')
+            if rule.get('wait'):                       # a long turn: a session/cancel meanwhile ends it, as a real adapter's does
+                _prompt_id = mid
+                def finish(mid=mid, text=rule.get('first') or 'Ok.', wait=float(rule['wait'])):
+                    global _prompt_id
+                    __import__('time').sleep(wait)
+                    if _prompt_id == mid: update('agent_message_chunk', content={'type': 'text', 'text': text}); reply(mid, ended()); _prompt_id = None
+                __import__('threading').Thread(target=finish, daemon=True).start(); continue
             update('agent_message_chunk', content={'type': 'text', 'text': rule.get('first') or 'Ok.'}); reply(mid, ended()); continue
         if folder_of():                                # a scenario's own turn (fake_director.py): its words, no permission asked
             _prompt_id = mid                           # ...on a thread, so a session/cancel meanwhile ends the turn as a real adapter's does

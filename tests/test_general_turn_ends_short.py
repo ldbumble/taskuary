@@ -81,6 +81,21 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
         self.assertTrue(any(SHORT in b for b in bodies)); self.assertTrue(any('three-year term' in b for b in bodies))
         self.assertFalse(any('TASKUARY: your last answer' in b for b in bodies))      # ...never in the chat as anyone's words
 
+    def test_an_answer_that_asks_the_owner_for_a_password_is_taken_back_by_its_agent_on_the_sign_in_road(self):
+        """Five recorded walks, 2026-11-11: asked to sign in to a site with no connection, the agent fetched the form from its shell and asked
+        the owner to paste the password - four times of five, with the browser's offer in its prompt."""
+        from taskuary import browserview
+        s = MemoryStore(); a_claude(self); tid = researcher(s)
+        asked = 'I have no Payworth login. Send me the email and password, or name a file that holds them.'
+        seen = turn(s, tid, [asked, 'There is no connection for Payworth, so I am using the browser. The earlier ask is withdrawn.'],
+                    judge=lambda *a, **k: json.dumps({'unfinished': False, 'why': '', 'asks_secret': True}))
+        self.assertEqual(len(seen['prompts']), 2)                     # told once, by the one wake
+        for want in ('asked the owner for a password', 'you do not need the password', '[[TASKUARY-SIGNIN:'): self.assertIn(want, seen['prompts'][1])
+        self.assertIn(browserview.SIGNIN_LINE, browserview.offer())  # ...the same words its prompt offers the browser with
+        bodies = [str(c['Body']) for c in s.list_comments(tid)]
+        self.assertTrue(any('using the browser' in b for b in bodies)); self.assertFalse(any('TASKUARY: your last answer' in b for b in bodies))
+        self.assertIn('asks_secret', hooks.ENDED_SYSTEM)
+
     def test_a_woken_turn_that_ends_short_again_is_not_woken_again(self):
         s = MemoryStore(); a_claude(self); tid = researcher(s)
         seen = turn(s, tid, SHORT, judge=verdict(True, 'the app walkthrough'))

@@ -545,8 +545,11 @@ ENDED_SYSTEM = ('You read the last message an agent wrote before its turn ended.
                 'it drafted asks for more (their output, their notes, their answer). That turn delivered its step; the next one comes '
                 'when they write back. Waiting for the owner\'s Send or decision is finished, not unfinished. Reply with JSON only: '
                 '{"unfinished": true or false, "why": "what it is still '
-                'waiting on, in a few plain words; empty when unfinished is false"}')
-ENDED_WANT = {'type': 'object', 'properties': {'unfinished': {'type': 'boolean'}, 'why': {'type': 'string'}}, 'required': ['unfinished']}
+                'waiting on, in a few plain words; empty when unfinished is false", "asks_secret": true when the message asks the owner to '
+                'give it a password, a sign-in code or other credentials, or to say where they are kept - else false}')
+ENDED_WANT = {'type': 'object', 'properties': {'unfinished': {'type': 'boolean'}, 'why': {'type': 'string'}, 'asks_secret': {'type': 'boolean'}},
+              'required': ['unfinished']}
+SECRET = '(asks for a sign-in)'      # the judge's word for an answer that asked the owner for a password: its agent is told how a sign-in is done
 _ENDED, _ENDED_MAX = {}, 256          # (sid, sha of the words) -> what it still waits on or '' - a Stop the spool replays costs nothing
 BACKGROUND = True          # the suite turns the read off its own thread (tests/conftest.py), as advisor.BACKGROUND; `wait` still reads
 
@@ -596,7 +599,7 @@ def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = F
                 v = ask_json(b, ENDED_SYSTEM, f"THE AGENT'S LAST MESSAGE:\n{said[-4000:]}", want=ENDED_WANT, need=('unfinished',)).data or {}
             except Exception as e: logger.debug(f'turn-end judge skipped for {sid}: {e}'); return
             if not isinstance(v, dict) or not isinstance(v.get('unfinished'), bool): return
-            why = (' '.join(str(v.get('why') or '').split())[:300] or 'work of its own') if v['unfinished'] else ''
+            why = SECRET if v.get('asks_secret') is True else (' '.join(str(v.get('why') or '').split())[:300] or 'work of its own') if v['unfinished'] else ''
             if len(_ENDED) >= _ENDED_MAX: _ENDED.pop(next(iter(_ENDED)))
             _ENDED[key] = why
         if not why: return
@@ -607,7 +610,11 @@ def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = F
         evs = [e for e in ws.events(store, tid, sid) if e['Kind'] not in ws.NOTES]
         if not evs or evs[-1]['Kind'] != 'turn_end' or evs[-1].get('Text') != said[:4000]: return
         if then:
-            try: then(waits_on(why))
+            try:
+                if why == SECRET:
+                    from . import browserview
+                    then('', browserview.ASKED_SECRET)
+                else: then(waits_on(why))
             except Exception as e: logger.debug(f'task {tid}: the agent was not woken after its short turn - {e}')
     if wait: return go()
     if BACKGROUND: threading.Thread(target=go, daemon=True, name=f'turn-end-judge-{sid}').start()

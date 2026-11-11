@@ -248,6 +248,10 @@ def _out(text, fence_it: bool = False) -> str:
 def _j(o) -> str: return json.dumps(o, indent=1, default=str, ensure_ascii=False)
 
 
+NOT_LISTED = ("A SITE OR SYSTEM NOT LISTED HERE has no connection: say so in one line, and reach it in Taskuary's browser where you have one "
+              "(the guide `browser` first) - a sign-in is done on the page there, by a saved sign-in or by the owner, and kept for next time. "
+              "Never ask the owner for a password, and never work a sign-in from your shell.")
+
 def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     """Run one tool for the session on task `tid`. `doors` are the server's own handlers for the acts that have one (tool_run, tick,
     reply, draft, propose), called with the caller's request so their own checks - owns_task, scopes, the send-to-proposal rule -
@@ -315,7 +319,9 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         return _out(f'{head}\n{body}', fence_it=True)
     if name == 'list_systems':
         from .docsync import agent_systems
-        return agent_systems(store) or 'no connection is marked as an agent tool - the owner turns that on per card'
+        # ...AND WHAT TO DO FOR ONE THAT IS NOT THERE (the recorded walk, 2026-11-11): an agent asked to sign in to a site read this list, found
+        # no connection, fetched the sign-in form from its shell and asked the owner for the password - the browser's offer, far up its prompt, unread
+        return (agent_systems(store) or 'no connection is marked as an agent tool - the owner turns that on per card') + '\n' + NOT_LISTED
     if name == 'guide':
         from . import guides
         return _out(guides.read(a.get('topic')))

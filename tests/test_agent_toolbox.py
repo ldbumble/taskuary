@@ -89,6 +89,13 @@ class TheServer(unittest.TestCase):
             out = verdicts.decide(self.s, rv, 'approve')
         self.assertFalse(out['ok']); self.assertIn('Nothing was sent', out['send_error']); self.assertEqual(self.s.get_review(rv['ReviewId'])['Status'], 'pending')
 
+    def test_the_systems_list_says_what_to_do_for_a_site_that_is_not_on_it(self):
+        """The recorded walk, 2026-11-11: asked to sign in to a site, an agent read this list, found no connection, fetched the sign-in form from
+        its shell and asked the owner for the password. Nothing an agent can call answers without saying what to do next."""
+        text, err = tool(self.tid, 'list_systems')
+        self.assertFalse(err)
+        for want in ('NOT LISTED HERE has no connection', "Taskuary's browser", 'guide `browser`', 'Never ask the owner for a password'): self.assertIn(want, text)
+
     def test_search_and_read_come_back_fenced(self):
         text, err = tool(self.tid, 'search_messages', words='uplift')
         self.assertFalse(err); self.assertIn('Renewal terms', text); self.assertTrue(text.startswith('⟦'))

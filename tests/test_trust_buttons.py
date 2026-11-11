@@ -116,7 +116,7 @@ def test_the_held_box_carries_the_presses_and_a_press_lifts_the_hold_without_sta
     s = _store(); t, _ = _held(s, FromEmail='gail@partner.example', FromName='Gail Moreno')
     story = funnel.agent_story(s, t)
     assert story['kind'] == 'held' and story['line'].startswith('Waiting for you. Gail Moreno is not on your domain')
-    assert story['trust'] == {'person': 'Trust Gail', 'org': 'Trust everyone at partner.example'}
+    assert story['trust'] == {'person': 'Trust Gail', 'org': 'Trust everyone at partner.example', 'once': True}
     origin.raise_to(s, t, 'trusted', 'owner')                                           # Trust Gail
     story = funnel.agent_story(s, t)
     assert story['kind'] == 'idle' and 'trust' not in story and 'trusted now' in story['line'], story
@@ -136,5 +136,5 @@ def test_the_task_page_s_origin_carries_the_same_words():
     from taskuary import server
     t, _ = _held(server.store, FromEmail='gail@partner.example', FromName='Gail Moreno')
     d = TestClient(server.app).get(f'/api/tasks/{t}').json()
-    assert d['origin']['trust'] == {'person': 'Trust Gail', 'org': 'Trust everyone at partner.example'}
+    assert d['origin']['trust'] == {'person': 'Trust Gail', 'org': 'Trust everyone at partner.example', 'once': True}
     assert d['agentStory']['trust'] == d['origin']['trust']

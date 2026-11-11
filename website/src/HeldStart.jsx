@@ -7,7 +7,7 @@ import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { ALERT } from "./theme.jsx";
 
-export default function HeldStart({ taskId, line, onChanged }) {
+export default function HeldStart({ taskId, line, once = true, onChanged }) {
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   const run = async (trust) => {
     setBusy(trust ? "trust" : "once"); setErr("");
@@ -22,8 +22,9 @@ export default function HeldStart({ taskId, line, onChanged }) {
     <Box data-tq-held-start="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
       <Typography sx={{ fontSize: 13.5, color: "var(--tq-text, #292824)" }}>{line}</Typography>
       <Box sx={{ display: "flex", gap: 1, mt: 0.75, flexWrap: "wrap" }}>
-        {btn(false, "Run anyway", { variant: "contained", "data-tq-run-anyway": "" })}
-        {btn(true, "Trust sender", { variant: "outlined", "data-tq-trust-sender": "" })}
+        {/* ...no Run anyway where it cannot work: a start refused for a stranger on this AI is refused again (funnel.held_offer `once`) */}
+        {once && btn(false, "Run anyway", { variant: "contained", "data-tq-run-anyway": "" })}
+        {btn(true, "Trust sender", { variant: once ? "outlined" : "contained", "data-tq-trust-sender": "" })}
       </Box>
       {err && <Typography variant="caption" sx={{ display: "block", color: "var(--tq-danger, #8a3646)", mt: 0.5 }}>{err}</Typography>}
     </Box>);

@@ -229,6 +229,7 @@ test("a stranger's task its AI cannot start says why under the owner's line, wit
     last = await page.evaluate(() => { const c = document.querySelector("[data-tq-task-page] .tq-aui-viewport [data-tq-run-clock]");
       return { clock: !!c, of: c ? (c.closest("[data-tq-pending-turn]") ? "pending" : c.closest("[data-tq-chat-line]")?.getAttribute("data-tq-chat-line") || c.parentElement?.outerHTML.slice(0, 200)) : "",
         text: (document.querySelector("[data-tq-task-page] .tq-aui-viewport")?.innerText || "").slice(-300) }; });
+    if (held != null && await page.$("[data-tq-task-page] [data-tq-run-anyway]")) bad.push("Run anyway offered on a start this AI refuses - it cannot work");
     if (held != null && last.clock) bad.push(`a running head still over the hold, 4 s on (${last.of}) ${JSON.stringify(await page.evaluate(async (id) => {
       const get = async (p) => (await fetch(p, { headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token") } })).json();
       const a = await get(`/api/tasks/${id}/assistant`), d = await get(`/api/tasks/${id}`);
@@ -239,7 +240,7 @@ test("a stranger's task its AI cannot start says why under the owner's line, wit
     await writeFile(path.join(dir, "server.log"), w.backend.output());
     await writeFile(path.join(dir, "payload.json"), JSON.stringify(await w.api(`/api/tasks/${made.taskId}/assistant`), null, 1)).catch(() => {});
     await note(dir, { done: "A stranger's mail task; the AI is a CLI Taskuary cannot hold to reading for a stranger (no reviewer, no read-only mode); the owner types a line.",
-      expect: "Under his line: why it cannot start, in one sentence, and the Trust press - the way past it. No head running on with nothing behind it.",
+      expect: "Under his line: why it cannot start, in one sentence, and the Trust press - the way past it; no Run anyway (it would be refused again). No head running on with nothing behind it.",
       saw: held == null ? `nothing said within 45 s: ${JSON.stringify(last).slice(0, 500)}` : bad.length ? bad.slice(0, 4).join("\n") : `the hold and its Trust ${held} ms after the press`,
       verdict: held != null && !bad.length ? "PASS" : "FAIL" });
   }

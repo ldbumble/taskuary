@@ -318,7 +318,7 @@ def test_an_auto_start_that_is_refused_is_held_never_failed(monkeypatch, tmp_pat
     assert s.task_has_tag(t, ingest.HOLD_TAG) and not s.get_dispatch(t)
     from taskuary import funnel
     idle = funnel.idle_state(s, t)                   # ...the task's one sentence, with the Trust presses its held box draws (senders.trust_offer)
-    assert idle['kind'] == 'held' and idle['line'].startswith('Waiting for you.') and 'Trust them' in idle['line'] and idle.get('trust')
+    assert idle['kind'] == 'held' and idle['line'].startswith('Waiting for you.') and 'Trust them' in idle['line'] and idle.get('trust') and idle['trust']['once'] is False
 
 def test_release_all_wakes_a_held_permit_with_a_deny():
     s = MemoryStore(); t = _stranger(s); out = []
@@ -370,3 +370,5 @@ def test_a_chat_turn_refused_for_a_stranger_is_the_hold_with_its_trust_never_a_f
     from taskuary import funnel
     idle = funnel.idle_state(s, t)
     assert idle['kind'] == 'held' and 'Trust them' in idle['line'] and idle.get('trust'), idle
+    # ...and no Run anyway: on the same AI it is refused again - a press that cannot work is not offered (funnel.held_offer)
+    assert idle['trust']['once'] is False

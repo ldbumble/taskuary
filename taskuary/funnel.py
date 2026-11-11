@@ -586,6 +586,18 @@ def timed_out(store, tid, st=None) -> str:
     return str(last.get('Text') or '') if ok else ''
 
 
+def held_offer(store, tid, msgs=None) -> dict | None:
+    """THE HOLD'S PRESSES, one function for every surface that draws them (the held box, the chat's HeldStart, the phone): the Trust presses
+    worded for the channel (senders.trust_offer), and `once` - whether Run anyway can start it. A hold that is a start REFUSED for a
+    stranger's words (ingest.held_start) offers no Run anyway: on the same AI it is refused again, and a press that cannot work is not
+    shown (the owner's rules, part 3: tell the truth; the recorded walk, 2026-11-10)."""
+    from .ingest import REFUSED
+    from .senders import trust_offer
+    if (offer := trust_offer(store, tid, msgs)) is None: return None
+    last = next((a['Action'] for a in store.list_audit('task', tid, 50) if a.get('Action') in (REFUSED, 'release', 'release_once')), None)
+    return {**offer, 'once': last != REFUSED}
+
+
 def idle_state(store, tid, st=None) -> dict:
     """Why nothing is running on a task that was handed to an agent and never began: {'kind', 'line', 'row'}.
 
@@ -685,8 +697,7 @@ def idle_state(store, tid, st=None) -> dict:
             # THE HOLD OFFERS ITS WAY OUT (the owner, 2026-10-26: "we should have button on untrusted user to either trust user or trust
             # domain and then we won't have issue again"): the box that says why nothing started carries the two presses, worded for
             # the channel (senders.trust_offer)
-            from .senders import trust_offer
-            return {**out('held', f'Waiting for you. {_sentence(said)}' + old, 'held for you - not started'), 'trust': trust_offer(store, tid)}
+            return {**out('held', f'Waiting for you. {_sentence(said)}' + old, 'held for you - not started'), 'trust': held_offer(store, tid)}
         return out('held', f'Waiting for you. {_sentence(said)}' + old, 'held for you - not started')
     # ...and a start refused for a stranger's words since (ingest.held_start) is that same hold, its Trust presses with it - never "couldn't
     # start" over a Trust nowhere to press (the owner, 2026-11-10: "this is also weird bug?")
@@ -694,8 +705,7 @@ def idle_state(store, tid, st=None) -> dict:
     refused = lambda: next((_cap(_sentence(str(c['Body'])[len(NOT_STARTED):])) for c in reversed(store.list_comments(tid) or [])
                             if str(c.get('Body') or '').startswith(NOT_STARTED)), '')
     if HOLD_TAG in st.tags and (said := refused()):
-        from .senders import trust_offer
-        return {**out('held', f'Waiting for you. {said}' + old, 'held for you - not started'), 'trust': trust_offer(store, tid)}
+        return {**out('held', f'Waiting for you. {said}' + old, 'held for you - not started'), 'trust': held_offer(store, tid)}
     if not auto_code_enabled(store) and (t.get('Kind') or '') == 'coding':
         return out('held', f'Waiting for you. Starting {agent} by itself is switched off, so it waits for you.' + old,
                    'held for you - not started')

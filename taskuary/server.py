@@ -2258,9 +2258,9 @@ def _ended_line(task_id: int, comments=None):
 
 
 def _trust_offer(task_id: int, msgs=None):
-    "senders.trust_offer, never in the way of opening the task: an offer that could not be worded is the plain Trust them."
-    from . import senders
-    try: return senders.trust_offer(store, task_id, msgs)
+    "funnel.held_offer, never in the way of opening the task: an offer that could not be worded is the plain Trust them."
+    from . import funnel
+    try: return funnel.held_offer(store, task_id, msgs)
     except Exception as e:
         logger.debug(f'task {task_id}: trust offer skipped - {e}'); return {'person': 'Trust them', 'org': None}
 

@@ -30,3 +30,11 @@ test("the owner's own line does not hide the hold: only an agent that spoke, a s
   assert.match(page, /const agentSpoke = \(detail\?\.comments \|\| \[\]\)\.some\(\(c\) => c\.ActorType === "assistant_agent"\);/);
   assert.match(page, /heldStartOf\(\{ story: detail\?\.agentStory, tags: t\?\.Tags, ran: ranBefore \|\| agentSpoke \|\| !!term \|\| liveSession \|\| !!queuedRow \}\)/);
 });
+
+// ...AND NO RUN ANYWAY WHERE IT CANNOT WORK (the recorded walk, 2026-11-10): a start refused for a stranger on this AI is refused again, so the
+// hold offers only Trust - read off the hold's own presses (funnel.held_offer `once`), the one function every surface draws them from
+test("Run anyway is drawn only where the hold's presses say it can start", () => {
+  const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
+  assert.match(src("HeldStart.jsx"), /\{once && btn\(false, "Run anyway"/);
+  assert.match(src("TaskPage.jsx"), /<HeldStart taskId=\{t\.TaskId\} line=\{heldStart\} once=\{detail\?\.agentStory\?\.trust\?\.once !== false\}/);
+});

@@ -81,20 +81,31 @@ def _since(store, tid: int) -> float:
     return max(ep((c or {}).get('a')), ep((s or {}).get('a')))
 
 
+def _after(body) -> float:
+    "The newest message the store held when a kept line was typed (general.wait_line) - a line from before that was written is after all of its second."
+    try: return float(json.loads(body or '{}').get('after'))
+    except (ValueError, TypeError, AttributeError): return INF
+
+
 def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing: bool = False) -> int:
-    """THE ONE HAND-OVER. Called at the moment a road gives the agent its input: `lines` - the names (LineId) of his lines it takes now;
-    `turn` - a turn begins, and with it the agent is told everything that came in or was pressed since its last one (general.turn_facts), so
-    those are heard here too, and the turn's own start is marked. `standing`: a line that begins a turn at the press - what already stood in
-    the chat unheard is heard with it, before it, so nothing drawn moves under his line. Each input once, whoever calls and however often.
-    -> how many were new."""
+    """THE ONE HAND-OVER. Called ONCE at the moment a road gives the agent its input: `lines` - his lines it takes now, as they waited
+    (store.take_lines' rows), or the name (LineId) of one sent this moment; `turn` - a turn begins, and with it the agent is told everything
+    that came in or was pressed since its last one (general.turn_facts), so those are heard here too, and the turn's own start is marked.
+    `standing`: a line that begins a turn at the press - what already stood in the chat unheard is heard with it, before it, so nothing
+    drawn moves under his line. Each input once, whoever calls and however often. -> how many were new.
+    WHAT ONE HAND-OVER TAKES STANDS IN THE ORDER IT CAME (the recorded flood, 2026-11-11: his lines were written down first, then his own
+    replies, then the sender's mail in the order triage got through them - "34, 31, 46"): by each one's own time, and inside one second - a
+    stamp is no finer - by the order the store took them in: a line knows the newest message that was there when it was typed."""
     from . import general
     tid, now = int(tid), time.time()
-    refs = []
+    refs = []                                      # ((its second, the newest message before it, kind, its place in its kind), kind, name)
     if turn or standing:
         since = _since(store, tid) - 1
-        refs += [('mail', str(x['MessageId'])) for x in _mail(store, tid) if x['T'] >= since]
-        refs += [('press', str(p[0])) for p in general.presses(store, tid) if ep(p[1]) >= since]
-    refs += [('line', str(x)) for x in lines if x]
+        refs += [((int(ep(x.get('SentAt') or x.get('CreatedAt')) or x['T']), x['MessageId'], 0, x['MessageId']), 'mail', str(x['MessageId'])) for x in _mail(store, tid) if x['T'] >= since]
+        refs += [((int(ep(p[1])), INF, 2, i), 'press', str(p[0])) for i, p in enumerate(general.presses(store, tid)) if ep(p[1]) >= since]
+    refs += [((int(ep(x.get('CreatedAt'))), _after(x.get('Body')), 1, x['CommentId']), 'line', str(x.get('LineId') or '')) if isinstance(x, dict) else ((INF, INF, 1, i), 'line', str(x))
+             for i, x in enumerate(lines) if x]
+    refs = [(k, r) for _, k, r in sorted(refs, key=lambda x: x[0]) if r]
     if turn: refs.append(('turn', str(time.time_ns())))
     if not refs: return 0
     n = 0
@@ -120,6 +131,15 @@ def with_turn(store, tid: int) -> list:
     m = store._rows("SELECT HId FROM heard WHERE TaskId=? AND Kind='turn' ORDER BY HId DESC LIMIT 2", (int(tid),))
     if len(m) < 2: return []
     return [int(r['Ref']) for r in store._rows("SELECT Ref FROM heard WHERE TaskId=? AND Kind='mail' AND HId>? AND HId<? ORDER BY HId", (int(tid), m[1]['HId'], m[0]['HId']))]
+
+
+def unheard(store, tid: int) -> set:
+    """The messages (ids) on the task that came in after the newest turn began and no hand-over took: the NEXT turn's to hear, so nothing a
+    turn is told names them (general.newest_message) - told there and again when heard, an input reached the agent twice."""
+    m = store._one("SELECT MAX(At) AS a FROM heard WHERE TaskId=? AND Kind='turn'", (int(tid),))
+    if not (m and m['a']): return set()
+    led = {r['Ref'] for r in store._rows("SELECT Ref FROM heard WHERE TaskId=? AND Kind='mail'", (int(tid),))}
+    return {x['MessageId'] for x in _mail(store, tid) if str(x['MessageId']) not in led and x['T'] + 1 > m['a']}
 
 
 def unhear(store, tid: int, lines) -> None:
@@ -163,15 +183,18 @@ def acp_steps(updates: list) -> list:
     out, by, compacts = [], {}, {}
     def chunk(k, t, at, **x):
         if not t: return
-        if out and out[-1]['k'] == k and out[-1].get('open') and not x.get('line') and not out[-1].get('line'): out[-1]['text'] += t
+        # ...ONE MESSAGE IS ONE STEP: the adapter names the message each chunk is of (`messageId`), and two messages said back to back in one
+        # turn ran together as one sentence (the recorded walk, 2026-11-11: '...`plus tax`."""The reply to Gail went out')
+        if out and out[-1]['k'] == k and out[-1].get('open') and not x.get('line') and not out[-1].get('line') and out[-1].get('mid') == x.get('mid'): out[-1]['text'] += t
         else: out.append({'k': k, 'text': t, 'open': True, 'at': at, **x})
     for u in updates or []:
         kind, at = u.get('sessionUpdate'), u.get('_at') or ''
+        said = {'mid': u['messageId']} if u.get('messageId') else {}
         if kind == 'user_message_chunk':
             who = _meta(u, 'taskuary')
             chunk('said' if who == 'agent' else 'brief' if who == 'brief' else 'you', _text(u.get('content')), at, **({'line': l} if (l := _meta(u, 'line')) else {}))
-        elif kind == 'agent_message_chunk': chunk('said', _text(u.get('content')), at)
-        elif kind == 'agent_thought_chunk': chunk('thought', _text(u.get('content')), at)
+        elif kind == 'agent_message_chunk': chunk('said', _text(u.get('content')), at, **said)
+        elif kind == 'agent_thought_chunk': chunk('thought', _text(u.get('content')), at, **said)
         elif kind == 'error' and _meta(u, 'taskuary') == 'error': out.append({'k': 'error', 'text': _text(u.get('content')), 'at': at})
         elif kind == 'compaction_update' or (kind in ('tool_call', 'tool_call_update') and (_meta(u, 'claudeCode', 'toolName') == 'compact' or str(u.get('toolCallId')) in compacts)):
             cid = str(u.get('compactionId') if kind == 'compaction_update' else u.get('toolCallId'))
@@ -194,7 +217,7 @@ def acp_steps(updates: list) -> list:
             if loc and not any(s['args'].get(k) for k in _PATHS): s['args']['file_path'] = loc
             if (diffs := [c for c in u.get('content') or [] if isinstance(c, dict) and c.get('type') == 'diff']):
                 s['edit'] = {'whole': True, 'parts': [{'old': d.get('oldText') or '', 'new': d.get('newText') or ''} for d in diffs]}; s['file'] = diffs[0].get('path') or loc
-    for s in out: s.pop('open', None)
+    for s in out: s.pop('open', None); s.pop('mid', None)
     return out
 
 
@@ -248,7 +271,10 @@ def items(store, tid: int) -> dict:
             h = led.get(('line', c.get('LineId') or ''))
             if not h and ty == WAITING_TYPE: pend.append(it); continue
             if h: it['_h'] = h['At']
-            last = max(last + 1e-7, h['At'] if h else ep(c['CreatedAt'])); put(last, 0, it, h['HId'] if h else 0); lines.append((last, _flat(body['text']), len(ev) - 1)); texts.add(_flat(body['text']))
+            # ...one the ledger heard stands at its hand-over's own moment, beside what was taken with it (in the ledger's order, `put`): moved
+            # a hair on for each line before it, every message of a flood stood above its second line
+            last = h['At'] if h and h['At'] >= last else max(last + 1e-7, h['At'] if h else ep(c['CreatedAt']))
+            put(last, 0, it, h['HId'] if h else 0); lines.append((last, _flat(body['text']), len(ev) - 1)); texts.add(_flat(body['text']))
         elif ty == USER_TYPE:
             last = max(last + 1e-7, ep(c['CreatedAt']))
             if str(c.get('Body') or '').startswith(FOLD_HEAD):

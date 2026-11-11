@@ -202,17 +202,16 @@ def _lines(store, tid: int) -> list:
             for w in general.waiting_lines(store, tid)]
 
 
-def _handed(store, tid: int, notes: list, how: str):
+def _handed(store, tid: int, notes: list, how: str, takes: bool = False):
     """The notes handed over: the waiting room's marked, and the owner's kept lines taken as his lines of the conversation (store.take_lines) -
-    the record of what he typed - once the session holds them, never before (codingchat.waiting reads them in that order)."""
+    the record of what he typed - once the session holds them, never before (codingchat.waiting reads them in that order). `takes`: the
+    session takes his lines itself as its turn begins (acpcoding._begins) - that is the hand-over, written once, there."""
     from . import general
     store.deliver_waiting([x['WId'] for x in notes if x.get('WId') is not None], how)
-    if (ids := [x['line'] for x in notes if x.get('line')]):
-        general.take_kept(store, tid, set(ids))
-    # ...and what Taskuary's own note told it of (a message that came in, a press) is heard with that note (conversation.hear)
-    if any((x.get('CreatedBy') or 'owner') == 'router' for x in notes):
-        from . import conversation
-        conversation.hear(store, tid, turn=True)
+    if takes: return
+    # ...and what Taskuary's own note told it of (a message that came in, a press) is heard with that note - one hand-over (conversation.hear)
+    ids, told = {x['line'] for x in notes if x.get('line')}, any((x.get('CreatedBy') or 'owner') == 'router' for x in notes)
+    if ids or told: general.take_kept(store, tid, ids, **({'turn': True} if told else {}))
     # ...typed into a PANE, its own phase says it works from here (a chat's turn and an ACP session's say so themselves, at their end): the
     # start in flight for these lines is over - marked before they were taken, it stayed "working" for good (the recorded walk, 2026-11-11)
     from . import terminal as term
@@ -301,7 +300,8 @@ def _deliver(store, tid: int, new: int = None) -> dict:
                 from . import sessionrecord
                 sessionrecord.keep_seed(tid, said_)
             how = term.tell(t, said_)
-        _handed(store, tid, notes, 'typed')
+        # ...a prompt queued for an ACP session at rest is its next turn's: the turn takes his lines as it begins, with all else it hears
+        _handed(store, tid, notes, 'typed', takes=term.is_acp(t) and not steer and not isinstance(t, general.GeneralSession))
         # ...the owner's own lines are his line in the chat and nothing more (a press is one quiet line): no machinery under them
         if not all(x.get('line') for x in notes):
             store.add_comment(tid, 'router', 'agent', f'{len(notes)} waiting-room note(s) {how} the live session'

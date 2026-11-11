@@ -215,7 +215,7 @@ class ACPClient:
         THE ANSWER IS WHAT IT SAID LAST, after its last tool call - what claude's `result` and codex's last agent_message are on the
         argv road. Its words before are steps in the trace (agents.ACPSteps); joined into the answer they read "I'll list the
         files... There are 3 files" as one reply. All of it when it said nothing after its last call."""
-        said, cut = [], [0]
+        said, cut, of = [], [0], [None]
         self.last_turn = {}
         outer = self.on_update
         def collect(u):
@@ -224,6 +224,9 @@ class ACPClient:
             # "Hello!" / tool_call / "What would you like..." and the result read "Hello!What would you"
             if kind == 'agent_message_chunk':
                 if said and said[-1] is None: said[-1] = chr(10); cut[0] = len(said)
+                # ...and so is a new message said straight after another (the adapter names each chunk's message): they ran together
+                elif said and u.get('messageId') != of[0]: said.append(chr(10) * 2)
+                of[0] = u.get('messageId')
                 said.append(_text_of(u.get('content')))
             elif kind in ('tool_call', 'tool_call_update', 'plan') and said and said[-1] is not None: said.append(None)
             if outer: outer(u)

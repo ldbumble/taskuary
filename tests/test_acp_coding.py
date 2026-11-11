@@ -461,3 +461,21 @@ def test_a_user_role_update_the_adapter_sent_itself_is_the_agents_not_the_owners
     ups = [u for ss in codingchat.chat(s, tid)['sessions'] for u in ss.get('updates') or [] if u['sessionUpdate'] == 'user_message_chunk']
     who = {u['content']['text']: u['_meta']['taskuary'] for u in ups}
     assert who['is the tax line right?'] == 'owner' and who['Compacted the conversation.'] == 'agent'
+
+
+def test_a_coding_agent_is_told_its_duties_about_drafts_once_and_each_turn_after_carries_the_facts_alone(world, monkeypatch):
+    """The recorded walk, 2026-11-11: a coding agent said "the draft still waits on your Send" in every turn - each turn's facts came with the
+    rules again (latest wins, how to withdraw). Told once, as a chat's agent is (selfclose.DRAFTS_ONCE); a turn carries what is new."""
+    from taskuary import acp, selfclose
+    s, tid, repo = world
+    told, real = [], acp.ACPClient.prompt
+    monkeypatch.setattr(acp.ACPClient, 'prompt', lambda self, text, sent=None: (told.append(text), real(self, text, sent=sent))[1])
+    t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)
+    # ...the mail and its draft after the session began (a sender nobody vouched for changes how a session is opened - not this test's)
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'ConversationId': 'c1', 'Channel': 'email', 'Subject': 'Ledger totals', 'Status': 'routed',
+                         'BodyText': 'What does total() return?', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example'})
+    s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'Channel': 'email', 'DraftText': 'Hi Gail, the sum plus tax. Alex'})
+    for n, w in enumerate(('and the tax line?', 'thanks'), 2): t.prompt(w); assert idle(t, n)
+    assert len(told) == 3 and all('THE DRAFT WAITING NOW' in x for x in told[1:]), told
+    assert [x.count(selfclose.WITHDRAW_LINE) for x in told] == [0, 1, 0] and [x.count(selfclose.LATEST_LINE) for x in told] == [0, 1, 0]
+    assert not any(selfclose.NO_NEW_LINE in x for x in told)

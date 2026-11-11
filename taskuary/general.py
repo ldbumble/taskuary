@@ -82,7 +82,10 @@ def wait_line(store, tid: int, text: str, files=None, line_id=None) -> int:
     conversation has it; it knew by its words and by counting, so a line from another window retired one not yet filed, and "ok" sent twice
     stood once. The name rides the kept row and the turn it becomes (store.take_lines), and comes back on both (waiting_lines, _as_messages)."""
     # ...and EVERY line has a name, the page's or one made here: it is how the ledger says it was heard (conversation.hear), kept or taken
-    wid = store.add_comment(tid, 'owner', WAITING_TYPE, json.dumps({'text': text, 'files': list(files or [])}), line_id=line_id or new_line_id())
+    # ...`after`: the newest message the store held when it was typed - a stamp is a whole second, and a line and a message of one second
+    # stand in the order they came (conversation.hear)
+    after = (store._one('SELECT MAX(MessageId) AS m FROM message') or {}).get('m') or 0
+    wid = store.add_comment(tid, 'owner', WAITING_TYPE, json.dumps({'text': text, 'files': list(files or []), 'after': after}), line_id=line_id or new_line_id())
     from . import handraise
     handraise.moved(tid)
     return wid
@@ -125,12 +128,14 @@ def waiting_lines(store, tid: int) -> list:
     "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
     return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body']), **({'line': r['LineId']} if r.get('LineId') else {})}
             for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE]
-def take_kept(store, tid: int, ids=None) -> list:
-    "The owner's kept lines (`ids`, else all) taken as his lines of the conversation (store.take_lines) - by the turn that takes them, any agent's."
-    got = store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'], ids=ids)
+def take_kept(store, tid: int, ids=None, **how) -> list:
+    """The owner's kept lines (`ids`, else all) taken as his lines of the conversation (store.take_lines) - by the turn that takes them, any
+    agent's. `how`: what else this hand-over is (conversation.hear's `turn`, `sid`) - ONE hand-over is written down once, so what it took
+    stands together, in the order it came."""
+    got = store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'], ids=ids) if ids is None or ids else []
     # ...THE HAND-OVER, written down (conversation.hear): from here each stands in the chat where the agent heard it
     from . import conversation
-    conversation.hear(store, tid, [r.get('LineId') for r in got])
+    conversation.hear(store, tid, got, **how)
     return got
 # A SESSION THAT ENDED UNDER A LINE (failed, closed, idled out) - never "reload the page" (the owner, 2026-11-07): say_line starts a fresh one,
 # which takes the kept line. 'has ended' is what every caller reads it by
@@ -571,10 +576,14 @@ def owner_answered_last(store, tid: int) -> bool:
 # LATEST MESSAGE WINS (the owner, 2026-11-06): corrected after a draft was waiting, the agent answered the thread's first ask again and the
 # draft it had left - mostly a reply already sent - stood under the newest turn as the answer. Each turn now hears which message is newest,
 # the draft waiting and when it was made, and what already went (selfclose.LATEST_LINE); the chat is told which turn a draft is (draft_turns)
-def newest_message(store, tid: int) -> dict | None:
-    "The newest message on the task - the owner's own line in the chat or a mail that joined it: {who, at, words}. Taskuary's briefs are not one."
+def newest_message(store, tid: int, turn: bool = False) -> dict | None:
+    """The newest message on the task - the owner's own line in the chat or a mail that joined it: {who, at, words}. Taskuary's briefs are not one.
+    `turn`: for the turn that just began - a message that came in after its hand-over is the next turn's to hear (conversation.unheard): named
+    here too, his own reply on the thread was in two prompts (the recorded flood, 2026-11-11)."""
+    from . import conversation
     said = [c for c in store.list_comments(tid, internal=True) if c.get('ActorType') == USER_TYPE and c.get('Actor') != BRIEF_ACTOR]
-    mail = store._rows(JOINED, (tid,))
+    late = conversation.unheard(store, tid) if turn else ()
+    mail = [m for m in store._rows(JOINED, (tid,)) if m['MessageId'] not in late]
     a = {'who': 'the owner (in this chat)', 'at': str(said[-1].get('CreatedAt') or ''), 'words': said[-1].get('Body'), 'cid': said[-1]['CommentId']} if said else None
     m = mail[-1] if mail else None
     b = {'who': 'the owner (their own reply on the thread)' if m.get('Own') else m.get('FromName') or m.get('FromEmail') or 'someone',
@@ -821,12 +830,13 @@ def own_heard(store, tid: int) -> list:
     ours = went_from_here(store, tid)
     return [x for x in (store.get_message(i) for i in conversation.with_turn(store, tid))
             if x and (x.get('Direction') == 'out' or x.get('Status') == 'context') and not ours(x)]
-def latest_block(store, tid: int, resumed: bool = False, rules: bool = True) -> str:
+def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, turn: bool = False) -> str:
     """LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none.
-    `resumed`: a CLI that has the conversation already reads the newest message as its turn, so only a draft or a reply that went is news."""
+    `resumed`: a CLI that has the conversation already reads the newest message as its turn, so only a draft or a reply that went is news.
+    `turn`: said to the turn that just began (newest_message)."""
     from . import selfclose
     from .continuity import clock
-    new, sent = newest_message(store, tid), wrapup.sent_replies(store, tid)
+    new, sent = newest_message(store, tid, turn), wrapup.sent_replies(store, tid)
     rv = store.pending_review(tid, 'draft_reply', live_only=False) or store.pending_review(tid, 'draft', live_only=False)
     rv = rv if rv and str(rv.get('DraftText') or '').strip() else None
     rows = store.list_comments(tid, internal=True)
@@ -908,10 +918,10 @@ def came_in(store, mids, said=()) -> str:
             + '\n'.join(f"- {x.get('FromName') or x.get('FromEmail') or 'someone'}, {clock(x.get('SentAt') or x.get('CreatedAt'))}: {_quote(mail_row(store, x)['words'], 1500)}" for x in rows))
 
 
-def turn_facts(store, tid: int, task: dict = None, resumed: bool = False, rules: bool = True) -> str:
+def turn_facts(store, tid: int, task: dict = None, resumed: bool = False, rules: bool = True, turn: bool = False) -> str:
     "latest_block for a task's turn - none on the dock or a setup walk. Said in the turn, not the system prompt (_prompt)."
     task = task if task is not None else store.get_task(tid) or {}
-    return '' if is_dock(task) or task.get('SourceRef') in ('connector:setup', SETUP_REF) else latest_block(store, tid, resumed, rules)
+    return '' if is_dock(task) or task.get('SourceRef') in ('connector:setup', SETUP_REF) else latest_block(store, tid, resumed, rules, turn)
 
 def draft_turns(store, tid: int) -> list:
     """Each pending reply draft and the turn it belongs to, for the chat: {review, turn ('comment-<id>' of the answer that left it, None before
@@ -1811,9 +1821,13 @@ def _prompt(store, tid: int) -> tuple[str, str]:
 def with_late(system: str, late) -> str: return '\n\n'.join([system, *(x for x in late if x)])
 
 
-def prompt_parts(store, tid: int) -> tuple[str, list, str]:
-    "(the system's lines that stay the same turn after turn, those a turn can change, the user turn) - _prompt joins them."
+def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
+    """(the system's lines that stay the same turn after turn, those a turn can change, the user turn) - _prompt joins them. `turn`: built for
+    a session's turn that just began (turn_facts) - the thread as its hand-over took it: what came in since is the next turn's to hear."""
     detail = store.task_detail(tid) or {}
+    if turn:
+        from . import conversation
+        if (late := conversation.unheard(store, tid)): detail = {**detail, 'messages': [m for m in detail.get('messages') or [] if m['MessageId'] not in late]}
     task = detail.get('task') or {}
     dock = is_dock(task)
     # SOUL.md stays with triage (PW-184); the worker reads AGENT.md - the rules both kinds share, with the
@@ -2016,7 +2030,7 @@ def prompt_parts(store, tid: int) -> tuple[str, list, str]:
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
     # ...the LATEST facts ride in the TURN, never the system prompt: they change every turn, and a CLI's system prompt is its process's
     # command line (a hashed --append-system-prompt-file), so in the system prompt each turn started a new process (clipool's one per chat)
-    lb = turn_facts(store, tid, task, rules=False)
+    lb = turn_facts(store, tid, task, rules=False, turn=turn)
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system += f'\n\n{selfclose.DRAFTS_ONCE}'
     md = store.checklist_markdown(tid, ids=True, shell=False) if hasattr(store, 'checklist_markdown') else ''    # the slot's id: its road is in the brief (by_tool)
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
@@ -2457,9 +2471,12 @@ class GeneralSession:
         # So a flood costs a turn or two, never one per input: a turn that finds its own input already taken ends here, quietly - the turn
         # that took it answers for it
         from . import conversation
-        lines = [text]
-        took = [{**r, **_line_of(r['Body'])} for r in take_kept(self.store, self.task_id)]
-        if (mine and not took) or (not took and mails and conversation.heard(self.store, self.task_id, 'mail', mails)): self._lock.release(); return ''
+        lines, waits = [text], bool(waiting_lines(self.store, self.task_id))
+        if (mine and not waits) or (not waits and mails and conversation.heard(self.store, self.task_id, 'mail', mails)): self._lock.release(); return ''
+        # ...ONE hand-over, written once (take_kept -> conversation.hear): his lines, what came in and was pressed since the last turn, and the
+        # turn's own start - so they stand together in the order they came
+        took = [{**r, **_line_of(r['Body'])} for r in take_kept(self.store, self.task_id, turn=True, sid=self.sid)]
+        if mine and not took: self._lock.release(); return ''          # ...taken back in that instant (a cancelled wait drops its line): nothing to say
         if took: attachments = list(dict.fromkeys([*(() if mine else attachments or ()), *(p for r in took for p in r['files'])]))
         if mine: lines = [r['text'] for r in took]; text, kept = '\n\n'.join(lines), True
         if len(took) > 1 or (took and not mine):
@@ -2471,7 +2488,6 @@ class GeneralSession:
         if as_owner: self.woke = self.silent = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.owned = as_owner and not brief
         self.busy, self.last = True, time.time()
-        conversation.hear(self.store, self.task_id, turn=True, sid=self.sid)       # the turn begins: what came in and was pressed since is heard with it
         if (news := came_in(self.store, conversation.with_turn(self.store, self.task_id), mails)):
             delivery_instructions = f'{delivery_instructions}\n\n{news}' if delivery_instructions else news
         # A NEW TURN MAY FINISH AGAIN (the email walk, 2026-10-29): the mark a self-close leaves stops two hooks wrapping one turn,
@@ -2532,7 +2548,7 @@ class GeneralSession:
             self.store.tag_task(self.task_id, terminal.SAVED, False, 'assistant')
             self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}, 'at': t0}]      # `at`: a cut turn's files are its own (keep_cut_turns)
             self.trace_revision += 1
-            system, late, user = prompt_parts(self.store, self.task_id)
+            system, late, user = prompt_parts(self.store, self.task_id, turn=True)
             # ...WHAT THIS TURN ALONE IS TOLD (what came in, how many lines he sent, a hand-over) rides the TURN of a conversation the CLI
             # already holds, never its system prompt (rule 10, the recorded flood 2026-11-11): changed there, everything after it - the whole
             # conversation - was read again at full price. A conversation said afresh has nothing kept: there it is among the late lines
@@ -2757,7 +2773,7 @@ class GeneralSession:
             if kept_conv:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
                 user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
-                if (lb := turn_facts(self.store, self.task_id, resumed=True, rules=False)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
+                if (lb := turn_facts(self.store, self.task_id, resumed=True, rules=False, turn=True)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
                 if turn_said: user, whole = f'{turn_said}\n\n{user}', f'{turn_said}\n\n{whole}'
                 if is_dock(self.store.get_task(self.task_id)):
                     user += f'\n\n{dock_snapshot(self.store)}'

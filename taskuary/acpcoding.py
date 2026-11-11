@@ -103,6 +103,7 @@ class ACPCoding:
         self.touched, self.calls, self.history, self.has_output, self._live_at = {}, {}, [], False, 0.
         self.held, self.steps, self.gate, self.turns = {}, None, None, 0
         self.owned = self.woke = self.silent = self.stop_next = False    # his turn; woken once (wake); woken for saying nothing; stop the turn as it goes
+        self.duties = False                                              # told its duties about drafts (selfclose.DRAFTS_ONCE) - once, in _begins
 
     # ── the terminal a Wall cell and the Terminal toggle show ──────────────────────────────────────────────────────────────
     def _out(self, s: str, output: bool = False):
@@ -293,7 +294,8 @@ class ACPCoding:
         if not text or not self.alive: return False
         item = (text, brief, list(shown or []), done)
         if self.steerable(): threading.Thread(target=self._steer, args=(item,), daemon=True).start(); return True
-        with self._qlock: self._q.append(item)
+        # ...at work from here: the turn that takes it begins a beat later, and read "at rest" in between the waiting room handed it over twice
+        with self._qlock: self._q.append(item); self.busy = True
         self._wake.set()
         return True
 
@@ -308,10 +310,11 @@ class ACPCoding:
             self.turn_at = general.PRESSED.get(self.task_id) or self.turn_at     # ...the turn they ride runs from his press (line_state)
             general.answered(self.task_id, len(lines)); self.owned, self.woke, self.silent = True, False, False
 
-    def _his(self, *items) -> set:
-        "The owner's kept lines these prompts carry, taken as his lines of the conversation (general.take_kept) - the ids taken."
+    def _his(self, *items, **how) -> set:
+        """The owner's kept lines these prompts carry, taken as his lines of the conversation (general.take_kept) - the ids taken. `how`: a
+        turn begins with them (conversation.hear) - one hand-over, written once."""
         lines = {s['line'] for _t, _b, shown, _d in items for s in shown if isinstance(s, dict) and s.get('line')}
-        if lines and self.store and self.task_id: general.take_kept(self.store, self.task_id, lines)
+        if (lines or how) and self.store and self.task_id: general.take_kept(self.store, self.task_id, lines, **how)
         return lines
 
     def steerable(self) -> bool:
@@ -434,13 +437,15 @@ class ACPCoding:
         what any agent's is (general.turn_facts) - what the owner pressed, a send that failed, the cards set aside. It was told only the passed
         cards, and the facts read his new line as answered (the audit, 2026-11-10). -> (the prompt, the lines it took)."""
         from . import proposals
-        lines = self._his(*items)
+        lines = self._his(*items, turn=True, sid=getattr(self, 'sid', ''))        # the turn begins: what it is told below is heard here, with his lines
         if self.store and self.task_id:
-            from . import conversation
-            conversation.hear(self.store, self.task_id, turn=True, sid=getattr(self, 'sid', ''))       # the turn begins: what it is told below is heard here
             try:
                 proposals.move_on(self.store, self.task_id)
-                if (lb := general.turn_facts(self.store, self.task_id, resumed=True)): text = f'{lb}\n\n{text}'
+                # ...EACH DUTY ONCE, as a chat's agent is told (selfclose.DRAFTS_ONCE in its startup): the rules ride the first turn that has
+                # facts for them, and every turn after carries the facts alone - told each turn, it said "the draft waits on your Send" each turn
+                if (lb := general.turn_facts(self.store, self.task_id, resumed=True, rules=False, turn=True)):
+                    from . import selfclose
+                    text = f"{'' if getattr(self, 'duties', False) else selfclose.DRAFTS_ONCE + chr(10) * 2}{lb}\n\n{text}"; self.duties = True
             except Exception as e: logger.debug(f'task {self.task_id}: the turn was not told its facts - {e}')
         return text, lines
 

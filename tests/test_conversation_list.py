@@ -99,6 +99,42 @@ class TheList(unittest.TestCase):
         told = '\n'.join(self.brain.calls[1:])
         for i in range(n): self.assertIn(f'flood {i + 1:02d} of', told, f'input {i + 1} was heard and never told')
 
+    def test_what_one_hand_over_takes_stands_in_the_order_it_came(self):
+        """The recorded flood, 2026-11-11: fifty inputs heard together stood as his sixteen lines, then his own replies, then the sender's
+        mail - "34, 31, 46". One hand-over, written once: each stands where it came, a line and a message of one second too."""
+        self.brain.delay = 1.0
+        self.say('Suggest two.', 'l0', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        n = 18
+        for i in range(n):
+            w = f'flood {i + 1:02d} of {n}'
+            if i % 3 == 0: self.mail(w)
+            elif i % 3 == 1: self.mail(w, own=True)
+            else: self.say(w, f'f{i}', wait=False)
+        self.rest()
+        words = [str(x.get('text') or x.get('words') or '') for x in self.list()['items'] if x['kind'] in ('line', 'arrival')]
+        self.assertEqual([w[:8] for w in words if w.startswith('flood ')], [f'flood {i + 1:02d}' for i in range(n)])
+
+    def test_a_message_that_lands_after_the_hand_over_is_the_next_turns_to_hear(self):
+        """The recorded flood, 2026-11-11: his own reply on the thread came in while the session started - after the turn's hand-over, before
+        its prompt was built - and was named in that prompt as the newest message, then told again by the turn that heard it."""
+        real, late = general.prompt_parts, []
+        def parts(*a, **k):
+            if not late: late.append(self.mail('I booked the Harbour Room myself.', own=True))
+            return real(*a, **k)
+        with mock.patch.object(general, 'prompt_parts', side_effect=parts): self.say('Suggest two.', 'l-one'); self.rest()
+        self.assertEqual(conversation.heard(self.s, self.tid, 'mail', late), False)
+        self.assertNotIn('Harbour Room', self.brain.calls[0])                                    # not heard, so not told
+        self.say('And now?', 'l-two'); self.rest()
+        self.assertTrue(conversation.heard(self.s, self.tid, 'mail', late)); self.assertIn('Harbour Room', self.brain.calls[1])
+
+    def test_two_messages_said_in_one_turn_over_acp_are_two_steps(self):
+        said = lambda mid, t: {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': t}, **({'messageId': mid} if mid else {})}
+        steps = conversation.acp_steps([said('m1', 'It returns the sum '), said('m1', 'plus tax.'), said('m2', 'The reply to Gail went out.')])
+        self.assertEqual([s['text'] for s in steps], ['It returns the sum plus tax.', 'The reply to Gail went out.'])
+        self.assertEqual([s['text'] for s in conversation.acp_steps([said('', 'One '), said('', 'message.')])], ['One message.'])     # an adapter that names none
+        self.assertFalse([k for s in steps for k in s if k not in ('k', 'text', 'at')])
+
     def test_a_message_that_came_in_mid_turn_is_pending_then_heard_with_the_next_turn(self):
         self.brain.delay = 3
         self.say('Suggest two.', 'l-one', wait=False)

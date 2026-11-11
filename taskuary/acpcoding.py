@@ -305,6 +305,7 @@ class ACPCoding:
             self._mine(shown)
             if self._q: t, b, s, d = self._q[-1]; self._q[-1] = (t, b, list(s) + [{**x, 'drawn': True} if isinstance(x, dict) else {'text': x, 'drawn': True} for x in shown], d); return
         if (lines := self._his(('', True, list(shown), None))):
+            self.turn_at = general.PRESSED.get(self.task_id) or self.turn_at     # ...the turn they ride runs from his press (line_state)
             general.answered(self.task_id, len(lines)); self.owned, self.woke, self.silent = True, False, False
 
     def _his(self, *items) -> set:

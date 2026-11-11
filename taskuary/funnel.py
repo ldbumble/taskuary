@@ -736,12 +736,9 @@ def live_session_state(tid, agent: str = 'the agent') -> tuple | None:
         s = terminal.session_for(tid)
         if not (s and getattr(s, 'alive', False)): return None
         waiting = bool(s.waiting()) if callable(getattr(s, 'waiting', None)) else getattr(s, 'busy', True) is False
-        from . import workerstate as ws
-        asks = waiting and ws.asking_of(s.store, s) is not None
     except Exception: return None
-    # ...an agent's parked turn is ready for you, whatever its next move is (lane_word, the owner 2026-11-05) - a coding agent's as a chat's (the
-    # audit, 2026-11-10: one read for every kind); one that asked you something waits on your answer
-    if waiting and not asks:
+    # ...a CHAT agent's parked turn is ready for you, whatever its next move is (lane_word, the owner 2026-11-05); a coding one waits on you
+    if waiting and type(s).__name__ == 'GeneralSession':
         return (f'Ready for you. {_cap(agent)} finished its turn - the next move is yours.', lanes.word('chat_ready'))
     return (f'Waiting for you. {_cap(agent)} finished its turn and waits on you.', 'waiting on you') if waiting \
         else (f'{_cap(agent)} is working on this.', 'working')

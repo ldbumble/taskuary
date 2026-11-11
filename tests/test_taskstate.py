@@ -57,7 +57,7 @@ class StateTests(unittest.TestCase):
             s.add_review({'TaskId': t, 'Kind': 'draft_reply', 'DraftText': 'Hi Ray - fixed.', 'Status': 'pending'})
             st = taskstate.task_state(s, tid=t)
             self.assertEqual((st.key, st.left), ('approve', ''))
-            self.assertTrue(funnel.idle_state(s, t)['line'].startswith('Ready for you.'), funnel.idle_state(s, t))
+            self.assertEqual(funnel.idle_state(s, t)['kind'], 'live', funnel.idle_state(s, t))       # ...never "left without finishing it"
 
     def test_a_done_task_continued_is_live_work_but_a_stale_terminal_is_not(self):
         s = MemoryStore(); t = task(s); s.update_task(t, {'Status': 'done'}, 'owner')

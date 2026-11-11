@@ -133,7 +133,8 @@ def _install_fresh_routes(app, store):
         if body.get("state") == "killed":
             import subprocess
             from taskuary import clipool
-            ps = [p for p in (getattr(getattr(t, "client", None), "p", None), getattr(clipool._POOL.get(f"general:{tid}"), "p", None), getattr(t, "pty", None)) if p is not None]
+            lv = clipool._POOL.get(f"general:{tid}")          # a chat agent's kept CLI: a process of its own, or an ACP connection's
+            ps = [p for p in (getattr(getattr(t, "client", None), "p", None), getattr(lv, "p", None), getattr(getattr(lv, "client", None), "p", None), getattr(t, "pty", None)) if p is not None]
             for p in ps:
                 # ...the whole tree: a CLI is node under a shell, and the shell alone dying leaves it at work
                 if os.name == "nt" and getattr(p, "pid", None): subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True)

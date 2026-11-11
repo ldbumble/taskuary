@@ -2551,6 +2551,11 @@ class GeneralSession:
             self.store.tag_task(self.task_id, terminal.SAVED, False, 'assistant')
             self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}, 'at': t0}]      # `at`: a cut turn's files are its own (keep_cut_turns)
             self.trace_revision += 1
+            # ...ON DISK FROM ITS START: kept only from its first step, a turn the restart cut while its CLI was still coming up left his line
+            # heard with nothing under it and nothing running (the recorded restart, 2026-11-11) - a turn cut at any point says it was cut
+            from . import sessionrecord
+            try: sessionrecord.keep_live(self.task_id, self.trace)
+            except OSError as e: logger.debug(f'task {self.task_id}: the turn now beginning was not kept on disk - {e}')
             system, late, user = prompt_parts(self.store, self.task_id, turn=True)
             # ...WHAT THIS TURN ALONE IS TOLD (what came in, how many lines he sent, a hand-over) rides the TURN of a conversation the CLI
             # already holds, never its system prompt (rule 10, the recorded flood 2026-11-11): changed there, everything after it - the whole

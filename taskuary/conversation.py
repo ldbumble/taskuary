@@ -101,14 +101,15 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
     from . import general
     tid, now = int(tid), time.time()
     rows = [x for x in lines if isinstance(x, dict)]
-    first, typed = min((_after(x.get('Body')) for x in rows), default=INF), min((ep(x.get('CreatedAt')) for x in rows), default=INF)
+    first = min((_after(x.get('Body')) for x in rows), default=INF)
     # (where, kind, name) - where: (0, when it joined, id) it stood drawn | (1, its second, the newest message before it, kind, place) | (2, n) sent now
     refs = []
     if turn or standing:
         since = _since(store, tid) - 1
         refs += [((0, x['T'], x['MessageId']) if x['MessageId'] <= first else (1, int(ep(x.get('SentAt') or x.get('CreatedAt')) or x['T']), x['MessageId'], 0, x['MessageId']),
                   'mail', str(x['MessageId'])) for x in _mail(store, tid) if x['T'] >= since]
-        refs += [((0, ep(p[1]), i) if ep(p[1]) < typed else (1, int(ep(p[1])), INF, 2, i), 'press', str(p[0])) for i, p in enumerate(general.presses(store, tid)) if ep(p[1]) >= since]
+        # ...a press stands where he made it (his stop is drawn the moment it is pressed): the lines that waited enter under it
+        refs += [((0, ep(p[1]), i), 'press', str(p[0])) for i, p in enumerate(general.presses(store, tid)) if ep(p[1]) >= since]
     refs += [((1, int(ep(x.get('CreatedAt'))), _after(x.get('Body')), 1, x['CommentId']), 'line', str(x.get('LineId') or '')) if isinstance(x, dict) else ((2, i), 'line', str(x))
              for i, x in enumerate(lines) if x]
     refs = [(k, r) for _, k, r in sorted(refs, key=lambda x: x[0]) if r]
@@ -394,7 +395,9 @@ def items(store, tid: int) -> dict:
             if x['kind'] == 'turn' and x['state'] in ('working', 'starting'): x.update(state='done', ended=x.get('ended') or x.get('started'))
     # ...a turn he stopped ended there, and one that failed says so where it failed, with the way past it
     for i, x in enumerate(out):
-        if x.get('stop') and (t := next((y for y in reversed(out[:i]) if y['kind'] == 'turn'), None)) and t['state'] == 'done': t['state'] = 'stopped'
+        # ...the turn right above his stop - one stopped before it said or did anything left nothing, and the mark fell on the finished answer
+        # above the line it never got to answer (the recorded stop, 2026-11-11)
+        if x.get('stop') and (t := next((y for y in reversed(out[:i]) if y['kind'] in ('turn', 'line', 'arrival')), None)) and t['kind'] == 'turn' and t['state'] == 'done': t['state'] = 'stopped'
     if not at_work and (f := funnel.run_failed(store, tid)):
         evf = store.last_worker_event(tid, kinds=('failed',)) or {}
         t = next((y for y in reversed(out) if y['kind'] in ('turn', 'line', 'arrival')), None)

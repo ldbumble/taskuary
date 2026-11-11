@@ -128,6 +128,31 @@ class TheList(unittest.TestCase):
         now = [x['id'] for x in self.list()['items'] if not x['id'].startswith('t:')]
         self.assertEqual(now, [*drawn, 'l-w', f'm:{new}'])
 
+    def test_his_stop_stands_where_he_pressed_it_and_what_waited_enters_under_it(self):
+        """The recorded stop, 2026-11-11: he stopped a turn that had said nothing, with two lines waiting. The stop's mark fell on the finished
+        answer above the line it never answered, and the waiting lines entered above "You stopped the agent", which was already drawn."""
+        self.say('Suggest two.', 'l-one'); self.rest()
+        self.brain.delay = 30
+        self.say('Compare both in detail.', 'l-two', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.say('Also the price.', 'l-three', wait=False)
+        self.brain.delay = 0
+        self.assertTrue(general.stop_turn(self.s, self.tid))
+        drawn = [x['id'] for x in self.list()['items'] if x['kind'] == 'press']
+        self.rest()
+        got = self.list(); ids = [x['id'] for x in got['items'] if not x['id'].startswith('t:')]
+        self.assertEqual(ids[-3:], ['l-two', *drawn, 'l-three'])
+        self.assertEqual([x['state'] for x in got['items'] if x['kind'] == 'turn'][0], 'done')                 # the answer above was never stopped
+
+    def test_a_turn_is_on_disk_from_its_start_so_a_restart_at_any_point_says_it_was_cut(self):
+        "The recorded restart, 2026-11-11: cut while its CLI was still coming up, the turn left his line heard with nothing under it."
+        from taskuary import sessionrecord
+        self.brain.delay = 0.8
+        self.say('Suggest two.', 'l-one', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False) and len(self.brain.calls) == 1))
+        self.assertTrue(sessionrecord._live_path(self.tid).is_file())
+        self.rest(); self.assertFalse(sessionrecord._live_path(self.tid).is_file())                             # ...and gone with the turn's own end
+
     def test_a_kept_line_is_heard_and_taken_in_one_step(self):
         "The recorded flood, 2026-11-11: read between its take and its hear, a line stood for a frame at the time it was typed, above what came in since."
         self.brain.delay = 0.5

@@ -4597,15 +4597,15 @@ def agent_row(store, item: dict) -> bool:
 
 
 def end_turn(store, line: list, actor: str = 'owner', write: bool = True) -> dict:
-    """THE BOTTOM OF THE RAIL (5): the desk's end row as it was - the Walk again chip by the prompt and up to three Opens of rows still
-    under Tasks - and no sentence (the owner, 2026-10-23: "yes remove the sentence, just the button"). The phone has no row: one short
+    """THE BOTTOM OF THE RAIL (5): the desk's end is the Walk again on the bar, beside Back - its Opens went (the owner, 2026-11-10: a row
+    on the rail opens its task with one click; fewer buttons) - and no sentence (the owner, 2026-10-23: "yes remove the sentence, just the button"). The phone has no row: one short
     status and its Walk again. Nothing on the rail at all: the day is done."""
     tid = general.dock_task(store, actor)[0]['TaskId']
     desk = DELIVERY.get() != PHONE
     tasks = [i for i in line if lanes.level_of(i) == 'task']
     opens = [{'verb': 'open', 'key': i['key'], 'label': ' · '.join(x for x in (
                  f"Open {i.get('ref') or ''}".strip(), _title_cut(' '.join(str(i.get('title') or 'it').split()), 50)) if x)}
-             for i in tasks[:3 if desk else 10]]
+             for i in ([] if desk else tasks[:10])]
     # ...the walk again on the BAR, beside Back: the bar is navigation, and an item's row under an empty line drew it nowhere - Back alone
     # (the owner, 2026-11-10: "where is the button to start over?")
     if line or tasks: say, chips = ('' if desk else "That's the bottom of the list."), [{**buttons.chip('walk'), 'bar': True}, *opens]

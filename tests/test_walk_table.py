@@ -155,9 +155,8 @@ def check(w: Walk, case: dict, out, before: int):
         row = next(r for r in items if walkworld.matches(r, src[case['urgent']]))
         assert lanes.is_urgent(row) and lanes.level_of(row) == 'task', f'{rid}: {case["urgent"]} is urgent, walked in its place'
     if 'lines' in case: assert w.lines() - before == case['lines'], f'{rid}: {w.lines() - before} new chat lines'
-    if case.get('opens'):
-        opens = [c.get('key') for c in out.get('chips') or [] if c.get('verb') == 'open']
-        assert opens == [w.key(x) for x in case['opens']], f'{rid}: the end offered {opens}'
+    # ...the end offers the walk again on the bar and nothing else: the rows it walks are on the rail, one click each (the owner, 2026-11-10)
+    if case.get('again'): assert [(c.get('verb'), c.get('bar')) for c in out.get('chips') or []] == [('walk', True)], f'{rid}: the end offered {out.get("chips")}'
     if case.get('desk'): assert railwalk.on(s) == w.key(case['desk']), f'{rid}: the desk is on {railwalk.on(s)}'
     walk = railwalk.peek(s)
     if 'back' in case: assert (walk.get('above') is not None) == case['back'], f'{rid}: Back {"on" if walk.get("above") else "off"} - above {walk.get("above")}'

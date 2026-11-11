@@ -3367,7 +3367,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and on a rail row below the top while the walk's word catches up (its answer in, its rail not yet), there is a row above: the server says
   // which. Greyed while a move is out, as Next is (the owner, 2026-11-03: one move at a time)
   const underTop = !!currentItem && items.some((i) => i.key === currentItem.key) && items[0]?.key !== currentItem.key;
-  const backTo = table.speaks && !firstRun && !old && !walk && (onWalk ? walkNow.above : underTop ? "above" : null), moving = busy || deferring || resetting;
+  // ...and AT THE WALK'S END, nothing on the table, Back goes to the last row it walked (railwalk.back from its end; the owner, 2026-11-09: Back is
+  // any task you were on) - greyed there, the bar was Back and nothing else that worked (the owner, 2026-11-10: "where is the button to start over?")
+  const walkEnd = !currentItem && !table.key && !table.place && !!walkNow?.ended && walkNow.above;
+  const backTo = !firstRun && !old && !walk && (table.speaks ? (onWalk ? walkNow.above : underTop ? "above" : null) : walkEnd || null), moving = busy || deferring || resetting;
   // ...and on a desk Back is ALWAYS on the bar, greyed where there is nowhere to go back to (the owner, 2026-10-29: the bar is Back and Next)
   useVerbs("nav", [{ id: BACK, group: "back", label: btn("back"), title: btnHint("back"), disabled: !backTo || moving, why: moving ? "" : "nothing above this one",
     run: () => backTo && goBack() }], !!backTo || (deskChat && !firstRun));

@@ -39,7 +39,7 @@
     {"id": "W33", "browser": {"skip": "T1 has no draft, so the desk has no Send on it - its Mark done road is W26"}, "rule": [6], "bug": "Next after a Send skipped a task", "steps": ["start", "next", "open T1"], "action": "send T1 closes", "expect": "T2", "rail": {"not": ["T1"]}, "back": false},
     {"id": "W34", "rule": [3, 4], "bug": "Back onto an FYI batch read it", "steps": ["open F5", "back"], "action": "reload", "expect": "F1-F4", "read": [], "rail": {"has": ["F1", "F2", "F3", "F4"]}, "back": true},
     {"id": "W35", "rule": [3, 4], "bug": "Back onto a report read it", "steps": ["open R3", "back"], "action": "reload", "expect": "R2", "rail": {"has": ["R2"]}, "back": true},
-    {"id": "W36", "rule": [6], "bug": "a walk opened out of order never reached the rows above", "steps": ["new-chat", "open T4"], "action": "next-to-end", "expect": "END", "opens": ["T1", "T2", "T3"], "rail": {"has": ["T1", "T2", "T3"]}, "back": true},
+    {"id": "W36", "rule": [6], "bug": "a walk opened out of order never reached the rows above", "steps": ["new-chat", "open T4"], "action": "next-to-end", "expect": "END", "again": true, "rail": {"has": ["T1", "T2", "T3"]}, "back": true},
     {"id": "W37", "rule": ["start"], "bug": "a walk opened out of order never reached the rows above", "steps": ["new-chat", "open T4", "next-to-end"], "action": "start", "expect": "T1", "back": false},
     {"id": "W38", "rule": ["edge"], "steps": ["open T3", "close-elsewhere T3"], "action": "next", "expect": "T4", "rail": {"not": ["T3"]}, "back": true},
     {"id": "W39", "rule": ["edge"], "steps": ["open T3", "close-elsewhere T3"], "action": "back", "expect": "T2", "back": true},

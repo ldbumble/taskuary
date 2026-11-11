@@ -756,7 +756,7 @@ class MemoryTests(unittest.TestCase):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual((first['item']['lane'], first['item']['tid']), ('queued', t))
             again = concierge.surface(s, llm=lambda *a, **k: 'never', from_key=first['item']['key'])
-            self.assertIsNone(again['item']); self.assertEqual([c.get('key') for c in again['chips']][1:], [first['item']['key']])
+            self.assertIsNone(again['item']); self.assertEqual([c.get('verb') for c in again['chips']], ['walk'])         # ...its row on the rail opens it
             on_rail = [(i['lane'], bool(i.get('surfaced'))) for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
             self.assertEqual(on_rail, [('queued', False)])
             self.assertEqual(railwalk.start(s)['item']['tid'], t)
@@ -786,7 +786,7 @@ class MemoryTests(unittest.TestCase):
             again = concierge.surface(s, llm=lambda *a, **k: 'never', from_key=first['item']['key'])
             self.assertIsNone(again['item'])                                                  # the walk does not bring it straight back
             self.assertEqual(again['say'], '')                                                  # its Open is the line (2026-10-23)
-            self.assertEqual([c.get('verb') for c in again['chips']], ['walk', 'open'])
+            self.assertEqual([c.get('verb') for c in again['chips']], ['walk'])
             # ...and the card it left wears Next - passed, not read: the task is still yours (2026-10-23)
             dock = general.dock_task(s)[0]['TaskId']
             worn = [json.loads(m.group(1)).get('pressed') for c in s.list_comments(dock) if (m := concierge._MARK.search(c.get('Body') or ''))]

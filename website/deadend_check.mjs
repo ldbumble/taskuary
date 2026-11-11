@@ -14,14 +14,14 @@
 //   links     the demo: links to a connector and a setting, from a fresh page and over their open page, Back, and Next's address
 //   search    the demo: Enter typed over an earlier answer and before any, the count past the cap, a connection by name, a phone
 //   table     the demo, its brain linking a task it is asked to show: a task opened by the rail, Next, the Board, a deep link, search,
-//             a typed ref, a link in a reply and the walk's end chip - each, and each reloaded
+//             a typed ref and a link in a reply - each, and each reloaded
 //
 // The rules, checked at every step:
 //   DARK      the bar is dark only when the Advisor spoke, and then on one button (the owner, 2026-10-17: "keep it ai")
 //   SEEN      the card on the table shows more than its header
 //   FIX       an error on screen has a way out on the row - a verb that is not Next
 //   RECEIPT   an item that leaves the rail is named in the chat - its card, folded with the badge of what was pressed
-//   OPENS     a chip that says "Open TQ-x" puts TQ-x on the table
+//   AGAIN     the walk's end offers the walk again on the bar - its rows open from the rail (the owner, 2026-11-10)
 //   WORDS     no developer word and no raw error on the card, the row, the Advisor's line or an error (words.json's jargon)
 //   NAMES     every button on the row and in its menus is a named button - a label in buttons.json
 //   CALLS     no /api request fails while the walk runs - a refusal the demo says AS the demo is not a failure
@@ -579,7 +579,7 @@ async function walk() {
   for (let n = 0; n < 40; n++) {
     const at = page.step = `walk ${n} ${s.ref || "(no item)"}`;
     judge(s, at);
-    if (s.verbs.some((v) => v.word.startsWith("Open TQ"))) break;
+    if (s.verbs.some((v) => v.word === label("walk"))) break;
     const before = s, has = (verb) => s.verbs.some((v) => verbOfId(v.id) === verb), t0 = Date.now();
     if (!did.has("approve") && (has("approve") || cardSends(s)) && ((await pressVerb(page, "approve")) || (await pressCardSend(page)))) {
       did.add("approve"); await wait(2600); reread(page, page.pressedAt || t0, at); await again(page, before, page.pressedAt || t0, sendWords, at);
@@ -610,16 +610,10 @@ async function walk() {
     seen.set(k, (seen.get(k) || 0) + 1);
     if (seen.get(k) >= 3) { note("STUCK", at, `three presses left the same screen - the row: ${JSON.stringify(s.verbs.map((v) => v.word))}`); break; }
   }
-  // ...and the end row offers the walk again beside them - the day card's own button, not a card or a line (the owner, 2026-10-22)
-  if (s.verbs.some((v) => v.word.startsWith("Open TQ")) && !s.verbs.some((v) => v.word === label("walk"))) note("OPENS", page.step, `the walk's end has no ${label("walk")} on the row: ${JSON.stringify(s.verbs.map((v) => v.word))}`);
-  // OPENS: the end line's first chip must put its own TQ on the table
-  const w = s.verbs.map((v) => v.word).find((x) => x.startsWith("Open TQ"));
-  if (w && await clickText(page, w, "[data-tq-row]")) {
-    await wait(5000);
-    const got = await look(page), want = w.match(/TQ-\d+/)[0];
-    if (got.ref !== want) note("OPENS", w, `put ${got.ref || "nothing"} on the table`);
-    judge(got, w);
-  }
+  // ...and the end offers the walk again on the bar, beside Back - Back alone was a dead end (the owner, 2026-11-10: "where is the button to
+  // start over?"); its rows open from the rail, one click each, so no Opens there
+  if (!s.verbs.some((v) => v.word === label("walk"))) note("AGAIN", page.step, `the walk's end has no ${label("walk")} on the bar: ${JSON.stringify(s.verbs.map((v) => v.word))}`);
+  if (s.verbs.some((v) => v.word.startsWith("Open TQ"))) note("AGAIN", page.step, `the walk's end offers Opens the rail already gives: ${JSON.stringify(s.verbs.map((v) => v.word))}`);
   await page.close(); srv.stop();
 }
 
@@ -1200,28 +1194,6 @@ async function table() {
     if (!a) { note("RING", page.step, `the answer to "show me ${typed.ref}" drew no link to it - the reply-link road was not walked`); return null; }
     await a.click();
     return typed.tid;
-  });
-  await road("end chip", async () => {
-    for (let n = 0; n < 40; n++) {
-      // ...a chip is a card's own words: on the row, or on the title bar where the task's moves went (the owner, 2026-10-29)
-      const chips = await page.$$eval(MOVES.map((m) => `${m} button`).join(", "), (bs) => bs.filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.innerText.trim()));
-      const words = (await look(page)).verbs.map((v) => v.word), w = [...words, ...chips].find((x) => x.startsWith("Open TQ"));
-      if (w) { for (const m of MOVES) if (await clickText(page, w, m)) break; return Number(w.match(/TQ-0*(\d+)/)[1]); }
-      // ...or behind a ▾: the end's Opens fold there beside Walk me through my tasks when the bar is short of room (the ask bar's fixed width)
-      for (let i = 0; i < (await page.$$(MORE)).length; i++) {
-        await page.evaluate((MORE, i) => document.querySelectorAll(MORE)[i]?.click(), MORE, i);
-        if (!(await until(() => menuUp(page)))) continue;
-        const o = await page.evaluate(() => { const it = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find((e) => e.innerText.trim().startsWith("Open TQ")
-          && e.getAttribute("aria-disabled") !== "true"); if (!it) return ""; const word = it.innerText.trim(); it.click(); return word; });
-        if (o) return Number(o.match(/TQ-0*(\d+)/)[1]);
-        await closePops(page);
-      }
-      // ...a run of notices read together moves on by its own word, as the walk pass presses it
-      if (words.includes(label("next", "batch"))) await clickText(page, label("next", "batch"), "[data-tq-row]");
-      else if (!(await pressNext(page))) break;
-      await wait(3500);
-    }
-    note("RING", page.step, "Next never reached the walk's end chips - the end-chip road was not walked"); return null;
   });
   // ...and the header on a phone: still one row - the title and the status pill, no chips (the redesign, owner-approved 2026-10-21: what
   // triage made of it is the last line of From, and the one pill is the rail's own status)

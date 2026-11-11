@@ -38,20 +38,29 @@ test("at the end of a walk with tasks still open, the bar offers the walk again 
     await press(page, "^(Next|All read, next)");
   }
   if (!rec) rec = await record(page, dir);
-  await new Promise((r) => setTimeout(r, 2500));
-  bar = await barButtons(page);
-  const rail = await page.evaluate(() => (/(\d+) to go/.exec(document.body.innerText) || [])[1] || "");
-  await page.screenshot({ path: path.join(out, `${name}.png`) });
-  await rec.stop();
-  const again = bar.some((b) => /^Walk me through my tasks/.test(b.text) && !b.off);
-  await note(dir, { done: "The demo world: the day card's walk, then the bar's Next until it is gone - the walk at its end, tasks still on the rail.",
-    expect: "On the bar: Back and the way to walk again (Walk me through my tasks) - never Back alone.",
-    saw: `rail: ${rail || "?"} to go; bar: ${bar.map((b) => b.text).join(" | ") || "nothing"}`, verdict: end && again ? "PASS" : "FAIL" });
-  assert.ok(end, "the walk reached its end");
-  assert.ok(again, `the bar offers the walk again: ${JSON.stringify(bar)} (rail ${rail} to go)`);
-  // ...and it walks again: the first item on the table, its Next on the bar
-  await press(page, "^Walk me through my tasks");
-  await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-row] button")].some((b) => /^(Next|All read, next)/.test(b.innerText.trim()) && !b.disabled),
-    { timeout: 30000, polling: 200 });
+  // ...each step after the end, kept with what the bar held: a step that does not come is the finding
+  const steps = [], barNow = async () => (await barButtons(page)).map((b) => b.text + (b.off ? " (off)" : "")).join(" | ");
+  const step = async (said, re) => { const ok = await page.waitForFunction((re) => [...document.querySelectorAll("[data-tq-row] button")]
+      .some((b) => new RegExp(re).test(b.innerText.trim()) && !b.disabled), { timeout: 30000, polling: 200 }, re).then(() => true, () => false);
+    steps.push(`${ok ? "ok" : "MISSING"} - ${said}: ${await barNow()}`); return ok; };
+  let ok = false;
+  try {
+    await new Promise((r) => setTimeout(r, 2500));
+    bar = await barButtons(page);
+    // the end: the walk again beside Back, and BACK LIT, to the last row the walk was on (the owner, 2026-11-09: Back is any task you were on) -
+    // it was greyed there, the bar's one button pressing nothing
+    ok = end && await step("the end: the walk again on the bar", "^Walk me through my tasks") && await step("the end: Back lit", "^Back$");
+    await page.screenshot({ path: path.join(out, `${name}.png`) });
+    ok = ok && await press(page, "^Back$") && await step("Back: the last row on the table again, its way on", "^(Next|All read, next)");
+    ok = ok && await press(page, "^(Next|All read, next)") && await step("on from it: the end again", "^Walk me through my tasks");
+    ok = ok && await press(page, "^Walk me through my tasks") && await step("the walk again: the first row, its Next", "^(Next|All read, next)");
+  } finally {
+    await page.screenshot({ path: path.join(out, `${name}-end.png`) });
+    await rec.stop();
+    await note(dir, { done: "The demo world: the day card's walk, then the bar's Next until it is gone - the walk at its end, tasks still on the rail; then Back, Next, and the walk again.",
+      expect: "At the end, on the bar: Back (lit, to the last row walked) and Walk me through my tasks - never Back alone. Back brings the last row back; Next ends again; the walk again starts at the top.",
+      saw: steps.join("\n") || "the walk never reached its end", verdict: ok ? "PASS" : "FAIL" });
+  }
+  assert.ok(ok, steps.join("\n"));
   assert.deepEqual(errors, []);
 });

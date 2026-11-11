@@ -259,8 +259,7 @@ class TurnTests(unittest.TestCase):
         # ...and the desk says no sentence about it: the buttons do the talking (the owner, 2026-10-23: "yes remove the sentence, just the button")
         self.assertIsNone(again['item']); self.assertEqual(again['say'], '')
         # ...and the way to it NOW is a button naming it - a Next under this line only said it again (2026-09-23) - after the walk again
-        self.assertEqual([c['verb'] for c in again['chips']], ['walk', 'open'])
-        self.assertTrue(again['chips'][1]['label'].startswith('Open TQ-'))
+        self.assertEqual([c['verb'] for c in again['chips']], ['walk'])
         gone = concierge.surface(s, key='msg:999', llm=lambda *a, **k: 'never')
         self.assertIsNone(gone['item']); self.assertEqual(gone['say'], "That message is no longer in Taskuary, so it can't be opened.")
         # ...a task REMOVED says so, and nothing is left on the table (trust audit S4, 2026-10-28)
@@ -362,7 +361,7 @@ class DecisionTests(unittest.TestCase):
         out = concierge.say(s, 'next', key=None, llm=lambda *a, **k: 'Nothing is on the table.\nCALL: {"kind": "next", "params": {}}')
         self.assertIsNone(out.get('decision'))
         # shown, never walked past with Next: still On you, and its Open says so - no sentence (2026-10-08, 2026-10-23)
-        self.assertEqual(out['say'], ''); self.assertEqual([c.get('verb') for c in out['chips']], ['walk', 'open'])
+        self.assertEqual(out['say'], ''); self.assertEqual([c.get('verb') for c in out['chips']], ['walk'])
 
     def test_mine_with_nothing_on_the_table_is_a_new_to_do_in_their_words(self):
         """"remind me to renew the contract" came back as DECIDE: mine - theirs to do - and was answered
@@ -1206,12 +1205,13 @@ class EndOfWalkTests(unittest.TestCase):
         self.assertEqual(out['say'], '')
         # ...on the bar, beside Back: it is navigation (the owner, 2026-11-10: "where is the button to start over?" - the bar held Back alone)
         self.assertEqual(out['chips'][0], {'verb': 'walk', 'label': 'Walk me through my tasks', 'hint': buttons.hint('walk'), 'bar': True})
-        self.assertEqual([c.get('key') for c in out['chips']], [None, 'task:1', 'task:2', 'task:3'])
+        # ...and no Opens on the desk: a row on the rail opens its task with one click (the owner, 2026-11-10: fewer buttons)
+        self.assertEqual([c.get('key') for c in out['chips']], [None])
 
     def test_a_task_waiting_on_someone_else_is_still_walked_again(self):
         """The owner, 2026-10-25: "I hit next when a task is the last thing and the walk through again did not show up"."""
         out = concierge.end_turn(MemoryStore(), self.rows((9, 'Schema sign-off', 'theirs')))
-        self.assertEqual(([c['verb'] for c in out['chips']], out['say']), (['walk', 'open'], ''))
+        self.assertEqual(([c['verb'] for c in out['chips']], out['say']), (['walk'], ''))
 
     def test_the_phone_says_it_is_the_bottom_and_offers_its_walk(self):
         with concierge.delivering(concierge.PHONE):

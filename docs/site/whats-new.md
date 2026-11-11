@@ -2,6 +2,19 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.45 - 2026-11-11
+
+- No approval box over a tool at work, and words typed to the agent are never refused with a state code
+- A task's chat is one list the server owns, drawn by one renderer for every agent
+- The chat: a turn stands under a heard line from the hand-over, nothing is re-sorted above what is drawn, and a first session is not told to resume
+- A pane's own record says when it took a typed line
+- What stood in the chat unheard is heard with the line that begins a turn, before it
+- The agent's words are cleaned by one function on every road, an arrival opens in place, and a card stands in the turn that was at work
+- One hand-over takes everything that waits, a live action stands right above the box, and a pressed card stays where it was
+- An agent is told each duty once, and a turn carries only what is new
+- Only words he typed are his line, one turn is at work and it is the last, and the tests read the one list
+- The task's header is read again the moment the chat's own word on "working" changes
+
 ## 0.3.11.44 - 2026-11-11
 
 - Send and close closes whatever the agent is doing, and a turn the close stopped is never said to have failed

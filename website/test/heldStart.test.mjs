@@ -22,3 +22,11 @@ test("the chat draws Run anyway (this once) and Trust sender (vouches too), both
   assert.match(src("GeneralWorkspace.jsx"), /\{!dock && heldStart\}/);
   assert.match(src("TaskPage.jsx"), /heldStart=\{chatPane && heldStart \? <HeldStart taskId=\{t\.TaskId\} line=\{heldStart\}/);
 });
+
+// ...AND A LINE OF HIS IS NO RUN (the recorded walk, 2026-11-10): he typed on a stranger's task whose AI could not start, the start was held -
+// and the hold was hidden because the chat now had history, his own line. Only the agent's words, a session or a queued start are a run
+test("the owner's own line does not hide the hold: only an agent that spoke, a session or a queued start does", () => {
+  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(page, /const agentSpoke = \(detail\?\.comments \|\| \[\]\)\.some\(\(c\) => c\.ActorType === "assistant_agent"\);/);
+  assert.match(page, /heldStartOf\(\{ story: detail\?\.agentStory, tags: t\?\.Tags, ran: ranBefore \|\| agentSpoke \|\| !!term \|\| liveSession \|\| !!queuedRow \}\)/);
+});

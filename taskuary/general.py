@@ -2757,6 +2757,13 @@ class GeneralSession:
             # reason reaches the log.
             # ...but a turn the OWNER stopped - Stop, or Stop and save closing the session under it - is stopped, never failed: its CLI
             # exits mid-turn, and read as a failure the start was put back in the queue and run again (the overnight run, 2026-11-03)
+            # A TURN REFUSED FOR A STRANGER'S WORDS IS THE HOLD, NEVER A FAILURE (rules part 4; the recorded walk, 2026-11-10: a running head with
+            # nothing behind it, never saying why): said once on the task with its Trust presses (ingest.held_start - the queue's road and a
+            # coding line's), the session ended under it, no failed run counted
+            from .ingest import held_start
+            if not stopped and held_start(self.store, self.task_id, e):
+                if not is_dock(self.store.get_task(self.task_id)): self._end_soon(learn=False, report=False)
+                raise
             if timed is not None:
                 # ...and one that RAN OUT OF TIME paused: its run ends stopped, in words that say why, on the thread it was on - so Continue
                 # resumes it with what it made, and no start queue runs a long build again from the top

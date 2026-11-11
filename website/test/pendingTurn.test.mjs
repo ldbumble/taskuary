@@ -67,3 +67,13 @@ test("an answer filed at or after the turn at work began ends it, whatever a lat
   assert.equal(pendingTurn([you("u1", "make it shorter"), answer], { busy: true, began: began + 9000 }), true);
   assert.equal(pendingTurn([you("u1", "make it shorter"), answer], { busy: true }), false, "no start said: a working flag alone is no new turn");
 });
+
+// ...AND A START THE SERVER HELD IS NO TURN (the recorded walk, 2026-11-10): his line on a stranger's task whose AI could not start - the hold
+// said under it with its Trust - stood with a running "AGENT · ran 6s" head over the hold for a minute, the fresh line's bridge
+test("a line whose start was held has no running head under it, its hold said instead", () => {
+  const thread = [you("u1", "make it shorter and attach the sheet")];
+  thread[0].createdAt = new Date().toISOString();
+  assert.deepEqual(drawn(thread, {}), ["u1", "pending"], "a fresh line bridges the beat before its run begins");
+  assert.deepEqual(drawn(thread, { held: true }), ["u1"], "held: nothing is running");
+  assert.deepEqual(drawn(thread, { held: true, busy: true }), ["u1", "pending"], "...until a run is at work after all");
+});

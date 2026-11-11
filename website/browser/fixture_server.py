@@ -119,6 +119,14 @@ def _install_fresh_routes(app, store):
         t.close(); general.drop_session(tid); terminal.SESSIONS.pop(t.sid, None)
         return {"ok": True}
 
+    @app.post("/api/fixture/no-readonly")
+    def fixture_no_readonly(body: dict = Body(...)):
+        """The stand-in CLI as one with no read-only mode Taskuary can hold it to (clis.READONLY): with a version too old for its reviewer
+        (FAKE_CLAUDE_VERSION), a stranger's task cannot start on it at all (origin.launch_mode) - the refused start, on screen."""
+        from taskuary import clis
+        clis.READONLY.pop(body.get("cli") or "claude", None)
+        return {"ok": True}
+
 
 async def run() -> None:
     # asyncio's Windows wakeup socket exists by the time this coroutine runs. The

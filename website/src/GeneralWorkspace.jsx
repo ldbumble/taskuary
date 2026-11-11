@@ -496,10 +496,10 @@ const AtWork = ({ since, began, compacting = false, ...props }) => {
 // press; a turn the thread draws takes the same spot at the same render (both read the thread's state). Where the thread already draws the live
 // turn, only the line under it, as ever
 // ...`foot`: the turn answers a line held at the chat's foot (an answer sent on the server's road), so its row stands under that line
-const PendingTurn = ({ busy, sent, at, began = null, foot = false, feed, children }) => {
+const PendingTurn = ({ busy, sent, at, began = null, foot = false, feed, held = false, children }) => {
   const atFoot = useFoot(feed).length > 0;
   const thread = useAuiState((s) => s.thread.messages), name = React.useContext(AgentNameCtx);
-  const due = pendingTurn(thread, { busy, sent, began });
+  const due = pendingTurn(thread, { busy, sent, began, held });
   // ...its clock from the EARLIEST start it has been told while it stands, never a later one (the owner, 2026-11-10: from the press, never
   // restarting): a coding turn's server start moved from the press to the adapter's turn as it came up, and "ran 9s" read "ran 2s"
   const first = React.useRef(null), told = +new Date(sent?.at || at || NaN);
@@ -1075,7 +1075,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               reopened - and the poll is what tells us so */}
           {/* ...drawn as the agent's turn, its head and its line, until the thread draws that turn itself (PendingTurn) */}
           <ThreadPrimitive.If running={false}>{dock ? serverBusy && atWork
-            : <PendingTurn busy={serverBusy} sent={sent} at={began || since} began={began} feed={feed}>{sentWork}</PendingTurn>}</ThreadPrimitive.If>
+            : <PendingTurn busy={serverBusy} sent={sent} at={began || since} began={began} feed={feed} held={!!heldStart}>{sentWork}</PendingTurn>}</ThreadPrimitive.If>
           {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
           {!dock && cards}
           {/* Only once it has stopped typing. An offer to "run this again, daily" hanging under a
@@ -1118,7 +1118,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               time it was typed, then this screen's own not yet kept; all of them waiting for the agent until a turn takes them (2026-11-07) */}
           <FootLines waiting={waiting} held={held} messages={messages} hint={!(sent || serverBusy)} />
           {/* ...and the turn its answer asked for, under it (PendingTurn `foot`) */}
-          <ThreadPrimitive.If running={false}><PendingTurn busy={serverBusy} sent={sent} began={began} foot feed={feed}>{sentWork}</PendingTurn></ThreadPrimitive.If>
+          <ThreadPrimitive.If running={false}><PendingTurn busy={serverBusy} sent={sent} began={began} foot feed={feed} held={!!heldStart}>{sentWork}</PendingTurn></ThreadPrimitive.If>
           {/* ...a chat no turn has summed up yet: its cards (TaskPage's chatCards), under the thread */}
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
           {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}
@@ -1386,10 +1386,13 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...but a turn that FAILED is read without handing the read to the thread: the bump swapped in the server's copy, which has neither
   // the reason nor - when it failed before the agent took it - the owner's own words, so a refused send left nothing on screen (the owner,
   // 2026-11-02: "the text goes no where"). The page still learns the session is down (accept -> onSession); the thread keeps both.
+  // ...and the task read again with it: the page's own "starting" stood on the stale task, its running head over a start that was refused and
+  // its hold said under it (the recorded walk, 2026-11-10: "AGENT · ran 50s" over "Waiting for you ... Trust them")
   const failed = useCallback(() => {
     if (coding) return;
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => accept(r.data)).catch(() => {});
-  }, [accept, task.TaskId, coding]);
+    onChanged?.();
+  }, [accept, task.TaskId, coding, onChanged]);
   const loaded = !!data, knownSid = data?.session?.sid || "";
   useEffect(() => { if (loaded && liveSid && knownSid !== liveSid) refresh(); }, [loaded, liveSid, knownSid, refresh]);
   // ...and at once when that door says it answered (`reread`, bumped by the page): the note is on the conversation by then, and the

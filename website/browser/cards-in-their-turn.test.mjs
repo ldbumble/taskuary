@@ -20,7 +20,7 @@ const NEW = "Hi Erin, short version: two real flaws, the sheet is attached. Alex
 const SCRIPT = [{ when: "make it shorter", anywhere: true, first: "Rewrote it short, with the sheet attached.",
   post: [{ path: "/api/agent/reply", body: { text: NEW, agent: "assistant", files: [{ name: "flaws.csv", data: Buffer.from("flaw,impact\nexport,high\nsso,medium\n").toString("base64") }] } }] }];
 
-async function world(t) {
+async function world(t, script = SCRIPT) {
   const bin = await mkdtemp(path.join(os.tmpdir(), "taskuary-fake-claude-"));
   t.after(() => rm(bin, { recursive: true, force: true }).catch(() => {}));
   const win = process.platform === "win32";
@@ -28,7 +28,7 @@ async function world(t) {
   const fake = path.join(repo, "tests", "fake_claude.py");
   await writeFile(path.join(bin, win ? "claude.cmd" : "claude"), win ? `@${py} ${fake} %*\r\n` : `#!/bin/sh\nexec "${py}" "${fake}" "$@"\n`);
   if (!win) await chmod(path.join(bin, "claude"), 0o755);
-  await writeFile(path.join(bin, "script.json"), JSON.stringify(SCRIPT));
+  await writeFile(path.join(bin, "script.json"), JSON.stringify(script));
   Object.assign(process.env, { FAKE_CLAUDE_SCRIPT: path.join(bin, "script.json"), FAKE_CLAUDE_SPAWN: "0.5", FAKE_CLAUDE_THINK: "3", FAKE_CLAUDE_LOG: path.join(bin, "log.jsonl") });
   const h = await startHarness({ fresh: true, bin });
   t.after(() => h.close());
@@ -186,4 +186,64 @@ test("a stranger's task on a CLI too old for its reviewer answers under the owne
     verdict: answered && !bad.length ? "PASS" : "FAIL" });
   assert.ok(answered, `the turn answered under his line:\n${text.slice(-800)}`);
   assert.deepEqual(bad.slice(0, 3), []);
+});
+
+// A START REFUSED FOR A STRANGER IS KEPT WHERE IT HAPPENED, WITH THE WAY PAST IT (rules part 4; the walk, 2026-11-10: a running "AGENT · ran 32s"
+// head with nothing behind it, never saying why). The AI is a CLI too old for its reviewer and with no read-only mode Taskuary can hold it to (/api/fixture/no-readonly), so a
+// stranger's task cannot start on it (origin.launch_mode). The owner types a line: under it, the hold in one sentence and its Trust press - never
+// a running head that goes on with nothing in it
+test("a stranger's task its AI cannot start says why under the owner's line, with the Trust press", { timeout: 300000 }, async (t) => {
+  process.env.FAKE_CLAUDE_VERSION = "2.1.100";
+  t.after(() => { delete process.env.FAKE_CLAUDE_VERSION; });
+  const w = await world(t);
+  assert.ok((await w.api("/api/fixture/no-readonly", {})).ok);
+  const page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const made = await w.api("/api/fixture/mail-task", { stranger: true });
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  const name = process.env.N17_NAME || "stranger-refused", dir = path.join(out, "video", name); await mkdir(dir, { recursive: true });
+  await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 60000 });
+  const rec = await record(page, dir), said = "make it shorter and attach the sheet", bad = [];
+  let held = null, last = null;
+  try {
+    await page.evaluate(() => document.querySelector("[data-tq-task-page] .tq-aui-input")?.focus());
+    await page.keyboard.type(said); await page.keyboard.press("Enter");
+    const t0 = Date.now();
+    while (Date.now() - t0 < 45000) {
+      last = await page.evaluate((said) => {
+        const vp = document.querySelector("[data-tq-task-page] .tq-aui-viewport"), text = vp?.innerText || "", at = text.lastIndexOf(said);
+        const after = at < 0 ? "" : text.slice(at + said.length);
+        const trust = [...document.querySelectorAll("[data-tq-task-page] button")].some((b) => /^Trust/.test(b.innerText.trim()) && b.getBoundingClientRect().width > 0);
+        const ran = /ran (\d+)s/.exec(after);
+        return { why: /cannot be kept to only reading|Trust them|Waiting for you|did not start|couldn.t start/i.test(after), trust, ran: ran ? +ran[1] : null,
+          clock: !!vp?.querySelector("[data-tq-run-clock]"), after: after.slice(0, 400) };
+      }, said);
+      if (last.why && last.trust) { held = Date.now() - t0; break; }
+      if (last.clock && last.ran != null && last.ran >= 15) bad.push(`${Date.now() - t0} ms: a running head at ${last.ran}s, nothing said`);
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    await new Promise((r) => setTimeout(r, 4000));
+    last = await page.evaluate(() => { const c = document.querySelector("[data-tq-task-page] .tq-aui-viewport [data-tq-run-clock]");
+      return { clock: !!c, of: c ? (c.closest("[data-tq-pending-turn]") ? "pending" : c.closest("[data-tq-chat-line]")?.getAttribute("data-tq-chat-line") || c.parentElement?.outerHTML.slice(0, 200)) : "",
+        text: (document.querySelector("[data-tq-task-page] .tq-aui-viewport")?.innerText || "").slice(-300) }; });
+    if (held != null && last.clock) bad.push(`a running head still over the hold, 4 s on (${last.of}) ${JSON.stringify(await page.evaluate(async (id) => {
+      const get = async (p) => (await fetch(p, { headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token") } })).json();
+      const a = await get(`/api/tasks/${id}/assistant`), d = await get(`/api/tasks/${id}`);
+      return { working: a.working, starting: a.starting, session: a.session && { busy: a.session.busy, alive: a.session.alive }, dStarting: d.starting, story: d.agentStory?.kind }; }, made.taskId))}`);
+  } finally {
+    await page.screenshot({ path: path.join(out, `${name}.png`) });
+    await rec.stop();
+    await writeFile(path.join(dir, "server.log"), w.backend.output());
+    await writeFile(path.join(dir, "payload.json"), JSON.stringify(await w.api(`/api/tasks/${made.taskId}/assistant`), null, 1)).catch(() => {});
+    await note(dir, { done: "A stranger's mail task; the AI is a CLI Taskuary cannot hold to reading for a stranger (no reviewer, no read-only mode); the owner types a line.",
+      expect: "Under his line: why it cannot start, in one sentence, and the Trust press - the way past it. No head running on with nothing behind it.",
+      saw: held == null ? `nothing said within 45 s: ${JSON.stringify(last).slice(0, 500)}` : bad.length ? bad.slice(0, 4).join("\n") : `the hold and its Trust ${held} ms after the press`,
+      verdict: held != null && !bad.length ? "PASS" : "FAIL" });
+  }
+  assert.ok(held != null, `the hold is said under his line with its Trust: ${JSON.stringify(last)}`);
+  assert.deepEqual(bad.slice(0, 4), []);
+  assert.deepEqual(errors, []);
 });

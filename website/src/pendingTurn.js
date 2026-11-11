@@ -29,9 +29,12 @@ const fresh = (m, now) => m?.role === "user" && !(m.brief || m.metadata?.custom?
 // ...and with no start said, an answer is the turn over: a working flag alone is no new turn (the poll that said it read the turn just filed)
 const over = (m, began) => m?.role === "assistant" && !live(m) && !(began && (!m.createdAt || +(m.createdAt instanceof Date ? m.createdAt : asUtc(String(m.createdAt))) < began));
 export const turnOver = (thread, { sent = null, began = null } = {}) => !sent && over((thread || []).at(-1), began);
-export function pendingTurn(thread, { busy = false, sent = null, now = Date.now(), began = null } = {}) {
+// ...and `held`: the server held the start his line asked for (a stranger's task its AI cannot be kept to reading - HeldStart says so under it):
+// nothing is running, so no head over the hold - the fresh line's bridge stood a minute (the recorded walk, 2026-11-10)
+export function pendingTurn(thread, { busy = false, sent = null, now = Date.now(), began = null, held = false } = {}) {
   const last = (thread || []).at(-1);
   if (last?.role === "assistant" && live(last)) return false;
+  if (held && !busy) return false;
   if (fresh(last, now)) return true;
   if (turnOver(thread, { sent, began })) return false;
   if (settled(thread, sent)) return false;

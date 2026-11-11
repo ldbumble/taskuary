@@ -2485,8 +2485,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession && !home;
   const startHere = !home && !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
   const ranBefore = !!(report || detail?.transcript);
-  // a start held for a new sender, said in the chat with its Run anyway (HeldStart) - only while no agent has ever run here
-  const heldStart = heldStartOf({ story: detail?.agentStory, tags: t?.Tags, ran: ranBefore || generalStarted || !!term || liveSession || !!queuedRow });
+  // a start held for a new sender, said in the chat with its Run anyway (HeldStart) - only while no agent has ever run here. A line of HIS is
+  // no run: typed on a stranger's task whose AI could not start, the hold went unsaid under it (the recorded walk, 2026-11-10)
+  const agentSpoke = (detail?.comments || []).some((c) => c.ActorType === "assistant_agent");
+  const heldStart = heldStartOf({ story: detail?.agentStory, tags: t?.Tags, ran: ranBefore || agentSpoke || !!term || liveSession || !!queuedRow });
   // held on where the code is: before any run that is a start waiting, after one it is the agent asking to move the work (wrapup.asks_to_move)
   const heldWhy = ranBefore ? "The agent found the work is not in this code - choose where it is and it starts there"
     : "Not started: it needs to know where the code is - it starts once you choose";

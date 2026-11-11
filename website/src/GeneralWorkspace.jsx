@@ -65,7 +65,7 @@ import { hint as btnHint, label as btn } from "./buttons.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
 import { starting as startingLine } from "./laneSays.js";
-import { live, pendingTurn, sentNow, settled } from "./pendingTurn.js";
+import { live, pendingTurn, sentNow, settled, turnOver } from "./pendingTurn.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import ConnectAi from "./ConnectAi.jsx";
@@ -496,16 +496,16 @@ const AtWork = ({ since, began, compacting = false, ...props }) => {
 // press; a turn the thread draws takes the same spot at the same render (both read the thread's state). Where the thread already draws the live
 // turn, only the line under it, as ever
 // ...`foot`: the turn answers a line held at the chat's foot (an answer sent on the server's road), so its row stands under that line
-const PendingTurn = ({ busy, sent, at, foot = false, feed, children }) => {
+const PendingTurn = ({ busy, sent, at, began = null, foot = false, feed, children }) => {
   const atFoot = useFoot(feed).length > 0;
   const thread = useAuiState((s) => s.thread.messages), name = React.useContext(AgentNameCtx);
-  const due = pendingTurn(thread, { busy, sent });
+  const due = pendingTurn(thread, { busy, sent, began });
   // ...its clock from the EARLIEST start it has been told while it stands, never a later one (the owner, 2026-11-10: from the press, never
   // restarting): a coding turn's server start moved from the press to the adapter's turn as it came up, and "ran 9s" read "ran 2s"
   const first = React.useRef(null), told = +new Date(sent?.at || at || NaN);
   if (!due) first.current = null;
   else first.current = Math.min(first.current ?? Date.now(), Number.isFinite(told) ? told : Infinity);
-  if (!due) return busy && !foot ? children : null;
+  if (!due) return busy && !foot && !turnOver(thread, { sent, began }) ? children : null;   // ...nor its spin, the turn over
   if (foot !== atFoot) return null;
   return <div className="tq-aui-message tq-aui-agent" data-tq-pending-turn="">
     <div className="tq-aui-role">{name}<RunClock start={first.current} /></div>
@@ -1075,7 +1075,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               reopened - and the poll is what tells us so */}
           {/* ...drawn as the agent's turn, its head and its line, until the thread draws that turn itself (PendingTurn) */}
           <ThreadPrimitive.If running={false}>{dock ? serverBusy && atWork
-            : <PendingTurn busy={serverBusy} sent={sent} at={began || since} feed={feed}>{sentWork}</PendingTurn>}</ThreadPrimitive.If>
+            : <PendingTurn busy={serverBusy} sent={sent} at={began || since} began={began} feed={feed}>{sentWork}</PendingTurn>}</ThreadPrimitive.If>
           {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
           {!dock && cards}
           {/* Only once it has stopped typing. An offer to "run this again, daily" hanging under a
@@ -1118,7 +1118,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               time it was typed, then this screen's own not yet kept; all of them waiting for the agent until a turn takes them (2026-11-07) */}
           <FootLines waiting={waiting} held={held} messages={messages} hint={!(sent || serverBusy)} />
           {/* ...and the turn its answer asked for, under it (PendingTurn `foot`) */}
-          <ThreadPrimitive.If running={false}><PendingTurn busy={serverBusy} sent={sent} foot feed={feed}>{sentWork}</PendingTurn></ThreadPrimitive.If>
+          <ThreadPrimitive.If running={false}><PendingTurn busy={serverBusy} sent={sent} began={began} foot feed={feed}>{sentWork}</PendingTurn></ThreadPrimitive.If>
           {/* ...a chat no turn has summed up yet: its cards (TaskPage's chatCards), under the thread */}
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
           {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}

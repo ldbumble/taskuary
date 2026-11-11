@@ -36,7 +36,8 @@ test("a server read without the turn keeps the agent's row; one with the live tu
 
 test("an agent at work that the thread does not draw yet is a turn with its head, never a bare line", () => {
   const thread = [you("u1", "Pull the September overtime"), agent("a1", "Done - by site, attached.")];
-  assert.deepEqual(drawn(thread, { busy: true }), ["u1", "a1", "pending"]);
+  // ...a turn the server says began (its `turnStarted`), one the thread does not draw yet
+  assert.deepEqual(drawn(thread, { busy: true, began: Date.now() }), ["u1", "a1", "pending"]);
   assert.deepEqual(drawn(thread, {}), ["u1", "a1"]);
   // this pane's own stream draws its own running turn
   assert.deepEqual(drawn([...thread, you("u2", "and October?"), agent("r1", "", { status: { type: "running" } })], { busy: true }),
@@ -54,4 +55,15 @@ test("a line of his the thread has just drawn, with nothing after it, draws the 
   assert.equal(pendingTurn([{ ...line, metadata: { custom: { press: true } } }], { now }), false);
   assert.equal(pendingTurn([{ ...line, createdAt: new Date(now - 3600000) }], { now }), false);
   assert.equal(pendingTurn([line, agent("a2", "On it.")], { now }), false, "an answer after it is the turn");
+});
+
+// ONE FACT FOR "THIS TURN IS OVER" (the recorded rewrite walk, 2026-11-10, frame 00353: as the turn filed its answer a second "AGENT · ran 5s ×"
+// head stood for a beat under the new card - the server's working flag, read a poll later, still said busy): the answer filed is the turn over,
+// unless the turn at work began after it
+test("an answer filed at or after the turn at work began ends it, whatever a late working flag says", () => {
+  const began = Date.parse("2026-11-10T10:00:00Z"), answer = agent("a2", "Rewrote it short.", { createdAt: new Date(began + 5000) });
+  assert.equal(pendingTurn([you("u1", "make it shorter"), answer], { busy: true, began }), false);
+  // ...a turn that began after the answer (a mail woke the agent): drawn from its start
+  assert.equal(pendingTurn([you("u1", "make it shorter"), answer], { busy: true, began: began + 9000 }), true);
+  assert.equal(pendingTurn([you("u1", "make it shorter"), answer], { busy: true }), false, "no start said: a working flag alone is no new turn");
 });

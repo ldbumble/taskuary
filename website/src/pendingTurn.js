@@ -4,6 +4,8 @@
 // and came back as the turn. The pane draws the agent's turn itself - its head and its clock - from the press, until a turn the thread on
 // screen draws takes its place at the same spot.
 
+import { asUtc } from "./dates.js";
+
 // a turn the thread on screen draws as live: this pane's own stream (running), or the server's turn read from its trace (`live-` rows)
 export const live = (m) => m?.status?.type === "running" || String(m?.id || "").startsWith("live-");
 const answers = (ms) => (ms || []).filter((m) => m?.role === "assistant").length;
@@ -20,10 +22,16 @@ export const settled = (thread, sent) => !!sent && answers(thread) > sent.answer
 // nothing ever answered is no turn at work
 const fresh = (m, now) => m?.role === "user" && !(m.brief || m.metadata?.custom?.brief || m.press || m.metadata?.custom?.press)
   && m.createdAt && now - +new Date(m.createdAt) < 60000;
-export function pendingTurn(thread, { busy = false, sent = null, now = Date.now() } = {}) {
+// ...and ONE FACT ENDS A TURN: its answer filed at or after the turn at work began (`began`, ms). A working flag read a poll late drew a second
+// running head under the finished turn for a beat (the recorded rewrite walk, 2026-11-10); a turn begun after the answer is a new one
+// ...and with no start said, an answer is the turn over: a working flag alone is no new turn (the poll that said it read the turn just filed)
+const over = (m, began) => m?.role === "assistant" && !live(m) && !(began && (!m.createdAt || +(m.createdAt instanceof Date ? m.createdAt : asUtc(String(m.createdAt))) < began));
+export const turnOver = (thread, { sent = null, began = null } = {}) => !sent && over((thread || []).at(-1), began);
+export function pendingTurn(thread, { busy = false, sent = null, now = Date.now(), began = null } = {}) {
   const last = (thread || []).at(-1);
   if (last?.role === "assistant" && live(last)) return false;
   if (fresh(last, now)) return true;
+  if (turnOver(thread, { sent, began })) return false;
   if (settled(thread, sent)) return false;
   return !!sent || !!busy;
 }

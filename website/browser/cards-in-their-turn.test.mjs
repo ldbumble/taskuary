@@ -103,7 +103,19 @@ async function rewrite(t, w, page, { tid, rid, name }) {
     if (others.some((c) => c.live && c.words.includes("short version"))) { done = at; break; }
     await new Promise((r) => setTimeout(r, 100));
   }
-  await new Promise((r) => setTimeout(r, 1500));
+  // ...AND ONCE THE TURN HAS ANSWERED, NO SECOND HEAD: every state the page commits for 4 s after the new card is live (the recorded walk,
+  // 2026-11-10, frame 00353: a second running "AGENT · ran 5s ×" stood a beat under the new card as the turn filed its answer)
+  const second = await page.evaluate(() => new Promise((done) => {
+    const seen = [], t0 = performance.now(), look = () => {
+      const vp = document.querySelector("[data-tq-task-page] .tq-aui-viewport"), answered = /Rewrote it short/.test(vp?.innerText || "");
+      const extra = vp ? vp.querySelectorAll("[data-tq-pending-turn]").length + Math.max(0, vp.querySelectorAll("[data-tq-run-clock]").length - 1) : 0;   // ...the turn's own spin under its words is not one
+      if (answered && extra && !seen.length) seen.push(Math.round(performance.now() - t0), [...vp.children].slice(-4).map((e) => `${e.className}`.split(" ").filter((c) => c.startsWith("tq-")).join(".") + (e.matches("[data-tq-pending-turn]") ? "[PENDING]" : "") + `[${(e.innerText || "").slice(0, 50).replace(/\s+/g, " ")}]`).join(" | "));
+    };
+    const obs = new MutationObserver(look); obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+    const frame = () => { look(); if (performance.now() - t0 < 4000) requestAnimationFrame(frame); else { obs.disconnect(); done(seen); } };
+    requestAnimationFrame(frame);
+  }));
+  if (second.length) bad.push(`${second[0]} ms after the card: a second running head under the answered turn: ${second[1]}`);
   const end = await look(page, rid, said);
   await page.screenshot({ path: path.join(out, `item3c-${name}-end.png`) });
   // ...the recording ends before the test scrolls the record into view for its own picture: that scroll is not the page's

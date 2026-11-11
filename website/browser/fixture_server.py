@@ -120,6 +120,23 @@ def _install_fresh_routes(app, store):
         t.close(); general.drop_session(tid); terminal.SESSIONS.pop(t.sid, None)
         return {"ok": True}
 
+    PAGES = {}
+    @app.post("/api/fixture/browser-page")
+    def fixture_browser_page(body: dict = Body(...)):
+        """The task's agent with its browser open on `url` - agent-browser is not here, so its state is said for it (browser/hand-over): the page
+        a step is handed over on. `close`: the browser closed under it."""
+        from taskuary import browserview, terminal
+        tid = int(body["taskId"])
+        if body.get("close"): PAGES.pop(tid, None)
+        else: PAGES[tid] = body.get("url") or "https://portal.vendor.example/login"
+        if not getattr(browserview.state, "fixture", False):
+            real = browserview.state
+            def state(sid, fresh=False):
+                url = PAGES.get(getattr(terminal.SESSIONS.get(str(sid)), "task_id", None))
+                return {"open": True, "url": url, "port": 0} if url else real(sid, fresh)
+            state.fixture = True; browserview.state = state
+        return {"ok": True}
+
     @app.post("/api/fixture/no-readonly")
     def fixture_no_readonly(body: dict = Body(...)):
         """The stand-in CLI as one with no read-only mode Taskuary can hold it to (clis.READONLY): with a version too old for its reviewer

@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from unittest import mock
 
 NL = chr(10)
-tok = lambda n: n // 4
+tok = lambda n: int(n) // 4
 
 
 def world():
@@ -73,7 +73,7 @@ def main():
     def rec(system, user, **kw): seen.update(system=system, user=user); return '{"intent": "fyi", "why": "x"}'
     triage.classify_intent({'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake', 'subject': 'Re: Payworth renewal',
                             'body': s.get_message(mid)['BodyText']}, llm=rec, learned=(s.get_doc('learned') or '')[:20_000], soul=s.get_doc('soul') or '')
-    row('triage', seen['system'], seen['user'])
+    row('triage', seen['system'], seen['user']); seen_triage = dict(seen)
     with mock.patch.object(origin, 'of_task', return_value=('owner', '')):
         system, user = general._prompt(s, tid)
         qs, qu = quickwork.prompt(s, tid, 'Can you confirm by Friday whether we renew?', False)
@@ -93,6 +93,13 @@ def main():
     print(f"{'call kind':36} {'system':>8} {'user':>8} {'tools':>8} {'tok/call':>9} {'calls':>6}  {'tok/unit':>9}  unit   (tokens = chars/4, an estimate)")
     for k, sy, us, tl_, per, calls, unit, total in rows:
         print(f'{k:36} {sy:8,} {us:8,} {tl_:8,} {per:9,} {calls:6}  {total or 0:9,}  {unit}')
+    t = seen_triage
+    if hasattr(t['system'], 'blocks'):
+        cache, own = sum(map(len, t['system'].blocks)), len(t['system'].rest) + len(t['user'])
+        print(NL + f"triage, cached context vs this mail's own: {' + '.join(f'{tok(len(b)):,}' for b in t['system'].blocks)} tokens in the cached blocks, "
+              f"{tok(own):,} new per mail")
+        for d in (0.5, 0.9):     # billed-equivalent input = new + cached x (1 - discount): the discount is the provider's, not known here
+            print(f'  billed as if {tok(own + cache * (1 - d)):,} tokens per mail at a {int(d * 100)}% discount on cached input (vs {tok(own + cache):,} uncached)')
     print(NL + 'agent turn, tokens per call, step by step:')
     print('  before: ' + ' '.join(f'{tok(x) // 1000}K' for x in before))
     print('  now:    ' + ' '.join(f'{tok(x) // 1000}K' for x in after))

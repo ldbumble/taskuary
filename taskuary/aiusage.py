@@ -48,7 +48,8 @@ def openai(j: dict) -> None:
     if not isinstance(u, dict): return
     chat = 'prompt_tokens' in u
     d = u.get('prompt_tokens_details' if chat else 'input_tokens_details') or {}
-    note(j.get('model') or '', _n(u, 'prompt_tokens' if chat else 'input_tokens'), _n(d, 'cached_tokens'),
+    # ...a gateway in front of Claude or Gemini may say its cache read the Anthropic way beside it (LiteLLM's cache_read_input_tokens)
+    note(j.get('model') or '', _n(u, 'prompt_tokens' if chat else 'input_tokens'), _n(d, 'cached_tokens') or _n(u, 'cache_read_input_tokens'),
          _n(u, 'completion_tokens' if chat else 'output_tokens'))
 
 

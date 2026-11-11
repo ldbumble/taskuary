@@ -554,7 +554,7 @@ class _Scrubbed:
     """
     def __init__(self, brain): object.__setattr__(self, '_brain', brain)
     def __call__(self, system, user, *a, **kw):
-        return self._brain(redact.scrub(system), redact.scrub(user), *a, **kw)
+        return self._brain(system.map(redact.scrub) if isinstance(system, Stable) else redact.scrub(system), redact.scrub(user), *a, **kw)
     def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
     def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
 
@@ -985,13 +985,54 @@ def said_text(msg: dict) -> str:
     return next((str((x.get('function') or {}).get('arguments') or '') for x in calls if (x.get('function') or {}).get('arguments')), '')
 
 
-# THE STABLE PART OF A CALL IS READ FROM THE PROVIDER'S CACHE (the owner, 2026-11-10: "32 million tokens? sounds very expensive"): the
-# guide, the tools and the conversation so far are the same bytes call after call - triage's guide on every mail, an agent's whole turn on
-# every step. The Messages API caches only what is marked: the system, the tool list and the conversation up to its newest block. The
-# OpenAI-style cards cache a repeated prefix by themselves, so there the order alone (stable first, apiagent.sent) is what hits
-EPHEMERAL, CACHE_FROM = {'type': 'ephemeral'}, 4_000      # a system under ~1K tokens is below what the API caches at all
-def cached(system: str):
-    return [{'type': 'text', 'text': system, 'cache_control': EPHEMERAL}] if len(system or '') >= CACHE_FROM else system
+# THE STABLE PART OF A CALL IS READ FROM THE PROVIDER'S CACHE (the owner, 2026-11-10: "32 million tokens? sounds very expensive" ... "keep the
+# triage context cached and then just the new info should query it"). Triage's guide is the same on every mail, an agent's system, tools and
+# conversation the same on every step. A prompt builder says which part is stable with stable(): its blocks, least often changing first, then
+# what is this call's own. Each card turns that into what its provider needs:
+# - the Messages API caches only what is marked (cache_control on each stable block; '1h' for a guide that stays the same for hours - a write
+#   costs 2x then, a read 0.1x; the default 5 minutes for an agent's steps seconds apart);
+# - OpenAI, and Gemini 2.5+ behind a gateway, cache a repeated prefix by themselves (OpenAI from 1,024 tokens; Gemini Flash from 4,096) - there
+#   the order alone hits. A LiteLLM gateway also takes cache_control and makes a Vertex cachedContent of the marked part, but on Gemini that
+#   turns the free implicit cache off for it and bills storage, so it is the card's choice (`cache: explicit` in its settings), not the default;
+# - a card that refuses the marker (a 400 naming it) is asked again without it, and never marked again (_NO_CACHE).
+# Whatever reads it as text - a CLI's prompt file, a log - reads the same words: Stable is a str.
+EPHEMERAL, CACHE_FROM = {'type': 'ephemeral'}, 2_000      # characters: under ~512 tokens no provider caches at all
+_NO_CACHE = set()          # (type, endpoint, model) that refused a cache marker
+# how each card's provider caches: 'explicit' takes the marker; 'implicit' caches a repeated prefix by itself (OpenAI-style APIs; Gemini behind a
+# gateway - its newest Flash models cache implicitly only, at a 90% discount, from ~4-6K tokens, for up to a day). The Messages API is marked in
+# make_llm's own branch. A card's `cache` setting overrides its type's; a type not listed is implicit
+CACHE_MARKS = {'anthropic': 'explicit', 'hipaa_ai': 'implicit', 'vertex_ai': 'implicit', 'gemini': 'implicit', 'openai': 'implicit',
+               'azure_openai': 'implicit', 'openrouter': 'implicit', 'deepseek': 'implicit'}
+_CACHE_REFUSED = re.compile(r'cache_control|cached_?content|cache', re.I)
+
+
+class Stable(str):
+    "A system prompt as its stable blocks then this call's own `rest` - the same words as ''.join(blocks) + rest wherever it is read as text."
+    def __new__(cls, blocks, rest: str = '', ttl: str = None):
+        bs = [str(b) for b in blocks if b]
+        s = super().__new__(cls, ''.join(bs) + str(rest or '')); s.blocks, s.rest, s.ttl = bs, str(rest or ''), ttl
+        return s
+    def map(self, f): return Stable([f(b) for b in self.blocks], f(self.rest) if self.rest else '', self.ttl)
+
+
+def stable(*blocks, rest: str = '', ttl: str = None) -> Stable: return Stable(blocks, rest, ttl)
+
+
+def blocks(system, marks: int = 4, ttl: bool = True, seconds: bool = False):
+    """`system` as content blocks with cache_control on its stable blocks (the last `marks` of them, each long enough to cache); a plain
+    string long enough is one marked block; None when nothing is worth marking. `seconds`: the TTL as LiteLLM's Gemini wants it ('3600s')."""
+    parts = getattr(system, 'blocks', None)
+    if parts is None: parts, rest, life = ([str(system)], '', None) if len(system or '') >= CACHE_FROM else (None, '', None)
+    else: rest, life = system.rest, system.ttl
+    if not parts: return None
+    life = life and ttl and ({'1h': '3600s', '5m': '300s'}.get(life, life) if seconds else life)
+    mark = {**EPHEMERAL, **({'ttl': life} if life else {})}
+    out = [{'type': 'text', 'text': b, **({'cache_control': mark} if k >= len(parts) - marks and len(''.join(parts[:k + 1])) >= CACHE_FROM else {})}
+           for k, b in enumerate(parts)]
+    return out + ([{'type': 'text', 'text': rest}] if rest.strip() else [])
+
+
+def cached(system, marks: int = 4): return blocks(system, marks) or str(system)
 
 
 def make_llm(t, cfg: dict, key: str):
@@ -1040,7 +1081,7 @@ def make_llm(t, cfg: dict, key: str):
             if fns: fns[-1] = {**fns[-1], 'cache_control': EPHEMERAL}
             if msgs and msgs[-1]['content']: msgs[-1]['content'][-1] = {**msgs[-1]['content'][-1], 'cache_control': EPHEMERAL}
             kw = {'tools': fns, **({'tool_choice': {'type': tool_choice}} if tool_choice in ('none', 'auto', 'any') else {})} if fns else {}
-            try: r = ask(model=model, max_tokens=max_tokens, messages=msgs, **({'system': cached(system)} if system else {}), **kw)
+            try: r = ask(model=model, max_tokens=max_tokens, messages=msgs, **({'system': cached(system, marks=2)} if system else {}), **kw)
             except anthropic.BadRequestError as e: raise RuntimeError(f'anthropic error 400: {str(e)[:300]}') from e
             if r.stop_reason == 'refusal': raise RuntimeError('model refused the request')
             return from_anthropic(r.content)
@@ -1108,6 +1149,15 @@ def make_llm(t, cfg: dict, key: str):
     else:
         raise RuntimeError(f'unknown AI connector type: {t}')
     ek = (t, urls[0], model)
+    marked = lambda system: ((cfg.get('cache') or CACHE_MARKS.get(t, 'implicit')) == 'explicit' and ek not in _NO_CACHE
+                             and blocks(system, seconds=True)) or str(system)
+    def unmarked(r, msgs) -> bool:
+        "A refused cache marker (a 400 naming it): taken off this request and never put on this card again."
+        if r.status_code not in (400, 422) or not msgs or isinstance(msgs[0].get('content'), str) or msgs[0].get('role') != 'system': return False
+        if not _CACHE_REFUSED.search(r.text or ''): return False
+        _NO_CACHE.add(ek); msgs[0] = {**msgs[0], 'content': ''.join(b.get('text') or '' for b in msgs[0]['content'])}
+        from loguru import logger
+        logger.info(f'{t}: the card refused a cache marker - asked without one from now on'); return True
 
     def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None, web=False):
         if web and not want and t in ('openai', 'azure_openai'):
@@ -1122,7 +1172,7 @@ def make_llm(t, cfg: dict, key: str):
         # AN EMPTY TURN IS NO TURN: Gemini and Claude behind a gateway both refuse one ("contents.parts must not be empty", "text content
         # blocks must be non-empty") where OpenAI let it by - a blank system is left out, and a blank ask is the system's words
         if not str(user or '').strip() and not images: system, content = '', system
-        msgs = ([{'role': 'system', 'content': system}] if str(system or '').strip() else []) + [{'role': 'user', 'content': content}]
+        msgs = ([{'role': 'system', 'content': marked(system)}] if str(system or '').strip() else []) + [{'role': 'user', 'content': content}]
         last = None
 
         def once(fmt):
@@ -1136,6 +1186,7 @@ def make_llm(t, cfg: dict, key: str):
                     # a local model may spend its first call loading weights off disk, a reasoning deployment its time on a long
                     # prompt - room to answer, and a quick give-up on an endpoint that is not there
                     r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
+                    if unmarked(r, msgs): r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                     # a spent budget first: it is no refused effort or format, and asking again in another shape only spends a request
                     if budget_spent(r): raise BudgetSpent(BUDGET_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t))
                     # ...a proxy may turn it down with a 422 of its own (the gateway in front of another provider's model)
@@ -1197,11 +1248,13 @@ def make_llm(t, cfg: dict, key: str):
     # carries `tools` on to the Gemini and Claude models behind a gateway (verified live on the HIPAA AI card, 2026-11-09).
     def chat(messages, tools, max_tokens=MAX_TOKENS, **extra):
         last = None
+        if messages and messages[0].get('role') == 'system': messages = [{**messages[0], 'content': marked(messages[0].get('content') or '')}, *messages[1:]]
         for url in urls:
             for tok_param in ('max_completion_tokens', 'max_tokens'):
                 body = {'messages': messages, 'tools': tools, tok_param: max_tokens, **extra, **({'model': model} if model else {}),
                         **({'reasoning_effort': effort} if effort and ek not in _NO_EFFORT else {})}
                 r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
+                if unmarked(r, messages): body['messages'] = messages; r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                 if budget_spent(r): raise BudgetSpent(BUDGET_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t))
                 if r.status_code in (400, 422) and body.pop('reasoning_effort', None) and _EFFORT_REFUSED.search(r.text or ''):
                     r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))

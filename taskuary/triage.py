@@ -859,12 +859,13 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if job: system += f"\n\nThe owner's job (their own document - what they are responsible for, who they serve, what to protect; weigh how much this matters with it):\n{job[:JOB_CHARS]}"
             # `learned` is LEARNED.md's active sections: the profile distilled from the owner's
             # past verdicts. It refines the operator's document; explicit notes still outrank it.
+            cut, memory = len(system), ''
             if learned:
                 # ...its "Your people" lines are for the priority alone (the guide's section 6 says so too, 2026-10-25)
                 # ...and what they said they do NOT care about decides as much as what they do (the owner, 2026-10-27: "if I don't care
                 # about something the system knows it") - read for its meaning, a legacy job by any of its names
                 # ...the whole of it since 2026-10-27 (learned_cut.whole): a line ending `(about: ...)` is about that one sender or topic
-                system += ("\n\nLearned profile - the owner's whole memory: what they care about and what they do not, from their own words "
+                memory = ("\n\nLearned profile - the owner's whole memory: what they care about and what they do not, from their own words "
                            "and their past verdicts, their people, how they work and what they promised. Something they said they do "
                            "not care about is never a task on its own - an fyi at most; the people lines weigh the priority only, never "
                            "whether it is a task; a line ending `(about: ...)` bears only on mail about that sender or topic "
@@ -882,6 +883,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # a FACT about this install, not a rule of judgement: no coding tool is connected, so coding is not a kind it has
             if not coding: system += ('\n\nTHERE IS NO CODING AGENT on this install (no coding tool, or developer mode is off). Never choose '
                                       'kind coding - work that would be coding is general.')
+            # THE CACHED CONTEXT, THEN THE NEW MAIL (the owner, 2026-11-10: "keep the triage context cached and then just the new info should
+            # query it"): the guide and the owner's documents (the same for hours), the playbooks, workstreams and workflows (for days), the
+            # learned memory (a line added at 3pm re-bills only itself) - each a cached block (llm.stable) - and only what follows is this mail's
+            fixed, menus, system = system[:cut], system[cut:], ''
             # WHAT IS THIS MESSAGE'S OWN comes after what every message shares (the owner, 2026-11-10: "32 million tokens?"): the guide, the
             # owner's documents and memory, the playbooks, workstreams and workflows are the same bytes on every mail - the prefix a provider
             # caches - and the evidence picked for this sender and the report's brief differ each time, so they follow
@@ -963,7 +968,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # provider enforces cannot be talked out of by a longer message. `need` is the recheck
             # behind it, for a CLI brain that has no wire to put a schema on - one more ask, naming
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
-            from .llm import ask_json
+            from .llm import ask_json, stable
+            system = stable(fixed, menus, memory, rest=system, ttl='1h')
             answer = ask_json(llm, system, user, want=verdict_schema(candidates, playbooks, same=bool(same_ids), goals=bool(goal_steps),
                                                                      coding=coding, workflows=workflows, earlier=bool(earlier_ids), thread_task=bool(home),
                                                                      notes=bool(note_ids), workstreams=bool(workstreams), watched=watched),

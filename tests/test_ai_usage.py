@@ -235,3 +235,50 @@ def test_an_anthropic_card_marks_the_stable_part_of_each_call_for_the_prompt_cac
     assert step['system'][0]['cache_control'] == llm.EPHEMERAL and step['tools'][-1]['cache_control'] == llm.EPHEMERAL
     assert 'cache_control' not in step['tools'][0] and step['messages'][-1]['content'][-1]['cache_control'] == llm.EPHEMERAL
     assert one['system'][0]['text'] == 'guide ' * 1000 and small['system'] == 'short'
+
+
+def _triage_system(learned='Alex cares about the rota.', who='erin@northwind.example'):
+    from taskuary.triage import classify_intent
+    seen = []
+    def brain(system, user, **kw): seen.append(system); return '{"intent": "fyi", "why": "x"}'
+    classify_intent({'from_email': who, 'subject': 's', 'body': 'b'}, llm=brain, notes=[f'{who}: rota changes are tasks'], learned=learned,
+                    playbooks='- rota: when a rota changes', workflows='- invoices: when an invoice arrives', soul='Alex runs operations.')
+    return seen[0]
+
+
+def test_triage_is_the_cached_context_then_the_new_mail_and_a_learned_line_rebills_only_its_own_block():
+    """The owner, 2026-11-10: "keep the triage context cached and then just the new info should query it". The guide and documents, the
+    menus and the memory are three cached blocks, least often changing first; what is this mail's own follows them."""
+    a, b, c = _triage_system(), _triage_system(who='gail@northwind.example'), _triage_system(learned='Alex cares about the rota. And invoices.')
+    assert isinstance(a, llm.Stable) and len(a.blocks) == 3 and a.ttl == '1h'
+    assert a.blocks == b.blocks and a.rest != b.rest, 'another mail: the same cached blocks, only its own part differs'
+    assert c.blocks[:2] == a.blocks[:2] and c.blocks[2] != a.blocks[2], 'a learned line: only the memory block changes'
+    assert 'rota changes are tasks' in a.rest and 'rota changes are tasks' not in ''.join(a.blocks)
+    assert sum(map(len, a.blocks)) > 20 * len(a.rest), 'nearly all of it is cached'
+
+
+def test_each_card_type_carries_the_cache_the_way_its_provider_takes_it_and_a_refused_marker_is_dropped_once():
+    system = _triage_system()
+    msg = NS(stop_reason='end_turn', model='claude-sonnet-4-5', content=[NS(type='text', text='{}')], usage=None)
+    cli = mock.Mock(); cli.messages.create.return_value = msg
+    with mock.patch('anthropic.Anthropic', return_value=cli): llm.make_llm('anthropic', {'model': 'claude-sonnet-4-5'}, 'k')(system, 'the mail')
+    sent = cli.messages.create.call_args.kwargs['system']
+    assert [x.get('cache_control') for x in sent[:3]] == [{'type': 'ephemeral', 'ttl': '1h'}] * 3 and 'cache_control' not in sent[-1]
+    assert ''.join(x['text'] for x in sent) == system
+    ok = {'choices': [{'message': {'content': '{}'}}], 'usage': {'prompt_tokens': 9, 'completion_tokens': 1}}
+    gw = {'base_url': 'https://ai.northwind.example/v1'}
+    with mock.patch('taskuary.llm.requests.post', return_value=_post(ok)) as post:
+        llm.make_llm('hipaa_ai', gw, 'k')(system, 'the mail')                      # implicit caching: the order alone, no marker
+        assert isinstance(post.call_args.kwargs['json']['messages'][0]['content'], str)
+        llm.make_llm('hipaa_ai', {**gw, 'cache': 'explicit'}, 'k')(system, 'the mail')
+        first = post.call_args.kwargs['json']['messages'][0]['content']
+        assert first[0]['cache_control'] == {'type': 'ephemeral', 'ttl': '3600s'}
+    refused = _post({'error': {'message': 'cache_control is not supported for this model'}}, 400)
+    llm._NO_CACHE.clear()
+    answers, kinds = iter([refused, _post(ok), _post(ok)]), []
+    def post(url, json=None, **kw): kinds.append(type(json['messages'][0]['content']).__name__); return next(answers)
+    with mock.patch('taskuary.llm.requests.post', side_effect=post):
+        brain = llm.make_llm('hipaa_ai', {**gw, 'model': 'flash-x', 'cache': 'explicit'}, 'k')
+        assert brain(system, 'the mail') == '{}' and brain(system, 'the next mail') == '{}'
+    assert kinds == ['list', 'str', 'str'], 'asked again without the marker, and never marked again on this card'
+

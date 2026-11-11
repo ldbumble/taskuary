@@ -18,7 +18,7 @@ def _refused(s):
 
 def test_a_start_refused_for_a_stranger_offers_trust_and_start_not_try_again():
     s = store(); tid, op = _refused(s)
-    chips = concierge.recover(s, op, llm=False)['chips']
+    chips = concierge.recover(s, op)['chips']
     assert chips[0]['label'] == 'Trust and start' and chips[0]['verb'] == 'revise' and chips[0]['params']['trust'] is True
     assert 'retry' not in [c['verb'] for c in chips]
 

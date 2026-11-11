@@ -156,7 +156,7 @@ class OneFailureShapeTests(unittest.TestCase):
         chips = []
         with mock.patch.object(concierge, 'restore_current', return_value=None), mock.patch.object(concierge, 'chips_for', return_value=[]):
             got = concierge.recover(MemoryStore(), {'id': 'x', 'version': 1, 'status': 'error', 'kind': 'task.complete', 'error': 'it broke',
-                                                    'outcome': {'retry': False}}, llm=False)
+                                                    'outcome': {'retry': False}})
         self.assertIn(buttons.label('report_bug'), [c['label'] for c in got['chips']])
         self.assertNotIn(buttons.label('try_again'), [c['label'] for c in got['chips']])
 
@@ -200,7 +200,7 @@ class SendAnywayTests(unittest.TestCase):
         op = {'id': 'x', 'version': 1, 'status': 'error', 'kind': 'review.approve', 'params': {}, 'error': 'delivery unknown',
               'outcome': {'delivery': 'unknown', 'unsent': True, 'rid': it['rid']}}
         with mock.patch.object(concierge, 'restore_current', return_value=None), mock.patch.object(concierge, 'chips_for', return_value=[]):
-            chips = concierge.recover(s, op, llm=False)['chips']
+            chips = concierge.recover(s, op)['chips']
         labels = [c['label'] for c in chips]
         self.assertIn(buttons.label('approve', 'unknown'), labels); self.assertIn(buttons.label('close'), labels)
         self.assertNotIn(buttons.label('try_again'), labels)

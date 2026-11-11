@@ -298,7 +298,7 @@ class ExecutionTests(unittest.TestCase):
         fix = {'label': 'Connect a mailbox', 'href': '#connections=Email'}
         op = {'id': 'x1', 'version': 1, 'kind': 'task.complete', 'status': 'error', 'error': 'no mailbox is connected to send from',
               'outcome': {'fix': fix}}
-        chips = concierge.recover(s, op, llm=False)['chips']
+        chips = concierge.recover(s, op)['chips']
         self.assertIn({'verb': 'go', **fix}, chips)
 
 

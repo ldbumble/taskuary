@@ -5585,20 +5585,19 @@ def receipt(store, op: dict, actor: str = 'owner') -> str:
 
 # the close-out's own other buttons, when GitHub's reading offered them with the refusal (ghcloseout.assess)
 OFFER_WORDS = {'update': 'Update branch', 'rerun': 'Re-run checks', 'anyway': f"{buttons.label('approve', 'action')} anyway"}
-_PICK = re.compile(r'\n?\s*PICK:\s*(\d+)\s*$', re.I)
 
 
-def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
+def recover(store, op: dict, actor: str = 'owner') -> dict:
     """WHAT NOW, after an act that did not happen (the owner, 2026-09-29: "the assistant freezes instead of trying to
     figure out solution"). A failed Close out said "Not done - 403 ..." and offered nothing - no retry, no Mark done, no
     way on - and the model never heard it had failed.
 
-    {'say': the model's sentence or '', 'chips': [...]}. The CHOICES are code's: Try again (never when GitHub named a grant
-    the token lacks, or refused on the pull request's state - a retry only repeats those), GitHub's own offers, the item on
-    the table's own verbs minus the act that just failed, then Next. The model says why and picks ONE of those by number;
-    its pick leads and it can add nothing. `llm=False` skips the model (a phone number press, a test)."""
+    {'chips': [...]}, all code's: the place that fixes it, Try again (never when GitHub named a grant the token lacks, or refused
+    on the pull request's state - a retry only repeats those), GitHub's own offers, the item on the table's own verbs minus the act
+    that just failed, then Next. What went wrong is the failure's own sentence (failures.classify, kept on the op) - never a model
+    asked again about a fact the op already holds (the owner's rules, 2026-11-10)."""
     st, o = op.get('status'), op.get('outcome') or {}
-    if st not in ('error', 'stale'): return {'say': '', 'chips': []}
+    if st not in ('error', 'stale'): return {'chips': []}
     tid = general.dock_task(store, actor)[0]['TaskId']
     try: item = restore_current(store, tid)
     except Exception as e:
@@ -5640,30 +5639,7 @@ def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
     gone = {v for v, row in PROPOSALS.items() if row[0] == op.get('kind')}
     chips += [c for c in chips_for(store, item) if c['verb'] not in gone]
     if not any(c.get('verb') == 'next' for c in chips): chips.append({'verb': 'next', 'label': CHIP_WORDS['next']})
-    say = ''
-    b = _brain_for(store, tid, llm) if llm is not False and item else None
-    if b:
-        moves = '\n'.join(f"{i} · {c['label']}" for i, c in enumerate(chips, 1))
-        what = describe_op(store, op)[0]
-        instruction = (f'The owner just confirmed "{what}" on this item and it DID NOT happen. What came back: {op.get("error") or st}.\n'
-                       'In one or two short sentences, in plain words: what went wrong and what would fix it - if it is something '
-                       'only the owner can change (a permission, a setting), say where. Then recommend ONE of these moves:\n'
-                       f'{moves}\nNever promise anything those moves do not do. End with a line PICK: <number>.')
-        try:
-            # not _ask (this instruction is not an introduction); its one check still holds here - another task named is dropped
-            said = str(b(_system(store, b), f"THE ITEM ON THE TABLE - speak only about this one:\n{facts(store, item)}\n\n{instruction}",
-                         max_tokens=MAX_TOKENS) or '').strip()
-            said = gate(parse_decision(said)[0])[0]
-            if off_subject(said, item): said = ''
-            m = _PICK.search(said or '')
-            say = _PICK.sub('', said or '').strip()
-            # ...and a bare acknowledgement explains nothing: "Not sent - ... where it was. Ok." (the 2026-10-22 re-walk)
-            if len(re.sub(r'[^\w\s]', '', say).split()) <= 2: say = ''
-            k = int(m.group(1)) if m else 0
-            if 1 <= k <= len(chips): chips = [chips[k - 1]] + [c for i, c in enumerate(chips) if i != k - 1]
-        except Exception as e:
-            logger.info(f'recover: the model did not answer about the failure - {e}'); say = ''
-    return {'say': say, 'chips': chips}
+    return {'chips': chips}
 
 
 def on_table(store, op: dict) -> bool:
@@ -5810,7 +5786,7 @@ def _stamp_next(store, dock_tid: int, key: str, label: str = None, row: dict = N
         logger.debug(f'concierge: Next left no badge on {key} - {e}'); return False
 
 
-def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = False, press: bool = False) -> dict:
+def receipt_turn(store, op: dict, actor: str = 'owner', table: bool = False, press: bool = False) -> dict:
     """The receipt AND, when it did not happen, its way on (recover): {'say': line, 'chips': [...]}. The chips ride on the
     recorded line, so the desktop draws them under it and the phone numbers them. `press`: a button pressed on the desk (the operations
     road, Remind me) - one that went through is stamped on its item's card (_stamp_pressed), never a line of its own."""
@@ -5848,8 +5824,7 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
     own = _chat_proposed(store, dock_tid, op.get('id')) or (table and not press)
     if st != 'done':
         if not own: return {'say': line, 'chips': []}
-        way = recover(store, op, actor, llm)
-        line = f"{line} {way['say']}".strip()
+        way = recover(store, op, actor)
         # a NOTE kind (AssistantView NOTE_KINDS): the sentence shows and the chips sit under it - an item kind hid the words
         record(store, dock_tid, 'assistant', line, {'kind': 'words', 'key': None, 'title': label, 'chips': way['chips'],
                                                    'tid': None, 'ref': ref or None})

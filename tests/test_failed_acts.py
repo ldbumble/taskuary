@@ -44,7 +44,7 @@ class AFailedSendIsNotDoneTests(unittest.TestCase):
 
 
 def failed_send(s, tid, rid, item, p, model=None):
-    """Confirm the reply with the send throwing, the model (when given) answering about it."""
+    """Confirm the reply with the send throwing; a model, when given, stands by - it is never asked about the failure."""
     from taskuary import concierge
     with mock.patch('taskuary.outbound.reply_to_message', side_effect=RuntimeError('SMTP 550 mailbox unavailable')), \
          mock.patch.object(concierge, 'brain', return_value=(lambda *a, **k: model) if model else None):
@@ -52,24 +52,20 @@ def failed_send(s, tid, rid, item, p, model=None):
 
 
 class AFailureCarriesItsWayOnTests(unittest.TestCase):
-    """The choices are code's; the model only says why and picks one of them."""
+    """The choices are code's, and so are the words: the failure's own sentence."""
     def test_the_failure_offers_try_again_the_items_other_verbs_and_next_never_the_act_that_failed(self):
         s = store(); got = failed_send(s, *drafted(s))
         verbs = [c['verb'] for c in got['chips']]
         self.assertEqual(verbs[0], 'retry'); self.assertIn('next', verbs); self.assertNotIn('approve', verbs)
         self.assertIn('close', verbs)                                              # Mark done: the way out that always works
 
-    def test_the_models_pick_leads_and_its_sentence_follows_the_fact(self):
+    def test_what_went_wrong_is_the_failures_own_sentence_never_a_model_asked_again(self):
+        # a model was asked "what went wrong and what fixes it" over a failure the op already words (failures.classify): two wordings of
+        # one fact, and a model call where a stored fact answers (the owner's rules, 2026-11-10)
         s = store(); tid, rid, item, p = drafted(s)
-        got = failed_send(s, tid, rid, item, p, model='Their mail server bounced it - the address may be wrong. Mark it done and ring them.\nPICK: 3')   # Try again, Redraft it, Mark done
-        self.assertIn('bounced', got['receipt']); self.assertNotIn('PICK', got['receipt'])
-        self.assertTrue(got['receipt'].startswith('Not sent'))
-        self.assertEqual(got['chips'][0]['verb'], 'close')
-
-    def test_a_pick_the_model_made_up_changes_nothing(self):
-        s = store(); tid, rid, item, p = drafted(s)
-        got = failed_send(s, tid, rid, item, p, model='Something went wrong.\nPICK: 99')
-        self.assertEqual(got['chips'][0]['verb'], 'retry')
+        got = failed_send(s, tid, rid, item, p, model='Their mail server bounced it - the address may be wrong.\nPICK: 3')
+        self.assertTrue(got['receipt'].startswith('Not sent - '), got['receipt']); self.assertIn('SMTP 550', got['receipt'])
+        self.assertNotIn('bounced', got['receipt']); self.assertEqual(got['chips'][0]['verb'], 'retry')
 
     def test_try_again_runs_the_same_confirmation_and_lands_it(self):
         s = store(); tid, rid, item, p = drafted(s)
@@ -83,7 +79,7 @@ class AFailureCarriesItsWayOnTests(unittest.TestCase):
         s = store(); tid, rid, item, p = drafted(s)
         s.update_operation(p['id'], {'Status': 'error', 'Error': 'the GitHub token may not merge #7 - it needs Contents: write',
                                      'OutcomeJson': json.dumps({'needs': 'Contents: write', 'rid': rid})})
-        way = concierge.recover(s, operations.get(s, p['id']), llm=False)
+        way = concierge.recover(s, operations.get(s, p['id']))
         self.assertNotIn('retry', [c['verb'] for c in way['chips']])
 
 
@@ -97,7 +93,7 @@ class ThePhoneNumbersTheWayOnTests(unittest.TestCase):
              mock.patch.object(concierge, 'brain', return_value=None):
             text = ra._ran(s, p, concierge.run_proposal(s, operations.get(s, p['id'])), item, 'owner')
         self.assertIn('Not sent', text); self.assertIn('Reply with one of:', text); self.assertIn('1 · Try again', text)
-        rows = dict(ra.recovery_rows(s, concierge.recover(s, operations.get(s, p['id']), llm=False)['chips']))
+        rows = dict(ra.recovery_rows(s, concierge.recover(s, operations.get(s, p['id']))['chips']))
         with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['craig@vendor.com'], 'cc': []}):
             said = ra.run_act(s, rows['Try again'], item)
         self.assertTrue(said.startswith('Done'), said); self.assertIn(s.get_review(rid)['Status'], ('approved', 'edited'))

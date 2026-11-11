@@ -8,6 +8,9 @@ import { asUtc } from "./dates.js";
 
 // a turn the thread on screen draws as live: this pane's own stream (running), or the server's turn read from its trace (`live-` rows)
 export const live = (m) => m?.status?.type === "running" || String(m?.id || "").startsWith("live-");
+// ...and one that has drawn NOTHING yet - no word, no step: its head is the pane's own (AtWorkHead), under his newest line, as a coding chat's live
+// turn is no row until its first step (the side-by-side walk, 2026-11-11: an empty "AGENT · Along the way" stood over a line typed mid-turn)
+export const bare = (m) => m?.role === "assistant" && live(m) && !(m.content || []).some((p) => p.type === "data" || String(p.text || "").trim());
 const answers = (ms) => (ms || []).filter((m) => m?.role === "assistant").length;
 
 // what the press keeps, before any request goes: when, and how many answers the thread had then

@@ -77,3 +77,15 @@ test("a line whose start was held has no running head under it, its hold said in
   assert.deepEqual(drawn(thread, { held: true }), ["u1"], "held: nothing is running");
   assert.deepEqual(drawn(thread, { held: true, busy: true }), ["u1", "pending"], "...until a run is at work after all");
 });
+
+// THE SIDE-BY-SIDE WALK, 2026-11-11: the general chat's streamed turn stood as an empty "AGENT · Along the way" over a line typed mid-turn, where
+// a coding chat draws no row for a turn before its first step - a turn that has drawn nothing is the pane's head under his newest line
+test("a live turn with no word and no step is bare; one with either, or a turn that answered, is not", async () => {
+  const { bare } = await import("../src/pendingTurn.js");
+  assert.equal(bare({ id: "a", role: "assistant", status: { type: "running" }, content: [] }), true);
+  assert.equal(bare({ id: "a", role: "assistant", status: { type: "running" }, content: [{ type: "text", text: " " }] }), true);
+  assert.equal(bare({ id: "a", role: "assistant", status: { type: "running" }, content: [{ type: "data", name: "agent_parts", data: { parts: [] } }] }), false);
+  assert.equal(bare(agent("live-s-1", "Read the vendor list.")), false);
+  assert.equal(bare(agent("a1", "")), false, "an answered turn is no live one");
+  assert.equal(bare(you("u1", "")), false);
+});

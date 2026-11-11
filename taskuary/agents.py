@@ -1989,8 +1989,9 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         limit = rate_limited(said)
         if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
         if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
-        raise RuntimeError(f'{name}: {said[:500]}')
-    aiusage.claude_result(final)                       # a turn that failed still used what it used
+        # ...a turn its CLI died in says so in the one sentence an ACP agent's death says too (acp.py), no process name before it
+        raise RuntimeError(said[:500] if said.startswith(clipool.MID_TURN) else f'{name}: {said[:500]}')
+    aiusage.claude_result(final)                      # a turn that failed still used what it used
     if final.get('is_error'):
         said = str(final.get('result') or final.get('subtype') or 'the CLI reported an error')
         limit = rate_limited(raw) or rate_limited(said)

@@ -10,7 +10,7 @@ test("an agent whose steps stream into the thread says it is working once, not a
   const ws = read("GeneralWorkspace.jsx");
   assert.match(ws, /const atWork = dock \? <Thinking provider=\{provider\} \/> : <AtWork /);
   assert.match(ws, /return folded && level !== "summary" \? null : <AgentBand \{\.\.\.props\} since=/);
-  assert.match(ws, /<ThreadPrimitive\.If running>\s*<WhileLines feed=\{feed\} waits=\{false\}>\{atWork\}<\/WhileLines>/);
+  assert.match(ws, /<ThreadPrimitive\.If running>\s*<WhileLines feed=\{feed\} waits=\{false\}>\{chat \? <BareHead or=\{pressedAt\}>\{atWork\}<\/BareHead> : atWork\}<\/WhileLines>/);
   assert.match(ws, /\{dock \? serverBusy && atWork\s*: <PendingTurn busy=\{serverBusy\}/);
 });
 

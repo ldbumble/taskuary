@@ -12,7 +12,7 @@ test("a running turn says so, whichever backend is answering", () => {
   // The DOCK says it with the dots it always had; a work window with ONE QUIET LINE, "Working on this…" (the closeout-in-chat spec,
   // 2026-11-04) - folded over the turn's steps once they stream in (WorkSteps), on its own until then (AtWork -> AgentBand)
   assert.match(view, /const atWork = dock \? <Thinking provider=\{provider\} \/> : <AtWork name=\{name\}/);
-  assert.match(view, /<ThreadPrimitive\.If running>\s*<WhileLines feed=\{feed\} waits=\{false\}>\{atWork\}<\/WhileLines>/);
+  assert.match(view, /<ThreadPrimitive\.If running>\s*<WhileLines feed=\{feed\} waits=\{false\}>\{chat \? <BareHead or=\{pressedAt\}>\{atWork\}<\/BareHead> : atWork\}<\/WhileLines>/);
   assert.match(view, /\{dock \? serverBusy && atWork\s*: <PendingTurn busy=\{serverBusy\}/);
   assert.match(view, /serverBusy=\{busy \|\| codingBusy\} provider=\{coding \? cc\.live\?\.cli \|\| "" : session\?\.provider \|\| pickedLabel\} name=\{name\}/);
   assert.match(view, /const Thinking = \(/);

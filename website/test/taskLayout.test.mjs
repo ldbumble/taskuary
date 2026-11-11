@@ -350,7 +350,8 @@ test("every kind with a chat opens on it, Came from folded thin; one with none o
     assert.equal(homeSection(kind, "to_reply", false), "from", kind);
   }
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /const anyChat = !!term\?\.alive \|\| hasRecord \|\| t\?\.Kind === "general" \|\| \/\^agent:\/\.test\(String\(t\?\.Assignee \|\| ""\)\)/,
-    "a task given to an agent opens on its chat before the agent says a word");
+  // ...a coding job's as a general one's: a coding task no session had touched opened on Came from with no box (the side-by-side walk, 2026-11-11)
+  assert.match(page, /const anyChat = !!term\?\.alive \|\| hasRecord \|\| \["general", "coding"\]\.includes\(t\?\.Kind\) \|\| \/\^agent:\/\.test\(String\(t\?\.Assignee \|\| ""\)\)/,
+    "a task given to an agent - general or coding - opens on its chat before the agent says a word");
   assert.match(page, /const closedW = \(k\) => \(k === "from" \|\| \(sessionView && k !== "agent"\) \? MINI_W : tabW\(bodyW\)\);/);
 });

@@ -22,6 +22,15 @@ class TypeToCarryOn(unittest.TestCase):
         for said in (clipool.MID_TURN, general.timed_out_line()): self.assertNotIn('Continue', said)
         self.assertIn('type to carry on', clipool.MID_TURN)
 
+    def test_a_cli_that_died_mid_turn_says_it_as_the_coding_chat_does(self):
+        """The side-by-side walk, 2026-11-11: the coding chat said "the agent stopped in the middle of its turn ...", the general chat the same
+        sentence led by "claude:" - one fact, one sentence, no process name."""
+        from taskuary import agents
+        with mock.patch.object(clipool, 'run', side_effect=clipool.Ended(f'{clipool.MID_TURN} (the CLI exited (3))')):
+            with self.assertRaises(RuntimeError) as got:
+                agents._run_live({}, 'claude', ['claude'], 'hi', lambda *a: None, 'task:1', None, None, None)
+        self.assertTrue(str(got.exception).startswith(clipool.MID_TURN), str(got.exception))
+
     def test_a_check_back_that_could_not_wake_the_agent(self):
         with mock.patch.object(general, 'session_for', return_value=None), \
              mock.patch.object(general, 'start_session', side_effect=RuntimeError('the CLI is signed out')):

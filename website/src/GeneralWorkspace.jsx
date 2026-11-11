@@ -65,7 +65,7 @@ import { hint as btnHint, label as btn } from "./buttons.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
 import { starting as startingLine } from "./laneSays.js";
-import { live, pendingTurn, sentNow, settled, turnOver } from "./pendingTurn.js";
+import { bare, live, pendingTurn, sentNow, settled, turnOver } from "./pendingTurn.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import ConnectAi from "./ConnectAi.jsx";
@@ -525,6 +525,8 @@ const AtWorkHead = ({ or, children }) => {
     return i < 0 ? null : turnFrom(ms[i].metadata?.custom?.since, turnBegan(ms.slice(0, i).map((m) => m.createdAt))); });
   return <TurnHead start={start ?? or}>{children}</TurnHead>;
 };
+// ...and the turn this pane streams, while it has drawn nothing (pendingTurn.bare): the same head, as a coding chat's turn before its first step
+const BareHead = ({ or, children }) => (useAuiState((s) => bare(s.thread.messages.at(-1))) ? <AtWorkHead or={or}>{children}</AtWorkHead> : children);
 // WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
 // each answer in a chat task, its time and the time from what it answered (the message before it) to the answer
 // ...and WHILE IT RUNS, ONE CLOCK (the owner, 2026-11-06): "Working on this… 3s" under it - the head's own "working 0:03" was a second one
@@ -579,6 +581,9 @@ const AssistantMessage = () => {
   const answered = turnAnswered(words);
   const said = custom?.summary && !answered
     ? [custom.summary.about, custom.summary.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : words;
+  // ...a turn that has drawn nothing yet is no row of its own: its head stands under his newest line (BareHead), never an empty one over it
+  const empty = useAuiState((s) => chat && bare(s.message));
+  if (empty) return null;
   return (
     <MessagePrimitive.Root className={`tq-aui-message tq-aui-agent${chat && said ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-chat-line={id}
       data-tq-turn-goes-on={more ? "" : undefined}>
@@ -853,8 +858,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
       const took = () => { if (!gone) { gone = true; onClearAttachments(sentFiles); } };
       const events = [];
       // ..."Started Claude Code (on this computer)" only on the conversation's first turn: it opened every follow-up the owner typed
-      // (the desktop stress test, 2026-11-03)
-      const keepStart = !runMessages.some((m) => m.role === "assistant");
+      // (the desktop stress test, 2026-11-03) - and in the dock only, as the server's copy keeps it (messagesWithTrace): in a task's chat
+      // the head and its starting line say it, and the note alone drew an empty "Along the way ▸" (the side-by-side walk, 2026-11-11)
+      const keepStart = dock && !runMessages.some((m) => m.role === "assistant");
       const content = (reply) => [...stepsPart(events, { answer: reply || "", keepStart }), ...(reply ? [{ type: "text", text: reply }] : [])];
       // A run that fails has to SAY so, here, under the question. Thrown out of the adapter it
       // is swallowed: the owner sees their own message and nothing after it, which is
@@ -896,7 +902,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
         onBusyChange?.(false);
       }
     },
-  }), [attachmentsRef, onBusyChange, onClearAttachments, onEnded, onSent, onStarted, selectionRef, task.TaskId]);
+  }), [attachmentsRef, dock, onBusyChange, onClearAttachments, onEnded, onSent, onStarted, selectionRef, task.TaskId]);
   const runtime = useLocalRuntime(modelAdapter, { initialMessages: initial(messages) });
   /* WHAT ARRIVED WHILE YOU WERE TYPING goes into the thread that is already standing. This used to
      be a key bump, which remounts - and the draft lives in the composer INSIDE this runtime, so the
@@ -1091,7 +1097,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           )}
           <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
           <ThreadPrimitive.If running>
-            <WhileLines feed={feed} waits={false}>{atWork}</WhileLines>
+            <WhileLines feed={feed} waits={false}>{chat ? <BareHead or={pressedAt}>{atWork}</BareHead> : atWork}</WhileLines>
           </ThreadPrimitive.If>
           {/* the answer is being written somewhere else - another tab, or this pane before it was
               reopened - and the poll is what tells us so */}
@@ -1568,7 +1574,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""} queued={chat && !dock ? queued : null} heldStart={chat && !dock ? heldStart : null}
         road={road} cards={codingCards} landing={chat && !dock ? landing : null} turnCards={chat && !dock ? turnCards : null} turns={cardTurns} stopShown={coding && acp && !!cc.live?.working}
-        placeholder={coding ? (closedTask ? "Write to pick it back up…" : cc.live ? MESSAGE : "Write to pick the session back up…") : ""}
+        placeholder={coding ? (closedTask ? "Write to pick it back up…" : cc.live || !cc.got?.sessions?.length ? MESSAGE : "Write to pick the session back up…") : ""}
         hint={!coding ? "" : acp ? (cc.live.working ? "Enter sends it when this turn ends · Shift+Enter adds a line" : "Enter sends it to the agent · Shift+Enter adds a line")
           : cc.live ? "Enter types it into the running agent · Shift+Enter adds a line" : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}
         empty={coding && cc.got ? (cc.live ? "The agent is starting - its turns show here as it works." : "No session has run on this task yet - write below to start one.") : ""}

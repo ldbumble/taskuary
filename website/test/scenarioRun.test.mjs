@@ -34,7 +34,7 @@ test("Working on this… counts from the turn's own start", () => {
 // the 0.3.11.40 release run drew the thinking row over the line just typed)
 test("lines typed mid-turn are drawn over the turn's working line", () => {
   const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  const i = ws.indexOf("<ThreadPrimitive.Messages components"), a = ws.indexOf("waits={false}>{atWork}", i), h = ws.indexOf("<FootLines ", i), z = ws.indexOf("waits>{dock ? atWork : <AtWorkHead", i);
+  const i = ws.indexOf("<ThreadPrimitive.Messages components"), a = ws.indexOf("waits={false}>{chat ? <BareHead or={pressedAt}>{atWork}", i), h = ws.indexOf("<FootLines ", i), z = ws.indexOf("waits>{dock ? atWork : <AtWorkHead", i);
   assert.ok(i > 0 && a > i && h > a && z > h, "messages, the running line while no line waits, the held lines, then the running line under them");
 });
 

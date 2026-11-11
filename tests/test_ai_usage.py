@@ -282,3 +282,14 @@ def test_each_card_type_carries_the_cache_the_way_its_provider_takes_it_and_a_re
         assert brain(system, 'the mail') == '{}' and brain(system, 'the next mail') == '{}'
     assert kinds == ['list', 'str', 'str'], 'asked again without the marker, and never marked again on this card'
 
+
+def test_the_settings_page_reads_what_the_ai_did_today_and_the_ceiling():
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    s = MemoryStore(); rid = brainroute.Lazy(s, brainroute.Route('triage', 'light', 'connector:1', '', 'light', [], 'fixed', 'test'))
+    aiusage.record(s, rid(), 900, {'in': 16000, 'cached': 15000, 'out': 200})
+    with mock.patch.object(server, 'store', s):
+        got = TestClient(server.app).get('/api/ai/today').json()
+    assert got['jobs']['triage'] == {'calls': 1, 'in': 16000, 'cached': 15000, 'out': 200}
+    assert (got['calls'], got['ceiling'], got['held']) == (1, brainroute.AUTO_CAP, '')
+

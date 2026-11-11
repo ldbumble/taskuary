@@ -12034,6 +12034,16 @@ def ai_routes(task: int = None, limit: int = 20):
     return {'routes': store.brain_routes(task, limit=max(1, min(int(limit), 200)))}
 
 
+@app.get('/api/ai/today')
+def ai_today():
+    """WHAT THE AI DID TODAY (the owner, 2026-11-10: "they spent 25 dollars in one day?"): calls and tokens in, of which cached, and out, by
+    job - every call counted, an agent's every step too - and the day's ceiling for work nobody asked for, with how much of it is used."""
+    from . import aiusage, brainroute as br
+    v = str(store.get_setting(br.AUTO_CAP_KEY) or '').strip()
+    return {'jobs': aiusage.today(store), 'calls': br.calls_today(store), 'ceiling': int(v) if v.isdigit() else br.AUTO_CAP,
+            'held': br.auto_held(store)}
+
+
 @app.get('/api/tasks/{tid}/ai-used')
 def task_ai_used(tid: int):
     """Every AI call and agent run on this task - when, the job, model, quick/normal/hard, tokens and time - for its "AI used" fold."""

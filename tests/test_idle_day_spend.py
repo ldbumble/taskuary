@@ -22,7 +22,8 @@ def drip(n=120):
         body = (f'Hi Alex, are you around on Tuesday for the rota? ({i})' + (' And can you send me the figures from last month?' if i % 16 == 0 else '')
                 if q else f'This week at Payworth: release notes {i}. ' * 30)
         yield {'external_id': f'idle-{i}', 'channel': 'email', 'conversation_id': f'conv-{i}', 'source_name': ME, 'sent_at': at,
-               'subject': f'Quick question {i}' if q else f'Payworth news {i}', 'from_email': who[1], 'from_name': who[0], 'body': body}
+               'subject': f'Quick question {i}' if q else f'Payworth news {i}', 'from_email': who[1], 'from_name': who[0], 'body': body,
+               **({} if q else {'sender_class': 'bulk'})}            # a list's own headers say so (categories.header_class)
 
 
 # what a card agent's tools typically answer: a mail search of ten hits, a message read whole, a 20 KB file (cut at apiagent.CAP)
@@ -97,7 +98,7 @@ def store():
 
 # per caller, for the day above: (calls, est. tokens). Triage is one call a mail; an agent turn of ten look-ups is eleven calls; the
 # Advisor looks where something moved - once here, since nothing does after the mail
-CEILING = {'triage': (125, 2_200_000), 'quick_work': (16, 130_000), 'general': (8 * 12, 1_800_000), 'advisor': (3, 60_000)}
+CEILING = {'triage': (20, 320_000), 'quick_work': (16, 130_000), 'general': (8 * 12, 1_500_000), 'advisor': (3, 60_000)}
 
 
 def test_an_idle_day_calls_the_model_only_for_what_arrived():
@@ -134,9 +135,23 @@ def test_past_the_days_ceiling_nothing_starts_by_itself_the_bell_says_why_and_th
     s = store(); s.set_setting(brainroute.AUTO_CAP_KEY, '500', 't')
     s.add_brain_route({'At': time.strftime('%Y-%m-%d %H:%M:%S'), 'Job': 'general', 'Pick': 'connector:1', 'Tier': 'standard', 'Calls': 500})
     spent = day(s, n=17, looks=3)
-    assert 'general' not in spent and 'quick_work' not in spent and spent['triage'][0] == 17, spent      # mail is still read; nobody started
+    assert 'general' not in spent and 'quick_work' not in spent and 0 < spent['triage'][0] <= 17, spent      # mail is still read; nobody started
     assert 'advisor' not in spent and assistant.run(s, force=True)['ran'], 'the clock waits; Run now is the owner asking'
     bell = [p for p in problems.collect(s) if p['key'] == 'auto_ai_cap']
     assert len(bell) == 1 and '500' in bell[0]['detail'] and 'what you ask for still runs' in bell[0]['detail']
     assert any('daily limit' in c['Body'] for t in s.list_tasks() for c in s.list_comments(t['TaskId'])), 'the task says why no agent started'
     assert 'daily limit' not in str(ingest.auto_start_ok(s, {}, None, 'general', own=True)[1]) and assistant.run(s)['held']
+
+
+def test_a_notice_like_the_last_three_is_filed_as_they_were_without_a_call_and_a_correction_hands_it_back():
+    "Rung one of the ladder (the owner, 2026-11-10: \"the ai limits as much as possible to use ai\"): nothing cheaper answers? then the model."
+    s = store()
+    spent = day(s, n=24, looks=0)
+    assert spent['triage'][0] == 3 + 3, spent           # three questions; three of the newsletter, then its verdict is reused
+    rows = s._rows("SELECT VerdictJson FROM route WHERE VerdictJson LIKE '%reused%'")
+    assert len(rows) == 18 and all('no AI call' in json.loads(r['VerdictJson'])['why'] for r in rows)
+    s._exec("INSERT INTO correction (MessageId, Sender, Verdict, Change, CreatedAt) VALUES (1, 'news@vendor.example', 'fyi', 'task', ?)",
+            (time.strftime('%Y-%m-%d %H:%M:%S'),))
+    m = {**next(drip(2)), 'external_id': 'later', 'from_email': 'news@vendor.example', 'subject': 'Payworth news 99', 'sender_class': 'bulk'}
+    assert ingest.reused_verdict(s, m) is None, 'the owner pressed otherwise: the model reads it again'
+    assert ingest.reused_verdict(s, {**m, 'sender_class': None}) is None, 'a person writing is never filed by its look'

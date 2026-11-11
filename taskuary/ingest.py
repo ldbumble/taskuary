@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 from . import kinds as task_kinds
 from .timewords import plural
-from .routing import first_line, draft_task_fields
+from .routing import first_line, draft_task_fields, norm_subject
 from .policy import evaluate
 from .triage import agent_words, classify_intent, person_name, sender_called, wrapper_of
 from .store import task_ref, auto_code_enabled, _now
@@ -578,6 +578,34 @@ def invite_verdict(store, msg: dict) -> dict | None:
                        + (f' It {clash}.' if clash else '') + ' Accept, decline or propose a new time.'}
 
 
+# A NOTICE LIKE THE LAST ONES IS FILED AS THEY WERE, WITHOUT A CALL (the owner, 2026-11-10: "the ai limits as much as possible to use ai"):
+# a list or a system that mails the same notice every day had it read by the model every day. Where the mail's own headers say a system or a
+# list sent it (never a person's hand-written mail), and the last REUSE_AFTER verdicts on that address and subject shape were all the same
+# filing - none of them, nor anything since from that sender, corrected by the owner - the stored verdict is that mail's too, marked
+# `reused` on its route so it can be seen and undone. A new sender, a changed subject, a task among them, or a correction: the model reads it
+REUSE_AFTER, REUSABLE = 3, ('fyi', 'ignore', 'watch')
+_SHAPE = re.compile(r'\d+')
+def subject_shape(s) -> str: return ' '.join(_SHAPE.sub('#', norm_subject(s)).split())
+
+
+def reused_verdict(store, msg: dict) -> dict | None:
+    who, cls = str(msg.get('from_email') or '').strip().lower(), msg.get('sender_class')
+    if not who or cls not in ('automated', 'bulk') or msg.get('file_text') or msg.get('images') or msg.get('idea_context'):
+        return None
+    shape = subject_shape(msg.get('subject'))
+    rows = store._rows("SELECT r.RouteId, r.VerdictJson, r.CreatedAt, m.Subject FROM route r JOIN message m ON m.MessageId=r.MessageId WHERE "
+                       "lower(m.FromEmail)=? AND m.SenderClass IN ('automated','bulk') AND IFNULL(r.VerdictJson,'')<>'' ORDER BY r.RouteId DESC LIMIT 30", (who,))
+    same = [r for r in rows if subject_shape(r['Subject']) == shape][:REUSE_AFTER]
+    if len(same) < REUSE_AFTER: return None
+    try: vs = [json.loads(r['VerdictJson']) for r in same]
+    except ValueError: return None
+    if len({v.get('intent') for v in vs}) != 1 or vs[0].get('intent') not in REUSABLE: return None
+    if store._one('SELECT 1 x FROM correction WHERE lower(Sender)=? AND CreatedAt>=? LIMIT 1', (who, str(same[-1]['CreatedAt'] or ''))): return None
+    v = {k: x for k, x in vs[0].items() if k not in ('notes', 'notes_applied', 'related_message_ids', 'existing_task_id', 'same_as')}
+    return {**v, 'title': str(msg.get('subject') or v.get('title') or '')[:200], 'summary': str(msg.get('subject') or '')[:300], 'reused': True,
+            'why': f"filed as the last {REUSE_AFTER} like it from {who} were - their verdict reused, no AI call ({str(v.get('why') or '')[:120]})"}
+
+
 def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]:
     """What IS this message - triage's verdict, with everything around the message as evidence:
     the standing notes, who else has spoken on the thread, what the assistant already said about
@@ -586,6 +614,7 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     One brain, one question, wherever the message landed: a reply that joins an open task gets
     judged exactly like one that opens a new one (the owner, 2026-09-03: "the triage should
     realize that")."""
+    if (v := reused_verdict(store, msg)) is not None: return {**v, 'notes': [], 'notes_left': 0}, {}
     fail = {}
     # **kw, not two positional args: a message with a picture on it calls the brain
     # as llm(system, user, images=[...]) - a screenshot of the error IS the request

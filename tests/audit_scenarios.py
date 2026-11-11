@@ -395,6 +395,8 @@ def world(backend: str, tmp: Path, monkeypatch):
                 from taskuary import outputs
                 shutil.rmtree(outputs.folder(t), ignore_errors=True)     # ...and the files it made: the folder is named by the task's number too
             clipool.close('')
+            from taskuary import funnel
+            funnel.invalidate()                       # ...and the rail it built: the next test's store is not this one
             MARK.unlink(missing_ok=True)
 
 
@@ -445,7 +447,8 @@ def broken(r: Run) -> list:
 
 
 # ...BUT FOR WHAT IS THE BACKEND'S OWN: the instant a press or a mail lands, whether its start is up yet or its stop has bitten (a CLI is killed
-# under its turn at once, an AI card's call runs out before it is dropped) - the steps right after one read `working` by the backend's clock
+# under its turn at once, an AI card's call runs out before it is dropped) - the steps right after one read `working`, the chip, the status and
+# the row's light by the backend's clock
 OWN = ('arrive', 'Remind me', 'a monitor', 'a stranger', 'a known', 'Erin writes', 'a second', 'arrives to')
 def normal(s: dict) -> dict:
     "A snapshot as two backends must read alike: what the page draws and lights, the cards by kind and place."
@@ -453,7 +456,7 @@ def normal(s: dict) -> dict:
     own = s['step'].startswith(OWN)
     return {'step': s['step'], 'lines': s['lines'], 'said': s['said'], 'events': s['events'], 'working': None if own else s['working'], 'waiting': s['waiting'],
             'asking': s['asking'], 'cards': [(kind(c['kind']), c['status'], c['turn'], c['passed']) for c in s['cards'] if live(c) or c['status'] != 'pending'],
-            'status': s['status'], 'chip': None if own else s['chip'], 'lit': s['lit'], 'told': sorted(set(re.findall(r'^([A-Z][A-Z \'-]{6,}?)(?: -|:|\()', s['told'], re.M)))}
+            'status': None if own else s['status'], 'chip': None if own else s['chip'], 'lit': None if own else s['lit'], 'told': sorted(set(re.findall(r'^([A-Z][A-Z \'-]{6,}?)(?: -|:|\()', s['told'], re.M)))}
 
 
 def parity(snaps: dict) -> list:

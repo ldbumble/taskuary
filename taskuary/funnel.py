@@ -691,9 +691,11 @@ def idle_state(store, tid, st=None) -> dict:
     # ...and a start refused for a stranger's words since (ingest.held_start) is that same hold, its Trust presses with it - never "couldn't
     # start" over a Trust nowhere to press (the owner, 2026-11-10: "this is also weird bug?")
     from .ingest import HOLD_TAG, NOT_STARTED
-    if HOLD_TAG in st.tags and (said := next((str(c['Body']) for c in reversed(store.list_comments(tid) or []) if str(c.get('Body') or '').startswith(NOT_STARTED)), '')):
+    refused = lambda: next((_cap(_sentence(str(c['Body'])[len(NOT_STARTED):])) for c in reversed(store.list_comments(tid) or [])
+                            if str(c.get('Body') or '').startswith(NOT_STARTED)), '')
+    if HOLD_TAG in st.tags and (said := refused()):
         from .senders import trust_offer
-        return {**out('held', f'Waiting for you. {said[len(NOT_STARTED):].strip()}' + old, 'held for you - not started'), 'trust': trust_offer(store, tid)}
+        return {**out('held', f'Waiting for you. {said}' + old, 'held for you - not started'), 'trust': trust_offer(store, tid)}
     if not auto_code_enabled(store) and (t.get('Kind') or '') == 'coding':
         return out('held', f'Waiting for you. Starting {agent} by itself is switched off, so it waits for you.' + old,
                    'held for you - not started')
@@ -703,6 +705,9 @@ def idle_state(store, tid, st=None) -> dict:
     if (live := live_session_state(tid, agent)): return out('live', *live)
     if lifted: return out('idle', f'Not started yet. The sender is trusted now - start {agent} when you want it; what was held never starts by itself.' + old,
                           'not started yet')
+    # ...and ANY START REFUSED ON ITS WAY IN says its reason here, as the log line that refused it did (ingest.not_started): a reply owed held
+    # by the day's ceiling, a switch or no AI read "Nothing has started the agent on this" in the box while the line under it said why
+    if not st.runs and not st.events and (said := refused()): return out('held', f'Waiting for you. {said}' + old, 'held for you - not started')
     return out('idle', f'Not started yet. Nothing has started {agent} on this.' + old, 'not started yet')
 
 
@@ -800,15 +805,12 @@ def agent_story(store, tid) -> dict | None:
 
 
 def no_agent_why(store, t: dict) -> str:
-    """Why no agent works a task of a kind no agent works (task, reply): the newest "No agent started:" line written on it
-    (ingest.not_started), else the ending its route recorded (ingest's `act`, the route reason's last clause). '' for agent work."""
+    """Why no agent works a task of a kind no agent works (task, reply): the ending its route recorded (ingest's `act`, the route reason's
+    last clause) - a start refused on it since is its hold (idle_state). '' for agent work."""
     from . import general
     from .ingest import NOT_STARTED
     if not t or t.get('Kind') in task_kinds.AGENT or general.handles(t): return ''
-    tid = t['TaskId']
-    said = next((str(c['Body']) for c in reversed(store.list_comments(tid) or []) if str(c.get('Body') or '').startswith(NOT_STARTED)), '')
-    if said: return said
-    r = next((r for r in reversed(store.list_routes(tid) or []) if r.get('Decision') != 'attach' and r.get('Reason')), None)
+    r = next((r for r in reversed(store.list_routes(t['TaskId']) or []) if r.get('Decision') != 'attach' and r.get('Reason')), None)
     tail = str(r['Reason']).rsplit(' · ', 1)[-1].strip().rstrip('.') if r else ''
     return f'{NOT_STARTED} {tail}.' if tail else ''
 

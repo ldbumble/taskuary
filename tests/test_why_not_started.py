@@ -89,6 +89,17 @@ class WhyNotStartedTests(unittest.TestCase):
         s = MemoryStore(); t = handed(s)
         self.assertEqual(funnel.not_started_why(s, t), 'Not started yet. Nothing has started the coding agent on this.')
 
+    def test_a_start_refused_on_its_way_in_says_its_reason_in_the_box(self):
+        # a reply owed handed to the agent the day's ceiling held: the line under the box said why, the box said "Nothing has started"
+        from taskuary import ingest
+        s = MemoryStore(); t = handed(s, who='', Kind='general')
+        ingest.not_started(s, t, "today's AI calls reached 500, so agents do not start or wake by themselves until tomorrow")
+        st = funnel.idle_state(s, t)
+        self.assertEqual((st['kind'], st['row']), ('held', 'held for you - not started'))
+        self.assertEqual(st['line'], "Waiting for you. Today's AI calls reached 500, so agents do not start or wake by themselves until tomorrow.")
+        s.start_run(t, 'claude', 'go', 'owner')                     # ...and once an agent ran, the old refusal is not its state
+        self.assertNotIn('AI calls', funnel.idle_state(s, t)['line'])
+
     def test_work_from_before_today_says_it_has_been_waiting(self):
         s = MemoryStore(); t = handed(s)
         s._exec('UPDATE task SET CreatedAt=? WHERE TaskId=?', (ago(2), t))   # CreatedAt is the store's to set
@@ -286,7 +297,7 @@ class WhyNoAgentWasMeantTests(unittest.TestCase):
         t = s.create_task({'Title': 'Answer Gail Moreno', 'Kind': 'reply', 'Status': 'open'}, 'triage')
         s.add_route(None, t, 'new', None, 'triage: a reply · new thread · a reply draft goes to the task for you', [])
         ingest.not_started(s, t, 'auto-start is off in Settings')
-        self.assertEqual(funnel.agent_story(s, t)['line'], 'No agent started: auto-start is off in Settings.')
+        self.assertEqual(funnel.agent_story(s, t), {'kind': 'held', 'line': 'Waiting for you. Auto-start is off in Settings.'})
 
     def test_agent_work_and_a_closed_task_say_nothing_here(self):
         s = MemoryStore()

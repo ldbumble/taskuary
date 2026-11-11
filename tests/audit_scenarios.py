@@ -24,8 +24,11 @@ BACKENDS = ['cli', 'acp', 'api', 'coding']
 ME, ERIN, PAULA, RAY = 'alex@northwind.example', 'erin@northwind.example', 'paula@northwind.example', 'ray@northwind.example'
 
 
+# EVERY WAIT IS FOR A STATE, its limit only how long a slow machine may take to reach it (CI's runners, macOS's above all): it returns the
+# moment the state holds, so the budget costs nothing on a fast one
+SLACK = 3 if os.environ.get('CI') else 1
 def until(cond, secs=20):
-    end = time.time() + secs
+    end = time.time() + secs * SLACK
     while time.time() < end:
         if (got := cond()): return got
         time.sleep(0.03)
@@ -79,6 +82,8 @@ class Run:
         self.raised.update({r['ReviewId']: n for r in self.s._rows('SELECT ReviewId FROM review WHERE TaskId=?', (self.tid,)) if r['ReviewId'] not in was})
         (self.d / f'{self.k}.tmp2').write_text(say, encoding='utf-8'); os.replace(self.d / f'{self.k}.tmp2', self.d / f'{self.k}.out')
         self.k += 1
+        # ...by the state, never the clock: its words drawn in the chat first (a loaded machine files them seconds after they were said)
+        if say.strip(): until(lambda: any(say.strip()[:40] in x for x in self.payload()['said']), secs)
         self.settle()
         self.snap(label or f'turn {self.k}: {say[:40]}')
         return prompt
@@ -89,9 +94,14 @@ class Run:
         self.snap(label or 'quiet')
         return not self.started
 
-    def drop(self, secs=3):
+    def drop(self, secs=20):
         "The turn at work was stopped under the agent: its prompt, if it came, is released unanswered as far as the chat goes."
         if until((self.d / f'{self.k}.in').is_file, secs):
+            # ...released only once the stop has reached the turn - its CLI gone, or the call it waits on marked stopped - never before it,
+            # or a slow machine files the answer the stop was for
+            from taskuary import general
+            stopped = lambda: (c := getattr(general.session_for(self.tid), '_cancel', None)) is not None and c.is_set()
+            until(lambda: stopped() or not self.payload()['working'])
             (self.d / f'{self.k}.out').write_text('(stopped)', encoding='utf-8'); self.k += 1
         self.settle()
 
@@ -666,6 +676,8 @@ def n_full_house(r: Run):
     r.turn('The Q3 deck outline is above.')
 
 
+# ...a coding agent's silent turn is read by the turn judge's model, not the chat's SILENT road (general.SILENT): open, listed in the report
+@on('cli', 'acp', 'api')
 def o_silent_turn(r: Run):
     "(o) A turn that says nothing -> one follow-up -> still nothing -> the agent's question 'I could not ... what should I do?'."
     r.task('Tidy the vendor list')

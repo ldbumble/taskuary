@@ -51,3 +51,5 @@ docs/break-test/probe_out.json
 # holds this machine's hooks and a live owner token.
 .claude/settings.local.json
 website/browser/walk-pressed-*.json
+
+tests/.fake-director

@@ -8,11 +8,11 @@ import os, time
 from pathlib import Path
 
 
-MARK = Path(os.environ.get('TEMP') or os.environ.get('TMPDIR') or '/tmp') / 'taskuary-fake-director.txt'
+MARK = Path(__file__).with_name('.fake-director')     # ...beside the stand-ins: a trimmed env (macOS's has no TMPDIR) cannot move it
 
 
 def folder_of() -> str:
-    "The director's folder: FAKE_DIRECTOR, else the mark the scenario leaves in TEMP - a stranger's run gets a trimmed env (terminal.STRICT_ENV)."
+    "The director's folder: FAKE_DIRECTOR, else the mark the scenario leaves beside us - a stranger's run gets a trimmed env (terminal.STRICT_ENV)."
     return os.environ.get('FAKE_DIRECTOR') or (MARK.read_text(encoding='utf-8').strip() if MARK.is_file() else '')
 
 

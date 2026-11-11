@@ -20,7 +20,9 @@ from taskuary import funnel, general, processing_unread, stages, taskstate, term
 from taskuary.store import SQLiteStore
 
 NOW = datetime.now().replace(microsecond=0)
-def at(minutes): return (NOW - timedelta(minutes=minutes)).isoformat(sep=' ')
+# ...from the clock when it is called, not when the file was imported: a suite that ran seven minutes of other files first put "five minutes
+# from now" before what the store stamped now (the audit corpus ahead of it, 2026-11-10)
+def at(minutes): return (datetime.now().replace(microsecond=0) - timedelta(minutes=minutes)).isoformat(sep=' ')
 STAMP = at(0)
 SAID = 'Nothing is left on my side.'
 

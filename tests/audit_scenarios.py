@@ -369,6 +369,7 @@ def world(backend: str, tmp: Path, monkeypatch):
         monkeypatch.setattr(browserview, 'installed', lambda: False)
         monkeypatch.setattr(browserview, 'can_set_up', lambda: False)
     from taskuary import learn, outbound, server
+    was = set(threading.enumerate())
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(server, 'store', s):
         r = Run(backend, s, TestClient(server.app), d, tmp)
         r.mp, r.repo = monkeypatch, tmp / 'ledger'
@@ -397,7 +398,16 @@ def world(backend: str, tmp: Path, monkeypatch):
             clipool.close('')
             from taskuary import funnel
             funnel.invalidate()                       # ...and the rail it built: the next test's store is not this one
-            MARK.unlink(missing_ok=True)
+            # ...and what its threads still do: a turn's retry or a wake that ends after this world opened a session into the suite's own
+            # registry, where the next test's task 1 read it as its live agent (processing/test_one_task_state, run after the corpus)
+            end = time.time() + 3
+            for t in set(threading.enumerate()) - was: t.join(max(0, end - time.time()))
+    for k, t in list(terminal.SESSIONS.items()):
+        if getattr(t, 'store', None) is s:
+            try: t.close()
+            except Exception: pass
+            terminal.SESSIONS.pop(k, None)
+    funnel.invalidate(); MARK.unlink(missing_ok=True)
 
 
 # ── the goal rules and the parity rule ───────────────────────────────────────────────────────────────────────────────────────────────

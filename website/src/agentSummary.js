@@ -63,26 +63,10 @@ export const staleDraft = (r) => !!(r?.stale ?? r?.Stale);
 const pendingReply = (r) => r?.Status === "pending" && r.Kind !== "action" && r.Kind !== "slot" && String(r.DraftText || "").trim();
 // ...the newest turn's Next steps hold the drafts only while one of them is fresh
 export const freshNext = (reviews) => { const ps = (reviews || []).filter(pendingReply); return !ps.length || ps.some((r) => !staleDraft(r)); };
-// ...AND ON A CODING TASK TOO (the owner, 2026-11-09: "it also disappeared once i asked next question. i thought actions stay on the past
-// prompt"): its chat is the CLI's sessions (codingchat.py), whose payload names no turn per draft, so every draft read "no shown turn wrote
-// one" and the card rode under whichever turn was newest. Its turn is the one at work when it was written: the newest agent turn started at
-// or before the draft's time (both stamps the server's own zone). Stale as general.draft_turns reads it: an owner's line came after it and no
-// turn has answered since. The same {review, turn, at, stale, before} the general chat's payload carries
-const stamp = (x) => String(x || "").replace("T", " ").slice(0, 19);
-export const codingDrafts = (reviews, messages) => {
-  const ms = (messages || []).filter((m) => m && m.createdAt), turns = ms.filter((m) => m.role === "assistant"), mine = ms.filter((m) => m.role === "user" && !m.brief);
-  return (reviews || []).filter(pendingReply).map((r) => {
-    const at = stamp(r.CreatedAt), turn = turns.filter((m) => stamp(m.createdAt) <= at).at(-1);
-    const later = mine.map((m) => stamp(m.createdAt)).filter((t) => t > at).sort()[0];
-    const stale = !!later && !turns.some((m) => stamp(m.createdAt) > later);
-    return { review: r.ReviewId, turn: turn ? String(turn.id) : null, at, stale, before: stale ? later : null };
-  });
-};
 // EVERY OTHER CARD OF THE TASK IN THE TURN THAT RAISED IT (TaskPage's turnCards: a held steps' card, a reply that went, an ask that waits).
-// On a coding chat that is the newest agent turn begun at or before it (`turnOf` - the thread's times are Dates, the server's stamps read as
-// they are). IN A GENERAL CHAT THE SERVER NAMES IT (the payload's `turns`, by the review `rid`; the spine audit, 2026-11-09): an answer there
-// is stamped when its turn ENDS, so that rule read a step held while the second turn worked into the first. Named with no answer yet: null,
-// the chat's foot. A coding chat's payload names none, and an answer the thread does not draw is no place to stand - turnOf
+// THE SERVER NAMES IT (the payload's `turns`, by the review `rid`; the spine audit, 2026-11-09), in a coding chat too (codingchat.cards): read by
+// times on the page, an answer stamped when its turn ENDS put a step held while the second turn worked into the first. Named with no answer
+// yet: null. A turn the thread does not draw is no place to stand - the newest agent turn begun at or before it (`turnOf`)
 const msOf = (x) => (x instanceof Date ? +x : +(String(x).includes("Z") ? new Date(x) : asUtc(String(x))));
 export const turnOf = (messages, at) => {
   const turns = (messages || []).filter((m) => m?.role === "assistant" && m.id), t = msOf(at);

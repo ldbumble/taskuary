@@ -183,6 +183,8 @@ def chat(store, tid: int) -> dict:
             'presses': general.press_lines(store, int(tid)),
             # ...and what it asks the owner, by the general chat's own read (taskstate.asking)
             'asking': taskstate.asking(store, store.get_task(int(tid)) or {'TaskId': int(tid)}, t if getattr(t, 'alive', False) else None),
+            # ...and the turn each card stands in, the general payload's `turns` and `drafts` read off this record (cards)
+            **cards(store, int(tid), ss),
             'permissions': permissions.pending(int(tid), store)}         # what the agent waits on the owner's button for
 
 
@@ -199,3 +201,23 @@ def owned(store, tid: int, ss: list) -> list:
     mine = lambda u: ' '.join(str((u.get('content') or {}).get('text') or '').split()) in his
     mark = lambda u: u if u.get('sessionUpdate') != 'user_message_chunk' or u.get('_meta') else {**u, '_meta': {'taskuary': 'owner' if mine(u) else 'agent'}}
     return [{**s, 'updates': [mark(u) for u in s['updates']]} if s.get('updates') else s for s in ss]
+
+
+def cards(store, tid: int, ss: list) -> dict:
+    """WHERE EACH CARD STANDS IN THE CODING CHAT, BY ITS TURN - the general payload's `turns` and `drafts` (general.draft_turns), read off this record:
+    the page compared times itself and named its turns by position, so nothing here could name one (2026-11-11). A card is of the turn whose step
+    was newest when it was raised, named as the page names that step (`sid#n`, its place in what `chat` hands it - chatStream.chatRows); raised on
+    arrival, or after his line before the turn's first step: none. A draft is stale once his line came after it and no step of the agent's since."""
+    def whose(u):
+        k, m = u.get('sessionUpdate') or u.get('k'), (u.get('_meta') or {}).get('taskuary')
+        return 'his' if k == 'you' or (k == 'user_message_chunk' and m == 'owner') else '' if k in ('brief', 'user_message_chunk', 'gap', 'screen') else 'agent'
+    at_ = lambda x: str(x or '').replace('T', ' ')[:19]
+    steps = sorted(((at_(u.get('_at') or u.get('at') or s.get('at')), f"{s['sid']}#{i}", whose(u)) for s in ss
+                    for i, u in enumerate(s.get('updates') or s.get('steps') or [])), key=lambda x: x[0])
+    turn = lambda at: next((n if w == 'agent' else None for t, n, w in reversed(steps) if t <= at_(at) and w), None)
+    his = lambda at: next((t for t, _, w in steps if t > at_(at) and w == 'his'), None)
+    rows = store._rows("SELECT ReviewId, Kind, Status, CreatedAt, DraftText FROM review WHERE TaskId=? AND Kind<>'slot' ORDER BY ReviewId", (tid,))
+    drafts = [{'review': r['ReviewId'], 'turn': turn(r['CreatedAt']), 'at': r['CreatedAt'], 'stale': stale, 'before': later if stale else None}
+              for r in rows if r['Status'] == 'pending' and r['Kind'] in ('draft_reply', 'draft') and str(r.get('DraftText') or '').strip()
+              for later in [his(r['CreatedAt'])] for stale in [bool(later) and not any(t > later and w == 'agent' for t, _, w in steps)]]
+    return {'turns': {str(r['ReviewId']): turn(r['CreatedAt']) for r in rows}, 'drafts': drafts}

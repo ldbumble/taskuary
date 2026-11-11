@@ -39,29 +39,31 @@ export function stepsFromAcp(updates) {
   // ...the agent's words arrive a token at a time: one step per run of chunks, as a log has one per block. A prompt Taskuary sent marks itself
   // its brief (`_meta.taskuary`), as mark_briefs marks a log's
   // ...each step at the moment its first update came in (`_at`, stamped as it was kept): ACP itself carries no time
-  let at = "";
-  const chunk = (k, t) => { if (!t) return; const last = out.at(-1); if (last?.k === k && last.open) last.text += t; else out.push({ k, text: t, open: true, ...(at ? { at } : {}) }); };
-  for (const u of updates || []) {
+  // ...and its place in the updates (`n`), the name the server gives a card's turn by (codingchat.cards)
+  let at = "", n = 0;
+  const here = () => ({ n, ...(at ? { at } : {}) });
+  const chunk = (k, t) => { if (!t) return; const last = out.at(-1); if (last?.k === k && last.open) last.text += t; else out.push({ k, text: t, open: true, ...here() }); };
+  for (const [i, u] of (updates || []).entries()) {
     const kind = u?.sessionUpdate;
-    at = u?._at || "";
+    at = u?._at || ""; n = i;
     // ...and a user-role message the adapter sent itself (a slash command's output) is the agent's, never the owner's line (codingchat.owned)
     if (kind === "user_message_chunk") chunk(u._meta?.taskuary === "agent" ? "said" : u._meta?.taskuary === "brief" || TOLD.test(textOf(u.content)) ? "brief" : "you", textOf(u.content));
     else if (kind === "agent_message_chunk") chunk("said", textOf(u.content));
     else if (kind === "agent_thought_chunk") chunk("thought", textOf(u.content));
     // ...and a turn that failed, kept by Taskuary where it happened (acpcoding._turn): the turn's error, with the way past it
-    else if (kind === "error" && u._meta?.taskuary === "error") out.push({ k: "error", text: textOf(u.content), ...(at ? { at } : {}) });
+    else if (kind === "error" && u._meta?.taskuary === "error") out.push({ k: "error", text: textOf(u.content), ...here() });
     else if ((cid = compactionOf(u, compacts)) != null) {
       let c = compacts.get(cid);
-      if (!c) { c = { k: "compact", id: cid, ...(at ? { at } : {}) }; compacts.set(cid, c); out.push(c); }
+      if (!c) { c = { k: "compact", id: cid, ...here() }; compacts.set(cid, c); out.push(c); }
       if (u.status) c.status = u.status;
     }
-    else if (kind === "plan") out.push({ k: "plan", items: (u.entries || []).map((e) => ({ text: String(e?.content || ""), status: e?.status || "pending" })), ...(at ? { at } : {}) });
+    else if (kind === "plan") out.push({ k: "plan", items: (u.entries || []).map((e) => ({ text: String(e?.content || ""), status: e?.status || "pending" })), ...here() });
     else if (kind === "tool_call" || kind === "tool_call_update") {
       let s = byId.get(u.toolCallId);
       if (!s) {
         if (kind === "tool_call_update" && !u.rawInput && !u.title && !u.kind) continue;
         const tool = u._meta?.claudeCode?.toolName;
-        s = { k: "tool", id: String(u.toolCallId || ""), name: tool || ACP_TOOL[u.kind] || u.title || u.kind || "tool", args: {}, ...(at ? { at } : {}) };
+        s = { k: "tool", id: String(u.toolCallId || ""), name: tool || ACP_TOOL[u.kind] || u.title || u.kind || "tool", args: {}, ...here() };
         byId.set(u.toolCallId, s); out.push(s);
       }
       const par = parentOf(u);
@@ -198,7 +200,7 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
   const working = (live ? live.working !== false : true), waiting = !!live?.asking || !!permissions?.length;
   const rows = [];
   sessions.forEach((ses, si) => {
-    const steps = sessionSteps(ses).map((s) => ({ ...s, at: at(s.at) || at(ses.at) }));
+    const steps = sessionSteps(ses).map((s, i) => ({ ...s, at: at(s.at) || at(ses.at), n: `${ses.sid}#${s.n ?? i}` }));
     const now = !!ses.live && si === sessions.length - 1 && working;
     let turn = null;
     const close = () => { if (turn) rows.push(turn); turn = null; };
@@ -240,7 +242,8 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
   for (const r of rows) { if (r.at) take(r.at); out.push(r); }
   take(null);
   return out.map((r, i) => (r.kind === "turn"
-    ? { kind: "turn", id: `r${i}`, at: r.at, running: !!r.running, waiting: !!r.running && waiting, parts: turnParts(eventsOf(r.steps, !!r.running)), answer: lastSaid(r.steps) }
+    ? { kind: "turn", id: `r${i}`, at: r.at, running: !!r.running, waiting: !!r.running && waiting, parts: turnParts(eventsOf(r.steps, !!r.running)), answer: lastSaid(r.steps),
+      steps: r.steps.map((s) => s.n) }
     : { ...r, id: `r${i}` }));
 }
 export const COMPACTED = "Conversation compacted";
@@ -264,7 +267,11 @@ export const rowMessages = (rows, sid = "coding") => (rows || []).map((r) => (r.
   : r.kind === "you" ? { id: `${sid}-${r.id}`, role: "user", content: [{ type: "text", text: r.text }], createdAt: r.at }
   // ...a compaction is an event, drawn as a press's quiet line is ("Conversation compacted · 8:21 AM") - never an input, so the turn goes on under it
   : r.kind === "event" ? { id: `${sid}-${r.id}`, role: "user", press: true, content: [{ type: "text", text: r.text }], createdAt: r.at }
-  : { id: `${r.running ? "live-" : ""}${sid}-${r.id}`, role: "assistant", content: partsMessage(r.parts), createdAt: r.at, ...(r.waiting ? { waiting: true } : {}) }));
+  : { id: `${r.running ? "live-" : ""}${sid}-${r.id}`, role: "assistant", content: partsMessage(r.parts), createdAt: r.at, steps: r.steps, ...(r.waiting ? { waiting: true } : {}) }));
+// ...and the turns the server names its cards by (codingchat.cards: a step's name) as the messages that draw them, so the general payload's
+// `turns` and `drafts` and the coding one's read through one placement road
+export const turnOfStep = (messages) => { const of = new Map((messages || []).flatMap((m) => (m.steps || []).map((s) => [s, m.id])));
+  return (name) => (name == null ? null : of.get(name) ?? null); };
 
 // WHICH SOURCE a task's chat reads: a coding task, or any task with a coding CLI live on it, is its sessions (codingchat.py); every other is
 // the general agent's conversation (general.py). The one component draws either - this picks, nothing in the page does

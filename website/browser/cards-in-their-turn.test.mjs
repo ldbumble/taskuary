@@ -399,3 +399,55 @@ test("a coding agent's question stands in its chat; the owner's typed answer is 
   assert.deepEqual([...new Set(bad)].slice(0, 4), []);
   assert.deepEqual(errors, []);
 });
+
+// TWO TURNS OF A CODING CHAT, A CARD IN EACH (2026-11-11): the server names the turn each card was raised in (codingchat.cards), the page draws
+// it there by the general chat's own road (placeCards / draftHome) - never by comparing times on the page. Sampled every 200 ms through both turns
+const TWO = [{ when: "make it shorter", anywhere: true, first: "Shorter now.", post: [{ path: "/api/agent/reply", body: { text: "Hi Erin, two flaws. Alex", agent: "assistant" } }] },
+  { when: "draft erin", anywhere: true, first: "Drafted her an answer.", post: [{ path: "/api/agent/reply", body: { text: "Hi Erin, here is the long review of the tool. Alex", agent: "assistant" } }] }];
+test("two turns of a coding chat each keep the card they raised, under their own line", { timeout: 600000 }, async (t) => {
+  const w = await world(t, TWO);
+  const page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const git = execFileSync(process.platform === "win32" ? "where" : "which", ["git"], { encoding: "utf8" }).trim().split(/\s*\n/)[0].trim();
+  await w.api("/api/fixture/coding", { git });
+  const made = await w.api("/api/fixture/mail-task", { kind: "coding" });
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  const name = process.env.N17_NAME || "coding-two-turns", dir = path.join(out, "video", name); await mkdir(dir, { recursive: true });
+  const box = await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 60000 });
+  const rec = await record(page, dir), bad = [];
+  // ...each live line of his and each letter, where it stands in the chat's content
+  const where = () => page.evaluate(() => {
+    const vp = document.querySelector("[data-tq-task-page] .tq-aui-viewport"), y = (e) => Math.round(e.getBoundingClientRect().top - vp.getBoundingClientRect().top + vp.scrollTop);
+    const lines = [...vp.querySelectorAll(".tq-aui-user-bubble")].map((e) => [e.innerText.trim(), y(e)]);
+    const cards = [...vp.querySelectorAll("[data-tq-review], [data-tq-replaced]")].filter((e) => e.getBoundingClientRect().height > 0)
+      .map((e) => [(e.querySelector("textarea")?.value || e.innerText).replace(/\s+/g, " ").slice(0, 80), y(e)]);
+    return { lines, cards };
+  });
+  const at = (xs, re) => (xs.find(([s]) => re.test(s)) || [])[1];
+  const turn = async (said, re) => {
+    await box.type(said); await page.keyboard.press("Enter");
+    const t0 = Date.now();
+    while (Date.now() - t0 < 90000) { const s = await where(); if (at(s.cards, re) != null) return s; await new Promise((r) => setTimeout(r, 200)); }
+    bad.push(`no card for "${said}" within 90 s`); return where();
+  };
+  try {
+    await turn("draft erin an answer", /long review of the tool/);
+    await turn("make it shorter", /two flaws/);
+    await new Promise((r) => setTimeout(r, 3000));
+    const s = await where(), l1 = at(s.lines, /draft erin/), l2 = at(s.lines, /make it shorter/), c1 = at(s.cards, /long review of the tool/), c2 = at(s.cards, /two flaws/);
+    if (!(l1 < c1 && c1 < l2)) bad.push(`the first turn's card is not between its line and the next: ${JSON.stringify(s)}`);
+    if (!(l2 < c2)) bad.push(`the second turn's card is not under its line: ${JSON.stringify(s)}`);
+  } finally {
+    await page.screenshot({ path: path.join(out, `${name}.png`) });
+    await rec.stop();
+    await writeFile(path.join(dir, "server.log"), w.backend.output());
+    await note(dir, { done: "A coding task from a mail (stand-in ACP agent); the owner asks it to draft an answer, then to make it shorter.",
+      expect: "Each turn's letter under that turn's line: the first one (greyed once replaced) between his two lines, the second under his second line.",
+      saw: bad.length ? bad.slice(0, 3).join("\n") : "as expected", verdict: bad.length ? "FAIL" : "PASS" });
+  }
+  assert.deepEqual(bad, []);
+  assert.deepEqual(errors, []);
+});

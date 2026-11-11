@@ -10,7 +10,8 @@ nothing is a design, a deny list is a control - and the list is written so that 
 added next month is refused until somebody decides otherwise.
 """
 import os
-import time, unittest
+import tempfile, time, unittest
+from pathlib import Path
 from unittest import mock
 
 from taskuary import demo
@@ -383,6 +384,23 @@ class TheWorldTests(unittest.TestCase):
             self.assertEqual((i['waiting'], i['state'], i['request']['text']), (True, 'asking', 'Keep the inter-company rows?'))
             self.assertIn('Keep the inter-company rows?', i['line'])
         finally: r.close()
+
+    def test_a_replays_chat_shows_its_run_and_the_question_its_row_waits_on(self):
+        """The walk audit, 2026-11-10: the coding issue's row read "agent waiting on you" over a chat that showed nothing - the replay typed only
+        to its screen. It records its run as an ACP session does and ends on its question, so the chat shows what the row says."""
+        from taskuary import codingchat, session_artifacts, terminal
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(session_artifacts, 'root', lambda: Path(d)), mock.patch.object(terminal, 'SESSIONS', {}):
+            r = demo.Replay(s, tid, lines=[(t, 0.001) for t, _ in demo.TRANSCRIPT]); terminal.SESSIONS[r.sid] = r
+            for _ in range(500):
+                if not r.busy: break
+                time.sleep(0.01)
+            chat = codingchat.chat(s, tid)
+            kinds = [u['sessionUpdate'] for u in chat['sessions'][-1]['updates']]
+            self.assertIn('tool_call', kinds); self.assertIn('agent_message_chunk', kinds)
+            self.assertEqual((chat['asking'] or {}).get('text'), demo.TRANSCRIPT[-1][0])
+            r.close()
 
     def test_a_replay_says_when_it_moves(self):
         """Stopping to wait, and being closed, are session transitions: each wakes the views as a real run's events do (G7)."""

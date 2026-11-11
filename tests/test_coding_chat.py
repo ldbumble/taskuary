@@ -93,6 +93,23 @@ def test_an_acp_session_is_served_as_its_updates(home, server):
     assert s['source'] == 'acp' and [u['sessionUpdate'] for u in s['updates']] == ['tool_call', 'agent_message_chunk']
 
 
+def test_each_card_is_named_with_the_turn_that_raised_it_as_the_page_names_that_turns_step():
+    """ONE PLACEMENT ROAD (2026-11-11): the page placed a coding card by comparing times and named the turns by position, so the server could not
+    name one. A card is of the turn whose step was newest when it was raised (`sid#n`, the update's place); raised on arrival or after his line
+    before the turn's first step, none. A draft is stale once his line came after it and no step of the agent's has since."""
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Ledger totals', 'Kind': 'coding'}, 'owner')
+    u = lambda at, k, meta=None: {'sessionUpdate': k, '_at': at, **({'_meta': {'taskuary': meta}} if meta else {})}
+    ss = [{'sid': 'a1', 'updates': [u('2026-11-11 09:00:00', 'user_message_chunk', 'owner'), u('2026-11-11 09:00:05', 'tool_call'),
+                                    u('2026-11-11 09:00:09', 'agent_message_chunk'), u('2026-11-11 09:10:00', 'user_message_chunk', 'owner')]}]
+    def card(at, kind='draft_reply'):
+        rid = s.add_review({'TaskId': tid, 'Kind': kind, 'Status': 'pending', 'DraftText': 'Hi Erin'}); s._exec('UPDATE review SET CreatedAt=? WHERE ReviewId=?', (at, rid)); return rid
+    arrival, mine, after_his, held = card('2026-11-11 08:00:00'), card('2026-11-11 09:00:06'), card('2026-11-11 09:10:01'), card('2026-11-11 09:00:09', 'action')
+    got = codingchat.cards(s, tid, ss)
+    assert got['turns'] == {str(arrival): None, str(mine): 'a1#1', str(after_his): None, str(held): 'a1#2'}
+    assert [(d['review'], d['turn'], d['stale']) for d in got['drafts']] == [(arrival, None, False), (mine, 'a1#1', True), (after_his, None, False)]
+
+
 def test_a_resumed_conversation_is_drawn_once(home, server):
     srv, c = server
     claude_log(home, 'cc3')

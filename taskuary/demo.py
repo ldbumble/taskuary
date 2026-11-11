@@ -598,13 +598,13 @@ TRANSCRIPT = [
     ('  9 passed', .8),
     ('Fixed and tested. Lakeview syncs again; the row with no manager is skipped and named once', 1.2),
     ('in the log, so the morning report still adds up.', .9),
-    ('Not pushing - that is yours to approve.', 1.6),
+    ('Push it to a branch and open a pull request for your review?', 1.6),
 ]
 TRANSCRIPTS = [TRANSCRIPT]
 
 def _brief_replay(title: str) -> list:
     """A coding task the seed did not write a recording for still replays its own words, never another task's."""
-    return [('$ claude', .4), ('', .2), (f'Reading the ask: {title}', 1.1), ('Nothing changed yet - waiting for you to say go.', 1.2)]
+    return [('$ claude', .4), ('', .2), (f'Reading the ask: {title}', 1.1), ('Nothing changed yet - shall I start on it?', 1.2)]
 
 # the GL reconciliation, as a general agent works it: in plain words, on the task's own conversation
 GL_CHAT = [
@@ -1529,13 +1529,33 @@ class Replay:
         for text, pause in self.lines:
             if not self.alive: return
             time.sleep(pause)
-            self._emit(f'{text}\r\n')
+            self._emit(f'{text}\r\n'); self._record(text)
+        # ...ending on its question to the owner, recorded as a real run's is (workerstate): the row said "waiting on you" over a chat that
+        # showed nothing it waited on (the walk audit, 2026-11-10)
+        if self.lines and str(self.lines[-1][0]).rstrip().endswith('?'):
+            from . import workerstate
+            workerstate.record(self.store, self.task_id, self.sid, 'input_needed', text=self.lines[-1][0].strip())
         self.busy = False
         # the Board and the task card show a TAIL of this as text, not as a terminal - the dim
         # escape rode along with it and printed as a literal [2m on every card
         self._emit('\r\nthe agent is waiting for you - this is a demo, so it waits forever\r\n')
         self._moved()                                # working -> waiting on you
 
+    def _record(self, text):
+        """...and each line into the coding chat's record as a real ACP session's updates (codingchat.record_update): a step for each `→ Tool:`
+        line, its output after it, the rest the agent's words - the chat draws the run the Board types out."""
+        from . import codingchat
+        put, m = (lambda u: codingchat.record_update(self.task_id, self.sid, u)), re.match(r'→ (\w+): (.*)', text.strip())
+        if m:
+            self.calls = getattr(self, 'calls', 0) + 1; kind = {'Read': 'read', 'Bash': 'execute', 'Edit': 'edit'}.get(m[1], 'other')
+            put({'sessionUpdate': 'tool_call', 'toolCallId': f'd{self.calls}', 'kind': kind, 'title': m[2], 'status': 'completed',
+                 'rawInput': {'command' if kind == 'execute' else 'path': m[2].split('  (')[0]}})
+        elif text.startswith('  ') and text.strip():
+            put({'sessionUpdate': 'tool_call_update', 'toolCallId': f'd{getattr(self, "calls", 0)}', 'status': 'completed',
+                 'content': [{'type': 'content', 'content': {'type': 'text', 'text': text.strip()}}]})
+        # ...a question its own paragraph, as an agent writes one: the chat says it once, on its card (askOnce.withoutAsked)
+        elif text.strip() and not text.startswith('$'):
+            put({'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': f'\n\n{text.strip()}' if text.rstrip().endswith('?') else text.strip() + ' '}})
     def _emit(self, text):
         self.buf.append(text)
         self.last = time.time()

@@ -57,7 +57,7 @@ test("the chat draws a waiting card once, in its turn - the foot's \"Waiting on 
   assert.equal((gw.match(/<TurnAsks /g) || []).length, 1, "drawn in a turn only - no box of its own at the chat's foot");
   assert.match(gw, /\{!dock && placed\.filter\(\(c\) => !c\.after\)\.map\(/, "only a chat with no agent turn at all draws a card under it, as its one row");
   assert.match(gw, /\{!dock && !turnCards && !!drafts\?\.length && \(/); assert.match(gw, /\{!dock && !turnCards && !!acts\?\.length && \(/);
-  assert.match(gw, /turns=\{coding \? null : data\?\.turns\}/);
+  assert.match(gw, /turns=\{cardTurns\}/);
   // ...under the words the block said, counted per turn, and marked for the agent room's rest (TaskPage's :has([data-tq-waits]))
   const asks = gw.slice(gw.indexOf("const TurnAsks = "), gw.indexOf("const TurnAsks = ") + 900);
   assert.match(asks, /<Box data-tq-turn-asks="" data-tq-waits=""/);

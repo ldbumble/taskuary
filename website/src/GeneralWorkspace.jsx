@@ -27,7 +27,7 @@ import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
 import { baseName, isWork } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { PARTS, chatRows, chatSource, checkBackDue, compactingNow, continues, eventOf, linkWords, partsMessage, rowMessages, turnParts, workCount } from "./chatStream.js";
+import { PARTS, chatRows, chatSource, checkBackDue, compactingNow, continues, eventOf, linkWords, partsMessage, rowMessages, turnOfStep, turnParts, workCount } from "./chatStream.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
@@ -75,7 +75,7 @@ import { askNote, heldActsLine, proposalFrom, reviewText } from "./reviewProposa
 import BriefLine from "./BriefLine.jsx";
 import AgentSummary, { OneBox } from "./AgentSummary.jsx";
 import { PassedCtx } from "./passedCtx.js";
-import { codingDrafts, draftHome, draftPassed, turnAnswered, foldedSummaries, freshNext, hasReply, lastAnswerSummed, placeCards, turnOf, withTurns } from "./agentSummary.js";
+import { draftHome, draftPassed, turnAnswered, foldedSummaries, freshNext, hasReply, lastAnswerSummed, placeCards, turnOf, withTurns } from "./agentSummary.js";
 import { asUtc, dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
@@ -1518,11 +1518,14 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   };
   const promptUsed = (id) => { if (ownPrompt?.id === id) setOwnPrompt(null); else onPromptUsed?.(id); };
   const placed = placeShown(data?.published, shownMessages);     // no hook: this sits below the loading return
+  // ...the turn each card stands in, as the server names it - a general answer's id, a coding turn by its step (chatStream.turnOfStep)
+  const src = coding ? cc.got : data, named = coding ? turnOfStep(shownMessages) : (x) => x;
+  const cardTurns = src?.turns && Object.fromEntries(Object.entries(src.turns).map(([k, v]) => [k, named(v)]));
   // the task's checklist where the page has not handed it in: the row carries it (store.list_tasks selects t.*)
   const steps = checklist || (() => { try { const a = JSON.parse(task?.Checklist || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } })();
   const thread = (
     <LevelCtx.Provider value={level}><ChatCtx.Provider value={chat && !dock}><AgentNameCtx.Provider value={dock ? name : AGENT_TURN}><ShownCtx.Provider value={placed.by}>
-    <WorkCtx.Provider value={dock ? null : { reviews: withTurns(reviews, coding ? codingDrafts(reviews, shownMessages) : data?.drafts), checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next,
+    <WorkCtx.Provider value={dock ? null : { reviews: withTurns(reviews, (src?.drafts || []).map((d) => ({ ...d, turn: named(d.turn) }))), checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next,
       cards: data?.cards || [], refresh }}>
     <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs, versions: data?.turnOutputs }}>
     <TraceFilesCtx.Provider value={coding}><LocalFiles.Provider value={dock ? null : { tid: task.TaskId }}>
@@ -1542,7 +1545,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""} queued={chat && !dock ? queued : null} heldStart={chat && !dock ? heldStart : null}
-        road={road} cards={codingCards} landing={chat && !dock ? landing : null} turnCards={chat && !dock ? turnCards : null} turns={coding ? null : data?.turns} stopShown={coding && acp && !!cc.live?.working}
+        road={road} cards={codingCards} landing={chat && !dock ? landing : null} turnCards={chat && !dock ? turnCards : null} turns={cardTurns} stopShown={coding && acp && !!cc.live?.working}
         placeholder={coding ? (closedTask ? "Write to pick it back up…" : cc.live ? MESSAGE : "Write to pick the session back up…") : ""}
         hint={!coding ? "" : acp ? (cc.live.working ? "Enter sends it when this turn ends · Shift+Enter adds a line" : "Enter sends it to the agent · Shift+Enter adds a line")
           : cc.live ? "Enter types it into the running agent · Shift+Enter adds a line" : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}

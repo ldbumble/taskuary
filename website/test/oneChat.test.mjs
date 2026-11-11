@@ -5,10 +5,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { chatRows, chatSource, eventsOf, rowMessages, stepsFromAcp, turnParts, workCount } from "../src/chatStream.js";
+import { chatRows, chatSource, eventsOf, rowMessages, stepsFromAcp, turnOfStep, turnParts, workCount } from "../src/chatStream.js";
 import { SHIPPED, defaultDetail, detailFor, keepOwnDetail, ownDetail } from "../src/chatDetail.js";
 import { notShown, stillHeld } from "../src/heldLines.js";
-import { codingDrafts, draftHome, draftPassed, freshNext, withTurns } from "../src/agentSummary.js";
+import { draftHome, draftPassed, freshNext, withTurns } from "../src/agentSummary.js";
 
 const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const gw = read("GeneralWorkspace.jsx"), page = read("TaskPage.jsx");
@@ -272,7 +272,7 @@ test("a draft stays under its own turn; a stale one is never under the newest tu
   // ...read off the payload's `drafts` (general.draft_turns), under the message whose id is the draft's turn
   const got = withTurns([{ ReviewId: 7, Status: "pending", DraftText: "On it." }], [{ review: 7, turn: "comment-12", at: "2026-11-06 14:48:00", stale: true, before: "2026-11-06 15:00:00" }]);
   assert.equal(draftHome(got, [{ id: "comment-12", role: "assistant", createdAt: "2026-11-06 14:50:00" }]), "comment-12");
-  assert.match(gw, /reviews: withTurns\(reviews, coding \? codingDrafts\(reviews, shownMessages\) : data\?\.drafts\)/);
+  assert.match(gw, /reviews: withTurns\(reviews, \(src\?\.drafts \|\| \[\]\)\.map\(\(d\) => \(\{ \.\.\.d, turn: named\(d\.turn\) \}\)\)\)/);
   assert.match(gw, /holds && next && chat/);
   assert.match(gw, /nextAt\?\.next && freshNext\(nextAt\.reviews\)/);
 });
@@ -314,13 +314,11 @@ test("regression: on a coding task the draft's card stays on the turn that wrote
   ] }] });
   const msgs = rowMessages(rows), turns = msgs.filter((m) => m.role === "assistant").map((m) => m.id);
   const draft = { ReviewId: 9, Status: "pending", Kind: "draft_reply", DraftText: "Hi Erin - found it, the fix is in.", CreatedAt: "2026-11-09 09:02:30" };
-  const got = codingDrafts([draft], msgs);
-  assert.deepEqual(got.map((d) => [d.turn, d.stale]), [[turns[0], false]], "the turn at work when it was written, two questions later");
-  assert.equal(draftHome(withTurns([draft], got), msgs), turns[0]);
-  // ...asked after it and not yet answered: stale under its own turn, never the newest turn's Next steps
-  const asked = codingDrafts([draft], msgs.slice(0, 3));
-  assert.equal(asked[0].stale, true); assert.equal(asked[0].before, "2026-11-09 09:30:00");
-  // ...written before any turn (the triage draft from the mail alone): no home, the newest answer holds it as before; retired: nothing
-  assert.equal(codingDrafts([{ ...draft, CreatedAt: "2026-11-09 08:00:00" }], msgs)[0].turn, null);
-  assert.deepEqual(codingDrafts([{ ...draft, Status: "closed_unsent" }], msgs), []);
+  // ...the server names the step at work when it was written (codingchat.cards: `sid#n`), the page the turn that drew that step (turnOfStep)
+  assert.ok(turns.every((id, k) => msgs.find((m) => m.id === id).steps.length) && msgs.find((m) => m.id === turns[0]).steps.includes("s1#1"));
+  assert.equal(draftHome(withTurns([draft], [{ review: 9, turn: turnOfStep(msgs)("s1#1"), at: draft.CreatedAt, stale: false }]), msgs), turns[0],
+    "the turn at work when it was written, two questions later");
+  // ...one written before any turn names none: under the mail, by its time; one whose step is not drawn names none either
+  assert.equal(turnOfStep(msgs)(null), null); assert.equal(turnOfStep(msgs)("s1#99"), null);
+  assert.match(gw, /turns=\{cardTurns\}/);
 });

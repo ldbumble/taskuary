@@ -2741,9 +2741,9 @@ def day(store, items: list) -> str:
     """The day in a breath, said by code from what it is made of - what waits, today's calendar, what agents hold (the same helpers
     the morning digest reads). A model only reworded this sentence: a call stored facts answer (the owner's rules, 2026-11-10)."""
     from . import assistant, calendar as cal
-    n = len(items)
-    out = ["Let's go through what we have today. " + (f"{plural(n, 'thing')} waiting - {funnel.summary(items).split(' - ', 1)[-1].split('.')[0]}."
-                                                     if n else 'Nothing is waiting on you yet.')]
+    # ...what waits, in the one count every surface says it in (waiting_line): the opener counted by lane ("2 on you") where the phone and
+    # the desk count by kind ("2 questions for you") - one fact, two wordings
+    out = ["Let's go through what we have today. " + waiting_line(items)]
     try:
         ev = [e for e in (cal.today(store).get('events') or []) if not e.get('all_day')]
         if ev: out.append('On the calendar: ' + '; '.join(f"{cal.span(e['start'], e.get('end') or '')} {e.get('subject')}"

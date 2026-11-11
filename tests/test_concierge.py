@@ -911,7 +911,8 @@ class OpeningTests(unittest.TestCase):
              mock.patch.object(concierge, 'brain', side_effect=AssertionError('the opening asked a model')):
             out = concierge.open_day(s)
         self.assertTrue(out['opened']); self.assertEqual(out['card']['kind'], 'brief'); self.assertEqual((out['card']['n'], out['card']['mail']), (1, 1))
-        self.assertTrue(out['say'].startswith("Let's go through what we have today. 1 thing waiting"), out['say'])
+        self.assertTrue(out['say'].startswith(f"Let's go through what we have today. {concierge.waiting_line(funnel.pile(s)['items'])}"), out['say'])
+        self.assertTrue(out['say'].startswith("Let's go through what we have today. 1 waiting: "), out['say'])
         self.assertIn('On the calendar: ', out['say']); self.assertIn('Budget review with Erin Blake', out['say'])
         self.assertIn('Agents have: TQ-0009 Vendor totals (working).', out['say'])
         self.assertFalse(concierge.open_day(s)['opened'])          # said once per chat
@@ -926,7 +927,7 @@ class OpeningTests(unittest.TestCase):
         s = store(); drafted(s)
         with mock.patch.object(concierge, 'brain', return_value=None):
             out = concierge.open_day(s)
-        self.assertTrue(out['say'].startswith("Let's go through what we have today. 1 thing waiting"))
+        self.assertTrue(out['say'].startswith("Let's go through what we have today. 1 waiting: "))
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
             c = TestClient(server.app)
             self.assertFalse(c.post('/api/concierge/open').json()['opened'])

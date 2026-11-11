@@ -17,8 +17,10 @@ found where the Assistant puts them ("The owner says: " on a first round, "The o
 "FROM THE OWNER: " in a Continue's turn - server.continue_work), the
 first rule whose regex matches answers - `first` on a first round, `then` once it has looked something up, or `exit` with that code
 mid-turn (a CLI that dies). No rule: "Ok."
+FAKE_DIRECTOR (fake_director.py): an agent's turn - a kept conversation, or a run with Taskuary's tools - answers a scenario's words instead.
 FAKE_CLAUDE_LOG, when set, gets one JSON line per event ({pid, ev, t, ...}) for the latency breakdown."""
 import json, os, re, sys, time
+from fake_director import directed, folder_of
 
 T0 = time.time()
 args = sys.argv[1:]
@@ -30,7 +32,9 @@ if '--help' in args:                     # an older claude has no --setting-sour
 SPAWN, THINK, PREFILL, TPS = env('FAKE_CLAUDE_SPAWN', 2.5), env('FAKE_CLAUDE_THINK', 0.7), env('FAKE_CLAUDE_PREFILL', 0.25), env('FAKE_CLAUDE_TPS', 70)
 LIVE, PARTIAL = 'stream-json' in (arg('--input-format') or ''), '--include-partial-messages' in args
 sid = arg('--resume') or f'fake-{os.getpid()}-{int(T0 * 1000) % 100000}'
-system = open(arg('--system-prompt-file'), encoding='utf-8').read() if arg('--system-prompt-file') else ''
+_sp = arg('--system-prompt-file') or arg('--append-system-prompt-file')
+system = open(_sp, encoding='utf-8').read() if _sp else ''
+if system and folder_of(): open(os.path.join(folder_of(), 'system.txt'), 'w', encoding='utf-8').write(system)
 script = json.load(open(os.environ['FAKE_CLAUDE_SCRIPT'], encoding='utf-8')) if os.environ.get('FAKE_CLAUDE_SCRIPT') else []
 
 
@@ -72,7 +76,9 @@ def turn(prompt: str, n: int):
     if n == 1: out({'type': 'system', 'subtype': 'init', 'session_id': sid, 'model': arg('--model') or 'default', 'tools': []})
     unseen = len(prompt) + (len(system) if n == 1 else 0)
     time.sleep(THINK + PREFILL * unseen / 10_000)
-    text = answer(prompt)
+    # ...a scenario's own turn (fake_director.py) is an agent's - a kept conversation, or a run with Taskuary's tools (a stranger's task runs one
+    # turn a process); a call beside it with no tools (a summary, a lesson) is answered at once
+    text = directed(prompt) if folder_of() and (LIVE or '--mcp-config' in args) else answer(prompt)
     log('first_token', n=n)
     chunks = re.findall(r'.{1,4}', text, re.S) or ['']
     start = time.time()
@@ -86,7 +92,7 @@ def turn(prompt: str, n: int):
          'duration_ms': int((time.time() - t) * 1000)})
 
 
-TAKES = {'--session-id', '--resume', '-r', '--settings', '--model', '--system-prompt-file', '--append-system-prompt', '--permission-mode',
+TAKES = {'--session-id', '--resume', '-r', '--settings', '--model', '--system-prompt-file', '--append-system-prompt-file', '--append-system-prompt', '--permission-mode',
          '--add-dir', '--tools', '--allowedTools', '--disallowedTools', '--mcp-config', '--setting-sources', '--output-format', '--input-format'}
 
 

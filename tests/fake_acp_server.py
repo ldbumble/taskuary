@@ -20,9 +20,11 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_STEER_ECHO=1  ...and echoes the steered words back as a user_message_chunk before it answers the steer
   FAKE_ACP_USAGE=1       each turn's answer carries its usage and _meta.quota, as both adapters' PromptResponses do
   FAKE_ACP_MODELS=<a,b>  the model values it offers (default opus,sonnet)
+  FAKE_DIRECTOR=<folder> each turn's words come from a scenario (fake_director.py), no permission asked; a session/cancel ends it meanwhile
 It offers config options (mode, model, effort) the way claude-agent-acp and codex-acp do, and says what they were set to.
 """
 import json, os, sys
+from fake_director import directed, folder_of
 
 SID = 'sess_fake_1'
 PERM_ID = 9001
@@ -118,6 +120,13 @@ for line in sys.stdin:
         if os.environ.get('FAKE_ACP_THINK'): __import__('time').sleep(float(os.environ['FAKE_ACP_THINK']))
         said = ' '.join(str(b.get('text') or '') for b in msg['params'].get('prompt') or [])
         _heard = f"heard: {said} [mode={SET['mode']} model={SET['model']} effort={SET['effort']} turn={STARTS}" + (f' resumed={RESUMED}' if RESUMED else '') + ']'
+        if folder_of():                                # a scenario's own turn (fake_director.py): its words, no permission asked
+            _prompt_id = mid                           # ...on a thread, so a session/cancel meanwhile ends the turn as a real adapter's does
+            def answer_later(mid=mid, said=said):
+                global _prompt_id
+                text = directed(said)
+                if _prompt_id == mid: update('agent_message_chunk', content={'type': 'text', 'text': text}); reply(mid, ended()); _prompt_id = None
+            __import__('threading').Thread(target=answer_later, daemon=True).start(); continue
         update('agent_message_chunk', content={'type': 'text', 'text': 'Looking. '})
         if os.environ.get('FAKE_ACP_FAIL') == 'turn' and STARTS == 1:
             send({'jsonrpc': '2.0', 'id': mid, 'error': {'code': -32603, 'message': 'Internal error: API Error: 529 Overloaded'}}); continue

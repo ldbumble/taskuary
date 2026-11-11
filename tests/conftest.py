@@ -498,6 +498,9 @@ def isolated_runtime_boundaries():
 
 
 def pytest_configure(config):
+    # a run of the audit corpus that was interrupted leaves its director's mark beside the stand-ins, and every stand-in agent of every
+    # later run then waits on a director that is not there (an hour of false reproductions, 2026-11-11) - a session starts without it
+    Path(__file__).with_name('.fake-director').unlink(missing_ok=True)
     config.addinivalue_line('markers', 'acp: the test drives the ACP road itself, so it keeps clis.ADAPTERS (no_real_acp_adapters)')
 
 

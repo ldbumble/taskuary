@@ -391,7 +391,7 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool, memo: dict = N
         how = store.talked_with(ch, who, exclude_mid, (*alias, name), conversation=conv, memo=memo)
     if how == 'dm': return True, _said(f'You talk with {name} one-to-one on {room}.')
     if how == 'answered': return True, _said(f'You have answered {name} on {room} before.')
-    return False, _said(f"{name} wrote in {room}, and you haven't talked with them one-to-one or answered them there, {NOBODY}.")
+    return False, _said(f"{name} wrote in {room}, and you haven't talked with them one-to-one or answered them there, {NOBODY}.", True)
 
 
 def vouch(store, rows) -> None:

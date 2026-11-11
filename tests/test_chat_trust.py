@@ -72,6 +72,18 @@ def test_a_task_started_by_an_un_dmd_group_member_is_a_stranger_s():
     _dm(s, 'slack:dm', 'Ray Colton'); _mine(s, 'slack:dm')
     assert origin.of_task(s, t)[0] == 'trusted'
 
+def test_a_chat_stranger_s_hold_is_the_stranger_hold_with_its_trust_presses():
+    # a monitor's reply owed in a group chat said "No agent started: ... wrote in Teams" in its log, and the task's own box said "Nothing has
+    # started the agent on this" with no Trust to press: the chat rule's sentence was not marked the first-time-sender hold the mail rule's is
+    from taskuary import funnel, ingest
+    s = _store(); _mine(s, 'slack:group'); _line(s, 'slack:group', 'Gail Moreno')
+    t = s.create_task({'Title': 'x', 'Kind': 'reply', 'Source': 'slack'}, 'router')
+    mid = _line(s, 'slack:group', 'Ray Colton', tid=t)
+    ok, why = senders.known(s, _msg('Ray Colton'), exclude_mid=mid)
+    ingest.not_started(s, t, why)
+    st = funnel.idle_state(s, t)
+    assert not ok and st['kind'] == 'held' and "haven't talked with them" in st['line'] and st['row'] == 'held for you - not started' and st.get('trust')
+
 c = TestClient(server.app)
 
 def _held_chat_task(who):

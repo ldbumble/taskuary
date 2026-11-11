@@ -17,7 +17,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from . import session_artifacts, sessionrecord
+from . import outputs, session_artifacts, sessionrecord
 
 ACP_KEEP = 20000                  # the newest updates kept per session: message chunks arrive a token at a time
 MAIL_N = 3000
@@ -204,7 +204,7 @@ def owned(store, tid: int, ss: list) -> list:
 
 
 def cards(store, tid: int, ss: list) -> dict:
-    """WHERE EACH CARD STANDS IN THE CODING CHAT, BY ITS TURN - the general payload's `turns` and `drafts` (general.draft_turns), read off this record:
+    """WHERE EACH CARD STANDS IN THE CODING CHAT, BY ITS TURN - the general payload's `turns`, `drafts` and `published` (general.draft_turns), read off this record:
     the page compared times itself and named its turns by position, so nothing here could name one (2026-11-11). A card is of the turn whose step
     was newest when it was raised, named as the page names that step (`sid#n`, its place in what `chat` hands it - chatStream.chatRows); raised on
     arrival, or after his line before the turn's first step: none. A draft is stale once his line came after it and no step of the agent's since."""
@@ -220,4 +220,7 @@ def cards(store, tid: int, ss: list) -> dict:
     drafts = [{'review': r['ReviewId'], 'turn': turn(r['CreatedAt']), 'at': r['CreatedAt'], 'stale': stale, 'before': later if stale else None}
               for r in rows if r['Status'] == 'pending' and r['Kind'] in ('draft_reply', 'draft') and str(r.get('DraftText') or '').strip()
               for later in [his(r['CreatedAt'])] for stale in [bool(later) and not any(t > later and w == 'agent' for t, _, w in steps)]]
-    return {'turns': {str(r['ReviewId']): turn(r['CreatedAt']) for r in rows}, 'drafts': drafts}
+    # ...and each page it showed or published, in the turn that showed it as the general chat's are (outputs.pages): the coding chat drew only a
+    # page whose trace carried the tool's answer, and a published one never (the overnight walk, 2026-11-11)
+    return {'turns': {str(r['ReviewId']): turn(r['CreatedAt']) for r in rows}, 'drafts': drafts,
+            'published': [{**p, 'after': turn(p['created_at'])} for p in outputs.pages(store, tid)]}

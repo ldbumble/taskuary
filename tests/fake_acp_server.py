@@ -130,9 +130,10 @@ for line in sys.stdin:
         if rule and rule.get('exit') is not None: sys.exit(rule['exit'])   # an agent that dies mid-turn, as fake_claude's `exit`
         if rule:
             # ...each post the shell call a real agent makes for it, reported running before it files and done after - never a card ahead of its turn
+            # ...each its own call id, as a real adapter's: one reused across turns drew a later turn's call into the first one's step
             for i, p in enumerate(rule.get('post') or []):
-                update('tool_call', toolCallId=f'post_{i}', title='taskuary', kind='execute', status='in_progress', rawInput={'command': f"taskuary {p['path'].rsplit('/', 1)[-1]}"})
-                post(p); update('tool_call_update', toolCallId=f'post_{i}', status='completed')
+                update('tool_call', toolCallId=f'post_{STARTS}_{i}', title='taskuary', kind='execute', status='in_progress', rawInput={'command': f"taskuary {p['path'].rsplit('/', 1)[-1]}"})
+                post(p); update('tool_call_update', toolCallId=f'post_{STARTS}_{i}', status='completed')
             if rule.get('wait'):                       # a long turn: a session/cancel meanwhile ends it, as a real adapter's does
                 _prompt_id = mid
                 def finish(mid=mid, text=rule.get('first') or 'Ok.', wait=float(rule['wait'])):

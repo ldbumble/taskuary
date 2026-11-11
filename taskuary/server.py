@@ -21,6 +21,7 @@ from . import agents as hub_agents
 from . import workstreams as hub_ws
 from . import cli_connections, pathcache
 from . import blackboard
+from .outputs import page_row as _artifact_row       # a task's artifact as the page draws it (outputs.page_row)
 from . import taskstate, stages
 from . import search
 from . import guard
@@ -2333,11 +2334,7 @@ def _assistant_payload(task_id: int, session=None):
     messages = general.with_failure(store, task_id, general.shown_history(store, task_id))
     took = {(m.get('line'), m.get('createdAt'), ''.join(c.get('text', '') for c in m.get('content') or [])) for m in messages if m['role'] == 'user'}
     kept = [w for w in kept if (w.get('line'), w['at'], w['text']) not in took]
-    # each page or picture belongs to the answer that made it: the turn files its answer after what it published or showed,
-    # so it is the first answer stamped at or after it (both stamps are store._now()); one with none yet waits at the foot
     answers = [(str(m.get('createdAt') or ''), m['id']) for m in messages if m['role'] == 'assistant']
-    published = [{**r, 'after': next((mid for at, mid in answers if at >= str(r.get('created_at') or '')), None)}
-                 for r in (_artifact_row(a) for a in store.list_task_artifacts(task_id) if a.get('Kind') in ('claude_artifact', 'shown'))]
     from . import outputs
     # ...but a card made BEFORE the owner's line that began that answer's turn is no card of it: a reply drafted on arrival was named with the
     # answer to his "make it shorter", so its card - and once replaced, its record - stood under his line (the owner, 2026-11-10: "it reqrote in
@@ -2412,8 +2409,9 @@ def _assistant_payload(task_id: int, session=None):
             # ...and a step handed over on a page that has closed since says so, its one press bringing it back (browsergate.shown_ask)
             'asking': taskstate.asking(store, task, session),
             # pages its Claude session published (claude_artifacts) and files it chose to show (selfclose.SHOW_LINE) - the
-            # conversation draws each under the answer that made it, and lists any it cannot place at its foot
-            'published': published,
+            # conversation draws each in the turn that made it, by the cards' one rule (at_turn): a turn stopped or failed has no answer, and
+            # its page went to the NEXT turn's (the overnight walk, 2026-11-11); lists any it cannot place at its foot
+            'published': [{**r, 'after': at_turn(r.get('created_at'))} for r in outputs.pages(store, task_id)],
             # A PLAYBOOK DRAFTED IN THIS CONVERSATION IS APPROVED IN IT (the owner, 2026-10-21): "Draft ready on the task" pointed at
             # Close out, which a live session hides - Approve was reachable only after Stop and save, which nothing said to press
             'playbookDrafts': [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' "
@@ -3673,14 +3671,6 @@ def _att_row(a: dict, mail: bool = True) -> dict:
             'url': f"/api/attachments/{a['AttachmentId']}" if a['Path'] else None}
 
 
-def _artifact_row(a: dict) -> dict:
-    return {'id': a['ArtifactId'], 'name': a.get('Name') or 'session artifact.md',
-            'content_type': a.get('ContentType') or 'text/markdown', 'size': a.get('Size') or 0,
-            'kind': a.get('Kind') or 'session', 'created_by': a.get('CreatedBy') or '',
-            'created_at': a.get('CreatedAt'),
-            'url': f"/api/task-artifacts/{a['ArtifactId']}" if a.get('Path') else None,
-            # a page a Claude session published: its claude.ai link (claude_artifacts); `url` is the local copy
-            **({'external_url': a['Url'], 'version': a.get('Version') or ''} if a.get('Url') else {})}
 
 # SVG/HTML as a navigable document on this origin runs script as Taskuary. PNG/JPEG
 # stay `inline` so the panel <img> can draw them; SVG still displays in <img> with

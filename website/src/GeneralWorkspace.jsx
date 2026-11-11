@@ -404,13 +404,15 @@ const RowCards = ({ id }) => {
   const { work, home, next } = useDraft(), chat = React.useContext(ChatCtx), cards = React.useContext(TurnCardsCtx).filter((c) => c.after === id);
   // ...a replaced draft's record under the same head the draft had (ReplacedDraft): replaced, nothing on the page moves
   const here = chat && home === id && next, records = cards.filter((c) => c.record), rest = cards.filter((c) => !c.record);
-  if (!here && !cards.length) return null;
+  // ...and a page shown by a turn that never answered (stopped, failed): under the line that began it, the server's `after`
+  const shown = React.useContext(ShownCtx)[id] || [];
+  if (!here && !cards.length && !shown.length) return null;
   const head = (words) => <Typography component="span" sx={{ display: "block", color: "var(--tq-text, #292824)", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>{words}</Typography>;
   return <div className="tq-aui-message tq-aui-agent" data-tq-row-cards={id}><div className="tq-aui-agent-body">
     {(here || !!records.length) && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
       {head(here && !hasReply(work.reviews) ? "Next steps" : "Suggested reply")}
       {records.map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}{here && next}</Box>}
-    {rest.map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}</div></div>;
+    {rest.map((c) => <React.Fragment key={c.key}>{c.node}</React.Fragment>)}{!!shown.length && <PublishedPages pages={shown} open />}</div></div>;
 };
 // a turn still running is ONE LINE, "Working on this…", its steps folded under it (the closeout-in-chat spec, 2026-11-04); a turn that
 // ended in its summary keeps them folded above it. A turn with no summary - older ones, a CLI that wrote none, one that died - as ever
@@ -444,10 +446,7 @@ const LiveSteps = ({ steps }) => { const cut = Math.max(0, steps.length - LIVE_S
     {!!cut && <details className="tq-aui-live-earlier"><summary>{plural(cut, "earlier step")}</summary><AgentSteps data={{ steps: steps.slice(0, cut) }} /></details>}
     <AgentSteps data={{ steps: steps.slice(cut) }} /></div>; };
 const stepsWord = (parts) => { const n = workCount(parts); return n ? plural(n, "step") : "Along the way"; };
-// a coding task's chat: the files a turn showed are drawn from its trace (TurnWork), as it has no `published` list
-const TraceFilesCtx = React.createContext(false);
 const TurnWork = ({ data }) => {
-  const fromTrace = React.useContext(TraceFilesCtx);
   const at = React.useContext(WorkCtx), now = useAuiState((s) => live(s.message)), ended = useAuiState((s) => !!s.message.metadata?.custom?.summary);
   const key = foldKey(useAuiState((s) => s.message.id)), level = React.useContext(LevelCtx), chat = React.useContext(ChatCtx);
   // ...AND A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer): a call that never got
@@ -464,9 +463,8 @@ const TurnWork = ({ data }) => {
   const draw = (p, i, lvl) => p.type === "said" ? <Md key={p.id} text={p.text} /> : p.type === "edit" ? <EditRow key={p.id} p={p} />
     : p.type === "plan" ? <PlanRow key={p.id} p={p} />
     : p.type === "view" ? <ViewSpec key={p.id} spec={p.spec} raw={p.raw} />
-    // ...a file the agent showed (show `files`), drawn where it showed it - on a coding task, whose chat has no shown list of its own (the general
-    // chat places its copies under their answer: ShownCtx), so a picture is never drawn twice
-    : p.type === "files" ? (fromTrace ? <TurnFiles key={p.id} files={p.files} /> : null)
+    // ...a file the agent showed (show `files`) is drawn by its kept copy, placed in its turn by the server for both chats (ShownCtx), never twice
+    : p.type === "files" ? null
     : lvl === "everything" ? <AgentSteps key={p.id} data={{ steps: p.steps }} />
     // IN THE ORDER IT HAPPENED (the owner, 2026-11-06: "never write above what was written already"): a group with a call still running stays
     // open with its spinner, and what the agent says after it draws below it
@@ -1545,9 +1543,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     setAnswered(req.request_id); onAnswered?.(); decidedOnView();
   };
   const promptUsed = (id) => { if (ownPrompt?.id === id) setOwnPrompt(null); else onPromptUsed?.(id); };
-  const placed = placeShown(data?.published, shownMessages);     // no hook: this sits below the loading return
-  // ...the turn each card stands in, as the server names it - a general answer's id, a coding turn by its step (chatStream.turnOfStep)
+  // ...the turn each card and page stands in, as the server names it - a general answer's id, a coding turn by its step (chatStream.turnOfStep)
   const src = coding ? cc.got : data, named = coding ? turnOfStep(shownMessages) : (x) => x;
+  const placed = placeShown((src?.published || []).map((p) => ({ ...p, after: named(p.after) })), shownMessages);     // no hook: below the loading return
   const cardTurns = src?.turns && Object.fromEntries(Object.entries(src.turns).map(([k, v]) => [k, named(v)]));
   // the task's checklist where the page has not handed it in: the row carries it (store.list_tasks selects t.*)
   const steps = checklist || (() => { try { const a = JSON.parse(task?.Checklist || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } })();
@@ -1556,7 +1554,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     <WorkCtx.Provider value={dock ? null : { reviews: withTurns(reviews, (src?.drafts || []).map((d) => ({ ...d, turn: named(d.turn) }))), checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next,
       cards: data?.cards || [], refresh }}>
     <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs, versions: data?.turnOutputs }}>
-    <TraceFilesCtx.Provider value={coding}><LocalFiles.Provider value={dock ? null : { tid: task.TaskId }}>
+    <LocalFiles.Provider value={dock ? null : { tid: task.TaskId }}>
       {/* ...and every other file in the task's outputs folder - one no answer names - at the foot, with what it published or showed */}
       <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}
         published={dock ? placed.foot : [...placed.foot, ...uncited(data?.outputs, shownMessages.filter((m) => m.role === "assistant").map(textOf), task.TaskId)
@@ -1580,7 +1578,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         empty={coding && cc.got ? (cc.live ? "The agent is starting - its turns show here as it works." : "No session has run on this task yet - write below to start one.") : ""}
         noAi={!coding && chat && !dock && !data?.providers?.length && !noAiSaid && !data?.demo
           ? <div className="tq-aui-noai" data-tq-no-ai="">No AI is connected yet - what you type waits for one. <ConnectAi size="small" variant="text" /></div> : null} />
-    </LocalFiles.Provider></TraceFilesCtx.Provider>
+    </LocalFiles.Provider>
     </OutputsCtx.Provider>
     </WorkCtx.Provider>
     </ShownCtx.Provider></AgentNameCtx.Provider></ChatCtx.Provider></LevelCtx.Provider>

@@ -60,8 +60,11 @@ test("a file the agent showed is drawn in the turn that showed it, from the call
   assert.equal(filesOf(call("c5", "Bash", {}), answer("c5", said)), null);
 });
 
-test("on a coding task the files part is drawn by TurnFiles; the general chat places its copy under the answer once", () => {
+// ...ONE ROAD FOR BOTH CHATS (the overnight walk, 2026-11-11): the server places each shown page in its turn for a coding chat as for a general one,
+// so the trace's files part draws nothing in either - a coding chat drew only pages whose trace carried them, and never twice
+test("a shown page is drawn by its kept copy in its turn in both chats, never from the trace", () => {
   const gw = read("GeneralWorkspace.jsx");
-  assert.match(gw, /p\.type === "files" \? \(fromTrace \? <TurnFiles key=\{p\.id\} files=\{p\.files\} \/> : null\)/);
-  assert.match(gw, /<TraceFilesCtx\.Provider value=\{coding\}>/);
+  assert.match(gw, /p\.type === "files" \? null/);
+  assert.match(gw, /placeShown\(\(src\?\.published \|\| \[\]\)\.map\(\(p\) => \(\{ \.\.\.p, after: named\(p\.after\) \}\)\)/);
+  assert.doesNotMatch(gw, /TraceFilesCtx/);
 });

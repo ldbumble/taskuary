@@ -39,10 +39,11 @@ export function stepsFromAcp(updates) {
   // ...the agent's words arrive a token at a time: one step per run of chunks, as a log has one per block. A prompt Taskuary sent marks itself
   // its brief (`_meta.taskuary`), as mark_briefs marks a log's
   // ...each step at the moment its first update came in (`_at`, stamped as it was kept): ACP itself carries no time
-  // ...and its place in the updates (`n`), the name the server gives a card's turn by (codingchat.cards)
+  // ...and its place in the updates (`n`), the name the server gives a card's turn by (codingchat.cards) - with the places of the updates it took
+  // in after its first (`took`: a call's progress, a run of word chunks), which the server names a card or a page by just the same
   let at = "", n = 0;
-  const here = () => ({ n, ...(at ? { at } : {}) });
-  const chunk = (k, t) => { if (!t) return; const last = out.at(-1); if (last?.k === k && last.open) last.text += t; else out.push({ k, text: t, open: true, ...here() }); };
+  const here = () => ({ n, ...(at ? { at } : {}) }), took = (s) => { if (s.n !== n) (s.took ||= []).push(n); };
+  const chunk = (k, t) => { if (!t) return; const last = out.at(-1); if (last?.k === k && last.open) { last.text += t; took(last); } else out.push({ k, text: t, open: true, ...here() }); };
   for (const [i, u] of (updates || []).entries()) {
     const kind = u?.sessionUpdate;
     at = u?._at || ""; n = i;
@@ -54,7 +55,7 @@ export function stepsFromAcp(updates) {
     else if (kind === "error" && u._meta?.taskuary === "error") out.push({ k: "error", text: textOf(u.content), ...here() });
     else if ((cid = compactionOf(u, compacts)) != null) {
       let c = compacts.get(cid);
-      if (!c) { c = { k: "compact", id: cid, ...here() }; compacts.set(cid, c); out.push(c); }
+      if (!c) { c = { k: "compact", id: cid, ...here() }; compacts.set(cid, c); out.push(c); } else took(c);
       if (u.status) c.status = u.status;
     }
     else if (kind === "plan") out.push({ k: "plan", items: (u.entries || []).map((e) => ({ text: String(e?.content || ""), status: e?.status || "pending" })), ...here() });
@@ -65,7 +66,7 @@ export function stepsFromAcp(updates) {
         const tool = u._meta?.claudeCode?.toolName;
         s = { k: "tool", id: String(u.toolCallId || ""), name: tool || ACP_TOOL[u.kind] || u.title || u.kind || "tool", args: {}, ...here() };
         byId.set(u.toolCallId, s); out.push(s);
-      }
+      } else took(s);
       const par = parentOf(u);
       if (par) s.parent = par;
       if (u.rawInput && typeof u.rawInput === "object") s.args = { ...s.args, ...small(u.rawInput) };
@@ -244,7 +245,7 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
   take(null);
   return out.map((r, i) => (r.kind === "turn"
     ? { kind: "turn", id: `r${i}`, at: r.at, running: !!r.running, waiting: !!r.running && waiting, parts: turnParts(eventsOf(r.steps, !!r.running)), answer: lastSaid(r.steps),
-      steps: r.steps.map((s) => s.n), ended: r.running ? null : at(r.steps.at(-1)?.at) || null }
+      steps: r.steps.flatMap((s) => [s.n, ...(s.took || []).map((k) => `${r.sid}#${k}`)]), ended: r.running ? null : at(r.steps.at(-1)?.at) || null }
     : { ...r, id: `r${i}` }));
 }
 export const COMPACTED = "Conversation compacted";

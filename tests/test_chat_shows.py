@@ -80,6 +80,27 @@ class ShownInTheChatTests(unittest.TestCase):
         answer = [m for m in data['messages'] if m['role'] == 'assistant'][-1]
         self.assertEqual([p['after'] for p in data['published']], [answer['id']])
 
+    def test_a_page_from_a_turn_that_never_answered_stays_on_that_turn(self):
+        # stopped or failed: no answer of its own - it went to the NEXT turn's answer, under "back again" (the overnight walk, 2026-11-11)
+        first = self.s.add_comment(self.tid, 'owner', general.USER_TYPE, 'Start the draft.')
+        general._show_files(self.s, self.tid, [str(config.home() / 'scratch' / 'spend.png')], [])
+        self.s._exec("UPDATE task_artifact SET CreatedAt='2000-01-01 00:00:01' WHERE TaskId=?", (self.tid,))
+        self.s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE CommentId=?", (first,))
+        self.s.add_comment(self.tid, 'owner', general.USER_TYPE, 'Back again.')
+        self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Back - nothing changed.')
+        data = self.server._assistant_payload(self.tid)
+        line = next(m for m in data['messages'] if m['role'] == 'user' and 'Start the draft' in str(m['content']))
+        self.assertEqual([p['after'] for p in data['published']], [line['id']])
+
+    def test_a_coding_chat_places_its_pages_in_the_turn_that_showed_them(self):
+        # ...the same list the general chat gets, named by the coding chat's steps: it had none, and a page drew only from a trace that carried it
+        from taskuary import codingchat
+        general._show_files(self.s, self.tid, [str(config.home() / 'scratch' / 'spend.png')], [])
+        self.s._exec("UPDATE task_artifact SET CreatedAt='2000-01-01 00:00:03' WHERE TaskId=?", (self.tid,))
+        ss = [{'sid': 's1', 'updates': [{'sessionUpdate': 'user_message_chunk', '_meta': {'taskuary': 'owner'}, '_at': '2000-01-01 00:00:00'},
+                                        {'sessionUpdate': 'tool_call', '_at': '2000-01-01 00:00:02'}, {'sessionUpdate': 'agent_message_chunk', '_at': '2000-01-01 00:00:09'}]}]
+        self.assertEqual([(p['name'], p['after']) for p in codingchat.cards(self.s, self.tid, ss)['published']], [('spend.png', 's1#1')])
+
     def test_a_picture_is_served_as_itself_and_a_page_only_as_text(self):
         general._show_files(self.s, self.tid, [str(config.home() / 'scratch' / n) for n in ('spend.png', 'spend.html')], [])
         rows = {a['Name']: a for a in self.s.list_task_artifacts(self.tid)}

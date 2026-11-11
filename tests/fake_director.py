@@ -41,5 +41,7 @@ def post(p: dict) -> str:
     body = {'task_id': int(os.environ.get('TASKUARY_TASK') or 0), **p.get('body', {})}
     hdr = {'Content-Type': 'application/json', 'X-Taskuary-Token': os.environ.get('TASKUARY_TOKEN') or '',
            **({'X-Taskuary-Task-Token': os.environ['TASKUARY_TASK_TOKEN']} if os.environ.get('TASKUARY_TASK_TOKEN') else {})}
-    try: return urllib.request.urlopen(urllib.request.Request(base + p['path'], json.dumps(body).encode(), hdr), timeout=60).read().decode()
+    # ...`{task}` in the path is the session's own task: the MCP door is /api/mcp?task=<id> (browser/shown-on-its-turn)
+    url = base + p['path'].replace('{task}', str(body['task_id']))
+    try: return urllib.request.urlopen(urllib.request.Request(url, json.dumps(body).encode(), hdr), timeout=60).read().decode()
     except Exception as e: return f'failed: {e}'

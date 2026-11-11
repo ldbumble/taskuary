@@ -320,5 +320,12 @@ test("regression: on a coding task the draft's card stays on the turn that wrote
     "the turn at work when it was written, two questions later");
   // ...one written before any turn names none: under the mail, by its time; one whose step is not drawn names none either
   assert.equal(turnOfStep(msgs)(null), null); assert.equal(turnOfStep(msgs)("s1#99"), null);
+  // ...and one raised after a call's progress names that update - the call's own step, merged into it: the page a stopped turn showed fell to
+  // the chat's foot (the overnight walk, 2026-11-11)
+  const acp = rowMessages(chatRows({ sessions: [{ sid: "s2", source: "acp", at: "2026-11-09 09:00:00", updates: [
+    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "start the draft" }, _meta: { taskuary: "owner" }, _at: "2026-11-09 09:00:00" },
+    { sessionUpdate: "tool_call", toolCallId: "c1", kind: "execute", title: "taskuary", status: "in_progress", _at: "2026-11-09 09:00:01" },
+    { sessionUpdate: "tool_call_update", toolCallId: "c1", status: "completed", _at: "2026-11-09 09:00:02" }] }] }));
+  assert.equal(turnOfStep(acp)("s2#2"), acp.find((m) => m.role === "assistant").id);
   assert.match(gw, /turns=\{cardTurns\}/);
 });

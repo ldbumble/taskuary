@@ -106,7 +106,7 @@ def rel(tid: int, p: Path) -> str:
     return Path(p).resolve().relative_to(folder(tid).resolve()).as_posix()
 
 def row(tid: int, p: Path, rel: str) -> dict:
-    "One file as the page draws it - the same shape as a shown page (server._artifact_row), so one list draws both."
+    "One file as the page draws it - the same shape as a shown page (page_row), so one list draws both."
     from urllib.parse import quote
     ext, sheet = p.suffix.lower(), PREVIEW.get(p.suffix.lower())
     if sheet == 'sheet' and not can_sheet(): sheet = None
@@ -271,11 +271,19 @@ def _tids() -> list:
     except OSError: return []
 
 
-def _page(a: dict) -> dict:
-    "A page an agent showed or published, in the row shape (server._artifact_row) - here, so a look-up never imports the server."
-    return {'id': a['ArtifactId'], 'name': a.get('Name') or 'page', 'kind': a.get('Kind'), 'content_type': a.get('ContentType') or '',
-            'created_at': a.get('CreatedAt'), 'url': f"/api/task-artifacts/{a['ArtifactId']}" if a.get('Path') else None,
-            **({'external_url': a['Url']} if a.get('Url') else {})}
+def page_row(a: dict) -> dict:
+    "A task's artifact as the page draws it - a page an agent showed or published among them - here, so a look-up never imports the server."
+    return {'id': a['ArtifactId'], 'name': a.get('Name') or 'session artifact.md',
+            'content_type': a.get('ContentType') or 'text/markdown', 'size': a.get('Size') or 0,
+            'kind': a.get('Kind') or 'session', 'created_by': a.get('CreatedBy') or '', 'created_at': a.get('CreatedAt'),
+            'url': f"/api/task-artifacts/{a['ArtifactId']}" if a.get('Path') else None,
+            # a page a Claude session published: its claude.ai link (claude_artifacts); `url` is the local copy
+            **({'external_url': a['Url'], 'version': a.get('Version') or ''} if a.get('Url') else {})}
+
+PAGES = ('shown', 'claude_artifact')
+def pages(store, tid: int) -> list:
+    "The pages task `tid`'s agents showed (agenttools.show_files) or published (claude_artifacts), as rows - each chat places them by its turns."
+    return [page_row(a) for a in store.list_task_artifacts(int(tid)) if a.get('Kind') in PAGES]
 
 
 def find(store, query: str = '', kind: str = '', tid: int = None, limit: int = 8) -> list:
@@ -289,7 +297,7 @@ def find(store, query: str = '', kind: str = '', tid: int = None, limit: int = 8
     try:
         for a in store._rows("SELECT * FROM task_artifact WHERE Kind IN ('shown','claude_artifact')" + (' AND TaskId=?' if tid else ''),
                              (int(tid),) if tid else ()):
-            pages.setdefault(int(a['TaskId']), []).append(_page(a))
+            pages.setdefault(int(a['TaskId']), []).append(page_row(a))
     except Exception: pass
     hits = []
     for t in dict.fromkeys(ids + ([] if tid else sorted(pages, reverse=True))):

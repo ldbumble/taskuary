@@ -258,7 +258,8 @@ export async function startHarness({ fresh = false, bin = "", tour = false } = {
       pages.add(page);
       await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
       await page.evaluateOnNewDocument((fixtureTokenValue) => {
-        localStorage.setItem("taskuary_token", fixtureTokenValue);
+        // ...in the app, never in a page the agent showed: its sandboxed frame has no storage, and the read threw there
+        if (window === window.top) localStorage.setItem("taskuary_token", fixtureTokenValue);
       }, token);
       await page.evaluateOnNewDocument((allowedHttpOrigin) => {
         const NativeWebSocket = window.WebSocket;

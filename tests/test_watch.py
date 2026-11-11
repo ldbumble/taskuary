@@ -187,6 +187,101 @@ class MovesEndTheWatchTests(unittest.TestCase):
         self.assertFalse(watch.watching(s.get_task(t)))
 
 
+class Watched(unittest.TestCase):
+    "A task triage put under Watching, on the rail, and the page's own road for a press on it."
+    def setUp(self):
+        from taskuary.ingest import ingest_message
+        self.s = store()
+        brain = lambda *a, **k: json.dumps({'intent': 'watch', 'why': 'Gail Moreno usually answers these', 'title': 'Send the signed vendor form'})
+        with mock.patch('taskuary.ingest._spawn'):
+            self.t = ingest_message(self.s, {'external_id': 'h1', 'channel': 'email', 'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake',
+                                             'conversation_id': 'conv-hand', 'subject': 'Vendor form', 'sent_at': ago(2),
+                                             'body': 'Alex - can you send me the signed vendor form today?'}, llm=brain)['task_id']
+        self.settle(); self.s.activate_processing_reads(fixed_now=ago(0), live_state=[]); self.settle()
+        self.assertEqual(self.level(), 'watching')
+
+    def settle(self): self.s.reconcile_processing_membership(fixed_now=ago(0)); funnel.invalidate()
+    def level(self):
+        "Where the row sits on the very next rail read - no settle between the press and it."
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            [i] = [i for i in processing_unread.build(self.s, live_state=[])['items'] if i.get('tid') == self.t]
+        return lanes.level_of(i)
+    def lines(self):
+        from taskuary import general
+        return [m['content'][0]['text'] for m in general.press_lines(self.s, self.t)]
+
+    def press(self, kind, params, start=None, hold=None):
+        "The page's own road (taskOps.runOperation -> server._run_operation), the agent's start stood in for at the door's inside."
+        from fastapi import BackgroundTasks
+        self.started = []
+        def go(tid, body, background): self.started.append((tid, body.kind, body.handed)); return {'dispatch': 'assistant', 'started': True, 'taskId': tid}
+        with mock.patch.object(server, 'store', self.s), mock.patch.object(server, '_no_brain', return_value=''), \
+                mock.patch('taskuary.origin.hold', return_value=hold), mock.patch.object(server, '_dispatch_task_to_its_agent', start or go):
+            return server._run_operation({'kind': kind, 'target': self.t, 'targetKind': 'task', 'params': params}, BackgroundTasks())
+
+
+class HandedToAnAgentTests(Watched):
+    """THE OWNER'S WATCHED TASK, HANDED TO AN AGENT (the owner, 2026-11-11: "i changed task to general agent and nothing happened also it's
+    still on watching rail"): triage read an ask put to the owner as somebody else's, the owner chose who does it on the task - and the
+    task wrote "You routing learned.", started nobody, and its row stayed under Watching."""
+    def test_who_does_it_changed_to_the_agent_ends_the_watch_starts_it_and_says_so_in_sentences(self):
+        for kind, who in (('general', 'the agent'), ('coding', 'the coding agent')):
+            with self.subTest(kind=kind):
+                self.setUp()
+                out = self.press('task.set_kind', {'kind': kind})
+                self.assertEqual(self.started, [(self.t, kind, True)], 'the agent he chose was not started - by the one dispatch door, told it was handed over')
+                self.assertTrue(out.get('started'))
+                self.assertEqual(self.s.get_task(self.t)['Kind'], kind)
+                self.assertFalse(watch.watching(self.s.get_task(self.t)))
+                self.assertEqual(self.level(), 'task', 'the row stayed under Watching')
+                self.assertEqual(self.lines(), [f'You handed it to {who}.', 'You stopped watching it - it is back under Tasks.'])
+
+    def test_a_start_that_cannot_happen_says_why_in_one_line_and_the_change_still_lands(self):
+        from fastapi import HTTPException
+        def no(tid, body, background): raise HTTPException(422, 'Connect an AI under Settings to start it.')
+        out = self.press('task.set_kind', {'kind': 'general'}, start=no)
+        self.assertEqual((out.get('started'), self.s.get_task(self.t)['Kind'], self.level()), (False, 'general', 'task'))
+        self.assertIn('Connect an AI', out['why'], 'the press answered nothing about the agent that did not start')
+
+    def test_a_stranger_s_task_waits_behind_its_trust_and_says_so(self):
+        out = self.press('task.set_kind', {'kind': 'general'}, hold={'line': 'Erin Blake is not someone you have trusted yet. Trust them and it starts.'})
+        self.assertEqual((self.started, out['started'], self.s.get_task(self.t)['Kind']), ([], False, 'general'))
+        self.assertIn('Trust them and it starts', out['why'])
+
+    def test_stop_watching_puts_it_back_under_tasks_on_the_next_read(self):
+        self.assertEqual(buttons.VERBS['watch']['states']['on'], 'Stop watching', 'the one move back, on the task itself')
+        self.press('task.watching', {'off': True})
+        self.assertEqual(self.level(), 'task')
+        self.assertEqual(self.lines(), ['You stopped watching it - it is back under Tasks.'])
+        self.assertEqual(self.started, [], 'back on his list is his to do: nobody starts')
+
+    def test_a_row_written_in_his_name_with_no_words_is_no_line_of_his(self):
+        "The composer said any such row by its bare name: \"You routing learned.\" (routingmemory's bookkeeping, written as the actor it is given)."
+        self.s.audit('task', self.t, 'routing_learned', 'owner', detail={'field': 'kind', 'value': 'general'})
+        self.assertEqual(self.lines(), [])
+
+
+class EveryMoveLeavesTheRailAndTheTaskAgreeingTests(Watched):
+    "Each move on a watched task: the task says it is not watched, and the next rail read has the row where the task says."
+    def where(self): return (watch.watching(self.s.get_task(self.t)), self.level())
+
+    def test_remind_me_puts_it_for_later_and_not_for_me_and_mark_done_take_it_off(self):
+        self.press('task.defer', {'until': '1 week'})
+        self.assertEqual(self.where(), (False, 'later'))
+        self.setUp(); self.press('task.complete', {})
+        self.assertEqual(self.s.get_task(self.t)['Status'], 'done'); self.assertFalse(self.s.get_task(self.t)['WatchedAt'])
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            self.assertFalse([i for i in processing_unread.rail_of(processing_unread.build(self.s, live_state=[])['items']) if i.get('tid') == self.t])
+
+    def test_a_new_mail_from_them_brings_it_back_under_tasks(self):
+        from taskuary.ingest import ingest_message
+        brain = lambda *a, **k: json.dumps({'intent': 'task', 'kind': 'task', 'why': 'she asks again', 'title': 'Send the signed vendor form', 'handled_elsewhere': False})
+        with mock.patch('taskuary.ingest._spawn'):
+            ingest_message(self.s, {'external_id': 'h2', 'channel': 'email', 'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake',
+                                    'conversation_id': 'conv-hand', 'subject': 'RE: Vendor form', 'sent_at': ago(0), 'body': 'Alex, any news on the form?'}, llm=brain)
+        self.assertEqual(self.where(), (False, 'task'))
+
+
 class ButtonTests(unittest.TestCase):
     def test_watch_it_is_a_button_beside_remind_me_and_assign_is_gone(self):
         self.assertEqual(buttons.VERBS['watch']['label'], 'Watch it')

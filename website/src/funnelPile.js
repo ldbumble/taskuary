@@ -465,6 +465,12 @@ export const inOrder = (rows, extra) => (extra || []).reduce((out, x) => {
 // starts, asks or stops no longer changes band at all: every open task is under Tasks (the owner, 2026-10-21).
 // ...and a pinned row sits in its band WHERE THE WALK'S ORDER PUTS IT: it kept its own lane's place in the server's order, so a row
 // from a later band was drawn under every row of the band it was pinned to - a day-old task at the bottom of its band, below 1h
+// ...UNTIL THE OWNER PRESSES A MOVE ON IT (the owner, 2026-11-11: "i changed task to general agent ... it's still on watching rail"): the pin
+// holds a row against a move that only opening it made, never against his own - Stop watching, or who does it changed, left the row under
+// Watching until he walked off it. `presses` counts the moves made on the table's task: one more than the pin was taken at lets the band go
+export const pinOf = (was, row, levels = {}, presses = 0) => (!row ? null
+  : was?.key !== row.key ? { key: row.key, level: levels[row.key] || null, presses }
+  : was.presses !== presses ? { ...was, level: null, presses } : was);
 export const bandsOf = (items, pin = null) => {
   const held = (i) => !!pin?.level && i.key === pin.key;
   return LEVEL_ORDER

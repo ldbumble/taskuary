@@ -85,6 +85,27 @@ test("the row on the table stays in the band it was opened from", async () => {
   assert.equal(where(null).a, levelOf(rows[0]));
 });
 
+// THE OWNER, 2026-11-11: "i changed task to general agent and nothing happened also it's still on watching rail" - the task on the table was
+// pinned to the band it was opened from, so Stop watching and who-does-it left its row under Watching until he walked off it
+test("a move the owner presses on the table's task lets its row go where the move put it", async () => {
+  const { bandsOf, pinOf } = await import("../src/funnelPile.js");
+  const watched = { key: "w", tid: 3, lane: "yours", order_band: 2, watching: true }, back = { ...watched, watching: false };
+  const where = (rows, pin) => bandsOf(rows, pin).find((b) => b.items.some((i) => i.key === "w")).level;
+  let pin = pinOf(null, watched, { w: "watching" }, 0);
+  assert.deepEqual(pin, { key: "w", level: "watching", presses: 0 });
+  assert.equal(where([back], pinOf(pin, back, { w: "watching" }, 0)), "watching", "a move nobody pressed (opening it, a poll) never moves the row under the pointer");
+  pin = pinOf(pin, back, { w: "watching" }, 1);
+  assert.equal(where([back], pin), "task", "the row stayed under Watching after his own press");
+  assert.equal(pinOf(pin, back, { w: "task" }, 1), pin, "and the pin is the same one until another press or another row");
+  assert.equal(pinOf(pin, null, {}, 1), null);
+  assert.equal(pinOf(pin, { key: "x" }, { x: "later" }, 1).level, "later", "the next row on the table is pinned where it was opened");
+  const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
+  assert.match(view, /pin\.current = pinOf\(pin\.current, tableRow && !movedKeys\.has\(tableRow\.key\) \? tableRow : null, lastLevel\.current, presses\)/);
+  assert.match(view, /changed: tablePressed,/, "TaskPage's onChanged is the press the rail hears");
+  const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
+  assert.match(page, /runOperation\(api, "task\.watching", selected, off \? \{ off: true \} : \{\}\); \}\n[^\n]+\n    loadDetail\(selected\); loadTasks\(\); onListChanged\?\.\(\); onChanged\?\.\(\);/, "Stop watching reads the rail at once");
+});
+
 // AN OWNER SCREENSHOT, 2026-10-20: the task on the table whose coding agent was working was drawn at the bottom of its section, below
 // rows a day younger. Since 2026-10-21 every open task is under Tasks in the walk's order, its agent working or not
 test("a working agent's task is under Tasks in its place, and a pinned row sits where the walk's order puts it", async () => {

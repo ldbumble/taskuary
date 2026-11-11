@@ -12,7 +12,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from . import llm as llm_mod, words, wrapup
+from . import kinds as _kinds, llm as llm_mod, words, wrapup
 from .buttons import label as L          # the action card's buttons by their one name (buttons.json)
 from .timewords import plural
 
@@ -608,8 +608,11 @@ HANDED_OFF = 'Handed off to '
 # ...each said in the owner's voice, so one phrase serves both: "You set a reminder for ..." on the page, "set a reminder for ..." to the agent
 # ...Remind me says what it did and where the task is now, as Send and close does (the owner, 2026-11-10: "it should show reminded for now")
 PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - put away until then" if d.get('to') else 'took the reminder off',
-           'watch': lambda d: 'chose Watch it - it waits quietly for a reply', 'unwatch': lambda d: 'stopped watching it',
+           'watch': lambda d: 'chose Watch it - it waits quietly for a reply', 'unwatch': lambda d: 'stopped watching it - it is back under Tasks',
            'stopped_turn': lambda d: 'stopped the agent',       # the x on a turn at work (stop_turn)
+           # ...who does it, changed to an agent (server.update_task): the change wrote no row of its own, and the task said only what the
+           # change taught - "You routing learned." (the owner, 2026-11-11)
+           'handed_to_agent': lambda d: f"handed it to {_kinds.worker(d.get('to')) or 'an agent'}",
            'priority': lambda d: f"changed its priority from {d.get('from')} to {d.get('to')}",
            'handoff': lambda d: f"handed this to {d.get('to')} by {d.get('channel')}", 'reopened': lambda d: 'reopened it', 'reopen': lambda d: 'reopened it',
            'split_into_task': lambda d: f"split part of it off as its own task: {d.get('title') or ''}".rstrip(': '),
@@ -685,10 +688,12 @@ def presses(store, tid: int, since: str = '') -> list:
     "The owner's presses on task `tid` after `since`, oldest first: [(audit id, at, what)] - its own and its shares."
     from .processing_unread import OWNER_ACTORS
     who = ','.join('?' * len(OWNER_ACTORS))
-    out = [(r['Id'], r['CreatedAt'], (PRESSES.get(r['Action']) or (lambda d, a=r['Action']: a.replace('_', ' ').replace('-', ' ')))(_detail(r)),
+    # ...ONLY A ROW THAT HAS WORDS (the owner, 2026-11-11: "You routing learned."): one without was said by its bare name, so any bookkeeping
+    # written as the actor it was handed (routingmemory.learn_correction) stood in the chat as a sentence of theirs that is none
+    out = [(r['Id'], r['CreatedAt'], PRESSES[r['Action']](_detail(r)),
             *((_held_result(_detail(r)),) if r['Action'] in HELD_DONE else ()))
            for r in store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id",
-                                (tid, *OWNER_ACTORS, since or '')) if r['Action'] not in QUIET and not _detail(r).get('review')]   # a card's own act: said by its card (proposals.execute)
+                                (tid, *OWNER_ACTORS, since or '')) if r['Action'] in PRESSES and not _detail(r).get('review')]   # a card's own act: said by its card (proposals.execute)
     out += [(r['Id'], r['CreatedAt'], f"shared it ({r['Action']})") for r in store._rows(
         f"SELECT * FROM audit WHERE EntityType='share' AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id", (*OWNER_ACTORS, since or ''))
         if _detail(r).get('task') == tid]

@@ -565,6 +565,8 @@ class DispatchBody(BaseModel):
     said: int | None = None
     # RUN ANOTHER AGENT: a second agent with a conversation of its own, never the one before picked back up (general.new_run)
     fresh: bool = False
+    # WHO DOES IT, JUST CHANGED TO AN AGENT (task.set_kind): the kind is already written, so the task no longer says it was the owner's own
+    handed: bool = False
 class PolicyBody(BaseModel):
     PolicyId: int | None = None; Name: str | None = None; Kind: str | None = None
     Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
@@ -1450,7 +1452,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # to the assistant" from a card was the one reclassification that never reached either
         # memory) and it left a live session attached to a task that had changed worker mode.
         update_task(tid, TaskBody(Kind=str(p.get('kind'))), background)
-        return {'kind': p.get('kind')}
+        return {'kind': p.get('kind'), **_start_chosen(tid, str(p.get('kind')), t.get('Kind'), background)}
     if kind == 'task.not_a_task': return not_a_task(tid, NotATaskBody(learn=bool(p.get('learn', True))), background)
     if kind == 'routing.remember':
         # the assistant teaching the routing memory in words, which it could not do at all: it could
@@ -2798,7 +2800,10 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
         # moving it OFF the agent entirely is the button's judgement, so it writes the button's
         # four records. general/coding are still agent work - a weaker signal, the routing fact only.
         if next_kind == 'task': _teach_not_coding(task_id, t, was_verdict, None, True, background)
-        else: _teach_routing(task_id, 'kind', next_kind, background=background)
+        else:
+            # ...said as the press it was, before what it taught (general.PRESSES): the change itself left no row on the task
+            store.audit('task', task_id, 'handed_to_agent', ACTOR, detail={'from': t.get('Kind'), 'to': next_kind})
+            _teach_routing(task_id, 'kind', next_kind, background=background)
     # ...and WHICH worker: reassigning the profile overturns triage's `profile`, the field that
     # decided an analyst read a timesheet ask in a bank-feeds checkout.
     who = str(fields.get('Assignee') or '')
@@ -3135,6 +3140,18 @@ def resume_previous_work(task_id: int, background: BackgroundTasks):
     return {'action': 'open', 'taskId': task_id}
 
 
+
+def _start_chosen(tid: int, kind: str, was: str, background) -> dict:
+    """WHO DOES IT, CHANGED TO AN AGENT, STARTS THAT AGENT (the owner, 2026-11-11: "i changed task to general agent and nothing happened"):
+    by the one dispatch door, so a start that cannot happen is kept on the task as any other (_start_failed) - and said in this press's
+    answer (`why`), never the change's failure: who does it is changed whatever became of the start. {} where nothing is to start.
+    An untrusted sender's task waits behind its Trust as every start does (origin.hold): its line is the why, and Trust starts it (_trusted_starts)."""
+    from . import origin
+    if kind not in task_kinds.AGENT or kind == was or (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {}
+    if (h := origin.hold(store, tid)): return {'started': False, 'why': h['line']}
+    try: out = dispatch_task(tid, DispatchBody(kind=kind, handed=was not in task_kinds.AGENT), background)
+    except HTTPException as e: return {} if e.status_code == 409 else {'started': False, 'why': str(e.detail or 'the agent did not start')}   # 409: one is at work on it already
+    return {'started': bool(out.get('started') or out.get('existing')), **({'why': out['reason']} if out.get('reason') else {})}
 
 def _pressed_on(task_id: int, body) -> int:
     """The task the press was made on: the goal a step was started from (DispatchBody.via, only the step's own parent), else the task."""
@@ -4541,7 +4558,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
             prompt = str(task.get('Summary') or task.get('Title') or '').strip()
             # ...and a task triage left to the owner is the agent's now: its Summary said "Alex makes both changes by hand", and the agent
             # the owner sent it to read that as its orders and did nothing (the overnight run, 2026-11-03)
-            if was not in task_kinds.AGENT and prompt: prompt += '\n\n' + HANDED_OVER
+            if (was not in task_kinds.AGENT or body.handed) and prompt: prompt += '\n\n' + HANDED_OVER
         # ...the Summary is Taskuary's brief, never the owner's words: pressed with nothing typed, the pane drew it under YOU (2026-11-03)
         # ...marked opening until its turn has run, as Continue's is: answered before the turn takes the session, the page read an idle
         # session with nothing said, drew no Starting… and never polled (2026-11-04)

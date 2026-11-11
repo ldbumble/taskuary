@@ -127,7 +127,7 @@ PURPOSE = {
                                  "`title`, `assignee`: exactly `owner` (the owner takes it) or `agent:<profile>` (one of the saved profiles), "
                                  "`due`: the day the work is due (2026-10-30, \"friday\", \"2 weeks\", or \"none\" to clear it); `ref` when "
                                  "it is not the one on the table. Any other value is refused with the allowed ones"),
-    'task.set_kind':            'say what kind of work a task is - `kind`: task (the owner does it) | general (a non-coding agent) | coding; `ref`',
+    'task.set_kind':            'say who does a task - `kind`: task (the owner does it) | general (a non-coding agent) | coding - an agent kind starts that agent on it; `ref`',
     'task.set_repo':            'put a coding task in the repository it belongs in - `repo` (its name, as the repositories list says it); `ref`',
     'task.check':               ('tick, untick or note one to-do on a task - `item`: its NUMBER (1 is the first; the facts list them numbered); '
                                  '`done`: false un-ticks; `note`: words kept under it ("Gail has it"; "" removes it) - with only a note it is not ticked; `ref`'),

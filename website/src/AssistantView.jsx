@@ -77,7 +77,7 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
-import { FYI_PAGE, ageHover, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, rowKeys, sameRow, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -323,7 +323,7 @@ class BeforeCommit extends React.Component {
   render() { return null; }
 }
 
-function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, coming = false, moved = {} }) {
+function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, coming = false, moved = {}, presses = 0 }) {
   const items = pile?.items || [];
   const sendCaps = useCapabilities();       // a draft its channel cannot send wears "draft to copy", never the flag (railStatus)
   // a task read newer than this rail takes back its agent lane (railStatus.agentGone): the row draws again when one says something new
@@ -463,8 +463,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // server (no longer put down) and jumped to Tasks under the pointer. It moves when the owner moves on, never while they look.
   const lastLevel = useRef({}), pin = useRef(null);
   const tableRow = current ? drawn.find((i) => !i.moved && atTable(i)) : null;
-  if (!tableRow || movedKeys.has(tableRow.key)) pin.current = null;
-  else if (pin.current?.key !== tableRow.key) pin.current = { key: tableRow.key, level: lastLevel.current[tableRow.key] || null };
+  // ...and until they press a move on it: the row then goes where that move put it (funnelPile.pinOf)
+  pin.current = pinOf(pin.current, tableRow && !movedKeys.has(tableRow.key) ? tableRow : null, lastLevel.current, presses);
   const bands = bandsOf(drawn.map((i) => (i.surfaced && atTable(i) ? { ...i, surfaced: false } : i)), pin.current);
   lastLevel.current = Object.fromEntries(bands.flatMap((b) => b.items.filter((i) => !i.moved).map((i) => [i.key, b.level])));
   // the FYI band is costed whole: its "N more fyi" stays while any of it is not here (fillCaps reads `total`)
@@ -1234,6 +1234,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // is held until the pile no longer carries it, or a pile read begun after its close's answer (`at`) still does - the server's word then
   const [leaving, setLeaving] = useState([]);         // [{ tid, key, was, at }] - `was` the row as it stood at the press (putDownLanded);
                                                       // a read's: [{ key, keys, coming, at }] - `keys` every rail key it took off
+  // the moves pressed on the table's task, counted: the rail lets its row go where a move of the owner's put it (funnelPile.pinOf)
+  const [presses, setPresses] = useState(0);
+  const tablePressed = useCallback(() => { setPresses((n) => n + 1); onChanged?.(); }, [onChanged]);
   const putDownRef = useRef([]);
   useEffect(() => { putDownRef.current = leaving; }, [leaving]);
   const dropLeaving = (key) => setLeaving((l) => (l.some((x) => x.key === key) ? l.filter((x) => x.key !== key) : l));
@@ -3263,9 +3266,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // none, so a move the row lacks drew no line and no button there (the matrix's phone pass, 2026-10-20)
   // SEND TO AGENT WITH NO AI IS GREYED, ITS REASON THE HOVER - on a report, an FYI or a mail as on a task (trust audit F3, 2026-10-28): the
   // card's word stood live there and opened a "No AI connected" box (capabilities.cannotStart, the task page's own check)
+  // A MOVE PRESSED ON THE TABLE'S TASK (TaskPage's onChanged): the rail lets its row go where the move put it (funnelPile.pinOf)
   const actions = { noAi: cannotStart(caps), openRef: (n) => pressRowRef.current?.(n), movedTo, done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref, c?.key),
-    next: () => runChip({ verb: "next" }), leave, reload: () => loadPile(true), changed: onChanged,
+    next: () => runChip({ verb: "next" }), leave, reload: () => loadPile(true), changed: tablePressed,
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
     // ...and a page opened over it is put away with the fold: the item under it was folded by the page, not by its X
     reopen: (key, onTable) => { if (onTable) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } else pull(key); },
@@ -4030,7 +4034,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           : (table.folded && !flight?.from) || (currentItem?.tid && leaving.some((x) => x.tid === currentItem.tid)) || table.place || (opening && opening !== currentItem?.key) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { if (asUser) pull(key, asUser); else railPress(key); }}
-        onSection={walkSection} onMoreFyi={moreFyi} onCurrent={() => backToTable()} moved={movedTo} /></>}
+        onSection={walkSection} onMoreFyi={moreFyi} onCurrent={() => backToTable()} moved={movedTo} presses={presses} /></>}
       stage={chat}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />

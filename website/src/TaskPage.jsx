@@ -1002,8 +1002,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     finally { setStrongGoing(false); }
   };
   const change = async (kind, params) => {
-    try { await runOperation(api, kind, selected, params); } catch (e) { setErr(opError(e, "That change didn't go through - pick it again.")); }
-    loadDetail(selected); loadTasks(); onChanged?.();
+    // ...and who does it, changed to an agent, starts that agent: where it could not start, the answer says why (server._start_chosen)
+    try { const out = await runOperation(api, kind, selected, params); if (out?.why) setErr(out.why); }
+    catch (e) { setErr(opError(e, "That change didn't go through - pick it again.")); }
+    loadDetail(selected); loadTasks(); onListChanged?.(); onChanged?.();
   };
   // Reopen changes the task's status and nothing else: no worker starts until the owner chooses one (PW-217)
   // ...BUSY AT THE PRESS, OPEN AT THE ANSWER (the owner, 2026-10-23: "when you hit reopen task nothing happens for a few seconds"): the
@@ -1366,7 +1368,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (!off) onLeave?.();
     try { if (walkLeave && !off) await walkLeave("watch"); else await runOperation(api, "task.watching", selected, off ? { off: true } : {}); }
     catch (e) { const msg = opError(e, "Could not watch it - it is still here; press Watch it again."); setErr(msg); if (!off) onStay?.(msg); return; }
-    loadDetail(selected); loadTasks(); onChanged?.();
+    loadDetail(selected); loadTasks(); onListChanged?.(); onChanged?.();
   };
   const dismiss = () => onClose?.();
   // The report is identified by its durable marker, not the actor label. Named coding agents

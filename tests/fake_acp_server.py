@@ -21,10 +21,12 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_USAGE=1       each turn's answer carries its usage and _meta.quota, as both adapters' PromptResponses do
   FAKE_ACP_MODELS=<a,b>  the model values it offers (default opus,sonnet)
   FAKE_DIRECTOR=<folder> each turn's words come from a scenario (fake_director.py), no permission asked; a session/cancel ends it meanwhile
+  FAKE_ACP_SCRIPT=<file>  fake_claude's script: the first rule whose `when` the owner's words match answers `first`, after its `post`s ran
+                         as the agent's own `taskuary --reply` would (fake_director.post) - a coding agent filing a reply, no permission asked
 It offers config options (mode, model, effort) the way claude-agent-acp and codex-acp do, and says what they were set to.
 """
 import json, os, re, sys
-from fake_director import directed, folder_of
+from fake_director import directed, folder_of, post
 
 SID = 'sess_fake_1'
 PERM_ID = 9001
@@ -122,6 +124,11 @@ for line in sys.stdin:
         # sign-in nobody asked for
         said = re.sub(r'\[\[[^\]]*\]\]', '', ' '.join(str(b.get('text') or '') for b in msg['params'].get('prompt') or []))
         _heard = f"heard: {said} [mode={SET['mode']} model={SET['model']} effort={SET['effort']} turn={STARTS}" + (f' resumed={RESUMED}' if RESUMED else '') + ']'
+        rule = next((r for r in (json.load(open(os.environ['FAKE_ACP_SCRIPT'], encoding='utf-8')) if os.environ.get('FAKE_ACP_SCRIPT') else [])
+                     if re.search(r['when'], said, re.I)), None)
+        if rule:
+            for p in rule.get('post') or []: post(p)
+            update('agent_message_chunk', content={'type': 'text', 'text': rule.get('first') or 'Ok.'}); reply(mid, ended()); continue
         if folder_of():                                # a scenario's own turn (fake_director.py): its words, no permission asked
             _prompt_id = mid                           # ...on a thread, so a session/cancel meanwhile ends the turn as a real adapter's does
             def answer_later(mid=mid, said=said):

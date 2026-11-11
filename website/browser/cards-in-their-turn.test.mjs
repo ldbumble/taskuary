@@ -29,7 +29,7 @@ async function world(t, script = SCRIPT) {
   await writeFile(path.join(bin, win ? "claude.cmd" : "claude"), win ? `@${py} ${fake} %*\r\n` : `#!/bin/sh\nexec "${py}" "${fake}" "$@"\n`);
   if (!win) await chmod(path.join(bin, "claude"), 0o755);
   await writeFile(path.join(bin, "script.json"), JSON.stringify(script));
-  Object.assign(process.env, { FAKE_CLAUDE_SCRIPT: path.join(bin, "script.json"), FAKE_CLAUDE_SPAWN: "0.5", FAKE_CLAUDE_THINK: "3", FAKE_CLAUDE_LOG: path.join(bin, "log.jsonl") });
+  Object.assign(process.env, { FAKE_CLAUDE_SCRIPT: path.join(bin, "script.json"), FAKE_ACP_SCRIPT: path.join(bin, "script.json"), FAKE_CLAUDE_SPAWN: "0.5", FAKE_CLAUDE_THINK: "3", FAKE_CLAUDE_LOG: path.join(bin, "log.jsonl") });
   const h = await startHarness({ fresh: true, bin });
   t.after(() => h.close());
   const api = (p, body) => fetch(`${h.fixtureApi}${p}`, { method: body ? "POST" : "GET",
@@ -147,6 +147,27 @@ test("a reply rewritten after the owner prompts: the old card greys in place at 
   assert.ok(made.taskId, JSON.stringify(made));
   await page.goto(w.ui, { waitUntil: "domcontentloaded" });
   await rewrite(t, w, page, { tid: made.taskId, rid: made.reviewId, name: process.env.N17_NAME || "rewrite-general" });
+  assert.deepEqual(errors, []);
+});
+
+// ...AND THE SAME IN A CODING CHAT (one road for both chats): the task's agent is the stand-in ACP adapter (fixture/coding), which files the new
+// letter as the real one's shell does (FAKE_ACP_SCRIPT -> `taskuary --reply`)
+// ...TODO until the morning's ruling (OVERNIGHT 2026-11-10, item 5): a coding start HOLDS the arrival draft (terminal.start_on_task ->
+// store.hold_reviews), so for the turn's first second the old card is gone from the chat instead of greyed where it stood
+test("a reply rewritten in a coding chat: the old card greys in place at the press, the new one stands live under his line", { timeout: 600000,
+  todo: "the held arrival draft leaves the chat while the coding turn starts" }, async (t) => {
+  const w = await world(t);
+  const page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const git = execFileSync(process.platform === "win32" ? "where" : "which", ["git"], { encoding: "utf8" }).trim().split(/\s*\n/)[0].trim();
+  const repo = await w.api("/api/fixture/coding", { git });
+  assert.ok(repo.taskId, `the coding home is set up: ${JSON.stringify(repo)}`);
+  const made = await w.api("/api/fixture/mail-task", { kind: "coding" });
+  assert.ok(made.taskId, JSON.stringify(made));
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  await rewrite(t, w, page, { tid: made.taskId, rid: made.reviewId, name: process.env.N17_NAME || "rewrite-coding" });
   assert.deepEqual(errors, []);
 });
 

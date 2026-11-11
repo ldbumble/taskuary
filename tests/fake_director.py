@@ -31,3 +31,15 @@ def directed(prompt: str, folder: str = None) -> str | None:
         if out.is_file(): return out.read_text(encoding='utf-8')          # the scenario writes it whole, by a rename
         time.sleep(0.02)
     return 'Ok.'
+
+
+def post(p: dict) -> str:
+    """What the real agent's shell would run - `taskuary --reply ...` and kin - as the CLI sends it, on the session's own task and token
+    (cli._post): {"path": "/api/agent/reply", "body": {...}}, task_id filled in. Every stand-in's scripted `post` (fake_claude, fake_acp_server)."""
+    import json, urllib.request
+    base = f"http://127.0.0.1:{os.environ.get('TASKUARY_PORT') or 7787}"
+    body = {'task_id': int(os.environ.get('TASKUARY_TASK') or 0), **p.get('body', {})}
+    hdr = {'Content-Type': 'application/json', 'X-Taskuary-Token': os.environ.get('TASKUARY_TOKEN') or '',
+           **({'X-Taskuary-Task-Token': os.environ['TASKUARY_TASK_TOKEN']} if os.environ.get('TASKUARY_TASK_TOKEN') else {})}
+    try: return urllib.request.urlopen(urllib.request.Request(base + p['path'], json.dumps(body).encode(), hdr), timeout=60).read().decode()
+    except Exception as e: return f'failed: {e}'

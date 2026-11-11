@@ -271,10 +271,12 @@ def left_by(store, rid):
     "{CommentId, CreatedAt} of the chat turn that last left review `rid` as it stands (store.snap_draft) - None when no filed turn did."
     return store._one('SELECT CommentId, CreatedAt, Text FROM draft_snapshot WHERE ReviewId=? ORDER BY Id DESC LIMIT 1', (rid,))
 def _turn_after(store, task_id: int, rv) -> bool:
-    "Has a turn begun on the task since draft `rv` was written - the owner's line or a brief after it? Only a written draft counts."
-    from .general import USER_TYPE
+    """Has a turn begun on the task since draft `rv` was written - the owner's line or a brief after it? Only a written draft counts.
+    ...his line still KEPT for the turn counts too (general.WAITING_TYPE): a coding turn files its letter before its record takes the line it
+    was given (waitroom._handed), and the old draft was rewritten in place under his line (the overnight audit, 2026-11-10)"""
+    from .general import USER_TYPE, WAITING_TYPE
     return bool(str(rv.get('DraftText') or '').strip()) and bool(store._one(
-        'SELECT 1 AS x FROM comment WHERE TaskId=? AND ActorType=? AND CreatedAt>? LIMIT 1', (task_id, USER_TYPE, str(rv.get('CreatedAt') or ''))))
+        'SELECT 1 AS x FROM comment WHERE TaskId=? AND ActorType IN (?,?) AND CreatedAt>? LIMIT 1', (task_id, USER_TYPE, WAITING_TYPE, str(rv.get('CreatedAt') or ''))))
 def an_earlier_turns(store, rv) -> bool:
     "Is this pending draft one a filed chat turn left - so a new letter now is a later turn's, and takes its place as a new draft?"
     s = left_by(store, rv['ReviewId']) if rv else None
@@ -473,6 +475,9 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # an EARLIER SESSION'S draft is not rewritten into this one: it is closed as superseded, its words kept, and this is a new review
     sid = str(sid or _sid_now(store, task_id) or '') or None
     if sid and held and stale_draft(store, held, sid): supersede(store, held, agent); held = {}
+    # ...and one HELD for the agent at work (store.hold_reviews) once the owner has prompted past it is old news too (_turn_after, as a live one
+    # below): unheld and rewritten, the arrival draft took the new letter in place over his line in a coding chat (the overnight audit, 2026-11-10)
+    if held and _turn_after(store, task_id, held): store.decide_review(held['ReviewId'], 'closed_unsent', None, agent, note=REPLACED); held = {}
     live = None if held else (store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False))
     # ...and a reply pending to SOMEONE ELSE is theirs: rewriting it into this letter took the one to them off the table (2026-11-02)
     # ...measured by whom it ANSWERS: a later line from someone else re-pins its MessageId to the newest message, and the night run (2026-11-09)

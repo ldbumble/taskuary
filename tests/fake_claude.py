@@ -20,7 +20,7 @@ mid-turn (a CLI that dies). No rule: "Ok."
 FAKE_DIRECTOR (fake_director.py): an agent's turn - a kept conversation, or a run with Taskuary's tools - answers a scenario's words instead.
 FAKE_CLAUDE_LOG, when set, gets one JSON line per event ({pid, ev, t, ...}) for the latency breakdown."""
 import json, os, re, sys, time
-from fake_director import directed, folder_of
+from fake_director import directed, folder_of, post
 
 T0 = time.time()
 args = sys.argv[1:]
@@ -49,14 +49,7 @@ def out(j): sys.stdout.write(json.dumps(j) + '\n'); sys.stdout.flush()
 def act(p: dict):
     """A rule's `post`: what the real agent's shell would run - `taskuary --reply ...` and kin - as the CLI sends it, on the session's own
     task and token (cli._post): {"path": "/api/agent/reply", "body": {...}} - task_id is filled in (browser/cards-in-their-turn)."""
-    import urllib.request
-    base = f"http://127.0.0.1:{os.environ.get('TASKUARY_PORT') or 7787}"
-    body = {'task_id': int(os.environ.get('TASKUARY_TASK') or 0), **p.get('body', {})}
-    hdr = {'Content-Type': 'application/json', 'X-Taskuary-Token': os.environ.get('TASKUARY_TOKEN') or '',
-           **({'X-Taskuary-Task-Token': os.environ['TASKUARY_TASK_TOKEN']} if os.environ.get('TASKUARY_TASK_TOKEN') else {})}
-    try: got = urllib.request.urlopen(urllib.request.Request(base + p['path'], json.dumps(body).encode(), hdr), timeout=60).read().decode()
-    except Exception as e: got = f'failed: {e}'
-    log('post', path=p['path'], got=got[:400])
+    log('post', path=p['path'], got=post(p)[:400])
 def answer(prompt: str) -> str:
     then = 'You looked up ' in prompt or 'You asked Taskuary for ' in prompt
     m = re.search(r'^(?:The owner (?:says|asked)|FROM THE OWNER): (.*)$', prompt, re.M)

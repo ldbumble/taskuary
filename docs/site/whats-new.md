@@ -2,6 +2,11 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.41 - 2026-11-11
+
+- The general chat and the coding chat say the same thing at a mid-turn line, a stop and a dead agent
+- The general chat draws a turn at work as the coding chat does, and a coding task's chat is there before its first session
+
 ## 0.3.11.40 - 2026-11-11
 
 - A coding chat keeps the drafted email in place and shows its agent's question

@@ -6717,7 +6717,7 @@ async def concierge_stream(body: ConciergeStreamBody):
             # only when the answer turns out to be about it (see concierge_say).
             notice = _notice_once(freshness) if body.mode != 'say' else ''
             if notice: put({'type': 'context_update', 'say': notice})
-            if body.mode == 'open': out = concierge.open_day(store, actor=ACTOR, trace=trace, cancel=cancel)
+            if body.mode == 'open': out = concierge.open_day(store, actor=ACTOR)
             elif body.mode == 'next':
                 out = concierge.surface(store, body.key, actor=ACTOR, from_key=body.from_key, press=body.press, read=body.read)
             elif body.mode == 'back': out = railwalk.back(store, body.from_key, ACTOR, press=body.press)

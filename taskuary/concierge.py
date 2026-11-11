@@ -208,11 +208,6 @@ def delivering(where: str):
     try: yield
     finally: DELIVERY.reset(token)
 
-OPENING = (
-    "Open the conversation for the day. Say 'let's go through what we have today' in your own words, then in two or three "
-    "sentences: what is on the calendar, what agents have in hand, how much is waiting and of what kind (from THE DAY below). "
-    "Do not walk through any item yet - the owner starts that with a button. Under 90 words. No options line.")
-
 # what the assistant says when a decision is carried out - the fact of what happens now, never a claim
 RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so.", 'let_go': 'Put down.', 'elsewhere': 'Closed - they answered elsewhere.',
             'reply': "I'll draft that - nothing goes out until you say so.", 'approve': f"Sending it as drafted - the task stays open until you {buttons.label('close')}.",
@@ -2742,19 +2737,20 @@ def _span_minutes(start: str, end: str) -> int:
     return max(0, int((b - a).total_seconds() // 60)) if a and b else 0
 
 
-def day(store) -> str:
-    """The facts the opening brief is written from: the pipe by lane, today's calendar, what agents
-    hold - the same helpers the morning digest reads, never the model's recollection."""
+def day(store, items: list) -> str:
+    """The day in a breath, said by code from what it is made of - what waits, today's calendar, what agents hold (the same helpers
+    the morning digest reads). A model only reworded this sentence: a call stored facts answer (the owner's rules, 2026-11-10)."""
     from . import assistant, calendar as cal
-    items = funnel.pile(store, force=True)['items']
-    lines = ['THE DAY', funnel.summary(items)]
+    n = len(items)
+    out = ["Let's go through what we have today. " + (f"{plural(n, 'thing')} waiting - {funnel.summary(items).split(' - ', 1)[-1].split('.')[0]}."
+                                                     if n else 'Nothing is waiting on you yet.')]
     try:
         ev = [e for e in (cal.today(store).get('events') or []) if not e.get('all_day')]
-        lines.append('CALENDAR TODAY: ' + ('; '.join(f"{cal.span(e['start'], e.get('end') or '')} {e.get('subject')}" + (f" with {', '.join((e.get('who') or [])[:3])}" if e.get('who') else '') for e in ev[:6]) or 'nothing on it'))
+        if ev: out.append('On the calendar: ' + '; '.join(f"{cal.span(e['start'], e.get('end') or '')} {e.get('subject')}"
+                                                          + (f" with {', '.join((e.get('who') or [])[:3])}" if e.get('who') else '') for e in ev[:6]) + '.')
     except Exception as e: logger.debug(f'concierge: calendar skipped - {e}')
-    flight = assistant.in_flight(store)
-    lines.append('AGENTS HAVE: ' + ('; '.join(f"{f['ref']} {f['title']} ({f['state']})" for f in flight[:6]) or 'nothing right now'))
-    return '\n'.join(lines)
+    if (flight := assistant.in_flight(store)): out.append('Agents have: ' + '; '.join(f"{f['ref']} {f['title']} ({f['state']})" for f in flight[:6]) + '.')
+    return ' '.join(out)
 
 
 def _brain_for(store, tid: int, llm, trace=None, cancel=None, fast=True):
@@ -2813,24 +2809,13 @@ def _numbered(text: str, n: int) -> dict:
     return got if len(got) == n else {}
 
 
-def open_day(store, llm=None, actor: str = 'owner', trace=None, cancel=None) -> dict:
+def open_day(store, actor: str = 'owner') -> dict:
     """The first line of a new chat: the day in a breath, then the buttons that start the walk. Written
     once per chat - a conversation that already has turns is not re-opened."""
-    task, _ = general.dock_task(store, actor)
-    tid = task['TaskId']
+    tid = general.dock_task(store, actor)[0]['TaskId']
     if general.chat_rows(store, tid): return {'say': '', 'card': None, 'opened': False}
     p = funnel.pile(store, force=True)
-    facts_ = day(store)
-    llm = _brain_for(store, tid, llm, trace, cancel, fast=True)
-    say = ''
-    if llm:
-        try:
-            say, _opts = parse_options(str(llm(_system(store, llm), f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{facts_}\n\n{OPENING}", max_tokens=MAX_TOKENS) or '').strip())
-            _remember_sid(store, tid, llm)
-        except Exception as e: logger.warning(f'concierge: the opening failed - {e}')
-    if not say:
-        n = len(p['items'])
-        say = ("Let's go through what we have today. " + (f"{plural(n, 'thing')} waiting - {funnel.summary(p['items']).split(' - ', 1)[-1].split('.')[0]}." if n else 'Nothing is waiting on you yet.'))
+    say = day(store, p['items'])
     chips = walk_chips(len(p['items']))
     card = {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(p['items']),
             'mail': sum(map(lanes.is_mail, p['items'])), 'chips': chips}

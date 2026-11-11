@@ -902,11 +902,19 @@ class OpeningTests(unittest.TestCase):
         t, m, r = drafted(s)
         s.add_comment(t, 'claude', 'agent', 'AGENT REPORT\nSummary: regenerated the export; rows now match.')
         seen = {}
-        fake = lambda system, user, **kw: seen.update(user=user) or "Let's go through what we have today: one reply waiting for your yes, nothing on the calendar."
-        out = concierge.open_day(s, llm=fake)
+        # ...said by code from the day's facts - what waits, the calendar, what agents hold: a model only reworded them (the owner's rules,
+        # 2026-11-10: no model call where stored facts answer)
+        from taskuary import assistant, calendar as cal
+        ev = {'start': '2026-11-10 14:00', 'end': '2026-11-10 15:00', 'subject': 'Budget review', 'who': ['Erin Blake'], 'all_day': False}
+        with mock.patch.object(cal, 'today', return_value={'events': [ev]}), \
+             mock.patch.object(assistant, 'in_flight', return_value=[{'ref': 'TQ-0009', 'title': 'Vendor totals', 'state': 'working'}]), \
+             mock.patch.object(concierge, 'brain', side_effect=AssertionError('the opening asked a model')):
+            out = concierge.open_day(s)
         self.assertTrue(out['opened']); self.assertEqual(out['card']['kind'], 'brief'); self.assertEqual((out['card']['n'], out['card']['mail']), (1, 1))
-        self.assertIn('THE DAY', seen['user']); self.assertIn('LEFT IN THE PIPE: 1', seen['user']); self.assertIn('AGENTS HAVE', seen['user'])
-        self.assertFalse(concierge.open_day(s, llm=fake)['opened'])          # said once per chat
+        self.assertTrue(out['say'].startswith("Let's go through what we have today. 1 thing waiting"), out['say'])
+        self.assertIn('On the calendar: ', out['say']); self.assertIn('Budget review with Erin Blake', out['say'])
+        self.assertIn('Agents have: TQ-0009 Vendor totals (working).', out['say'])
+        self.assertFalse(concierge.open_day(s)['opened'])          # said once per chat
         self.assertIn(f'review:{r}', funnel.build(s)['items'][0]['aliases'])  # nothing was surfaced by the opening
         # the walk onto a task an agent worked on: the Assistant writes no line of its own about that agent (the owner, 2026-11-09: "the agents
         # while running should recommend actions, no assistant") - the few words that name any row, and what its row fills is the task's own move

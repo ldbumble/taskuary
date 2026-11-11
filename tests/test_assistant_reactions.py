@@ -1738,7 +1738,7 @@ class InlineVerbTests(unittest.TestCase):
         the moment the first line is written, so the walk became unreachable."""
         s = ResponseTests()._asked()[0]
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            opened = concierge.open_day(s, llm=None)
+            opened = concierge.open_day(s)
         self.assertEqual([c['verb'] for c in opened['chips']], ['next'])          # the opening line starts it
         self.assertEqual([c['verb'] for c in opened['card']['chips']], ['next'])  # ...and a reload keeps it
 
@@ -1749,7 +1749,7 @@ class InlineVerbTests(unittest.TestCase):
         # ...and once the pipe really is empty there is nothing to offer at all
         empty = store()
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            self.assertEqual(concierge.open_day(empty, llm=None)['chips'], [])
+            self.assertEqual(concierge.open_day(empty)['chips'], [])
             self.assertEqual(concierge.surface(empty, llm=None)['chips'], [])
 
     def test_next_on_a_waiting_draft_keeps_it_and_the_reply(self):

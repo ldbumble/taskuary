@@ -236,14 +236,15 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
     const before = !!live?.promptPending || (begun && last?.at && +asUtc(last.at) < begun * 1000 - 2000);
     if (now && last?.kind === "turn" && last.sid === ses.sid && !before) last.running = true;
   });
-  // ...each mail where it came in: over the first entry at or after it, a run of them one row (the general chat's Arrived)
+  // ...each mail where it came in: over the first entry at or after it, a run of them one row (the general chat's Arrived), stamped when it
+  // joined the task as the general chat's is - stamped when it was sent, a turn that took it up hours later read "ran 1h 26m" (the demo, 2026-11-11)
   const out = [], pending = [...mails].sort((a, b) => at(a.joined || a.at).localeCompare(at(b.joined || b.at)));
-  const take = (upto) => { const got = []; while (pending.length && (upto == null || at(pending[0].joined || pending[0].at) <= upto)) got.push(pending.shift()); if (got.length) out.push({ kind: "mail", at: at(got.at(-1).at), mail: got }); };
+  const take = (upto) => { const got = []; while (pending.length && (upto == null || at(pending[0].joined || pending[0].at) <= upto)) got.push(pending.shift()); if (got.length) out.push({ kind: "mail", at: at(got.at(-1).joined || got.at(-1).at), mail: got }); };
   for (const r of rows) { if (r.at) take(r.at); out.push(r); }
   take(null);
   return out.map((r, i) => (r.kind === "turn"
     ? { kind: "turn", id: `r${i}`, at: r.at, running: !!r.running, waiting: !!r.running && waiting, parts: turnParts(eventsOf(r.steps, !!r.running)), answer: lastSaid(r.steps),
-      steps: r.steps.map((s) => s.n) }
+      steps: r.steps.map((s) => s.n), ended: r.running ? null : at(r.steps.at(-1)?.at) || null }
     : { ...r, id: `r${i}` }));
 }
 export const COMPACTED = "Conversation compacted";
@@ -267,7 +268,7 @@ export const rowMessages = (rows, sid = "coding") => (rows || []).map((r) => (r.
   : r.kind === "you" ? { id: `${sid}-${r.id}`, role: "user", content: [{ type: "text", text: r.text }], createdAt: r.at }
   // ...a compaction is an event, drawn as a press's quiet line is ("Conversation compacted · 8:21 AM") - never an input, so the turn goes on under it
   : r.kind === "event" ? { id: `${sid}-${r.id}`, role: "user", press: true, content: [{ type: "text", text: r.text }], createdAt: r.at }
-  : { id: `${r.running ? "live-" : ""}${sid}-${r.id}`, role: "assistant", content: partsMessage(r.parts), createdAt: r.at, steps: r.steps, ...(r.waiting ? { waiting: true } : {}) }));
+  : { id: `${r.running ? "live-" : ""}${sid}-${r.id}`, role: "assistant", content: partsMessage(r.parts), createdAt: r.at, steps: r.steps, ...(r.ended ? { ended: r.ended } : {}), ...(r.waiting ? { waiting: true } : {}) }));
 // ...and the turns the server names its cards by (codingchat.cards: a step's name) as the messages that draw them, so the general payload's
 // `turns` and `drafts` and the coding one's read through one placement road
 export const turnOfStep = (messages) => { const of = new Map((messages || []).flatMap((m) => (m.steps || []).map((s) => [s, m.id])));

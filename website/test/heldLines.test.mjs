@@ -83,7 +83,7 @@ test("the chat sends a held line under its name, and the thread keeps the name t
   const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(ws, /setHeld\(\(h\) => \[\.\.\.h, \{ id, text: w \|\| withImages\("", files\.map\(\(a\) => a\.path\)\), after, drawn: mineDrawn\.length, named: !road \}\]\);/);
   assert.match(ws, /api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant\/messages`, \{ text: w, attachments: files\.map\(\(a\) => a\.path\), line_id: id \}/);
-  assert.match(ws, /\.\.\.\(m\.line \? \{ line: m\.line \} : \{\}\) \};/);
+  assert.match(ws, /\.\.\.\(m\.line \? \{ line: m\.line \} : \{\}\),/);
   // ...the public demo's own server answers the same way: a line typed there is not left standing at the foot
   assert.match(readFileSync(new URL("../src/demoApi.js", import.meta.url), "utf8"), /role: "user", content: \[\{ type: "text", text: asked \}\], \.\.\.\(body\?\.line_id \? \{ line: body\.line_id \} : \{\}\) \}\);/);
 });

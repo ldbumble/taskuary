@@ -93,7 +93,9 @@ const initial = (messages) => {
   return (messages || []).map((m) => {
     const custom = { ...(m.brief ? { brief: true, mail: m.mail || [], ...(m.fold ? { fold: m.fold } : {}) } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id), drafts: m.drafts_then || null } : {}),
       ...(m.since ? { since: m.since } : {}), ...(m.press ? { press: true, ...(m.result ? { result: m.result } : {}) } : {}),   // a press of the owner's (general.press_lines): their line, no turn
-      ...(m.line ? { line: m.line } : {}) };          // the name the page that sent it gave it (heldLines.lineOf)
+      ...(m.line ? { line: m.line } : {}),
+      // ...and when a coding turn's last step came (chatStream.rowMessages `ended`): its time is its first step's, a general answer's its end
+      ...(m.ended ? { ended: m.ended } : {}) };          // the name the page that sent it gave it (heldLines.lineOf)
     return { ...m, ...(Object.keys(custom).length ? { metadata: { custom } } : {}),
       // ...a stamp is the SERVER'S LOCAL time (dates.js, store.norm_stamp), read through asUtc with the zone setting - read as UTC, every
       // answer said 7:32 AM for 12:32 PM (the owner, 2026-11-05: "time is wrong. we have settings for time zone")
@@ -520,8 +522,8 @@ const RanFor = () => {
   // ...a turn still running has not "ran" anything yet: its stamp read "ran 0s" over "Working on this…" (the chat-model stress run, 2026-11-05)
   // ...and the live message is drawn anew at every step, so its own time is the latest step's: the turn began at the server's `since`, else
   // at the line it answers
-  const running = useAuiState((s) => live(s.message)), since = useAuiState((s) => s.message.metadata?.custom?.since);
-  const start = running ? turnFrom(since, before) : before, t = running && start ? new Date(start) : at ? new Date(at) : null;
+  const running = useAuiState((s) => live(s.message)), since = useAuiState((s) => s.message.metadata?.custom?.since), ended = useAuiState((s) => s.message.metadata?.custom?.ended);
+  const start = running ? turnFrom(since, before) : before, t = running && start ? new Date(start) : ended ? asUtc(ended) : at ? new Date(at) : null;
   if (!t || Number.isNaN(+t)) return null;
   if (running) return <RunClock start={+t} />;
   const ran = running ? "" : turnStamp({ start: before, end: t });

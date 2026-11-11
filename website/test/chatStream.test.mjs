@@ -41,7 +41,7 @@ const ACP = [
 ];
 const ses = (more) => ({ sid: "s1", cli: "claude", at: "2026-11-06 09:00:00", ...more });
 // the rows a person reads: ids, stamps and step names aside (an ACP session has no per-step clock; its steps are named by update, a log's by step)
-const shape = (rows) => rows.map(({ id, at, steps, ...r }) => r);
+const shape = (rows) => rows.map(({ id, at, steps, ended, ...r }) => r);
 // ...and a command's output, which only ACP hands over (a log keeps the command alone)
 const noOutput = (rows) => rows.map((r) => (r.parts ? { ...r, parts: r.parts.map((p) => (p.steps ? { ...p, steps: p.steps.map(({ detail, id, ...s }) => s) } : p)) } : r));
 

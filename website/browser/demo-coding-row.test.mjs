@@ -32,7 +32,7 @@ test("the demo's coding task shows the run and the question its row says it wait
     seen = await page.waitForFunction(() => {
       const pane = document.querySelector("[data-tq-task-page]"), vp = pane?.querySelector(".tq-aui-viewport");
       const asks = vp?.querySelector("[data-tq-asking]")?.innerText || "";
-      return asks && /waiting on you/i.test(pane.innerText) ? { asks, text: vp.innerText } : null;
+      return asks && /waiting on you/i.test(pane.innerText) ? { asks, text: vp.innerText, ran: [...vp.querySelectorAll("[data-tq-ran]")].map((e) => e.innerText).join(" | ") } : null;
     }, { timeout: 60000, polling: 300 }).then((x) => x.jsonValue()).catch(() => null);
     await new Promise((r) => setTimeout(r, 1500));
   } finally {
@@ -41,9 +41,11 @@ test("the demo's coding task shows the run and the question its row says it wait
     const text = await page.evaluate(() => document.querySelector("[data-tq-task-page]")?.innerText || "");
     await note(dir, { done: "The demo world; the coding issue northwind/importers#214 opened while its replayed agent runs, watched until it waits.",
       expect: "The run's steps and words in the chat, then the question it waits on (Push it to a branch...?) on the chat's card - with the row's 'agent waiting on you'.",
-      saw: seen ? `the question: ${seen.asks.slice(0, 120)}` : `no question on the chat within 60 s:\n${text.slice(-500)}`, verdict: seen ? "PASS" : "FAIL" });
+      saw: seen ? `the question: ${seen.asks.slice(0, 120)}; head: ${seen.ran}` : `no question on the chat within 60 s:\n${text.slice(-500)}`, verdict: seen ? "PASS" : "FAIL" });
   }
   assert.ok(seen, "the question the row waits on stands on the chat");
   assert.match(seen.text, /census_sync\.py/, "the run's steps are in the chat");
+  // ...and its head says how long it ran - the seconds it typed for, never the hours between the issue and the demo opening
+  assert.match(seen.ran, /ran \d+s(?!\w)/, `the turn's head: ${seen.ran}`);
   assert.deepEqual(errors, []);
 });

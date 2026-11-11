@@ -1425,8 +1425,6 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # had already removed (the owner, 2026-09-22: "don't see anywhere on agent or task to choose repo").
         out = dispatch_task(tid, DispatchBody(kind=p.get('kind'), agent=p.get('agent'), brain=p.get('brain'),
                                               instruction=p.get('instructions'), model=p.get('model')), background)
-        # ...a start the door refused is its 422, said as its reason - it read "'JSONResponse' object has no attribute 'get'" (2026-11-04)
-        if isinstance(out, JSONResponse): raise RuntimeError(json.loads(out.body or b'{}').get('detail') or 'the agent did not start')
         if out.get('dispatch') == 'needs_repo':
             raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
         return out
@@ -3145,7 +3143,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
         from . import general
         return {'dispatch': 'assistant' if general.handles(task) else 'session', 'started': False, 'existing': True, 'taskId': task_id,
                 'ref': task_ref(task_id)}
-    if why := _no_brain(task, body): raise HTTPException(422, why)
+    if why := _no_brain(task, body): _start_refused(task_id, body, why)
     from . import asks
     asks.mark(store, task_id)          # the owner started it - the button or the assistant: it reports back like an ask
     try:
@@ -3164,16 +3162,29 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
             funnel.hold_for_repo(store, task_id, str(e.detail or ''))    # ...and the task keeps saying so after the answer is gone
             return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
                     'ref': task_ref(task_id), 'reason': str(e.detail or '')}
-        if e.status_code >= 422: _start_failed(_pressed_on(task_id, body), str(e.detail or 'the agent did not start'))
-        raise
-    except Exception as e:
-        # A START THAT FAILED is said once, with its fix (failures.classify): a missing coding tool answered 500 with the raw
-        # "FileNotFoundError: [Errno 2] ... 'claude'" on the task page, and nothing to press (the dead-end walk, 2026-10-18)
-        from . import failures
-        logger.warning(f'dispatch of task {task_id} failed: {e}')
-        c = failures.classify(e, act='dispatch.prepare')
-        _start_failed(_pressed_on(task_id, body), e)
-        return JSONResponse(status_code=422, content={'detail': c['sentence'], 'fix': c['fix'], 'retry': c['retry']})
+        if e.status_code < 422 or isinstance(e, StartRefused): raise
+        _start_refused(task_id, body, e.__context__ if isinstance(e.__context__, Exception) else str(e.detail or 'the agent did not start'))
+    except Exception as e: _start_refused(task_id, body, e)
+
+
+class StartRefused(HTTPException):
+    "A start that did not happen, as the 422 its door answers - with the way past it (`fix`), which every caller and the page read."
+    def __init__(self, c: dict): super().__init__(422, c['sentence']); self.fix, self.retry = c['fix'], c['retry']
+
+@app.exception_handler(StartRefused)
+async def _start_refused_answer(_request, e: StartRefused):
+    return JSONResponse(status_code=422, content={'detail': e.detail, 'fix': e.fix, 'retry': e.retry})
+
+def _start_refused(task_id: int, body, e):
+    """A START THAT FAILED is said once, with its fix (failures.classify) - a refusal at the door as much as a failure under it: no AI to
+    run on answered a bare 422 with no Connect an AI beside it, and a missing coding tool 500 with the raw "FileNotFoundError: [Errno 2] ...
+    'claude'" (the dead-end walk, 2026-10-18). Kept on the task too (_start_failed). Raised, so a caller in code meets it as the
+    exception it always was - never a JSON answer to misread."""
+    from . import failures
+    logger.warning(f'dispatch of task {task_id} failed: {e}')
+    c = failures.classify(e, act='dispatch.prepare')
+    if task_id: _start_failed(_pressed_on(task_id, body), e)
+    raise StartRefused(c)
 
 
 @app.post('/api/tasks/{task_id}/offer')
@@ -4551,7 +4562,7 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     # ...a coding one with developer mode off is a general agent's (_dispatch_one says the same for a task that is not already coding)
     want = requested if requested in task_kinds.AGENT else 'coding'
     if want == 'coding' and not hub_agents.developer_mode(store): want = 'general'
-    if why := _no_brain(store.get_task(m['TaskId']) if m.get('TaskId') else None, body, want): raise HTTPException(422, why)
+    if why := _no_brain(store.get_task(m['TaskId']) if m.get('TaskId') else None, body, want): _start_refused(m.get('TaskId'), body, why)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, want)
     try:
         out = _dispatch_task_to_its_agent(tid, body, background)

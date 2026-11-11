@@ -161,10 +161,12 @@ def test_an_agent_is_said_on_it_only_when_it_started(s):
 
 def test_a_start_the_door_refused_says_its_reason(s):
     t = task(s)
-    from fastapi.responses import JSONResponse
-    with mock.patch.object(server, 'dispatch_task', return_value=JSONResponse(status_code=422, content={'detail': 'Claude Code is not installed'})):
+    # ...the door's refusal is raised with its way past it (server.StartRefused), never handed back as an answer to misread
+    refusal = server.StartRefused({'sentence': 'Claude Code is not installed', 'fix': {'label': 'Connect a coding tool', 'href': '#x'}, 'retry': False})
+    with mock.patch.object(server, 'dispatch_task', side_effect=refusal):
         out = run(s, 'dispatch.prepare', t, {'kind': 'general'}, lambda: server._run_operation({'kind': 'dispatch.prepare', 'target': t, 'params': {'kind': 'general'}}, None))
     assert out['status'] == 'error' and 'installed' in out['error'] and 'JSONResponse' not in out['error'], out
+    assert out['outcome']['fix']['label'] == 'Connect a coding tool', out
 
 
 # ---- a reply's draft: the receipt is the box as it now is, and the under-way line says how it went (the walk drives the door itself) ---

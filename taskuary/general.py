@@ -1745,6 +1745,20 @@ def reading_block(store, tid: int) -> str:
 
 
 def _prompt(store, tid: int) -> tuple[str, str]:
+    system, late, user = prompt_parts(store, tid)
+    return with_late(system, late), user
+
+
+# WHAT CHANGES BETWEEN TURNS GOES LAST (token spend, 2026-11-10): a provider's prompt cache (Anthropic's markers, OpenAI's and Gemini's own)
+# serves a prompt only up to its first changed byte. "The owner answered this themselves" landed a third of the way into the system, so
+# every line after it - and the whole conversation kept after the system - was paid for again. The lines a turn can change (what was
+# learned about this task, the owner's own answer, a file a reply refused, how much earlier mail was found, a checklist that appeared, a
+# hand-over) are said after everything that stays the same
+def with_late(system: str, late) -> str: return '\n\n'.join([system, *(x for x in late if x)])
+
+
+def prompt_parts(store, tid: int) -> tuple[str, list, str]:
+    "(the system's lines that stay the same turn after turn, those a turn can change, the user turn) - _prompt joins them."
     detail = store.task_detail(tid) or {}
     task = detail.get('task') or {}
     dock = is_dock(task)
@@ -1769,8 +1783,9 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     owner_bg = '' if outsider else _brief.background(store, workstream=_ws_of(store, tid) or None, drop=_brief.GENERAL_HAS)
     task_ = store.get_task(tid) or {}
     known = '' if outsider else learned_block(store, f"{task_.get('Title') or ''}\n{task_.get('Summary') or ''}")
+    late = [known]
     system = (
-        (f'{owner_bg}\n\n' if owner_bg else '') + (f'{known}\n\n' if known else '') +
+        (f'{owner_bg}\n\n' if owner_bg else '') +
         # ...and said once (2026-11-09): "never claim a tool did what it did not" is AGENT.md's Honest reporting, and "ask when a fact is
         # missing" fought WORK_LINE's keep-working - the one question is AGENT.md's When to ask
         # ...and WHO IT IS (the agent walk, 2026-11-10): on a task it is the agent - "the assistant" is the owner's own chat, the dock
@@ -1930,10 +1945,10 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # THE AGENT NEVER CLOSES A CHAT TASK (the owner, 2026-11-05: "agent should never close once it's open until we hit close"): every
     # general task is told the owner ends it - Mark done, Send and close, Close with a note - never CHAT_LINE's closing marker
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system = system + '\n\n' + selfclose.owner_closes_line()
-    if not dock and owner_answered_last(store, tid): system = system + '\n\n' + selfclose.OWNER_ANSWERED_LINE
+    if not dock and owner_answered_last(store, tid): late.append(selfclose.OWNER_ANSWERED_LINE)
     if owed: system = system + '\n\n' + selfclose.REPLY_LINE
     elif nobody and not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system = system + '\n\n' + wrapup.nobody_line(store, tid)
-    if owed and (miss := wrapup.refused_line(store, tid)): system = system + '\n\n' + miss      # a file its reply does not carry (wrapup._told)
+    if owed: late.append(wrapup.refused_line(store, tid))      # a file its reply does not carry (wrapup._told)
     from . import slots
     acts = not dock and not stranger and task.get('SourceRef') not in ('connector:setup', SETUP_REF)   # ...the action line rides: an email of its own
     if slots.all_(store, tid) or acts: system = system + '\n\n' + selfclose.DRAFT_LINE
@@ -1990,7 +2005,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if len(src) > room:
         cut = f'[older source material trimmed - its first {len(src) - room + 300:,} characters; {READ_WHOLE}]\n\n'
         src = (cut + src[-(room - 300):]) if room > 700 else ''
-    return system, head + (f"SOURCE MATERIAL\n{src}\n\n" if src else '') + conv
+    return system, late, head + (f"SOURCE MATERIAL\n{src}\n\n" if src else '') + conv
 
 
 def _ctx_came(store, tid: int) -> str:
@@ -2452,9 +2467,8 @@ class GeneralSession:
             self.store.tag_task(self.task_id, terminal.SAVED, False, 'assistant')
             self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}, 'at': t0}]      # `at`: a cut turn's files are its own (keep_cut_turns)
             self.trace_revision += 1
-            system, user = _prompt(self.store, self.task_id)
-            if delivery_instructions:
-                system = f'{system}\n\n{str(delivery_instructions).strip()}'
+            system, late, user = prompt_parts(self.store, self.task_id)
+            if delivery_instructions: late.append(str(delivery_instructions).strip())
             if not as_owner: user = f'{user}\n\n{text}'      # the instruction, carried but not attributed
             browser_tools, browser_env, browser_offer = False, None, False
             # AN API CARD HAS NO SHELL - but it can call tools (apiagent.py): the browser is the server's to run for it, on the owner's own
@@ -2552,7 +2566,7 @@ class GeneralSession:
                 try: hands = origin.launch_mode(self.store, self.task_id, _cli_of_pick(self.store, self.pick)) != 'look'
                 except origin.Refusal: pass                 # ...its run refuses it, and says so where it starts (llm.make_cli_llm)
             # ...and with no shell, its to-dos are ticked by a mark in the reply (selfclose.tick_markers), never a command it cannot run
-            if not hands and self.store.task_checklist(self.task_id): system = f'{system}\n\n{_sc.TICK_CHAT_LINE}'
+            if not hands and self.store.task_checklist(self.task_id): late.append(_sc.TICK_CHAT_LINE)
             # ...ONE WAY TO WRITE A REPLY (2026-11-09): a session with Taskuary's own tools (agenttools.session_args: Claude and Codex, with
             # hands) writes it with propose_reply - the marker line rode beside it and the agent was told two ways at once (audit3 #3)
             # ...and an email the same (by_tool, 2026-11-10). Never a stranger's session: llm.for_agent wires it no tools, and with the
@@ -2567,7 +2581,7 @@ class GeneralSession:
             # ...and the owner's own mail, which a stranger's task never reads (the route refuses it too: server._owner_history): searched
             # by the session itself where it has hands, else for it
             said, prior = history_brief(self.store, self.task_id, hands)
-            if said: system = f'{system}\n\n{said}'
+            late.append(said)
             # ...and with no hands to open a playbook's file, the one triage matched rides whole (the menu still names the rest)
             if not hands and 'PLAYBOOKS - ' in system:
                 from . import playbooks as _pbk
@@ -2669,6 +2683,7 @@ class GeneralSession:
                     # ...and where it cannot, the next real step as the owner's question - never "cannot be done from here" (2026-11-09)
                     if self.browser_wanted and not apiagent.can(brain): self._remember_trace('progress', 'browser', NO_BROWSER_LINE)     # true of a card that takes no tools, and only of it
                     system = f'{system}\n\n{apiagent.no_browser_line() if apiagent.can(brain) else apiagent.no_tools_line()}'
+            system = with_late(system, late)
             whole = user                 # the conversation said in full: what a fresh one hears where this one cannot be picked back up
             if self.cli_sid or (looped and self.card_msgs):
                 # an opening turn's 'turn' IS the instruction, which the history never saw

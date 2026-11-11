@@ -341,6 +341,31 @@ class TheSessionTests(unittest.TestCase):
         self.assertEqual([m['role'] for m in session.card_msgs], ['user', 'assistant', 'user'])
         self.assertIn('and the newest?', session.card_msgs[-1]['content'])
 
+    def test_two_turns_of_one_task_share_their_system_up_to_the_lines_a_turn_changes(self):
+        """A provider's prompt cache serves a prompt only up to its first changed byte: "the owner answered this themselves" landed a third of
+        the way into the system, and everything after it - the conversation kept too - was paid for again on the next turn."""
+        from taskuary import general, llm as llm_mod, selfclose
+        heard = []
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): heard.append(msgs[0]['content']); return {'content': 'Found it.'}
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')
+        tid = s.create_task({'Title': 'August export', 'Summary': 'Erin asks for the August export', 'Kind': 'general', 'Status': 'open'}, 'owner')
+        mail = lambda i, who, at, body, **kw: s.add_message({'TaskId': tid, 'ExternalId': f'x-{i}', 'ConversationId': 'c1', 'Channel': 'email',
+                                                             'SourceName': 'alex@northwind.example', 'Subject': 'August export', 'FromName': who[0],
+                                                             'FromEmail': who[1], 'SentAt': at, 'BodyText': body, 'Status': 'routed', **kw})
+        mail(1, ('Erin Blake', 'erin@northwind.example'), '2026-11-06 09:00:00', 'Could you send the August export?')
+        session = general.GeneralSession(s, tid)
+        session.pick, session.provider, session.model = 'connector:1', 'HIPAA AI', ''
+        with mock.patch.object(llm_mod, 'build_llm', return_value=Brain()), mock.patch.object(bv, 'installed', return_value=True), \
+             mock.patch.object(bv, 'state', return_value={'open': False}), mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
+            session.send_prompt('find the export', echo=False)
+            mail(2, ('Alex Doyle', 'alex@northwind.example'), '2026-11-06 10:00:00', 'Sent it.', Direction='out')
+            session.send_prompt('and the September one?', echo=False)
+        a, b = heard
+        at = b.index(selfclose.OWNER_ANSWERED_LINE)
+        self.assertEqual(a[:at], b[:at], 'everything before the changed line is the same bytes')
+        self.assertGreater(at, b.index(apiagent.TOOLS_BRIEF), 'and the stable lines - the tools brief among them - come before it')
+
     def test_a_model_that_refuses_tools_is_asked_the_plain_way(self):
         seen = []
         class Brain:

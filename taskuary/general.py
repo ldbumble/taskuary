@@ -267,7 +267,7 @@ def place_coding(store, tid: int) -> str:
     profile = json.loads((store.get_agent(role) or {}).get('Config') or '{}') if role else {}
     repo, _why = terminal.guess_repo(store, tid, profile)
     cwd = ((profile.get('cwd_map') or {}).get(repo) or terminal.find_checkout(repo, profile)) if repo else ''
-    if repo and not cwd: raise ValueError(f'no local path for {repo} - pick the repository on the task, then start it again')
+    if repo and not cwd: raise terminal.NeedsRepo(f'no local path for {repo} - pick the repository on the task, then start it again')
     cwd = str(cwd or repochoice.scratch(tid))
     landing.mark_start(store, tid, cwd)
     return cwd

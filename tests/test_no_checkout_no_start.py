@@ -47,10 +47,20 @@ def test_a_folder_of_its_own_or_no_repository_at_all_still_opens(tmp_path):
 def test_the_automatic_start_holds_for_the_owners_pick_instead_of_retrying():
     s = _store({})
     tid = s.create_task({'Title': 'Fix the invoices page crash in the portal', 'Kind': 'coding', 'Assignee': 'agent:coder'}, 'owner')
-    refusal = ValueError('no local path for org/app, and a search of your code folders found no checkout with that git remote')
+    refusal = terminal.NeedsRepo('no local path for org/app, and a search of your code folders found no checkout with that git remote')
     with mock.patch.object(terminal, 'start_on_task', side_effect=refusal), mock.patch('taskuary.blackboard.record_failure') as failed, \
          mock.patch('taskuary.ingest.auto_sessions', return_value=4):
         ingest._auto_code(s, tid)
     assert not failed.called
     assert funnel.held_for_repo(s.get_task(tid))
     assert any('needs a repository' in c['Body'] for c in s.list_comments(tid))
+
+def test_a_failure_whose_words_look_like_it_is_a_failure_not_a_repository_to_pick():
+    # the hold was read off the refusal's words ('no local path|does not exist'): any start failing on "the file does not exist"
+    # asked the owner to pick a repository. It is the checkout guard's own refusal (terminal.NeedsRepo), known by its type
+    s = _store({})
+    tid = s.create_task({'Title': 'Fix the invoices page crash in the portal', 'Kind': 'coding', 'Assignee': 'agent:coder'}, 'owner')
+    with mock.patch.object(terminal, 'start_on_task', side_effect=ValueError('the settings file does not exist')), \
+         mock.patch('taskuary.blackboard.record_failure') as failed, mock.patch('taskuary.ingest.auto_sessions', return_value=4):
+        ingest._auto_code(s, tid)
+    assert failed.called and not funnel.held_for_repo(s.get_task(tid))

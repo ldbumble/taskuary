@@ -14,6 +14,9 @@ from loguru import logger
 from .timewords import plural
 from . import redact     # imports nothing of ours: safe at module level
 
+
+class NeedsRepo(ValueError): "The checkout guard's refusal: a repository named with no checkout found, or a working folder gone - the owner picks where (funnel.needs_repo)."
+
 SCROLLBACK = 200_000        # chars kept for late joiners / reconnects
 # Put in every socket's queue, in order with the bytes, when the pty changes size. A pane kept alive out of sight goes
 # on taking output; it has to wrap at the size the child is painting for, or it is wrong when it is shown again.
@@ -1133,7 +1136,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                 if agent: remember_path(store, agent, repo, found)
                 logger.info(f'found {repo} at {found} - remembered on {agent or label}')
         if not cwd:
-            raise ValueError(f'no local path for {repo}, and a search of your code folders found no '
+            raise NeedsRepo(f'no local path for {repo}, and a search of your code folders found no '
                              f'checkout with that git remote. Pick the repository on the task - the repo '
                              f'chip beside its agent, or the chooser this refusal opens - choose {repo} and '
                              f'give it the path; otherwise the session would open in '
@@ -1147,7 +1150,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         from . import repochoice
         cwd = profile['cwd'] if profile.get('cwd') and not profile.get('cwd_map') else repochoice.scratch(task_id)
     cwd = cwd or profile.get('cwd') or os.getcwd()
-    if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
+    if not os.path.isdir(cwd): raise NeedsRepo(f'working directory does not exist: {cwd}')
     # WHICH CHECKOUT comes first, and only then which binary: resolving the CLI up here meant a box
     # without it answered "'claude' not found on PATH" to a task whose real problem was that nothing
     # said where it belonged - the wrong sentence, and the one the owner cannot act on.

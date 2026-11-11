@@ -136,8 +136,10 @@ class TheDoorsThatAreNotChats(unittest.TestCase):
 
     def test_an_uncertain_repo_asks_for_a_choice_and_keeps_the_new_task_id(self):
         mid = _msg('security app account', 'the login screen is empty')
-        with mock.patch('taskuary.server.start_session',
-                        side_effect=HTTPException(422, 'no local path for org/app, and a search of your code folders found no checkout with that git remote')):
+        def refuse(*a, **k):
+            try: raise server.hub_term.NeedsRepo('no local path for org/app, and a search of your code folders found no checkout with that git remote')
+            except ValueError as e: raise HTTPException(422, str(e))
+        with mock.patch('taskuary.server.start_session', side_effect=refuse):
             response = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coding'})
         self.assertEqual(response.status_code, 200)
         d = response.json()

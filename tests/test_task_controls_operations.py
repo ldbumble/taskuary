@@ -79,7 +79,7 @@ class TaskControls(unittest.TestCase):
         self.s.upsert_agent('coding', 'coding', 'cli', '{}')
         why = 'no local path for org/app, and a search of your code folders found no checkout with that git remote'
         with mock.patch.object(server.hub_term, 'session_for', return_value=None), \
-             mock.patch.object(server.hub_term, 'start_on_task', side_effect=ValueError(why)):
+             mock.patch.object(server.hub_term, 'start_on_task', side_effect=server.hub_term.NeedsRepo(why)):
             _, r = self.run_op('dispatch.prepare', tid, {'kind': 'coding'})
         out = r.json()
         self.assertEqual(out['status'], 'error')                       # still not a success: nothing started

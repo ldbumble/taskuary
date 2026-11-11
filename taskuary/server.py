@@ -3109,7 +3109,6 @@ def resume_previous_work(task_id: int, background: BackgroundTasks):
         finally: general.OPENING.discard(task_id)
     return {'action': 'open', 'taskId': task_id}
 
-from .funnel import NEEDS_REPO
 
 
 def _pressed_on(task_id: int, body) -> int:
@@ -3160,8 +3159,9 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
     except HTTPException as e:
         # a repository the agent cannot open - none chosen, several plausible, a path that is gone - is a
         # DECISION for the owner, shown as a visible choice, never a session in some other checkout (PW-095)
-        if e.status_code == 422 and NEEDS_REPO.search(str(e.detail or '')):
-            from . import funnel; funnel.hold_for_repo(store, task_id, str(e.detail or ''))    # ...and the task keeps saying so after the answer is gone
+        from . import funnel
+        if e.status_code == 422 and funnel.needs_repo(e):
+            funnel.hold_for_repo(store, task_id, str(e.detail or ''))    # ...and the task keeps saying so after the answer is gone
             return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
                     'ref': task_ref(task_id), 'reason': str(e.detail or '')}
         if e.status_code >= 422: _start_failed(_pressed_on(task_id, body), str(e.detail or 'the agent did not start'))
@@ -4562,8 +4562,9 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
         reason = str(e.detail or '')
         # This is a decision, not a failed action. The message may only just have become a task,
         # so return its id and let the card ask which repo before resuming the same dispatch.
-        if e.status_code == 422 and NEEDS_REPO.search(reason):
-            from . import funnel; funnel.hold_for_repo(store, tid, reason)
+        from . import funnel
+        if e.status_code == 422 and funnel.needs_repo(e):
+            funnel.hold_for_repo(store, tid, reason)
             return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': tid,
                     'ref': task_ref(tid), 'reason': reason}
         raise

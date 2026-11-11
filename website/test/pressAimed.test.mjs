@@ -28,6 +28,10 @@ test("one gesture is one press: a second click, or a press within one press, on 
   assert.ok(!aimed("B", { detail: 0 }, (t += ONE_PRESS_MS - 50)), "a press within one press acted on the next item");
   assert.ok(aimed("B", { detail: 1 }, (t += ONE_PRESS_MS + 1)), "a press after one press is the owner's next move");
   assert.ok(aimed("", { detail: 0 }, (t += ONE_PRESS_MS + 1)) && aimed("C", { detail: 0 }, (t += 50)), "a press on an empty table holds nothing");
+  // ...and A PRESS ON NO ITEM soon after one on an item is the owner's (the overnight audit, 2026-11-10): Next at the walk's end drew the walk
+  // again, and pressed 0.3 s later it did nothing under a lit button - only a double-click's second click is held there
+  assert.ok(aimed("D", { detail: 1 }, (t += ONE_PRESS_MS + 1)) && aimed("", { detail: 1 }, (t += 250)), "the end's walk again, pressed soon after Next");
+  assert.ok(aimed("D", { detail: 1 }, (t += ONE_PRESS_MS + 1)) && !aimed("", { detail: 2 }, (t += 100)), "a double-click on Next never starts the walk again");
 });
 
 test("the canvas holds every press to its item, on the window before any card hears it - and never the rail's", () => {

@@ -278,7 +278,9 @@ export const aimed = (item, e = null, now = Date.now()) => {
   const l = lastPress;
   // ...a press with nothing on the table (Walk me through my tasks, the opener's own buttons) was aimed at no item, so what comes up after
   // it was never drawn under another item's press: the walk's first Next is the owner's (walk-again-last-task, 2026-10-25)
-  if (l?.item && item !== l.item && (Number(e?.detail) > 1 || now - l.at < ONE_PRESS_MS)) return false;
+  // ...and A PRESS ON NO ITEM reads none: only a double-click's second click holds it. The walk's end draws its walk again at Next's own
+  // press, and pressed 0.3 s later it did nothing under a lit button (the overnight audit, 2026-11-10)
+  if (l?.item && item !== l.item && (Number(e?.detail) > 1 || (!!item && now - l.at < ONE_PRESS_MS))) return false;
   lastPress = { item, at: now };
   return true;
 };

@@ -57,16 +57,23 @@ test("at the end of a walk with tasks still open, the bar offers the walk again 
     // ...and the end's walk again gone from the bar once that row is back: it stood there greyed beside Back and Next (the recorded walk, 2026-11-10)
     if (ok) { await new Promise((r) => setTimeout(r, 2000)); const left = (await barButtons(page)).filter((b) => /^Walk me through my tasks/.test(b.text));
       steps.push(`${left.length ? "STALE" : "ok"} - the walk again gone from the bar under the row: ${await barNow()}`); ok = !left.length; }
-    ok = ok && await press(page, "^(Next|All read, next)") && await step("on from it: the end again", "^Walk me through my tasks");
-    if (ok) await new Promise((r) => setTimeout(r, 1500));          // ...pressed as a person does, once the end has drawn
-    ok = ok && await press(page, "^Walk me through my tasks") && await step("the walk again: the first row, its Next", "^(Next|All read, next)");
+    // ...and the end's walk again PRESSED BY A HAND THE MOMENT IT IS DRAWN (the overnight audit, 2026-11-10): ~0.3 s after Next it did nothing
+    // under a lit button - the one-gesture gate (actionRow.aimed) held it as Next's second click. A lit button acts
+    const hand = async (re) => { const r = await page.evaluate((src) => { const b = [...document.querySelectorAll("[data-tq-row] button")].find((x) => new RegExp(src).test(x.innerText.trim())
+      && !x.disabled && x.getBoundingClientRect().width > 0); if (!b) return null; const q = b.getBoundingClientRect(); return { x: q.x + q.width / 2, y: q.y + q.height / 2 }; }, re);
+      if (r) await page.mouse.click(r.x, r.y); return !!r; };
+    const t0 = Date.now();
+    ok = ok && await hand("^(Next|All read, next)") && await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-row] button")]
+      .some((b) => /^Walk me through my tasks/.test(b.innerText.trim()) && !b.disabled), { timeout: 30000, polling: 10 }).then(() => true, () => false);
+    if (ok) steps.push(`ok - on from it: the end again, its walk again drawn ${Date.now() - t0} ms after Next`);
+    ok = ok && await hand("^Walk me through my tasks") && await step(`the walk again pressed ${Date.now() - t0} ms after Next: the first row, its Next`, "^(Next|All read, next)");
   } finally {
     await page.screenshot({ path: path.join(out, `${name}-end.png`) });
     await rec.stop();
     await writeFile(path.join(dir, "server.log"), h.backend.output());
     await writeFile(path.join(dir, "requests.txt"), reqs.join("\n"));
     await note(dir, { done: "The demo world: the day card's walk, then the bar's Next until it is gone - the walk at its end, tasks still on the rail; then Back, Next, and the walk again.",
-      expect: "At the end, on the bar: Back (lit, to the last row walked) and Walk me through my tasks - never Back alone. Back brings the last row back; Next ends again; the walk again starts at the top.",
+      expect: "At the end, on the bar: Back (lit, to the last row walked) and Walk me through my tasks - never Back alone. Back brings the last row back; Next ends again; the walk again, pressed the moment it is drawn, starts at the top.",
       saw: steps.join("\n") || "the walk never reached its end", verdict: ok ? "PASS" : "FAIL" });
   }
   assert.ok(ok, steps.join("\n"));

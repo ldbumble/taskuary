@@ -11,8 +11,15 @@ from tests.test_chat_proposals import store
 def _refused(s):
     tid = s.create_task({'Title': 'Look at the new user setup', 'Kind': 'coding', 'Status': 'open'}, 'router')
     op = operations.propose(s, 'agent.continue', tid, {})
-    s.update_operation(op['id'], {'Status': 'error', 'Error': "this tool has no built-in reviewer, so it does not run a stranger's task with its tools",
-                                  'OutcomeJson': json.dumps({'retry': True})})
+    # ...the refusal as the start raised it (origin.Refusal, re-raised as the door's 409): its KIND rides on the op, read off the type - the
+    # way on was found by searching the sentence for "stranger's task", and a reworded sentence would have offered Try again
+    from fastapi import HTTPException
+    from taskuary import failures, origin
+    try:
+        try: raise origin.Refusal('this AI cannot be kept to only reading their words, so it does not start')
+        except origin.Refusal as e: raise HTTPException(409, str(e))
+    except HTTPException as e: c = failures.classify(e, act='agent.continue')
+    s.update_operation(op['id'], {'Status': 'error', 'Error': c['sentence'], 'OutcomeJson': json.dumps(failures.outcome(c))})
     return tid, operations.get(s, op['id'])
 
 

@@ -5614,7 +5614,7 @@ def recover(store, op: dict, actor: str = 'owner') -> dict:
         if rv and rv.get('TaskId'): chips.append({'verb': 'close', 'tid': rv['TaskId'], 'label': buttons.label('close')})
     # A START REFUSED FOR A STRANGER (origin.launch_mode): the way on is the owner's word on the sender - Trust and start, the same
     # proposal told to vouch first (server._run_kind) - never a Try again that is refused the same way, never another tool
-    if st == 'error' and op.get('targetKind') == 'task' and "stranger's task" in str(op.get('error') or ''):
+    if st == 'error' and op.get('targetKind') == 'task' and o.get('code') == 'stranger':
         chips = [c for c in chips if c.get('verb') != 'retry']
         chips.insert(0, {'verb': 'revise', 'op': op['id'], 'params': {**(op.get('params') or {}), 'trust': True},
                          'label': buttons.label('trust_start'), 'hint': buttons.hint('trust_start'),

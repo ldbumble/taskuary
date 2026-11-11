@@ -81,13 +81,17 @@ def classify(e, *, act: str = None, tid=None) -> dict:
     # an AI CLI that isn't signed in is a sign-in to do on its card, not an app bug to report (agents.signed_out_msg, 2026-10-25)
     elif _SIGNED_OUT.search(text): fix = fix or _fix('Sign it in', 'ai_apps')
     unknown = act in SENDS and not isinstance(e, str) and outbound.delivery_uncertain(e)
-    return {'sentence': redact.scrub(sentence)[:500], 'fix': fix, 'retry': not fix and not unknown, 'unknown': bool(unknown)}
+    # ...and what KIND of failure it is, read off the exception's type, never its words: a start refused for a stranger's words has one way
+    # on, the owner's Trust (concierge.recover) - a retry is refused the same way
+    from .origin import Refusal, RefusedForStranger
+    code = 'stranger' if any(isinstance(x, (Refusal, RefusedForStranger)) for x in (e, getattr(e, '__cause__', None), getattr(e, '__context__', None))) else ''
+    return {'sentence': redact.scrub(sentence)[:500], 'fix': fix, 'retry': not fix and not unknown and not code, 'unknown': bool(unknown), 'code': code}
 
 
 def outcome(c: dict, **more) -> dict:
     """The OutcomeJson part of a classified failure - what an op row keeps."""
-    return {k: v for k, v in {**more, 'fix': c.get('fix'), 'retry': c.get('retry'), **({'delivery': 'unknown'} if c.get('unknown') else {})}.items()
-            if v is not None}
+    return {k: v for k, v in {**more, 'fix': c.get('fix'), 'retry': c.get('retry'), 'code': c.get('code') or None,
+                              **({'delivery': 'unknown'} if c.get('unknown') else {})}.items() if v is not None}
 
 
 # WHERE A FAILURE LIVES (agreed with the workflow runner, taskhub-ca, 2026-10-18): a known area's fix is its place in words.json

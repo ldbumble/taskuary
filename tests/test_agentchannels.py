@@ -102,8 +102,9 @@ def test_a_teammate_cannot_answer_a_permission_whatever_they_type(w):
     # the ask waits long past anything this test does: at 5 s a slow machine let it time out between a teammate's lines, and the
     # test read the timeout as the teammate having answered it (CI's macOS, 2026-11-10)
     t = threading.Thread(target=lambda: box.append(perm.ask(w.s, w.tid, req, wait=120)), daemon=True); t.start()
-    for _ in range(200):
-        if perm.pending(w.tid, w.s): break
+    # ...and waits for what it reads next - the ask SAID in the channel, which lands after the ask is pending (CI's macOS, 2026-11-11)
+    for _ in range(1500):
+        if perm.pending(w.tid, w.s) and 'asks permission' in w.said(): break
         time.sleep(0.02)
     assert 'asks permission' in w.said() and '1. Allow once' in w.said() and 'only Alex Doyle can answer' in w.said()
     for words in ('1', 'Allow once', 'allow_once', 'Always allow', '2'):

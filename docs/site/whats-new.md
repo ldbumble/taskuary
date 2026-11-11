@@ -2,6 +2,10 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.44 - 2026-11-11
+
+- Send and close closes whatever the agent is doing, and a turn the close stopped is never said to have failed
+
 ## 0.3.11.43 - 2026-11-11
 
 - A stopped turn keeps its head, a failed one says one sentence, and the Done press is said as its button

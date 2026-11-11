@@ -375,8 +375,9 @@ def world(backend: str, tmp: Path, monkeypatch):
             for t in list(terminal.SESSIONS.values()):
                 try: t.close()
                 except Exception: pass
-            if r.tid:
-                general.IDLED.pop(r.tid, None); acpcoding.IDLED.pop(r.tid, None); general.answered(r.tid, every=True); general.OPENING.discard(r.tid)
+            # ...every task it made, by id: the next test's store numbers its tasks from 1 again, and a start mark left here would be theirs
+            for t in [x['TaskId'] for x in s._rows('SELECT TaskId FROM task')]:
+                general.IDLED.pop(t, None); acpcoding.IDLED.pop(t, None); general.answered(t, every=True); general.OPENING.discard(t)
             clipool.close('')
             MARK.unlink(missing_ok=True)
 

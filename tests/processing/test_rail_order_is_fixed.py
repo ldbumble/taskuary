@@ -142,9 +142,10 @@ def test_the_bottom_ends_the_walk_names_what_was_skipped_and_the_next_walk_start
     out = concierge.surface(store, bottom['key'])
     while out['item']: out = concierge.surface(store, from_key=out['item']['key'])
     assert out.get('over'), 'the walk did not end at the bottom'
-    # ...named by their Opens, with no sentence on the desk (the owner, 2026-10-23: "yes remove the sentence, just the button")
+    # ...no sentence on the desk (the owner, 2026-10-23: "yes remove the sentence, just the button"), and the walk again alone on the bar:
+    # what was skipped is on the rail, a click away (2026-11-10)
     assert out['say'] == '', f"the end of the walk said a sentence: {out['say']}"
-    assert out['chips'][0]['verb'] == 'walk' and [c['key'] for c in out['chips'][1:]][:2] == [i['key'] for i in rail(store) if i.get('tid') in tids[:2]]
+    assert [(c['verb'], c.get('bar')) for c in out['chips']] == [('walk', True)]
     from taskuary import railwalk
     again = railwalk.start(store)                              # the Walk again chip: the next walk starts at the top (2026-10-30)
     assert again['item'] and again['item'].get('tid') == tids[0], 'the next walk did not start at the top'

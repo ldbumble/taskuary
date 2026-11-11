@@ -195,11 +195,14 @@ class HeldStrangerChoicesTests(PhoneCase):
         from taskuary import general
         from taskuary.ingest import HOLD_TAG
         tid = _held(self.f, self.s); self.ph.ready(); self.ph.walk()
-        with mock.patch.object(general, 'start_session', side_effect=AssertionError('nothing starts on a vouch')):
+        # ...TRUST STARTS ITS AGENT (the owner, 2026-11-11): the vouch lifts the hold and the task's agent takes it, as on the desk
+        from taskuary import server
+        with mock.patch.object(server, '_trusted_starts', return_value='started') as starts:
             got = self.ph.tap('Trust them')
+        starts.assert_called_once()
         self.assertFalse(self.s.task_has_tag(tid, HOLD_TAG))
         said = text_of(got)
-        self.assertIn(f'TQ-{tid:04d}', said); self.assertIn('nothing has started', said); self.assertNotIn('New sender', said)
+        self.assertIn(f'TQ-{tid:04d}', said); self.assertIn('its agent takes it from here', said); self.assertNotIn('New sender', said)
         self.assertIn('Send to agent', got[-1][1]); self.assertNotIn('Trust them', got[-1][1])
 
 

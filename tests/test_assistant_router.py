@@ -309,6 +309,7 @@ class DeskRoutes(unittest.TestCase):
                       'CALL: {"kind": "agent.answer", "params": {"text": "use the main branch"}}',
                       'CALL: {"kind": "answer_agent", "params": {"text": "use the main branch"}}'):
             s = store(); tid, item = on_table(s)
+            s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))      # a thread he trusts: an untrusted sender's task starts no agent (origin.hold)
             with mock.patch.object(concierge, '_agent_running', return_value=True), mock.patch.object(waitroom, 'state', return_value=('working', None)):
                 out, _ = say(s, 'tell the agent to use the main branch', item['key'], model)
             # ...the receipt quotes what the owner typed, never the Assistant's version of it put in their mouth (the desktop run, 2026-11-04:
@@ -321,6 +322,7 @@ class DeskRoutes(unittest.TestCase):
         # a full-tools session there holds them for the owner's Continue, waitroom.full_on_stranger)
         from types import SimpleNamespace
         s = store(); tid, item = on_table(s); typed = []
+        s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))
         with mock.patch.object(concierge, '_agent_running', return_value=True), \
              mock.patch.object(waitroom, 'state', return_value=('parked', SimpleNamespace(mode='auto'))), \
              mock.patch.object(terminal, 'tell', side_effect=lambda t, text: (typed.append(text), 'typed into')[1]):

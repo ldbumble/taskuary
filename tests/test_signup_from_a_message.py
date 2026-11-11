@@ -228,8 +228,7 @@ class TheTurn(unittest.TestCase):
     def test_no_agent_browser_and_a_strangers_task_each_say_why(self):
         _, _, _, system, kw = self.turn(installed=False)
         self.assertIn('install agent-browser under', system); self.assertIsNone(kw.get('hold_sid'))
-        _, _, _, system, _ = self.turn(stranger=True)
-        self.assertIn('NO BROWSER ON THIS TASK', system); self.assertNotIn('NO BROWSER IS OPEN', system)
+        # ...an untrusted sender's task has no turn to tell anything: no agent works it until Trust (origin.hold, tests/test_conversation_list.py)
 
 
 if __name__ == '__main__': unittest.main()

@@ -23,6 +23,7 @@ def reopened():
     _at('comment', 'CommentId', s.add_comment(tid, 'assistant', 'assistant_agent', 'There is no ready-made connector; the reply is drafted.'),
         '2026-10-13 15:04:15', s)
     s.save_session(tid, 'cli:claude', '', 'native-1', 'ctx-1')
+    s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))      # a thread he trusts: an untrusted sender's task starts no agent (origin.hold)
     s.cx.execute("UPDATE session_resume SET UpdatedAt='2026-10-13 15:04:16' WHERE TaskId=?", (tid,)); s.cx.commit()
     old = s.add_message({'ExternalId': 'm0', 'Channel': 'email', 'Subject': 'Connector status?', 'FromName': 'Gail Moreno',
                          'FromEmail': 'gail@northwind.example', 'BodyText': 'Any news on the connector?', 'TaskId': tid, 'SentAt': '2026-10-13 14:00:00'})

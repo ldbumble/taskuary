@@ -1908,7 +1908,7 @@ def _tell_now(store, tid: int, target: int, said: str, actor: str, owner: str = 
     if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not go in'} - say so in plain words. Nothing was sent.")
     o = r.get('outcome') or {}
     when = ('it has them now' if o.get('delivered') else
-            f"they wait for your {buttons.label('continue')}" if o.get('state') == 'held_stranger' else 'they go in when it stops at its prompt')
+            "they wait until you trust its sender" if o.get('state') == 'held_stranger' else 'they go in when it stops at its prompt')
     return _did(store, tid, f"Told the agent on {task_ref(target)}: “{_title_cut(' '.join(str(owner or said).split()), 120)}” - {when}.", 'agent.tell')
 
 

@@ -284,6 +284,7 @@ class ChatAttachTests(NoHook):
         from taskuary import general
         f = self.home / 'scratch' / 'review.xlsx'; f.write_bytes(b'xlsx')
         s = MemoryStore(); tid, _ = task_with(s)
+        s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))      # a thread he trusts: an untrusted sender's task starts no agent (origin.hold)
         answer = f'Here it is.\n{selfclose.REPLY_OPEN}\n{OWN}\n[[TASKUARY-ATTACH: {f}]]\n{selfclose.REPLY_CLOSE}'
         with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')):
             sess = general.GeneralSession(s, tid)

@@ -263,6 +263,29 @@ def test_a_kept_conversation_holds_its_connection_between_turns():
     finally: clipool.close(key)
 
 
+def test_a_stop_ends_its_own_turn_and_never_the_one_that_begins_after_it():
+    """The recorded stop, 2026-11-11: he stopped a turn with two lines waiting. Their turn began at once on the same kept conversation, and the
+    stop's backstop closed it two seconds after the press - "died mid-turn", nothing drawn, his lines unanswered."""
+    import threading, time
+    key, said = 'general:test-acp-stop', {}
+    def turn(n, stop, resume=None):
+        with mock.patch.object(agents, '_resolve_cmd', return_value=[FAKE[0]]):
+            try: said[n] = agents.run_cli(profile(keep_alive=key), f'turn {n}', lambda *a: None, extra_env={'FAKE_ACP_HANG': '1'}, cancel=stop, resume=resume)
+            except Exception as e: said[n] = e
+    try:
+        s1, s2 = threading.Event(), threading.Event()
+        a = threading.Thread(target=turn, args=(1, s1)); a.start(); time.sleep(1.5)
+        s1.set(); a.join(10)                                                   # his stop: the turn honours it and ends
+        assert isinstance(said[1], tuple), said                                # ...as an answer, its conversation kept
+        turn(2, s2, said[1][1])                                                # ...and the lines that waited have theirs, on that conversation
+        time.sleep(2.5)                                                        # past the backstop's two seconds: it was not closed under them
+        c = threading.Thread(target=turn, args=(3, s2, said[1][1]), daemon=True); c.start(); c.join(8)
+        assert not c.is_alive(), 'the conversation was closed and a fresh process began its first turn'
+        assert 'turn=2' in str(said[2]) and 'turn=3' in str(said[3]), (said[2][0], said[3][0] if isinstance(said[3], tuple) else said[3])
+        assert clipool.is_live(key)
+    finally: s1.set(); s2.set(); clipool.close(key)
+
+
 # ── how claude and codex launch ───────────────────────────────────────────────────────────────────────────────────────────
 def test_claude_and_codex_launch_through_their_pinned_adapter_driving_the_owner_s_own_binary():
     for name, pkg in (('claude', 'claude-agent-acp@'), ('codex', 'codex-acp@')):

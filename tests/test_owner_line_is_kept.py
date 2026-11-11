@@ -72,13 +72,17 @@ class OwnerLineIsKept(unittest.TestCase):
         for w in ('And copy Erin Blake.', 'Before Friday.'): general.wait_line(self.s, self.tid, w)    # typed mid-turn; then the process went away
         self.assertFalse(hasattr(general, 'to_box') or hasattr(server, 'lines_to_box'))
         self.assertNotIn('box', server._assistant_payload(self.tid))
+        # ...and the turn the restart cut says so without asking him to type: his lines carry on by themselves
+        with mock.patch('taskuary.sessionrecord.cut_turns', return_value=[(self.tid, [])]), mock.patch('taskuary.sessionrecord.keep_turn'):
+            general.keep_cut_turns(self.s)
+        self.assertEqual(self.said()[-1][1], general.CUT_ON); self.assertNotIn('type to', general.CUT_ON)
         self.assertEqual([x['text'] for x in conversation.items(self.s, self.tid)['pending']], ['And copy Erin Blake.', 'Before Friday.'])   # ...by the box
         self.brain.delay = 0
         waitroom.tick(self.s)                                                              # the clock: nobody is taking them, so one turn begins
         self.assertFalse(general.run_kept(self.s, self.tid))                               # ...one, not one a tick
         end = time.time() + 15
         while (general.ASSISTANT_TYPE, 'Answer 1.') not in self.said() and time.time() < end: time.sleep(0.05)
-        self.assertEqual(self.said(), [(general.USER_TYPE, 'And copy Erin Blake.'), (general.USER_TYPE, 'Before Friday.'), (general.ASSISTANT_TYPE, 'Answer 1.')])
+        self.assertEqual(self.said()[-3:], [(general.USER_TYPE, 'And copy Erin Blake.'), (general.USER_TYPE, 'Before Friday.'), (general.ASSISTANT_TYPE, 'Answer 1.')])
         self.assertEqual(len(self.brain.calls), 1)                                         # both in one turn, each said once
         self.assertEqual(general.waiting_lines(self.s, self.tid), [])
         time.sleep(0.2); waitroom.tick(self.s); time.sleep(0.2)

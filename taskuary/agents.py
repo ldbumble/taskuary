@@ -1551,12 +1551,19 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
                              'sid': client.session_id}, trace, held)
     client.on_update, client.permit = steps, lambda params: (steps.asked(params.get('toolCall')), gate(params))[1]
     with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.add(client.p)
+    over = threading.Event()             # this turn has ended, however it ended
     if cancel is not None:
         # A browser Cancel asks the agent to stop first; killing the process is the backstop for
         # an agent that does not honour session/cancel.
+        # ...AND ONLY FOR THE TURN THAT WAS STOPPED (the recorded stop, 2026-11-11): the kill came two seconds after the ask whatever had
+        # happened since - the stopped turn had ended at once, the lines that waited behind it had begun their turn on this same
+        # conversation, and it was closed under them: "died mid-turn", nothing drawn, his lines unanswered. A turn that honoured the stop is
+        # over; what runs next is never the one being stopped
         def _cancel():
             cancel.wait()
-            if cancel.is_set() and conv.lock.locked(): client.cancel(); time.sleep(2); clipool.drop(keep, conv) if keep else client.close()
+            if over.is_set() or not conv.lock.locked(): return
+            client.cancel()
+            if not over.wait(2): clipool.drop(keep, conv) if keep else client.close()
         threading.Thread(target=_cancel, daemon=True).start()
     stop, ok = None, False
     try:
@@ -1580,6 +1587,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         if _SIGNED_OUT.search(str(e)): raise RuntimeError(signed_out_msg(name, str(e), launch['cmd'][0])) from e
         raise
     finally:
+        over.set()
         steps.flush(stop if ok else 'error')
         client.on_update, client.permit = None, None
         with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.discard(client.p)

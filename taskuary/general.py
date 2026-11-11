@@ -92,6 +92,7 @@ def wait_line(store, tid: int, text: str, files=None, line_id=None) -> int:
 # ...AND A TURN THE RESTART CUT KEEPS WHAT IT SAID (the product audit, 2026-11-08): its words and steps went with the process, and nothing in
 # the chat said the turn was cut. Filed at start-up as the turn's answer so far, its steps under it, with one quiet line under its words
 CUT = f'_Cut short when Taskuary restarted - {CARRY_ON}._'
+CUT_ON = '_Cut short when Taskuary restarted._'
 def keep_cut_turns(store) -> list:
     "Every turn a restart cut, filed on its open task: [task ids]."
     from . import sessionrecord
@@ -99,7 +100,9 @@ def keep_cut_turns(store) -> list:
     for tid, trace in sessionrecord.cut_turns():
         if (store.get_task(tid) or {}).get('Status') in (None, 'done', 'dropped'): continue
         words = sessionrecord.said(trace)
-        rid = store.add_comment(tid, 'assistant', ASSISTANT_TYPE, f'{words}\n\n{CUT}' if words else CUT)
+        # ...where his lines wait by the box they carry on by themselves (run_kept): nothing for him to type, so it is not asked of him
+        cut = CUT_ON if waiting_lines(store, tid) else CUT
+        rid = store.add_comment(tid, 'assistant', ASSISTANT_TYPE, f'{words}\n\n{cut}' if words else cut)
         sessionrecord.keep_turn(tid, rid, trace)
         if (t0 := next((e.get('at') for e in trace[:1] if e.get('type') == 'start'), None)):
             from . import outputs

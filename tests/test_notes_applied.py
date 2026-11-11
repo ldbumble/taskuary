@@ -38,6 +38,21 @@ def test_triage_names_the_notes_it_applied_by_their_ids_and_the_verdict_keeps_th
     assert v['notes_applied'] == [seen['ids'][0]], v
 
 
+def test_a_note_on_one_sender_leaves_the_cached_part_of_the_prompt_the_same_for_every_mail():
+    """The memory is a cached block of triage's prompt (llm.stable). The lines a mail's evidence also carries were taken out of it, so a
+    sender with a note had a memory of their own - billed whole again, the guide with it on a CLI (5 memories over 40 mails, 2026-11-11)."""
+    s, seen = _store(), []
+    def llm(system, user, **kw):
+        seen.append(system); return json.dumps({'intent': 'fyi', 'why': 'scripted', 'title': 'A line', 'summary': 'A line.'})
+    llm.takes_want = True
+    for i, who in enumerate(('gail', 'ray')):
+        ingest.ingest_message(s, {'external_id': f'c{i}', 'channel': 'email', 'from_email': f'{who}@northwind.example', 'from_name': who.title(),
+                                  'subject': f'A question {i}', 'body': 'Are you joining the offsite?'}, llm=llm)
+    gail, ray = seen
+    assert 'Gail asking about the offsite is never a task.' in gail.rest and 'Gail asking' not in ray.rest     # the evidence is this mail's own
+    assert gail.blocks == ray.blocks and any('Gail asking about the offsite' in b for b in ray.blocks)          # ...the memory is everyone's
+
+
 def test_with_no_notes_shown_there_is_no_notes_applied():
     s = MemoryStore()
     for k in ('calendar_enabled', 'coding_auto_enabled'): s.set_setting(k, '0', 't')

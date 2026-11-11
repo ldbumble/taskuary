@@ -750,15 +750,11 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     from . import capabilities
     from .triage import job_doc
     # THE WHOLE MEMORY, every time (the owner, 2026-10-27: "triage needs the entire thing to make a decision every time, so load the
-    # whole thing") - not the care and people lines cut to 1500 characters. A line already in the EVIDENCE (a verdict about this sender
-    # or topic: both come from LEARNED.md now) is said once, there
+    # whole thing") - not the care and people lines cut to 1500 characters.
+    # ...and THE SAME BYTES ON EVERY MAIL: the lines this mail's EVIDENCE also carries were taken out of it here, so the memory - a cached
+    # block of the prompt (triage's stable()) - was a different one for every sender with a note, and was billed whole again each time
+    # (5 memories over 40 mails, measured 2026-11-11). A line may now be read twice, once there under its id; what is cached is paid once
     lrn = learned_cut.whole(store, 'triage', target=f"mail:{msg.get('external_id') or ''}")
-    from .memorylines import ABOUT
-    from .triage import note_id
-    said = {str(n)[len(note_id(n)) + 3 if note_id(n) else 0:].strip() for n in notes}     # a note's words, past the id it carries
-    blocks = [[l for l in b.splitlines() if l.startswith('#') or ABOUT.sub('', l.strip().lstrip('-* ')).strip() not in said]
-              for b in lrn.split('\n\n')]
-    lrn = '\n\n'.join('\n'.join(b) for b in blocks if any(not l.startswith('#') for l in b))
     intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), job=job_doc(store), thread=thread, seen=carried,
                              learned=lrn,
                              notes=notes, notes_left=notes_left, images=msg.get('images'),

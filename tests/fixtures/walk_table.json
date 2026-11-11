@@ -63,6 +63,7 @@
     {"id": "W54", "browser": {"steps": ["start"], "action": "next-twice"}, "rule": ["edge"], "steps": ["start", "next press=p1"], "action": "next press=p1", "expect": "T2", "lines": 0, "back": true},
     {"id": "W55", "browser": {"skip": "the Reports page over the table is report-back-unread's; the read it carries is pinned in process"}, "rule": [4], "steps": ["start", "next", "reports-page R1"], "action": "next", "expect": "T3", "read": ["R1"], "back": true},
     {"id": "W60", "rule": [2, "watch"], "note": "a row under Watching, clicked, is on the walk like any task: Back above it, Next below it (watch.py, the owner 2026-11-04)", "steps": ["start", "watch T5"], "action": "open T5", "expect": "T5", "watching": ["T5"], "back": true, "then": {"action": "next", "expect": "R1", "watching": ["T5"], "back": true}},
-    {"id": "W61", "rule": [4, "watch"], "note": "Next from the last of Tasks walks into Watching, the row staying there", "steps": ["start", "watch T5", "open M1"], "action": "next", "expect": "T5", "watching": ["T5"], "back": true}
+    {"id": "W61", "rule": [4, "watch"], "note": "Next from the last of Tasks walks into Watching, the row staying there", "steps": ["start", "watch T5", "open M1"], "action": "next", "expect": "T5", "watching": ["T5"], "back": true},
+    {"id": "W62", "rule": [3, 4], "note": "Back from the end of the walk goes to the last row walked that is still on the rail: the last FYI batch read is gone, so the batch before it (the owner, 2026-11-10: \"last item we walked if it's still there. if read then it's gone\")", "steps": ["open F5", "next"], "action": "back", "expect": "F1-F4", "rail": {"has": ["F1", "F2", "F3", "F4"]}, "back": true}
   ]
 }

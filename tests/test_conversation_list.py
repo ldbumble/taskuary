@@ -115,6 +115,17 @@ class TheList(unittest.TestCase):
         words = [str(x.get('text') or x.get('words') or '') for x in self.list()['items'] if x['kind'] in ('line', 'arrival')]
         self.assertEqual([w[:8] for w in words if w.startswith('flood ')], [f'flood {i + 1:02d}' for i in range(n)])
 
+    def test_a_kept_line_is_heard_and_taken_in_one_step(self):
+        "The recorded flood, 2026-11-11: read between its take and its hear, a line stood for a frame at the time it was typed, above what came in since."
+        self.brain.delay = 0.5
+        self.say('Suggest two.', 'l-one', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.say('Near a station.', 'l-two', wait=False)
+        real, at_take = self.s.take_lines, []
+        def take(*a, **k): at_take.append(conversation.heard(self.s, self.tid, 'line', ['l-two'])); return real(*a, **k)
+        with mock.patch.object(self.s, 'take_lines', side_effect=take): self.rest()
+        self.assertEqual(at_take, [True])
+
     def test_a_message_that_lands_after_the_hand_over_is_the_next_turns_to_hear(self):
         """The recorded flood, 2026-11-11: his own reply on the thread came in while the session started - after the turn's hand-over, before
         its prompt was built - and was named in that prompt as the newest message, then told again by the turn that heard it."""

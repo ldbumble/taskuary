@@ -2,6 +2,31 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.39 - 2026-11-11
+
+- A read the agent makes again in one turn is answered from its first answer, not run and paid for twice
+- What a turn can change is said at the end of an agent's instructions, so the rest is served from the provider's cache
+- A start refused on its way in says why in the task's box, not 'Nothing has started'
+- The walk drops a helper nothing calls and inlines a one-use one
+- A general task held by its switch names the place the switch really is
+- A held row on the phone says its state once
+- A hold that is a refused start offers only Trust: Run anyway, which would be refused again, is not drawn
+- A playbook an agent proposes that could never be saved is refused to the agent at once, not at the owner's Approve
+- A proposal the owner approves or dismisses stays in its turn as its pressed card, and Taskuary's head over its word to the agent is not drawn
+- A failed act is worded by its own failure, never a model asked again
+- A new chat opens with the day said by code: what waits, the calendar, what agents hold
+- A message promoted by hand takes the ask triage already read, not a second model reading
+- A title triage wrote stands on the rail, whatever its words
+- Why a line did not reach an agent is one table, matched by code
+- A start refused for a stranger is known by its kind, not by searching its sentence
+- A start that needs a repository picked is known by the checkout guard's own refusal, not its words
+- The walk again at the walk's end acts when pressed right after Next, instead of doing nothing under a lit button
+- Send to agent with no AI says why in one line and lights Connect an AI
+- The opener counts what waits as the phone and the desk do
+- A coding agent's chat reads, wakes and is told by the general chat's own functions
+- A parked agent reads live again, and a coding start's clock stays on the press
+- A coding agent's new letter after the owner prompted past the old draft is a new card, not the old one rewritten in place
+
 ## 0.3.11.38 - 2026-11-10
 
 - The agent's new card enters inside its turn, never under the owner's line above the turn's head

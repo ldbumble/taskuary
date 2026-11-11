@@ -5,7 +5,7 @@ from unittest import mock
 from taskuary import proposals, verdicts
 from taskuary.store import MemoryStore
 
-BOOK = '# Monthly export\n\nRun the export, check the totals against the ledger, then send the file to Erin Blake.\n'
+BOOK = '# Monthly export\nwhen: the month ends\n\nRun the export, check the totals against the ledger, then send the file to Erin Blake.\n'
 
 
 def test_two_presses_of_one_approve_run_the_action_once():

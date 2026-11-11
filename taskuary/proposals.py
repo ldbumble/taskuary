@@ -244,6 +244,12 @@ def validate(store, p: dict) -> tuple:
         return True, 'change ' + '; '.join(f"{c['name']} -> {c['value']}" for c in changes)
     missing = [k for k in need if not str(p.get(k) or '').strip()]
     if missing: return False, f'{a} needs {", ".join(missing)}'
+    # NOTHING EMPTY IS PUT IN FRONT OF THE OWNER: a playbook that could not be filed, or says nothing of how the job is done, is refused at
+    # this one gate - the tool, a marker in the agent's words, the on-close question - and its writer is told what it lacks
+    if a == PLAYBOOK:
+        from . import playbooks
+        try: playbooks.check(str(p.get('text') or ''))
+        except ValueError as e: return False, str(e)
     from . import trackers
     if (a == 'close_item' or p.get('type') in trackers.TYPES) and (why := trackers.check(p)): return False, why
     # A CLOSE-OUT IS THE OWNER'S OWN ACT (the owner, 2026-09-27: "ask me before merge then do it"): the switches gate what

@@ -168,6 +168,9 @@ def check(text: str) -> dict:
     "The playbook `text` parsed, or ValueError saying what it lacks - one rule for its writing and for an agent's proposal of it."
     pb = parse(text)
     if not pb['title'] or not pb['when']: raise ValueError('a playbook needs a "# title" line and a "when:" line')
+    # ...AND HOW THE JOB IS DONE (the owner, 2026-11-11: "why would you create a blank playbook"): a title and a "when:" alone passed, and
+    # a card stood for his approval that said nothing - refused here, to whoever wrote it, with what it lacks
+    if not pb['steps'] and not pb['body']: raise ValueError('a playbook says how the job is done: it needs a "steps:" line, or the steps written out under it')
     return pb
 
 
@@ -389,8 +392,8 @@ def draft(store, task_id: int, transcript: str, agent: str = 'agent', llm=None) 
         j = json.loads(re.sub(r'^```(json)?|```$', '', str(llm(DRAFT_SYSTEM, user, max_tokens=1200) or '').strip(), flags=re.M))
         pb = j.get('playbook')
         if not isinstance(pb, dict) or not str(pb.get('text') or '').strip(): return None
-        parsed = parse(pb['text'])
-        if not parsed['title'] or not parsed['when']: return None
+        try: parsed = check(pb['text'])                 # one rule for every road: never queue one that says nothing
+        except ValueError: return None
         slug = slugify(pb.get('slug') or parsed['title'])
         if any(b['slug'] == slug for b in books): return None
         made = proposals.queue(store, task_id, {'action': 'write_playbook', 'slug': slug, 'text': pb['text'],

@@ -407,3 +407,26 @@ class DeletedIsRecoverable(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_a_playbook_that_says_nothing_of_how_the_job_is_done_is_refused_at_every_door():
+    """The owner, 2026-11-11: an agent's playbook card stood for his approval, blank. A title and a "when:" passed the check, so the tool,
+    the proposal gate and the on-close question all queued one with no steps. One rule, at the one gate, said to whoever wrote it."""
+    import json
+    from taskuary import agenttools, playbooks, proposals
+    from taskuary.store import MemoryStore
+    blank, full = '# Month-end close\nwhen: the month ends', '# Month-end close\nwhen: the month ends\nsteps: 1. pull the ledger 2. reconcile'
+    for text in (blank, blank + '\nuses: quickbooks', ''):
+        try: playbooks.check(text); raise AssertionError(f'passed: {text!r}')
+        except ValueError as e: assert 'needs' in str(e)
+    assert playbooks.check(full)['steps'] and playbooks.check(blank + '\n\n1. Pull the ledger.\n2. Reconcile it.')['body']      # the steps written out under it
+    s = MemoryStore(); tid = s.create_task({'Title': 'Close October', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    refused = []
+    assert proposals.queue(s, tid, {'action': 'write_playbook', 'slug': 'month-end', 'text': blank, 'why': 'it recurs'}, refused=refused) is None
+    assert refused and 'how the job is done' in str(refused[0]) and not s._rows('SELECT 1 FROM review WHERE TaskId=?', (tid,))
+    try: agenttools.proposal_of({'action': 'write_playbook', 'slug': 'month-end', 'text': blank}); raise AssertionError('the tool took it')
+    except ValueError as e: assert 'how the job is done' in str(e)
+    s.set_setting('playbooks_enabled', '1', 'owner')
+    said = lambda t: (lambda system, user, **k: json.dumps({'playbook': {'slug': 'month-end', 'text': t, 'why': 'it recurs'}}))
+    assert playbooks.draft(s, tid, 'x' * 5000, llm=said(blank)) is None and not s._rows('SELECT 1 FROM review WHERE TaskId=?', (tid,))
+    assert proposals.queue(s, tid, {'action': 'write_playbook', 'slug': 'month-end', 'text': full, 'why': 'it recurs'})

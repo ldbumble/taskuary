@@ -31,6 +31,13 @@ const sampler = (names) => {
       const shown = [...document.querySelectorAll("[data-tq-task-page] button")].filter((b) => b.getBoundingClientRect().width > 0).map((b) => [b.innerText.trim().replace(/\s+/g, " "), !b.disabled]);
       vp.querySelectorAll("[data-tq-turn-cards] button").forEach((b) => { const n = b.innerText.trim().replace(/\s+/g, " "); if (n.length > 2 && n.length < 40 && /^[A-Z]/.test(n)) seen.add(n); });
       const tail = [...vp.querySelectorAll("[data-tq-item]")].pop(), said = tail?.hasAttribute("data-tq-turn") ? [...tail.querySelectorAll("[data-tq-said]")].map((e) => e.innerText).join(" / ") : "";
+      // NOTHING EMPTY IS DRAWN (the owner, 2026-11-11: a blank card stood for his approval): an item with no words that is not a turn at work,
+      // a card in a turn with none, a line waiting by the box with none
+      const bare = (e) => !e.innerText.trim() && !e.querySelector("[data-tq-working], img, video, canvas, textarea");
+      const empty = [...[...vp.querySelectorAll("[data-tq-item]")].filter(bare).map((e) => e.getAttribute("data-tq-item")),
+        ...[...vp.querySelectorAll("[data-tq-turn-cards] > *")].filter(bare).map((e) => `a card of ${e.closest("[data-tq-item]")?.getAttribute("data-tq-item")}`),
+        ...[...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].filter(bare).map((e) => `waiting ${e.getAttribute("data-tq-pending-item")}`)];
+      if (empty.length) f.empty = empty;
       const named = said ? namedIn(said) : [];
       if (named.length) { f.named = named; f.unlit = named.filter((n) => !shown.some(([b, on]) => on && b === n)); if (!f.unlit.length) delete f.unlit; }
       const sig = JSON.stringify(f);
@@ -63,6 +70,7 @@ export function check(frames) {
     }
     // words that name a button, with no such button to press in that frame (said once per run of frames that lack it)
     if (f.unlit?.length && JSON.stringify(f.unlit) !== JSON.stringify(prev?.unlit || [])) say(f.t, `the agent's words name ${f.unlit.map((n) => `"${n}"`).join(", ")} and no such button is lit`);
+    for (const id of f.empty || []) if (!(prev?.empty || []).includes(id)) say(f.t, `${id} is drawn empty`);
     ids.filter((id) => !id.startsWith("t:")).forEach((id) => heard.add(id)); prev = f;
   }
   return bad;

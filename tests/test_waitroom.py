@@ -83,6 +83,22 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(terminal.stable_phase_of(t, at + terminal.PHASE_DWELL + .1), 'working')
         self.assertIsNone(t._phase_candidate)
 
+    def test_a_pane_launched_on_its_prompt_is_at_work_until_its_cli_shows_its_first_turn(self):
+        """The recorded flood on a terminal agent, 2026-11-11: its prompt rode the command line, the CLI took a minute to come up with the bare
+        prompt on screen, and the waiting room typed thirty lines and notes into it before its first turn - none reached the agent."""
+        t = FakeTerm(1, idle=60, tail=['? for shortcuts'])
+        t.status_tail = lambda n=8: t._tail[-n:]
+        at = 500.0; t.launching = at
+        for dt in (0, terminal.PHASE_DWELL + 1, 60): self.assertEqual(terminal.stable_phase_of(t, at + dt), 'working')       # coming up: never parked
+        t._tail = ['Reading totals.py', 'esc to interrupt · for agents']
+        self.assertEqual(terminal.stable_phase_of(t, at + 61), 'working'); self.assertFalse(t.launching)                     # its first turn: from here the screen says
+        t._tail = ['Done.', '? for shortcuts']
+        terminal.stable_phase_of(t, at + 70); self.assertEqual(terminal.stable_phase_of(t, at + 71 + terminal.PHASE_DWELL), 'parked')
+        # ...and a CLI whose working screen is never recognised is not held for good
+        u = FakeTerm(1, idle=60, tail=['? for shortcuts']); u.status_tail = lambda n=8: u._tail[-n:]; u.launching = at
+        terminal.stable_phase_of(u, at + terminal.LAUNCH_WAIT + 1)
+        self.assertEqual(terminal.stable_phase_of(u, at + terminal.LAUNCH_WAIT + 2 + terminal.PHASE_DWELL), 'parked')
+
     def test_a_real_prompt_has_to_hold_then_publishes_once(self):
         t = FakeTerm(1, idle=60, tail=['Done. Tests pass.', '? for shortcuts'])
         t.status_tail = lambda n=8: t._tail[-n:]

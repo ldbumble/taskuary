@@ -70,7 +70,8 @@ class ThreadChangeReplans(unittest.TestCase):
         turn = calls[0][0][-1]
         self.assertIn('Gail Moreno', turn); self.assertIn('it ships Friday, I booked the courier', turn)
         self.assertIn('Gail Moreno - answered: it ships Friday', turn)                    # triage's reading rides with it
-        self.assertIn('WHOLE next step', turn); self.assertIn('--reply-not-needed', turn); self.assertIn('TASKUARY-SUMMARY', turn)
+        self.assertIn('WHOLE next step', turn); self.assertIn('--reply-not-needed', turn)
+        self.assertNotIn('TASKUARY-SUMMARY', turn)                 # ...how a turn ends is said once, in the startup context (selfclose.SUMMARY_LINE)
         self.assertIn(tid, general.OPENING)
         # the stand-in agent decides no reply is needed: the draft is put down - kept under Not sent, no card, no Send - and the task stays open
         got = verdicts.not_needed(s, tid, 'Gail Moreno answered this', 'assistant')

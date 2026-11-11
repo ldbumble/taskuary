@@ -152,8 +152,8 @@ def test_a_one_line_turn_files_its_line_alone_and_the_agent_is_told_it_may():
     assert rest == 'Ray thanked you.' and out['did'] == 'Ray thanked you.' and out['about'] == '' and out['on_you'] == []
     # ...the model judges it: the instructions say ONE line and no draft, and never hand it a list of words to match
     from taskuary import ingest
-    for words in (selfclose.SUMMARY_LINE, ingest.REPLAN):
-        assert 'ONE' in words and 'no draft' in words
+    assert 'ONE' in selfclose.SUMMARY_LINE and 'no draft' in selfclose.SUMMARY_LINE
+    assert 'one line of your own' in ingest.REPLAN                 # ...said once: the re-plan note no longer repeats the summary's rule
 
 
 # ── a refusal says why, and what to do next ─────────────────────────────────────────────────

@@ -71,6 +71,7 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
   await page.reload({ waitUntil: "domcontentloaded" }); await sleep(3000);
   await open(page, tid);
   await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 120000 });
+  await sleep(2500);                    // ...the task's own page, not the one a walk before this left open: its box took the first line and went away
   const rec = await record(page, path.join(out, "video", name));
   await page.evaluate(sampler);
   const snap = async (n) => { await shot(page, `${name}-${n}`); const c = await api(`/api/tasks/${tid}/conversation`); await save(`${name}-${n}-list.json`, c);

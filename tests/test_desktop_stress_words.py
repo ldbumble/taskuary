@@ -20,8 +20,8 @@ def test_the_agent_is_told_its_reply_is_a_card_under_next_steps():
     the task's home (2026-11-04) there is no Close out on it: the stress run (2026-11-05) had the agent say "The reply is in Close out" and
     list "Review the reply in Close out and press Send" as an On you step, over the draft's own card under Next steps."""
     from taskuary import general, selfclose
-    assert 'its own card under Next steps' in selfclose.REPLY_LINE and 'Close out' not in selfclose.REPLY_LINE
-    assert 'none is ever an on_you step' in selfclose.SUMMARY_LINE      # ...nor its own question again (email-04 of the run: said twice)
+    assert 'its card under your answer' in selfclose.CARD_SAID and 'Close out' not in selfclose.REPLY_LINE + selfclose.CARD_SAID      # said once (CARD_SAID)
+    assert 'are never an on_you step' in selfclose.SUMMARY_LINE      # ...nor its own question again (email-04 of the run: said twice)
     assert 'Close out' not in general.DRAFTED
 
 

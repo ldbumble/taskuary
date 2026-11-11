@@ -1460,6 +1460,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // work it draws (chatDetail.js): this task's own choice, else its kind's default from Settings. Off a task's own chat (the dock, the Wall), as ever
   const source = dock ? "general" : chatSource(task, term), coding = source === "coding";
   const conv = useConversation(task.TaskId, !dock);
+  // ..."WORKING" IS ONE FACT ON THE WHOLE PAGE (the recorded walk, 2026-11-11: the chat stood finished under a header that still read "agent
+  // working"): the moment the list's own word on it changes, the task's header and its row are read again
+  const convWorks = !!conv.list?.working, answeredRef = useRef(onAnswered); answeredRef.current = onAnswered;
+  useEffect(() => { if (conv.list) answeredRef.current?.(); }, [convWorks]);   // eslint-disable-line react-hooks/exhaustive-deps
   const cc = useCodingChat(task.TaskId, coding, term, (chat && !dock ? turnCards || [] : []).map((c) => c.at)), defaults = useChatDefaults(), own = useOwnDetail(task.TaskId);
   const level = chat && !dock ? detailFor({ source, settings: defaults, own }) : "steps";
   useEffect(() => { if (cc.got) setRevision((k) => k + 1); }, [cc.got]);

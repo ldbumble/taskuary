@@ -3520,7 +3520,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         queued={chatPane && !liveSession && queuedRow ? <QueuedStart taskId={t.TaskId} queued={queuedRow} line onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} /> : null}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null} next={chatCards}
-                        onAnswered={() => { findTerm(selected); onChanged?.(); }}
+                        onAnswered={() => { findTerm(selected); loadTasks(); loadDetail(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere && !chatPane} chat={home}
                         opening={agentOpening} seed={chatPane ? chatSeed : null}
                         came={home ? { label: cameFrom(sourceMessage) ? `From ${cameFrom(sourceMessage)}` : sources.length ? cameFromLabel(sources) : fromWorkflow ? `Routine · ${fromWorkflow.title}` : "Came from",

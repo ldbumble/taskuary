@@ -2,6 +2,11 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.43 - 2026-11-11
+
+- A stopped turn keeps its head, a failed one says one sentence, and the Done press is said as its button
+- No empty fold, one I'm done on a handed-over page, and the chat's browser says why it went
+
 ## 0.3.11.42 - 2026-11-11
 
 - A page the agent shows stays on the turn that made it, in both kinds of chat

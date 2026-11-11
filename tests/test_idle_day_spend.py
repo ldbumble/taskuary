@@ -14,12 +14,12 @@ PEOPLE = [('Erin Blake', 'erin@northwind.example'), ('Gail Moreno', 'gail@northw
 NL = chr(10)
 
 
-def drip(n=120):
+def drip(n=120, every=8):
     "The day's mail: one in eight a colleague's question (every other one needing a look-up), the rest newsletters - each its own thread."
     for i in range(n):
-        q = i % 8 == 0
+        q = i % every == 0
         who, at = PEOPLE[i % 3] if q else ('Payworth', 'news@vendor.example'), f'2026-11-10 {7 + i * 12 // n:02d}:{i % 60:02d}'
-        body = (f'Hi Alex, are you around on Tuesday for the rota? ({i})' + (' And can you send me the figures from last month?' if i % 16 == 0 else '')
+        body = (f'Hi Alex, are you around on Tuesday for the rota? ({i})' + (' And can you send me the figures from last month?' if i % (2 * every) == 0 else '')
                 if q else f'This week at Payworth: release notes {i}. ' * 30)
         yield {'external_id': f'idle-{i}', 'channel': 'email', 'conversation_id': f'conv-{i}', 'source_name': ME, 'sent_at': at,
                'subject': f'Quick question {i}' if q else f'Payworth news {i}', 'from_email': who[1], 'from_name': who[0], 'body': body,
@@ -70,7 +70,7 @@ def _settle(base, wait=60):
     while threading.active_count() > base and time.monotonic() < end: time.sleep(0.05)
 
 
-def day(s, n=120, looks=48, model=Model) -> dict:
+def day(s, n=120, looks=48, model=Model, every=8) -> dict:
     "{job: (calls, est. tokens)} for one idle day of `n` mails and `looks` Advisor looks."
     Model.spent = {}
     base, k = threading.active_count(), iter(range(10**6))
@@ -83,7 +83,7 @@ def day(s, n=120, looks=48, model=Model) -> dict:
          mock.patch.object(general, '_selected', return_value=('connector:1', 'HIPAA AI', '')), \
          mock.patch.object(apiagent, 'taskuary_tools', side_effect=lambda tid, sid, stranger=False, post=None: toolbox(tid, sid, stranger, _post)), \
          mock.patch.object(apiagent, 'run_tool', side_effect=lambda store, tid, sid, name, a: apiagent._cut(ANSWERS.get(name, ANSWERS['search_mail'])(next(k)))):
-        for m in drip(n):
+        for m in drip(n, every):
             ingest.ingest_message(s, m, llm=model('triage')); _settle(base)
         for _ in range(looks):                       # the Advisor's report, every thirty minutes of the day
             assistant.run(s); _settle(base)
@@ -155,3 +155,10 @@ def test_a_notice_like_the_last_three_is_filed_as_they_were_without_a_call_and_a
     m = {**next(drip(2)), 'external_id': 'later', 'from_email': 'news@vendor.example', 'subject': 'Payworth news 99', 'sender_class': 'bulk'}
     assert ingest.reused_verdict(s, m) is None, 'the owner pressed otherwise: the model reads it again'
     assert ingest.reused_verdict(s, {**m, 'sender_class': None}) is None, 'a person writing is never filed by its look'
+
+
+def test_a_busy_day_stays_one_judgement_per_new_kind_of_mail_and_one_look_or_turn_per_question():
+    "150 mails, one in four a question, half of those needing a look-up: what the day costs, held under its own ceiling."
+    spent = day(store(), n=150, looks=48, every=4)
+    print(NL + 'BUSY DAY (calls, est. tokens):', json.dumps(spent))
+    assert spent['triage'][0] <= 42 and spent['quick_work'][0] <= 38 and spent['general'][0] <= 19 * 12 and spent.get('advisor', (0,))[0] <= 3, spent

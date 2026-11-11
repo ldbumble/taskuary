@@ -179,7 +179,7 @@ const read = (url) => {
   if (m0) return demoRecord(state["/api/tasks/detail"]?.[m0[1]]);
   // the chat's one list (conversation.py), read off the same recorded conversation: the demo keeps turns already written, never a ledger
   const mc = p.match(/^\/api\/tasks\/(\d+)\/conversation$/);
-  if (mc) return demoConversation(state["/api/tasks/detail"]?.[`${mc[1]}:assistant`]);
+  if (mc) return demoConversation(state["/api/tasks/detail"]?.[`${mc[1]}:assistant`], state["/api/tasks/detail"]?.[`${mc[1]}:conversation`]);
   let m = p.match(/^\/api\/tasks\/(\d+)\/assistant$/);
   if (m) return clone(state["/api/tasks/detail"]?.[`${m[1]}:assistant`]) || { messages: [], providers: [], session: null };
   m = p.match(/^\/api\/tasks\/(\d+)$/);
@@ -393,18 +393,23 @@ const scriptedSay = (asked, key) => {
 // another task, React stops listening but this timer still completes and files the reply in the
 // recorded task state. Coming back therefore behaves like the desktop server instead of losing
 // both the progress and the answer at navigation time.
-const demoConversation = (box) => {
-  const items = []; let anchor = "0", n = 0;
+// THE DEMO'S CHAT IS THE SERVER'S OWN LIST, as recorded (demo_fixtures.mjs: GET /conversation of every task - a coding task's turns and
+// each card in its turn among them), and what the visitor said in the demo since stands under it: his line, the scripted answer, a turn at work
+const demoConversation = (box, kept) => {
+  const items = [...(kept?.items || [])]; let anchor = items.findLast((x) => x.kind !== "turn" && x.kind !== "card")?.id || "0", n = items.length;
   const said = (m) => (m.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
-  for (const m of box?.messages || []) {
+  // ...the recorded messages are the list's already: only the ones the demo added since (their ids are the demo's own)
+  if (box && box.kept0 == null) box.kept0 = kept ? (box.messages || []).filter((m) => !/^(u|a|d)\d+$/.test(String(m.id))).length : 0;
+  for (const m of (box?.messages || []).slice(box?.kept0 || 0)) {
     if (m.role === "assistant") items.push({ id: `t:${anchor}:${n++}`, kind: "turn", state: "done", steps: [], text: said(m), cards: [], at: m.createdAt, answer: m.id, ...(m.summary ? { summary: m.summary } : {}) });
     else if (m.press) items.push({ id: `p:${m.id}`, kind: "press", text: said(m), at: m.createdAt });
-    else if (m.brief) (m.mail || []).forEach((x, i) => { anchor = `m:${x.mid || `${m.id}-${i}`}`; n = 0; items.push({ ...x, id: anchor, kind: "arrival" }); });
-    else { anchor = m.line || m.id; n = 0; items.push({ id: anchor, kind: "line", text: said(m), at: m.createdAt, files: [] }); }
+    else if (m.brief) (m.mail || []).forEach((x, i) => { anchor = `m:${x.mid || `${m.id}-${i}`}`; items.push({ ...x, id: anchor, kind: "arrival" }); });
+    else { anchor = m.line || m.id; items.push({ id: anchor, kind: "line", text: said(m), at: m.createdAt, files: [] }); }
   }
   const busy = !!box?.session?.busy;
   if (busy) items.push({ id: `t:${anchor}:${n}`, kind: "turn", state: "working", steps: [], text: "", cards: [], started: Date.now() / 1000 });
-  return { rev: `${items.length}:${busy}:${items.at(-1)?.id || ""}`, items, pending: [], working: busy };
+  return { ...(kept || {}), rev: `${items.length}:${busy}:${items.at(-1)?.id || ""}`, items, pending: [], working: busy, started: null, asking: null, permissions: [], live: null,
+    hold: kept?.hold || null, published: kept?.published || [], ran: items.some((x) => x.kind === "turn") };
 };
 
 export const startDemoAssistant = (taskId, body, emit = () => {}) => {

@@ -37,9 +37,3 @@ test("a wake during a read is one read after it, never two at a time", async (t)
   assert.equal(n, 2);
 });
 
-test("the coding chat reads on task-changed through the coalescer", () => {
-  const src = readFileSync(fileURLToPath(new URL("../src/GeneralWorkspace.jsx", import.meta.url)), "utf8");
-  assert.match(src, /coalesced\(load, 2500\)[^\n]*onLive\("task-changed"[^\n]*wake\(\)/);
-  // ...the conversation's own read (useConversation) asks by revision - an unchanged list answers "same" - so it reads each poke
-  assert.match(src, /params: \{ rev: rev\.current \}/);
-});

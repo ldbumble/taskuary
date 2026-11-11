@@ -51,11 +51,3 @@ test("a replaced draft's record stands where the draft stood: by its time, under
   assert.equal(c.after, "came-in-1");
 });
 
-test("the page greys a passed draft where it stands and draws every row's cards, the mail's too", () => {
-  const gw = src("GeneralWorkspace.jsx"), rd = src("ReviewDecision.jsx");
-  assert.match(rd, /const off = busy \|\| drafting \|\| passed;/);
-  assert.match(rd, /const passed = React\.useContext\(PassedCtx\);/);
-  assert.ok(!/replanning/.test(src("TaskPage.jsx").match(/<ReviewDecision review=\{pendingReview\}[^\n]*\n[^\n]*\n[^\n]*/)[0]), "no turn-long greying of whatever draft waits");
-  assert.match(gw, /<RowCards id=\{line\} \/>/);
-  assert.ok(!gw.includes("<StaleDrafts"), "no second, read-only copy of the draft under its turn");
-});

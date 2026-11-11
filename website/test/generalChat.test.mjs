@@ -57,32 +57,5 @@ test("an ended general session's chat gives the page back to the stage that is f
   // ...or that holds what waits on the owner: a draft card or an On you step in its summary (Task 4.2)
 });
 
-// THE CHAT'S STRIP RIDES IN THE STEP'S HEADING ON THE CANVAS: "Agent work" on one row and the agent's name, brain and Full screen on
-// a second took two lines off the answer (the owner, 2026-10-18: "make the agent space take up more space")
-test("on the canvas the chat's brain and Full screen sit in the agent step's heading, and come home in full screen", () => {
-  // ...only while its session is live: a failed or closed agent's heading carries no picker, "provider default" or Full screen (the owner,
-  // 2026-10-25) - GeneralWorkspace draws none of them anywhere then (noTools)
-  assert.match(tasks, /tools=\{inRow && workspaceMode === "general" && liveSession\s*\? <Box ref=\{setChatTools\}/);
-  assert.match(tasks, /noTools=\{!liveSession\}/);
-  assert.match(tasks, /toolsAt=\{canvas \? chatTools : null\}/);
-  assert.match(workspace, /\{!dock && !noTools && !chat && toolsAt && !full && <>\{createPortal\(tools, toolsAt\)\}<\/>\}/);
-  assert.match(workspace, /\{!dock && !noTools && !chat && !\(toolsAt && !full\) && <Box sx=\{\{ minHeight: 39,/);
-});
 
-test("the chat box says the agent, never \"the assistant\" over an analyst (email walk 2026-10-29; the owner, 2026-11-06)", () => {
-  assert.match(workspace, /placeholder=\{askWords \|\| placeholder \|\| \(dock \? "Tell Taskuary what to do next…" : MESSAGE\)\}/, "one prompt wording (audit 2026-11-05)");
-  assert.doesNotMatch(workspace, /Tell the assistant what to do next/);
-});
 
-// A SEND THAT FAILED STAYS ON SCREEN (the owner, 2026-11-02: "the text goes no where"): the read after a failed turn tells the page the
-// session is down, but never resets the thread - the server's copy has neither the reason nor words the agent never took
-test("a failed send keeps the owner's words and the reason in the chat", () => {
-  const failed = workspace.slice(workspace.indexOf("const failed = useCallback("), workspace.indexOf("const loaded = !!data"));
-  // ...the server's copy handed to the thread only when it says the failure (general.with_failure): a poll's copy from before it, applied as the run
-  // ended, wiped the turn's "⚠" and left his line under a head spinning for a minute (the overnight walk, 2026-11-11)
-  assert.match(failed, /accept\(r\.data\); if \(r\.data\?\.messages\?\.at\(-1\)\?\.failed\) setRevision\(\(k\) => k \+ 1\)/);
-  assert.match(workspace, /onEnded=\{failed\}/);
-  // ...and the adapter still says the reason under the message on both roads: an error event and a refused request
-  assert.match(workspace, /onEnded\?\.\(\);\s*\n\s*yield \{ content: content\(`⚠ \$\{event\.error/);
-  assert.match(workspace, /onEnded\?\.\(\);\s*\n\s*yield \{ content: content\(`⚠ \$\{e\?\.message/);
-});

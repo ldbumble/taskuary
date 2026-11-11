@@ -68,6 +68,9 @@ for (const t of (out["/api/tasks"]?.data || [])) {
   if (r && r.ok) out["/api/tasks/detail"][t.TaskId] = await r.json();
   const a = await fetch(`${BASE}/api/tasks/${t.TaskId}/assistant`).catch(() => null);
   if (a && a.ok) out["/api/tasks/detail"][`${t.TaskId}:assistant`] = await a.json();
+  // ...and its chat as the page draws it: the server's one list (conversation.items), a coding task's turns and every card's place in it
+  const c = await fetch(`${BASE}/api/tasks/${t.TaskId}/conversation`).catch(() => null);
+  if (c && c.ok) out["/api/tasks/detail"][`${t.TaskId}:conversation`] = await c.json();
   // ...and the pictures and PDFs its agent made, as data: addresses - the static demo has no server to fetch them from (taskOutputs.STATIC_OUTPUTS)
   const box = out["/api/tasks/detail"][`${t.TaskId}:assistant`];
   for (const o of (box?.outputs || []).filter((o) => /^(image\/|application\/pdf)/.test(o.content_type || "") && o.size < 400000)) {

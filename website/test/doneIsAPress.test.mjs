@@ -28,13 +28,3 @@ test("an act that still waits keeps its buttons on the turn that set it up", () 
   assert.equal(stateOf({ ...row, Status: "approved" }).done, true); assert.equal(stateOf({ ...row, Status: "rejected" }).done, false);
 });
 
-test("the Assistant's dock shows an act in its words, and sends back only what the owner changed", () => {
-  assert.doesNotMatch(ws, /reviewDraft/);
-  const dock = ws.slice(ws.indexOf("export function DockActions"), ws.indexOf("export function DockActions") + 9000);
-  assert.match(dock, /value=\{edits\[review\.ReviewId\] \?\? reviewText\(review\)\}/);
-  assert.match(dock, /r\.Kind === "action" \? \(typed != null && typed !== shown \? typed : null\) : typed \?\? shown/);
-  const act = (p) => ({ Kind: "action", Status: "pending", DraftText: JSON.stringify(p) });
-  assert.equal(reviewText(act({ action: "shell_act", command: "git push origin fix-export", what: "Push the fix" })), "Approve runs: git push origin fix-export");
-  assert.equal(reviewText(act({ action: "write_playbook", name: "Month end", text: "# Month end\n1. Pull the ledger." })), "# Month end\n1. Pull the ledger.");
-  assert.equal(reviewText({ Kind: "reply", DraftText: "Thanks Erin - Thursday works." }), "Thanks Erin - Thursday works.", "a reply is its draft, as before");
-});

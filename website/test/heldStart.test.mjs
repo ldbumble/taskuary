@@ -1,40 +1,23 @@
-// The owner, 2026-11-09: a coding task held because its sender was new opened on "waiting to start" over an empty chat, with nothing to press.
-// The chat says why nothing started by itself, and Run anyway starts it through the hold's own release - for a coding and a general task alike.
+// AN UNTRUSTED SENDER'S TASK IS WORKED BY NO AGENT (the owner, 2026-11-11): the chat shows what came in, one plain line why nothing works on
+// it, and one Trust action that starts the agent - read off the server's one list (conversation.items `hold`, origin.hold), never worked
+// out by the page, and with no "Run anyway" beside it.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { heldStartOf } from "../src/agentStory.js";
 
-const story = { kind: "held", line: "Waiting for you. Gail Moreno (gail@vendor.example) is not on your domain and you have never written to them, so no agent starts on their words by itself." };
+const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
-test("the held line is said only for a new sender's hold, and only while no agent ever ran", () => {
-  assert.equal(heldStartOf({ story, tags: "repo:x,hold:new-sender" }), story.line);
-  assert.equal(heldStartOf({ story, tags: "hold:new-sender", ran: true }), "", "once an agent ran, the chat tells its own story");
-  assert.equal(heldStartOf({ story, tags: "held:repo" }), "", "a hold on where the code is has its own way on");
-  assert.equal(heldStartOf({ story: { ...story, kind: "idle" }, tags: "hold:new-sender" }), "");
+test("the hold is the list's: its line and its one Trust action, drawn in the chat", () => {
+  const gw = src("GeneralWorkspace.jsx");
+  assert.match(gw, /hold=\{conv\.list\?\.hold \|\| null\}/);
+  assert.match(gw, /\{hold && <HeldStart taskId=\{task\.TaskId\} hold=\{hold\} onChanged=\{onTrusted\} \/>\}/);
+  assert.doesNotMatch(src("TaskPage.jsx"), /heldStart|HeldStart/, "the page works out no hold of its own");
 });
 
-test("the chat draws Run anyway (this once) and Trust sender (vouches too), both through the hold's release", () => {
-  const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
-  assert.match(src("HeldStart.jsx"), /api\.post\(`\/api\/tasks\/\$\{taskId\}\/release`, \{ trust \}\)/);
-  assert.match(src("HeldStart.jsx"), /btn\(false, "Run anyway"/);
-  assert.match(src("HeldStart.jsx"), /btn\(true, "Trust sender"/);
-  assert.match(src("GeneralWorkspace.jsx"), /\{!dock && heldStart\}/);
-  assert.match(src("TaskPage.jsx"), /heldStart=\{chatPane && heldStart \? <HeldStart taskId=\{t\.TaskId\} line=\{heldStart\}/);
-});
-
-// ...AND A LINE OF HIS IS NO RUN (the recorded walk, 2026-11-10): he typed on a stranger's task whose AI could not start, the start was held -
-// and the hold was hidden because the chat now had history, his own line. Only the agent's words, a session or a queued start are a run
-test("the owner's own line does not hide the hold: only an agent that spoke, a session or a queued start does", () => {
-  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /const agentSpoke = \(detail\?\.comments \|\| \[\]\)\.some\(\(c\) => c\.ActorType === "assistant_agent"\);/);
-  assert.match(page, /heldStartOf\(\{ story: detail\?\.agentStory, tags: t\?\.Tags, ran: ranBefore \|\| agentSpoke \|\| !!term \|\| liveSession \|\| !!queuedRow \}\)/);
-});
-
-// ...AND NO RUN ANYWAY WHERE IT CANNOT WORK (the recorded walk, 2026-11-10): a start refused for a stranger on this AI is refused again, so the
-// hold offers only Trust - read off the hold's own presses (funnel.held_offer `once`), the one function every surface draws them from
-test("Run anyway is drawn only where the hold's presses say it can start", () => {
-  const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
-  assert.match(src("HeldStart.jsx"), /\{once && btn\(false, "Run anyway"/);
-  assert.match(src("TaskPage.jsx"), /<HeldStart taskId=\{t\.TaskId\} line=\{heldStart\} once=\{detail\?\.agentStory\?\.trust\?\.once !== false\}/);
+test("one action: Trust, by the label the server words for the sender - no Run anyway", () => {
+  const card = src("HeldStart.jsx").replace(/^\/\/.*$/gm, "");
+  assert.match(card, /api\.post\(`\/api\/tasks\/\$\{taskId\}\/trust`\)/);
+  assert.match(card, /\{busy \? "Starting…" : hold\.person \|\| "Trust them"\}/);
+  assert.equal((card.match(/<Button/g) || []).length, 1);
+  assert.doesNotMatch(card, /Run anyway|\/release/);
 });

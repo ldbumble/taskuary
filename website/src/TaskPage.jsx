@@ -10,7 +10,6 @@ import { usePromptImages, withImages } from "./promptImages.jsx";
 import { ASK_WHAT, RunForm } from "./RunForm.jsx";
 import CheckBackChip from "./CheckBackChip.jsx";
 import QueuedStart from "./QueuedStart.jsx";
-import HeldStart from "./HeldStart.jsx";
 import { dangerAimOf, dangerLine, dangerOf, strangerLine, trustInBox } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { canSend, cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
@@ -126,7 +125,7 @@ import { draftAnswers, otherPendingReplies } from "./pendingDrafts.js";
 import { replyRounds, roundReviews } from "./replyRounds.js";
 import { diffStat } from "./agentRecord.js";
 import AgentStory from "./AgentStory.jsx";
-import { heldStartOf, startLabel, storyPlace, storyShown } from "./agentStory.js";
+import { startLabel, storyPlace, storyShown } from "./agentStory.js";
 import { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 import { useShareParts } from "./Share.jsx";
@@ -2482,10 +2481,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession && !home;
   const startHere = !home && !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
   const ranBefore = !!(report || detail?.transcript);
-  // a start held for a new sender, said in the chat with its Run anyway (HeldStart) - only while no agent has ever run here. A line of HIS is
-  // no run: typed on a stranger's task whose AI could not start, the hold went unsaid under it (the recorded walk, 2026-11-10)
-  const agentSpoke = (detail?.comments || []).some((c) => c.ActorType === "assistant_agent");
-  const heldStart = heldStartOf({ story: detail?.agentStory, tags: t?.Tags, ran: ranBefore || agentSpoke || !!term || liveSession || !!queuedRow });
   // held on where the code is: before any run that is a start waiting, after one it is the agent asking to move the work (wrapup.asks_to_move)
   const heldWhy = ranBefore ? "The agent found the work is not in this code - choose where it is and it starts there"
     : "Not started: it needs to know where the code is - it starts once you choose";
@@ -3516,7 +3511,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           source (chatStream.chatSource) - a coding task's sessions, or the general agent's conversation - and the branch's landing
                           card joins it wherever the task works in a checkout */}
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
-                        heldStart={chatPane && heldStart ? <HeldStart taskId={t.TaskId} line={heldStart} once={detail?.agentStory?.trust?.once !== false} onChanged={() => { loadTasks(); loadDetail(t.TaskId); findTerm(t.TaskId); onChanged?.(); }} /> : null}
                         queued={chatPane && !liveSession && queuedRow ? <QueuedStart taskId={t.TaskId} queued={queuedRow} line onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} /> : null}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null} next={chatCards}

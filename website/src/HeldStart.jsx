@@ -1,30 +1,25 @@
-// A START HELD FOR A NEW SENDER IS SAID IN THE CHAT, with its one way on (the owner, 2026-11-09): a coding task held because its sender was new
-// opened on "waiting to start" over an empty chat, and Came from said "anything risky waits for your OK" with nothing to press. The chat says
-// who sent it and why nothing started by itself (funnel.agent_story's held line, the router's not_started line). Two ways on, both through the hold's
-// own release (server.release_task): Run anyway starts this task once and the sender stays unknown; Trust sender vouches for them as well.
+// AN UNTRUSTED SENDER'S TASK IS WORKED BY NO AGENT, AND SAYS SO WITH ITS ONE WAY ON (the owner, 2026-11-11): the chat shows what came in, this
+// one plain line why nothing is working on it (origin.hold, the list's `hold`), and one lit action - Trust <sender>. The press records the
+// trust and starts the agent as any task's (server.task_trust); what waited by the box is handed over with it. No "Run anyway": an agent
+// either works a sender's words or it does not.
 import React, { useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
-import { ALERT } from "./theme.jsx";
 
-export default function HeldStart({ taskId, line, once = true, onChanged }) {
-  const [busy, setBusy] = useState(""), [err, setErr] = useState("");
-  const run = async (trust) => {
-    setBusy(trust ? "trust" : "once"); setErr("");
-    try { await api.post(`/api/tasks/${taskId}/release`, { trust }); onChanged?.(); }
-    catch (e) { setErr(e?.response?.data?.detail || "It did not start - try again."); setBusy(""); }
+export default function HeldStart({ taskId, hold, onChanged }) {
+  const [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const trust = async () => {
+    setBusy(true); setErr("");
+    try { await api.post(`/api/tasks/${taskId}/trust`); onChanged?.(); }
+    catch (e) { setErr(e?.response?.data?.detail || "It was not trusted - try again."); setBusy(false); }
   };
-  const btn = (trust, label, props) => (
-    <Button size="small" disableElevation disabled={!!busy} onClick={() => run(trust)} {...props}
-      startIcon={busy === (trust ? "trust" : "once") ? <CircularProgress size={12} color="inherit" /> : null}
-      sx={{ fontSize: 12.5, minHeight: 30, textTransform: "none" }}>{busy === (trust ? "trust" : "once") ? "Starting…" : label}</Button>);
   return (
     <Box data-tq-held-start="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
-      <Typography sx={{ fontSize: 13.5, color: "var(--tq-text, #292824)" }}>{line}</Typography>
+      <Typography sx={{ fontSize: 13.5, color: "var(--tq-text, #292824)" }}>{hold.line}</Typography>
       <Box sx={{ display: "flex", gap: 1, mt: 0.75, flexWrap: "wrap" }}>
-        {/* ...no Run anyway where it cannot work: a start refused for a stranger on this AI is refused again (funnel.held_offer `once`) */}
-        {once && btn(false, "Run anyway", { variant: "contained", "data-tq-run-anyway": "" })}
-        {btn(true, "Trust sender", { variant: once ? "outlined" : "contained", "data-tq-trust-sender": "" })}
+        <Button size="small" variant="contained" disableElevation disabled={busy} onClick={trust} data-tq-trust-sender=""
+          startIcon={busy ? <CircularProgress size={12} color="inherit" /> : null} sx={{ fontSize: 12.5, minHeight: 30, textTransform: "none" }}>
+          {busy ? "Starting…" : hold.person || "Trust them"}</Button>
       </Box>
       {err && <Typography variant="caption" sx={{ display: "block", color: "var(--tq-danger, #8a3646)", mt: 0.5 }}>{err}</Typography>}
     </Box>);

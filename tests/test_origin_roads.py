@@ -20,7 +20,8 @@ def _claude(monkeypatch, tmp_path):
 
 def _stranger(s):
     t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'email'}, 'router')
-    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'someone@vendor.example', 'Status': 'routed'}); return t
+    # ...a stranger with NO SENDER TO TRUST - Taskuary's own words from what it read: an untrusted sender's task starts no agent at all (origin.hold)
+    s.add_message({'TaskId': t, 'Channel': 'assistant', 'FromEmail': 'someone@vendor.example', 'Status': 'routed'}); return t
 
 TOOLBOX = ('--mcp-config', '--disallowedTools')       # what trusted work on a task adds (agenttools.session_args), each with its value
 
@@ -351,24 +352,3 @@ def test_the_folder_passes_in_its_long_name_when_temp_is_a_short_one(monkeypatch
     d = origin.stranger_dir(7)
     for p in (d / 'notes.md', Path(os.path.realpath(d)) / 'notes.md'):
         assert floor.check({'tool_name': 'Read', 'tool_input': {'file_path': str(p)}}, 7) == {}, p
-
-
-def test_a_chat_turn_refused_for_a_stranger_is_the_hold_with_its_trust_never_a_failure():
-    """The recorded walk, 2026-11-10: a stranger's task whose AI cannot be kept to reading; the owner typed a line and the chat drew a running
-    "AGENT · ran 50s" head with nothing behind it, never saying why. A chat's turn refused at its start is the stranger hold the queue's and a
-    coding line's are (ingest.held_start): said once on the task with its Trust presses (funnel.idle_state), never a failed run."""
-    s = MemoryStore(); t = s.create_task({'Title': 'Vendor review', 'Kind': 'general', 'Status': 'open', 'Source': 'email'}, 'router')
-    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'paula@vendor.example', 'Status': 'routed'})
-    with mock.patch.object(general, '_selected', return_value=('cli:copilot', 'Copilot', '')): sess = general.GeneralSession(s, t)
-    refused = origin.refused(origin.Refusal(origin.no_reviewer(s)))
-    with mock.patch.object(general.llm_mod, 'build_llm', side_effect=refused), mock.patch('taskuary.hooks.judge_ended'), \
-         mock.patch.object(general.GeneralSession, '_end_soon'):
-        with pytest.raises(ValueError): sess.send_prompt('make it shorter and attach the sheet')
-    said = [c['Body'] for c in s.list_comments(t)]
-    assert [x for x in said if x.startswith(ingest.NOT_STARTED) and 'Trust them' in x], said
-    assert s.task_has_tag(t, ingest.HOLD_TAG) and (s.last_worker_event(t, kinds=('failed',)) or {}).get('Kind') != 'failed'
-    from taskuary import funnel
-    idle = funnel.idle_state(s, t)
-    assert idle['kind'] == 'held' and 'Trust them' in idle['line'] and idle.get('trust'), idle
-    # ...and no Run anyway: on the same AI it is refused again - a press that cannot work is not offered (funnel.held_offer)
-    assert idle['trust']['once'] is False

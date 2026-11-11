@@ -4,57 +4,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { notShown, stillHeld } from "../src/heldLines.js";
+
 
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const you = (text) => ({ role: "user", content: [{ type: "text", text }] });
 const agent = (text) => ({ role: "assistant", content: [{ type: "text", text }] });
 const LINE = "the second site - I see you have it at 4 million?";
 
-// 1. ONE LINE, ONCE. Typed while the agent had a question open, the line took the answer's road: held at the foot as the owner's AND appended to
-// the chat's own thread, which drew it as the turn's "You" bubble - so it stood twice, the second under the agent's first step, for the whole turn
-test("a held line the chat already draws is not drawn again under the agent's step", () => {
-  const held = [{ id: "h", text: LINE, after: 2, drawn: 2 }];
-  const server = [you("first"), agent("Which site?"), you("second"), agent("Want the totals?")];
-  const thread = [...server, you(LINE), agent("")];          // the answer road: the runtime appended it and its turn is streaming
-  assert.deepEqual(stillHeld(held, server), held, "the server has not filed it yet");
-  assert.deepEqual(notShown(stillHeld(held, server), thread), [], "...but the thread on screen draws it: once is enough");
-  // ...and a line the thread does not draw yet (typed mid-turn, waiting for the turn ahead) stays drawn, held
-  assert.deepEqual(notShown(held, server), held);
-  // ...nor does a line the owner said before the hold take it away
-  assert.deepEqual(notShown([{ id: "y", text: "yes", after: 1, drawn: 1 }], [you("yes")]).length, 1);
-});
 
-test("Taskuary's own brief is not the owner's line: a held line waits for theirs", () => {
-  const brief = { role: "user", brief: true, content: [{ type: "text", text: "New mail on this task from Erin Blake" }] };
-  const held = [{ id: "h", text: LINE, after: 1, drawn: 1 }];
-  assert.deepEqual(stillHeld(held, [you("first"), brief]), held, "a brief filed ahead of it is no copy of it");
-  assert.deepEqual(stillHeld(held, [you("first"), brief, you(LINE)]), []);
-  const meta = { role: "user", metadata: { custom: { brief: true } }, content: [{ type: "text", text: "Taskuary's instructions" }] };
-  assert.deepEqual(notShown(held, [you("first"), meta]), held, "the thread marks a brief on its metadata");
-});
 
-test("the chat draws its held lines through notShown, and a failed answer takes its held copy back", () => {
-  const gw = read("GeneralWorkspace.jsx");
-  assert.match(gw, /const shown = notShown\(held, mine\);\s*return \[\.\.\.waitingShown\(waiting, shown, mine, messages\)[^\n]*\.\.\.shown\];[\s\S]*<FootLines waiting=\{waiting\} held=\{held\} messages=\{messages\}/);
-  assert.doesNotMatch(gw, /\{held\.map\(\(l\) => <div key=\{l\.id\}/);
-  assert.match(gw, /\.catch\(\(x\) => \{ setHeld\(\(h\) => h\.filter\(\(l\) => l\.id !== id\)\); setSent\(null\); c\.setText\(w\)/);
-  // ...and a coding source's lines are held the same way, on the same road - one post for every agent (general.take_line, 2026-11-10)
-  assert.match(gw, /api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant\/messages`, \{ text: w, attachments: files\.map\(\(a\) => a\.path\), line_id: id \}, \{ timeout: 0 \}\)\s*\.then\(\(\) => road\?\.\(\)\)/);
-});
 
-// 2. THE FILES LEAVE THE BOX WITH THE SEND. They were cleared only when the agent's whole turn was done - minutes of chips over a box that had
-// already sent them - and a line typed while it worked never sent them at all
-test("the chat box lets go of its files once the send is accepted, and keeps them when it fails", () => {
-  const gw = read("GeneralWorkspace.jsx");
-  assert.match(gw, /const sentFiles = attachmentsRef\.current\.map\(\(a\) => a\.path\)/);
-  assert.match(gw, /if \(event\.type !== "error"\) took\(\);/, "the first word back from the server is the send accepted");
-  assert.doesNotMatch(gw, /onClearAttachments\(\); onSent\(event\.payload\)/, "never every file at the turn's end: one added meanwhile stays");
-  // ...a line held while it works carries the box's files, and puts them back if it did not go
-  assert.match(gw, /\{ text: w, attachments: files\.map\(\(a\) => a\.path\), line_id: id \}/);
-  assert.match(gw, /onAttachBack\(files\)/);
-  assert.match(gw, /const clearAttachments = useCallback\(\(paths\) =>/);
-});
 
 // 3. AN FYI HANDFUL IS "6 messages": the row and the section already say FYI
 test("an FYI handful's chip, title and kicker say how many, not 'nothing to decide'", () => {

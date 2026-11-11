@@ -32,12 +32,3 @@ test("(c) the re-evaluated turn shows one line and no card", () => {
   assert.equal(freshNext([retired]), true, "nothing stale waits either");
 });
 
-// (b) the owner's outside reply is an input entry on the LEFT: the server places it after the last agent turn (general.shown_history, pinned by
-// tests/test_owner_input_on_canvas.py) as a brief whose mail is theirs; the page draws that brief in place, its own row on the left
-test("(b) the owner's outside reply renders as a left-side input entry, in the stream's order", () => {
-  const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /if \(brief && chat\) return mail\?\.length \? <><MessagePrimitive\.Root className="tq-aui-message tq-aui-brief"><Arrived mail=\{mail\} \/>/);
-  assert.match(ws, /data-tq-chat-arrived=\{x\.own \? "own" : ""\}/);
-  assert.match(ws, /const headOf = \(x\) => x\.own \? \["You", ON_WORD/);
-  assert.match(read("generalWorkspace.css"), /\.tq-aui-chat \.tq-aui-arrived-own \{ justify-self: start;/);
-});

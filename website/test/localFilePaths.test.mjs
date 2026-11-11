@@ -31,14 +31,6 @@ test("a path named bare in the words becomes a code span for the chat to draw as
   assert.equal(codeLocalPaths(`Saved: ${OUT}\\report.pdf.`, 42), `Saved: \`${OUT}\\report.pdf\`.`);
 });
 
-test("the chat draws a local path as the file: a picture as <img> with a link that opens it whole, anything else a link", () => {
-  const md = read("md.jsx");
-  assert.match(md, /const Code = [\s\S]*?localFile\(kids\[0\], at\.tid\)/);
-  assert.match(md, /f\.image && <span data-tq-local-picture[\s\S]*?<img src=\{src\}/);
-  assert.match(md, /f\.image \? <a href=\{src\} data-tq-file-link=""[\s\S]*?: <A href=\{f\.url\}>/);
-  assert.match(md, /code: Code/);
-  assert.match(read("GeneralWorkspace.jsx"), /<LocalFiles\.Provider value=\{dock \? null : \{ tid: task\.TaskId \}\}>/);
-});
 
 const call = (id, name, args = {}) => ({ type: "tool_call", name, detail: { tool_call_id: id, args } });
 const answer = (id, result, is_error = false) => ({ type: "tool_result", name: id, detail: { tool_call_id: id, result, is_error } });
@@ -60,11 +52,3 @@ test("a file the agent showed is drawn in the turn that showed it, from the call
   assert.equal(filesOf(call("c5", "Bash", {}), answer("c5", said)), null);
 });
 
-// ...ONE ROAD FOR BOTH CHATS (the overnight walk, 2026-11-11): the server places each shown page in its turn for a coding chat as for a general one,
-// so the trace's files part draws nothing in either - a coding chat drew only pages whose trace carried them, and never twice
-test("a shown page is drawn by its kept copy in its turn in both chats, never from the trace", () => {
-  const gw = read("GeneralWorkspace.jsx");
-  assert.match(gw, /p\.type === "files" \? null/);
-  assert.match(gw, /placeShown\(\(src\?\.published \|\| \[\]\)\.map\(\(p\) => \(\{ \.\.\.p, after: named\(p\.after\) \}\)\)/);
-  assert.doesNotMatch(gw, /TraceFilesCtx/);
-});

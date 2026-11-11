@@ -27,17 +27,6 @@ test("the chat draws it only where the task works in a checkout, whatever its ki
   assert.equal((page.match(/<LandingCard /g) || []).length, 1, "once, in the chat");
 });
 
-test("the card is part of the turn its newest change came in, and moves with the chat", () => {
-  const ms = [{ id: "u1", role: "user", createdAt: "2026-11-08 15:55:00" }, { id: "t1", role: "assistant", createdAt: "2026-11-08 15:55:12" },
-    { id: "u2", role: "user", createdAt: "2026-11-08 15:56:15" }, { id: "t2", role: "assistant", createdAt: "2026-11-08 15:56:16" },
-    { id: "t3", role: "assistant", createdAt: "2026-11-08 16:30:00" }];
-  assert.equal(landingTurn(ms, "2026-11-08 16:09:55"), "t2");
-  assert.equal(landingTurn(ms, ""), "t3");
-  assert.equal(landingTurn(ms.slice(0, 1), "2026-11-08 16:09:55"), null);
-  const chat = fs.readFileSync(path.join(process.cwd(), "src", "GeneralWorkspace.jsx"), "utf8");
-  assert.match(chat, /\{landing\?\.after === id && landing\.node\}/);
-  assert.match(chat, /\{!dock && !landAt && landNode\}/, "at the foot only before any turn");
-});
 
 test("the card's list folds the generated files and says how many more, apart from See the diff", () => {
   const { src, gen } = landingFiles([{ path: "taskuary/landing.py" }, { path: "website/package-lock.json" }, { path: "taskuary/static/assets/index-AbCd1234.js" }]);

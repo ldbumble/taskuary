@@ -335,7 +335,7 @@ class SharedSessionTests(unittest.TestCase):
         answer = 'Here is the comparison.\n[[TASKUARY-DONE]] Finished the comparison.'
         timer = mock.Mock()
         with mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: answer), mock.patch('taskuary.origin.launch_mode', return_value='full'), \
-             mock.patch.object(general.threading, 'Timer', return_value=timer) as make_timer:
+             mock.patch('taskuary.origin.hold', return_value=None), mock.patch.object(general.threading, 'Timer', return_value=timer) as make_timer:
             session.send_prompt('Compare them')
         make_timer.assert_not_called()
         self.assertNotIn(store.get_task(tid)['Status'], ('done', 'dropped'))

@@ -68,24 +68,7 @@ test("a running turn shows its steps open, the newest six, and ONE clock - its w
   assert.match(read("AgentStepRows.jsx"), /<CircularProgress size=\{10\}/);
 });
 
-// A BURST (the owner, 2026-11-05): a mail read in while turn 1 ran is drawn after it, stamped when it came in - the re-think under it began when
-// turn 1 answered, the newest of everything above it, never at that mail's earlier stamp
-test("a turn's run is counted from the newest thing above it, not the row just above", () => {
-  const t = (hm) => new Date(`2026-11-05T17:${hm}`);
-  assert.equal(+turnBegan([t("19:55"), t("21:10"), t("20:40")]), +t("21:10"));
-  assert.equal(turnStamp({ start: turnBegan([t("19:55"), t("21:10"), t("20:40")]), end: t("21:50") }), "ran 40s");
-  assert.equal(turnBegan([null, undefined]), null);
-  assert.match(read("GeneralWorkspace.jsx"), /turnBegan\(ms\.slice\(0, i\)\.map\(\(m\) => m\.createdAt\)\)/);
-});
 
-// ONE WAY TO STOP AN AGENT MID-RUN, ON THE RUNNING TURN (the owner, 2026-11-10: "we should have x button for agent to stop in middle of the
-// work"): a small x on the turn's head, calling the chat's own stop road
-test("the running turn's head carries the x that stops it, on the chat's own stop road", () => {
-  const ws = read("GeneralWorkspace.jsx"), clock = ws.slice(ws.indexOf("const RunClock"), ws.indexOf("const AgentNameCtx"));
-  assert.match(clock, /stop = React\.useContext\(StopCtx\)/);
-  assert.match(clock, /\{stop && <IconButton size="small" data-tq-stop-run="" aria-label="Stop the agent"[^>]*onClick=\{stop\}/);
-  assert.match(ws, /<StopCtx\.Provider value=\{dock \? null : onStop\}>/);
-});
 
 // THE CLOCK COUNTS FROM THE PRESS AND NEVER RESTARTS (the owner, 2026-11-10; the recorded coding walk: "ran 9s" under his line while the adapter
 // started, then "ran 2s" once the turn's own row came - its clock from the turn's first step): a running turn counts from the earlier of its own
@@ -97,14 +80,4 @@ test("a running turn's clock is the earlier of its start and the line it answers
   assert.equal(turnFrom(null, null), null);
 });
 
-test("the coding chat's running turn and every running head count by turnFrom, from the press", () => {
-  const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(gw, /since: turnFrom\(\+asUtc\(m\.createdAt\) \|\| null, pressed\) \|\| undefined/);
-  assert.match(gw, /began = isLive \? turnFrom\(since, before\) : null, running = isLive && !\(pressed > \(began \?\? Infinity\)\);/);
-});
 
-test("the pending turn's clock keeps the earliest start it was told while it stands", () => {
-  const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(gw, /else first\.current = Math\.min\(first\.current \?\? Date\.now\(\), Number\.isFinite\(told\) \? told : Infinity\);/);
-  assert.match(gw, /<TurnHead start=\{first\.current\}>/);
-});

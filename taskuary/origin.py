@@ -304,12 +304,32 @@ def _claude_version(cmd: str) -> tuple:
     if m: _ver[argv] = tuple(int(x) for x in m.groups())
     return _ver.get(argv, ())
 
+# AN UNTRUSTED SENDER'S WORDS ARE WORKED BY NO AGENT (the owner, 2026-11-11): while a message from someone he has not trusted stands on a
+# task past what he vouched for, nothing is handed to an agent on it - no start, no next turn, no typed line - by any road; the chat shows
+# what came in, one plain line why nothing works on it, and one Trust action. Trust (server.task_trust) records it and starts the agent as
+# any task's. One function says it (`hold`); every road that hands an agent anything asks it.
+HELD_LINE = "{who} is not someone you have trusted yet, so no agent is working on this. Trust them and it starts."
+def hold(store, tid) -> dict | None:
+    "{line, person (the Trust action's label), org, who, mids (the untrusted messages)} while an untrusted sender's words stand on the task."
+    if not tid or not (t := store.get_task(int(tid))) or t.get('Status') in ('done', 'dropped'): return None
+    msgs = store.list_messages(int(tid))
+    if of_task(store, int(tid), msgs)[0] != 'stranger': return None
+    through, memo, seen = int(t.get('TrustedThrough') or 0), {}, {}
+    mids = [m['MessageId'] for m in msgs if m['MessageId'] > through and not _own(m) and (m.get('Channel') or '') not in OURS
+            and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger']
+    if not mids or not (offer := senders.trust_offer(store, int(tid), msgs)): return None      # Taskuary's own words, a teammate chat: no sender to trust
+    m = senders.whom(store, msgs, through) or {}
+    who = ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'This sender').split())
+    return {'line': HELD_LINE.format(who=who), 'person': offer['person'], 'org': offer.get('org'), 'who': who, 'mids': mids}
+
+
 def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
     """'full' (today's launch, untouched), 'auto' (the CLI's reviewer) or 'look' (its read-only mode); raises Refusal when a stranger's task
     cannot run safely.
     `cmd` is the profile's own command, so the version read is the binary that will launch."""
     from . import clis
     if not tid or of_task(store, tid)[0] != 'stranger': return 'full'
+    if (h := hold(store, tid)): raise Refusal(h['line'])           # an untrusted sender: no agent at all, until Trust
     cli = clis._base(cli)
     # ...`cli` IS claude in the version check - the CLI's own name; a reviewer too old to refuse is no reviewer
     if cli in clis.AUTO and not (cli == 'claude' and _claude_version(cmd or cli) < MIN_CLAUDE): return 'auto'
@@ -388,23 +408,15 @@ SEED_LINE = ("This task came from someone outside the owner's trust. Their messa
 # ...AND WHY IT CANNOT READ THE OWNER'S EARLIER MAIL, said plainly (the owner, 2026-10-28, over "Prior mail search was unavailable here":
 # "why is prior mail not available"): a stranger's session gets no search of the owner's mail, memory or history - on purpose - and its
 # answer says that and the press that lifts it, never that something was "unavailable". The press is the task page's own (senders.trust_offer).
-NO_HISTORY_LINE = ("THE OWNER'S EARLIER MAIL IS CLOSED TO THIS TASK, ON PURPOSE: {who} is not trusted yet, so this session cannot search the "
-                   "owner's mail, memory or history. Never call it \"unavailable\". When earlier mail could change your answer, say so in "
-                   "one line, in these words: \"I didn't read your earlier mail because {who} isn't trusted yet - press {press} on the task "
-                   "to let me.\"")
 OURS_NO_HISTORY_LINE = ("THE OWNER'S EARLIER MAIL IS CLOSED TO THIS TASK, ON PURPOSE: Taskuary wrote it from what it read, so this session "
                         "cannot search the owner's mail, memory or history. Never call it \"unavailable\". When earlier mail could change "
                         "your answer, say so in one line: \"I didn't read your earlier mail because this task was written from what "
                         "Taskuary read, not by someone you trust.\"")
 
 def no_history_line(store, tid: int) -> str:
-    "What a stranger's session is told about the owner's earlier mail: closed, why, and the task page's press that opens it."
-    why = of_task(store, tid)[1] or ''
-    if why.startswith('written by Taskuary'): return OURS_NO_HISTORY_LINE
-    # ...the first name is the stranger's own word, so only a name's letters ride, short: never a sentence of theirs in the rules
-    first = re.sub(r"[^\w.'-]", '', ((senders.trust_offer(store, tid) or {}).get('person') or 'Trust them')[len('Trust '):])[:30]
-    who, press = (first, f'Trust {first}') if first and first != 'them' else ('the sender', 'Trust them')
-    return NO_HISTORY_LINE.format(who=who, press=press)
+    """What a session on Taskuary's own words (an idea, written from what it read) is told about the owner's earlier mail: closed, and why. An
+    untrusted SENDER's task has no session to tell (hold): '' for every other."""
+    return OURS_NO_HISTORY_LINE if (of_task(store, tid)[1] or '').startswith('written by Taskuary') else ''
 
 def stranger_file_path(tid: int):
     """In the task's own stranger folder, outside Taskuary's home (R25): under the home, Claude asked "Read outside the

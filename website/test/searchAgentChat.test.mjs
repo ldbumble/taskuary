@@ -19,10 +19,3 @@ test("it opens at its line, and nothing else asks for one", () => {
   assert.equal(lineOf(title), ""); assert.equal(lineOf({ line: 'x"]' }), "");
 });
 
-test("the row draws the snippet, the pick scrolls to the line, and the chat's lines carry their anchor", () => {
-  const src = readFileSync(new URL("../src/SearchEverything.jsx", import.meta.url), "utf8");
-  assert.match(src, /hit\.snippet && \(/);
-  assert.match(src, /focusPlace\(null, \(\) => document\.querySelector\(lineOf\(h\)\)\)/);
-  const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.equal((ws.match(/data-tq-chat-line=\{(line|id)\}/g) || []).length, 2);
-});

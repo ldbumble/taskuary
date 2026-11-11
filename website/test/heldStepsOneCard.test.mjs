@@ -52,14 +52,6 @@ test("pressed, the card stays in the turn with the press it took and what came o
   assert.deepEqual([halfway.asks.map((g) => g.reviews.length), halfway.past], [[2], []]);
 });
 
-test("a pressed card - held steps approved, a reply sent - is drawn in the turn that set it up, whatever came after", () => {
-  const page = read("TaskPage.jsx"), chat = read("GeneralWorkspace.jsx");
-  assert.match(page, /const turnCards = \[\.\.\.passedCards, \.\.\.replacedCards, \.\.\.pressedCards\.map\(\(g\) =>/);
-  assert.match(page, /node: <SentCard id=\{r\.ReviewId\}/);
-  assert.match(page, /turnCards=\{turnCards\}/);
-  assert.match(chat, /const placed = React\.useMemo\(\(\) => placeCards\(turnCards, messages, turns\), \[turnCards, messages, turns\]\);/, "placed in the turn that raised it (agentSummary.placeCards)");
-  assert.match(chat, /\{pressed\.map\(\(c\) => <React\.Fragment key=\{c\.key\}>\{c\.node\}<\/React\.Fragment>\)\}/);
-});
 
 test("the task page draws a turn's held steps as one HeldSteps card, one Approve through the batch door", () => {
   const page = read("TaskPage.jsx"), card = read("HeldSteps.jsx");

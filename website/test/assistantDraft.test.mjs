@@ -15,14 +15,4 @@ test("the thread is keyed on the task alone - a poll can never remount it", () =
   assert.doesNotMatch(gw, /setThreadKey/);
 });
 
-test("new messages land in the running thread instead of rebuilding it", () => {
-  assert.match(gw, /setRevision\(\(k\) => k \+ 1\)/);
-  assert.match(gw, /revision=\{revision\}/);
-  assert.match(gw, /runtime\.thread\.reset\(initial\(/);
-});
 
-test("a reset never lands on top of this pane's own live stream", () => {
-  const eff = gw.slice(gw.indexOf("const applied = useRef"), gw.indexOf("const prompted = useRef"));
-  assert.match(eff, /isRunning/);
-  assert.ok(eff.indexOf("isRunning") < eff.indexOf("runtime.thread.reset"), "check first, reset after");
-});

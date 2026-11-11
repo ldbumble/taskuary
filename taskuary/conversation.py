@@ -21,7 +21,6 @@ import hashlib, json, time
 from datetime import datetime
 
 INF = float('inf')
-OWED = 120                    # seconds a line handed to a live agent reads "at work" before its first step shows
 
 
 def ep(at) -> float:
@@ -250,7 +249,10 @@ def items(store, tid: int) -> dict:
     from .general import ASSISTANT_TYPE, FOLD_HEAD, USER_TYPE, WAITING_TYPE
     from .processing_unread import OWNER_ACTORS
     tid = int(tid)
-    was, state = general.at_work(tid), general.line_state(store, tid, [])
+    # ...read BEFORE the conversation: a turn that ends between the two reads is still at work in this one, its answer not yet read
+    from . import origin
+    hold_ = origin.hold(store, tid)
+    at_work, t0 = (general.working(store, tid), general.turn_started(tid)) if not hold_ else (bool(getattr(general._live_of(tid), 'busy', False)), general.turn_started(tid))
     led = {(r['Kind'], r['Ref']): r for r in store._rows('SELECT * FROM heard WHERE TaskId=? ORDER BY HId', (tid,))}
     era = min((r['At'] for r in led.values()), default=INF)
     marks = [r for (k, _), r in led.items() if k == 'turn']
@@ -334,8 +336,8 @@ def items(store, tid: int) -> dict:
             else: put(s['T'], 1, {'kind': 'step', 'sid': sid, 'seg': n, 'step': {k_: v for k_, v in s.items() if k_ != 'T'}, 'T': s['T']})
 
     # what came in, and what he pressed: at the moment the agent heard it, else at its own time
-    at_work, waits = was or state['working'], min((x.pop('_after') for x in pend), default=INF)
-    began = (state.get('turnStarted') or max((r['At'] for r in led.values()), default=0.) or INF) if at_work else INF
+    waits = min((x.pop('_after') for x in pend), default=INF)
+    began = (t0 or max((r['At'] for r in led.values()), default=0.) or INF) if at_work else INF
     for x in _mail(store, tid):
         # ...the task's OWN row (ownwork.ensure: his ask, filed as the task was made) never "came in": it is drawn only where the chat has nothing else
         if (x.get('Channel') or '') == ownwork.CHANNEL and ev: continue
@@ -345,7 +347,8 @@ def items(store, tid: int) -> dict:
         # ...a stamp is a whole second: one that joined in the turn's first second came in under it (it stood ABOVE the turn at work)
         # ...and one that came in while a line of his waits by the box waits there with it: drawn at once, the line entered above it when
         # both were heard, in the order they came (the recorded flood on a pane, 2026-11-11)
-        if not h and (at_work and x['T'] + 1 > began or x['MessageId'] > waits): pend.append(it)
+        # ...and what an untrusted sender wrote on a thread an agent works: it waits, behind the Trust action (origin.hold)
+        if not h and (at_work and x['T'] + 1 > began or x['MessageId'] > waits or (hold_ and x['MessageId'] in hold_['mids'] and (turn_of or live_sid))): pend.append(it)
         else: put(h['At'] if h else x['T'], 0 if h else -1, it, h['HId'] if h else 0)
     stop = f"You {general.PRESSES['stopped_turn']({})}."
     for m in general.press_lines(store, tid):
@@ -382,20 +385,15 @@ def items(store, tid: int) -> dict:
     if halted:
         at_work = bool(pend)
         if tail['state'] in ('working', 'starting'): tail.update(state='done', ended=tail.get('ended') or time.time())
-    # ...A LINE A LIVE AGENT WAS HANDED IS BEING WORKED ON, from the hand-over until its first step shows: a pane takes seconds to say it works,
-    # and his line stood heard with nothing under it (the recorded walk, 2026-11-11)
-    # ...unless he stopped it, it failed, or two minutes passed with nothing: then nothing spins over it
-    if (tail and tail.get('_h') and time.time() - tail['_h'] < OWED and general._live_of(tid) is not None
-            and not any(x.get('stop') for x in out[out.index(tail):]) and not funnel.run_failed(store, tid)): at_work = True
     # ...A TURN IS MADE ONCE, AT ITS HAND-OVER: the live session's last turn is the one at work only where its work came after the newest
     # hand-over - one that ended before it is finished, and the turn now beginning stands under it (a wake after a press marked the answer
     # above "working" again, and the card under it lost its place)
     mark = max((m['At'] for m in marks), default=0.)
     mine = not halted and tail and tail['kind'] == 'turn' and (tail['state'] == 'working' or tail.get('sid') == live_sid and live_sid and (tail.get('ended') or INF) >= mark - 0.01)
     if at_work and not mine:
-        began_ = state.get('turnStarted') or max(mark if tail and tail['kind'] == 'turn' and mark >= (tail.get('ended') or 0) else 0., (tail or {}).get('_h') or (tail or {}).get('_hm') or 0.) or time.time()      # from its hand-over, where one is written
+        began_ = t0 or max(mark if tail and tail['kind'] == 'turn' and mark >= (tail.get('ended') or 0) else 0., (tail or {}).get('_h') or (tail or {}).get('_hm') or 0.) or time.time()      # from its hand-over, where one is written
         out.append(tail := {'kind': 'turn', 'at': stamp(began_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': began_, 'ended': None})
-    elif at_work and tail['state'] != 'working': tail.update(state='working', ended=None, started=state.get('turnStarted') or tail['started'])
+    elif at_work and tail['state'] != 'working': tail.update(state='working', ended=None, started=t0 or tail['started'])
     # ..."WORKING" IS ONE FACT, the one the task's header reads: where it is false no turn spins
     if not at_work:
         for x in out:
@@ -425,10 +423,13 @@ def items(store, tid: int) -> dict:
         seen.add(x['id'])
 
     # A TURN'S CARDS STAND LAST IN IT: each action under the turn that set it up (the one that last left a draft as it stands), else where it was made
+    # ...the turn that was at work when a thing was made: the first one that had begun (where its start is known) and had not yet ended
+    made_in = lambda at: next((x for x in out if x['kind'] == 'turn' and (x.get('ended') is None or x['ended'] + 1 >= at - 0.999) and (x.get('started') or 0) <= at), None)
+    # ...and each page it showed or published, by that same rule, named by its turn (`after`: the page's key for a turn); None: at the foot
+    from . import outputs
+    published = [{**p, 'after': (t.get('answer') or t['id']) if (t := made_in(ep(p.get('created_at')) + 0.999)) else None} for p in outputs.pages(store, tid)]
     def place(card, at, cid=None):
-        t = turn_of.get(cid) if cid else None
-        # ...the turn that was at work when it was made: the first one that had begun (where its start is known) and had not yet ended
-        if t is None: t = next((x for x in out if x['kind'] == 'turn' and (x.get('ended') is None or x['ended'] + 1 >= at - 0.999) and (x.get('started') or 0) <= at), None)
+        t = (turn_of.get(cid) if cid else None) or made_in(at)
         if t is None:
             i = max((j for j, x in enumerate(out) if ep(x.get('started') or x.get('at')) <= at), default=-1)
             if i >= 0 and out[i]['kind'] == 'turn': t = out[i]
@@ -459,5 +460,11 @@ def items(store, tid: int) -> dict:
         else: x['cards'] = [{**c, 'id': c['id'] + ':k', 'status': 'kept'} if c is card else c for c in x['cards']]; t['cards'].append(card)
 
     for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None)
-    body = {'items': out, 'pending': pend, 'working': at_work, 'started': state.get('turnStarted') if at_work else None}
+    # ...and what the agent waits on him for, and the CLI that runs: read by the page off this one list (the chat's own payloads are gone)
+    from . import permissions, taskstate
+    live = general._live_of(tid)
+    body = {'items': out, 'pending': pend, 'working': at_work, 'started': t0 if at_work else None,
+            'asking': taskstate.asking(store, store.get_task(tid) or {'TaskId': tid}, general.session_for(tid) or (live if codingchat._live(tid) else None)),
+            'permissions': permissions.pending(tid, store), 'live': codingchat.live_of(codingchat._live(tid)),
+            'hold': hold_ and {k: hold_[k] for k in ('line', 'person', 'org')}, 'published': published, 'ran': bool(turn_of) or any(x['kind'] == 'turn' for x in out)}
     return {'rev': hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16], **body}

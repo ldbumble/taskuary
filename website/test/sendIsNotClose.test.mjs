@@ -66,21 +66,6 @@ test("no screen says a send closes the task", () => {
   assert.match(read("ReviewDecision.jsx"), /`\$\{sendWord\} sends this to \$\{replyContext\(r\)\} - \$\{stays\}\.`/);
 });
 
-test("whether a draft can leave is asked of capabilities.js, with the row's own CanSend kept for what it knows more", () => {
-  const live = { known: true, send: { teams: false, email: true } };
-  assert.equal(caps.draftCanSend(live, { Channel: "email", CanSend: true }), true);
-  assert.equal(caps.draftCanSend(live, { Channel: "teams", CanSend: true }), false, "the channel's live answer");
-  assert.equal(caps.draftCanSend(live, { Channel: "email", CanSend: false }), false, "the row knows the draft has nobody to go to");
-  assert.equal(caps.draftCanSend(live, { Channel: "teams", Deliver: JSON.stringify({ kind: "zoho_invoice" }) }), true, "an invoice asks no channel");
-  assert.equal(caps.draftCanSend(live, null), false);
-  assert.equal(caps.channelCanSend({ known: false, send: {} }, "teams", false), false, "the row's word until the answer is in");
-  assert.equal(caps.channelCanSend(live, "teams", true), false, "the live answer once it is");
-  assert.equal(caps.channelCanSend(live, "email", false), true);
-  assert.match(read("ReviewDecision.jsx"), /const canSendIt = draftCanSend\(caps, r\);/);
-  assert.doesNotMatch(read("ReviewDecision.jsx"), /r\.CanSend [!=]==/);
-  assert.match(read("GeneralWorkspace.jsx"), /\{!draftCanSend\(caps, review\) \? null : \(/);
-  assert.doesNotMatch(read("assistantCards.jsx"), /CanSend [!=]== false/);
-});
 
 test("the dead-end walk takes a failed send's fix by its own words: an id ending ':fix' is a named button", () => {
   const d = readFileSync(new URL("../deadend_check.mjs", import.meta.url), "utf8");

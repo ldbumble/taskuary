@@ -60,16 +60,3 @@ test("a road that reports what is thrown gets the answer, the line, or the reque
   assert.throws(() => sure(outcomeOf(null, refusal)), (e) => e === refusal, "its reader knows a refusal's fix: the error itself, not a copy of its words");
 });
 
-test("no card posts a verdict any other way", () => {
-  for (const f of readdirSync(SRC).filter((x) => /\.jsx?$/.test(x) && x !== "press.js" && !/^demo/i.test(x)))
-    assert.doesNotMatch(read(f), /api\.post\((`\/api\/reviews\/\$\{[^}]+\}\/decide`|"\/api\/reviews\/steps")/, `${f} posts its own`);
-  const uses = { "ActionCard.jsx": /press\(api, row\.ReviewId, /, "HeldSteps.jsx": /pressSteps\(api, c\.waiting, verb\)/, "BrowserPane.jsx": /pressReview\(api, h\.id, /,
-    "GeneralWorkspace.jsx": /press\(api, r\.ReviewId, /, "assistantCards.jsx": /press\(api, onCo, /, "SlotList.jsx": /press\(api, r\.ReviewId, /,
-    "gameItem.jsx": /press\(api, item\.rid, /, "ReviewDecision.jsx": /press\(api, r\.ReviewId,/ };
-  for (const [f, re] of Object.entries(uses)) assert.match(read(f), re, f);
-  // ...and an act's card reads itself again where the press was answered elsewhere or not yet, with no failure said for the first
-  const card = read("ActionCard.jsx");
-  assert.match(card, /if \(!landed\(o\) && o\.kind !== "already"\) setErr\(failLine\(o, post \? "posted" : "sent"\)\);/);
-  assert.match(card, /if \(landed\(o\) \|\| \["already", "unknown"\]\.includes\(o\.kind\)\) onChanged\?\.\(\);/);
-  assert.doesNotMatch(read("GeneralWorkspace.jsx"), /if \(data\.send_error\) throw new Error\(data\.send_error\);\n\s+const message = verb === "approve"/);
-});

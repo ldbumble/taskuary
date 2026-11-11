@@ -248,6 +248,9 @@ def _deliver(store, tid: int, new: int = None) -> dict:
     lines, waiting = _lines(store, tid), store.waiting_notes(tid)
     pending = lines + waiting
     if not pending: return {'delivered': 0, 'state': state(store, tid)[0]}
+    from . import origin
+    # ...AN UNTRUSTED SENDER'S TASK HANDS NOTHING OVER (origin.hold): it all waits, said in the chat with its Trust action
+    if (h := origin.hold(store, tid)): return {'delivered': 0, 'state': 'held_stranger', 'why': h['line'], 'left': len(pending)}
     st, t = state(store, tid)
     # the drip: one note per stop, the rest keep their place in line - the owner's typed lines all at once, as one turn
     notes = lines + (together(lines, waiting) if drip(store) else waiting)

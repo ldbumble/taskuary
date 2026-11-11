@@ -27,7 +27,8 @@ def _claude(monkeypatch, tmp_path):
 def _task(s=None, frm='someone@vendor.example'):
     s = s or server.store
     t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'email'}, 'router')
-    mid = s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': frm, 'Status': 'routed'}); return t, mid
+    # ...a stranger with NO SENDER TO TRUST - Taskuary's own words from what it read: an untrusted sender's task starts no agent at all (origin.hold)
+    mid = s.add_message({'TaskId': t, 'Channel': 'assistant', 'FromEmail': frm, 'Status': 'routed'}); return t, mid
 
 
 # ── the token ───────────────────────────────────────────────────────────────────────────────────────────────────────

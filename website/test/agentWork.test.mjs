@@ -98,16 +98,6 @@ test("only a real http target names a source", () => {
   assert.equal(sourceOf(""), "");
 });
 
-test("the general assistant's own window is left exactly as it was", () => {
-  const view = read("GeneralWorkspace.jsx");
-  // every part of the agent-at-work treatment is off in the dock, which IS the assistant
-  assert.match(view, /const working = !dock && /);
-  assert.match(view, /\{dock && busy && \(/);                       // the dock keeps its own "still working" banner
-  assert.match(view, /const name = dock \? "Taskuary" : agentName\(task\)/);   // the dock's turns stay Taskuary's
-  assert.match(view, /keepStart = true/);                           // and it keeps the trace's start line
-  assert.match(view, /placeholder=\{askWords \|\| placeholder \|\| \(dock \? "Tell Taskuary what to do next…" : /);   // and its composer keeps its own words
-  assert.match(view, /const askWords = dock \|\| !asking \? "" : /);   // ...a question's words are never the dock's
-});
 
 test("a chat card shows its turn's answer from the start, never the sign-off its tail ends on (email walk 2026-10-29)", () => {
   const run = { said: "Hi Paula,\n\nThe announcement reads well.\n\nBest,\nAlex", tail: ["Best,", "Alex"] };

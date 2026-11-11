@@ -26,7 +26,8 @@ _real_version = origin.__dict__['_claude_version']
 
 def _stranger(s, subject='hi'):
     t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'email'}, 'router')
-    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'someone@vendor.example', 'Subject': subject, 'BodyText': 'b', 'Status': 'routed'}); return t
+    # ...a stranger with NO SENDER TO TRUST - Taskuary's own words from what it read: an untrusted sender's task starts no agent at all (origin.hold)
+    s.add_message({'TaskId': t, 'Channel': 'assistant', 'FromEmail': 'someone@vendor.example', 'Subject': subject, 'BodyText': 'b', 'Status': 'routed'}); return t
 
 def _owner(s): return s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
 

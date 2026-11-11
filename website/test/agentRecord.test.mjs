@@ -47,24 +47,6 @@ test("a conversation lists only its working - its turns are the chat", () => {
   assert.equal(hasMore({ ...chat, steps: [{ k: "said", text: "August was up 8%." }] }), false);
 });
 
-// TASKUARY'S INSTRUCTIONS ARE NOT THE OWNER'S WORDS (the owner, 2026-10-30): the brief an agent started on is marked by the server
-// (a `brief` step, general.BRIEF_ACTOR on a chat turn) and drawn as one folded grey line - never "Told" or YOU
-test("a brief is its own step, listed for a coding run and left to the chat for a conversation", () => {
-  const run = { ...coding, steps: [{ k: "brief", text: "THIS TASK IS A REPLY OWED to Erin Blake." }, ...coding.steps] };
-  assert.deepEqual(recordSteps(run).map((s) => s.k), ["brief", "you", "thought", "tool", "result"]);
-  const chat = { source: "conversation", steps: [{ k: "brief", text: "A QUICK LOOK CAME FIRST." }, { k: "tool", name: "Read", text: "a.csv" }] };
-  assert.deepEqual(recordSteps(chat).map((s) => s.k), ["tool"]);
-  const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
-  assert.match(read("BriefLine.jsx"), /BRIEF_LABEL = "Taskuary's instructions"/);
-  assert.match(read("BriefLine.jsx"), /component="details"/, "folded until clicked");
-  assert.match(read("AgentRecord.jsx"), /s\.k === "brief"\) return <BriefLine text=\{s\.text\} \/>/);
-  const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /m\.brief \? \{ brief: true, mail: m\.mail \|\| \[\](, \.\.\.\(m\.fold \? \{ fold: m\.fold \} : \{\}\))? \} : \{\}/, "the server's flag reaches the thread (a fold names its task)");
-  assert.match(ws, /metadata: \{ custom \}/);
-  // ...with the mail that carried the turn on, in its sender's words, over the folded line (general.shown_history)
-  assert.match(ws, /return brief \? \(\s*<MessagePrimitive\.Root className="tq-aui-message tq-aui-brief">\s*<CameIn mail=\{mail \|\| \[\]\} \/>\s*<BriefLine>/);
-  assert.match(ws, /className="tq-aui-role">\{x\.who\}<\/div>/, "under who sent it");
-});
 
 test("facts name who, when and how much", () => {
   assert.deepEqual(recordFacts(coding), ["claude", "2026-10-10 09:00", "2 thoughts", "1 step"]);

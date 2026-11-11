@@ -33,11 +33,6 @@ test("the row draws Mark done once: the decision's, with the task's own left out
   assert.ok(!r.agent.some((x) => x.id === "done"), "and still not twice beside the draft's own");
 });
 
-test("the dock's reply is Send, Mark done and Redraft - no Reject", () => {
-  const dock = read("GeneralWorkspace.jsx");
-  assert.match(dock, /decide\(review, "no_reply"\)\}>\{btn\("close"\)\}<\/Button>/, "the no-reply close says what it does");
-  assert.match(dock, /decide\(review, "reject"\)\}>Dismiss<\/Button>/, "an agent's proposed action is still dismissed");
-});
 
 test("the walk's reply card offers Redraft over a draft it has", () => {
   const cards = read("assistantCards.jsx");

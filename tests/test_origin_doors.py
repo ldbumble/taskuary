@@ -29,20 +29,20 @@ def test_trust_this_task_is_the_owner_s_and_refused_to_an_agent():
     assert c.get(f'/api/tasks/{tid}').json()['origin']['origin'] == 'trusted'
     assert c.post('/api/tasks/99999999/trust').status_code == 404
 
-def test_release_remembers_the_first_inbound_email_sender(monkeypatch):
+def test_trust_remembers_the_first_inbound_email_sender(monkeypatch):
     from taskuary import ingest
     tid = _stranger_task(frm='released@vendor.example'); server.store.tag_task(tid, ingest.HOLD_TAG, on=True, actor='t')
     monkeypatch.setattr(server, 'start_session', lambda *a, **k: 'sid')
-    assert c.post(f'/api/tasks/{tid}/release', json={}).json()['released']
+    assert c.post(f'/api/tasks/{tid}/trust').json()['origin'] != 'stranger'
     assert server.store._rows('SELECT Reason FROM sender_trust WHERE Mailbox=? AND Address=?', ('box@northwind.example', 'released@vendor.example'))
 
-def test_release_of_a_task_with_no_email_does_nothing_extra(monkeypatch):
+def test_trust_of_a_task_with_no_email_does_nothing_extra(monkeypatch):
     from taskuary import ingest
     tid = server.store.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'teams'}, 'router')
     server.store.add_message({'TaskId': tid, 'Channel': 'teams', 'SourceName': 'room', 'FromName': 'Erin Blake', 'Status': 'routed'})
     server.store.tag_task(tid, ingest.HOLD_TAG, on=True, actor='t')
     monkeypatch.setattr(server, 'start_session', lambda *a, **k: 'sid')
-    assert c.post(f'/api/tasks/{tid}/release', json={}).json()['released']
+    assert c.post(f'/api/tasks/{tid}/trust').json()['origin'] != 'stranger'
 
 def _hand(monkeypatch, mode):
     from taskuary import ingest

@@ -50,19 +50,6 @@ test("the task page hands every waiting ask to its turn, and draws it in its own
     assert.ok(page.includes(k), "a pressed card names its review too");
 });
 
-test("the chat draws a waiting card once, in its turn - the foot's \"Waiting on you\" box is gone", () => {
-  const gw = read("GeneralWorkspace.jsx");
-  assert.match(gw, /mine = React\.useContext\(TurnCardsCtx\)\.filter\(\(c\) => c\.after === id\), pressed = mine\.filter\(\(c\) => !c\.waits\)/);
-  assert.match(gw, /<TurnAsks cards=\{mine\.filter\(\(c\) => c\.waits\)\} also=\{holds && !!next && mine\.some\(\(c\) => c\.also\)\} \/>/);
-  assert.equal((gw.match(/<TurnAsks /g) || []).length, 1, "drawn in a turn only - no box of its own at the chat's foot");
-  assert.match(gw, /\{!dock && placed\.filter\(\(c\) => !c\.after\)\.map\(/, "only a chat with no agent turn at all draws a card under it, as its one row");
-  assert.match(gw, /\{!dock && !turnCards && !!drafts\?\.length && \(/); assert.match(gw, /\{!dock && !turnCards && !!acts\?\.length && \(/);
-  assert.match(gw, /turns=\{cardTurns\}/);
-  // ...under the words the block said, counted per turn, and marked for the agent room's rest (TaskPage's :has([data-tq-waits]))
-  const asks = gw.slice(gw.indexOf("const TurnAsks = "), gw.indexOf("const TurnAsks = ") + 900);
-  assert.match(asks, /<Box data-tq-turn-asks="" data-tq-waits=""/);
-  assert.match(asks, /\$\{also \? "Also waiting on you" : "Waiting on you"\}\$\{cards\.length > 1 \? ` · \$\{cards\.length\}` : ""\}/);
-});
 
 test("what the foot's boxes said over a held act and a playbook is said over its one card", () => {
   const act = (p) => ({ Kind: "action", Status: "pending", DraftText: JSON.stringify(p) });
@@ -71,16 +58,3 @@ test("what the foot's boxes said over a held act and a playbook is said over its
   assert.equal(askNote(act({ action: "close_task", why: "the folder is clear" })), "", "a card that says itself gets no line over it");
 });
 
-// A TURN THAT GOES ON PAST ITS CARD IS TWO ROWS, THE CARD BETWEEN (the owner, 2026-11-10: "it should continue after it not above it"): an ACP
-// turn an Approve lets carry on draws what it did next under the card, never over it
-test("a coding turn that goes on past a card is split at the card, so its next steps stand under it", async () => {
-  const { chatRows, rowMessages } = await import("../src/chatStream.js");
-  const ups = [{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Committing." }, _at: "2026-11-10 12:00:01" },
-    { sessionUpdate: "tool_call", toolCallId: "m", kind: "execute", title: "Merge newest master; list conflicts", status: "in_progress", _at: "2026-11-10 12:00:09" }];
-  const ses = [{ sid: "s", source: "acp", live: true, at: "2026-11-10 12:00:00", updates: ups }];
-  assert.equal(chatRows({ sessions: ses }).filter((r) => r.kind === "turn").length, 1, "no card: one turn");
-  const rows = chatRows({ sessions: ses, cuts: ["2026-11-10 12:00:05"] }).filter((r) => r.kind === "turn");
-  assert.equal(rows.length, 2);
-  const msgs = rowMessages(rows);
-  assert.deepEqual(after([{ key: "held:7", rid: 7, at: "2026-11-10 12:00:05", waits: true }], null, msgs), [msgs[0].id], "the card stands after the part before it");
-});

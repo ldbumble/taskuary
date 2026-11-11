@@ -376,7 +376,8 @@ def test_the_switch_off_a_cli_without_acp_and_a_strangers_task_keep_the_terminal
 # ── a stranger's task: never over ACP, on either road ────────────────────────────────────────────────────────────────────────
 def stranger(s):
     t = s.create_task({'Title': 'Fix the import warning', 'Kind': 'coding', 'Source': 'email'}, 'router')
-    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'someone@vendor.example', 'Status': 'routed'})
+    # ...a stranger with NO SENDER TO TRUST - Taskuary's own words from what it read: an untrusted sender's task starts no agent at all (origin.hold)
+    s.add_message({'TaskId': t, 'Channel': 'assistant', 'FromEmail': 'someone@vendor.example', 'Status': 'routed'})
     assert origin.of_task(s, t)[0] == 'stranger'
     return t
 

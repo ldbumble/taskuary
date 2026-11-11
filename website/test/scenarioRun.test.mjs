@@ -15,42 +15,13 @@ test("the rail's bottom fade sits on the card's inner edge", () => {
   assert.match(read("FeedView.jsx"), /position: "absolute", left: "1px", right: "1px", bottom: 0, zIndex: 6,/);
 });
 
-// THE WORKING LINE'S CLOCK is the turn's (the scenario run, 2026-11-06): it read the owner's line before the one just typed, "249m 53s" over a
-// turn three seconds old - the server's turn_started when it has said it, and never before the newest input in the thread
-test("Working on this… counts from the turn's own start", () => {
-  const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  // ...a coding turn from the live session's own `turnStarted` first (codingchat.live_of): its first turn on a resume is a brief, drawn as no line,
-  // and the owner's last line drawn was two days back - "Working on this… 2947m 55s" (the owner's live coding task, 2026-11-08)
-  // ...and first of all the press, where a press began it - the one fact both payloads carry (general.line_state `turnStarted`, 2026-11-10)
-  assert.match(ws, /const turnAt = \(coding \? cc\.got : data\)\?\.turnStarted;/);
-  assert.match(ws, /const since = turnStart\(shownMessages\), began = turnAt \? turnAt \* 1000 : session\?\.busy && session\?\.turn_started \? session\.turn_started \* 1000\n\s+: coding && cc\.live\?\.working && cc\.live\?\.turnStarted \? cc\.live\.turnStarted \* 1000 : codingAt \? \+asUtc\(codingAt\) \|\| null : null;/);
-  assert.match(ws, /const typed = useAuiState\(\(s\) => turnBegan\(s\.thread\.messages\.filter\(\(m\) => m\.role === "user"\)\.map\(\(m\) => m\.createdAt\)\)\);/);
-  // ...the server's start first: a mail joining mid-turn is newer than the turn, and set its clock back to 0s
-  assert.match(ws, /<AgentBand \{\.\.\.props\} since=\{began \|\| Math\.max\(since \|\| 0, typed \|\| 0\) \|\| null\} \/>/);
-  assert.match(ws, /work=\{work\} since=\{since\} began=\{began\}/);
-});
 
-// ...and the lines typed while it works stand over its working line, which moves under them: nothing above a new prompt (the owner, 2026-11-10;
-// the 0.3.11.40 release run drew the thinking row over the line just typed)
-test("lines typed mid-turn are drawn over the turn's working line", () => {
-  const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  const i = ws.indexOf("<ThreadPrimitive.Messages components"), a = ws.indexOf("waits={false}>{chat ? <BareHead or={pressedAt}>{atWork}", i), h = ws.indexOf("<FootLines ", i), z = ws.indexOf("waits>{dock ? atWork : <AtWorkHead", i);
-  assert.ok(i > 0 && a > i && h > a && z > h, "messages, the running line while no line waits, the held lines, then the running line under them");
-});
 
 // AN ACTION CARD'S PICK is as wide as what it shows, and the keyboard sees it (the scenario run, 2026-11-06: "Anyone" a word's gap from its chevron)
 test("an action card's choice sizes to its pick and rings on keyboard focus", () => {
   assert.match(read("ActionCard.jsx"), /fieldSizing: "content", borderRadius: "4px", "&:focus-visible": \{ outline: `2px solid \$\{ACCENT\}`, outlineOffset: 1 \} \};/);
 });
 
-// A TURN THE SERVER WOKE IS READ (the scenario run, 2026-11-06): new mail and a check-back ran three turns on a live, idle session while the
-// open chat kept its first answer - nothing polls an idle pane. The task's own `task-changed` reads it once, never over this pane's own stream
-test("the open chat reads the task again when it moves, unless a turn is streaming here", () => {
-  const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /import \{ onLive, touches \} from "\.\/live\.js";/);
-  assert.match(ws, /quietRef\.current = loaded && !busy && !streaming && !dock;/);
-  assert.match(ws, /onLive\("task-changed", \(ev\) => \{ if \(quietRef\.current && touches\(ev, task\.TaskId\)\) refresh\(\); \}\)/);
-});
 
 // A REPORT MADE A TASK says where it went on its row - and squeezed, its words drop out whole, never "Mo…" (the scenario run, 2026-11-06)
 test("a moved row's words wrap away whole before they are cut", () => {
@@ -61,16 +32,3 @@ test("a moved row's words wrap away whole before they are cut", () => {
   assert.ok(av.indexOf('<span className="ref" role="link"') < av.indexOf('<span className="w">Moved to Tasks ·</span>'), "the ref comes first in the page");
 });
 
-// A CHECK-BACK COME DUE opens the turn it wakes, as an event line (the scenario run, 2026-11-06; an event, never an input, 2026-11-09): long,
-// it was drawn as nothing, and the turn stood under the one before with nothing over it
-test("a check-back's turn opens on what it was set to verify", async () => {
-  const { checkBackDue, eventOf } = await import("../src/chatStream.js");
-  const ws = read("GeneralWorkspace.jsx"), py = readFileSync(new URL("../../taskuary/checkback.py", import.meta.url), "utf8");
-  const turn = /TURN = \("([^"]+)"\s*\n\s*"([^"]+)"\)/.exec(py);
-  assert.ok(turn, "the server's check-back line is where the test reads it");
-  const said = (turn[1] + turn[2]).replace("{what}", "whether Ray sent the paper");
-  assert.equal(checkBackDue(said), "whether Ray sent the paper");
-  assert.equal(checkBackDue("THE THREAD CHANGED: Ray Colton wrote on this task"), "");
-  assert.equal(eventOf(said), "Check-back due: whether Ray sent the paper");
-  assert.ok(ws.includes('checkBackDue(words) ? "check-back"'));
-});

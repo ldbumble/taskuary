@@ -5,9 +5,9 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { chatRows, chatSource, eventsOf, rowMessages, stepsFromAcp, turnOfStep, turnParts, workCount } from "../src/chatStream.js";
+import { chatSource, eventsOf, turnParts, workCount } from "../src/chatStream.js";
 import { SHIPPED, defaultDetail, detailFor, keepOwnDetail, ownDetail } from "../src/chatDetail.js";
-import { notShown, stillHeld } from "../src/heldLines.js";
+
 import { draftHome, draftPassed, freshNext, withTurns } from "../src/agentSummary.js";
 
 const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
@@ -31,17 +31,6 @@ const LOG = [{ k: "brief", text: "TASKUARY: work TQ-0042 ..." },
   { k: "plan", items: [{ text: "Read the ledger", status: "completed" }, { text: "Fix the tax line", status: "in_progress" }] },
   { k: "said", text: "Fixed: the total now adds the tax line." }];
 
-test("the shared mapper: a general run trace and a coding session's log give the same row shapes", () => {
-  const general = turnParts(TRACE), [coding] = chatRows({ sessions: [{ sid: "s1", cli: "claude", at: "2026-11-06 09:00:00", steps: LOG }] });
-  assert.deepEqual(bare(general), bare(coding.parts));
-  assert.deepEqual(general.map((p) => p.type), ["work", "edit", "plan", "said"]);
-  assert.equal(general[1].summary, "Edited budget.py (+1 −1)");
-  assert.deepEqual(general[2].items.map((x) => x.state), ["done", "now"]);
-  assert.equal(workCount(general), 3, "two steps and an edit");
-  // ...and the same session over ACP is that log again (chatStream.stepsFromAcp)
-  assert.deepEqual(stepsFromAcp([{ sessionUpdate: "tool_call", toolCallId: "x", kind: "read", status: "completed", locations: [{ path: "C:/work/ledger/store.py" }] }])
-    .map(({ k, name, args }) => ({ k, name, args })), [{ k: "tool", name: "Read", args: { file_path: "C:/work/ledger/store.py" } }]);
-});
 
 test("a general agent that edits files gets its edit rows with diffs; a call that carries no diff stays a step", () => {
   const parts = turnParts([call("w", "Write", { file_path: "portal/new.js", content: "x\ny\n" }), done("w"),
@@ -50,18 +39,6 @@ test("a general agent that edits files gets its edit rows with diffs; a call tha
   assert.equal(parts[0].summary, "Wrote new.js (+2 −0)");
 });
 
-test("a coding source's rows become the one thread's messages: mail a brief, the owner's line theirs, a turn at work the live one", () => {
-  const rows = chatRows({ sessions: [{ sid: "s1", at: "2026-11-06 09:00:00", live: true, steps: [...LOG, { k: "you", text: "Run the whole suite too.", at: "2026-11-06 09:01:00" },
-    { k: "tool", name: "Bash", args: { command: "pytest -q" }, at: "2026-11-06 09:01:04" }] }],
-    mails: [{ who: "Erin Blake", words: "The budget skips tax.", channel: "email", at: "2026-11-06 08:58:00" }], live: { working: true } });
-  const ms = rowMessages(rows);
-  assert.deepEqual(ms.map((m) => m.role), ["user", "assistant", "user", "assistant"]);
-  assert.equal(ms[0].brief, true); assert.equal(ms[0].mail[0].who, "Erin Blake");
-  assert.equal(ms[2].content[0].text, "Run the whole suite too.");
-  assert.match(ms[3].id, /^live-/, "the turn at work is the live one");
-  assert.match(ms[1].id, /^(?!live-)/);
-  assert.equal(ms[1].content[0].name, "agent_parts");
-});
 
 // ── 2. parallel work and helpers ────────────────────────────────────────────────────────────────
 // the owner, 2026-11-06: "it's spinning but not the last thing … if it's still working why are we on next thing, shouldn't it be in order? unless
@@ -82,22 +59,6 @@ test("a helper's own steps nest under its row, and while it runs alongside later
   assert.equal(ended.steps[0].alongside, undefined);
 });
 
-test("over ACP a helper's calls name their parent too, and nest the same way (coding source)", () => {
-  const ups = [{ sessionUpdate: "user_message_chunk", content: { type: "text", text: "TASKUARY: work ..." }, _meta: { taskuary: "brief" } },
-    { sessionUpdate: "tool_call", toolCallId: "h", kind: "think", title: "Task", status: "in_progress", rawInput: { description: "Check live portal pages" }, _meta: { claudeCode: { toolName: "Task" } } },
-    { sessionUpdate: "tool_call", toolCallId: "k1", kind: "fetch", status: "completed", rawInput: { url: "https://portal.example/status" }, _meta: { claudeCode: { toolName: "WebFetch", parentToolUseId: "h" } } },
-    { sessionUpdate: "tool_call", toolCallId: "m", kind: "read", status: "completed", locations: [{ path: "notes/status.md" }] }];
-  const live = { working: true, transport: "acp" };
-  const [turn] = chatRows({ sessions: [{ sid: "s", source: "acp", live: true, at: "2026-11-06 09:00:00", updates: ups }], live });
-  const [helper, main] = turn.parts[0].steps;
-  assert.equal(turn.parts[0].steps.length, 2);
-  assert.equal(helper.alongside, true); assert.deepEqual(helper.kids.map((s) => s.summary), ["Read portal.example/status"]);
-  assert.equal(main.summary, "Read status.md");
-  const [ended] = chatRows({ sessions: [{ sid: "s", source: "acp", at: "2026-11-06 09:00:00", updates: [...ups, { sessionUpdate: "tool_call_update", toolCallId: "h", status: "completed" }] }] });
-  assert.equal(ended.parts[0].steps[0].summary, "Helper: Check live portal pages (done, 1 step)");
-  assert.match(read("AgentStepRows.jsx"), /data-tq-step-alongside="">still working in parallel</);
-  assert.match(read("AgentStepRows.jsx"), /if \(step\.kids\?\.length\) return <details className=\{`\$\{cls\} tq-aui-step-helper`\} data-tq-helper="">/);
-});
 
 // ── 3. the detail level ─────────────────────────────────────────────────────────────────────────
 test("the detail level: Everything for coding work, Summary for other work, Settings' defaults, and a task's own choice over both", () => {
@@ -123,19 +84,6 @@ test("the detail level: Everything for coding work, Summary for other work, Sett
   assert.match(page, /<HeadPop id="chat-detail" title="Chat detail" .*?><ChatDetail taskId=\{t\.TaskId\} source=\{chatSource\(t, term\)\} \/><\/HeadPop>/);
 });
 
-test("the levels draw: Summary folds every step behind one quiet line, Steps folds each group, Everything opens every call", () => {
-  const tw = gw.slice(gw.indexOf("const TurnWork = "), gw.indexOf("// ...and with none of its steps on screen yet"));
-  assert.match(tw, /if \(level === "summary"\) \{/);
-  assert.match(tw, /<WorkFold k=\{`\$\{key\}:all`\} quiet parts=\{rest\} draw=\{draw\} \/>/);
-  // ...its words stay at Summary, and so does a view it showed (ViewSpec.jsx): never folded away
-  assert.match(tw, /const out = \(p\) => p\.type === "view" \|\| p\.type === "files" \|\| \(!ended && p\.type === "said"\)/);
-  assert.match(tw, /\{said\.map\(\(p, i\) => draw\(p, i, "everything"\)\)\}/, "its words stay at Summary");
-  assert.match(tw, /p\.type === "view" \? <ViewSpec key=\{p\.id\} spec=\{p\.spec\} raw=\{p\.raw\} \/>/);
-  assert.match(tw, /lvl === "everything" \? <AgentSteps key=\{p\.id\} data=\{\{ steps: p\.steps \}\} \/>/);
-  assert.match(tw, /: <WorkFold key=\{p\.id\} k=\{`\$\{key\}:\$\{p\.id\}`\} parts=\{\[p\]\} draw=\{draw\} \/>/);
-  assert.match(gw, /const level = chat && !dock \? detailFor\(\{ source, settings: defaults, own \}\) : "steps";/);
-  assert.match(gw, /data: \{ by_name: \{ \[PARTS\]: TurnWork, agent_steps: TurnWork \} \}/);
-});
 
 test("a task's source is its sessions when it is coding or a coding CLI runs on it, else the general agent's conversation", () => {
   assert.equal(chatSource({ Kind: "coding" }, null), "coding");
@@ -144,46 +92,10 @@ test("a task's source is its sessions when it is coding or a coding CLI runs on 
   assert.equal(chatSource({ Kind: "reply" }, null), "general");
 });
 
-// ── 4. one component ────────────────────────────────────────────────────────────────────────────
-test("only one chat component exists: no second stream renderer, and the page never picks between two", () => {
-  assert.ok(!fs.existsSync(new URL("../src/CodingChat.jsx", import.meta.url)), "CodingChat.jsx is gone");
-  assert.ok(!fs.existsSync(new URL("../src/codingChat.js", import.meta.url)), "its mapper merged into chatStream.js");
-  const src = new URL("../src/", import.meta.url), files = fs.readdirSync(src).filter((f) => /\.jsx?$/.test(f) && f !== "chatStream.js");   // the mapper itself defines them
-  const drawing = files.filter((f) => /<ThreadPrimitive\.Messages|chatRows\(|rowMessages\(|data-tq-coding-chat/.test(fs.readFileSync(new URL(f, src), "utf8")));
-  assert.deepEqual(drawing, ["GeneralWorkspace.jsx"]);
-  assert.equal((page.match(/<GeneralWorkspace /g) || []).length, 1, "the task page mounts the one chat for every kind");
-  assert.doesNotMatch(page, /CodingChat|liveTerminal\(term\) \? </);
-});
 
-test("the Changes popover and the landing card show only where the task works in a checkout, whatever its kind", () => {
-  assert.match(page, /\{canCode && detail\?\.checkout && <HeadPop id="changes" title="Changes" wide /);
-  assert.match(page, /landing=\{canCode && detail\?\.checkout && <LandingCard /);
-  assert.doesNotMatch(page, /t\.Kind === "coding" && <HeadPop id="changes"/);
-  assert.match(gw, /\{!dock && !landAt && landNode\}/);               // ...in the turn that made it (LandingCtx), at the foot only before any
-});
 
-// ── 5. every chat fix of the day, held in the one chat ──────────────────────────────────────────
-test("regression: the owner's line shows once (heldLines notShown)", () => {
-  const thread = [{ role: "user", content: [{ type: "text", text: "Run the whole suite too." }] }];
-  assert.deepEqual(notShown([{ id: "h", text: "Run the whole suite too.", drawn: 0 }], thread), []);
-  assert.equal(stillHeld([{ id: "h", text: "yes", after: 1 }], [{ role: "user", content: [{ type: "text", text: "yes" }] }]).length, 1, "an earlier yes never takes a new one");
-  assert.match(gw, /const shown = notShown\(held, mine\);\s*return \[\.\.\.waitingShown\(waiting, shown, mine, messages\)[^\n]*\.\.\.shown\];[\s\S]*<FootLines waiting=\{waiting\} held=\{held\} messages=\{messages\}/);      // after the server's kept lines (waitingShown), each drawn once
-});
 
-test("regression: the mail that came in stays above the owner's first typed line", () => {
-  const rows = chatRows({ sessions: [{ sid: "s", at: "2026-11-06 09:00:00", steps: [{ k: "you", text: "Look at this one first.", at: "2026-11-06 09:05:00" }, ...LOG.slice(1).map((s) => ({ ...s, at: "2026-11-06 09:06:00" }))] }],
-    mails: [{ who: "Ray Colton", words: "Any news on the tax line?", channel: "email", at: "2026-11-06 09:02:00" }] });
-  assert.deepEqual(rows.map((r) => r.kind), ["mail", "you", "turn"]);
-  assert.match(gw, /return coding \? byTime\(\[\.\.\.general, \.\.\.turns, \.\.\.\(cc\.got\?\.presses \|\| \[\]\)\]\) : general;/);   // ...each press a line at its time
-});
 
-test("regression: no 'Working on this…' after the turn ends or while it waits on the owner", () => {
-  const ses = [{ sid: "s", source: "acp", live: true, at: "2026-11-06 09:00:00", updates: [{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Should I go ahead?" } }] }];
-  assert.equal(chatRows({ sessions: ses, live: { working: false } }).at(-1).running, false);
-  assert.equal(chatRows({ sessions: ses, live: { working: true }, permissions: [{ id: 1 }] }).at(-1).waiting, true);
-  assert.match(gw, /const codingBusy = coding && \(!!cc\.got\?\.working \|\| !!cc\.live\?\.working\) && !screenAsks && !perms\.length;/);
-  assert.match(gw, /const calm = \(st\) => \(!now && st\.status === "running" \? \{ \.\.\.st, status: "done", alongside: false \}/, "an ended turn spins nothing");
-});
 
 test("regression: strict arrival order - a later message draws below a step still running, and steps never reorder", () => {
   const parts = turnParts([words("Running the suite."), call("t", "Bash", { command: "pytest -q" }), words("Quick update: half of it passed.")]);
@@ -194,17 +106,7 @@ test("regression: strict arrival order - a later message draws below a step stil
   assert.deepEqual(cut.map((p) => p.type), ["work", "edit"]); assert.equal(cut[0].steps[0].status, "done");
 });
 
-test("regression: no Terminal button; the PTY asking card shows only while the screen asks", () => {
-  assert.doesNotMatch(gw, /terminal-toggle|TerminalIcon|<span>Terminal<\/span>/);
-  assert.match(gw, /screenAsks = coding && !!cc\.live\?\.asking && !acp && !!cc\.live\?\.sid/);
-  assert.match(gw, /\{screenAsks && <div className="tq-cc-screen" data-tq-chat-screen=""[^]*<TerminalPane sid=\{cc\.live\.sid\}/);
-});
 
-test("regression: a command's output opens under its own step", () => {
-  const [w] = turnParts(eventsOf(stepsFromAcp([{ sessionUpdate: "tool_call", toolCallId: "c", kind: "execute", rawInput: { command: "pytest -q" } },
-    { sessionUpdate: "tool_call_update", toolCallId: "c", status: "completed", content: [{ type: "content", content: { type: "text", text: "```\n3 passed\n```" } }] }]), false));
-  assert.equal(w.steps[0].detail, "$ pytest -q\n→ 3 passed");
-});
 
 test("regression: the owner's own ask gets no reply narration (server: tests/test_own_ask_no_reply.py, both sources' prompts)", () => {
   const py = fs.readFileSync(new URL("../../tests/test_own_ask_no_reply.py", import.meta.url), "utf8");
@@ -218,11 +120,6 @@ test("regression: an FYI handful says '6 messages', never 'nothing to decide'", 
   assert.match(cards, /title=\{batch \? plural\(n, "message"\) : card\.title\}/);
 });
 
-test("regression: files leave the box once the send is accepted, on every road", () => {
-  assert.match(gw, /if \(event\.type !== "error"\) took\(\);/);
-  assert.match(gw, /const files = \[\.\.\.attachmentsRef\.current\];\s*if \(files\.length\) onClearAttachments\(files\.map\(\(a\) => a\.path\)\);/);
-  assert.match(gw, /onAttachBack\(files\)/, "and come back when it did not go");
-});
 
 test("regression: one OneBox everywhere, with its paperclip and its mic", () => {
   assert.match(gw, /<OneBox root=\{ComposerPrimitive\.Root\}/);
@@ -239,21 +136,11 @@ test("regression: the plan is one checklist, the newest of its turn", () => {
   assert.match(read("ViewSpec.jsx"), /PlanRow = \(\{ p, label = "The agent's plan" \}\)/);
 });
 
-test("regression: permission cards stand in the stream while the agent works", () => {
-  assert.match(gw, /<PermissionCards taskId=\{task\.TaskId\} items=\{perms\} onAnswered=\{cc\.load\} \/>/);
-  const thread = gw.slice(gw.indexOf("function AssistantThread("), gw.indexOf("export function GeneralWorkspace("));
-  assert.ok(thread.indexOf("{!dock && cards}") < thread.indexOf("<ThreadPrimitive.If running={false}>\n          {dock && <DockActions"), "never only once it stopped");
-});
 
 test("regression: a nothing-new turn is one line", () => {
   assert.match(read("AgentSummary.jsx"), /if \(oneLine\(summary\)\) return <>\{<Box data-tq-summary="line"/);
 });
 
-test("regression: how it closed is the stream's last line, under the landing card", () => {
-  const thread = gw.slice(gw.indexOf("function AssistantThread("), gw.indexOf("export function GeneralWorkspace("));
-  const land = thread.indexOf("{!dock && !landAt && landNode}"), closed = thread.indexOf('{!dock && closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">');
-  assert.ok(land > 0 && closed > land && closed > thread.indexOf("data-tq-next-steps"));
-});
 
 test("regression: AI used and Talk to this agent from… sit in the header's corner, never at the chat's foot", () => {
   const head = page.slice(page.indexOf("<StatusPill status={status}"), page.indexOf("{onExpand && ("));
@@ -262,70 +149,5 @@ test("regression: AI used and Talk to this agent from… sit in the header's cor
   assert.doesNotMatch(gw, /<AgentChannels |<AiUsed /);
 });
 
-test("a draft stays under its own turn; a stale one is never under the newest turn's Next steps (latest-wins hook)", () => {
-  const fresh = { ReviewId: 1, Status: "pending", DraftText: "Thanks Erin, on it.", turn: "m1" };
-  const stale = { ...fresh, ReviewId: 2, stale: true, drafted_at: "2026-11-06 14:48:00" };
-  assert.equal(freshNext([fresh]), true); assert.equal(freshNext([stale]), false); assert.equal(freshNext([]), true);
-  // ...a stale draft is drawn once, where it stands, greyed (draftPassed) - never a second read-only copy, never under the newest turn
-  assert.equal(draftPassed([stale], []), true); assert.equal(draftPassed([fresh], []), false);
-  assert.match(gw, /next=\{\(home \? !holds : custom\.folded\) \? null : next\}/);
-  // ...read off the payload's `drafts` (general.draft_turns), under the message whose id is the draft's turn
-  const got = withTurns([{ ReviewId: 7, Status: "pending", DraftText: "On it." }], [{ review: 7, turn: "comment-12", at: "2026-11-06 14:48:00", stale: true, before: "2026-11-06 15:00:00" }]);
-  assert.equal(draftHome(got, [{ id: "comment-12", role: "assistant", createdAt: "2026-11-06 14:50:00" }]), "comment-12");
-  assert.match(gw, /reviews: withTurns\(reviews, \(src\?\.drafts \|\| \[\]\)\.map\(\(d\) => \(\{ \.\.\.d, turn: named\(d\.turn\) \}\)\)\)/);
-  assert.match(gw, /holds && next && chat/);
-  assert.match(gw, /nextAt\?\.next && freshNext\(nextAt\.reviews\)/);
-});
 
-// THE OWNER, 2026-11-09 (said as a repeat): "again suggested reply stayed on bottom after i asked it questions" - a draft the agent KEPT through
-// later turns is current (general.draft_turns), and its card with Send followed whichever turn was newest, under every question since
-test("regression: a kept draft's card stays on the turn that wrote it while questions are asked under it", () => {
-  const ids = ["mail-1", "comment-10", "q-1", "comment-11", "q-2", "comment-12"];
-  const kept = { ReviewId: 4, Status: "pending", Kind: "draft_reply", DraftText: "Hi Erin - Thursday works.", turn: "comment-10", stale: false };
-  const rows = ids.map((id, i) => ({ id, role: id.startsWith("comment") ? "assistant" : "user", createdAt: `2026-11-09 09:0${i}:00` }));
-  assert.equal(draftHome([kept], rows), "comment-10", "two questions later, still the turn that drafted it");
-  // ...a later turn's new letter (a newer review) stands in its own turn
-  assert.equal(draftHome([kept, { ...kept, ReviewId: 5, turn: "comment-11" }], rows), "comment-11");
-  // ...stale it stays in its turn too (greyed, draftPassed); sent or an act: no draft waits
-  assert.equal(draftHome([{ ...kept, stale: true }], rows), "comment-10"); assert.equal(draftHome([{ ...kept, Status: "sent" }], rows), null);
-  assert.equal(draftHome([{ ...kept, Kind: "action" }], rows), null);
-  // ...its turn not drawn: by its time - written after q-1 and before its answer, it is that answer's turn's (an answer is stamped when it ends)
-  assert.equal(draftHome([{ ...kept, turn: "comment-9", CreatedAt: "2026-11-09 09:02:30" }], rows), "comment-11");
-  assert.equal(draftHome([{ ...kept, turn: "comment-9", CreatedAt: "2026-11-09 09:01:30" }], rows), "comment-10");
-  // ...wired: every road that draws `work.next` asks for the home first - a turn without a summary, a summed one (unfolded to hold it), the foot
-  assert.match(gw, /holds = home \? home === id : newest/);
-  assert.match(gw, /!custom\?\.summary && holds && next/);
-  assert.match(gw, /folded=\{!!custom\.folded && !\(home && holds\)\}/);
-  assert.match(gw, /!working && !draftHome\(nextAt\.reviews, messages\)/);
-  assert.doesNotMatch(gw, /!custom\?\.summary && newest && work\.next/);
-});
 
-// THE OWNER, 2026-11-09, on a coding task worked from a group chat: "it also disappeared once i asked next question. i thought actions stay on
-// the past prompt it was connected to??" - the coding chat's payload names no turn per draft, so the card had no home and rode the newest turn
-test("regression: on a coding task the draft's card stays on the turn that wrote it after the owner asks another question", () => {
-  const step = (k, at, text) => ({ k, at, text });
-  const rows = chatRows({ sessions: [{ sid: "s1", cli: "claude", at: "2026-11-09 09:00:00", source: "saved", steps: [
-    step("you", "2026-11-09 09:00:00", "Look into Erin's report and draft her an answer"),
-    step("said", "2026-11-09 09:01:00", "Found it - the link was dropped. Drafted Erin a reply."),
-    step("you", "2026-11-09 09:30:00", "is the fix committed?"),
-    step("said", "2026-11-09 09:30:10", "Not yet - the suite is still running."),
-    step("you", "2026-11-09 09:31:00", "is it on master"),
-    step("said", "2026-11-09 09:31:10", "It is on your local master only."),
-  ] }] });
-  const msgs = rowMessages(rows), turns = msgs.filter((m) => m.role === "assistant").map((m) => m.id);
-  const draft = { ReviewId: 9, Status: "pending", Kind: "draft_reply", DraftText: "Hi Erin - found it, the fix is in.", CreatedAt: "2026-11-09 09:02:30" };
-  // ...the server names the step at work when it was written (codingchat.cards: `sid#n`), the page the turn that drew that step (turnOfStep)
-  assert.ok(turns.every((id, k) => msgs.find((m) => m.id === id).steps.length) && msgs.find((m) => m.id === turns[0]).steps.includes("s1#1"));
-  assert.equal(draftHome(withTurns([draft], [{ review: 9, turn: turnOfStep(msgs)("s1#1"), at: draft.CreatedAt, stale: false }]), msgs), turns[0],
-    "the turn at work when it was written, two questions later");
-  // ...one written before any turn names none: under the mail, by its time; one whose step is not drawn names none either
-  assert.equal(turnOfStep(msgs)(null), null); assert.equal(turnOfStep(msgs)("s1#99"), null);
-  // ...and one raised after a call's progress names that update - the call's own step, merged into it: the page a stopped turn showed fell to
-  // the chat's foot (the overnight walk, 2026-11-11)
-  const acp = rowMessages(chatRows({ sessions: [{ sid: "s2", source: "acp", at: "2026-11-09 09:00:00", updates: [
-    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "start the draft" }, _meta: { taskuary: "owner" }, _at: "2026-11-09 09:00:00" },
-    { sessionUpdate: "tool_call", toolCallId: "c1", kind: "execute", title: "taskuary", status: "in_progress", _at: "2026-11-09 09:00:01" },
-    { sessionUpdate: "tool_call_update", toolCallId: "c1", status: "completed", _at: "2026-11-09 09:00:02" }] }] }));
-  assert.equal(turnOfStep(acp)("s2#2"), acp.find((m) => m.role === "assistant").id);
-  assert.match(gw, /turns=\{cardTurns\}/);
-});

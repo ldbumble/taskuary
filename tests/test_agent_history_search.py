@@ -180,18 +180,6 @@ class TheBriefTests(unittest.TestCase):
             got = brief(s, strangers(s))
         self.assertIn('TASK', got)                       # a brief was written...
         self.assertNotIn('taskuary --search', got)       # ...naming no history
-
-    def test_a_strangers_brief_says_plainly_why_and_names_the_trust_press(self):
-        # the owner, 2026-10-28, over "Prior mail search was unavailable here": withheld on purpose, said so, with the press that opens it
-        s = world(); a_claude(self)
-        tid = strangers(s)
-        mail(s, tid, who='Omar Keller', email='omar@vendor.example', subject='Grant categories', conv='conv-grant', body='Which category fits?')
-        with mock.patch('taskuary.origin._claude_version', return_value=(9, 9, 9)):
-            got = brief(s, tid)
-        self.assertIn("I didn't read your earlier mail because Omar isn't trusted yet - press Trust Omar on the task to let me.", got)
-        self.assertIn('Never call it "unavailable"', got)
-        self.assertNotIn('Renewal terms', got)           # ...and none of the owner's mail rode in
-
     def test_a_trusted_task_on_a_brain_with_no_search_is_handed_the_senders_earlier_mail(self):
         # an API card, or a CLI set to look things up only, has no shell and no Taskuary tools: Taskuary searches for it
         s = world(); a_claude(self)

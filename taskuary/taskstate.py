@@ -175,7 +175,9 @@ class TaskState:
         # PREDATES the close is a terminal nobody shut, not the task picked back up (the Board's old rule, kept).
         if live and t.get('Status') == 'done' and t.get('ClosedAt') and str(session.get('started') or '') < str(t['ClosedAt']): live = False
         if live:
-            if not session.get('waiting'): return 'working'
+            # ...by the one function every surface asks (general.working): the session's own word here, or a line it was just handed
+            from .general import owed
+            if not session.get('waiting') or owed(store, tid): return 'working'
             # ...but an agent PARKED - it answered, asked nothing - over a reply it drafted is the reply waiting, as the rail says: the Board
             # put it under "agent waiting on you" with "ready to send" on the same card, and the header said so until a reload (email walk 2026-10-29)
             parked = (session.get('state') or 'parked') == 'parked' and not session.get('request')

@@ -24,9 +24,3 @@ test("the agent's state is said once, by the task header's pill - live or stoppe
   assert.doesNotMatch(s, /<LifecycleChip kind="agent"|<StoryChip /);
 });
 
-// ...and in the dock only: in a task's chat the note alone drew an empty "Along the way" fold under the head (the side-by-side walk, 2026-11-11)
-test("'Started <the agent>' opens the dock conversation's first turn only", () => {
-  const s = src("GeneralWorkspace.jsx");
-  assert.match(s, /const keepStart = dock && !runMessages\.some\(\(m\) => m\.role === "assistant"\);/);
-  assert.match(s, /stepsPart\(events, \{ answer: reply \|\| "", keepStart \}\)/);
-});

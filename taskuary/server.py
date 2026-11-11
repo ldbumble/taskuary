@@ -2074,8 +2074,29 @@ def task_trust(task_id: int, scope: str = ''):
         try: org = senders.trust_org(store, task_id, ACTOR)
         except ValueError as e: raise HTTPException(422, str(e))
     else: origin.raise_to(store, task_id, 'trusted', ACTOR)
+    # ...and a mail's sender is remembered for the mailbox it came to: their next message starts its agent by itself
+    m = next((m for m in store.list_messages(task_id) if m.get('Channel') == 'email' and m.get('Direction') != 'out'), None)
+    if m: store.remember_trust(m.get('SourceName'), m.get('FromEmail'), 'trusted by the owner')
     o, why = origin.of_task(store, task_id)
-    return {'origin': o, 'why': why, **({'org': org} if org else {})}
+    started = _trusted_starts(task_id) if o != 'stranger' else ''
+    return {'origin': o, 'why': why, 'started': started, **({'org': org} if org else {})}
+
+
+def _trusted_starts(task_id: int) -> str:
+    """TRUST STARTS THE AGENT (the owner, 2026-11-11): the hold is gone, and what waited is worked as on any task - a live agent is handed
+    it as a line that joined the thread is (ingest.thread_moved: one turn for all of it), a task no agent worked yet starts its own."""
+    from . import general, ingest as _ing, senders, waitroom
+    t = store.get_task(task_id) or {}
+    if store.task_has_tag(task_id, _ing.HOLD_TAG): store.tag_task(task_id, _ing.HOLD_TAG, on=False, actor=ACTOR)
+    if t.get('Status') in ('done', 'dropped') or t.get('Kind') not in _ing.task_kinds.AGENT: return ''
+    if _ing.live_agent(store, task_id):
+        m = next((m for m in reversed(store.list_messages(task_id)) if not _ing.is_ours(m)), None)
+        if m: _ing._spawn(_ing.thread_moved, store, task_id, {**senders.row_msg(m), 'body': m.get('BodyText') or '', 'subject': m.get('Subject') or ''}, m['MessageId'], None, ACTOR)
+        else: waitroom.later(store, 0.2)
+        return 'handed'
+    if general.handles(t): _ing._spawn(_ing._auto_general, store, task_id)
+    else: _ing._spawn(lambda: start_session(store, task_id, None, None))
+    return 'started'
 
 def _calendar_of(task_id: int, msgs=None):
     from . import calwrite
@@ -5479,38 +5500,6 @@ def own_note(body: OwnNoteBody):
     from . import ownwork
     try: return ownwork.note(store, body.title, body.body, body.when, ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
-
-class ReleaseBody(BaseModel): agent: str | None = None; model: str | None = None; trust: bool = True
-
-@app.post('/api/tasks/{task_id}/release')
-def release_task(task_id: int, body: ReleaseBody, background: BackgroundTasks):
-    """"Yes, this one is fine" - the owner letting a held task through to the agent.
-
-    A first message from an address nobody here has ever written to does not get to start a
-    session by itself (senders.known): an inbound message is a prompt, and an unvetted prompt
-    that opens a terminal on this machine is the whole prompt-injection surface in one step. It
-    is still triaged, still shown, still a task - it just waits for this click. Releasing drops
-    the hold so the sender is never asked about again, and starts the session."""
-    from .ingest import HOLD_TAG
-    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    if not store.task_has_tag(task_id, HOLD_TAG): raise HTTPException(422, 'this task is not being held')
-    store.tag_task(task_id, HOLD_TAG, on=False, actor=ACTOR)
-    # TWO WAYS ON (the owner, 2026-11-09): Run anyway starts this one task and the sender stays unknown - an automated sender's next
-    # alert waits again, and the agent runs as it does on any stranger's words (origin.launch_mode); Trust sender vouches as well
-    if body.trust:
-        store.add_comment(task_id, ACTOR, 'human', 'Released to the agent - you vouched for this sender.')
-        m = next((m for m in store.list_messages(task_id) if m.get('Channel') == 'email' and m.get('Direction') != 'out'), None)
-        if m: store.remember_trust(m.get('SourceName'), m.get('FromEmail'), 'released by the owner')
-        from . import senders
-        senders.vouch(store, store.list_messages(task_id))
-    else: store.add_comment(task_id, ACTOR, 'human', 'Run this once - the sender is still unknown, so their next message waits for you again.')
-    store.audit('task', task_id, 'release' if body.trust else 'release_once', ACTOR)
-    from . import general, ingest as _ing
-    if general.handles(store.get_task(task_id)):
-        _ing._spawn(_ing._auto_general, store, task_id)     # the assistant's session, not a CLI (PW-069)
-        return {'released': True, 'assistant': True}
-    ses = start_session(store, task_id, body.agent, body.model)
-    return {'released': True, 'session': ses}
 
 class AgentDoneBody(BaseModel): task_id: int; summary: str = ''; agent: str = 'agent'; no_reply: bool = False; sid: str = ''
 

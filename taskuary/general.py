@@ -643,7 +643,7 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - pu
            'outbox': lambda d: f"started a message to {_to(d)}", 'task_email': lambda d: f"started an email to {_to(d)}",
            'land_review_revert': lambda d: f"reverted part of the agent's change in {', '.join(d.get('files') or []) or 'its files'}",
            'strong-again': lambda d: 'asked for it again on the strong model', 'filed_not_work': lambda d: 'filed a message on it as not work',
-           'origin_raised': lambda d: 'said what is on it so far can be trusted', 'use_repo': lambda d: 'changed where its code lives',
+           'origin_raised': lambda d: 'trusted the sender', 'use_repo': lambda d: 'changed where its code lives',
            'not_a_task_delete': lambda d: 'said it is not a task', 'not_mine_delete': lambda d: 'said it is not for them',
            'archived_not_deleted': lambda d: 'asked to delete it - it was closed and kept'}
 def _ref(tid) -> str:
@@ -2030,7 +2030,7 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
                    + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}' + ('' if stranger else f'\n\n{LESSON_LINE}\n\n{CHECK_BACK_LINE}'))
     # ...and a setup walk works the same way: AGENT.md no longer repeats how a step is checked or a failing way given up (2026-11-09)
     elif not dock: system += f'\n\n{WORK_LINE}'
-    if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
+    if stranger and not dock and (nh := origin.no_history_line(store, tid)): system = system + '\n\n' + nh     # closed on purpose, and said so
     # ...the LATEST facts ride in the TURN, never the system prompt: they change every turn, and a CLI's system prompt is its process's
     # command line (a hashed --append-system-prompt-file), so in the system prompt each turn started a new process (clipool's one per chat)
     lb = turn_facts(store, tid, task, rules=False, turn=turn)
@@ -2452,6 +2452,8 @@ class GeneralSession:
         text = str(text or '').strip()
         if not text and waiting is None: raise ValueError('empty message')
         if not self.alive: raise Ended(waiting)
+        from . import origin
+        if (h := origin.hold(self.store, self.task_id)): raise origin.RefusedForStranger(h['line'])      # nothing is handed over until Trust
         # LINES TYPED WHILE IT WORKS ARE ONE TURN (the owner, 2026-11-05: "either or what the model decides if it's clarification"): each
         # waits here; the first to get the turn files them all and the model reads them together - a later one may correct an earlier one.
         # The others find theirs already taken and end quietly: the turn that took them answers for them.
@@ -3334,6 +3336,40 @@ def _at_work(s) -> bool:
 def at_work(tid: int) -> bool: return tid in OPENING or _at_work(_live_of(tid))
 
 
+# "THE AGENT IS AT WORK" IS ONE FACT, ONE FUNCTION (the owner, 2026-11-11: a chat stood finished under a header that read "agent working", and a
+# turn spun under an answer while the header read done): the task's header and row (taskstate.TaskState.key), the chat's list
+# (conversation.items) and the road a typed line takes (take_line) all ask `working`. A start in flight (OPENING); a live session that, by its
+# own word, is not waiting on the owner (what its info says - the run's word before its screen, terminal.worker_fields); or a line a live
+# agent was handed and has not begun on yet (`owed`: a pane takes seconds to say it works)
+OWED = 120                    # seconds a line handed to a live agent reads "at work" before its turn shows
+def waits(store, s) -> bool:
+    "Does this live session wait on the owner, by its own word - the `waiting` of its info, without building the rest."
+    if isinstance(s, GeneralSession): return bool(s.waiting())
+    from . import terminal
+    try: return bool(terminal.worker_fields(store, s)['waiting'])
+    except Exception: return not _at_work(s)
+def owed(store, tid: int, s=None) -> bool:
+    "A line the live agent was handed (the ledger's newest `line`) under two minutes ago, its turn not begun, not stopped and not failed since."
+    s = s if s is not None else _live_of(tid)
+    if s is None: return False
+    r = store._one("SELECT At FROM heard WHERE TaskId=? AND Kind='line' ORDER BY HId DESC LIMIT 1", (int(tid),))
+    if not r or time.time() - r['At'] >= OWED or max(getattr(s, 'turn_at', 0) or 0, getattr(s, 'last', 0) if isinstance(s, GeneralSession) else 0) >= r['At']: return False
+    from . import conversation, funnel
+    at = conversation.stamp(r['At'])
+    if store._one("SELECT 1 AS x FROM comment WHERE TaskId=? AND ActorType=? AND CreatedAt>=? LIMIT 1", (int(tid), ASSISTANT_TYPE, at)): return False
+    if store._one("SELECT 1 AS x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='stopped_turn' AND CreatedAt>=? LIMIT 1", (int(tid), at)): return False
+    if funnel.run_failed(store, tid): return False
+    # ...a CLI with no hooks never says its turn began: its own record does (a step after the hand-over)
+    return isinstance(s, GeneralSession) or not any(x['T'] > r['At'] for _sid, _live, steps in conversation._session_steps(store, tid) for x in steps)
+def working(store, tid: int) -> bool:
+    s = _live_of(tid)
+    return tid in OPENING or (s is not None and not waits(store, s)) or owed(store, tid, s)
+def turn_started(tid: int):
+    "The clock of the turn at work: from the press that began it (PRESSED), else the session's own start of it."
+    s = _live_of(tid)
+    return PRESSED.get(tid) or getattr(s, 'turn_at', 0) or (getattr(s, 'last', 0) if getattr(s, 'busy', False) else 0) or None
+
+
 def line_state(store, tid: int, rows: list = None, was: bool = False) -> dict:
     """WHAT EVERY CHAT DRAWS OF THE OWNER'S LINES AND THE TURN THEY ASKED FOR, for every kind of agent - one function, both payloads (the owner,
     2026-11-10: "IT should not say waiting on top of the prompt only under it and it should happen right away"): `working` - a start in flight
@@ -3362,6 +3398,9 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     t = reopen(store, tid, actor)
     if not t: raise ValueError(f'no task {tid}')
     box_sent(store, tid)
+    # ...AN UNTRUSTED SENDER'S TASK HANDS NOTHING TO AN AGENT (origin.hold): his line is kept and waits by the box, behind the Trust action
+    from . import origin
+    if (h := origin.hold(store, tid)): return {'kept': wait_line(store, tid, text, files, line_id), 'held': h['line']}
     # ...A TASK HE TYPES INTO IS HIS TO END (selfclose.claim, as a session he opened): its agent answers and waits - told to close the task when
     # finished, a coding agent spent a plain question's answer on wrapping up (the recorded walk, 2026-11-11)
     if not handles(t):
@@ -3372,7 +3411,7 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     # ...A START READS THE CHAT FIRST, as it always did (server._refresh_for_turn), at work from the press all the while: a sync that fails
     # refuses the start before anything is kept, its reason under the line on the page
     line_id = line_id or new_line_id()
-    rest = not (tid in OPENING or _at_work(_live_of(tid)))
+    rest = not working(store, tid)
     if rest: PRESSED[tid] = time.time()       # the turn's clock: the press
     if prepare is not None and _live_of(tid) is None:
         held = tid in OPENING

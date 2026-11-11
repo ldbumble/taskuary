@@ -1866,7 +1866,7 @@ def _trust(store, tid: int, key: str, actor: str) -> str:
     if store.task_has_tag(tid, HOLD_TAG): store.tag_task(tid, HOLD_TAG, on=False, actor=actor)     # the vouch is the release (release_task)
     from .store import task_ref
     back = concierge.surface(store, key, actor=actor)
-    said = f'Trusted - {task_ref(tid)} is no longer held, and nothing has started on it.'
+    said = f'Trusted - {task_ref(tid)} is no longer held, and its agent takes it from here.'
     return turn_text(back, said, store=store) if back.get('item') else stuck(store, said)
 
 

@@ -94,22 +94,12 @@ def _held_chat_task(who):
     server.store.tag_task(t, ingest.HOLD_TAG, on=True, actor='t')
     return t
 
-def test_release_vouches_for_the_chat_sender(monkeypatch):
+def test_trust_vouches_for_the_chat_sender_and_starts_its_agent(monkeypatch):
     monkeypatch.setattr(server, 'start_session', lambda *a, **k: 'sid')
     t = _held_chat_task('Omar Keller')
-    assert c.post(f'/api/tasks/{t}/release', json={}).json()['released']
+    assert c.post(f'/api/tasks/{t}/trust').json()['started'] == 'started'           # Trust records it and starts the agent (the owner, 2026-11-11)
     assert server.store.trusted_sender('slack', 'omar keller')
     assert senders.known(server.store, _msg('Omar Keller'))[0]
-
-def test_run_anyway_starts_it_once_and_the_sender_stays_unknown(monkeypatch):
-    # the owner, 2026-11-09: Run anyway (this once) and Trust sender are two buttons; an automated sender's next alert waits again
-    monkeypatch.setattr(server, 'start_session', lambda *a, **k: 'sid')
-    t = _held_chat_task('Ray Colton')
-    assert c.post(f'/api/tasks/{t}/release', json={'trust': False}).json()['released']
-    assert not server.store.task_has_tag(t, ingest_hold())
-    assert not server.store.trusted_sender('slack', 'ray colton') and not senders.known(server.store, _msg('Ray Colton'))[0]
-    assert origin.of_task(server.store, t)[0] == 'stranger'          # the agent runs on a stranger's words, as before
-
 def ingest_hold():
     from taskuary import ingest
     return ingest.HOLD_TAG

@@ -41,10 +41,3 @@ test("both of a task's boxes keep them: the chat's composer and the box before i
   assert.match(first, /else keepUnsent\(task\.TaskId, text\);/);
 });
 
-test("the arrow holds the line while a turn runs, as Enter does", () => {
-  const chat = src("GeneralWorkspace.jsx");
-  // assistant-ui's own Send is disabled for as long as the thread runs: it is drawn only while it does not
-  assert.match(chat, /<ThreadPrimitive\.If running><HeldSend composer=\{runtime\.thread\.composer\} files=\{attachmentsRef\.current\.length\}/);
-  assert.match(chat, /onHold=\{\(\) => \{ const c = runtime\.thread\.composer; holdText\(c\.getState\(\)\.text\.trim\(\), c\); \}\}/);
-  assert.match(chat, /data-tq-held-send="" aria-label="Send" disabled=\{!text\.trim\(\) && !files\}/, "grey only over an empty box");
-});

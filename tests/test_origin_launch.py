@@ -9,7 +9,8 @@ def _claude(monkeypatch):
 
 def _stranger(s):
     t = s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'email'}, 'router')
-    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'someone@vendor.example', 'Status': 'routed'}); return t
+    # ...a stranger with NO SENDER TO TRUST - Taskuary's own words from what it read: an untrusted sender's task starts no agent at all (origin.hold)
+    s.add_message({'TaskId': t, 'Channel': 'assistant', 'FromEmail': 'someone@vendor.example', 'Status': 'routed'}); return t
 
 def test_claude_auto_drops_the_bypass_and_loads_no_mcp():
     a = clis.auto_args('claude', ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json'])

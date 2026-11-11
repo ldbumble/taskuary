@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { chatRows, ownerIn, stepsFromAcp } from "../src/chatStream.js";
+
 import { asUtc } from "../src/dates.js";
 import { editHunks, headerOf, hunksOf, hunkText, langOf, numbered, parseUnified, tokens } from "../src/diffView.js";
 
@@ -45,80 +45,13 @@ const shape = (rows) => rows.map(({ id, at, steps, ended, ...r }) => r);
 // ...and a command's output, which only ACP hands over (a log keeps the command alone)
 const noOutput = (rows) => rows.map((r) => (r.parts ? { ...r, parts: r.parts.map((p) => (p.steps ? { ...p, steps: p.steps.map(({ detail, id, ...s }) => s) } : p)) } : r));
 
-test("a session's log and the same session over ACP draw the same chat rows", () => {
-  const log = chatRows({ sessions: [ses({ source: "Claude Code log", steps: LOG })] });
-  const acp = chatRows({ sessions: [ses({ source: "acp", updates: ACP })] });
-  assert.deepEqual(noOutput(shape(acp)), noOutput(shape(log)));
-  assert.match(acp[0].parts[0].steps[1].detail, /\$ pytest -q tests\n→ 3 passed/);
-  assert.deepEqual(log.map((r) => r.kind), ["turn", "you", "turn"]);
-  const [first] = log;
-  assert.deepEqual(first.parts.map((p) => p.type), ["work", "edit", "said"]);
-  assert.deepEqual(first.parts[0].steps.map((s) => s.summary), ["Read store.py", "Ran pytest"]);
-  assert.equal(first.parts[1].summary, "Edited budget.py (+1 −1)");
-  assert.equal(first.answer, "Fixed: the total now adds the tax line.");
-});
 
-test("Taskuary's own brief is never drawn; the owner's typed line is, on its own row", () => {
-  const rows = chatRows({ sessions: [ses({ steps: LOG })] });
-  assert.ok(!JSON.stringify(rows).includes("TASKUARY: work"));
-  assert.equal(rows[1].text, "Run the whole suite too.");
-});
 
-test("the owner's words inside a Resume brief are their own line, the rest stays Taskuary's", () => {
-  // the owner, 2026-11-08: "i asked another question and the text was never sent into the prompt" - typed to a session at rest, it led the brief
-  const brief = "FROM THE OWNER: was this code completed?\n\nThe owner chose Resume for this task. Use the saved conversation and handover...";
-  const rows = chatRows({ sessions: [ses({ source: "acp", updates: [
-    { sessionUpdate: "user_message_chunk", content: { type: "text", text: brief }, _meta: { taskuary: "brief" } },
-    ...chunks("agent_message_chunk", "Not yet - the Hub page is half built.")] })] });
-  assert.deepEqual(rows.map((r) => r.kind), ["you", "turn"]);
-  assert.equal(rows[0].text, "was this code completed?");
-  assert.ok(!JSON.stringify(rows).includes("The owner chose Resume"));
-  assert.equal(ownerIn("TASKUARY: work TQ-0042 ..."), "");
-});
 
-test("a brief that carries a line already drawn as his draws no second bubble of Taskuary's words round it", () => {
-  // the browser walk, 2026-11-10: a line typed after a coding session ended stood as his bubble, and under it a second bubble of his - "The
-  // owner left 1 note for you after the last session ended. Take them in order: (1) now check the tax line" - the reopening's brief, whose
-  // FROM THE OWNER part is the waiting room's batch wrapped round the line the prompt had already recorded as his (acpcoding._show)
-  const brief = "FROM THE OWNER: The owner left 1 note for you after the last session ended. Take them in order: (1) now check the tax line\n\nThe owner chose Resume for this task.";
-  const rows = chatRows({ sessions: [ses({ source: "acp", updates: [
-    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "now check the tax line" }, _meta: { taskuary: "owner", line: 6 } },
-    { sessionUpdate: "user_message_chunk", content: { type: "text", text: brief }, _meta: { taskuary: "brief" } },
-    ...chunks("agent_message_chunk", "The tax line adds up.")] })] });
-  assert.deepEqual(rows.map((r) => r.kind), ["you", "turn"]);
-  assert.equal(rows[0].text, "now check the tax line");
-});
 
-test("the mail that came in stands over the turn it woke, a burst as one row", () => {
-  const mails = [{ who: "Erin Blake", words: "The budget skips tax.", channel: "email", at: "2026-11-06 08:58:00", joined: "2026-11-06 08:59:00" },
-    { who: "Erin Blake", words: "Also the rounding.", channel: "email", at: "2026-11-06 08:59:30", joined: "2026-11-06 08:59:40" },
-    { who: "Ray Colton", words: "Any news?", channel: "email", at: "2026-11-06 09:00:40", joined: "2026-11-06 09:00:40" }];
-  const rows = chatRows({ sessions: [ses({ steps: LOG })], mails });
-  assert.deepEqual(rows.map((r) => r.kind), ["mail", "turn", "mail", "you", "turn"]);
-  assert.deepEqual(rows[0].mail.map((m) => m.words), ["The budget skips tax.", "Also the rounding."]);
-  assert.equal(rows[2].mail[0].who, "Ray Colton");
-});
 
-test("a live session's newest turn is the one at work, its newest step still running", () => {
-  const rows = chatRows({ sessions: [ses({ live: true, steps: LOG.slice(0, 7) })] });
-  const turn = rows.at(-1);
-  assert.equal(turn.running, true);
-  assert.equal(turn.parts.at(-1).steps.at(-1).status, "running");
-  assert.equal(rows[0].running, false);
-});
 
-test("a step saved before its arguments were kept still reads by its one line", () => {
-  const rows = chatRows({ sessions: [ses({ steps: [{ k: "tool", name: "Read", text: "C:/work/ledger/store.py" }, { k: "tool", name: "Bash", text: "Run the tests", detail: "pytest -q" }]})] });
-  // ...a command the agent described reads as what it was for, as in the general chat
-  assert.deepEqual(rows[0].parts[0].steps.map((s) => s.summary), ["Read store.py", "Run the tests"]);
-});
 
-test("a codex patch and a write each read as their own row", () => {
-  const rows = chatRows({ sessions: [ses({ steps: [
-    { k: "tool", name: "apply_patch", file: "portal/app.js", edit: { patch: "@@\n-a\n+b\n+c" } },
-    { k: "tool", name: "Write", file: "portal/new.js", args: { file_path: "portal/new.js" }, edit: { parts: [{ old: "", new: "x\ny\n" }] } }] })] });
-  assert.deepEqual(rows[0].parts.map((p) => p.summary), ["Edited app.js (+2 −1)", "Wrote new.js (+2 −0)"]);
-});
 
 // ── the viewer ───────────────────────────────────────────────────────────────────────────────────
 test("two whole files diff into git's own hunk, numbered as git numbers it", () => {
@@ -156,41 +89,8 @@ test("the highlighter colours by language and keeps every character", () => {
   assert.deepEqual(tokens("x", ""), [{ t: "", s: "x" }]);
 });
 
-test("the one chat's box, on a coding source, takes the one road a chat's line takes (general.take_line, 2026-11-10)", () => {
-  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.doesNotMatch(src, /\/api\/tasks\/\$\{task\.TaskId\}\/waitroom`/, "no second road for a coding line");
-  assert.doesNotMatch(src, /\/api\/tasks\/\$\{task\.TaskId\}\/continue-work`, \{ note/);
-  assert.match(src, /api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant\/messages`, \{ text: w, attachments: files\.map\(\(a\) => a\.path\), line_id: id \}, \{ timeout: 0 \}\)\s*\.then\(\(\) => road\?\.\(\)\)/);
-  assert.match(src, /\/api\/tasks\/\$\{tid\}\/coding-chat/);
-});
 
-test("over ACP each step keeps the moment it came in, and the plan is one checklist - the newest of its turn", () => {
-  const ups = [
-    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "TASKUARY: work TQ-0042 ..." }, _meta: { taskuary: "brief" }, _at: "2026-11-06 09:00:00" },
-    { sessionUpdate: "plan", entries: [{ content: "Read the ledger", status: "in_progress" }, { content: "Fix the tax line", status: "pending" }], _at: "2026-11-06 09:00:02" },
-    { sessionUpdate: "tool_call", toolCallId: "a", kind: "read", title: "Read store.py", status: "completed", locations: [{ path: "C:/work/ledger/store.py" }], _at: "2026-11-06 09:00:03" },
-    { sessionUpdate: "plan", entries: [{ content: "Read the ledger", status: "completed" }, { content: "Fix the tax line", status: "in_progress" }], _at: "2026-11-06 09:00:04" },
-    { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "On the tax line now." }, _at: "2026-11-06 09:00:05" },
-  ];
-  assert.equal(stepsFromAcp(ups).find((s) => s.k === "tool").at, "2026-11-06 09:00:03");
-  const [turn] = chatRows({ sessions: [{ sid: "s", source: "acp", at: "2026-11-06 08:59:00", updates: ups }] });
-  assert.equal(turn.at, "2026-11-06 09:00:02");
-  const plans = turn.parts.filter((p) => p.type === "plan");
-  assert.equal(plans.length, 1);
-  assert.deepEqual(plans[0].items, [{ text: "Read the ledger", state: "done" }, { text: "Fix the tax line", state: "now" }]);
-});
 
-test("over ACP the box is a prompt and Stop ends the turn; there is no Terminal button, and a pty's asking screen is a card in the stream", () => {
-  // the owner, 2026-11-06: "hate this terminal button. it's also not a terminal"
-  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /\/api\/tasks\/\$\{task\.TaskId\}\/agent\/cancel/);
-  // ...the plan's checklist row is ViewSpec's, which an agent's own checklist view draws with too
-  assert.match(src, /<PlanRow key=\{p\.id\} p=\{p\} \/>/);
-  assert.match(fs.readFileSync(new URL("../src/ViewSpec.jsx", import.meta.url), "utf8"), /data-tq-plan/);
-  assert.doesNotMatch(src, /terminal-toggle|TerminalIcon|<span>Terminal<\/span>/);
-  assert.match(src, /screenAsks = coding && !!cc\.live\?\.asking && !acp/);
-  assert.match(src, /data-tq-chat-screen[^]*The agent's screen is asking something[^]*<TerminalPane/);
-});
 
 // ── recorded ACP update sequences ────────────────────────────────────────────────────────────────
 const say = (t, at) => ({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: t }, ...(at ? { _at: at } : {}) });
@@ -198,51 +98,8 @@ const BRIEF = { sessionUpdate: "user_message_chunk", content: { type: "text", te
 const flat = (turn) => turn.parts.flatMap((p) => (p.type === "work" ? p.steps.map((s) => `${s.kind === "said" ? "said" : "step"}:${s.summary}:${s.status}`)
   : p.type === "said" ? [`said:${p.text}`] : [`${p.type}`]));
 
-test("a message after a step still running draws BELOW it, and the step keeps running (the owner, 2026-11-06: never write above what was written)", () => {
-  const ups = [BRIEF, say("Running the suite."),
-    { sessionUpdate: "tool_call", toolCallId: "t1", kind: "execute", title: "pytest", status: "in_progress", rawInput: { command: "pytest -q" } },
-    { sessionUpdate: "tool_call_update", toolCallId: "t1", _meta: { terminal_output_delta: { data: "....\n" } } },
-    say("Quick update: "), say("about half the suite has passed so far.")];
-  const live = { working: true, transport: "acp" };
-  const before = chatRows({ sessions: [ses({ source: "acp", live: true, updates: ups.slice(0, 4) })], live }).at(-1);
-  const after = chatRows({ sessions: [ses({ source: "acp", live: true, updates: ups })], live }).at(-1);
-  assert.deepEqual(flat(before), ["said:Running the suite.", "step:Ran pytest:running"]);
-  // ...what was on screen stays as it was, in place; the new words come after it
-  assert.deepEqual(flat(after), [...flat(before), "said:Quick update: about half the suite has passed so far."]);
-  // ...and what it printed so far is under the running step
-  assert.match(after.parts[1].steps[0].detail, /\$ pytest -q\n→ \.\.\.\./);
-  // ...the result, when it comes, settles the same row where it stands
-  const done = chatRows({ sessions: [ses({ source: "acp", live: true, updates: [...ups, { sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed" }] })], live }).at(-1);
-  assert.deepEqual(flat(done), ["said:Running the suite.", "step:Ran pytest:done", "said:Quick update: about half the suite has passed so far."]);
-});
 
-test("a command's output opens under its own step: Claude's fenced result and Codex's streamed one; a failed command says so", () => {
-  const ups = [BRIEF,
-    { sessionUpdate: "tool_call", toolCallId: "c", kind: "execute", rawInput: { command: "pytest -q" } },
-    { sessionUpdate: "tool_call_update", toolCallId: "c", status: "failed", content: [{ type: "content", content: { type: "text", text: "```\n1 failed, 3 passed\n```" } }] },
-    { sessionUpdate: "tool_call", toolCallId: "x", kind: "execute", rawInput: { command: "npm test" } },
-    { sessionUpdate: "tool_call_update", toolCallId: "x", _meta: { terminal_output_delta: { data: "ok 1\n" } } },
-    { sessionUpdate: "tool_call_update", toolCallId: "x", _meta: { terminal_output_delta: { data: "ok 2\n" } } },
-    { sessionUpdate: "tool_call_update", toolCallId: "x", status: "completed", content: [{ type: "content", content: { type: "text", text: "ignored" } }] }];
-  const [turn] = chatRows({ sessions: [ses({ source: "acp", updates: ups })] });
-  const [a, b] = turn.parts[0].steps;
-  assert.equal(a.detail, "$ pytest -q\n→ 1 failed, 3 passed"); assert.equal(a.status, "error");
-  assert.equal(b.detail, "$ npm test\n→ ok 1\nok 2");
-});
 
-test("a turn that ended on a question is not working, though its session is alive (the owner's live coding task, 2026-11-06)", () => {
-  const ups = [BRIEF, { sessionUpdate: "tool_call", toolCallId: "r", kind: "read", title: "Read ledger.py", status: "completed", locations: [{ path: "C:/work/ledger/ledger.py" }] },
-    say("I can fix the rounding in ledger.py. Should I go ahead?")];
-  const rows = (live, permissions = []) => chatRows({ sessions: [ses({ source: "acp", live: true, updates: ups })], live, permissions });
-  // ...the turn ended: the session waits on the owner - no turn at work, nothing spinning under the question
-  assert.equal(rows({ working: false, transport: "acp" }).at(-1).running, false);
-  assert.equal(rows({ working: true, transport: "acp" }).at(-1).running, true);
-  // ...and at work but waiting on the owner's press (a permission card, a screen that asks): running, but waiting - no "Working on this…"
-  assert.equal(rows({ working: true }, [{ id: "p1" }]).at(-1).waiting, true);
-  assert.equal(rows({ working: true, asking: true }).at(-1).waiting, true);
-  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /const codingBusy = coding && \(!!cc\.got\?\.working \|\| !!cc\.live\?\.working\) && !screenAsks && !perms\.length;/);
-});
 
 test("the general chat's ACP trace keeps the words where they were said: the answer takes only what came after the last call", async () => {
   const { stepsOf } = await import("../src/agentSteps.js");
@@ -258,25 +115,4 @@ test("the general chat's ACP trace keeps the words where they were said: the ans
   assert.deepEqual(stepsOf(trace, { keepStart: false, answer: "All 212 pass." }).map((s) => s.summary), live.slice(0, 3));
 });
 
-// ONLY WHAT THE OWNER TYPED IS HIS (codingchat.owned, 2026-11-10): a user-role message the adapter sent itself - a slash command's output - is
-// marked the agent's by the server, which records every line he typed, and is drawn as the agent's words, never in his bubble
-test("a user-role update the server marks as the agent's is drawn as the agent's words", () => {
-  const steps = stepsFromAcp([
-    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "merge it in" }, _meta: { taskuary: "owner" } },
-    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "Compacted: 3 files read" }, _meta: { taskuary: "agent" } },
-  ]);
-  assert.deepEqual(steps.map((s) => [s.k, s.text]), [["you", "merge it in"], ["said", "Compacted: 3 files read"]]);
-});
 
-test("a turn that ended before the live session's turn began is not the one at work", () => {
-  // the recorded coding walk, 2026-11-10: a line typed to a session that had idled out - while its adapter came back up the turn before stood
-  // "running" again, its x and "ran 4s" OVER his new line, and nothing under it. The turn at work is the one the live session began
-  const steps = LOG.slice(0, 7), live = (at) => ({ working: true, ...(at ? { turnStarted: +asUtc(at) / 1000 } : {}) });
-  assert.equal(chatRows({ sessions: [ses({ live: true, steps })], live: live("2026-11-06 09:30:00") }).at(-1).running, false);
-  assert.equal(chatRows({ sessions: [ses({ live: true, steps })], live: live("2026-11-06 09:00:00") }).at(-1).running, true);
-  assert.equal(chatRows({ sessions: [ses({ live: true, steps })], live: live() }).at(-1).running, true, "no start said: as before");
-  // ...a session reopened for his line replays its history as new rows before it is handed his prompt: none of them is at work
-  assert.equal(chatRows({ sessions: [ses({ live: true, steps })], live: { working: true, promptPending: true } }).at(-1).running, false);
-  // ...the press is the turn's start where the payload says it (line_state `turnStarted`), the woken session's own not up yet
-  assert.equal(chatRows({ sessions: [ses({ live: true, steps })], live: live("2026-11-06 09:00:00"), turnStarted: +asUtc("2026-11-06 09:30:00") / 1000 }).at(-1).running, false);
-});

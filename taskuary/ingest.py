@@ -254,7 +254,7 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str, own: bool = False) -> t
     if not own and (d := danger(store, msg, mid)): return False, said(f'It reads as an attempt to steer an AI ({d}) - nothing starts until you press.')
     if not own and (held := brainroute.auto_held(store)): return False, said(held[0].upper() + held[1:] + '.')
     if kind == 'general':
-        if cfg.get('general_auto_enabled', '1') != '1': return False, said(f"Starting an agent by itself is switched off in {words.name('coding')}.")
+        if cfg.get('general_auto_enabled', '1') != '1': return False, said(f"Starting an agent by itself is switched off in {words.name('agents')}.")
         from . import general
         if not general.provider_options(store): return False, said(f"No AI is set up for an agent to run on yet ({words.name('ai')}).")
     elif kind == 'coding':

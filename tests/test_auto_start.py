@@ -72,8 +72,10 @@ class AutoStartTests(unittest.TestCase):
         out, spawned = ingested(s, mail(), 'general')
         self.assertEqual(spawned, [])
         self.assertEqual(s.get_task(out['task_id'])['Status'], 'open')
-        # the switch's place, by its one name (words.json) - never a typed "Settings" path
-        self.assertIn(f"held for you: Starting an agent by itself is switched off in {words.name('coding')}.", last_reason(s))
+        # the switch's place, by its one name (words.json) - never a typed "Settings" path - and the place it really is: the general switch
+        # sits under Agents, and the sentence sent the owner to Coding agent, where it is not
+        knobs = json.loads((pathlib.Path(ingest.__file__).parent / 'settings_schema.json').read_text(encoding='utf-8'))['knobs']
+        self.assertIn(f"held for you: Starting an agent by itself is switched off in Settings → {knobs['general_auto_enabled']['group']}.", last_reason(s))
         s2 = store(coding_auto_enabled='0')
         _out, spawned = ingested(s2, mail(external_id='c1'), 'coding')
         self.assertEqual(spawned, []); self.assertIn(f"Starting the coding agent by itself is switched off in {words.name('coding')}.", last_reason(s2))

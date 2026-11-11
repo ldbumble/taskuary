@@ -2261,7 +2261,7 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         # A HELD START IS WHAT HAPPENED (the owner, 2026-10-16): "nothing has been done with it yet" was said over work the
         # sender gate held, a start that failed and a real queue alike - the task's own sentence says which, and what to do
         idle = item.get('why_idle') if item.get('lane') == 'queued' and item['kind'] in ('asked', 'todo') else ''
-        if idle: return f"{frm}. No agent has started on it. {idle} From you: {_from_you(store, item)}."   # the moves are its own buttons
+        if idle: return f"{frm}. {idle} From you: {_from_you(store, item)}."   # its own sentence leads with its state; the moves are its buttons
         # "the agent removed X" reads; "the agent The PR was reviewed.." did not - a summary that is its own sentence gets a lead-in
         done = (_cap(str(item['why'])) if item.get('closed') and item.get('why') else      # a closed task says what happened, not "fyi"
                 f"it was worked on - {str(item['summary']).strip().rstrip('.')}" if item.get('summary') else

@@ -156,6 +156,13 @@ class PhantomGuard(unittest.TestCase):
                     self.assertLessEqual(self.names(line, it), shown, (it['kind'], it.get('lane'), line))
                 self.assertLessEqual(self.names(concierge._from_you(None, it), it), shown)
 
+    def test_a_held_row_says_its_state_once(self):
+        # the phone read "No agent has started on it. Waiting for you. ..." - two heads for one fact; the row's own sentence leads with it
+        it = next(i for i in ITEMS if i.get('why_idle'))
+        with mock.patch.object(concierge, '_agent_running', return_value=False):
+            line = concierge.fallback(dict(it), True)
+        self.assertIn(f". {it['why_idle']} From you:", line); self.assertNotIn('No agent has started', line)
+
     def test_the_cannot_lines(self):
         with mock.patch.object(concierge, '_agent_running', return_value=True):
             for it in ITEMS:

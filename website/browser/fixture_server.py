@@ -42,12 +42,20 @@ def _pty_own(address) -> bool:
     return host in ("127.0.0.1", "localhost") and sys._getframe(2).f_globals.get("__name__", "").startswith("winpty")
 
 
+# THE AGENT'S OWN BROWSER, on a recorded real-CLI walk only (TASKUARY_FIXTURE_LOOPBACK=1, set by harness.mjs under REAL_BROWSER): Taskuary reads
+# the browser's screencast and DevTools ports on this computer, so loopback - and only loopback - is let through. Without it every read of the
+# browser raised, no sign-in was ever raised and the walk ended in a dead end the product does not have. Never set in CI.
+LOOPBACK = os.environ.get("TASKUARY_FIXTURE_LOOPBACK") == "1"
+def _local(host) -> bool: return LOOPBACK and str(host) in ("127.0.0.1", "localhost", "::1")
+
+
 class NoOutboundSocket(socket.socket):
     def connect(self, address):
-        if _pty_own(address): return super().connect(address)
+        if _pty_own(address) or _local(address[0] if isinstance(address, tuple) else ""): return super().connect(address)
         raise RuntimeError(f"browser fixture blocked outbound socket connection to {address!r}")
 
     def connect_ex(self, address):
+        if _local(address[0] if isinstance(address, tuple) else ""): return super().connect_ex(address)
         raise RuntimeError(f"browser fixture blocked outbound socket connection to {address!r}")
 
 
@@ -200,12 +208,15 @@ async def run() -> None:
     socket.socket = NoOutboundSocket
     loop = asyncio.get_running_loop()
 
+    real_connection = loop.create_connection
+
     async def no_outbound_connection(*args, **kwargs):
         target = kwargs.get("host") or (args[1] if len(args) > 1 else "unknown")
+        if _local(target): return await real_connection(*args, **kwargs)
         raise RuntimeError(f"browser fixture blocked event-loop connection to {target!r}")
 
     loop.create_connection = no_outbound_connection
-    for operation in ("connect", "connect_ex"):
+    for operation in () if LOOPBACK else ("connect", "connect_ex"):
         probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             getattr(probe, operation)((HOST, PORT))
@@ -217,6 +228,7 @@ async def run() -> None:
         finally:
             probe.close()
     try:
+        if LOOPBACK: raise RuntimeError("blocked event-loop connection: loopback is let through on this walk")
         await loop.create_connection(asyncio.Protocol, HOST, PORT)
     except RuntimeError as error:
         if "blocked event-loop connection" not in str(error):

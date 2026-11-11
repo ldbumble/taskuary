@@ -247,6 +247,21 @@ class PromoteTests(unittest.TestCase):
         self.assertTrue(route.startswith('promoted by the owner'))
         self.assertIn('triage had filed it: an unknown sender asks for a sign-in through a link', route)
 
+    def test_promoting_a_mail_triage_already_read_takes_its_reading_and_asks_no_model(self):
+        # the ask triage read when the mail came in is stored on its verdict: promoting it asked a model to read the same ask again
+        s = MemoryStore()
+        mid = self._msg(s)
+        s.add_route(mid, None, 'file', None, 'triage: nothing to do - Ellis chases the rollout', [], 'triage',
+                    verdict={'intent': 'fyi', 'why': 'Ellis chases the rollout', 'summary': 'Ellis wants the rollout date confirmed.',
+                             'checklist': ['Confirm the rollout date']})
+        brain = mock.Mock(side_effect=AssertionError('a model was asked'))
+        with mock.patch('taskuary.llm.build_llm', return_value=brain):
+            tid = ingest.task_from_message(s, mid, 'owner')
+        for th in [th for th in threading.enumerate() if th.name == ingest.ENRICH_THREAD]: th.join(5)
+        brain.assert_not_called()
+        self.assertEqual(s.get_task(tid)['Summary'], 'Ellis wants the rollout date confirmed.')
+        self.assertEqual([i['text'] for i in s.task_checklist(tid)], ['Confirm the rollout date'])
+
     def test_a_plain_promote_is_asked_with_no_danger_guidance(self):
         s = MemoryStore()
         mid = self._msg(s)

@@ -921,7 +921,6 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                 "its line opens again", [], 'router')
                 batch.arrived(store, r['task_id'], msg.get('conversation_id'), msg.get('from_name') or msg.get('from_email') or 'someone')
                 return {'status': 'routed', 'task_id': r['task_id'], 'message_id': mid}
-    new_rid = None                    # set when a fresh reply task opens a review below
     split_from = r.get('split_from')     # the thread's or the room's task, when triage said this is a different job (new_job, rel new)
     held = ''                            # why the coding agent was NOT auto-started (a robot or a stranger)
     notes, notes_left = [], 0            # standing notes the classifier saw, and any that did not fit
@@ -1184,7 +1183,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # - anything else that is real work queues as needs-you, for you to route
             # ...an invite's answer is not an email: its row's Accept, Decline and Propose a new time draft it (calwrite.draft)
             if f['kind'] == 'reply' and not intent.get('invite'):
-                new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage',
+                rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage',
                                                   'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"
                                                             + (f' · {unsendable}' if unsendable else '')})
                 starts.append((reply_to_agent, store, tid, rid, msg))
@@ -3134,34 +3133,41 @@ ENRICH_THREAD = 'press-enrich'
 
 
 def earlier_verdict(store, m: dict, mid) -> dict:
-    """{'why', 'danger'}: what triage said of a message before it was work - its newest stored verdict's why (the route's reason
-    without its head when no verdict was kept) and what it read the words as trying to make an AI do (`danger`)."""
-    why = ''
+    """{'why', 'danger', 'summary', 'checklist'}: what triage said of a message before it was work - its newest stored verdict's why (the
+    route's reason without its head when no verdict was kept), the ask it read out of it when it wrote one, and what it read the words as
+    trying to make an AI do (`danger`)."""
+    why, v = '', {}
     for r in reversed(store.message_routes(mid) if mid else []):
-        try: v = json.loads(r.get('VerdictJson') or 'null')
-        except (TypeError, ValueError): v = None
+        try: v = json.loads(r.get('VerdictJson') or 'null') or {}
+        except (TypeError, ValueError): v = {}
         if isinstance(v, dict) and str(v.get('why') or '').strip(): why = str(v['why']); break
+        v = {}
         if str(r.get('Reason') or '').startswith('triage:'): why = str(r['Reason']).split(' - ', 1)[-1]; break
-    return {'why': ' '.join(why.split())[:300], 'danger': danger(store, m, mid)}
+    items = [x.strip() for x in (v.get('checklist') or []) if isinstance(x, str) and x.strip()] if isinstance(v.get('checklist'), list) else []
+    return {'why': ' '.join(why.split())[:300], 'danger': danger(store, m, mid), 'summary': str(v.get('summary') or '').strip(), 'checklist': items[:12]}
 
 
 def ask_later(store, tid: int, m: dict, plain: str, earlier: dict = None):
-    """Read the ask out of `m` off the press and put it on `tid`. No brain, nothing to wait for: `plain` is the answer."""
+    """Read the ask out of `m` off the press and put it on `tid`. No brain, nothing to wait for: `plain` is the answer. Where triage
+    already read the ask when the message came in (its stored verdict's summary), that reading is it - never a model asked again; a
+    message it read as steering an AI is read again, told so (triage.extract_ask's flagged reading: the owner's own safe checklist)."""
+    if (earlier or {}).get('summary') and not earlier.get('danger'): return _fill(store, tid, plain, earlier)
     from . import llm as _llm
     llm = _llm.build_llm(store, job='triage')
     if llm: threading.Thread(target=_enrich, args=(store, tid, m, plain, llm, earlier), daemon=True, name=ENRICH_THREAD).start()
 
 
-def _enrich(store, tid: int, m: dict, plain: str, llm, earlier: dict = None):
+def _fill(store, tid: int, plain: str, ask: dict):
     """Fill in only what the press left plain: an ask or a checklist the owner wrote meanwhile is theirs."""
+    t = store.get_task(tid)
+    if not t: return
+    if ask.get('summary') and ask['summary'] != plain and (t.get('Summary') or '') == plain: store.update_task(tid, {'Summary': ask['summary']}, 'triage')
+    if ask.get('checklist') and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
+
+
+def _enrich(store, tid: int, m: dict, plain: str, llm, earlier: dict = None):
     from . import triage as _triage
-    try:
-        ask = _triage.extract_ask(m, llm, earlier=earlier)
-        t = store.get_task(tid)
-        if not t: return
-        if ask['summary'] and ask['summary'] != plain and (t.get('Summary') or '') == plain:
-            store.update_task(tid, {'Summary': ask['summary']}, 'triage')
-        if ask['checklist'] and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')     # a list the owner wrote meanwhile is theirs
+    try: _fill(store, tid, plain, _triage.extract_ask(m, llm, earlier=earlier))
     except Exception as e: logger.warning(f"the ask on {task_ref(tid)} stays the sender's own words - {e}")
 
 

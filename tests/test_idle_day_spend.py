@@ -157,6 +157,32 @@ def test_a_notice_like_the_last_three_is_filed_as_they_were_without_a_call_and_a
     assert ingest.reused_verdict(s, {**m, 'sender_class': None}) is None, 'a person writing is never filed by its look'
 
 
+def test_a_notice_is_reused_only_when_its_words_are_the_same_as_the_last_three_numbers_aside():
+    """The owner, 2026-11-10: "dangerous like who decides it's the same". A system that says "finished" three nights and "FAILED" on the
+    fourth - in the body, under the same subject - has the failure read by the model; the next "finished" is filed as before."""
+    s, calls = store(), []
+    def model(system, user, **kw):
+        calls.append(json.loads(user).get('body')); return json.dumps({'intent': 'fyi', 'kind': 'task', 'why': 'w', 'title': 't', 'summary': 's'})
+    def mail(i, body, **kw):
+        return ingest.ingest_message(s, {'external_id': f'run-{i}', 'channel': 'email', 'conversation_id': f'run-{i}', 'source_name': ME,
+                                         'sent_at': f'2026-11-0{i} 02:00', 'subject': f'Nightly export 2026-11-0{i}', 'from_email': 'jobs@vendor.example',
+                                         'from_name': 'Export bot', 'body': body, 'sender_class': 'automated', **kw}, llm=model)
+    with mock.patch.object(senders, 'wrote_to', return_value=True):
+        for i, n in ((1, 120), (2, 118), (3, 121)): mail(i, f'Nightly export finished at 02:0{i} on Tuesday, {n} rows.')
+        assert len(calls) == 3
+        mail(4, 'Nightly export FAILED at 02:04 on Tuesday, 0 rows.')
+        assert len(calls) == 4, 'one word differs: the model reads it'
+        mail(5, 'Nightly export finished at 02:05 on Thursday, 133 rows.')
+        assert len(calls) == 4, 'the same words as the last three, numbers and days aside: filed as they were'
+        mail(6, 'Nightly export finished at 02:06 on Friday, 140 rows.', mail_meta={'atts': 1})
+        assert len(calls) == 5, 'a file rides on it: the model reads it'
+        s._exec("INSERT INTO correction (MessageId, Sender, Verdict, Change, CreatedAt) VALUES (1, 'jobs@vendor.example', 'fyi', 'task', ?)",
+                (time.strftime('%Y-%m-%d %H:%M:%S'),))
+        mail(7, 'Nightly export finished at 02:07 on Friday, 141 rows.')
+        assert len(calls) == 6, 'the owner corrected one: the model reads them again'
+    assert ingest.notice_template('Re: Export 12', 'declined on Dec 3') != ingest.notice_template('Export 12', 'marked on Dec 3')
+
+
 def test_a_busy_day_stays_one_judgement_per_new_kind_of_mail_and_one_look_or_turn_per_question():
     "150 mails, one in four a question, half of those needing a look-up: what the day costs, held under its own ceiling."
     spent = day(store(), n=150, looks=48, every=4)

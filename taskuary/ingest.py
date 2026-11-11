@@ -582,20 +582,28 @@ def invite_verdict(store, msg: dict) -> dict | None:
 # a list or a system that mails the same notice every day had it read by the model every day. Where the mail's own headers say a system or a
 # list sent it (never a person's hand-written mail), and the last REUSE_AFTER verdicts on that address and subject shape were all the same
 # filing - none of them, nor anything since from that sender, corrected by the owner - the stored verdict is that mail's too, marked
-# `reused` on its route so it can be seen and undone. A new sender, a changed subject, a task among them, or a correction: the model reads it
+# `reused` on its route so it can be seen and undone. A new sender, a task among them, or a correction: the model reads it.
+# "LIKE" IS THE SAME TEXT, never a look (the owner, 2026-11-10: "dangerous like who decides it's the same"): a system that mailed "export
+# finished" three nights and "export FAILED" on the fourth had the failure filed unread, its subject being the same. Subject AND body must be
+# word for word the earlier ones' once numbers, dates, times and ids are masked - plain code comparing templates, judging no meaning: any word
+# that differs is the model's to read. A mail carrying any attachment is the model's too (its files are saved after it is judged)
 REUSE_AFTER, REUSABLE = 3, ('fyi', 'ignore', 'watch')
-_SHAPE = re.compile(r'\d+')
-def subject_shape(s) -> str: return ' '.join(_SHAPE.sub('#', norm_subject(s)).split())
+# ...a date's own names, whole words only ("declined" is never "dec"), and none that is also an everyday word (may, mar, sat, sun)
+_VARYING = re.compile(r'\S*\d\S*|\b(?:january|february|march|april|june|july|august|september|october|november|december|monday|tuesday|wednesday'
+                      r'|thursday|friday|saturday|sunday|jan|feb|apr|jun|jul|aug|sep|sept|oct|nov|dec|mon|tue|tues|wed|thu|thur|thurs|fri)\b')
+def template(s) -> str: return ' '.join(_VARYING.sub('#', str(s or '').lower()).split())
+def notice_template(subject, body) -> tuple: return template(norm_subject(subject)), template(body)
 
 
 def reused_verdict(store, msg: dict) -> dict | None:
-    who, cls = str(msg.get('from_email') or '').strip().lower(), msg.get('sender_class')
-    if not who or cls not in ('automated', 'bulk') or msg.get('file_text') or msg.get('images') or msg.get('idea_context'):
-        return None
-    shape = subject_shape(msg.get('subject'))
-    rows = store._rows("SELECT r.RouteId, r.VerdictJson, r.CreatedAt, m.Subject FROM route r JOIN message m ON m.MessageId=r.MessageId WHERE "
-                       "lower(m.FromEmail)=? AND m.SenderClass IN ('automated','bulk') AND IFNULL(r.VerdictJson,'')<>'' ORDER BY r.RouteId DESC LIMIT 30", (who,))
-    same = [r for r in rows if subject_shape(r['Subject']) == shape][:REUSE_AFTER]
+    who, cls, meta = str(msg.get('from_email') or '').strip().lower(), msg.get('sender_class'), msg.get('mail_meta') or {}
+    if not who or cls not in ('automated', 'bulk') or msg.get('idea_context'): return None
+    if msg.get('file_text') or msg.get('images') or meta.get('atts') or meta.get('attached'): return None
+    shape = notice_template(msg.get('subject'), msg.get('body'))
+    rows = store._rows("SELECT r.RouteId, r.VerdictJson, r.CreatedAt, m.Subject, m.BodyText FROM route r JOIN message m ON m.MessageId=r.MessageId "
+                       "WHERE lower(m.FromEmail)=? AND m.SenderClass IN ('automated','bulk') AND IFNULL(r.VerdictJson,'')<>'' AND NOT EXISTS "
+                       "(SELECT 1 FROM attachment a WHERE a.MessageId=m.MessageId AND IFNULL(a.Inline,0)=0) ORDER BY r.RouteId DESC LIMIT 30", (who,))
+    same = [r for r in rows if notice_template(r['Subject'], r['BodyText']) == shape][:REUSE_AFTER]
     if len(same) < REUSE_AFTER: return None
     try: vs = [json.loads(r['VerdictJson']) for r in same]
     except ValueError: return None

@@ -35,7 +35,7 @@ def record_update(tid: int, sid: str, update: dict) -> None:
     Taskuary's own seed or brief rather than the owner's words (the chat never draws a brief; it draws the mail that caused it)."""
     if not isinstance(update, dict) or not sid: return
     # ...stamped as it arrives (`_at`, the server's own zone): ACP updates carry no time, and a turn read as one stamp under every mail
-    update = {**update, '_at': update.get('_at') or datetime.now().isoformat(sep=' ', timespec='seconds')}
+    update = {**update, '_at': update.get('_at') or datetime.now().isoformat(sep=' ', timespec='milliseconds')}
     try:
         with _acp_path(tid, sid).open('a', encoding='utf-8') as f: f.write(json.dumps(update, ensure_ascii=False) + '\n')
     except (OSError, TypeError, ValueError) as e: logger.debug(f'coding chat: ACP update for task {tid} not kept - {e}')
@@ -135,7 +135,8 @@ def _worded(ups: list) -> list:
     return [{**u, 'content': {'type': 'text', 'text': asked_inline(u['content']['text'])[0]}} if words(u) else u for u in out]
 
 
-def _session(tid: int, sid: str, cli: str, ext: str, at: str, live: bool = False) -> dict:
+def _session(tid: int, sid: str, cli: str, ext: str, at: str, live: bool = False, local: bool = True) -> dict:
+    _local = globals()['_local'] if local else (lambda steps: steps)         # `local=False`: each step's own stamp, to the millisecond (conversation.items)
     s = {'sid': sid, 'cli': cli or '', 'at': str(at or '').replace('T', ' ')[:19], 'live': live}
     if (ups := acp_updates(tid, sid)): return {**s, 'source': 'acp', 'updates': _worded(ups)}
     saved = sessionrecord._saved_path(tid, sid)
@@ -148,7 +149,7 @@ def _session(tid: int, sid: str, cli: str, ext: str, at: str, live: bool = False
     return {**s, 'source': src or 'none', 'steps': _local(sessionrecord.mark_briefs(tid, steps)) if steps else []}
 
 
-def sessions(store, tid: int) -> list:
+def sessions(store, tid: int, local: bool = True) -> list:
     """Every coding session of the task, oldest first, each with its steps (or its ACP updates). A resumed conversation writes on into
     the same CLI log, so of the sessions sharing one, only the newest is kept - it holds the earlier ones' steps too."""
     tid = int(tid)
@@ -160,7 +161,7 @@ def sessions(store, tid: int) -> list:
     # never stands in for the ones before it, and they are all kept
     acp = {sid for sid, *_ in items if _acp_path(tid, sid).is_file()}
     last = {(cli, ext): i for i, (sid, cli, ext, _, _) in enumerate(items) if ext and sid not in acp}
-    return [_session(tid, sid, cli, ext, at, live) for i, (sid, cli, ext, at, live) in enumerate(items)
+    return [_session(tid, sid, cli, ext, at, live, local) for i, (sid, cli, ext, at, live) in enumerate(items)
             if not ext or sid in acp or last.get((cli, ext)) == i]
 
 

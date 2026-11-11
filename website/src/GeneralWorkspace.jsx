@@ -27,7 +27,7 @@ import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
 import { baseName, isWork } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { PARTS, chatRows, chatSource, checkBackDue, compactingNow, continues, eventOf, linkWords, partsMessage, rowMessages, turnOfStep, turnParts, workCount } from "./chatStream.js";
+import { PARTS, chatRows, chatSource, checkBackDue, compactingNow, continues, eventOf, eventsOf, hasParts, linkWords, partsMessage, rowMessages, turnOfStep, turnParts, workCount } from "./chatStream.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
@@ -199,8 +199,9 @@ const useTurnOutputs = (id) => { const at = React.useContext(OutputsCtx); return
 // ...and a file NAMED in the words - `Report.csv` - opens over the chat at a press (FileDialog): the names are marked once drawn
 const nameOf = (s) => String(s || "").trim().replace(/^.*[\\/]/, "");
 export const isOutputsFolder = (s, tid) => new RegExp(`outputs[\\\\/]TQ-0*${Number(tid)}[\\\\/]?$`, "i").test(String(s || "").trim());
-const AssistantText = ({ text }) => {
-  const mid = useAuiState((s) => s.message.id), at = useTurnOutputs(mid), shown = React.useContext(ShownCtx)[mid];
+const AssistantText = ({ text }) => <SaidText text={text} mid={useAuiState((s) => s.message.id)} />;
+const SaidText = ({ text, mid }) => {
+  const at = useTurnOutputs(mid), shown = React.useContext(ShownCtx)[mid];
   const box = React.useRef(null), [viewing, setViewing] = useState(null);
   const listed = at?.listed || [];
   const fileNamed = (el) => { const n = nameOf(el?.textContent); return n ? listed.find((f) => f.name === n || nameOf(f.path) === n) : null; };
@@ -274,9 +275,10 @@ const headOf = (x) => x.own ? ["You", ON_WORD[String(x.channel || "").toLowerCas
 // the subject when it says something the words do not: not over a chat line (none), not the same as the line before's, not the words themselves
 export const subjectOf = (x, prev) => { const sub = String(x?.subject || "").trim(), bare = (v) => String(v || "").replace(/^\s*((re|fw|fwd)\s*:\s*)+/i, "").trim().toLowerCase();
   return !sub || x.own || bare(sub) === bare(prev?.subject) || bare(sub) === bare(x.words) ? "" : sub; };
-const Arrived = ({ mail }) => mail.map((x, i, all) => {
+const Arrived = ({ mail, prev = null }) => mail.map((x, i0, list) => {
+  const all = prev ? [prev, ...list] : list, i = i0 + (prev ? 1 : 0);
   const more = sameAs(all[i - 1], x), stamp = x.at ? when(x.at) : "", again = more && stamp === (all[i - 1].at ? when(all[i - 1].at) : "");
-  return <div key={i} className={`tq-aui-arrived${more ? " tq-aui-arrived-more" : ""}${x.own ? " tq-aui-arrived-own" : ""}`} data-tq-chat-arrived={x.own ? "own" : ""}>
+  return <div key={i0} className={`tq-aui-arrived${more ? " tq-aui-arrived-more" : ""}${x.own ? " tq-aui-arrived-own" : ""}`} data-tq-chat-arrived={x.own ? "own" : ""}>
     {!again && <span className="tq-aui-arrived-head">{more ? stamp : <><ChannelMark channel={x.channel} />
       {[...headOf(x), stamp].filter(Boolean).join(" · ")}</>}</span>}
     {/* ...a mail's subject over its words, once a run (the owner, 2026-11-09: "you can't see anything about the email") - the words are the
@@ -450,9 +452,11 @@ const LiveSteps = ({ steps }) => { const cut = Math.max(0, steps.length - LIVE_S
 const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = workCount(parts);
   return n ? <Fold k={k} quiet={quiet} label={plural(n, "step")}>{parts.map((p, i) => draw(p, i, "everything"))}</Fold>
     : <>{parts.filter((p) => p.type !== "said").map((p, i) => draw(p, i, "everything"))}</>; };
-const TurnWork = ({ data }) => {
-  const at = React.useContext(WorkCtx), now = useAuiState((s) => live(s.message)), ended = useAuiState((s) => !!s.message.metadata?.custom?.summary);
-  const key = foldKey(useAuiState((s) => s.message.id)), level = React.useContext(LevelCtx), chat = React.useContext(ChatCtx);
+const TurnWork = ({ data }) => <TurnWorkView data={data} now={useAuiState((s) => live(s.message))} ended={useAuiState((s) => !!s.message.metadata?.custom?.summary)}
+  k={useAuiState((s) => s.message.id)} />;
+const TurnWorkView = ({ data, now, ended, k }) => {
+  const at = React.useContext(WorkCtx);
+  const key = foldKey(k), level = React.useContext(LevelCtx), chat = React.useContext(ChatCtx);
   // ...AND A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer): a call that never got
   // its result before the answer was filed is drawn done, never circling. IN A CHAT A STEP IS NEVER "FAILED" (the owner, 2026-11-05: "it's just a
   // internal thought failure, for the user the task is getting done. failure means nothing") - a TURN that failed says so in its own words
@@ -825,6 +829,105 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 }
 
 // the arrow of a box whose turn is running: live over words (or a file), and its press holds the line (holdText) - what Enter does there
+// ── THE CONVERSATION: ONE LIST, DRAWN AS IT STANDS (the owner, 2026-11-11: "this needs a rebuild with one pass robust code, with shared code for
+// general and coding agents") ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// The server owns the list (conversation.py): what came in, his lines, his presses, the agent's turns - each where the agent heard it - and
+// what still waits for the agent, apart. This draws it: one row per item, keyed by the item's own name, whatever agent works the task and
+// whatever road it runs on. Nothing here decides an order, a place for a card, or whether a line was heard.
+export function useConversation(tid, on) {
+  const [list, setList] = useState(null), rev = useRef("");
+  const load = useCallback(() => (on ? api.get(`/api/tasks/${tid}/conversation`, { params: { rev: rev.current } }).then(({ data: d }) => {
+    if (!d || d.same) return false;
+    rev.current = d.rev; setList(d); return true;
+  }).catch(() => false) : Promise.resolve(false)), [tid, on]);
+  useEffect(() => { rev.current = ""; setList(null); load(); }, [load]);
+  const going = !!list?.working;
+  // ...a turn at work is read as it goes; at rest the server's own poke (task-changed) brings what is new, and a slow look backs it up
+  useEffect(() => { if (!on) return undefined; const t = setInterval(load, going ? 600 : 5000); return () => clearInterval(t); }, [on, going, load]);
+  useEffect(() => (on ? onLive("task-changed", (ev) => { if (touches(ev, tid)) load(); }) : undefined), [on, tid, load]);
+  return { list, load };
+}
+const INPUTS = ["line", "arrival", "press", "note"];
+const TurnTime = ({ t }) => {
+  const end = t.ended ? new Date(t.ended * 1000) : t.at ? new Date(String(t.at).replace(" ", "T")) : null;
+  if (!end || Number.isNaN(+end)) return null;
+  const ran = t.started && t.ended ? turnStamp({ start: t.started * 1000, end }) : "";
+  return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>· {when(end)}{ran ? ` · ${ran}` : ""}</span>;
+};
+const ConvTurn = ({ t, more, cards, name }) => {
+  const live = t.state === "working" || t.state === "starting";
+  const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { answer: t.text || "" }), [t.steps, t.text, live]);
+  const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
+  const sum = t.summary, words = t.text || (sum ? [sum.about, sum.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : "");
+  const made = at ? turnFiles({ listed: at.listed, id: key, words, did: sum?.did, tid: at.tid, skip: [] }) : [];
+  const names = new Set(made.map((f) => f.name));
+  const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name));
+  const quiet = !live && !hasParts(parts) && !words && !t.fail && !cards?.length && !made.length && !rest.length;
+  if (quiet) return null;
+  return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
+    {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}
+    {!more && <div className="tq-aui-role">{name}{live ? <RunClock start={(t.started || Date.now() / 1000) * 1000} /> : <TurnTime t={t} />}</div>}
+    <div className="tq-aui-agent-body">
+      <TurnWorkView data={{ parts }} now={live} ended={!!t.text && !live} k={t.id} />
+      {!!words && <SaidText text={words} mid={key} />}
+      {live && <div className="tq-aui-thinking" role="status" aria-label="The agent is at work" data-tq-working="" {...(t.state === "starting" ? { "data-tq-starting-line": "" } : {})}><i /><i /><i /></div>}
+      {t.state === "failed" && !!t.fail && <div className="tq-aui-hint" role="alert" data-tq-turn-failed="">⚠ {t.fail}</div>}
+      {!!rest.length && <PublishedPages pages={rest} open />}
+      {!!made.length && <TurnFiles files={made} />}
+      {!!cards?.length && <div data-tq-turn-cards="">{cards}</div>}
+    </div></div>;
+};
+const ConvLine = ({ x, more, waits = false }) => {
+  const stamp = x.at ? when(x.at instanceof Date ? x.at : String(x.at)) : "";
+  return <div className={`tq-aui-message tq-aui-user${more ? " tq-aui-user-more" : ""}`} data-tq-item={x.id} data-tq-chat-line={x.id} {...(waits ? { "data-tq-held": "" } : {})}>
+    {!more && <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{stamp ? ` · ${stamp}` : ""}</div>}
+    <div className="tq-aui-user-bubble" dir="auto">{x.text}</div>
+    {!!x.err && <div className="tq-aui-hint" role="alert">{x.err}</div>}</div>;
+};
+/* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
+   `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
+function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, name, tid, onChanged }) {
+  const used = new Set();
+  const draw = (cs) => (cs || []).flatMap((c) => {
+    const got = nodes.filter((n) => n.rid === c.review && !used.has(n.key)), post = posts.find((p) => p.ReviewId === c.review);
+    got.forEach((n) => used.add(n.key));
+    return [...got.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>),
+      ...(post && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} />] : []),
+      ...(next && c.review === nextRid && !used.has("next") && used.add("next") ? [<Box key="next" data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>{next}</Box>] : [])];
+  });
+  const rows = items.map((x, i) => {
+    const prev = items[i - 1];
+    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn"} cards={draw(x.cards)} name={name} />;
+    if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
+    if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;
+    if (x.kind === "card") { const got = draw([x]); return got.length ? <div key={x.id} className="tq-aui-message tq-aui-agent" data-tq-item={x.id} data-tq-row-cards=""><div className="tq-aui-agent-body">{got}</div></div> : null; }
+    return <div key={x.id} className={`tq-aui-message tq-aui-press${prev && (prev.kind === "press" || prev.kind === "note") ? " tq-aui-press-more" : ""}`} data-tq-item={x.id} data-tq-chat-press="">
+      <div className="tq-aui-press-line">{pressLine(x.text, x.at ? when(String(x.at)) : "")}</div></div>;
+  });
+  // ...a card the list places nowhere (made this instant, the list a read behind) is never lost: under everything, until the list names its turn
+  const loose = nodes.filter((n) => !used.has(n.key));
+  return <>{rows}
+    {!!loose.length && <div className="tq-aui-message tq-aui-agent" data-tq-row-cards="loose"><div className="tq-aui-agent-body">{loose.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>)}</div></div>}
+    {next && !used.has("next") && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
+    {landing}</>;
+}
+/* WHAT WAITS FOR THE AGENT, BY THE BOX: accepted, not yet handed over - never in the conversation until it is (the heard rule) */
+const PendingStrip = ({ items }) => (!items.length ? null : <div className="tq-conv-pending" data-tq-pending="" role="status">
+  <div className="tq-conv-pending-head">Waiting for the agent{items.length > 1 ? ` · ${items.length}` : ""}</div>
+  {items.map((x) => <div key={x.id} className={`tq-conv-pending-row${x.err ? " tq-conv-pending-err" : ""}`} data-tq-pending-item={x.id} data-tq-held="" dir="auto" title={x.text || x.words || ""}>
+    <span className="tq-conv-pending-who">{x.kind === "line" ? "You" : x.kind === "arrival" ? (x.own ? "You, outside" : x.who || "Someone") : ""}</span>
+    <span className="tq-conv-pending-words">{x.err ? `${x.text} - ${x.err}` : x.text || x.words || ""}</span></div>)}
+</div>);
+/* this page's own lines and the server's list as one: a line it sent is drawn at once - in the conversation when the agent was at rest (it is
+   heard as it is sent, its turn under it), by the box when a turn was at work - and the server's copy takes over by the same name */
+const withMine = (list, mine) => {
+  const items = list?.items || [], pending = list?.pending || [], known = new Set([...items, ...pending].map((x) => x.id));
+  const own = mine.filter((l) => !known.has(l.id));
+  const rest = own.filter((l) => l.rest && !l.err), wait = own.filter((l) => !l.rest || l.err);
+  const tail = rest.length && !list?.working ? [{ id: `t:${rest.at(-1).id}:0`, kind: "turn", state: "starting", steps: [], text: "", cards: [], started: +rest.at(-1).at / 1000 }] : [];
+  return { items: [...items, ...rest, ...tail], pending: [...pending, ...wait] };
+};
+
 function HeldSend({ composer, files, onHold }) {
   const [text, setText] = useState(() => composer.getState().text);
   useEffect(() => { const read = () => setText(composer.getState().text); read(); return composer.subscribe(read); }, [composer]);
@@ -835,7 +938,13 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false, waiting = [], box = "",
   onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, turns = null, queued = null, heldStart = null, hint = "", placeholder = "",
-  empty = "", stopShown = false, seed = null, compacting = false }) {
+  empty = "", stopShown = false, seed = null, compacting = false, list = null, reloadList = null }) {
+  // A TASK'S CHAT DRAWS THE SERVER'S LIST (Conversation); the Assistant's own dock keeps its streamed thread
+  const conv = !dock, turnName = React.useContext(AgentNameCtx);
+  const [mine, setMine] = useState([]), merged = useMemo(() => withMine(list, mine), [list, mine]);
+  useEffect(() => { if (!list) return; const known = new Set([...list.items, ...list.pending].map((x) => x.id));
+    setMine((m) => (m.some((l) => known.has(l.id) && !l.err) ? m.filter((l) => !known.has(l.id) || l.err) : m)); }, [list]);
+  const stick = useRef(true), inner = useRef(null), listNow = useRef(list); listNow.current = list;
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -906,6 +1015,31 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     },
   }), [attachmentsRef, dock, onBusyChange, onClearAttachments, onEnded, onSent, onStarted, selectionRef, task.TaskId]);
   const runtime = useLocalRuntime(modelAdapter, { initialMessages: initial(messages) });
+  /* ONE ROAD FOR A LINE HE SENDS, whatever the agent is and whatever it is doing: named here, drawn at once, posted with that name - the
+     server's list answers for it from then on (general.take_line: heard now by an agent at rest, kept for one at work) */
+  const sendLine = useCallback((given) => {
+    const c = runtime.thread.composer, w = String(given ?? c.getState().text).trim(), files = [...attachmentsRef.current];
+    if (!w && !files.length) return;
+    if (given == null) c.setText("");
+    if (files.length) onClearAttachments(files.map((a) => a.path));
+    const id = `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, sel = selectionRef.current || {};
+    setMine((m) => [...m, { id, kind: "line", text: w || withImages("", files.map((a) => a.path)), at: new Date(), rest: !listNow.current?.working }]);
+    stick.current = true;
+    api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id, pick: sel.connectorId || null, model: sel.model || null }, { timeout: 0 })
+      .then((r) => { if (road) road(); else if (r.data?.messages) onSent?.(r.data); reloadList?.(); })
+      .catch((x) => { setMine((m) => m.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))); if (files.length) onAttachBack(files); reloadList?.(); });
+    setTimeout(() => reloadList?.(), 120);
+  }, [runtime, attachmentsRef, selectionRef, onClearAttachments, onAttachBack, onSent, road, reloadList, task.TaskId]);
+  // ...at its end, and held there while he has not moved away from it: what is new draws under what he was reading, never over it
+  useEffect(() => {
+    const v = viewport.current, el = inner.current;
+    if (!conv || !v || !el) return undefined;
+    const on = () => { stick.current = v.scrollHeight - v.scrollTop - v.clientHeight < 56; };
+    const ro = new ResizeObserver(() => { if (stick.current) v.scrollTop = v.scrollHeight; });
+    v.addEventListener("scroll", on, { passive: true }); ro.observe(el);
+    return () => { v.removeEventListener("scroll", on); ro.disconnect(); };
+  }, [conv, !!list]);   // eslint-disable-line react-hooks/exhaustive-deps
+  React.useLayoutEffect(() => { const v = viewport.current; if (conv && v && stick.current) v.scrollTop = v.scrollHeight; }, [conv, merged]);
   /* WHAT ARRIVED WHILE YOU WERE TYPING goes into the thread that is already standing. This used to
      be a key bump, which remounts - and the draft lives in the composer INSIDE this runtime, so the
      2.5s busy poll emptied the box under the owner's fingers every time the agent took another step
@@ -929,7 +1063,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   useEffect(() => {
     if (!prompt?.text || prompted.current === prompt.id) return;
     prompted.current = prompt.id;
-    runtime.thread.append(prompt.text);
+    if (conv) sendLine(prompt.text); else runtime.thread.append(prompt.text);
     onPromptUsed?.(prompt.id);
   }, [onPromptUsed, prompt, runtime]);
   /* "New task for the agent" with no repository: the prompt the owner typed is the first thing
@@ -946,7 +1080,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     if (asked.current || road || messages?.length || !text || !wantsAsk(task)) return;
     asked.current = true;
     onAsked?.();
-    runtime.thread.append(text);
+    if (conv) sendLine(text); else runtime.thread.append(text);
   }, [task, messages, runtime, onAsked]);
 
   // ONE PLACE says what it is doing. Once its steps stream into the thread above, the band repeated the newest of them word for word
@@ -958,7 +1092,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const viewport = useRef(null), said = !!messages?.length, busyNow = useRef(false);
   busyNow.current = !!serverBusy;
   useEffect(() => {
-    if (dock || !said) return undefined;
+    if (dock || conv || !said) return undefined;
     const answer = (v) => [...([...v.querySelectorAll(".tq-aui-agent")].pop()?.querySelectorAll("[data-tq-said]") || [])].pop();
     return stickToEnd(viewport.current, (v) => endTop(v, busyNow.current || runtime.thread.getState().isRunning ? null : answer(v)));
   }, [dock, said, runtime]);
@@ -970,6 +1104,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const [askErr, setAskErr] = useState(""), answering = useRef(false);
   useEffect(() => { setAskErr(""); }, [asking?.request_id]);
   const answerTyped = (e) => {
+    if (conv) { e.preventDefault(); sendLine(); return; }
     // ...a source with its own road (a coding CLI: typed into it, or its session picked back up) takes every line as a held one
     if (!dock && !asking && road) { e.preventDefault(); const c = runtime.thread.composer; holdText(c.getState().text.trim(), c); return; }
     if (dock || !asking) return;
@@ -1039,6 +1174,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     return c.subscribe(() => keepUnsent(id, c.getState().text));
   }, [runtime, dock, task.TaskId]);
   const holdLine = (e) => {
+    if (conv) { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent?.isComposing) { e.preventDefault(); sendLine(); } return; }
     if (dock || asking) return;
     const c = runtime.thread.composer, w = heldLine(e, c.getState().text, !!road || runtime.thread.getState().isRunning);
     if (!w) return;
@@ -1066,6 +1202,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const [landState, setLandState] = useState(null);
   const landAt = landing ? turnOf(messages, landState?.at || "") : null;
   const landNode = landing ? React.cloneElement(landing, { onState: setLandState }) : null;
+  const nextRid = [...(nextAt?.reviews || [])].reverse().find((r) => r.Status === "pending" && ["draft_reply", "draft"].includes(r.Kind))?.ReviewId ?? null;
   const placed = React.useMemo(() => placeCards(turnCards, messages, turns), [turnCards, messages, turns]);
   // ...the chat's cards stand at the foot (no turn has summed it up, none holds the draft): what waits beside them there is "Also"
   const footNext = !dock && nextAt?.next && freshNext(nextAt.reviews) && !summed && !working && !draftHome(nextAt.reviews, messages) && (!chat || messages?.at(-1)?.role !== "assistant");
@@ -1081,7 +1218,28 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   return (
     <AssistantRuntimeProvider runtime={runtime}><LandingCtx.Provider value={landAt && !dock ? { after: landAt, node: landNode } : null}><TurnCardsCtx.Provider value={dock ? [] : placed}><StopCtx.Provider value={dock ? null : onStop}><PressedCtx.Provider value={pressedAt}>
       <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>
-        <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport">
+        <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport" autoScroll={!conv}>
+          {conv ? <div ref={inner} className="tq-conv" data-tq-conv={list ? "loaded" : ""}>
+            {chat && !!list && !merged.items.length && reading}
+            {!!list && !merged.items.length && !!empty && <div className="tq-aui-hint" style={{ margin: "8px 0 16px" }}>{empty}</div>}
+            {!!list && !merged.items.length && !empty && !(chat && reading) && <div className="tq-aui-welcome"><TaskuaryMark size={22} /><div>
+              <div className="tq-aui-welcome-title">Work on this with your assistant</div>
+              <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
+            <Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
+              landing={landNode} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} />
+            {cards}
+            {asking && <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} />}
+            <PublishedPages pages={published} deliver />
+            {!turnCards && !!drafts?.length && <Box data-tq-playbook-drafts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
+              <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>{askNote(drafts[0])}</Typography>
+              {drafts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}</Box>}
+            {!turnCards && !!acts?.length && <Box data-tq-browser-acts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
+              <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>{heldActsLine(acts)}</Typography>
+              {acts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}</Box>}
+            {heldStart}
+            {queued && <div className="tq-aui-message tq-aui-agent" data-tq-queued-turn=""><div className="tq-aui-role">{AGENT_TURN}</div><div className="tq-aui-agent-body">{queued}</div></div>}
+            {closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
+          </div> : <>
           {/* ...where the chat is home, the ask as triage read it is its first line (ChatCtx) */}
           {chat && !messages?.length && reading}
           {/* ...a source that says what an empty chat means (no coding session yet) says so under the reading */}
@@ -1166,8 +1324,10 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             <div className="tq-aui-role">{AGENT_TURN}</div><div className="tq-aui-agent-body">{queued}</div></div>}
           {/* ...AND HOW IT CLOSED, the stream's last line (the owner, 2026-11-06): a closed task is the same chat, its close said in it */}
           {!dock && closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
+          </>}
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">
+            {conv && <PendingStrip items={merged.pending} />}
             {/* NO AI: one small line over the box, its Connect an AI beside it (the owner, 2026-11-06) - the box stays the box */}
             {!dock && noAi}
             {/* A CLOSED task's conversation is read, not typed into: a message started a live session on a done task, which
@@ -1201,7 +1361,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
                   title="Stops this turn - the chat stays, and what you type next carries on" onClick={onStop}><CloseIcon fontSize="small" /></button></ThreadPrimitive.If>}</>}
               /* THE ARROW WHILE IT WORKS (the owner, 2026-11-10: "Arrow works too"): the runtime's Send is off for as long as a turn this pane
                  streams runs, so the arrow stood grey over typed words that Enter would have sent. While it runs the arrow is the held line's */
-              send={dock || asking ? sendArrow : <><ThreadPrimitive.If running={false}>{sendArrow}</ThreadPrimitive.If>
+              send={conv ? <button type="button" className="tq-aui-send" aria-label="Send" data-tq-send="" onClick={() => sendLine()}><SendIcon fontSize="small" /></button>
+                : dock || asking ? sendArrow : <><ThreadPrimitive.If running={false}>{sendArrow}</ThreadPrimitive.If>
                 <ThreadPrimitive.If running><HeldSend composer={runtime.thread.composer} files={attachmentsRef.current.length}
                   onHold={() => { const c = runtime.thread.composer; holdText(c.getState().text.trim(), c); }} /></ThreadPrimitive.If></>} />
             {askErr && <div className="tq-aui-asking-err" role="alert" style={{ padding: "4px 4px 0" }}>{askErr}</div>}
@@ -1276,6 +1437,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ONE CHAT, WHATEVER THE SOURCE (chatStream.chatSource): a coding task's sessions, or the general agent's conversation - and how much of the
   // work it draws (chatDetail.js): this task's own choice, else its kind's default from Settings. Off a task's own chat (the dock, the Wall), as ever
   const source = dock ? "general" : chatSource(task, term), coding = source === "coding";
+  const conv = useConversation(task.TaskId, !dock);
   const cc = useCodingChat(task.TaskId, coding, term, (chat && !dock ? turnCards || [] : []).map((c) => c.at)), defaults = useChatDefaults(), own = useOwnDetail(task.TaskId);
   const level = chat && !dock ? detailFor({ source, settings: defaults, own }) : "steps";
   useEffect(() => { if (cc.got) setRevision((k) => k + 1); }, [cc.got]);
@@ -1565,7 +1727,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs, versions: data?.turnOutputs }}>
     <LocalFiles.Provider value={dock ? null : { tid: task.TaskId }}>
       {/* ...and every other file in the task's outputs folder - one no answer names - at the foot, with what it published or showed */}
-      <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}
+      <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages} list={conv.list} reloadList={conv.load}
         published={dock ? placed.foot : [...placed.foot, ...uncited(data?.outputs, shownMessages.filter((m) => m.role === "assistant").map(textOf), task.TaskId)
           // ...a file its turn draws, or a post's own picture, is not one more row at the foot of a chat
           .filter((r) => !(chat && (shownMessages.some((m) => m.id === r.after) || (data?.cards || []).some((p) => p.post?.image === r.path))))]}

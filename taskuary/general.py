@@ -81,7 +81,8 @@ def wait_line(store, tid: int, text: str, files=None, line_id=None) -> int:
     `line_id`: THE NAME THE PAGE GAVE IT (the spine audit, 2026-11-09). The page that sent a line draws it at once and has to know when the
     conversation has it; it knew by its words and by counting, so a line from another window retired one not yet filed, and "ok" sent twice
     stood once. The name rides the kept row and the turn it becomes (store.take_lines), and comes back on both (waiting_lines, _as_messages)."""
-    wid = store.add_comment(tid, 'owner', WAITING_TYPE, json.dumps({'text': text, 'files': list(files or [])}), line_id=line_id)
+    # ...and EVERY line has a name, the page's or one made here: it is how the ledger says it was heard (conversation.hear), kept or taken
+    wid = store.add_comment(tid, 'owner', WAITING_TYPE, json.dumps({'text': text, 'files': list(files or [])}), line_id=line_id or new_line_id())
     from . import handraise
     handraise.moved(tid)
     return wid
@@ -119,13 +120,18 @@ def box_sent(store, tid: int):
     "The owner sent from the box: what it held again is theirs now, kept or cleared - never offered twice."
     for r in store.list_comments(tid, internal=True):
         if r.get('ActorType') == BOX_TYPE: store.drop_comment(r['CommentId'])
+def new_line_id() -> str: return 's' + uuid.uuid4().hex[:14]
 def waiting_lines(store, tid: int) -> list:
     "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
     return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body']), **({'line': r['LineId']} if r.get('LineId') else {})}
             for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE]
 def take_kept(store, tid: int, ids=None) -> list:
     "The owner's kept lines (`ids`, else all) taken as his lines of the conversation (store.take_lines) - by the turn that takes them, any agent's."
-    return store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'], ids=ids)
+    got = store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'], ids=ids)
+    # ...THE HAND-OVER, written down (conversation.hear): from here each stands in the chat where the agent heard it
+    from . import conversation
+    conversation.hear(store, tid, [r.get('LineId') for r in got])
+    return got
 # A SESSION THAT ENDED UNDER A LINE (failed, closed, idled out) - never "reload the page" (the owner, 2026-11-07): say_line starts a fresh one,
 # which takes the kept line. 'has ended' is what every caller reads it by
 ENDED = 'this assistant session has ended - it starts again with the next line you send'
@@ -2435,6 +2441,8 @@ class GeneralSession:
         if as_owner: self.woke = self.silent = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.owned = as_owner and not brief
         self.busy, self.last = True, time.time()
+        from . import conversation
+        conversation.hear(self.store, self.task_id, turn=True, sid=self.sid)       # the turn begins: what came in and was pressed since is heard with it
         # A NEW TURN MAY FINISH AGAIN (the email walk, 2026-10-29): the mark a self-close leaves stops two hooks wrapping one turn,
         # and it outlived the turn - Continue on an agent that had closed once refused its next [[TASKUARY-DONE]], parked "waiting on you"
         from . import selfclose
@@ -3298,7 +3306,9 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     files = outputs.take_in(tid, files) if files and handles(t) else files
     # ...A START READS THE CHAT FIRST, as it always did (server._refresh_for_turn), at work from the press all the while: a sync that fails
     # refuses the start before anything is kept, its reason under the line on the page
-    if not (tid in OPENING or _at_work(_live_of(tid))): PRESSED[tid] = time.time()       # the turn's clock: the press
+    line_id = line_id or new_line_id()
+    rest = not (tid in OPENING or _at_work(_live_of(tid)))
+    if rest: PRESSED[tid] = time.time()       # the turn's clock: the press
     if prepare is not None and _live_of(tid) is None:
         held = tid in OPENING
         OPENING.add(tid)
@@ -3308,6 +3318,11 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
             raise
         prepare = None
     wid = wait_line(store, tid, text, files, line_id)
+    # ...AN AGENT AT REST HEARS IT NOW (the owner, 2026-11-11: "where the agent listens to it is where it shows"): the line begins its turn, so it
+    # stands in the chat from the press with the turn under it; one sent while a turn works waits by the box until a road takes it (take_kept)
+    if rest:
+        from . import conversation
+        conversation.hear(store, tid, [line_id])
     _IN_FLIGHT[tid] = _IN_FLIGHT.get(tid, 0) + 1
     OPENING.add(tid)
     if not wait:
@@ -3329,7 +3344,10 @@ def _start_line(store, tid, t, text, files, actor, line_id, wid, prepare, kw):
         from . import waitroom
         out = waitroom.deliver(store, tid)
         # ...held where nothing will take it now (a full house, a stranger's task, no AI): kept and said, never "working" over nothing
-        if out.get('state') in waitroom.HELD and not out.get('delivered'): answered(tid, every=True)
+        if out.get('state') in waitroom.HELD and not out.get('delivered'):
+            answered(tid, every=True)
+            from . import conversation
+            conversation.unhear(store, tid, [line_id])        # ...nobody took it: it waits by the box again
         return out
     except Exception as e:
         if not handles(t):
@@ -3346,7 +3364,10 @@ def _start_line(store, tid, t, text, files, actor, line_id, wid, prepare, kw):
 
 def answered(tid: int, n: int = 1, every: bool = False):
     "A turn took (or answered) `n` of the lines accepted for it, or its start failed (`every`): the mark goes with the last of them."
-    n = 0 if every else _IN_FLIGHT.get(tid, n) - n
+    # ...THE KEPT LINES ARE THE COUNT (the recorded walk, 2026-11-11: a coding chat read "working" four minutes after its answer - a line
+    # steered into the turn was taken and never counted off): where the task's session can say what still waits, that is what is left
+    st = getattr(_live_of(tid), 'store', None)
+    n = 0 if every else len(waiting_lines(st, tid)) if st is not None else _IN_FLIGHT.get(tid, n) - n
     if n > 0: _IN_FLIGHT[tid] = n; return
     _IN_FLIGHT.pop(tid, None); PRESSED.pop(tid, None); OPENING.discard(tid)
 

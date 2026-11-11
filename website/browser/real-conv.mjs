@@ -1,0 +1,91 @@
+// THE CONVERSATION, WALKED ON THE REAL CLI WITH A PER-FRAME SAMPLER (not a test: nothing here runs in CI). node real-conv.mjs <name> <general|acp|pty> [steps...]
+// Each animation frame the page writes down what the chat holds - the items in order (their names, where each stands), what waits by the box,
+// the scroll - and the rules are read off the frames afterwards (check): his line once from the frame it is heard, nothing new above what was
+// drawn, the working line under it in that frame, the scroll never going back, a waiting line never in the conversation.
+import path from "node:path";
+import { api, connect, open, shot, save, sleep, type, press, buttons, out, info } from "./real-lib.mjs";
+import { record } from "./recorder.mjs";
+
+const sampler = () => {
+  window.__frames = []; let last = "";
+  const tick = () => {
+    const vp = document.querySelector("[data-tq-task-page] .tq-aui-viewport");
+    if (vp) {
+      const items = [...vp.querySelectorAll("[data-tq-item]")].map((e) => [e.getAttribute("data-tq-item"), e.getAttribute("data-tq-turn") || "", Math.round(e.getBoundingClientRect().top - vp.getBoundingClientRect().top + vp.scrollTop)]);
+      const pend = [...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].map((e) => e.getAttribute("data-tq-pending-item"));
+      const f = { items, pend, top: Math.round(vp.scrollTop), h: vp.scrollHeight, ch: vp.clientHeight, working: !!vp.querySelector("[data-tq-working]"), cards: vp.querySelectorAll("[data-tq-turn-cards] button:not([disabled])").length };
+      const sig = JSON.stringify(f);
+      if (sig !== last) { last = sig; window.__frames.push({ t: Math.round(performance.now()), ...f }); }
+    }
+    window.__raf = requestAnimationFrame(tick);
+  };
+  tick();
+};
+export function check(frames) {
+  const bad = [], say = (t, m) => bad.push(`${t} ms: ${m}`);
+  let prev = null; const heard = new Set();
+  for (const f of frames) {
+    const ids = f.items.map((x) => x[0]), seen = new Set();
+    for (const id of ids) { if (seen.has(id)) say(f.t, `${id} drawn twice`); seen.add(id); }
+    for (const id of f.pend) if (seen.has(id)) say(f.t, `${id} is by the box AND in the conversation`);
+    for (const id of heard) if (!seen.has(id)) say(f.t, `${id} was in the conversation and is gone`);
+    if (prev) {
+      const was = new Set(prev.items.map((x) => x[0])), lastOld = Math.max(-1, ...ids.map((id, i) => (was.has(id) ? i : -1)));
+      ids.forEach((id, i) => { if (!was.has(id) && i < lastOld) say(f.t, `${id} drawn ABOVE ${ids[lastOld]}, which was already there`); });
+      // ...the view went back: only where it is no longer at its end, or went back though nothing above got shorter (a fold closing at the end keeps it pinned)
+      if (f.top < prev.top - 2 && (f.h - f.top - f.ch > 60 || f.h >= prev.h)) say(f.t, `scrolled back ${prev.top} -> ${f.top} (height ${prev.h} -> ${f.h})`);
+      // his line, the frame it enters the conversation: a turn at work right under it
+      ids.forEach((id, i) => { if (!was.has(id) && /^(l|s)[0-9a-z]/.test(id) && !f.items.slice(i + 1).some((x) => x[1] === "starting" || x[1] === "working")) say(f.t, `${id} heard with no turn at work under it in that frame`); });
+    }
+    ids.filter((id) => !id.startsWith("t:")).forEach((id) => heard.add(id)); prev = f;
+  }
+  return bad;
+}
+const frames = (page) => page.evaluate(() => window.__frames);
+const working = (page) => page.evaluate(() => !!document.querySelector("[data-tq-task-page] .tq-aui-viewport [data-tq-working]"));
+// at rest by the SERVER's word and the page's both - the two disagreeing for long is a finding (said when it ends)
+async function rest(page, tid, timeout = 300000, settle = 4000) { const end = Date.now() + timeout; let calm = 0, split = 0, how = "";
+  while (Date.now() < end) { const dom = await working(page), srv = (await api(`/api/tasks/${tid}/conversation`)).working;
+    if (dom !== srv) { split += 400; how = `page ${dom ? "working" : "at rest"}, server ${srv ? "working" : "at rest"}`; }
+    if (dom || srv) calm = 0; else if ((calm += 400) >= settle) { if (split > 2500) console.log(`FINDING: page and server disagreed on "working" for ${split} ms (${how})`); return true; }
+    await sleep(400); } console.log("FINDING: never came to rest"); return false; }
+async function untilWorking(page, timeout = 60000) { const end = Date.now() + timeout; while (Date.now() < end) { if (await working(page)) return true; await sleep(100); } return false; }
+
+if (process.argv[1]?.endsWith("real-conv.mjs")) {
+  const [name, road = "general", ...steps] = process.argv.slice(2);
+  let tid;
+  if (road === "general") {
+    const got = await api("/api/ingest/push", { channel: "email", subject: "Offsite venue", from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`,
+      body: "Hi Alex,\n\nCan you suggest two venues for the March offsite, about 40 people, and tell me which one you would pick? A short answer is fine.\n\nThanks,\nGail" });
+    console.log("push", JSON.stringify(got).slice(0, 200)); tid = got.task_id;
+  } else { const got = await api("/api/fixture/coding", { git: info.git, real: true, pty: road === "pty" }); tid = got.taskId; }
+  const { browser, page } = await connect();
+  await page.reload({ waitUntil: "domcontentloaded" }); await sleep(3000);
+  await open(page, tid);
+  await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 120000 });
+  const rec = await record(page, path.join(out, "video", name));
+  await page.evaluate(sampler);
+  const snap = async (n) => { await shot(page, `${name}-${n}`); const c = await api(`/api/tasks/${tid}/conversation`); await save(`${name}-${n}-list.json`, c);
+    console.log(`[${n}]`, c.items.map((x) => `${x.kind}${x.state ? ":" + x.state : ""}${x.cards?.length ? "+" + x.cards.length + "c" : ""}`).join(" "), "| pending", c.pending.length, "| working", c.working); };
+  for (const s of steps.length ? steps : ["rest", "say:Make it one paragraph shorter.", "rest"]) {
+    const [k, ...r] = s.split(":"), arg = r.join(":");
+    if (k === "rest") { await rest(page, tid); await snap(`rest${Date.now() % 100000}`); }
+    else if (k === "say") { await type(page, arg); await sleep(300); }
+    else if (k === "busy") await untilWorking(page);                     // wait until a turn is at work
+    else if (k === "wait") await sleep(Number(arg));
+    else if (k === "mail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: "email", subject: "Re: Offsite venue", from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
+    else if (k === "press") console.log(await press(page, new RegExp(arg), "[data-tq-task-page]"));
+    else if (k === "flood") { const n = Number(arg) || 50;
+      for (let i = 0; i < n; i++) { const w = `flood line ${i + 1} of ${n}: note ${i + 1}`;
+        if (i % 3 === 0) await api("/api/ingest/push", { channel: "email", subject: "Re: Offsite venue", from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: w });
+        else api(`/api/tasks/${tid}/assistant/messages`, { text: w, line_id: `lflood${name}${i}` }).catch(() => {});      // not waited for: typed as fast as he can
+        await sleep(150); } }
+    else if (k === "snap") await snap(arg || "snap");
+  }
+  const fr = await frames(page), bad = check(fr);
+  await save(`${name}-frames.json`, fr); await save(`${name}-findings.txt`, bad.join("\n") || "no rule broken");
+  await rec.stop({ sheet: 12 });
+  console.log("FRAMES", fr.length, "RULES BROKEN", bad.length); console.log(bad.slice(0, 25).join("\n"));
+  console.log("TASK", tid, "BUTTONS", (await buttons(page)).slice(0, 30));
+  await browser.disconnect();
+}

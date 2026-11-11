@@ -177,6 +177,9 @@ const read = (url) => {
   // the Agent work card's record (sessionrecord.py): the demo keeps no CLI logs, so each filed report is a session
   const m0 = p.match(/^\/api\/tasks\/(\d+)\/record$/);
   if (m0) return demoRecord(state["/api/tasks/detail"]?.[m0[1]]);
+  // the chat's one list (conversation.py), read off the same recorded conversation: the demo keeps turns already written, never a ledger
+  const mc = p.match(/^\/api\/tasks\/(\d+)\/conversation$/);
+  if (mc) return demoConversation(state["/api/tasks/detail"]?.[`${mc[1]}:assistant`]);
   let m = p.match(/^\/api\/tasks\/(\d+)\/assistant$/);
   if (m) return clone(state["/api/tasks/detail"]?.[`${m[1]}:assistant`]) || { messages: [], providers: [], session: null };
   m = p.match(/^\/api\/tasks\/(\d+)$/);
@@ -390,6 +393,20 @@ const scriptedSay = (asked, key) => {
 // another task, React stops listening but this timer still completes and files the reply in the
 // recorded task state. Coming back therefore behaves like the desktop server instead of losing
 // both the progress and the answer at navigation time.
+const demoConversation = (box) => {
+  const items = []; let anchor = "0", n = 0;
+  const said = (m) => (m.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
+  for (const m of box?.messages || []) {
+    if (m.role === "assistant") items.push({ id: `t:${anchor}:${n++}`, kind: "turn", state: "done", steps: [], text: said(m), cards: [], at: m.createdAt, answer: m.id, ...(m.summary ? { summary: m.summary } : {}) });
+    else if (m.press) items.push({ id: `p:${m.id}`, kind: "press", text: said(m), at: m.createdAt });
+    else if (m.brief) (m.mail || []).forEach((x, i) => { anchor = `m:${x.mid || `${m.id}-${i}`}`; n = 0; items.push({ ...x, id: anchor, kind: "arrival" }); });
+    else { anchor = m.line || m.id; n = 0; items.push({ id: anchor, kind: "line", text: said(m), at: m.createdAt, files: [] }); }
+  }
+  const busy = !!box?.session?.busy;
+  if (busy) items.push({ id: `t:${anchor}:${n}`, kind: "turn", state: "working", steps: [], text: "", cards: [], started: Date.now() / 1000 });
+  return { rev: `${items.length}:${busy}:${items.at(-1)?.id || ""}`, items, pending: [], working: busy };
+};
+
 export const startDemoAssistant = (taskId, body, emit = () => {}) => {
   const box = assistantBox(taskId);
   const asked = String(body?.text || "").trim();

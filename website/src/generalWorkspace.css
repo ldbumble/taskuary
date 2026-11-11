@@ -203,3 +203,11 @@
 .tq-aui-press-cmd summary { cursor: pointer; display: inline; margin-left: 6px; }
 .tq-aui-press-cmd code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; font-size: 11.5px; }
 .tq-aui-chat .tq-aui-agent-more { margin-top: -8px; }
+
+/* THE CONVERSATION'S PENDING STRIP (Conversation.PendingStrip): what was accepted and waits for the agent, by the box - never in the chat until heard */
+.tq-conv-pending { margin: 0 auto 8px; max-width: 760px; padding: 6px 10px; border: 1px dashed var(--tq-border, #d9d4cb); border-radius: 10px; background: var(--tq-panel-2, #f4f1ea); max-height: 132px; overflow-y: auto; }
+.tq-conv-pending-head { font-size: 11px; font-weight: 600; color: var(--tq-muted, #8b877e); margin-bottom: 2px; }
+.tq-conv-pending-row { display: flex; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--tq-text, #292824); }
+.tq-conv-pending-who { flex: 0 0 auto; color: var(--tq-muted, #8b877e); }
+.tq-conv-pending-words { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-conv-pending-err .tq-conv-pending-words { color: var(--tq-danger, #b3261e); white-space: normal; }

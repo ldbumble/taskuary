@@ -421,6 +421,12 @@ def said(trace: list) -> str:
 
 def keep_turn(tid: int, reply_id, trace: list):
     """A general turn's tool calls and thinking, filed under the reply they led to (general.send_prompt)."""
+    if not (steps := trace_steps(trace)): return
+    with _gen_path(tid).open('a', encoding='utf-8') as f: f.write(json.dumps({'reply': reply_id, 'steps': steps}) + '\n')
+
+
+def trace_steps(trace: list) -> list:
+    "A chat turn's trace as steps, the one shape every road's record reads in - the turn at work's too (conversation.items)."
     from .viewspec import MARK
     steps, calls = [], {}
     for e in trace or []:
@@ -436,8 +442,7 @@ def keep_turn(tid: int, reply_id, trace: list):
         elif k == 'progress' and name in ('text', 'agent_message') and str(d or '').strip(): steps.append({'k': 'said', 'text': _cut(d, SAID_N)})
         elif k == 'tool_result' and isinstance(d, dict) and d.get('is_error'): steps.append({'k': 'error', 'text': _cut(d.get('result'), 400)})
         elif k == 'error': steps.append({'k': 'error', 'text': _cut((d or {}).get('result') if isinstance(d, dict) else d, 400)})
-    if not steps: return
-    with _gen_path(tid).open('a', encoding='utf-8') as f: f.write(json.dumps({'reply': reply_id, 'steps': steps}) + '\n')
+    return steps
 
 
 # TASKUARY'S INSTRUCTIONS ARE NOT THE OWNER'S WORDS (the owner, 2026-10-30): a coding agent's log has the prompt Taskuary typed into it

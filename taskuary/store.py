@@ -578,6 +578,10 @@ CREATE TABLE IF NOT EXISTS batch_item (ItemId INTEGER PRIMARY KEY, TaskId INTEGE
 CREATE INDEX IF NOT EXISTS idx_batch_item_conv ON batch_item(ConversationId);
 CREATE TABLE IF NOT EXISTS waitroom (WId INTEGER PRIMARY KEY, TaskId INTEGER, Note TEXT, CreatedBy TEXT,
   CreatedAt TEXT, DeliveredAt TEXT, How TEXT);
+-- WHAT THE AGENT HEARD, AND WHEN (conversation.py): one row per input handed to a task's agent - his line (by the name it was sent under), a
+-- message that came in, a press - and one per turn begun. An input is in it once: that is the chat's "told once", kept by the key.
+CREATE TABLE IF NOT EXISTS heard (HId INTEGER PRIMARY KEY, TaskId INTEGER, Kind TEXT, Ref TEXT, At REAL, Grp INTEGER, Seq INTEGER, Sid TEXT,
+  UNIQUE(TaskId, Kind, Ref));
 -- The agent wall (blackboard.py): what one agent leaves for the next one in the same
 -- checkout. Derived facts (who holds which file) are read off git and the run trace and are
 -- never stored; this is the part only the agent knows - what it is doing, what it found, what

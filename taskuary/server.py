@@ -2434,6 +2434,15 @@ def _assistant_payload(task_id: int, session=None):
 def assistant_state(task_id: int):
     return _assistant_payload(task_id)
 
+@app.get('/api/tasks/{task_id}/conversation')
+def conversation_list(task_id: int, rev: str = ''):
+    """THE TASK'S CHAT, ONE LIST FOR EVERY KIND OF AGENT (conversation.items): what the page draws, in order, and what waits by the box.
+    `rev`: the list the page already holds - unchanged, only its name comes back."""
+    from . import conversation
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    got = conversation.items(store, task_id)
+    return {'rev': got['rev'], 'same': True} if rev and rev == got['rev'] else got
+
 @app.post('/api/tasks/{task_id}/assistant/session')
 def assistant_session(task_id: int, body: AssistantSessionBody = None):
     from . import general
@@ -2507,8 +2516,12 @@ def assistant_message(task_id: int, body: AssistantMessageBody):
     from . import codingchat, general
     _chat_kind(task_id)
     if (said := _demo_turn(task_id, body.text, _line_id(body))) is not None: return {'reply': said, **_assistant_payload(task_id)}
-    try: out = _say(task_id, body)
+    # ...A LINE SENT WHILE A TURN WORKS IS KEPT, AND THIS ANSWERS (the flood, 2026-11-11: fifty lines held fifty requests open until the turn
+    # ended): it waits by the box (conversation.items `pending`) and the turn that takes it is the one that answers for it
+    busy = general.at_work(task_id)
+    try: out = _say(task_id, body, wait=not busy)
     except (ValueError, RuntimeError) as e: return _chat_failed(e)
+    if busy: return {'reply': '', 'kept': True}
     if not general.handles(store.get_task(task_id)): return {'reply': '', 'handed': out, **codingchat.chat(store, task_id)}
     session, reply = out
     return {'reply': reply, **_assistant_payload(task_id, session)}

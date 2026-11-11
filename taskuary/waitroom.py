@@ -183,7 +183,12 @@ def deliver(store, tid: int, new: int = None) -> dict:
     # ONE NOTE, ONE HANDOVER (2026-11-09): the owner's POST steered a line in, and before it marked the line handed over (a slow store:
     # 4 s) the turn ended and the clock's deliver read it as still waiting - the chat drew it twice. A task's deliveries take turns.
     with _DLOCK: lk = _DELIVERING.setdefault(tid, threading.RLock())
-    with lk: return _deliver(store, tid, new)
+    with lk: out = _deliver(store, tid, new)
+    # ...held where nothing will take them now: kept by the box, and never "working" over nothing (general.OPENING)
+    if out.get('state') in HELD and not out.get('delivered'):
+        from . import general
+        general.answered(tid, every=True)
+    return out
 
 
 def _lines(store, tid: int) -> list:
@@ -204,6 +209,15 @@ def _handed(store, tid: int, notes: list, how: str):
     store.deliver_waiting([x['WId'] for x in notes if x.get('WId') is not None], how)
     if (ids := [x['line'] for x in notes if x.get('line')]):
         general.take_kept(store, tid, set(ids))
+    # ...and what Taskuary's own note told it of (a message that came in, a press) is heard with that note (conversation.hear)
+    if any((x.get('CreatedBy') or 'owner') == 'router' for x in notes):
+        from . import conversation
+        conversation.hear(store, tid, turn=True)
+    # ...typed into a PANE, its own phase says it works from here (a chat's turn and an ACP session's say so themselves, at their end): the
+    # start in flight for these lines is over - marked before they were taken, it stayed "working" for good (the recorded walk, 2026-11-11)
+    from . import terminal as term
+    t = next((x for x in list(term.SESSIONS.values()) if x.task_id == tid and x.alive), None)
+    if t is not None and not term.is_acp(t) and not isinstance(t, general.GeneralSession): general.answered(tid, every=True)
 
 
 def _shown(notes: list) -> list:
@@ -287,7 +301,6 @@ def _deliver(store, tid: int, new: int = None) -> dict:
                 from . import sessionrecord
                 sessionrecord.keep_seed(tid, said_)
             how = term.tell(t, said_)
-            if (n := sum(bool(x.get('line')) for x in notes)): general.answered(tid, n)     # typed in: the pane's own phase says it works from here
         _handed(store, tid, notes, 'typed')
         # ...the owner's own lines are his line in the chat and nothing more (a press is one quiet line): no machinery under them
         if not all(x.get('line') for x in notes):
@@ -343,9 +356,6 @@ def reopen_coding(store, tid: int, notes: list, said: str, actor: str = 'router'
         how = 'seeded'
     t = term.SESSIONS.get((got or {}).get('sid')) or next((x for x in list(term.SESSIONS.values()) if x.task_id == tid and x.alive), None)
     if t is not None and term.is_acp(t): t.carries(_shown(notes))
-    elif (n := sum(bool(x.get('line')) for x in notes)):
-        from . import general
-        general.answered(tid, n)          # a pane typed its seed: its own phase says it works from here
     return how
 
 

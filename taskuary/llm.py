@@ -304,6 +304,10 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     # `read_only` is explicit for scheduled reports: a folder tells the agent where it may READ,
     # not whether it may write. None preserves the older caller contract where a cwd meant hands.
     no_hands = read_only if read_only is not None else not (cwd or cli_tools)
+    # A ONE-SHOT WITH NO HANDS READS NONE OF THE OWNER'S OWN CLI SETUP either (agents._own_settings, as the Assistant and a general task):
+    # their CLAUDE.md, skills and plugins rode every verdict, after the cached instructions and so billed whole each time - 5,624 tokens
+    # written a call against 865 without them, measured on the real CLI (2026-11-11). A classifier has no use for a coding style guide
+    if no_hands and not keep: prof['user_settings'] = False
     raw_args = prof.get('args')          # the profile's own, before any road below restricts them
     if not no_hands and cwd: prof['cwd'] = cwd
     elif not no_hands and cli_tools:
@@ -447,6 +451,11 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
             # conversation (clipool keys on the command) stays warm until the instructions actually change. Without
             # hands it REPLACES Claude Code's own coding prompt; with tools it is appended to it.
             from . import config
+            # ...and ONLY WHAT EVERY CALL SHARES is in that file (stable()'s blocks): Claude Code caches its system prompt as one piece,
+            # so this call's own part at its end - the evidence picked for one sender - re-billed the whole guide on every mail (23,376
+            # tokens written, none read, against 17,720 read with it under the instructions; measured on the real CLI, 2026-11-11).
+            # It leads the turn instead, above the message it is about
+            if getattr(system, 'blocks', None) and system.rest.strip(): system, user = ''.join(system.blocks), f'{system.rest.strip()}\n\n{user}'
             folder = config.home() / 'prompts'; folder.mkdir(parents=True, exist_ok=True)
             path = folder / f"system-{hashlib.sha1(system.encode('utf-8')).hexdigest()[:16]}.md"
             if not path.exists(): path.write_text(system, encoding='utf-8')

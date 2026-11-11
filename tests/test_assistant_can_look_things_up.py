@@ -73,6 +73,39 @@ class AssistantToolsTests(unittest.TestCase):
         # its instructions ride as the system prompt (a file), which adds no tool of any kind (2026-09-24)
         self.assertEqual(args[5:6], ['--system-prompt-file']); self.assertEqual(len(args), 7)
 
+    def test_two_mails_share_one_cached_system_prompt_on_the_cli(self):
+        """Claude Code caches its system prompt whole: one mail's own evidence at its end re-billed the guide on every mail (measured on
+        the real CLI, 2026-11-11). The file holds what every call shares; the call's own part leads the turn, above the message."""
+        from pathlib import Path
+        store = MemoryStore(); a_claude(self)
+        seen = []
+        def run_cli(profile, prompt, trace, resume=None, **kwargs):
+            a = profile['args']; seen.append((a[a.index('--system-prompt-file') + 1], prompt)); return 'ok', None, None
+        guide = 'THE GUIDE. ' * 300
+        with mock.patch('taskuary.agents.run_cli', side_effect=run_cli):
+            brain = llm.make_cli_llm(store, 'claude')
+            brain(llm.stable(guide, '\n\nMEMORY', rest='\n\nEVIDENCE - Gail Moreno handles payroll.'), '{"from": "gail@northwind.example"}')
+            brain(llm.stable(guide, '\n\nMEMORY', rest='\n\nEVIDENCE - Ray Colton handles overtime.'), '{"from": "ray@northwind.example"}')
+            brain(llm.stable(guide, '\n\nMEMORY'), '{"from": "erin@northwind.example"}')
+        self.assertEqual(len({f for f, _ in seen}), 1)                               # the same bytes: the provider reads them from its cache
+        self.assertEqual(Path(seen[0][0]).read_text(encoding='utf-8'), guide + '\n\nMEMORY')
+        self.assertEqual(seen[0][1], 'EVIDENCE - Gail Moreno handles payroll.\n\n{"from": "gail@northwind.example"}')   # nothing is dropped
+        self.assertEqual(seen[2][1], '{"from": "erin@northwind.example"}')
+
+    def test_a_one_shot_with_no_hands_reads_none_of_the_owners_cli_setup(self):
+        """Their CLAUDE.md, skills and plugins rode every verdict uncached - 5,624 tokens a call against 865 (real CLI, 2026-11-11)."""
+        from taskuary import agents
+        store = MemoryStore(); a_claude(self)
+        seen = {}
+        def run_cli(profile, prompt, trace, resume=None, **kwargs):
+            seen.update(profile=profile); return 'ok', None, None
+        with mock.patch('taskuary.agents.run_cli', side_effect=run_cli), mock.patch('taskuary.agents.cli_has_flag', return_value=True):
+            llm.make_cli_llm(store, 'claude')('SYS', 'USER')
+            self.assertEqual(agents._own_settings(seen['profile'], 'claude'), ['--setting-sources', 'project,local'])
+            # ...and a run with hands in the owner's own checkout keeps it all, as before
+            llm.make_cli_llm(store, 'claude', cwd='.')('SYS', 'USER')
+            self.assertEqual(agents._own_settings(seen['profile'], 'claude'), [])
+
 
 class AssistantProviderTests(unittest.TestCase):
     @mock.patch('taskuary.agents.runs_here', lambda p: bool((p or {}).get('cmd')))   # the CLI it connects counts as installed: CI has none on PATH

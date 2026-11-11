@@ -4606,7 +4606,9 @@ def end_turn(store, line: list, actor: str = 'owner', write: bool = True) -> dic
     opens = [{'verb': 'open', 'key': i['key'], 'label': ' · '.join(x for x in (
                  f"Open {i.get('ref') or ''}".strip(), _title_cut(' '.join(str(i.get('title') or 'it').split()), 50)) if x)}
              for i in tasks[:3 if desk else 10]]
-    if line or tasks: say, chips = ('' if desk else "That's the bottom of the list."), [buttons.chip('walk'), *opens]
+    # ...the walk again on the BAR, beside Back: the bar is navigation, and an item's row under an empty line drew it nowhere - Back alone
+    # (the owner, 2026-11-10: "where is the button to start over?")
+    if line or tasks: say, chips = ('' if desk else "That's the bottom of the list."), [{**buttons.chip('walk'), 'bar': True}, *opens]
     else: say, chips = all_done(store), []
     if write: record(store, tid, 'assistant', say, {'kind': 'words', 'key': None, 'chips': chips} if chips else None)
     return {'item': None, 'say': say, 'options': [], 'chips': chips, 'left': len(line), 'exhausted': None, 'over': True}

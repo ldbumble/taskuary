@@ -1204,7 +1204,8 @@ class EndOfWalkTests(unittest.TestCase):
         out = concierge.end_turn(MemoryStore(), rows)
         self.assertTrue(out['over'])
         self.assertEqual(out['say'], '')
-        self.assertEqual(out['chips'][0], {'verb': 'walk', 'label': 'Walk me through my tasks', 'hint': buttons.hint('walk')})
+        # ...on the bar, beside Back: it is navigation (the owner, 2026-11-10: "where is the button to start over?" - the bar held Back alone)
+        self.assertEqual(out['chips'][0], {'verb': 'walk', 'label': 'Walk me through my tasks', 'hint': buttons.hint('walk'), 'bar': True})
         self.assertEqual([c.get('key') for c in out['chips']], [None, 'task:1', 'task:2', 'task:3'])
 
     def test_a_task_waiting_on_someone_else_is_still_walked_again(self):

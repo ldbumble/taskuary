@@ -57,7 +57,10 @@ test("a running turn shows its steps open, the newest six, and ONE clock - its w
   assert.match(ws, /const LIVE_SHOWN = 6;/);
   assert.match(ws, /data-tq-live-steps=""/);
   assert.match(ws, /plural\(cut, "earlier step"\)/);
-  assert.match(ws, /const stepsWord = \(parts\) => \{ const n = workCount\(parts\); return n \? plural\(n, "step"\) : "Along the way"; \};/, "an ended turn folds to N steps");
+  assert.match(ws, /const WorkFold = \(\{ k, quiet = false, parts, draw \}\) => \{ const n = workCount\(parts\);\s+return n \? <Fold k=\{k\} quiet=\{quiet\} label=\{plural\(n, "step"\)\}>/, "an ended turn folds to N steps");
+  // ...and a fold with no step in it is never drawn: "Along the way ▸" over a turn the app started, before its first step (the overnight walk, 2026-11-11)
+  assert.doesNotMatch(ws, /"Along the way"/);
+  assert.match(ws, /: <>\{parts\.filter\(\(p\) => p\.type !== "said"\)\.map\(\(p, i\) => draw\(p, i, "everything"\)\)\}<\/>; \};/, "its notes stand open");
   assert.doesNotMatch(ws, /<Ticking|data-tq-working-for/, "the head's \"working 0:03\" is gone (the owner, 2026-11-06)");
   assert.doesNotMatch(ws, /Working on this…<\/span>/, "no working line: the head's clock (RunClock) and the spin");
   assert.match(ws, /· \{when\(new Date\(start\)\)\} · ran \{elapsedText\(Math\.max\(0, now - start\)\)\}/);

@@ -445,7 +445,11 @@ const LiveSteps = ({ steps }) => { const cut = Math.max(0, steps.length - LIVE_S
   return <div className="tq-aui-live-steps" data-tq-live-steps="" role="status" aria-live="polite">
     {!!cut && <details className="tq-aui-live-earlier"><summary>{plural(cut, "earlier step")}</summary><AgentSteps data={{ steps: steps.slice(0, cut) }} /></details>}
     <AgentSteps data={{ steps: steps.slice(cut) }} /></div>; };
-const stepsWord = (parts) => { const n = workCount(parts); return n ? plural(n, "step") : "Along the way"; };
+// ONE RULE FOR EVERY FOLD OF A TURN'S WORK: it is drawn round steps of work. One with none in it - only Taskuary's own notes, as a turn the app
+// started holds before its first step - read "Along the way ▸" over nothing he could see (the overnight walk, 2026-11-11): its notes stand open
+const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = workCount(parts);
+  return n ? <Fold k={k} quiet={quiet} label={plural(n, "step")}>{parts.map((p, i) => draw(p, i, "everything"))}</Fold>
+    : <>{parts.filter((p) => p.type !== "said").map((p, i) => draw(p, i, "everything"))}</>; };
 const TurnWork = ({ data }) => {
   const at = React.useContext(WorkCtx), now = useAuiState((s) => live(s.message)), ended = useAuiState((s) => !!s.message.metadata?.custom?.summary);
   const key = foldKey(useAuiState((s) => s.message.id)), level = React.useContext(LevelCtx), chat = React.useContext(ChatCtx);
@@ -469,13 +473,13 @@ const TurnWork = ({ data }) => {
     // IN THE ORDER IT HAPPENED (the owner, 2026-11-06: "never write above what was written already"): a group with a call still running stays
     // open with its spinner, and what the agent says after it draws below it
     : now && (i === last || p.steps.some((x) => x.status === "running")) ? <LiveSteps key={p.id} steps={p.steps} />
-    : <Fold key={p.id} k={`${key}:${p.id}`} label={stepsWord([p])}><AgentSteps data={{ steps: p.steps }} /></Fold>;
+    : <WorkFold key={p.id} k={`${key}:${p.id}`} parts={[p]} draw={draw} />;
   // SUMMARY: the agent's words, in order; every step, edit and plan behind one quiet "n steps" line over them that opens on them all. A turn its
   // summary sums up folds whole - its summary says the words
   if (level === "summary") {
     // ...and a view the agent showed is what it chose to put in front of the owner: never folded away
     const out = (p) => p.type === "view" || p.type === "files" || (!ended && p.type === "said"), said = parts.filter(out), rest = parts.filter((p) => !out(p));
-    return <>{rest.some((p) => p.type !== "said") && <Fold k={`${key}:all`} quiet label={stepsWord(rest)}>{rest.map((p, i) => draw(p, i, "everything"))}</Fold>}
+    return <>{rest.some((p) => p.type !== "said") && <WorkFold k={`${key}:all`} quiet parts={rest} draw={draw} />}
       {said.map((p, i) => draw(p, i, "everything"))}</>;
   }
   return <>{parts.map((p, i) => draw(p, i, level))}</>;

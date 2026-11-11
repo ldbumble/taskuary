@@ -126,13 +126,13 @@ test("the detail level: Everything for coding work, Summary for other work, Sett
 test("the levels draw: Summary folds every step behind one quiet line, Steps folds each group, Everything opens every call", () => {
   const tw = gw.slice(gw.indexOf("const TurnWork = "), gw.indexOf("// ...and with none of its steps on screen yet"));
   assert.match(tw, /if \(level === "summary"\) \{/);
-  assert.match(tw, /<Fold k=\{`\$\{key\}:all`\} quiet label=\{stepsWord\(rest\)\}>/);
+  assert.match(tw, /<WorkFold k=\{`\$\{key\}:all`\} quiet parts=\{rest\} draw=\{draw\} \/>/);
   // ...its words stay at Summary, and so does a view it showed (ViewSpec.jsx): never folded away
   assert.match(tw, /const out = \(p\) => p\.type === "view" \|\| p\.type === "files" \|\| \(!ended && p\.type === "said"\)/);
   assert.match(tw, /\{said\.map\(\(p, i\) => draw\(p, i, "everything"\)\)\}/, "its words stay at Summary");
   assert.match(tw, /p\.type === "view" \? <ViewSpec key=\{p\.id\} spec=\{p\.spec\} raw=\{p\.raw\} \/>/);
   assert.match(tw, /lvl === "everything" \? <AgentSteps key=\{p\.id\} data=\{\{ steps: p\.steps \}\} \/>/);
-  assert.match(tw, /: <Fold key=\{p\.id\} k=\{`\$\{key\}:\$\{p\.id\}`\} label=\{stepsWord\(\[p\]\)\}>/);
+  assert.match(tw, /: <WorkFold key=\{p\.id\} k=\{`\$\{key\}:\$\{p\.id\}`\} parts=\{\[p\]\} draw=\{draw\} \/>/);
   assert.match(gw, /const level = chat && !dock \? detailFor\(\{ source, settings: defaults, own \}\) : "steps";/);
   assert.match(gw, /data: \{ by_name: \{ \[PARTS\]: TurnWork, agent_steps: TurnWork \} \}/);
 });

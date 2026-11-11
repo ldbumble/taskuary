@@ -252,11 +252,13 @@ Take over to drive it yourself; close the session to close it."
         {note && <Typography title={note.t} sx={{ ...mono, fontSize: 10, flexShrink: 1, minWidth: 0, maxWidth: "45%",
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           color: note.bad ? CATPPUCCIN.red : CATPPUCCIN.green }}>{note.t}</Typography>}
-        <Box component="button" onClick={() => (driving ? setDriving(false) : takeOver())}
+        {/* ...but not while the agent has handed him the page: its bar's "I'm done" is that step's one press, and this stood beside it as a
+            second, greyed one (the overnight walk, 2026-11-11) */}
+        {!turn && <Box component="button" onClick={() => (driving ? setDriving(false) : takeOver())}
           title={driving ? "give the page back to the agent" : "drive the page yourself - for a password or a code the agent must not type"}
           sx={{ ...btn, ...(driving ? { color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow } : {}) }}>
           {driving ? "I'm done" : "Take over"}
-        </Box>
+        </Box>}
         {/* ...Snapshot only in Developer mode (audit, 2026-11-05): a frame filed as an attachment is a developer's record */}
         {devMode && <Box component="button" onClick={snapshot} title="keep this frame on the task as an attachment" sx={btn}>Snapshot</Box>}
         {onFold && <Box component="button" onClick={onFold} title={overlay ? "back to the terminal" : "fold the browser away - the browser chip above the terminal brings it back"} sx={btn}>{overlay ? "✕" : "›"}</Box>}

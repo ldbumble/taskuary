@@ -25,7 +25,7 @@ test("the agent hands its browser over for a sign-in and goes on under the card 
   await writeFile(path.join(bin, win ? "claude.cmd" : "claude"), win ? `@${py} ${path.join(repo, "tests", "fake_claude.py")} %*\r\n` : `#!/bin/sh\nexec "${py}" "${path.join(repo, "tests", "fake_claude.py")}" "$@"\n`);
   if (!win) await chmod(path.join(bin, "claude"), 0o755);
   await writeFile(path.join(bin, "script.json"), JSON.stringify([
-    { when: "pressed Done", anywhere: true, first: "Signed in - the price list is on the portal: Payworth 4 a head." },
+    { when: "pressed I'm done", anywhere: true, first: "Signed in - the price list is on the portal: Payworth 4 a head." },
     { when: "open the vendor portal", anywhere: true, first: "The portal wants a sign-in. [[TASKUARY-YOURTURN: sign in to the vendor portal]]" }]));
   Object.assign(process.env, { FAKE_CLAUDE_SCRIPT: path.join(bin, "script.json"), FAKE_CLAUDE_SPAWN: "0.5", FAKE_CLAUDE_THINK: "1" });
   const h = await startHarness({ fresh: true, bin });
@@ -50,7 +50,10 @@ test("the agent hands its browser over for a sign-in and goes on under the card 
         .map((e) => `${e.className || e.tagName}${e.querySelector("[data-tq-run-clock]") ? " CLOCK" : ""}${e.querySelector(".tq-aui-thinking") ? " SPIN" : ""} :: ${(e.innerText || "").replace(/\s+/g, " ").slice(0, 110)}`) : [];
       const pane = [...document.querySelectorAll("[data-tq-browser], .tq-browser, [class*=browser]")].filter((e) => e.getBoundingClientRect().width > 80).map((e) => `${e.className}`.slice(0, 60) + " :: " + (e.innerText || "").replace(/\s+/g, " ").slice(0, 120));
       const done = [...(tp?.querySelectorAll("button") || [])].filter((b) => /^(Done|I.m done)$/.test(b.innerText.trim()) && b.getBoundingClientRect().width > 0).length;
-      return { rows: rows.slice(-6), pane: pane.slice(0, 4), done };
+      // ...the line that says why the pane went, and the chip that brings a folded one back
+      const closed = (document.querySelector("[data-tq-browser-closed]")?.innerText || "").trim();
+      const chip = [...(tp?.querySelectorAll("button") || [])].map((b) => b.innerText.trim()).filter((x) => /^browser ·/.test(x));
+      return { rows: rows.slice(-6), pane: pane.slice(0, 4), done, closed, chip };
     });
     states.push({ label, ...s }); await page.screenshot({ path: path.join(out, `${states.length}-${label}.png`) });
     return s;
@@ -60,6 +63,13 @@ test("the agent hands its browser over for a sign-in and goes on under the card 
     await page.keyboard.type("open the vendor portal and get the price list"); await page.keyboard.press("Enter");
     await page.waitForFunction(() => /sign in to the vendor portal|wants a sign-in/i.test(document.querySelector("[data-tq-task-page]")?.innerText || ""), { timeout: 60000 });
     await new Promise((r) => setTimeout(r, 4000)); await look("handed-over");
+    // ...he puts the pane away in the middle of his step: there must be a way back to it
+    const folded = await page.evaluate(() => { const b = [...document.querySelectorAll("[data-tq-task-page] button")].find((x) => /fold the browser away/.test(x.title || "")); b?.click(); return !!b; });
+    states.push({ label: "fold pressed", folded });
+    await new Promise((r) => setTimeout(r, 1500)); await look("folded-mid-step");
+    const back = await page.evaluate(() => { const b = [...document.querySelectorAll("[data-tq-task-page] button")].find((x) => /^browser ·/.test(x.innerText.trim())); b?.click(); return b?.innerText.trim() || ""; });
+    states.push({ label: "way back pressed", back });
+    await new Promise((r) => setTimeout(r, 1500)); await look("unfolded");
     const pressed = await page.evaluate(() => { const b = [...document.querySelectorAll("button")].filter((x) => /^(Done|I.m done)$/.test(x.innerText.trim()) && !x.disabled && x.getBoundingClientRect().width > 0).pop(); b?.click(); return !!b; });
     states.push({ label: "done pressed", pressed });
     await new Promise((r) => setTimeout(r, 400)); await look("after-done-0.4s");

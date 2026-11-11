@@ -742,6 +742,8 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   const [folded, setFolded] = useState(() => !!sid && savedFold(sid));
   // the browser has been seen OPEN on this session: from then on a closed one folds the pane (showsBrowser)
   const [seen, setSeen] = useState(false);
+  // ...and, quiet, it has been shown him for a step of his on this session (`lent`): once it goes, a line says why (closedLine)
+  const [lent, setLent] = useState(false);
   const [ratio, setRatio] = useState(savedRatio);
   const [peek, setPeek] = useState(false);
   const [localOk, setLocalOk] = useState(false);          // the owner unfolded a local page: it stays shown (isLocalPage)
@@ -755,7 +757,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   // session, so the conversation sits inside the same tree it will sit in once one exists - swapping the
   // wrapper in mid-turn would remount the thread that is streaming the answer (GeneralWorkspace.started).
   useEffect(() => {
-    setBrowser({ open: false, url: "" }); setSeen(false); setLocalOk(false); setFolded(!!sid && savedFold(sid)); lastPage.current = "";
+    setBrowser({ open: false, url: "" }); setSeen(false); setLent(false); setLocalOk(false); setFolded(!!sid && savedFold(sid)); lastPage.current = "";
     if (!sid) return undefined;
     let stop = false, timer = 0, asking = false;
     const tick = async () => {
@@ -789,6 +791,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   // ...and an empty tab is no view and no chip: only a page the agent opened is shown (showsBrowser)
   const showingBrowser = !!sid && (quiet ? need && showsBrowser(browser.open, browser.url) : showsBrowser(browser.open, browser.url) || (stack && seen));
   const ended = !quiet && stack && seen && !browser.open;
+  useEffect(() => { if (quiet && showingBrowser) setLent(true); }, [quiet, showingBrowser]);
   const layout = quiet ? quietLayout(width, showingBrowser, folded) : layoutFor(width, showingBrowser, folded || (isLocalPage(browser.url) && !localOk), stack);
   const share = quiet ? quietRatio(ratio) : splitRatio(ratio, width);
   const onScreen = showingBrowser && viewOnScreen(layout);
@@ -830,9 +833,12 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   );
   /* A BROWSER THAT WAS OPEN AND CLOSED says so, where its chip or half sat: the pane just vanished, so a crash, a close and a glitch
      looked the same (2026-10-25). Words only - it comes back by itself when the agent opens a page again. */
-  const closedLine = !quiet && !!sid && seen && !browser.open && !ended && (
+  // ...and a chat's page, shown him for his step, goes once nothing waits on him there - his I'm done, the page moving on, an answer in
+  // words - and it went with nothing said (the overnight walk, 2026-11-11)
+  const closedLine = !!sid && (quiet ? lent && !showingBrowser : seen && !browser.open && !ended) && (
     <Typography data-tq-browser-closed="" sx={{ ...mono, flex: "0 0 auto", fontSize: 10.5, color: "#a8a196", m: "5px 0 0 10px" }}>
-      {`The browser closed${lastPage.current ? ` (last on ${shortUrl(lastPage.current, 36)})` : ""}. It reopens when the agent next needs it.`}
+      {quiet ? "The browser is put away - nothing waits on you there now. It shows here again when the agent needs you."
+        : `The browser closed${lastPage.current ? ` (last on ${shortUrl(lastPage.current, 36)})` : ""}. It reopens when the agent next needs it.`}
     </Typography>
   );
   return (

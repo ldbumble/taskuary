@@ -37,3 +37,13 @@ test("a page that is not moving is still a live page", () => {
   assert.doesNotMatch(pane, /staleTimer/);
   assert.match(pane, /ws\.onclose = \(\) => \{ setLive\(false\)/);
 });
+
+// THE OVERNIGHT WALK, 2026-11-11: the agent handed him the page for a sign-in. The pane's header stood a second, greyed "I'm done" beside
+// the step's own, and after his press the chat's pane went with nothing said.
+test("a step handed over has one I'm done, and the chat's pane says why it went", () => {
+  assert.match(pane, /\{!turn && <Box component="button" onClick=\{\(\) => \(driving \? setDriving\(false\) : takeOver\(\)\)\}/, "the header's press stands aside");
+  const term = src("TerminalView.jsx");
+  assert.match(term, /useEffect\(\(\) => \{ if \(quiet && showingBrowser\) setLent\(true\); \}, \[quiet, showingBrowser\]\);/);
+  assert.match(term, /const closedLine = !!sid && \(quiet \? lent && !showingBrowser : seen && !browser\.open && !ended\) && \(/);
+  assert.match(term, /"The browser is put away - nothing waits on you there now\. It shows here again when the agent needs you\."/);
+});

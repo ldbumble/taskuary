@@ -381,7 +381,7 @@ def forget(tid: int, sid: str):
     """A SESSION THAT IS GONE KEEPS NOTHING HERE. What each was offered stayed for every session there had ever been, until the app was
     closed. Asked by a session with no turn on (general: idled out, closed), never under one: `call` reads these, and every turn that
     comes after says them again first (tools_for)."""
-    for d in (TOOLBOX, OFFERED): d.pop((tid, sid), None)
+    for d in (TOOLBOX, OFFERED, DEFERRED): d.pop((tid, sid), None)
     STRANGERS.discard((tid, sid))
 
 
@@ -396,7 +396,36 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
     mine = [] if stranger else [*(BROWSER if browser else []), *FILES, *WEB, *((WRITE + SHELL) if hands else [])]
     out = own + mine + ([] if 'show' in TOOLBOX[(tid, sid)] else [SHOW])
     OFFERED[(tid, sid)] = {t['function']['name'] for t in out}
-    return out
+    later = [t for t in out if t['function']['name'] in LATER]
+    DEFERRED[(tid, sid)] = {t['function']['name']: t for t in later}
+    return [t for t in out if t['function']['name'] not in LATER] + ([loader(later)] if later else [])
+
+
+# TOOLS OFFERED AS THE WORK NEEDS THEM (the owner's standing rule, 2026-11-02: "model sees all, tools progressive"; 2026-11-10: "the ai limits as
+# much as possible to use ai"): the whole toolbox's schemas - 44 tools, ~24,000 characters - rode on every step of every turn. The tools a turn
+# reaches for are offered whole; the rest are NAMED in load_tools' own description, and a call to it adds their schemas to the end of the
+# list for the rest of the turn (never reordered: what goes before stays the same bytes for the provider's cache). Named here is every tool a
+# measured turn did not reach for; anything not named stays in the core, so a new tool is offered whole until someone moves it
+LATER = frozenset({'read_attachment', 'search_knowledge', 'owner_memory', 'calendar', 'list_systems', 'run_system', 'remind', 'ask_stronger',
+                   'note_peers', 'use_repo', 'find_repos', 'propose_land', 'withdraw_draft', 'sign_form', 'answer_invite', 'set_up_meeting', 'share',
+                   'file_write', 'file_edit'})
+LOAD = 'load_tools'
+DEFERRED = {}                  # (tid, sid) -> {name: schema} of the tools this turn named but has not loaded
+def _gist(t) -> str: return re.split(r'(?<=[a-z)])[.:;] ', str(t['function'].get('description') or ''), maxsplit=1)[0][:90]
+def loader(later: list) -> dict:
+    return _fn(LOAD, 'More of your tools, loaded for the rest of this turn by name - then call them. Not loaded yet: '
+               + '; '.join(f"{t['function']['name']} ({_gist(t)})" for t in sorted(later, key=lambda t: t['function']['name'])) + '.',
+               _S({'names': {'type': 'array', 'items': {'type': 'string'}}}, ['names']))
+
+
+def load(tid: int, sid: str, tools: list, names) -> str:
+    "Add the named tools' schemas to the END of `tools` (in place): what was offered before them stays the same bytes."
+    have, kept = {t['function']['name'] for t in tools}, DEFERRED.get((tid, sid)) or {}
+    new = [kept[n] for n in dict.fromkeys(str(n) for n in (names or [])) if n in kept and n not in have]
+    tools.extend(new)
+    unknown = [str(n) for n in names or [] if str(n) not in kept and str(n) not in have]
+    return ((f"Loaded {', '.join(t['function']['name'] for t in new)} - call them now." if new else 'Those are loaded already - call them.')
+            + (f" No tool named {', '.join(unknown)}." if unknown else ''))
 
 
 BUDGET = 300_000               # the conversation KEPT, in characters (~75K tokens)
@@ -469,7 +498,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
     be one system and one user message, so whatever the agent had read with its tools was gone by the owner's next line - only its own
     last answer came back, as chat text - and it opened the same pages and files again. Kept under BUDGET (_fit)."""
     from . import llm
-    tools = tools if tools is not None else [*BROWSER, SHOW]
+    tools = list(tools) if tools is not None else [*BROWSER, SHOW]
     BRAINS[(tid, sid)] = brain
     if trace: SAY[(tid, sid)] = lambda s: trace('progress', 'browser', s)
     STOPS[(tid, sid)] = cancel
@@ -477,6 +506,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                + [{'type': 'text', 'text': user}]) if images else user
     mine = {'role': 'user', 'content': content}
     msgs, begun = [{'role': 'system', 'content': system}, *(history or []), mine], False
+    load(tid, sid, tools, [(c.get('function') or {}).get('name') for m in history or [] for c in m.get('tool_calls') or []])   # what it used before
     why, read, idle = 'You are out of steps for this turn.', set(), 0
     budget, idle_n = _setting(store, 'agent_request_chars', REQUEST_CHARS), _setting(store, 'agent_idle_steps', IDLE_STEPS)
     stopped = lambda: cancel is not None and cancel.is_set()
@@ -509,7 +539,8 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                 try: a = json.loads(f.get('arguments') or '{}') or {}
                 except ValueError: a = {}
                 if trace: trace('tool_call', name, {'args': a})
-                try: out, err = _await(lambda: run_tool(store, tid, sid, name, a), cancel), False
+                if name in (DEFERRED.get((tid, sid)) or {}): load(tid, sid, tools, [name])       # called by the name it was given: loaded as it runs
+                try: out, err = (load(tid, sid, tools, a.get('names')) if name == LOAD else _await(lambda: run_tool(store, tid, sid, name, a), cancel)), False
                 except Exception as e:
                     if stopped(): raise
                     out, err = f'{name} failed: {e}', True

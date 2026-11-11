@@ -179,6 +179,27 @@ class OneRoundTripTests(unittest.TestCase):
         self.assertLess(time.monotonic() - t0, 5)
         self.assertEqual([m['role'] for m in kept], ['user', 'assistant', 'tool'], 'what it had done is kept, its open call answered')
 
+    def test_tools_are_offered_as_the_work_needs_them_and_a_loaded_one_is_added_at_the_end(self):
+        """The owner's rule, "model sees all, tools progressive" (2026-11-10: "the ai limits as much as possible to use ai"): every schema rode
+        on every step. The core is offered whole, the rest named in load_tools; loading one appends it, so what went before is the same bytes."""
+        from taskuary import agenttools
+        def post(url, json=None, headers=None, timeout=None):
+            r = mock.Mock(status_code=200); r.json.return_value = agenttools.rpc(json, lambda n, a: f'{n} answered', ()); return r
+        whole = len(json.dumps(apiagent.tools_for(1, 'p', True, post=post) + list(apiagent.DEFERRED[(1, 'p')].values())))
+        core = apiagent.tools_for(1, 'p', True, post=post)
+        names = [t['function']['name'] for t in core]
+        assert {'search_messages', 'read_message', 'propose_reply', 'check_back', 'show'} <= set(names) and 'calendar' not in names
+        line = core[-1]['function']['description']
+        assert names[-1] == 'load_tools' and all(n in line for n in apiagent.LATER if n in apiagent.DEFERRED[(1, 'p')])
+        assert len(json.dumps(core)) < whole * 0.7
+        seen, steps = [], iter([{'tool_calls': [{'id': 'a', 'function': {'name': 'load_tools', 'arguments': '{"names": ["calendar"]}'}}]},
+                                {'tool_calls': [{'id': 'b', 'function': {'name': 'set_up_meeting', 'arguments': '{}'}}]}, {'content': 'Booked.'}])
+        class Brain:
+            def chat(self, msgs, tools, max_tokens, **kw): seen.append([t['function']['name'] for t in tools]); return next(steps)
+        with mock.patch.object(apiagent, 'run_tool', return_value='done'):
+            self.assertEqual(apiagent.turn(Brain(), MemoryStore(), 1, 'p', 'sys', 'book it', 500, tools=core), 'Booked.')
+        assert seen[1] == names + ['calendar'] and seen[2] == names + ['calendar', 'set_up_meeting'], 'appended, never reordered'
+
     def test_a_long_conversation_drops_its_oldest_tool_answers_then_its_oldest_turns(self):
         call = lambda k: {'role': 'assistant', 'tool_calls': [{'id': k, 'function': {'name': 'file_read', 'arguments': '{}'}}]}
         def talk(): return [{'role': 'system', 'content': 'sys'}, {'role': 'user', 'content': 'the whole task'},

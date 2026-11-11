@@ -289,8 +289,9 @@ test("regression: a kept draft's card stays on the turn that wrote it while ques
   // ...stale it stays in its turn too (greyed, draftPassed); sent or an act: no draft waits
   assert.equal(draftHome([{ ...kept, stale: true }], rows), "comment-10"); assert.equal(draftHome([{ ...kept, Status: "sent" }], rows), null);
   assert.equal(draftHome([{ ...kept, Kind: "action" }], rows), null);
-  // ...its turn not drawn: by its time
-  assert.equal(draftHome([{ ...kept, turn: "comment-9", CreatedAt: "2026-11-09 09:02:30" }], rows), "q-1");
+  // ...its turn not drawn: by its time - written after q-1 and before its answer, it is that answer's turn's (an answer is stamped when it ends)
+  assert.equal(draftHome([{ ...kept, turn: "comment-9", CreatedAt: "2026-11-09 09:02:30" }], rows), "comment-11");
+  assert.equal(draftHome([{ ...kept, turn: "comment-9", CreatedAt: "2026-11-09 09:01:30" }], rows), "comment-10");
   // ...wired: every road that draws `work.next` asks for the home first - a turn without a summary, a summed one (unfolded to hold it), the foot
   assert.match(gw, /holds = home \? home === id : newest/);
   assert.match(gw, /!custom\?\.summary && holds && next/);

@@ -100,8 +100,11 @@ export const placeCards = (cards, messages, turns) => { const ids = new Set((mes
 // foot, so the line he typed went over it and the card jumped under his line; under the mail it answers it stays where it was
 // ...a row with no time yet - the turn at work, drawn before its answer is filed - is as old as the row before it: a draft written while it works
 // is its own, never his line's (the recorded walk, 2026-11-10: the new card stood under his line, over the turn's head, then jumped into the turn)
+// ...and AN ANSWER IS AS OLD AS ITS TURN'S START, the row before it: it is stamped when the turn ENDS, so the moment it was filed - before the
+// server named it the draft's turn - the draft its turn wrote read as older and stood a beat over its head (the recorded walk, 2026-11-10)
 export const rowOf = (messages, at) => { const t = msOf(at); let was = -Infinity, id = null;
-  for (const m of messages || []) { if (!m?.id) continue; was = m.createdAt ? msOf(m.createdAt) : was; if (was <= t) id = m.id; }
+  for (const m of messages || []) { if (!m?.id) continue; const own = m.createdAt ? msOf(m.createdAt) : was;
+    if ((m.role === "assistant" ? was : own) <= t) id = m.id; was = own; }
   return id; };
 // ...a reply, or an email the task owes (a slot's card, slots.draft) - both are the draft card the owner rewrites by prompting
 const letter = (r) => r?.Status === "pending" && r.Kind !== "action" && String(r.DraftText || "").trim();

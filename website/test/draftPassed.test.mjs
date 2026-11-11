@@ -24,6 +24,12 @@ test("a draft no turn wrote stands under the row it came after, by time - never 
   // turn's - under his line it stood over the turn's head, then jumped down into the turn (the recorded walk, 2026-11-10)
   const at = { id: "live-1", role: "assistant" }, mine = { ...line, createdAt: "2026-11-10 09:00:00" };
   assert.equal(draftHome([{ ...draft, ReviewId: 2, CreatedAt: "2026-11-10 09:00:05" }], [mail, mine, at]), "live-1");
+  // ...and the moment that turn's answer is filed - stamped when it ENDED, after the draft - before the server names it the draft's turn: still
+  // that turn's. Read by its stamp, the card stood a beat under his line, over the answer's head, then jumped into it (the recorded walk, 2026-11-10)
+  const done = { id: "a9", role: "assistant", createdAt: "2026-11-10 09:00:09" };
+  assert.equal(draftHome([{ ...draft, ReviewId: 2, CreatedAt: "2026-11-10 09:00:05" }], [mail, mine, done]), "a9");
+  // ...while a draft from before his line stays under the mail when his line's answer is filed
+  assert.equal(draftHome([draft], [mail, mine, done]), "came-in-1");
 });
 
 test("the draft is passed from the paint his line is drawn in - his own line in the thread, or one held on the page", () => {

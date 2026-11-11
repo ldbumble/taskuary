@@ -80,6 +80,14 @@ jobs:
         working-directory: website
       - run: npm test
         working-directory: website
+      # a name the page reads and nothing defines throws on the first draw, and no unit test draws every card (a card lost its definitions
+      # with a button on 2026-11-10 and only the release gate saw it) - the same count tools/release.sh takes
+      - name: No undefined names in the page
+        working-directory: website
+        shell: bash
+        run: |
+          n=$({ npx --yes eslint@10.10.0 -c eslint.undef.mjs -f json src 2>/dev/null | grep -o '"ruleId":"no-undef"' || true; } | wc -l)
+          [ "$n" -eq 0 ] || { echo "$n undefined names (eslint no-undef)"; npx --yes eslint@10.10.0 -c eslint.undef.mjs src | grep -B3 no-undef; exit 1; }
       - run: npm run build
         working-directory: website
       - run: npm run build:docs

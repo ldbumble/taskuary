@@ -592,12 +592,22 @@ def _reply_waiting(store, tid):
     return store._one("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind NOT IN ('action','slot') ORDER BY ReviewId DESC LIMIT 1", (tid,))
 
 
+def in_words(got, n: int = 300) -> str:
+    """What an act gave back, in words for its agent (the owner, 2026-11-11: the agent was handed the raw JSON, a path under his home in it):
+    each plain value by its name, a file by its name alone, anything nested left out."""
+    from pathlib import PurePosixPath, PureWindowsPath
+    if not isinstance(got, dict): return ' '.join(str(got or '').split())[:n]
+    name = lambda v: next((P(v).name for P in (PureWindowsPath, PurePosixPath) if isinstance(v, str) and P(v).is_absolute()), v)
+    return ', '.join(f"{str(k).replace('_', ' ')}: {' '.join(str(name(v)).split())}" for k, v in got.items()
+                     if isinstance(v, (str, int, float)) and not isinstance(v, bool) and str(v).strip())[:n]
+
+
 def pressed(rv: dict, out: dict) -> tuple:
     "(the press, what it did) of an answered review, in words for its agent."
     if rv.get('Kind') == 'action':
         from . import proposals
         a = proposals._action(rv) or 'action'
-        return 'Approve', f"{a.replace('_', ' ')} - {json.dumps(out.get('result') or {}, default=str)[:300]}"
+        return 'Approve', ' - '.join(x for x in (a.replace('_', ' '), in_words(out.get('result'))) if x)
     # ...a calendar answer is no reply: "the reply was sent" told the agent of an accepted invite (the stress round, 2026-11-10)
     if (env := _envelope(rv)).get('kind') == 'calendar':
         from .calwrite import head_of

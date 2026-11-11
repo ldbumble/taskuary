@@ -39,6 +39,11 @@ test("a general agent that has said nothing yet is one line in its chat, the box
                        content: [{ type: "text", text: "Gail wants the renewal terms settled before Thursday.\n\n".repeat(12) }] }],
           session: { ...ses, busy: false }, starting: false, providers: [{ id: 1, label: "Codex", model: "" }] }
       : { messages: [], session: ses, starting: false, providers: [{ id: 1, label: "Codex", model: "" }] });
+    // ...and the chat itself is the server's one list (conversation.items): the turn at work, then the answer in that same item
+    const turn = { id: "t:0:0", kind: "turn", at: "", steps: [], cards: [], started: Date.now() / 1000 - 3 };
+    if (req.method() === "GET" && p === `/api/tasks/${made.taskId}/conversation`) return void json(answered
+      ? { rev: "b", items: [{ ...turn, state: "done", ended: Date.now() / 1000, text: "Gail wants the renewal terms settled before Thursday.\n\n".repeat(12) }], pending: [], working: false, started: null }
+      : { rev: "a", items: [{ ...turn, state: "starting", text: "", ended: null }], pending: [], working: true, started: turn.started });
     if (req.method() === "GET" && p === "/api/terminals") return void json({ data: [answered ? { ...ses, busy: false } : ses] });
     page.fixtureRequestGuard(req);
   });
@@ -47,7 +52,7 @@ test("a general agent that has said nothing yet is one line in its chat, the box
   await page.waitForSelector("[data-tq-starting-line]", { timeout: 20000 });
   const quiet = await page.evaluate(() => {
     const pane = document.querySelector("[data-tq-starting]").getBoundingClientRect(), box = document.querySelector("[data-tq-starting] [data-tq-one-box]");
-    const head = document.querySelector("[data-tq-starting] [data-tq-run-clock], [data-tq-pending-turn] [data-tq-run-clock]"), spin = document.querySelector("[data-tq-starting-line]");
+    const head = document.querySelector("[data-tq-starting] [data-tq-run-clock], [data-tq-turn] [data-tq-run-clock]"), spin = document.querySelector("[data-tq-starting-line]");
     return { line: spin.innerText, words: /Starting|Working/.test([...document.querySelectorAll("[data-tq-starting], .tq-aui-thread")].map((e) => e.innerText).join(" ")),
              head: head ? head.innerText : "", under: !!head && head.getBoundingClientRect().bottom <= spin.getBoundingClientRect().top + 1,
              welcome: !!document.querySelector(".tq-aui-welcome"),

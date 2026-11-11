@@ -48,8 +48,11 @@ def clean(text) -> str:
     return str(j.get('did') or j.get('about') or '').strip() if isinstance(j, dict) else ''
 def _said(steps: list, body: str = '') -> list:
     "A turn's steps with its words cleaned (clean) - and a step that says only what the turn's answer says, or nothing, left out."
+    from .chatformat import plain_text
     out = []
     for s in steps:
+        # ...a thought is one plain row: the same cleaner, and its markup said as words ("**Replacing the pending draft**" stood raw)
+        if s.get('k') == 'thought' and (w := plain_text(clean(s.get('text'))) or clean(s.get('text'))): out.append({**s, 'text': w}); continue
         if s.get('k') != 'said': out.append(s); continue
         w = clean(s.get('text'))
         if w and w != body.strip(): out.append({**s, 'text': w})
@@ -214,7 +217,8 @@ def _card(r) -> dict:
 def items(store, tid: int) -> dict:
     "The task's conversation: {rev, items, pending, working, started} - see the module's head."
     from . import codingchat, funnel, general, ownwork, sessionrecord, wrapup
-    from .general import ASSISTANT_TYPE, BRIEF_ACTOR, FOLD_HEAD, USER_TYPE, WAITING_TYPE
+    from .general import ASSISTANT_TYPE, FOLD_HEAD, USER_TYPE, WAITING_TYPE
+    from .processing_unread import OWNER_ACTORS
     tid = int(tid)
     was, state = general.at_work(tid), general.line_state(store, tid, [])
     led = {(r['Kind'], r['Ref']): r for r in store._rows('SELECT * FROM heard WHERE TaskId=? ORDER BY HId', (tid,))}
@@ -235,7 +239,10 @@ def items(store, tid: int) -> dict:
     turn_of = {}                                   # an answer's CommentId -> its turn entry (a card names its turn by it)
     for c in rows:
         ty, cid = c.get('ActorType'), c['CommentId']
-        if ty == WAITING_TYPE or (ty == USER_TYPE and c.get('Actor') != BRIEF_ACTOR):
+        # ONLY WORDS HE TYPED ARE A LINE, by who filed them here - never by the role a CLI or a runtime gave the text (the owner, 2026-11-11, of
+        # Taskuary's own note to the agent drawn as his bubble: "it's not a prompt if you hit approve?"). What the app tells the agent - a
+        # note, a wake, a press's result, whoever's name it is filed under - is no item at all: his press is its own quiet line (press_lines)
+        if ty == WAITING_TYPE or (ty == USER_TYPE and c.get('Actor') in OWNER_ACTORS):
             body = general._line_of(c['Body']) if ty == WAITING_TYPE else {'text': c.get('Body') or '', 'files': []}
             it = {'id': c.get('LineId') or f'c:{cid}', 'kind': 'line', 'at': c['CreatedAt'], **body}
             h = led.get(('line', c.get('LineId') or ''))
@@ -301,7 +308,7 @@ def items(store, tid: int) -> dict:
         if (x.get('Channel') or '') == ownwork.CHANNEL and ev: continue
         h, it = led.get(('mail', str(x['MessageId']))), None
         row = general.mail_row(store, x)
-        it = {'id': f"m:{x['MessageId']}", 'kind': 'arrival', **row, 'joined': stamp(x['T'])}
+        it = {'id': f"m:{x['MessageId']}", 'kind': 'arrival', **row, 'joined': stamp(x['T']), **({'_hm': h['At']} if h else {})}
         # ...a stamp is a whole second: one that joined in the turn's first second came in under it (it stood ABOVE the turn at work)
         if not h and at_work and x['T'] + 1 > began: pend.append(it)
         else: put(h['At'] if h else x['T'], 0 if h else -1, it, h['HId'] if h else 0)
@@ -326,6 +333,11 @@ def items(store, tid: int) -> dict:
         elif rank == -1 and run is not None: held.append(e)
         else: close(); out.append(e)
     close()
+    # ONE TURN AT WORK, AND IT IS THE LAST (the owner's live task, 2026-11-11: a second head spun under a later, finished answer while the task
+    # read done): a turn stands where it began, so one that reads at work with a turn after it has ended - whatever its session still says
+    turns_ = [x for x in out if x['kind'] == 'turn']
+    for x in turns_[:-1]:
+        if x['state'] in ('working', 'starting'): x.update(state='done', ended=x.get('ended') or x.get('started'))
     # the turn at work is the last thing in the list: one the agent has not yet said a word in is there too, the moment its input was heard
     tail = next((x for x in reversed(out) if x['kind'] in ('turn', 'line', 'arrival')), None)
     # ...A LINE A LIVE AGENT WAS HANDED IS BEING WORKED ON, from the hand-over until its first step shows: a pane takes seconds to say it works,
@@ -333,9 +345,19 @@ def items(store, tid: int) -> dict:
     # ...unless he stopped it, it failed, or two minutes passed with nothing: then nothing spins over it
     if (tail and tail.get('_h') and time.time() - tail['_h'] < OWED and general._live_of(tid) is not None
             and not any(x.get('stop') for x in out[out.index(tail):]) and not funnel.run_failed(store, tid)): at_work = True
-    if at_work and not (tail and tail['kind'] == 'turn' and (tail['state'] == 'working' or tail.get('sid') == live_sid and live_sid)):
-        out.append(tail := {'kind': 'turn', 'at': stamp(time.time()), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': state.get('turnStarted') or time.time(), 'ended': None})
+    # ...A TURN IS MADE ONCE, AT ITS HAND-OVER: the live session's last turn is the one at work only where its work came after the newest
+    # hand-over - one that ended before it is finished, and the turn now beginning stands under it (a wake after a press marked the answer
+    # above "working" again, and the card under it lost its place)
+    mark = max((m['At'] for m in marks), default=0.)
+    mine = tail and tail['kind'] == 'turn' and (tail['state'] == 'working' or tail.get('sid') == live_sid and live_sid and (tail.get('ended') or INF) >= mark - 0.01)
+    if at_work and not mine:
+        began_ = state.get('turnStarted') or max(mark if tail and tail['kind'] == 'turn' and mark >= (tail.get('ended') or 0) else 0., (tail or {}).get('_h') or (tail or {}).get('_hm') or 0.) or time.time()      # from its hand-over, where one is written
+        out.append(tail := {'kind': 'turn', 'at': stamp(began_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': began_, 'ended': None})
     elif at_work and tail['state'] != 'working': tail.update(state='working', ended=None, started=state.get('turnStarted') or tail['started'])
+    # ..."WORKING" IS ONE FACT, the one the task's header reads: where it is false no turn spins
+    if not at_work:
+        for x in out:
+            if x['kind'] == 'turn' and x['state'] in ('working', 'starting'): x.update(state='done', ended=x.get('ended') or x.get('started'))
     # ...a turn he stopped ended there, and one that failed says so where it failed, with the way past it
     for i, x in enumerate(out):
         if x.get('stop') and (t := next((y for y in reversed(out[:i]) if y['kind'] == 'turn'), None)) and t['state'] == 'done': t['state'] = 'stopped'
@@ -376,15 +398,22 @@ def items(store, tid: int) -> dict:
     # THE NEXT THING TO PRESS IS RIGHT ABOVE THE BOX (the recorded walk, 2026-11-11: the agent said "check the card before you press Send" of a
     # card a screen above its words): an action still live after a later turn ended is one that turn KEPT - each turn is told what waits and
     # takes back what it undoes - so it stands last in the newest turn that said something, and where it stood says so, greyed
-    turns = [x for x in out if x['kind'] == 'turn']
-    if (kept := next((t for t in reversed(turns) if t['state'] in ('done', 'stopped') and (t['text'] or t['steps'])), None)):
-        ghost = lambda c: {**c, 'id': c['id'] + ':k', 'status': 'kept'}
-        for i, x in enumerate(out[:out.index(kept)]):
-            if x['kind'] == 'turn':
-                live = [c for c in x['cards'] if c['status'] == 'pending']
-                x['cards'] = [ghost(c) if c['status'] == 'pending' else c for c in x['cards']]; kept['cards'] += live
-            elif x['kind'] == 'card' and x['status'] == 'pending': out[i] = ghost(x); kept['cards'].append(x)
+    # ...and one he pressed stays where it stood when he pressed it: under the newest answer of that moment, never back where it was first made
+    said = [(i, x) for i, x in enumerate(out) if x['kind'] == 'turn' and x['state'] in ('done', 'stopped') and (x['text'] or x['steps'])]
+    def under(i, card):
+        "The newest answer after place `i` that had ended by the time the card was decided (now, while it waits) - None: it stands where it is."
+        lim = INF if card['status'] == 'pending' else ep(card.get('decided')) if card.get('decided') else -1
+        # ...a press is stamped by the whole second: an answer that ended in that second stood there, the turn the press began ends after it
+        return next((t for k, t in reversed(said) if k > i and int(t.get('ended') or 0) <= lim), None)
+    moves = []
+    for i, x in enumerate(out):
+        for card in ([x] if x['kind'] == 'card' else x['cards'] if x['kind'] == 'turn' else []):
+            if card['status'] not in ('superseded',) and (t := under(i, card)): moves.append((i, x, card, t))
+    for i, x, card, t in moves:
+        # ...where it stood says so, greyed, under the same name: nothing drawn goes away
+        if x['kind'] == 'card': out[i] = {**x, 'status': 'kept'}; t['cards'].append({**card, 'id': card['id'] + ':live'})
+        else: x['cards'] = [{**c, 'id': c['id'] + ':k', 'status': 'kept'} if c is card else c for c in x['cards']]; t['cards'].append(card)
 
-    for x in out: x.pop('stop', None); x.pop('_h', None)
+    for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None)
     body = {'items': out, 'pending': pend, 'working': at_work, 'started': state.get('turnStarted') if at_work else None}
     return {'rev': hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16], **body}

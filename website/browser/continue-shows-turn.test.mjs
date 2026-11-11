@@ -113,8 +113,16 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   await new Promise((r) => setTimeout(r, 1500));
   await page.evaluate(() => document.querySelector("[data-tq-task-page] .tq-aui-input")?.focus());
   await page.keyboard.type("and the west office");
-  await press(page, "and the west office", /The west office has no payroll vendor/);
-  await underway(page, "and the west office", /The west office has no payroll vendor/);
+  // ...THE HEARD RULE (the owner, 2026-11-11: "where the agent listens to it is where it shows"): the agent is at work, so the line waits by the
+  // box at once - never in the conversation yet - and enters it once, when the next turn takes it, with that turn's answer under it
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].some((e) => /and the west office/.test(e.innerText)), { timeout: 1500, polling: 50 });
+  assert.equal(await page.$$eval("[data-tq-task-page] .tq-aui-user-bubble", (bs) => bs.filter((b) => /and the west office/.test(b.innerText)).length), 0, "not in the conversation while it waits");
+  await inTask(page, /The west office has no payroll vendor/);
+  assert.equal(await page.$$eval("[data-tq-task-page] .tq-aui-user-bubble", (bs) => bs.filter((b) => /and the west office/.test(b.innerText)).length), 1, "in the conversation once, when heard");
+  assert.equal(await page.$("[data-tq-task-page] [data-tq-pending-item]"), null, "nothing left by the box");
+  const end = await pageText(page);
+  assert.ok(end.indexOf("and the west office") < end.indexOf("The west office has no payroll vendor"), "its answer under it");
   assert.ok(!/ran 0s/.test(await pageText(page)), "no turn reads it ran 0s");
   assert.deepEqual(errors, []);
 });

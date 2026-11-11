@@ -896,7 +896,7 @@ const ConvLine = ({ x, more, waits = false }) => {
 };
 /* AN ACTION WHERE IT STOOD, once it is no longer the one to press there: a draft a later turn rewrote, or one the agent's latest turn kept -
    which stands under that turn, right above the box. Greyed, nothing to press */
-const PAST = { kept: (c) => `${/draft/.test(c.what || "") ? "This draft" : "This action"} still waits - it stands below, under the agent's latest answer`, superseded: () => "Earlier draft - rewritten below" };
+const PAST = { kept: (c) => `${/draft/.test(c.what || "") ? "This draft" : "This action"} stands below, under a later answer`, superseded: () => "Earlier draft - rewritten below" };
 const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.status} role="note">
   <div className="tq-conv-past-head">{PAST[c.status](c)}</div>
   {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;
@@ -1695,7 +1695,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const pickedLabel = (data?.providers || []).find((p) => String(p.id) === String(connectorId))?.label;
   // STARTED AND SILENT: the agent is on its way and has filed nothing - the pane is that one line high, not the room an answer gets
   // ...and only while this turn has drawn nothing: a page opened four minutes into a first turn read "Starting… 3s" over its steps (2026-11-07)
-  const quiet = !dock && busy && !drawn && !(data?.messages || []).some((m) => m.role === "assistant");
+  // ...read off the one list, as the chat itself is: the moment a turn has said or done anything the room is its answer's
+  const quiet = !dock && busy && !drawn && !(data?.messages || []).some((m) => m.role === "assistant")
+    && !(conv.list?.items || []).some((x) => x.kind === "turn" && (x.text || x.steps?.length));
   // ...and a start onto a conversation that has answered before (Continue, a carried-on turn): the same line until this turn draws its
   // first output, under the turns already there - never "is working" over a session that has not come up yet (2026-11-04)
   const starting = quiet || (!dock && (data?.starting || opening) && !drawn) ? startingLine(name, session?.provider || pickedLabel) : "";

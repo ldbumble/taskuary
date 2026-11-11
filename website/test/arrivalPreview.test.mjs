@@ -11,7 +11,9 @@ const body = /export const subjectOf = (\(x, prev\) => \{[\s\S]*?\n  return [^\n
 const subjectOf = new Function(`return ${body}`)();
 
 test("the subject rides over a mail's words, bold, and its whole words stay on hover", () => {
-  assert.match(ws, /\{!!subjectOf\(x, all\[i - 1\]\) && <span className="tq-aui-arrived-subject" dir="auto">\{x\.subject\}<\/span>\}\n\s*\{!!mailWords\(x\) && <span className="tq-aui-arrived-words" dir="auto" title=\{x\.words\}>/);
+  assert.match(ws, /\{!!subjectOf\(x, all\[i - 1\]\) && <span className="tq-aui-arrived-subject" dir="auto">\{x\.subject\}<\/span>\}\r?\n\s*\{!!mailWords\(x\) && <ArrivedWords words=\{mailWords\(x\)\} \/>\}/);
+  // ...its words read in place: a few lines, and one toggle only where they are cut (the owner, 2026-11-11)
+  assert.match(ws, /<span ref=\{el\} className=\{`tq-aui-arrived-words\$\{open \? " tq-aui-arrived-open" : ""\}`\} dir="auto">\{words\}<\/span>/);
   assert.match(css, /\.tq-aui-arrived-subject \{ color: var\(--tq-text, #2b2925\); font-weight: 600;/);
 });
 

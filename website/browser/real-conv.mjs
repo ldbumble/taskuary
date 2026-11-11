@@ -34,6 +34,11 @@ export function check(frames) {
       ids.forEach((id, i) => { if (!was.has(id) && i < lastOld) say(f.t, `${id} drawn ABOVE ${ids[lastOld]}, which was already there`); });
       // ...the view went back: only where it is no longer at its end, or went back though nothing above got shorter (a fold closing at the end keeps it pinned)
       if (f.top < prev.top - 2 && f.h - f.top - f.ch > 2 && (f.h - f.top - f.ch > 60 || f.h >= prev.h)) say(f.t, `scrolled back ${prev.top} -> ${f.top} (height ${prev.h} -> ${f.h})`);
+      // THE CHAT FOLLOWS ITS END (the owner, 2026-11-11): at the bottom it stays at the bottom through every draw; scrolled up to read, it is
+      // not moved (this driver never scrolls, so any move there is the page's own)
+      const gap = (x) => x.h - x.top - x.ch;
+      if (gap(prev) <= 2 && gap(f) > 2) say(f.t, `was at its end and fell ${gap(f)} px behind (height ${prev.h} -> ${f.h})`);
+      if (gap(prev) > 60 && f.top !== prev.top) say(f.t, `moved by itself while he read above: ${prev.top} -> ${f.top}`);
       // his line, the frame it enters the conversation: a turn at work right under it
       ids.forEach((id, i) => { if (!was.has(id) && /^(l|s)[0-9a-z]/.test(id) && !f.items.slice(i + 1).some((x) => x[1] === "starting" || x[1] === "working")) say(f.t, `${id} heard with no turn at work under it in that frame`); });
     }
@@ -47,6 +52,8 @@ const working = (page) => page.evaluate(() => !!document.querySelector("[data-tq
 async function rest(page, tid, timeout = 300000, settle = 4000) { const end = Date.now() + timeout; let calm = 0, split = 0, how = "";
   while (Date.now() < end) { const dom = await working(page), srv = (await api(`/api/tasks/${tid}/conversation`)).working;
     if (dom !== srv) { split += 400; how = `page ${dom ? "working" : "at rest"}, server ${srv ? "working" : "at rest"}`; }
+    // ...and where the server says nothing works, nothing on the page spins: a turn left at work under a finished one is a finding at once
+    if (!srv && dom && (split += 0) >= 0 && (rest.ghost = (rest.ghost || 0) + 400) === 3200) console.log("FINDING: the server says at rest and a working indicator still stands on the page");
     if (dom || srv) calm = 0; else if ((calm += 400) >= settle) { if (split > 2500) console.log(`FINDING: page and server disagreed on "working" for ${split} ms (${how})`); return true; }
     await sleep(400); } console.log("FINDING: never came to rest"); return false; }
 async function untilWorking(page, timeout = 60000) { const end = Date.now() + timeout; while (Date.now() < end) { if (await working(page)) return true; await sleep(100); } return false; }

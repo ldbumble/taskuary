@@ -29,11 +29,11 @@ def test_a_draft_is_said_in_a_line_and_its_words_are_the_cards():
     s.add_message({'TaskId': t, 'Channel': 'email', 'Subject': 'March invoice batch', 'FromName': 'Gail Moreno',
                    'FromEmail': 'gail@northwind.example', 'BodyText': 'Can you check the March batch?', 'Status': 'routed'})
     line = selfclose.owner_closes_line()
-    assert 'say in one line what you set up and for whom' in line and "never repeat the draft's words" in line and 'assum' in line
+    assert 'say in ONE short line what you set up and for whom' in line and 'never repeat any of that' in line and 'assum' in line
     # ...nor its id (agent walk 2, 2026-11-10: "send it after rv3"): the prompt names drafts by Taskuary's handle, which the owner never sees
     assert selfclose.HANDLES_LINE in line and 'the owner never sees it' in line
     marked = general._prompt(s, t)[0]; tooled = general.by_tool(marked)
-    for system in (marked, tooled): assert system.count("never repeat the draft's words") == 1
+    for system in (marked, tooled): assert system.count("never repeat any of that") == 1
     # ...a session that drafts by marked block writes the words once, in the block: there the block IS the draft
     assert 'the block IS the draft' in selfclose.REPLY_LINE and 'the block IS the draft' in selfclose.DRAFT_LINE
     assert 'the block IS the draft' not in tooled and 'never as text in the conversation' not in marked
@@ -43,6 +43,6 @@ def test_the_draft_tools_answer_says_the_same_one_sentence():
     # the owner, 2026-11-10: on a turn that REPLACED a waiting reply the agent quoted the new one whole, and its scratch folder's path under it -
     # the tool's own answer said nothing of the card. One sentence (selfclose.CARD_SAID): in the guide every general turn carries, and in the answer
     from taskuary import agenttools
-    assert selfclose.CARD_SAID in selfclose.owner_closes_line() and 'nor the path of a file it carries' in selfclose.CARD_SAID
+    assert selfclose.CARD_SAID in selfclose.owner_closes_line() and 'the file it carries' in selfclose.CARD_SAID
     assert agenttools.said_once({'ok': True, 'review_id': 7})['shown'] == selfclose.CARD_SAID
     assert 'shown' not in agenttools.said_once({'ok': False, 'why': 'nothing was saved'})

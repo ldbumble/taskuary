@@ -200,7 +200,9 @@ def owned(store, tid: int, ss: list) -> list:
            if c.get('ActorType') == general.USER_TYPE and c.get('Actor') == 'owner'}
     his |= {' '.join(parts(x.get('Note'))[0].split()) for x in store.waitroom(int(tid), limit=500) if (x.get('CreatedBy') or 'owner') == 'owner'}
     mine = lambda u: ' '.join(str((u.get('content') or {}).get('text') or '').split()) in his
-    mark = lambda u: u if u.get('sessionUpdate') != 'user_message_chunk' or u.get('_meta') else {**u, '_meta': {'taskuary': 'owner' if mine(u) else 'agent'}}
+    sent = lambda u: (u.get('_meta') or {}).get('taskuary') == 'prompt'           # ...a prompt Taskuary sent as typed (ACPCoding._show): his words, or its own
+    mark = lambda u: (u if u.get('sessionUpdate') != 'user_message_chunk' or (u.get('_meta') and not sent(u)) else
+                      {**u, '_meta': {'taskuary': 'owner' if mine(u) else 'brief' if sent(u) else 'agent'}})
     return [{**s, 'updates': [mark(u) for u in s['updates']]} if s.get('updates') else s for s in ss]
 
 

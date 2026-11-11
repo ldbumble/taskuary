@@ -21,7 +21,10 @@ OPEN_PARITY = {('j', 'coding'),     # a reply owed on arrival is a 'draft' revie
                ('m', 'coding'),     # put to rest, the rail lights Continue on a coding task (rulebook MOVES 'stopped') and nothing on a chat
                ('r', 'coding'),     # held for a stranger, the rail lights Send to agent (regular_agent) on a general task and nothing on a coding one
                ('s', 'coding'),     # a coding task's close writes its session up (wrapup): a playbook it proposes is put down with the close, a card no chat has
-               ('t', 'coding')}     # a reply sent while its coding turn still worked is named by no turn in the coding payload (found 2026-11-11, open),
+               ('t', 'coding'),
+               # a reply owed is drafted at the arrival where a quick call can (cli, acp): its card stands from then, above the turn that goes on to
+               # rewrite it, until that turn ends and keeps it; an AI card has no quick call, so its turn raises the card itself
+               ('s', 'api'), ('t', 'api')}     # a reply sent while its coding turn still worked is named by no turn in the coding payload (found 2026-11-11, open),
                                     # and a coding session takes the queued word at its turn's end, a chat at the waiting room's next look
 
 

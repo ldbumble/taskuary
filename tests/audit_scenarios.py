@@ -250,46 +250,37 @@ class Run:
 
     # ── what is read ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
     def payload(self) -> dict:
-        """The chat as the page reads it, normalized: lines (the owner's, in order), said (the agent's turns), events (press lines), working,
-        waiting, asking, permissions - from whichever payload this task's kind reads."""
-        if (self.s.get_task(self.tid) or {}).get('Kind') == 'coding':
-            d = self.c.get(f'/api/tasks/{self.tid}/coding-chat').json()['data']
-            ups = [u for ss in d['sessions'] for u in ss.get('updates') or []]
-            lines, said, ats, cur = [], [], [], None
-            for u in ups:
-                k, who = u['sessionUpdate'], (u.get('_meta') or {}).get('taskuary')
-                if k == 'user_message_chunk' and who == 'owner': lines.append(u['content']['text']); cur = None
-                elif k == 'user_message_chunk': cur = None
-                elif k == 'agent_message_chunk':
-                    if cur is None: said.append(''); ats.append(u.get('_at') or ''); cur = len(said) - 1
-                    said[cur] += u['content'].get('text', '')
-            keep = [i for i, x in enumerate(said) if x.strip()]
-            return {'lines': lines, 'said': [said[i] for i in keep], 'ats': [ats[i] for i in keep], 'ids': [f'c{i}' for i in keep],
-                    'events': [text_of(m) for m in d.get('presses') or []], 'working': d['working'],
-                    'waiting': [w['text'] for w in d['waiting']], 'asking': (d.get('asking') or {}).get('text'), 'permissions': [p['title'] for p in d.get('permissions') or []],
-                    'cards': d.get('cards'), 'turns': d.get('turns')}
-        d = self.c.get(f'/api/tasks/{self.tid}/assistant').json()
-        ms = d['messages']
-        return {'lines': [text_of(m) for m in ms if m['role'] == 'user' and not m.get('brief') and not m.get('press') and not m.get('mail')],
-                'said': [text_of(m) for m in ms if m['role'] == 'assistant'], 'ids': [m['id'] for m in ms if m['role'] == 'assistant'],
-                'ats': [str(m.get('createdAt') or '') for m in ms if m['role'] == 'assistant'],
-                'events': [text_of(m) for m in ms if m.get('press')], 'working': d['working'], 'waiting': [w['text'] for w in d['waiting']],
-                'asking': (d.get('asking') or {}).get('text'), 'permissions': [], 'cards': d.get('cards'), 'turns': d.get('turns')}
+        """The chat as the page reads it - THE ONE LIST, whatever agent works the task (conversation.items, GET /conversation): lines (the
+        owner's, in order), said (the agent's turns that said something), events (press lines), working, waiting (by the box), and each
+        card's place; asking and permissions from the kind's own status read, until the list carries them."""
+        d = self.c.get(f'/api/tasks/{self.tid}/conversation').json()
+        coding = (self.s.get_task(self.tid) or {}).get('Kind') == 'coding'
+        old = self.c.get(f'/api/tasks/{self.tid}/coding-chat').json()['data'] if coding else self.c.get(f'/api/tasks/{self.tid}/assistant').json()
+        words = lambda t: t.get('text') or ''.join(x.get('text') or '' for x in t.get('steps') or [] if x.get('k') == 'said')
+        said, ats, ids, home, at = [], [], [], {}, {}
+        for x in d['items']:
+            if x['kind'] == 'card': at.setdefault(x['review'], None); home.setdefault(x['review'], None); continue
+            if x['kind'] != 'turn': continue
+            n = len(said)                      # ...a turn that has said nothing yet is the answer it will be
+            for c in x['cards']:
+                home.setdefault(c['review'], n)
+                if c['status'] not in ('kept', 'superseded'): at[c['review']] = n
+            if words(x).strip(): said.append(words(x)); ats.append(str(x.get('at') or '')); ids.append(x['id'])
+        return {'lines': [x['text'] for x in d['items'] if x['kind'] == 'line'], 'said': said, 'ats': ats, 'ids': ids,
+                'events': [x['text'] for x in [*d['items'], *d['pending']] if x['kind'] == 'press'], 'working': d['working'],
+                'waiting': [x['text'] for x in d['pending'] if x['kind'] == 'line'], 'asking': (old.get('asking') or {}).get('text'),
+                'permissions': [q['title'] for q in old.get('permissions') or []] if coding else [], 'home': home, 'at': at}
 
     def cards(self) -> list:
-        "Every card of the task, oldest first: {id, kind, what, status, passed, turn (which of the agent's answers it stands in; None: none yet)}."
+        """Every card of the task, oldest first: {id, kind, what, status, passed, turn (the answer it was raised in and stands in, live or
+        greyed; None: none), at (the answer its live copy stands under - a waiting action is kept under the newest)}."""
         from taskuary import general, proposals
         p, out = self.payload(), []
-        ids, turns, ats = p.get('ids') or [], p.get('turns') or {}, p.get('ats') or []
         for r in self.s._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (self.tid,)):
-            named = turns.get(str(r['ReviewId']), ...)
-            # ...where the payload names no turn the page places it by time (agentSummary.turnOf): the newest answer stamped at or before it
-            by_time = max((i for i, a in enumerate(ats) if a <= str(r['CreatedAt'])), default=len(ats) - 1 if ats else None)
-            # ...an email owed is no card of a turn (the task's emails draw it - test_cards_stand_in_their_turn): it has no place to keep
-            turn = None if r['Kind'] == 'slot' else ids.index(named) if named in ids else None if named is None else by_time
             what = proposals._action(r) if r['Kind'] == 'action' else r['Kind']
             out.append({'id': r['ReviewId'], 'kind': what, 'status': r['Status'], 'text': ' '.join(str(r.get('FinalText') or r.get('DraftText') or '').split())[:80],
-                        'turn': turn, 'named': named is not ..., 'passed': proposals.passed(r) or bool(r.get('Stale')),
+                        'turn': None if r['Kind'] == 'slot' else p['home'].get(r['ReviewId']), 'at': p['at'].get(r['ReviewId']), 'named': r['ReviewId'] in p['home'],
+                        'passed': proposals.passed(r) or bool(r.get('Stale')),
                         'error': r.get('ActError') or (r.get('DeliveryState') if r.get('DeliveryState') in ('failed', 'unknown') else ''),
                         'note': r.get('DecideNote') or ''})
         # ...and a coding task's landing question (landing.state): the Push card, its own door (/landing), no review row
@@ -445,7 +436,7 @@ def broken(r: Run) -> list:
         # (v) only what he typed is his
         if s['lines'] != r.typed[:len(s['lines'])] or [x for x in s['lines'] if x not in r.typed]: say('v', i, f"lines {s['lines']} != typed {r.typed}")
         # (vii) told the truth: no draft told as waiting that is not, no unsent card told as unsent that went
-        for rid in re.findall(r'THE DRAFT WAITING NOW \(rv(\d+)', s['told']) + re.findall(r'^- rv(\d+):', s['told'].split('ALSO SET UP AND NOT SENT')[-1], re.M) * ('ALSO SET UP' in s['told']):
+        for rid in re.findall(r'^- rv(\d+):', s['told'].split('ALSO SET UP AND NOT SENT')[-1], re.M) * ('ALSO SET UP' in s['told']):
             c = next((c for c in s['cards'] if c['id'] == int(rid)), None)
             if not c or c['status'] not in ('pending', 'held'): say('vii', i, f"told rv{rid} waits, but it is {c and c['status']}")
     # (iii) a card stands in the turn that raised it, from its first answer on, and never moves
@@ -456,6 +447,11 @@ def broken(r: Run) -> list:
         turns = [next((x['turn'] for x in s['cards'] if x['id'] == c['id']), None) for s in ss]
         placed = [t for t in turns if t is not None]
         if len(set(placed)) > 1: out.append(f"(iii) rv{c['id']} moved between turns: {placed}")
+    # ...and THE THING TO PRESS IS RIGHT ABOVE THE BOX (the owner, 2026-11-11): a waiting card's live copy stands under the newest answer
+    for i, s in enumerate(ss):
+        for c in s['cards']:
+            if c['status'] == 'pending' and c.get('at') is not None and s['said'] and not s['working'] and c['at'] < len(s['said']) - 1:
+                say('iii', i, f"rv{c['id']} waits under answer {c['at'] + 1} of {len(s['said'])}")
     # (iv) a press leaves one trace where it was made (a line, or its card's own state) and reaches the agent once
     for i in r.pressed:
         if i == 0: continue
@@ -479,7 +475,7 @@ def normal(s: dict) -> dict:
     # ...HIS LINES AS THE PAGE DRAWS THEM, taken by a turn or waiting for one, in order: the moment a turn takes one is the backend's clock (a chat
     # takes it in the request, a coding adapter once it is up), and so is the task's status on the press that starts it. An empty answer draws nothing
     return {'step': s['step'], 'his': s['lines'] + s['waiting'], 'said': [x for x in s['said'] if x.strip()], 'events': s['events'],
-            'working': None if own else s['working'], 'asking': s['asking'], 'cards': [(kind(c['kind']), c['status'], c['turn'], c['passed']) for c in s['cards'] if live(c) or c['status'] != 'pending'],
+            'working': None if own else s['working'], 'asking': s['asking'], 'cards': [(kind(c['kind']), c['status'], c.get('at'), c['passed']) for c in s['cards'] if live(c) or c['status'] != 'pending'],
             'status': None if own or s['step'].startswith('type') else s['status'], 'chip': None if own else s['chip'], 'lit': None if own else s['lit'], 'told': sorted(set(re.findall(r'^([A-Z][A-Z \'-]{6,}?)(?: -|:|\()', s['told'], re.M)))}
 
 

@@ -34,7 +34,7 @@ test("the owner's next line in a row carries a new minute's time alone, a same m
 // RIGHT-TO-LEFT WORDS: each paragraph takes its own direction (the scenario run, 2026-11-06)
 test("chat paragraphs and bubbles take their direction from their own words", () => {
   const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /<span className="tq-aui-arrived-words" dir="auto" title=\{x\.words\}>/);
+  assert.match(ws, /className=\{`tq-aui-arrived-words\$\{open \? " tq-aui-arrived-open" : ""\}`\} dir="auto">/);
   assert.match(ws, /<div className="tq-aui-user-bubble" dir="auto"><MessagePrimitive\.Parts \/><\/div>/);
   assert.match(read("generalWorkspace.css"), /\.tq-aui-agent-body p, \.tq-aui-agent-body li, \.tq-aui-user-bubble p, \.tq-aui-arrived-words, \.tq-aui-ask \{ unicode-bidi: plaintext; \}/);
 });

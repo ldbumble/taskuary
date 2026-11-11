@@ -343,8 +343,11 @@ class ACPCoding:
         "Each prompt as the chat, the transcript and the Terminal draw it: the owner's own lines as theirs, Taskuary's words as its brief."
         for t, brief, shown, _d in [i for i in items if id(i) not in self._drawn]:
             self._mine([s for s in shown if not (isinstance(s, dict) and s.get('drawn'))])
+            # ...WHO WROTE IT IS SAID HERE, where it is sent (the owner, 2026-11-11: only words he typed are his): Taskuary's brief, or a prompt
+            # that went in as typed - his only where it is one of his kept words (codingchat.owned), else Taskuary's too. Never left unmarked:
+            # read as the adapter's own, a relayed message ran on as the agent's words and two turns drew as one
             self._record({'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': t},
-                          **({'_meta': {'taskuary': 'brief'}} if brief or shown else {})})
+                          '_meta': {'taskuary': 'brief' if brief or shown else 'prompt'}})
             self.history.append(('brief' if brief or shown else 'you', t))
             self._out(f"\r\n\x1b[1;34m{'taskuary' if brief or shown else 'you'}>\x1b[0m {_crlf(t if len(t) < 400 else t[:400] + ' …')}\r\n")
 

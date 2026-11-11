@@ -1321,13 +1321,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // SENT (Send / Approve): the send already went through. THE REPLY THAT WENT CLOSES THE TASK (the owner, 2026-10-29: "wait until the
   // send actually succeeds, then close the task"): `closes` is ReviewDecision's word, said only after the server's receipt - the close
   // goes through the server's one gate (concierge.close_after_send): kept open, said on the task, while anything on it still waits on
-  // you - a held agent step, a proposal, an email it owes, a session still open (a held `git push` was closed under, 2026-10-29).
+  // your own press - a held agent step, a proposal, an email it owes (a held `git push` was closed under, 2026-10-29).
   // Anything else (an Approve, one of its emails) reads the task again and stays on it; closed by something else meanwhile means walk on
   // ...and only the draft's Send and close says `closes` (the owner, 2026-11-03: "send and close and send without closing"): its plain Send
   // reads the task again and stays on it, as Send does everywhere else
-  // ...and NOTHING STILL WORKING IS PUT DOWN (the owner, 2026-11-01: "if agent screen is still open and you hit send message it should
-  // not close the tasks"): with work live the press puts nothing down, and a close the server kept open picks the row back up - put
-  // down at the press, it stayed off the rail with its agent still drawn on the canvas
+  // ...and SEND AND CLOSE IS HIS CLOSE, WHATEVER THE AGENT IS DOING (the owner, 2026-11-11: "Why is agent still going .... there is nothing
+  // left to do"): put down at the press as Mark done is, the agent stopped by the server; a close the server kept open - something
+  // still waits on his own press - picks the row back up
   const sent = async ({ closes = false, said = null } = {}) => {
     if (said) setSentHere({ ...said, closing: closes });
     // ...a beat for that line to be read before the view moves on: the close itself goes at once
@@ -1335,11 +1335,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // ...on the walk's table that gate is the walk's close (railwalk.leave "sent"): kept open, the same row comes back
     if (closes && walkLeave) {
       if (beat) await beat;            // ...the walk's close draws its "…" under the card at once: the line goes first
-      if (!liveWork) onLeave?.();
-      // ...and the walk is told it stays (`stays`), so it draws no row below at the press: the next row stood on the table until the kept
-      // answer brought this one back, a beat on a quick server and seconds on a slow one
+      onLeave?.();
       // ...and kept open, the sent line says why - it went on saying "closing the task" over a task that stayed (the agent walk, 2026-11-10)
-      try { const d = await walkLeave("sent", liveWork ? { stays: true } : {}); if (d?.kept) { if (said) setSentHere((h) => h && { ...h, closing: false, kept: d.kept.join("; ") }); onStay?.(); } } catch (e) { onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
+      try { const d = await walkLeave("sent"); if (d?.kept) { if (said) setSentHere((h) => h && { ...h, closing: false, kept: d.kept.join("; ") }); onStay?.(); } } catch (e) { onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
       loadDetail(selected); loadTasks(); onChanged?.(); return;
     }
     if (closes) {
@@ -1390,8 +1388,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const liveSession = !!term?.alive || agentOpening;
   // ...and a start held back for a free agent slot says "Waiting its turn" in its place (QueuedStart)
   const queuedRow = (listRow?.State === "queued" ? listRow?.Queued : null) || (detail?.task?.TaskId === selected ? detail?.queued : null) || null;
-  // ...and what a Send leaves open: an agent on it, working or waiting on you, keeps the task open (concierge.close_after_send)
-  const liveWork = liveSession || liveRun ? "the agent is working" : "";
   // No "are you sure" box on a live session (the owner, 2026-10-19: "this should be a hover over the buttons"): the press
   // is the decision, and what it does to the agent is said on the button's hover (markDoneHint).
   const askFinish = () => (liveSession ? stopAndFinish() : finish("done"));
@@ -2808,7 +2804,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               queue mounts, so two surfaces cannot say different things about one draft. */}
           {pendingReview ? (<>
             <Box data-tq-review={pendingReview.ReviewId}>
-            <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend liveWork={liveWork} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
+            <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
               onEmailInstead={() => setEmailOpen(true)} why={rec?.state === "draft_ready" ? rec.why || "" : ""}
               onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} /></Box>   {/* the list's row moves too (T19) */}
             <MoreDrafts reviews={moreDrafts} messages={storedMessages} onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />

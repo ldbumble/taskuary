@@ -2786,6 +2786,11 @@ class GeneralSession:
             timed = None if stopped else _timed_out(e)
             # ...a turn that ran out of time says so in words, not as "Codex exit 1: timed out after 1500s." (2026-11-04)
             said = timed_out_line(e) if timed is not None else (unreached_line(e, self.provider) or refused_line(e, self.provider) or str(e))
+            # ...and A TURN TASKUARY STOPPED IS NOT A CLI THAT DIED (the real-CLI walk, 2026-11-11): its process is killed under it by the
+            # close or the x, which reads as a death mid-turn (clipool.MID_TURN) - recorded in those words, the rail said "the agent
+            # stopped: the agent stopped in the middle of its turn ... type to carry on" of a task its owner had just closed
+            from .clipool import MID_TURN
+            if stopped and MID_TURN in said: said = 'stopped'
             self._remember_trace('error', 'assistant', {'result': said, 'is_error': True})
             self._emit(f'\x1b[1;31merror>\x1b[0m {said}\r\n\r\n')
             self._unusable(e)
@@ -2825,8 +2830,7 @@ class GeneralSession:
             # ITS CLI DIED PART-WAY THROUGH (clipool.MID_TURN): the turn was not sent again, as it may have done some of the work.
             # The session ends here, its conversation saved - so the task reads stopped and its row offers Continue, which picks the
             # saved conversation back up; a session left open over a dead process offered Stop and save on nothing (2026-10-21)
-            from .clipool import MID_TURN
-            if stopped: raise Stopped(str(e)) from e
+            if stopped: raise Stopped(said) from e
             if MID_TURN in str(e): self._end_soon(learn=False)
             # A FAILED TURN IS SAID AS A FAILURE (owner-approved, 2026-10-21): left open, the session read alive and not busy - "waiting
             # on you" on the card, the rail and the Board over an agent that never ran. It ends here, its conversation kept, so every

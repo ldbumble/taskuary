@@ -32,7 +32,7 @@ def test_each_thing_a_task_holds_is_one_line_with_its_button():
     assert lines[2] == 'a LinkedIn post waits for your Approve' and lines[3] == 'the agent asks: Should the comparison include Ramp?'
     assert [x['verb'] for x in got] == ['approve', 'approve', 'approve', 'answer_agent']
     # ...and what keeps a Send-and-close open is said as before, the question aside
-    assert concierge.waiting_on_owner(s, tid)[:2] == ['an email this task owes still waits for your Send'] * 2
+    assert [x['says'] for x in concierge.owed_items(s, tid, asks=False)][:2] == ['an email this task owes still waits for your Send'] * 2
 
 
 def test_the_assistant_the_dock_and_their_reads_all_carry_it():

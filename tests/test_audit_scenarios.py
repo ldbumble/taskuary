@@ -19,7 +19,10 @@ OPEN = {}
 OPEN_PARITY = {('j', 'coding'),     # a reply owed on arrival is a 'draft' review the general road opens and a joined mail marks behind; a coding
                                     # task's reply is the agent's own draft_reply, which no join marks (ingest: behind = pending_review(kind='draft'))
                ('m', 'coding'),     # put to rest, the rail lights Continue on a coding task (rulebook MOVES 'stopped') and nothing on a chat
-               ('r', 'coding')}     # held for a stranger, the rail lights Send to agent (regular_agent) on a general task and nothing on a coding one
+               ('r', 'coding'),     # held for a stranger, the rail lights Send to agent (regular_agent) on a general task and nothing on a coding one
+               ('s', 'coding'),     # a coding task's close writes its session up (wrapup): a playbook it proposes is put down with the close, a card no chat has
+               ('t', 'coding')}     # a reply sent while its coding turn still worked is named by no turn in the coding payload (found 2026-11-11, open),
+                                    # and a coding session takes the queued word at its turn's end, a chat at the waiting room's next look
 
 
 @pytest.mark.parametrize('backend', A.BACKENDS)

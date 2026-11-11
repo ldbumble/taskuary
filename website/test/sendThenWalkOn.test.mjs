@@ -11,12 +11,12 @@ const read = (f) => readFileSync(path(f), "utf8");
 
 test("a clean send hands over to the task page, which walks on only when the task closed", () => {
   const dec = read("ReviewDecision.jsx"), page = read("TaskPage.jsx");
-  assert.match(dec, /onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false/);
+  assert.match(dec, /onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, toRow = false/);
   // after the error checks, never instead of them: a refused or failed send keeps the card and says why
   assert.match(dec, /else if \(data\.send_error\) setSendErr\(replySendFailure\(data\)\);(\n\s+\/\/[^\n]*)+\n\s+else if \(data\.ok && \(verb === "approve" \|\| \(verb === "close_unsent" && r\.Kind !== "slot"\)\) && onSent\) \{(\n\s+\/\/[^\n]*)*\n\s+setSent\(verb === "approve"\); setBusy\(false\); await onSent\(\{ closes: closesIt && shut && verb === "approve" && \(data\.reply \? !!data\.reply\.ok : true\),/);
   // ...and a chat's Mark done (close_unsent: it copies the draft and closes) walks on the same way - it stood as "task · done" (2026-10-20)
   assert.match(dec, /else if \(data\.ok && verb !== "reject" && onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\{ closes: closesIt && close && !!data\.reply\?\.ok \}\);/);   // the close-out (merge + reply) too - Approve and close's
-  assert.match(page, /onMarkDone=\{askFinish\} onSent=\{sent\} closeOnSend liveWork=\{liveWork\} onRemind=/);
+  assert.match(page, /onMarkDone=\{askFinish\} onSent=\{sent\} closeOnSend onRemind=/);
   const sent = page.slice(page.indexOf("const sent = async"), page.indexOf("// Remind me: put away"));
   assert.match(sent, /api\.get\(`\/api\/tasks\/\$\{selected\}`\)/);
   assert.match(sent, /if \(done\) \{ onLeave\?\.\(\); return closedHere\(\); \}/);
@@ -34,21 +34,20 @@ test("a reply sent from Close out closes the task once the send succeeded; a fai
   const sent = page.slice(page.indexOf("const sent = async"), page.indexOf("// Remind me: put away"));
   // ...through the server's one gate, which keeps it open while anything on it still waits on the owner (a held `git push`, 2026-10-29):
   // the page walks on only when that gate says it closed
-  assert.match(sent, /if \(closes && walkLeave\) \{\n\s+if \(beat\) await beat;[^\n]*\n\s+if \(!liveWork\) onLeave\?\.\(\);\n(\s+\/\/[^\n]*\n)*\s+try \{ const d = await walkLeave\("sent", liveWork \? \{ stays: true \} : \{\}\); if \(d\?\.kept\) \{ if \(said\) setSentHere\(\(h\) => h && \{ \.\.\.h, closing: false, kept: d\.kept\.join\("; "\) \}\); onStay\?\.\(\); \} \}/,
-    "on the walk's table, the walk's close (railwalk.leave sent) - never put down over live work, and picked back up when kept open");
-  // ...and the walk told it stays draws no row below at the press: the next row stood on the table until the kept answer came back
-  assert.match(read("AssistantView.jsx"), /const putDown = !key && \(how === "next" \|\| \(how === "leave" && !left\?\.stays && !away\)\) \? fromKey : null;/);
+  assert.match(sent, /if \(closes && walkLeave\) \{\n\s+if \(beat\) await beat;[^\n]*\n\s+onLeave\?\.\(\);\n(\s+\/\/[^\n]*\n)*\s+try \{ const d = await walkLeave\("sent"\); if \(d\?\.kept\) \{ if \(said\) setSentHere\(\(h\) => h && \{ \.\.\.h, closing: false, kept: d\.kept\.join\("; "\) \}\); onStay\?\.\(\); \} \}/,
+    "on the walk's table, the walk's close (railwalk.leave sent) - put down at the press as Mark done is, and picked back up when kept open");
+  assert.match(read("AssistantView.jsx"), /const putDown = !key && \(how === "next" \|\| \(how === "leave" && !away\)\) \? fromKey : null;/);
   assert.match(sent, /\n\s+if \(closes\) \{/);
   // ...and the send itself says it closes, so the server closes before the task's agent is woken by the send (verdicts.decide `closes`)
   assert.match(decide, /\.\.\.\(closesIt && shut && verb === "approve" \? \{ closes: true \} : \{\}\) \}\), data = out\.data;/);
   assert.match(sent, /out = await closeAfterSend\(api, selected\);[^\n]*\n\s+if \(beat\) await beat;\n\s+if \(out\?\.closed\) \{ onLeave\?\.\(\); return closedHere\(\); \}/);
   assert.doesNotMatch(sent, /finish\("done"\)/, "never Mark done's close, which has no gate");
   assert.match(read("closeAgent.jsx"), /export const closeAfterSend = \(api, tid\) => runOperation\(api, "task\.complete", tid, \{ after_send: true \}\);/);
-  // ...and NEVER WHILE WORK ON IT IS LIVE (the owner, 2026-11-01): the line under Send says it stays open
+  // ...WHATEVER ITS AGENT IS DOING (the owner, 2026-11-11: "there is nothing left to do"): no line says it stays open while an agent works
   // ...and only Send and close closes (the owner, 2026-11-03: "send and close and send without closing"): Close out's Send says it stays open
-  assert.match(dec, /const closeThen = liveWork \? `the task stays open while \$\{liveWork\}` : "then the task closes";/);
+  assert.match(dec, /const closeThen = "then the task closes";/);
+  assert.doesNotMatch(dec + page, /liveWork/);
   assert.match(dec, /stays = `the task stays open until you \$\{btn\("close"\)\}`;/);
-  assert.match(page, /const liveWork = liveSession \|\| liveRun \? "the agent is working" : "";/);
   // ...and a close the walk kept open is back on the rail too, not only the table (AssistantView surface)
   assert.match(read("AssistantView.jsx"), /if \(how === "leave" && data\?\.kept\) \{ leftKey\.current = null; dropLeaving\(fromKey\); \}/);
 });

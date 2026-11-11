@@ -182,6 +182,21 @@ def test_an_agent_that_dies_mid_turn_is_said_as_a_chat_cli_that_did(world, monke
     assert e['content']['text'] == f'{MID_TURN}.', e['content']['text']
 
 
+def test_a_turn_its_own_close_ended_is_stopped_never_said_as_a_failure(world, monkeypatch):
+    """THE OWNER'S LIVE APP (2026-11-11: "also says error like agent stopped mid turn????"): Mark done or Send and close while the coding agent
+    works closes its session under the turn - its process is killed, the turn's request comes back empty, and the chat read "the agent
+    stopped in the middle of its turn - nothing was sent again ... type to carry on" on a task he had just closed. And the process IS gone:
+    where the tree-kill could not run, the adapter went on working and filed its answer on the closed task."""
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_HANG', '1')
+    t = open_(s, tid, repo, seed='look at the totals')
+    assert until(lambda: t.in_turn)
+    with mock.patch('taskuary.spawn.run', side_effect=OSError('no taskkill here')): terminal.close(t.sid)
+    assert until(lambda: t.client.p.poll() is not None), 'its process outlived the close'
+    assert until(lambda: not t.in_turn)
+    assert not [u for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'error'], 'a turn Taskuary stopped is not a failed one'
+
+
 def test_a_note_from_the_waiting_room_is_drawn_as_the_owners_words(world):
     s, tid, repo = world
     t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)

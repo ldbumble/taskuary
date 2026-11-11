@@ -1,6 +1,6 @@
 """CLOSE OUT HAS TWO SENDS (the owner, 2026-11-03: "when you send message through close out we need button send and close and send without
 closing so task stays open on send"). Send and close sends the reply and then closes the task through the one gate (concierge.close_after_send:
-kept open, and said why, while an agent works on it); Send sends and the task stays open. The desk's Assistant lights the one the words
+its agent stopped; kept open, and said why, only while something else on it waits for the owner's press); Send sends and the task stays open. The desk's Assistant lights the one the words
 mean, a phone asks yes or no for it, and the index the model reads stays under its cap. Invented Northwind people only."""
 import unittest
 from types import SimpleNamespace
@@ -33,7 +33,7 @@ class Buttons(unittest.TestCase):
     def test_both_sends_are_on_the_one_list_and_each_says_what_it_does(self):
         self.assertEqual((buttons.label('approve'), buttons.label('send_close')), ('Send', 'Send and close'))
         self.assertEqual(buttons.hint('approve'), 'Sends the reply - the task stays open until you Mark done')
-        self.assertTrue(buttons.hint('send_close').startswith('Sends the reply, then closes the task - it stays open while an agent works on it'))
+        self.assertTrue(buttons.hint('send_close').startswith('Sends the reply, then closes the task - its agent is stopped, and it stays open only while'))
         self.assertEqual(buttons.VERBS['send_close']['row'], ['send_close'])
 
     def test_send_and_close_is_offered_only_on_a_reply_drafted_on_a_task(self):
@@ -76,40 +76,61 @@ class Server(unittest.TestCase):
         self.assertEqual(r.json()['status'], 'done'); self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
         self.assertTrue(r.json()['outcome']['closed'])
 
-    def test_send_and_close_keeps_it_open_while_an_agent_works(self):
-        term.SESSIONS['run1'] = SimpleNamespace(sid='run1', task_id=self.tid, alive=True)
-        with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT): r = self.run_op(self.s, self.rid, close=True)
+    def test_send_and_close_closes_whatever_its_agent_is_doing(self):
+        """The owner's live app (2026-11-11): pressed while the agent's turn still ran, the reply went and the task stayed open - "the agent
+        session on it is still open" - with the agent woken to hear of the send. It is his close: the agent is saved and stopped, as Mark done does."""
+        term.SESSIONS['run1'] = SimpleNamespace(sid='run1', task_id=self.tid, alive=True, mode='assistant', busy=True, started=1)
+        with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT), mock.patch('taskuary.writeup.start') as job:
+            r = self.run_op(self.s, self.rid, close=True)
         out = r.json()
-        self.assertEqual(out['status'], 'done'); self.assertNotEqual(self.s.get_task(self.tid)['Status'], 'done')
-        self.assertEqual(out['outcome']['kept_open'], ['the agent session on it is still open'])
-        self.assertIn('Sent. Kept open: The agent session on it is still open.', [c['Body'] for c in self.s.list_comments(self.tid)])
+        self.assertEqual(out['status'], 'done'); self.assertEqual((out['outcome']['closed'], out['outcome']['kept_open']), (True, []))
+        # ...behind the press, by the job Mark done's press starts: the session written up, then the task closed
+        job.assert_called_once_with(self.s, self.tid, close=True, actor=mock.ANY, no_reply=True, sid='run1')
+        self.assertFalse([c['Body'] for c in self.s.list_comments(self.tid) if c['Body'].startswith('Sent. Kept open')])
 
     def test_it_closes_before_the_agent_parked_on_it_is_woken(self):
         """A send that went wakes the agent that set it up. The close came after, by the page's own call: the parked agent was working
         again, and the task read "Sent. Kept open: The agent session on it is still open" every time an agent had run on it."""
         from taskuary import general, verdicts
-        ses = term.SESSIONS['g1'] = SimpleNamespace(sid='g1', task_id=self.tid, alive=True, mode='assistant', busy=False)
+        ses = term.SESSIONS['g1'] = SimpleNamespace(sid='g1', task_id=self.tid, alive=True, mode='assistant', busy=False, started=1)
         woke = []
         def wake(store, tid, *a, **k): woke.append(tid); ses.busy = True; return 'told'
-        with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT), mock.patch.object(general, 'approved', wake), \
-             mock.patch.object(concierge, 'save_live', lambda *a, **k: True):
+        def job(store, tid, **k): ses.alive = False; concierge.close_task(store, tid, k['actor'])       # ...the write-up's own close
+        with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT), mock.patch.object(general, 'approved', wake), mock.patch('taskuary.writeup.start', job):
             out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', None, None, 'owner', closes=True)
             self.assertTrue(out['shut']['closed']); self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
             self.assertEqual(woke, [], 'an agent the close stops is not woken to be stopped')
             again = concierge.close_after_send(self.s, self.tid, 'owner')          # the page's walk asks a beat later: closed already
         self.assertEqual((again['status'], again['kept_open']), ('done', []))
 
-    def test_kept_open_is_said_once_in_words_and_its_agent_hears_the_send(self):
+    def test_the_second_ask_while_the_close_is_on_its_way_does_not_wait_for_it(self):
+        "The page asks the gate again a beat after the send (walk leave `sent`): the close running behind the press is its answer."
+        self.s.decide_review(self.rid, 'approved', None, 'owner')                 # ...the reply went
+        with mock.patch('taskuary.writeup.closing', return_value=True), mock.patch.object(concierge, 'close_task') as shut:
+            again = concierge.close_after_send(self.s, self.tid, 'owner')
+        self.assertEqual((again['status'], again['closed'], shut.called), ('done', True, False))
+
+    def test_it_closes_under_an_agent_at_work_and_wakes_nobody(self):
         from taskuary import general, verdicts
-        term.SESSIONS['g1'] = SimpleNamespace(sid='g1', task_id=self.tid, alive=True, mode='assistant', busy=True)
+        term.SESSIONS['g1'] = SimpleNamespace(sid='g1', task_id=self.tid, alive=True, mode='assistant', busy=True, started=1)
+        woke = []
+        with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT), mock.patch('taskuary.writeup.start'), \
+             mock.patch.object(general, 'approved', lambda store, tid, *a, **k: woke.append(tid) or 'told'):
+            out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', None, None, 'owner', closes=True)
+        self.assertEqual((out['shut']['closed'], out['shut']['kept_open'], woke), (True, [], []), 'a press that closes the task wakes nobody')
+
+    def test_kept_open_is_said_once_in_words_and_its_agent_hears_the_send(self):
+        "What still waits for his own press keeps it open - another email the task owes - said once, and the agent hears the send as before."
+        from taskuary import general, verdicts
+        self.s.add_review({'TaskId': self.tid, 'Kind': 'slot', 'DraftText': 'Hello Gail', 'Status': 'pending'})
         woke = []
         with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT), \
              mock.patch.object(general, 'approved', lambda store, tid, *a, **k: woke.append(tid) or 'told'):
             out = verdicts.decide(self.s, self.s.get_review(self.rid), 'approve', None, None, 'owner', closes=True)
             again = concierge.close_after_send(self.s, self.tid, 'owner')
-        why = 'the agent session on it is still open'
+        why = 'an email this task owes still waits for your Send'
         self.assertEqual((out['shut']['closed'], out['shut']['kept_open'], again['kept_open'], woke), (False, [why], [why], [self.tid]))
-        self.assertEqual([c['Body'] for c in self.s.list_comments(self.tid)].count('Sent. Kept open: The agent session on it is still open.'), 1)
+        self.assertEqual([c['Body'] for c in self.s.list_comments(self.tid)].count(f'Sent. Kept open: {why[0].upper()}{why[1:]}.'), 1)
         said = [x[2] for x in general.presses(self.s, self.tid)]
         self.assertEqual([x for x in said if 'open' in x], [f'asked to close it with that send - it stays open: {why}'])
 

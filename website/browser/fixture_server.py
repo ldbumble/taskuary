@@ -85,7 +85,9 @@ def _install_fresh_routes(app, store):
         store.set_setting(agents.DEV_MODE, "1", "owner")
         fake = str(Path(__file__).resolve().parents[2] / "tests" / "fake_acp_server.py")
         # ...under the CLI's own name too: a conversation reopened after a restart starts its session by the name it kept (waitroom.reopen_coding)
-        for name in ("coding", "claude"): store.upsert_agent(name, "coding", "cli", json.dumps({"cmd": "claude", "acp_cmd": [sys.executable, fake], "cwd": str(repo)}))
+        # ...`real`: the CLI on PATH through its own adapter, not the stand-in (a recorded walk with TASKUARY_BROWSER_REAL_CLI)
+        conn = {"cmd": "claude", "cwd": str(repo)} | ({} if body.get("real") else {"acp_cmd": [sys.executable, fake]})
+        for name in ("coding", "claude"): store.upsert_agent(name, "coding", "cli", json.dumps(conn))
         tid = store.create_task({"Title": body.get("title") or "Comment the ledger totals", "Kind": "coding", "Status": "in_progress"}, "owner")
         return {"taskId": tid, "repo": str(repo)}
 
@@ -136,6 +138,24 @@ def _install_fresh_routes(app, store):
                 return {"open": True, "url": url, "port": 0} if url else real(sid, fresh)
             state.fixture = True; browserview.state = state
         return {"ok": True}
+
+    @app.post("/api/fixture/outbox")
+    def fixture_outbox(body: dict = Body(...)):
+        """A mailbox that sends nowhere: every send is a line in the home's outbox.jsonl and answers as sent (a recorded walk presses Send
+        and Send and close). The fixture has no connection out, so nothing can leave either way."""
+        import json
+        from taskuary import outbound, server
+        from taskuary import store as store_mod
+        store_mod.set_owner(store, "Alex Doyle", "alex@northwind.example", "owner")     # ...the one door: the agents' documents name him too
+        box = Path(os.environ["TASKUARY_HOME"]) / "outbox.jsonl"
+        def out(*a, **k):
+            keep = lambda v: v if isinstance(v, (str, list, int, type(None))) else type(v).__name__
+            with box.open("a", encoding="utf-8") as f: f.write(json.dumps({"args": [keep(x) for x in a[1:]], "kw": {n: keep(v) for n, v in k.items()}}, default=str) + "\n")
+            return {"channel": "email", "to": k.get("to") or ["gail@northwind.example"], "cc": k.get("cc") or []}
+        outbound.send_out = outbound.reply_to_message = out
+        outbound.send_block = lambda *a, **k: ""; outbound.review_connect = lambda *a, **k: None
+        server._refresh_chat_context = lambda *a, **k: {}          # no mailbox to read before a Send
+        return {"ok": True, "outbox": str(box)}
 
     @app.post("/api/fixture/no-readonly")
     def fixture_no_readonly(body: dict = Body(...)):

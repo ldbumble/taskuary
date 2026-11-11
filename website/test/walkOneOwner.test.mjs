@@ -40,6 +40,6 @@ test("a close on the table is railwalk.leave: Mark done, a note, Remove, Remind 
   assert.match(item, /walkLeave=\{async \(how, x\) => \{ const \{ error, data \} = await onWalkLeave\(how, x\); if \(error\) throw error; return data; \}\}/);
   assert.match(page, /walkLeave\(note \? "note" : "done", note \? \{ note \} : \{\}\)/);
   assert.match(page, /walkLeave\("not_task"\)/);
-  assert.match(page, /walkLeave\("sent", liveWork \? \{ stays: true \} : \{\}\)/);
+  assert.match(page, /walkLeave\("sent"\)/);
   assert.match(page, /walkLeave\("remind", \{ until \}\)/);
 });

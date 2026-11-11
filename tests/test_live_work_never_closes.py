@@ -1,7 +1,7 @@
 """NOTHING CLOSES A TASK AUTOMATICALLY WHILE ANYTHING ON IT IS STILL WORKING (the owner, 2026-11-01: "if agent screen is still open and
 you hit send message it should not close the tasks ... If anything still working never close the task automatically"). The shape: a coding
 task's agent sat at its prompt waiting on the owner, the owner pressed Send on the drafted reply in Close out, and the row left the rail
-with the agent still drawn on the canvas. Every automatic close asks one check (workerstate.live_work); the owner's own Mark done does not.
+with the agent still drawn on the canvas. Every automatic close asks one check (workerstate.live_work); the owner's own Mark done and Send and close do not.
 Invented Northwind people only."""
 import unittest
 from types import SimpleNamespace
@@ -35,12 +35,12 @@ class LiveWork(unittest.TestCase):
             self.assertTrue(any('quick answer' in x for x in got))
             self.assertNotIn('its routine is still running', ws.live_work(self.s, self.tid, skip=('routine',)))
 
-    def test_send_with_a_live_waiting_agent_keeps_it_open_and_says_why(self):
-        term.SESSIONS['run1'] = SimpleNamespace(sid='run1', task_id=self.tid, alive=True)
-        out = concierge.close_after_send(self.s, self.tid)
-        self.assertFalse(out['closed']); self.assertEqual(out['kept_open'], [ws.LIVE_SESSION])
-        self.assertNotEqual(self.s.get_task(self.tid)['Status'], 'done')
-        self.assertIn('Sent. Kept open: The agent session on it is still open.', [c['Body'] for c in self.s.list_comments(self.tid)])
+    def test_send_and_close_is_the_owners_own_close_and_asks_it_no_more_than_mark_done_does(self):
+        "Send and close is his press (2026-11-11), not an automatic close: a live agent is saved and stopped under it, as Mark done's is."
+        term.SESSIONS['run1'] = SimpleNamespace(sid='run1', task_id=self.tid, alive=True, started=1)
+        with mock.patch('taskuary.writeup.start') as job:
+            out = concierge.close_after_send(self.s, self.tid)
+        self.assertTrue(out['closed']); self.assertEqual(out['kept_open'], []); self.assertTrue(job.called)
 
     def test_send_with_nothing_live_still_closes(self):
         self.assertTrue(concierge.close_after_send(self.s, self.tid)['closed'])

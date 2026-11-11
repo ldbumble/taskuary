@@ -79,7 +79,8 @@ def live_work(store, tid: int, but=None, skip: tuple = ()) -> list:
     """Everything still working or live on this task, each in its words - [] when nothing is. THE ONE CHECK every AUTOMATIC close asks
     (the owner, 2026-11-01: "If anything still working never close the task automatically" - a Send closed a task whose agent sat at
     its prompt waiting on him). An agent waiting on the owner is live: its session is open. `but` is the session asking (an agent's own
-    --done), never counted against itself; `skip` names work the caller IS ('routine', 'quick'). The owner's own Mark done never asks this."""
+    --done), never counted against itself; `skip` names work the caller IS ('routine', 'quick'). The owner's own closes - Mark done, Send
+    and close - never ask this."""
     from . import quickwork, terminal as term, workflows, writeup
     tid, out = int(tid), []
     if but is None: live = _live(tid)

@@ -43,11 +43,11 @@ class SendThenClose(unittest.TestCase):
         self.assertTrue(out['outcome']['closed'], out); self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
         self.assertFalse(any(n.startswith('Sent. Kept open') for n in self.notes()))
 
-    def test_an_open_session_or_a_queued_start_keeps_it_open(self):
+    def test_a_held_push_keeps_it_open_under_a_live_agent_too_and_the_agent_alone_never_does(self):
+        self.hold()
         with mock.patch('taskuary.workerstate._live', return_value=SimpleNamespace(sid='run1')):
-            self.assertEqual(concierge.close_after_send(self.s, self.tid)['kept_open'], ['the agent session on it is still open'])
-        self.s.enqueue_dispatch(self.tid, None, 'claude', 'every slot is busy')
-        self.assertIn('an agent is queued to start on it', concierge.close_after_send(self.s, self.tid)['kept_open'])
+            kept = concierge.close_after_send(self.s, self.tid)['kept_open']
+        self.assertEqual(len(kept), 1); self.assertIn('held step still waits for your Approve', kept[0])
         self.assertNotEqual(self.s.get_task(self.tid)['Status'], 'done')
 
     def test_a_held_step_outlives_its_closed_session_and_is_still_approvable(self):

@@ -67,9 +67,9 @@ class Run:
         if 'error' in r: return f"ERROR {r['error']['message']}"
         return ('ERROR ' if r['result'].get('isError') else '') + r['result']['content'][0]['text']
 
-    def turn(self, say: str, *calls, label: str = None, secs=40) -> str:
-        """The agent's next turn: waits for its prompt (whatever started it), makes `calls` [(tool, {args})] while it is at work, answers `say`
-        and waits for it to end. -> the prompt it was given."""
+    def at_work(self, *calls, secs=40, label: str = None) -> str:
+        """The agent's next turn begun and still at work: waits for its prompt (whatever started it) and makes `calls` [(tool, {args})] - no
+        answer yet, so what the owner presses meanwhile lands on a turn under way (`label` snaps it there). -> the prompt it was given."""
         inp = self.d / f'{self.k}.in'
         assert until(inp.is_file, secs), f'{self.backend}: turn {self.k} never started (no prompt reached the agent)'
         prompt = inp.read_text(encoding='utf-8'); self.prompts.append(prompt); self.told.append((len(self.snaps), prompt))
@@ -80,12 +80,21 @@ class Run:
         # ...each card this turn raised, by the turn it is (the agent's answers so far): where the page must draw it
         n = len(self.payload()['said'])
         self.raised.update({r['ReviewId']: n for r in self.s._rows('SELECT ReviewId FROM review WHERE TaskId=?', (self.tid,)) if r['ReviewId'] not in was})
+        if label: self.snap(label)
+        return prompt
+
+    def answer(self, say: str, label: str = None, secs=40):
+        "The turn at work answers `say` and ends."
         (self.d / f'{self.k}.tmp2').write_text(say, encoding='utf-8'); os.replace(self.d / f'{self.k}.tmp2', self.d / f'{self.k}.out')
         self.k += 1
         # ...by the state, never the clock: its words drawn in the chat first (a loaded machine files them seconds after they were said)
         if say.strip(): until(lambda: any(say.strip()[:40] in x for x in self.payload()['said']), secs)
         self.settle()
         self.snap(label or f'turn: {say[:40]}')          # ...named by what it said: a stopped turn's prompt may or may not have come
+
+    def turn(self, say: str, *calls, label: str = None, secs=40) -> str:
+        "The agent's next turn, whole: its prompt, its `calls` while at work, its answer `say`, its end. -> the prompt it was given."
+        prompt = self.at_work(*calls, secs=secs); self.answer(say, label, secs)
         return prompt
 
     def quiet(self, secs=1.5, label=None) -> bool:
@@ -721,8 +730,42 @@ def q_save_routine(r: Run):
     r.turn('Saved: it runs every Monday at 8.')
 
 
+def s_send_close_at_work(r: Run):
+    """(s) Send and close pressed on the card while its agent is still at work (the owner's live app, 2026-11-11: the reply went, the task stayed
+    open "the agent session on it is still open", the agent was woken twice and a turn read as stopped in the middle) -> the reply goes, the
+    card stands sent, the task closes and the agent is put to rest: no turn after it, nothing said to have failed."""
+    r.arrive({'intent': 'reply_only', 'kind': 'task', 'title': 'Gail asks for three wiki options'}, from_name='Gail Moreno', from_email='gail@northwind.example',
+             body='Could you find me three open-source options for a team wiki?')
+    r.at_work(('propose_reply', {'text': 'Hi Gail - BookStack, Wiki.js and DokuWiki; I would pick BookStack.'}), label='the card, its turn still at work')
+    # ...closed behind the press (concierge.close_behind: the write-up job Mark done's press starts): read once the close has landed, by the
+    # state, never the clock
+    pace(); r.pressed.append(len(r.snaps))
+    assert r.c.post(f"/api/reviews/{r.card()['id']}/decide", json={'verb': 'approve', 'closes': True}).status_code < 300
+    r.drop()
+    assert until(lambda: r.s.get_task(r.tid)['Status'] == 'done'), 'Send and close closes, whatever the agent is doing'
+    r.snap('send and close while it works')
+    r.quiet(label='closed: nothing at work')
+    # ...and a turn its own close stopped is not said to have died: the rail read "the agent stopped: the agent stopped in the middle of its turn"
+    assert not [e for e in r.s.worker_events(r.tid) if 'middle of its turn' in json.dumps(e, default=str)], 'a stopped turn is not a failed one'
+    assert not r.started, 'a press that closes the task wakes nobody'
+
+
+def t_send_at_work(r: Run):
+    "(t) Send pressed on the card while its agent is still at work -> the task stays open, the agent hears it once, and its short turn ends clean."
+    r.arrive({'intent': 'reply_only', 'kind': 'task', 'title': 'Gail asks for three wiki options'}, from_name='Gail Moreno', from_email='gail@northwind.example',
+             body='Could you find me three open-source options for a team wiki?')
+    r.at_work(('propose_reply', {'text': 'Hi Gail - BookStack, Wiki.js and DokuWiki; I would pick BookStack.'}), label='the card, its turn still at work')
+    r.send(label='send while it works')
+    r.answer('Three options, BookStack the pick - the reply to Gail waits for your Send.')
+    from taskuary import waitroom
+    waitroom.tick(r.s)                               # ...the waiting room's clock: what was queued behind the turn is handed over at its stop
+    r.turn('It went to Gail.')
+    assert r.quiet(label='told once: nothing at work'), 'the send reaches the agent once'
+    assert not [x for x in r.payload()['said'] if 'stopped' in x], 'no turn reads as failed'
+
+
 SCENARIOS = {k: f for k, f in [('a', a_question_answered), ('b', b_email_rewritten), ('c', c_bug_pushed), ('d', d_page_step), ('e', e_three_asks),
                                ('f', f_ci_notice), ('g', g_invite_clash), ('h', h_steered_mail), ('i', i_late_answer), ('j', j_answered_outside),
                                ('k', k_send_fails), ('l', l_no_connector), ('m', m_remind_while_working), ('n', n_full_house), ('o', o_silent_turn),
-                               ('p', p_break_out), ('q', q_save_routine), ('r', r_monitor_notice)]}
+                               ('p', p_break_out), ('q', q_save_routine), ('r', r_monitor_notice), ('s', s_send_close_at_work), ('t', t_send_at_work)]}
 def runs_on(name, backend) -> bool: return backend in getattr(SCENARIOS[name], 'on', BACKENDS)

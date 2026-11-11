@@ -12,7 +12,7 @@ const rd = read("ReviewDecision.jsx");
 
 test("the one list names both sends, and each hover says exactly what it does", () => {
   assert.equal(label("send_close"), "Send and close");
-  assert.match(hint("send_close"), /^Sends the reply, then closes the task - it stays open while an agent works on it/);
+  assert.match(hint("send_close"), /^Sends the reply, then closes the task - its agent is stopped, and it stays open only while something else on it still waits on you/);
   assert.equal(hint("approve"), "Sends the reply - the task stays open until you Mark done");
   assert.doesNotMatch(hint("approve"), /Close out|closes/);
   assert.deepEqual(rowsOf("send_close"), ["send_close"]);
@@ -34,7 +34,7 @@ test("the Advisor's or the Assistant's pick lights its own send - Send never lig
 
 test("a close-out's pair: Approve and close and Approve, on the one list, and the close-out's yes lights Approve and close", () => {
   assert.equal(label("send_close", "closeout"), "Approve and close");
-  assert.match(hint("send_close", "closeout"), /^Runs what finishing it does on GitHub, sends the reply, then closes the task - it stays open while an agent works on it/);
+  assert.match(hint("send_close", "closeout"), /^Runs what finishing it does on GitHub, sends the reply, then closes the task - its agent is stopped, and it stays open only while something else/);
   assert.ok(ALL_LABELS.includes("Approve and close"));
   const list = [{ id: "41:send_close", label: "Approve and close", group: "decide", tone: "p", card: true },
     { id: "41:approve", label: "Approve", group: "decide", tone: "s", card: true }, { id: "41:alt", label: "Decline", group: "decide", tone: "s", card: true }];
@@ -69,8 +69,8 @@ test("Close out draws Send and close first and filled, Send beside it; only Send
   assert.match(moves, /run: \(\) => decide\("approve", false, false\), title: sendTitle/);
   assert.match(rd, /await onSent\(\{ closes: closesIt && shut && verb === "approve" && \(data\.reply \? !!data\.reply\.ok : true\),\n\s+said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: replyContext\(r\), subject: deliverySubject\(r\), id: r\.ReviewId \} : null \}\); return;/);
   assert.match(rd, /const closeTitle = `\$\{to\} - \$\{closeThen\}`, sendTitle = `\$\{to\} - \$\{stays\}`;/);
-  // ...while an agent works the hover and the line say it stays open - the server keeps it so (concierge.close_after_send)
-  assert.match(rd, /const closeThen = liveWork \? `the task stays open while \$\{liveWork\}` : "then the task closes";/);
+  // ...whatever its agent is doing: the server stops it under the close (concierge.close_after_send)
+  assert.match(rd, /const closeThen = "then the task closes";/);
   assert.match(rd, /\$\{closeWord\} sends this to \$\{replyContext\(r\)\}[^`]*- \$\{closeThen\}; \$\{sendWord\} sends it and \$\{stays\}\./);
 });
 

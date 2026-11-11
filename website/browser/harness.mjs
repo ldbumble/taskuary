@@ -206,6 +206,15 @@ export async function startHarness({ fresh = false, bin = "", tour = false } = {
     const system = process.platform === "win32" ? [path.join(process.env.SystemRoot || "C:\\Windows", "System32"), process.env.SystemRoot || "C:\\Windows"]
       : ["/usr/bin", "/bin"];
     backendEnv = { ...isolated, TASKUARY_FIXTURE_FRESH: "1", PATH: [bin, ...system].filter(Boolean).join(path.delimiter) };
+    // THE OWNER'S REAL CLI, for a recorded walk only (the owner, 2026-11-11: "run it against my real claude cli"): TASKUARY_BROWSER_REAL_CLI names
+    // the folders its programs are in (claude, node, git). The CLI signs in from the person's own profile, so the profile folders stay theirs;
+    // Taskuary's home is still the scratch one, and the fixture still opens no connection out. Never set in CI: the stand-in is the default.
+    if (process.env.TASKUARY_BROWSER_REAL_CLI) {
+      backendEnv.PATH = [bin, ...process.env.TASKUARY_BROWSER_REAL_CLI.split(path.delimiter), ...system].filter(Boolean).join(path.delimiter);
+      for (const k of ["HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY"]) {
+        if (process.env[k] === undefined) delete backendEnv[k]; else backendEnv[k] = process.env[k];
+      }
+    }
     delete backendEnv.TASKUARY_DEMO;
     if (process.platform === "win32") delete backendEnv.Path;
   }

@@ -140,7 +140,6 @@ export const BlankAsk = ({ line, onSend, onCancel }) => (
 // `onSent`: a send or close-out that went through - the task page reads the task and, when that closed it, walks on.
 // `closeOnSend`: the task page's Close out (the owner, 2026-10-29: "wait until the send actually succeeds, then close the task"): a reply
 // that went is the close too - onSent({ closes }) says so, only after the server's receipt; a send that failed leaves it open, its error here.
-// `liveWork`: what is still working on the task ("the agent is working") - the server keeps it open after the send, and the line says so.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
 // `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
 // ...an act a connector declares a card for (a post, a tracker comment) is drawn as that card (ActionCard.jsx), wherever its proposal shows -
@@ -149,7 +148,7 @@ export default function ReviewDecision(props) {
   const act = cardOf(props.review);
   return act ? <ActionCard row={act} tid={props.review?.TaskId} onChanged={props.onChanged} /> : <Decision {...props} />;
 }
-function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "" }) {
+function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "" }) {
   const [text, setTextNow] = useState(() => heldOf(r)?.text ?? null);   // the owner's edit; null means "the draft as filed"
   const setText = (v) => { hold(r, { text: v ?? null }); setTextNow(v); };
   const [cc, setCcNow] = useState(() => heldOf(r)?.cc ?? null);         // null means "the CC the draft was filed with"
@@ -253,12 +252,12 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // ...and in Close out TWO SENDS (the owner, 2026-11-03: "button send and close and send without closing so task stays open on send"): Send and
   // close is the one that closes, and the primary; Send sends and the task stays open, as it does everywhere else
   const closesIt = closeOnSend && onTask && !!onSent;
-  // ...but never while work on it is live (the owner, 2026-11-01): the reply goes and the task stays open - the server keeps it so too
+  // ...whatever its agent is doing (the owner, 2026-11-11): Send and close is his close, and the server stops the agent under it
   // ...a calendar card's press is its act, and a share's names who it is for (sharing.agent_share's `share`)
   const calWord = isCal ? CAL_PRESS[meta.act] : "", shareTo = String(meta.share?.to || "").split(/\s+/)[0];
   const sendWord = calWord || (shareTo ? `Share with ${shareTo}` : btn("approve")), closeWord = calWord ? `${calWord} and close` : btn("send_close");
   const closeCo = btn("send_close", "closeout"), stays = `the task stays open until you ${btn("close")}`;
-  const closeThen = liveWork ? `the task stays open while ${liveWork}` : "then the task closes";
+  const closeThen = "then the task closes";
   // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so a send went out with the promise and
   // without the file. The move becomes answering by email with the file; sending the words alone stays beside it.
   const chatFile = !!onEmailInstead && !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && canSendIt

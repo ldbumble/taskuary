@@ -62,11 +62,12 @@ class Walk:
         if verb == 'send':
             sym, closes, live = args[0], args[1] in ('closes', 'live'), args[1] == 'live'
             if closes and 'rid' in self.src[sym]: self.s.decide_review(self.src[sym]['rid'], 'approved', 'Sent.', 'owner')
-            # ...`live`: the reply went with the task's agent still open at its prompt, waiting on the owner (2026-11-01)
+            # ...`live`: the reply went with the task's agent still open - Send and close stops it and closes, behind the press (2026-11-11)
             from types import SimpleNamespace
             from taskuary import terminal
             agent = {'w-live': SimpleNamespace(sid='w-live', task_id=self.src[sym].get('tid'), alive=True)} if live else {}
-            with mock.patch.dict(terminal.SESSIONS, agent):
+            def job(store, tid, **k): terminal.SESSIONS.pop('w-live', None); concierge.close_task(store, tid, k.get('actor') or 'owner')   # the write-up's close
+            with mock.patch.dict(terminal.SESSIONS, agent), mock.patch('taskuary.writeup.start', job):
                 return self.land(railwalk.leave(self.s, self.key(sym), 'sent', press=press))
         if verb == 'arrive': return walkworld.arrive(self.s, self.src, args[0])
         if verb == 'close-elsewhere': return walkworld.close_elsewhere(self.s, self.src, args[0])

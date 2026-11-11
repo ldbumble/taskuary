@@ -4243,15 +4243,6 @@ def close_task(store, tid: int, actor: str = 'owner', save: bool = True) -> bool
     return True
 
 
-def waiting_on_owner(store, tid: int) -> list:
-    """What on this task still waits on the owner, each in the words it carries: a held agent step or a proposal for an Approve, another
-    reply or email for a Send, an agent session still open, a run or workflow still going, an agent queued to start. [] when nothing does.
-    A SEND THAT CLOSES (close_after_send) asks this first: a Close out Send closed a task whose agent's `git push` was held for the
-    owner's Approve - never approved, never pushed, and the task read done (2026-10-29)."""
-    from . import workerstate as ws
-    return [i['says'] for i in owed_items(store, tid, asks=False)] + ws.live_work(store, tid)   # ...and anything still working or live on it
-
-
 def owed_items(store, tid: int, asks: bool = True) -> list:
     """EVERYTHING A TASK HOLDS FOR THE OWNER, item by item, from the reads its own page draws (server._assistant_payload): each pending or
     held review - the reply draft, an email it owes, a post, any other proposal - and the agent's open question. Each {rid, verb, line,
@@ -4290,22 +4281,35 @@ def owed_items(store, tid: int, asks: bool = True) -> list:
     return out
 
 
+def close_behind(store, tid: int, actor: str = 'owner') -> bool:
+    """The owner's close of a task whose reply has gone: with an agent live on it, the session is written up and the task closed BEHIND the
+    press, by the job Mark done's own press starts (writeup.start) - the agent stops at once and the press answers once its session is kept.
+    Closed inside the press, every AI call of the ending (what it learned, its report) held the page for 10 s under a turn that had stopped,
+    its head still drawn (the real-CLI walk, 2026-11-11). True: closed, or closing behind the press."""
+    from . import terminal, writeup
+    if writeup.closing(tid): return True               # ...the page's second ask, a beat later: the same close, on its way
+    try: s = terminal.session_for(tid)
+    except Exception: s = None
+    if writeup.in_job() or not (s and getattr(s, 'alive', False)): return close_task(store, tid, actor)
+    writeup.start(store, tid, close=True, actor=actor, no_reply=True, sid=getattr(s, 'sid', None))
+    return True
+
+
 SAME_PRESS = 30       # seconds in which a second ask about a send's close is the same press asking (close_after_send)
 def close_after_send(store, tid: int, actor: str = 'owner') -> dict:
-    """THE ONE GATE on "the reply that went closes the task" (the Close out Send, 2026-10-29): closed only when nothing on it still waits
-    on the owner (waiting_on_owner); otherwise it stays open and says why on the task. {'status', 'closed', 'kept_open'}."""
+    """THE ONE GATE on "the reply that went closes the task" (the Close out Send, 2026-10-29): closed unless something on it still waits for
+    the owner's own press (owed_items: a held agent step or a proposal for an Approve, another reply or email for a Send - a Close out Send
+    closed a task whose agent's `git push` was held, never approved, never pushed, and the task read done); then it stays open and says why
+    on the task. {'status', 'closed', 'kept_open'}."""
     t = store.get_task(tid) or {}
     if not t: raise ValueError('task not found')
     if t.get('Status') in ('done', 'dropped'): return {'status': t['Status'], 'closed': False, 'kept_open': []}
-    kept = waiting_on_owner(store, tid)
-    # ...but an agent PARKED at its prompt is not work still going (the owner's ruling, 2026-11-05): on a chat task the session stays open
-    # after every turn, and Send and close never closed once an agent had run. The owner's press stops it - saved as Mark done saves it
-    # (close_task) - and closes; an agent still working keeps it open, and nothing closes a task on its own
-    from . import workerstate as ws
-    live = ws._live(tid)
-    parked = getattr(live, 'mode', '') == 'assistant' and getattr(live, 'busy', None) is False      # a chat agent at rest; a terminal never reads as one
-    if ws.LIVE_SESSION in kept and parked: kept = [k for k in kept if k != ws.LIVE_SESSION]
-    if not kept: return {'status': 'done', 'closed': close_task(store, tid, actor), 'kept_open': []}
+    # ...AND ITS AGENT NEVER KEEPS IT OPEN (the owner, 2026-11-11: "Why is agent still going .... there is nothing left to do"): Send and close is
+    # his close, as Mark done is - the agent on it, at work or at rest, is saved and stopped (close_behind) and is not woken to hear of the send.
+    # Kept open while a turn ran, the send woke the agent, the page's second ask closed the task under that turn, and the chat read "it stays
+    # open: the agent session on it is still open" over a turn said to have stopped in the middle
+    kept = [i['says'] for i in owed_items(store, tid, asks=False)]
+    if not kept: return {'status': 'done', 'closed': close_behind(store, tid, actor), 'kept_open': []}
     said = '; '.join(kept)
     # ...said ONCE a press: the send's own close says it (verdicts.decide `closes`), and the page's walk asks again a beat later
     last = store._one("SELECT Detail, CreatedAt FROM audit WHERE EntityType='task' AND EntityId=? AND Action='send_kept_open' ORDER BY Id DESC LIMIT 1", (tid,))

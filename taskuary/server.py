@@ -1792,7 +1792,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
                                   | ({'fix': out['send_fix']} if out.get('send_fix') else {}))
         if out.get('send_error'): out = {**out, 'reply_error': out['send_error']}
         # SEND AND CLOSE (the owner, 2026-11-03: "button send and close and send without closing"): `close` closes the task once the reply
-        # went, through the one gate (concierge.close_after_send) - kept open, and said why, while an agent or anything else on it waits
+        # went, through the one gate (concierge.close_after_send) - kept open, and said why, only while something else on it waits on him
         if p.get('close') and rv.get('TaskId') and not out.get('reply_error'):
             from . import concierge
             out = {**out, **(out.pop('shut', None) or concierge.close_after_send(store, int(rv['TaskId']), ACTOR))}

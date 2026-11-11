@@ -397,12 +397,17 @@ class ACPCoding:
         stop_now, self.stop_next = self.stop_next, False
         try: stop, said = self.client.prompt(text, sent=self.client.cancel if stop_now else None); ok = True
         except acp_mod.ACPAgentError as e:
-            logger.warning(f'acp coding {self.sid}: the turn failed - {e}')
-            # ...a sentence that already says how to carry on is said as it is (acp's mid-turn death)
-            self._say('progress', 'acp', why := f'{str(e)[:400]}.' if general.CARRY_ON in str(e) else f'The turn failed: {str(e)[:300]} - {general.CARRY_ON}.')
-            # ...IN THE CHAT, where it happened (rules part 4): said only on its Terminal, the chat - drawn from the kept updates - showed the
-            # turn's first words and stopped. Taskuary's own update, marked as its brief is (chatStream.stepsFromAcp draws it as the turn's error)
-            self._record({'sessionUpdate': 'error', 'content': {'type': 'text', 'text': why}, '_meta': {'taskuary': 'error'}})
+            # A TURN ITS OWN CLOSE ENDED IS STOPPED, NEVER FAILED (the owner, 2026-11-11: "also says error like agent stopped mid turn????"):
+            # Mark done, Send and close or a stop closes the session under the turn and its process is killed - said as a death, the chat
+            # read "stopped in the middle of its turn ... type to carry on" on a task he had just closed (a chat's: general.send_prompt)
+            if getattr(self, 'closing', False): logger.info(f'acp coding {self.sid}: its turn ended with its close')
+            else:
+                logger.warning(f'acp coding {self.sid}: the turn failed - {e}')
+                # ...a sentence that already says how to carry on is said as it is (acp's mid-turn death)
+                self._say('progress', 'acp', why := f'{str(e)[:400]}.' if general.CARRY_ON in str(e) else f'The turn failed: {str(e)[:300]} - {general.CARRY_ON}.')
+                # ...IN THE CHAT, where it happened (rules part 4): said only on its Terminal, the chat - drawn from the kept updates - showed the
+                # turn's first words and stopped. Taskuary's own update, marked as its brief is (chatStream.stepsFromAcp draws it as the turn's error)
+                self._record({'sessionUpdate': 'error', 'content': {'type': 'text', 'text': why}, '_meta': {'taskuary': 'error'}})
         finally:
             self.in_turn = False
             try: self.steps.flush(stop if ok else 'error')

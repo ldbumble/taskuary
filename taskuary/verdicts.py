@@ -573,8 +573,9 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
         actor = a[2] if len(a) > 2 else kw.get('actor', 'owner')
         # SEND AND CLOSE CLOSES BEFORE ITS AGENT IS TOLD (the agent walk, 2026-11-10): the close came a beat after the send, by the page's
         # own call - and by then the send had woken the agent parked on the task, so the gate found it working and kept the task open:
-        # "Sent. Kept open: The agent session on it is still open", every time an agent had run. The owner said close: an agent at rest
-        # is stopped (concierge.close_after_send), never woken to be; one kept open for a reason of its own hears the send as before
+        # "Sent. Kept open: The agent session on it is still open", every time an agent had run. The owner said close: its agent, at
+        # work or at rest, is stopped (concierge.close_after_send), never woken to be; a task kept open by something else that waits
+        # on his press hears the send as before
         if closes and (out.get('reply') or {'ok': rv.get('Kind') != 'action'}).get('ok'):
             from . import concierge
             try: out['shut'] = concierge.close_after_send(store, rv['TaskId'], actor)

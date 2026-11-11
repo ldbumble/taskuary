@@ -15,7 +15,8 @@ const real = [exe, path.dirname(where("npx")[0])          /* the folder npx is i
 // THE AGENTS' BROWSER, KEPT IN THE SCRATCH HOME (REAL_BROWSER=1; a walk of the browser): the CLI signs in from the person's own profile, and the
 // browser driver keeps its sessions under whatever profile it is run with - so it is run through a stand-in of its name that hands it the
 // scratch profile (the folder above AGENT_BROWSER_HOME, harness.mjs). Nothing of a walk is written to the person's own driver folder.
-if (process.env.REAL_BROWSER) {
+if (process.env.REAL_BROWSER === "own") real.push(path.dirname(where("agent-browser")[0]));
+else if (process.env.REAL_BROWSER) {
   const exe = path.join(path.dirname(where("agent-browser")[0]), "node_modules", "agent-browser", "bin", "agent-browser-win32-x64.exe"), shim = path.join(out, "shim");
   await mkdir(shim, { recursive: true });
   await writeFile(path.join(shim, "agent-browser.cmd"), `@echo off

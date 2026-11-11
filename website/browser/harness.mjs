@@ -222,6 +222,9 @@ export async function startHarness({ fresh = false, bin = "", tour = false } = {
       mkdirSync(xdgConfig, { recursive: true });
       writeFileSync(path.join(xdgConfig, ".curlrc"), ports.map((p) => `connect-to = "127.0.0.1:${p}:127.0.0.1:9"`).join("\n") + "\n");
       backendEnv.CURL_HOME = xdgConfig;
+      // ...REAL_BROWSER=own (the owner, 2026-11-11: "yes run browser thing under my profile"): the driver keeps its sessions under the person's own
+      // profile, so Taskuary reads them there - only the files of its own sessions, by their names
+      if (process.env.REAL_BROWSER === "own") backendEnv.AGENT_BROWSER_HOME = path.join(os.homedir(), ".agent-browser");
     }
     delete backendEnv.TASKUARY_DEMO;
     if (process.platform === "win32") delete backendEnv.Path;

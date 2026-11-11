@@ -11,7 +11,9 @@ export const live = (m) => m?.status?.type === "running" || String(m?.id || "").
 const answers = (ms) => (ms || []).filter((m) => m?.role === "assistant").length;
 
 // what the press keeps, before any request goes: when, and how many answers the thread had then
-export const sentNow = (thread, at = Date.now(), busy = false) => ({ at, answers: answers(thread), busy });     // `busy`: a turn already at work then
+// `busy`: a turn already at work then - and one the thread does not draw yet (its adapter silent so far, its head the pane's own) will file an
+// answer after the press that is its own, not the line's: counted in, so it never lets the press go (the recorded coding walk, 2026-11-10)
+export const sentNow = (thread, at = Date.now(), busy = false) => ({ at, answers: answers(thread) + (busy && !live((thread || []).at(-1)) ? 1 : 0), busy });
 
 // ...let go once the thread has a turn after it: the reply (or the live turn) is the thread's own from there
 export const settled = (thread, sent) => !!sent && answers(thread) > sent.answers;

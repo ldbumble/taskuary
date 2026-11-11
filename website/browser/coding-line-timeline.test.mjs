@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { startHarness } from "./harness.mjs";
+import { note, record } from "./recorder.mjs";
 
 /* A LINE TYPED IN A CODING CHAT, AS THE OWNER SEES IT (general.take_line; the owner, 2026-11-10: "coding and general use the same code when it
    comes to interactions so there should be no difference. IT should not say waiting on top of the prompt only under it and it should happen
@@ -125,6 +126,21 @@ async function timeline(page, said, answer, pressed, name, { midturn = false } =
   return seen;
 }
 
+// ONE SCENE OF THE WALK, RECORDED (the owner, 2026-11-10: every audit is judged by watching it): `before` sets the state up on screen, then his
+// line is typed and followed to the answer. The frames, a contact sheet and a README go under video/<walk>-<name>
+async function scene(page, name, said, { midturn = false, before = null, state = "" } = {}) {
+  const dir = path.join(shots, "video", `${process.env.N17_NAME || "coding-walk"}-${name}`), rec = await record(page, dir);
+  let err = "";
+  try { if (before) await before(); await timeline(page, said, heard(said), await say(page, said), name, { midturn }); }
+  catch (e) { err = e.message; throw e; }
+  finally {
+    await rec.stop();
+    await note(dir, { done: `A coding chat (stand-in ACP adapter, slow to start)${state ? `, ${state}` : ""}; the owner types "${said}" and presses Enter.`,
+      expect: "His line once; the agent's head (AGENT · time · ran Ns) directly under it from the press, the spin under the head, the clock counting from the press and never restarting; no 'Working' words; nothing drawn above his line; then the answer in that turn.",
+      saw: err ? err.slice(0, 1500) : "as expected", verdict: err ? "FAIL" : "PASS" });
+  }
+}
+
 test("a line typed in an ACP coding chat stands once, its turn's head under it from the press, in every state the line can meet", { timeout: 900000 }, async (t) => {
   const w = await codingWorld(t);
   const page = await w.newPage();
@@ -145,30 +161,26 @@ test("a line typed in an ACP coding chat stands once, its turn's head under it f
     .catch(async (e) => { await page.screenshot({ path: path.join(shots, "item1-first.png") }); throw new Error(`${e.message}\n${(await pageText(page)).slice(-1500)}`); });
   await quiet(page);
   await page.screenshot({ path: path.join(shots, "item1-first.png") });
-  let at;
 
   // THE SESSION ENDED
   assert.ok((await w.api("/api/fixture/session", { taskId: tid, state: "ended" })).ok, "the session ended");
-  at = await say(page, "now check the tax line");
-  await timeline(page, "now check the tax line", heard("now check the tax line"), at, "ended");
+  await scene(page, "ended", "now check the tax line", { state: "its session ended" });
   await quiet(page);
 
   // ...STOPPED BY ITS x MID-TURN, then a line typed carries on
-  at = await say(page, "and the rounding");
-  await page.waitForSelector("[data-tq-task-page] [data-tq-stop-run]", { visible: true, timeout: 10000 });
-  await page.screenshot({ path: path.join(shots, "item1-x-before.png") });
-  await page.evaluate(() => document.querySelector("[data-tq-task-page] [data-tq-stop-run]").click());     // the head is drawn anew each second
-  await quiet(page);
-  await page.screenshot({ path: path.join(shots, "item1-x-stopped.png") });
-  at = await say(page, "carry on with the rounding");
-  await timeline(page, "carry on with the rounding", heard("carry on with the rounding"), at, "after-x");
+  await scene(page, "after-x", "carry on with the rounding", { state: "a turn stopped by its x", before: async () => {
+    await say(page, "and the rounding");
+    await page.waitForSelector("[data-tq-task-page] [data-tq-stop-run]", { visible: true, timeout: 10000 });
+    await page.screenshot({ path: path.join(shots, "item1-x-before.png") });
+    await page.evaluate(() => document.querySelector("[data-tq-task-page] [data-tq-stop-run]").click());     // the head is drawn anew each second
+    await quiet(page);
+    await page.screenshot({ path: path.join(shots, "item1-x-stopped.png") }); } });
   await quiet(page);
 
   // IDLED OUT
   const idled = await w.api("/api/fixture/session", { taskId: tid, state: "idled" });
   assert.ok(idled.ok, `the session idled out: ${idled.why}`);
-  at = await say(page, "what about the import");
-  await timeline(page, "what about the import", heard("what about the import"), at, "idled");
+  await scene(page, "idled", "what about the import", { state: "its session idled out" });
   await quiet(page);
 
   // AFTER A RESTART (TQ_WALK_RESTART=1): a conversation reopened after a restart starts by the CLI's own profile, which the start-up folds into
@@ -176,24 +188,21 @@ test("a line typed in an ACP coding chat stands once, its turn's head under it f
   if (process.env.TQ_WALK_RESTART) {
     await w.restart();
     await page.reload({ waitUntil: "domcontentloaded" });
-    at = await say(page, "is it still there after the restart");
-    await timeline(page, "is it still there after the restart", heard("is it still there after the restart"), at, "restart");
+    await scene(page, "restart", "is it still there after the restart", { state: "after the app restarted" });
     await quiet(page);
   }
 
   // A CLOSED TASK: typing reopens it
   await fetch(`${w.fixtureApi}/api/tasks/${tid}`, { method: "PATCH", headers: { "Content-Type": "application/json", "X-Taskuary-Token": w.token }, body: JSON.stringify({ Status: "done" }) });
   await page.reload({ waitUntil: "domcontentloaded" });
-  at = await say(page, "one more thing on the closed one");
-  await timeline(page, "one more thing on the closed one", heard("one more thing on the closed one"), at, "closed");
+  await scene(page, "closed", "one more thing on the closed one", { state: "the task closed" });
   const task = await w.api(`/api/tasks/${tid}`);
   assert.ok(["open", "in_progress"].includes(task.Status ?? task.task?.Status), `typing reopened it: ${JSON.stringify(task).slice(0, 200)}`);
   await quiet(page);
 
   // A LINE TYPED MID-TURN
-  await say(page, "start on the docs");
-  await page.waitForSelector("[data-tq-task-page] [data-tq-run-clock]", { visible: true, timeout: 10000 });
-  at = await say(page, "and the changelog too");
-  await timeline(page, "and the changelog too", heard("and the changelog too"), at, "midturn", { midturn: true });
+  await scene(page, "midturn", "and the changelog too", { midturn: true, state: "a turn still running", before: async () => {
+    await say(page, "start on the docs");
+    await page.waitForSelector("[data-tq-task-page] [data-tq-run-clock]", { visible: true, timeout: 10000 }); } });
   assert.deepEqual(errors, []);
 });

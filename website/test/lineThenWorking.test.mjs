@@ -32,4 +32,11 @@ test("a line typed while a turn runs waits for that turn to end, then the turn i
   assert.equal(sent.busy, true);
   assert.equal(pendingTurn(thread, { busy: true, sent }), false, "the live turn is what is at work - nothing new over it");
   assert.equal(pendingTurn([thread[0], { role: "assistant", id: "a1" }], { busy: false, sent }), true, "its end is not the line's answer");
+  // ...AND A TURN AT WORK THE THREAD DID NOT DRAW YET - its adapter had said nothing at the press, its head the pane's own: its answer, filed
+  // after the press, is not his line's either. Counted as his, the turn he asked for was gone from under his line until it began (the recorded
+  // coding walk, 2026-11-10, about one run in two)
+  const early = [{ role: "user", id: "u0" }, { role: "assistant", id: "a0" }, { role: "user", id: "u1" }];
+  const held = sentNow(early, 1, true);
+  assert.equal(pendingTurn([...early, { role: "assistant", id: "a1" }], { busy: false, sent: held }), true, "the turn at work ended: his is still to come");
+  assert.equal(settled([...early, { role: "assistant", id: "a1" }, { role: "assistant", id: "live-a2" }], held), true, "his turn is the thread's own");
 });

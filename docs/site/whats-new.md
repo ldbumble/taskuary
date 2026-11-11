@@ -2,6 +2,27 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.38 - 2026-11-10
+
+- The agent's new card enters inside its turn, never under the owner's line above the turn's head
+- An email card the agent writes again after the owner prompted greys in place at the press and its new letter is a new card in its turn
+- A line typed in a coding chat keeps one head under it from the press to the answer: never gone for a frame, never over an old turn, its clock never restarting
+- A finished turn ends with its answer: no second running head under it for a beat while a late working flag catches up
+- A reply drafted on arrival stays under the mail it answers when the agent answers a later line and leaves it alone
+- A draft the turn at work wrote stays in that turn the moment its answer is filed, never a beat over its head
+- A line typed while a turn works keeps its turn's head under it when that turn ends, before its own begins
+- The end of a walk offers the walk again on the bar, beside Back
+- A refused stranger's start is refused where its run starts again, and the audit corpus keeps its files in a home of its own
+- A chat agent whose last turn was stopped is not "agent done", so Remind me mid-turn never lights Mark done
+- The audit corpus waits for states on a slow machine's budget, its director's mark sits beside the stand-ins, and a stop is released only once it bit
+- A question triage calls hard is looked at in one call first at arrival, and climbs to the agent's tool loop only when that call says it must
+- An AI card agent is offered its everyday tools whole and the rest by name, loaded for the turn when it calls for them
+- The background passes ask the model only when what they read changed: workstream rewrites, people pages, scheduled AI reports, and a stuck idea three times
+- Triage is a cached context and the new mail: its guide, menus and memory are cache blocks every card type carries the way its provider takes them
+- A notice like the last three from the same list or system is filed as they were, without a model call, and marked as reused
+- /api/ai/today says what the AI did today by job - calls, tokens in, of which cached, and out - and the day's automatic ceiling
+- At the end of a walk Back is lit to the last row walked, and the desk offers no Opens beside the walk again
+
 ## 0.3.11.37 - 2026-11-10
 
 - The Assistant's desk chat shows nothing written for the phone or for a refused press

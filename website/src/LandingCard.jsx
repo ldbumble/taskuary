@@ -58,6 +58,19 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
   };
   const rest = (s.answers || []).map((a) => a.how).filter((h) => h !== w.first && h !== w.second);
   const tip = s.push ? `up to ${String(s.push.tip || "").slice(0, 7)}${s.push.deploy ? ` · deploys to ${s.push.deploy}` : ""}` : s.own && s.ask ? `${plural(s.ahead, "commit")} ahead` : "";
+  // REVIEW: only on the agent's own branch while it waits to land - the base is every agent's, and what landed is history
+  const files = diff ? parseUnified(diff) : [], { src, gen } = landingFiles(s.files);
+  const reviewing = !!s.ask && !!s.own;
+  const picked = Object.entries(marks).filter(([, v]) => v === "revert").map(([k]) => k);
+  const revert = async () => {
+    const parts = picked.map((k) => { const at = k.lastIndexOf("#"), path = k.slice(0, at), index = +k.slice(at + 1);
+      const h = files.find((f) => f.path === path)?.hunks.find((x) => x.index === index); return h ? { path, index, text: hunkText(h) } : null; }).filter(Boolean);
+    setBusy("revert"); setErr("");
+    try { const { data } = await api.post(`/api/tasks/${taskId}/landing/revert`, { parts }); setSaid(data?.says || ""); setMarks({}); load(); readDiff(); onChanged?.(); }
+    catch (e) { setErr(e?.response?.data?.detail || "Nothing was reverted"); }
+    setBusy("");
+  };
+  const label = (h) => (s.answers || []).find((a) => a.how === h)?.label || h;
   const sub = s.passed ? w.passed : [tip, `+${s.plus || 0} −${s.minus || 0}`, s.ask && s.proposal?.why].filter(Boolean).join(" · ");
   const link = { ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } };
   const press = (h, tone0, tone = tone0) => (

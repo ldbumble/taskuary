@@ -776,6 +776,19 @@ def ask_json(brain, system: str, user: str, want: dict = None, need=(), **kw) ->
     return _stepped(brain, system, user, want, need, kw, out)
 
 
+def remembered(store, key: str, words, ask):
+    """SAME WORDS, SAME ANSWER: `ask()`'s answer, or the one kept under the setting `key` when `words` are what it was last asked with -
+    then nothing is asked. One answer per key, the last one, so nothing grows; an answer of None (the model did not answer) is never
+    kept, and is asked again. For a question a clock asks - never one the owner asks again on purpose (a redraft)."""
+    h = hashlib.sha1('\0'.join(map(str, words)).encode('utf-8', 'replace')).hexdigest()
+    try: had = json.loads(store.get_setting(key) or '{}')
+    except ValueError: had = {}
+    if isinstance(had, dict) and had.get('h') == h and 'out' in had: return had['out']
+    out = ask()
+    if out is not None: store.set_setting(key, json.dumps({'h': h, 'out': out}), 'router')
+    return out
+
+
 _FENCE = re.compile(r'```[a-zA-Z]*\s*\n?(.*?)```', re.S)
 
 

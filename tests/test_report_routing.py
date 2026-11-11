@@ -165,6 +165,20 @@ def test_an_unanswered_line_reaches_you_rather_than_going_quiet():
     assert (d['timeline'], d['alert']) == (True, True)
 
 
+def test_a_scheduled_run_that_says_what_the_last_one_said_is_not_judged_again():
+    """An unchanged run skipped its summary (render_report's mark) and was still read by the judge every time it was due. The same
+    result under the same questions and memory keeps its answer; a new result, new questions, or no answer at all asks."""
+    s, seen = MemoryStore(), []
+    cfg = {'route': {'timeline': {'how': 'ai', 'when': 'any error'}, 'alert': {'how': 'ai', 'when': 'any error'}}}
+    go = lambda r=None, c=cfg, memo='report_judge_mark:7', say='TIMELINE: yes\nALERT: no': reports.decide_for(s, c, r or res(), llm_saying(say, seen), memo=memo)
+    first, again = go(), go()
+    assert len(seen) == 1 and first == again and (first['timeline'], first['alert']) == (True, False)
+    go(res(body='a\nb\nc')); assert len(seen) == 2                                                    # what it came back with changed
+    go(res(body='a\nb\nc'), {'route': {'timeline': {'how': 'ai', 'when': 'any warning'}}}); assert len(seen) == 3   # the owner's sentence changed
+    go(memo=None); go(memo=None); assert len(seen) == 5                                               # a run the owner asked for is always judged
+    go(memo='report_judge_mark:8', say='TIMELINE: no'); go(memo='report_judge_mark:8'); assert len(seen) == 7      # half an answer is none: asked again
+
+
 def test_a_judge_that_answers_half_the_question_answered_none_of_it():
     cfg = {'route': {'timeline': {'how': 'ai', 'when': 'a'}, 'alert': {'how': 'ai', 'when': 'b'}}}
     d = reports.decide(cfg, res(), llm_saying('TIMELINE: no'))

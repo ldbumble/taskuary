@@ -1547,10 +1547,17 @@ def with_judge(chosen, default_llm, learned: str = '') -> dict:
     return {'llm': default_llm, 'learned': learned} if chosen is default_llm else {'judge': chosen}
 
 
-def decide_for(store, cfg: dict, res: dict, default_llm) -> dict:
-    """`decide` with this install's judge already resolved."""
+def decide_for(store, cfg: dict, res: dict, default_llm, memo: str = None) -> dict:
+    """`decide` with this install's judge already resolved. `memo` names where a scheduled report keeps its judge's last answer: a run
+    that came back saying what the last one said, under the same questions and the same memory, is not judged again (llm.remembered) -
+    an unchanged run skipped its summary and was still read by the judge, the owner's whole memory with it, every time it was due."""
     mem = judge_memory(store, cfg) if asks_ai(cfg) else ''
-    return decide(cfg, res, **with_judge(judge_for(store, cfg, default_llm, mem), default_llm, mem))
+    kw = with_judge(judge_for(store, cfg, default_llm, mem), default_llm, mem)
+    j = kw.get('judge') or (chat_judge(kw['llm'], mem) if kw.get('llm') else None)
+    if memo and j:
+        from .llm import remembered
+        kw = {'judge': lambda state, ask, c: remembered(store, memo, (judge_prompt(c), mem, state, *ask), lambda: j(state, ask, c))}
+    return decide(cfg, res, **kw)
 
 
 def is_digest(cfg: dict) -> bool: return 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}
@@ -2071,7 +2078,8 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         return {'message_id': None, 'subject': subject, 'files': 0, 'said': 0, 'failed': True, 'error': body, 'summary': text[:2000]}
     # the sources it went without are said on the report itself too, its first line - on the card where it is read (2026-10-21)
     if notes: text = f'{unread_note(notes)}\n\n{text}'
-    d = decide_for(store, cfg, read_result(head, text, failed), report_llm(store, cfg, llm))
+    d = decide_for(store, cfg, read_result(head, text, failed), report_llm(store, cfg, llm),
+                   memo=f"report_judge_mark:{src['SourceId']}" if trigger == 'schedule' else None)
     # ONLY A RUN THE TRIAGE LINE SENDS IS TRIAGED (the owner, 2026-10-16, reversing D1 of 2026-09-28): "most reports should not
     # go through triage ... if it's always show up then it's just a report fyi, not a optional if this happens, then triage then
     # fix type of thing." A daily summary triaged as mail had its line about an open thread read as that task, and the whole run

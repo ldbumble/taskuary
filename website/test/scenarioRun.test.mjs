@@ -30,11 +30,12 @@ test("Working on this… counts from the turn's own start", () => {
   assert.match(ws, /work=\{work\} since=\{since\} began=\{began\}/);
 });
 
-// ...and the lines typed while it works come under that line, never between the turn's head and its clock
-test("lines typed mid-turn are drawn under Working on this…", () => {
+// ...and the lines typed while it works stand over its working line, which moves under them: nothing above a new prompt (the owner, 2026-11-10;
+// the 0.3.11.40 release run drew the thinking row over the line just typed)
+test("lines typed mid-turn are drawn over the turn's working line", () => {
   const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  const i = ws.indexOf("<ThreadPrimitive.Messages components"), a = ws.indexOf("{atWork}", i), b = ws.indexOf("<PendingTurn busy={serverBusy}", i), h = ws.indexOf("<FootLines ", i);
-  assert.ok(i > 0 && a > i && b > a && h > b, "messages, the running line, the server's running line, then the held lines");
+  const i = ws.indexOf("<ThreadPrimitive.Messages components"), a = ws.indexOf("waits={false}>{atWork}", i), h = ws.indexOf("<FootLines ", i), z = ws.indexOf("waits>{atWork}", i);
+  assert.ok(i > 0 && a > i && h > a && z > h, "messages, the running line while no line waits, the held lines, then the running line under them");
 });
 
 // AN ACTION CARD'S PICK is as wide as what it shows, and the keyboard sees it (the scenario run, 2026-11-06: "Anyone" a word's gap from its chevron)

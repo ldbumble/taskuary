@@ -97,7 +97,7 @@ test("a running turn's clock is the earlier of its start and the line it answers
 test("the coding chat's running turn and every running head count by turnFrom, from the press", () => {
   const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(gw, /since: turnFrom\(\+asUtc\(m\.createdAt\) \|\| null, pressed\) \|\| undefined/);
-  assert.match(gw, /const start = running \? turnFrom\(since, before\) : before/);
+  assert.match(gw, /began = isLive \? turnFrom\(since, before\) : null, running = isLive && !\(pressed > \(began \?\? Infinity\)\);/);
 });
 
 test("the pending turn's clock keeps the earliest start it was told while it stands", () => {

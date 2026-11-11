@@ -375,6 +375,8 @@ const useFoot = ({ waiting, held, messages }) => {
   const shown = notShown(held, mine);
   return [...waitingShown(waiting, shown, mine, messages).map((w) => ({ id: `waiting-${w.id}`, text: w.text, at: w.at })), ...shown];
 };
+// ...what stands only while one of his lines waits at the foot, or only while none does (read inside the runtime, as useFoot must be)
+const WhileLines = ({ feed, waits, children }) => ((useFoot(feed).length > 0) === waits ? children : null);
 const FootLines = ({ waiting, held, messages, hint }) => {
   const lines = useFoot({ waiting, held, messages });
   return lines.map((l) =>
@@ -522,8 +524,11 @@ const RanFor = () => {
   // ...a turn still running has not "ran" anything yet: its stamp read "ran 0s" over "Working on this…" (the chat-model stress run, 2026-11-05)
   // ...and the live message is drawn anew at every step, so its own time is the latest step's: the turn began at the server's `since`, else
   // at the line it answers
-  const running = useAuiState((s) => live(s.message)), since = useAuiState((s) => s.message.metadata?.custom?.since), ended = useAuiState((s) => s.message.metadata?.custom?.ended);
-  const start = running ? turnFrom(since, before) : before, t = running && start ? new Date(start) : ended ? asUtc(ended) : at ? new Date(at) : null;
+  const isLive = useAuiState((s) => live(s.message)), since = useAuiState((s) => s.message.metadata?.custom?.since), ended = useAuiState((s) => s.message.metadata?.custom?.ended);
+  // ...and ONCE HE HAS TYPED AFTER IT, it is not his screen's running turn (the 0.3.11.40 release run: a turn finishing its stream as he pressed
+  // drew its clock and x over the line he had just typed) - the turn his line asks for runs under it (PendingTurn, atWork below FootLines)
+  const pressed = React.useContext(PressedCtx), began = isLive ? turnFrom(since, before) : null, running = isLive && !(pressed > (began ?? Infinity));
+  const start = running ? began : before, t = running && start ? new Date(start) : ended ? asUtc(ended) : at ? new Date(at) : null;
   if (!t || Number.isNaN(+t)) return null;
   if (running) return <RunClock start={+t} />;
   const ran = running ? "" : turnStamp({ start: before, end: t });
@@ -1071,7 +1076,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           )}
           <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
           <ThreadPrimitive.If running>
-            {atWork}
+            <WhileLines feed={feed} waits={false}>{atWork}</WhileLines>
           </ThreadPrimitive.If>
           {/* the answer is being written somewhere else - another tab, or this pane before it was
               reopened - and the poll is what tells us so */}
@@ -1114,11 +1119,11 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           </ThreadPrimitive.If>
           {/* ...LAST, under everything the turn has drawn - its files and cards too: a PDF the turn made stood under the line typed after it
               (the product audit, 2026-11-08) */}
-          {/* ...and the lines typed while it works come UNDER its "Working on this…": over it, they stood between the turn's name and its
-              clock, an empty head with the owner's words below it (the scenario run, 2026-11-06) */}
           {/* ...the SERVER'S copy first (`waiting`, kept the moment each was sent - on every screen, through a reload or a restart), each at the
               time it was typed, then this screen's own not yet kept; all of them waiting for the agent until a turn takes them (2026-11-07) */}
           <FootLines waiting={waiting} held={held} messages={messages} hint={!(sent || serverBusy)} />
+          {/* ...and a turn at work while one of his lines waits draws its working UNDER that line: nothing above a new prompt (the owner, 2026-11-10) */}
+          <ThreadPrimitive.If running><WhileLines feed={feed} waits>{atWork}</WhileLines></ThreadPrimitive.If>
           {/* ...and the turn its answer asked for, under it (PendingTurn `foot`) */}
           <ThreadPrimitive.If running={false}><PendingTurn busy={serverBusy} sent={sent} began={began} foot feed={feed} held={!!heldStart}>{sentWork}</PendingTurn></ThreadPrimitive.If>
           {/* ...a chat no turn has summed up yet: its cards (TaskPage's chatCards), under the thread */}

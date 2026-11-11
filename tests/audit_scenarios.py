@@ -315,6 +315,8 @@ def world(backend: str, tmp: Path, monkeypatch):
     from fake_director import MARK
     MARK.write_text(str(d), encoding='utf-8')
     monkeypatch.setattr(session_artifacts, 'root', lambda: tmp / 'artifacts')
+    from taskuary import config                       # ...a home of its own: a task's files (outputs.folder) never outlive the scenario
+    (tmp / 'home').mkdir(); monkeypatch.setattr(config, 'home', lambda: tmp / 'home')
     s = MemoryStore()
     s.set_setting('owner_email', ME, 't'); s.set_setting('owner_name', 'Alex Doyle', 't')
     monkeypatch.setattr(general, 'idle_for', lambda: 3600)

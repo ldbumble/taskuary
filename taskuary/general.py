@@ -2549,7 +2549,8 @@ class GeneralSession:
             # answers - where it used to be refused outright with "start it with claude"
             if hands:
                 from . import origin
-                hands = origin.launch_mode(self.store, self.task_id, _cli_of_pick(self.store, self.pick)) != 'look'
+                try: hands = origin.launch_mode(self.store, self.task_id, _cli_of_pick(self.store, self.pick)) != 'look'
+                except origin.Refusal: pass                 # ...its run refuses it, and says so where it starts (llm.make_cli_llm)
             # ...and with no shell, its to-dos are ticked by a mark in the reply (selfclose.tick_markers), never a command it cannot run
             if not hands and self.store.task_checklist(self.task_id): system = f'{system}\n\n{_sc.TICK_CHAT_LINE}'
             # ...ONE WAY TO WRITE A REPLY (2026-11-09): a session with Taskuary's own tools (agenttools.session_args: Claude and Codex, with

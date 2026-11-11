@@ -121,6 +121,22 @@ class Worst(Model):
         return {'role': 'assistant', 'content': '', 'tool_calls': [{'id': f'c{len(msgs)}', 'function': {'name': 'search_mail', 'arguments': '{}'}}]}
 
 
+def test_a_clocked_look_with_the_payload_of_the_last_one_asks_nothing():
+    """A report with a candidate still standing, or a source of its own, never passed the nothing-moved guard: one install sent the
+    whole payload (~49K tokens) every half hour round the clock. The same payload, the clock's own line aside, keeps its answer."""
+    s, seen = store(), []
+    def brain(system, user, **k): seen.append(user); return '{"say": []}'
+    cand = [{'key': 'cold:1', 'facts': 'Gail Moreno asked for the accrual and nothing has moved'}]
+    import datetime as dt
+    def look(c=cand, memo='advisor_think_mark:7', at='10:00'):
+        class Clock(dt.datetime): now = classmethod(lambda cls, tz=None: cls.fromisoformat(f'2026-11-02T{at}:00'))
+        with mock.patch.object(assistant, 'datetime', Clock): assistant.think(s, c, brain, memo=memo)
+    look(); look(at='10:30'); assert len(seen) == 1, 'half an hour on, the same words: nothing asked'
+    assert 'NOW: Monday 02 November 2026 10:00' in seen[0]
+    look([{**cand[0], 'facts': 'Gail Moreno wrote again'}], at='11:00'); assert len(seen) == 2          # what it reads changed
+    look(memo=None, at='11:00'); look(memo=None, at='11:00'); assert len(seen) == 4                    # Run now is the owner asking
+
+
 def test_follow_ups_that_wake_an_agent_end_however_badly_it_answers():
     """A turn that said nothing is woken once, a quick look hands on to the agent, a reply owed is asked for at a run's end: none of them
     may wake another, whatever the agent does - here it answers nothing, or calls the same search, every time."""

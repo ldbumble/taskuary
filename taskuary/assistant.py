@@ -1436,7 +1436,7 @@ def systems_inputs(store, watch_source_ids=None, watch_sources=None) -> str:
 
 
 def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES,
-          watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None) -> list:
+          watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None, memo: str = None) -> list:
     """One call: the owner's instruction (the Reports tab), the candidates, the day, what was already said."""
     from .triage import job_doc
     soul, job = store.doc('soul') or '', job_doc(store, SOUL_CHARS)
@@ -1466,7 +1466,13 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     if not systems_only:
         from .llm import readable_images
         images = readable_images(store, _people_context(store)[1])
-    text = llm(system, user, max_tokens=POST_TOKENS, **({'images': images} if images else {}))
+    ask = lambda: llm(system, user, max_tokens=POST_TOKENS, **({'images': images} if images else {})) or None
+    # THE SAME PAYLOAD GETS THE SAME ANSWER (`memo`: where a clocked look keeps its last one - llm.remembered): the look's own guard
+    # reads what MOVED, and a report with a candidate still standing or a source of its own never passed it - so one install sent
+    # the whole payload, ~49K tokens, every half hour round the clock. Read without its clock line (build_sections' NOW); a new day asks again
+    from .llm import remembered
+    words = (system, re.sub(r'(?m)^NOW: .*$', '', user, count=1), datetime.now().strftime('%Y-%m-%d'), len(images))
+    text = (remembered(store, memo, words, ask) if memo else ask()) or ''
     return parse(store, text, cands, max_lines, report_id, connect=ev), _notes(text), user, mids
 
 
@@ -1956,7 +1962,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     if used:
         try:
             say, note, read, mids = think(store, cands, llm, instruction, c['max'],
-                                          watch_source_ids, watch_sources, systems_only, blocks, report_id)
+                                          watch_source_ids, watch_sources, systems_only, blocks, report_id,
+                                          memo=None if asked else f'advisor_think_mark:{report_id or ""}')
             store.set_setting(mark_key(report_id), mark, 'assistant')
             # the week starts when a check that READ the counts came back - never on a preview or a failed pass
             if AUTOMATION_HEAD in (read or ''):

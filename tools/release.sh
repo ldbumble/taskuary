@@ -132,7 +132,7 @@ targeted() {
       taskuary/*.py) m=$(find tests -name "test_$s.py" | head -1); [ -n "$m" ] && PY+=("$m") || LOOSE+=("$f");;
       website/test/*.test.mjs) NODE+=("${f#website/}");;
       # ...by the name the file has on disk: Windows finds heldStart.test.mjs when asked for HeldStart, and CI's Linux then does not
-      website/src/*) WEB=1; t=$(ls website/test | grep -ix "$s.test.mjs" | head -1); [ -n "$t" ] && NODE+=("test/$t") || LOOSE+=("$f");;
+      website/src/*) WEB=1; t=$(ls website/test | grep -ix "$s.test.mjs" | head -1 || true); [ -n "$t" ] && NODE+=("test/$t") || LOOSE+=("$f");;
       website/*) WEB=1;;
       *) LOOSE+=("$f");;
     esac

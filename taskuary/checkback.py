@@ -80,7 +80,7 @@ def late(store, now: datetime = None) -> int:
         # ...AND A TASK NO AGENT HAS WORKED GETS ITS FIRST ONE (the owner, 2026-11-10: "yes"): no conversation to wake was a lateness nobody
         # took up. It starts through the check every start passes (auto_start_ok) - a refusal (the switch, a stranger held) said once on the
         # task, and Chase stays lit (woke is False) - with the same turn; a full house queues it as a carry-on turn waits (ingest.queue_turn)
-        first = (why := ingest.wake_why(store, tid, {}, None, None, own=True)) == 'no agent conversation'
+        first = ingest.code_of(why := ingest.wake_why(store, tid, {}, None, None, own=True)) == 'no_conversation'
         if why and not first: continue
         it = advisor._item(store, 'task', tid, build=False)
         f = rulebook.facts(store, it, advisor.offered(store, it)) if it else {}

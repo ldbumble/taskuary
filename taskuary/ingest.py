@@ -2095,11 +2095,22 @@ def live_agent(store, tid) -> str:
     return 'run' if any(x['Status'] == 'running' for x in store.list_runs(tid)) else ''
 
 
+# WHY A LINE DID NOT REACH AN AGENT - ONE TABLE (the owner's rules, 2026-11-10: the same fact reads the same everywhere): the code each road
+# matches, and the words the owner reads. Roads compare the code, never the sentence, so a sentence reworded here changes nothing else
+WHY = {'not_new': 'not new work', 'live': 'an agent is live on it', 'closed': 'the task is closed', 'off': 'passing lines to the agent is switched off',
+       'no_session': 'no live session to pass it to', 'not_assistant': 'not an assistant task', 'no_conversation': 'no agent conversation',
+       'degraded': 'triage could not read it', 'channel': 'the channel waits for the owner', 'another': 'another agent is live on it',
+       'no_carry': 'no conversation to carry on', 'own_task': 'it is your own task, so no agent works it', 'no_coding_session': 'no saved coding session to reopen'}
+class Why(str): code = ''
+def reason(code: str) -> Why: w = Why(WHY[code]); w.code = code; return w
+def code_of(why) -> str: return getattr(why, 'code', '')
+
+
 def _resumable_coding(store, tid) -> tuple:
     """(the saved CLI conversation a coding task reopens, why not) - the checks of the owner's Continue (server._resumable)."""
     from pathlib import Path
     row = store.resumable_session(tid)
-    if not row: return None, 'no saved coding session to reopen'
+    if not row: return None, reason('no_coding_session')
     if not store.get_agent(row['Agent'] or ''): return None, f'the profile "{row["Agent"]}" is no longer configured'
     if not (row['Cwd'] and Path(row['Cwd']).is_dir()): return None, f'the checkout it worked in no longer exists: {row["Cwd"]}'
     return row, ''
@@ -2118,10 +2129,10 @@ def carry_on_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
     A LIVE agent is not carried on but told (pass_in_why)."""
     from . import general
     t = store.get_task(tid) or {}
-    if not follow or follow.get('degraded') or follow.get('intent') != 'task': return 'not new work'
-    if live_agent(store, tid): return 'an agent is live on it'
+    if not follow or follow.get('degraded') or follow.get('intent') != 'task': return reason('not_new')
+    if live_agent(store, tid): return reason('live')
     kind = 'general' if general.handles(t) else t.get('Kind')
-    lack = ('it is your own task, so no agent works it' if kind not in task_kinds.AGENT else 'no conversation to carry on'
+    lack = (reason('own_task') if kind not in task_kinds.AGENT else reason('no_carry')
             if kind == 'general' and not general.history(store, tid) else _resumable_coding(store, tid)[1] if kind == 'coding' else '')
     return reach_why(store, tid, msg, mid, follow, kind, lack=lack)
 
@@ -2131,8 +2142,8 @@ def pass_in_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
     session as its next turn, else why not. The owner, 2026-10-28: "even if agent is running, both coding and regular, it should
     pass in the new message no?" It is the default now for related new work; answer_to_agent=off still means never. A sender
     who may not start an agent by themselves (senders.known) is never typed into one - their words wait for the owner."""
-    if not follow or follow.get('degraded') or follow.get('intent') != 'task': return 'not new work'
-    if (live := live_agent(store, tid)) not in task_kinds.AGENT: return 'no live session to pass it to'
+    if not follow or follow.get('degraded') or follow.get('intent') != 'task': return reason('not_new')
+    if (live := live_agent(store, tid)) not in task_kinds.AGENT: return reason('no_session')
     return reach_why(store, tid, msg, mid, follow, live)
 
 
@@ -2146,12 +2157,12 @@ def reach_why(store, tid, msg: dict, mid, follow: dict | None, kind: str, own: b
     owner's own line or press - no sender to check, nothing of theirs read as steering. `lack`: what the road itself is missing (no
     conversation to carry on), said only past the gate - a road that starts a first agent on it instead never passes a held channel."""
     live = live_agent(store, tid)
-    if (follow or {}).get('degraded'): return 'triage could not read it'
-    if not joinable(store, tid): return 'the task is closed'      # dismissed: a done task new work reopens first (land_on)
-    if store.get_setting('answer_to_agent') == 'off': return 'passing lines to the agent is switched off'
-    if msg.get('no_auto'): return 'the channel waits for the owner'
+    if (follow or {}).get('degraded'): return reason('degraded')
+    if not joinable(store, tid): return reason('closed')      # dismissed: a done task new work reopens first (land_on)
+    if store.get_setting('answer_to_agent') == 'off': return reason('off')
+    if msg.get('no_auto'): return reason('channel')
     if not own and (held := brainroute.auto_held(store)): return held
-    if live and live != kind: return 'another agent is live on it'
+    if live and live != kind: return reason('another')
     # ...nor a line that reads as steering an AI (the owner, 2026-10-28): it waits for the owner's press
     if not own and (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d})'
     if lack or (own and live): return lack
@@ -2196,8 +2207,8 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
     if live_agent(store, tid) in task_kinds.AGENT: return _pass_in(store, tid, msg, mid, follow, actor)
     if (store.get_task(tid) or {}).get('Kind') == 'reply': return agent_on_reply(store, tid, msg, mid, follow, actor)
     if why := carry_on_why(store, tid, msg, mid, follow):
-        if why in FIRST_AGENT and (went := first_agent(store, tid, msg, mid, follow, actor)) is not None: return went
-        if why not in QUIET_WHY: not_started(store, tid, why)
+        if code_of(why) in FIRST_AGENT and (went := first_agent(store, tid, msg, mid, follow, actor)) is not None: return went
+        if code_of(why) not in QUIET_WHY: not_started(store, tid, why)
         return False
     from . import blackboard as bb, general, quickwork
     coding = not general.handles(store.get_task(tid) or {})
@@ -2243,7 +2254,7 @@ def queued_turn(store, tid, turn: str, said: str = '') -> None:
 # on". The owner had to type to get help. New work that triage reads as an agent's (intent task, kind general or coding) on a `task`-kind
 # row, or on an agent's row nothing ever ran on, now gives the row that kind and starts its agent as a fresh task would (auto_start_ok;
 # a full house queues it) - never a second agent, never past the owner's switches or a sender who may not start one
-FIRST_AGENT = ('no conversation to carry on', 'it is your own task, so no agent works it', 'no saved coding session to reopen')
+FIRST_AGENT = ('no_carry', 'own_task', 'no_coding_session')
 
 
 # ...a start already set going on an open task counts as an agent on it: a burst's second line lands before that start has a conversation
@@ -2279,8 +2290,7 @@ def first_agent(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> 
 # answered "not an agent's task" and wrote it nowhere, so a task that needed an agent sat looking as if nobody had got round to it.
 # Silent only where nothing was asked of an agent, the owner switched it off, one is already on it or another road is its own (the line
 # went nowhere an agent was ever going to be): ONE list for carrying on, passing in and waking - three had drifted apart
-QUIET_WHY = ('not new work', 'an agent is live on it', 'the task is closed', 'passing lines to the agent is switched off', 'no live session to pass it to',
-         'not an assistant task', 'no agent conversation', 'triage could not read it')
+QUIET_WHY = ('not_new', 'live', 'closed', 'off', 'no_session', 'not_assistant', 'no_conversation', 'degraded')
 NOT_STARTED = 'No agent started:'
 
 
@@ -2408,7 +2418,7 @@ def reply_to_agent(store, tid, rid, msg: dict = None) -> bool:
             if not general.handles(t):
                 return _carry_on(store, tid, msg, m['MessageId'], {'intent': 'task', 'kind': t.get('Kind'), 'why': rv.get('Reason') or ''}, 'triage')
             # ...its conversation's own road said why where it refused (thread_moved); only what that road keeps quiet is said here
-            why = w if (w := wake_why(store, tid, msg, m['MessageId'], None)) in QUIET_WHY else ''
+            why = w if code_of(w := wake_why(store, tid, msg, m['MessageId'], None)) in QUIET_WHY else ''
             if why: not_started(store, tid, f'{why} - {general.carry_on(t)}')
             return False
         try: return agent_on_reply(store, tid, msg, m['MessageId'], {'intent': 'task', 'kind': 'general', 'why': rv.get('Reason') or ''}, 'triage', opening=True)
@@ -2492,7 +2502,7 @@ def mark_browser(store, tid, actor: str = 'triage') -> bool:
 def _pass_in(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bool:
     why = pass_in_why(store, tid, msg, mid, follow)
     if why:
-        if why not in QUIET_WHY: store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message was not passed to the agent: {why.rstrip('.')}. It waits for you.")
+        if code_of(why) not in QUIET_WHY: store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message was not passed to the agent: {why.rstrip('.')}. It waits for you.")
         return False
     store.audit('task', tid, 'passed_to_agent', actor, 'agent', {'message_id': mid})
     # the wrapper triage named (a banner, a legal footer) rides with the line, so the agent is handed only what the sender wrote
@@ -2661,13 +2671,13 @@ def wake_why(store, tid, msg: dict, mid, follow: dict | None, own: bool = False)
     "'' when a line that joined the task should wake its assistant to re-plan (replan_turn), else why not."
     from . import general
     t = store.get_task(tid) or {}
-    if t.get('Status') in ('done', 'dropped'): return 'the task is closed'
-    if not general.handles(t): return 'not an assistant task'
+    if t.get('Status') in ('done', 'dropped'): return reason('closed')
+    if not general.handles(t): return reason('not_assistant')
     # ...with the assistant's conversation on it: a writer's draft alone (a reply task, an invite and its banter) never starts an agent
     # by itself - the reply writer's own redraft (attach, above) is that task's road
     # A turn still OPENING counts (the night run, 2026-11-09: a colleague answered the group 6s into the task's quick call, the line went
     # unheard, and the turn asked the owner for a password nobody needed any more)
-    if not live_agent(store, tid) and not general.history(store, tid): return 'no agent conversation'
+    if not live_agent(store, tid) and not general.history(store, tid): return reason('no_conversation')
     return reach_why(store, tid, msg, mid, follow, 'general', own)
 
 
@@ -2677,7 +2687,7 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
     from . import general
     if not own and (went := start_lifted(store, tid, msg, mid, actor)) is not None: return went
     if why := wake_why(store, tid, msg, mid, follow, own):
-        if why not in QUIET_WHY: not_started(store, tid, why)
+        if code_of(why) not in QUIET_WHY: not_started(store, tid, why)
         return False
     turn = replan_turn(msg, follow, own)
     store.audit('task', tid, 'thread_moved', actor, 'agent', {'message_id': mid, 'own': own})
@@ -2733,7 +2743,7 @@ def folded_in(store, tid, src, title: str, msgs: list, result: str = '', drafts:
     from . import general
     msg = {'from_name': task_ref(src)}
     if why := wake_why(store, tid, msg, None, None, own=True):
-        if why not in QUIET_WHY: not_started(store, tid, why)
+        if code_of(why) not in QUIET_WHY: not_started(store, tid, why)
         return False
     turn = fold_turn(store, src, title, msgs, result, drafts)
     store.audit('task', tid, 'fold_to_agent', actor, 'agent', {'from_task': src, 'messages': [m['MessageId'] for m in msgs]})

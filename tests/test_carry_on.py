@@ -63,6 +63,17 @@ class CarryOnTests(unittest.TestCase):
         self.assertTrue(any(a['Action'] == 'auto_continue' for a in s._rows('SELECT * FROM audit WHERE EntityId=?', (str(tid),))))
         self.assertIn(tid, general.OPENING); general.OPENING.discard(tid)
 
+    def test_a_reason_is_matched_by_its_code_so_its_words_can_change(self):
+        # the roads that keep quiet compared the sentences themselves, in four lists over four files: one reworded sentence and a
+        # switched-off line would have been said as "No agent started", a first agent never started. One table, matched by code
+        s = store(); tid = finished_task(s)
+        s.set_setting('answer_to_agent', 'off', 't')
+        with mock.patch.dict(ingest.WHY, {'off': 'you turned off passing new lines to agents'}):
+            why = ingest.carry_on_why(s, tid, mail(**AGAIN), None, {'intent': 'task'})
+            self.assertEqual((why, ingest.code_of(why)), ('you turned off passing new lines to agents', 'off'))
+            self.assertEqual(ingested(s, mail(**AGAIN))[1], [])
+        self.assertFalse([c for c in s.list_comments(tid) if c['Body'].startswith(ingest.NOT_STARTED)])
+
     def test_not_when_the_owner_switched_unattended_starts_off(self):
         s = store(); tid = finished_task(s)
         s.set_setting('general_auto_enabled', '0', 't')

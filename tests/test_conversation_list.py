@@ -138,7 +138,10 @@ class TheList(unittest.TestCase):
         self.say('Also the price.', 'l-three', wait=False)
         self.brain.delay = 0
         self.assertTrue(general.stop_turn(self.s, self.tid))
-        drawn = [x['id'] for x in self.list()['items'] if x['kind'] == 'press']
+        got = self.list(); drawn = [x['id'] for x in got['items'] if x['kind'] == 'press']; at = [x['id'] for x in got['items']].index(drawn[0])
+        # ...stopped from the press: nothing spins above it, and what is at work - his waiting line's turn - stands under it
+        self.assertFalse([x for x in got['items'][:at] if x.get('state') in ('working', 'starting')], self.kinds(got))
+        self.assertTrue(got['working'] and got['items'][-1].get('state') in ('working', 'starting') and len(got['items']) - 1 > at, self.kinds(got))
         self.rest()
         got = self.list(); ids = [x['id'] for x in got['items'] if not x['id'].startswith('t:')]
         self.assertEqual(ids[-3:], ['l-two', *drawn, 'l-three'])

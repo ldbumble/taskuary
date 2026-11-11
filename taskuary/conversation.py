@@ -375,6 +375,13 @@ def items(store, tid: int) -> dict:
         if x['state'] in ('working', 'starting'): x.update(state='done', ended=x.get('ended') or x.get('started'))
     # the turn at work is the last thing in the list: one the agent has not yet said a word in is there too, the moment its input was heard
     tail = next((x for x in reversed(out) if x['kind'] in ('turn', 'line', 'arrival')), None)
+    # ...A TURN HE STOPPED IS STOPPED FROM THE PRESS (the recorded stop, 2026-11-11: its CLI took seconds to let go, and all that time the turn
+    # spun above "You stopped the agent"): what is at work from there is the turn his waiting lines begin, under the press - with none
+    # waiting, nothing is
+    halted = bool(tail and tail['kind'] == 'turn' and any(x.get('stop') for x in out[out.index(tail):]))
+    if halted:
+        at_work = bool(pend)
+        if tail['state'] in ('working', 'starting'): tail.update(state='done', ended=tail.get('ended') or time.time())
     # ...A LINE A LIVE AGENT WAS HANDED IS BEING WORKED ON, from the hand-over until its first step shows: a pane takes seconds to say it works,
     # and his line stood heard with nothing under it (the recorded walk, 2026-11-11)
     # ...unless he stopped it, it failed, or two minutes passed with nothing: then nothing spins over it
@@ -384,7 +391,7 @@ def items(store, tid: int) -> dict:
     # hand-over - one that ended before it is finished, and the turn now beginning stands under it (a wake after a press marked the answer
     # above "working" again, and the card under it lost its place)
     mark = max((m['At'] for m in marks), default=0.)
-    mine = tail and tail['kind'] == 'turn' and (tail['state'] == 'working' or tail.get('sid') == live_sid and live_sid and (tail.get('ended') or INF) >= mark - 0.01)
+    mine = not halted and tail and tail['kind'] == 'turn' and (tail['state'] == 'working' or tail.get('sid') == live_sid and live_sid and (tail.get('ended') or INF) >= mark - 0.01)
     if at_work and not mine:
         began_ = state.get('turnStarted') or max(mark if tail and tail['kind'] == 'turn' and mark >= (tail.get('ended') or 0) else 0., (tail or {}).get('_h') or (tail or {}).get('_hm') or 0.) or time.time()      # from its hand-over, where one is written
         out.append(tail := {'kind': 'turn', 'at': stamp(began_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': began_, 'ended': None})

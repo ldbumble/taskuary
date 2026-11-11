@@ -2,6 +2,38 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.37 - 2026-11-10
+
+- The Assistant's desk chat shows nothing written for the phone or for a refused press
+- A view an agent draws in its chat is kept on the task and drawn from there when its session log is gone
+- Basecamp and Jira are one card each with their MCP servers, and no catalogue entry is named for its road
+- A system with two ways in offers API and MCP as two equal choices at the top of its one card
+- A new mail or chat connection's card asks how far back its first sync goes, 3 days unless chosen
+- A release goes out on the targeted rerun, and master is then brought green
+- "Stop the agent" typed to the Assistant stops it through the x on its turn, and a settings panel is found beside the setting, never in its place
+- The Assistant's tools page says what Stop the agent does now
+- "login" finds Saved sign-ins behind the settings that mention it, and the API and MCP choices say what they give in plain words
+- A line typed in a coding chat stands once while it waits: its kept copy is known by the id the page sent it under
+- A coding line the session holds for its next turn is named in the chat payload by the id the page sent it under
+- A coding agent's reopening brief draws no second bubble of the owner's round the line he typed
+- A browser scenario is recorded as the owner would see it, and the scratch instance can hold a coding agent and a mail with its draft
+- A draft the owner prompts past greys where it stands at the press, and the agent's new letter is a new card under his line
+- The agent's head stands under the owner's line in the same paint as the line, on the chat's own send too
+- An agent turn on an AI card sends old tool answers as one line each and ends after steps that find nothing new
+- Every step of an AI card agent's loop is counted on its route row and logged, and the day's calls and tokens add up by job
+- An idle day calls the model only for what arrived: the Advisor looks only when something moved, and past a daily ceiling nothing starts by itself
+- An Anthropic card marks the guide, the tools and the conversation so far for the provider's prompt cache
+- Triage puts what every mail shares first and the evidence picked for one sender after it, so the provider's cache covers the whole guide
+- A turn that comes back with no word at all is the turn that said nothing: woken once, then its one question
+- An agent set going on a new task's mail is at work from that moment
+- Remind me pressed while the agent is still coming up puts that turn to rest too
+- A reply nobody has written is not told to the agent as something it set up
+- A turn stopped while an AI card was answering is stopped, its late answer never filed
+- A stranger's task reads and answers on a CLI with no reviewer, and a refused start is a hold with its Trust presses, never a failure
+- An email or reply set up and not sent is told to the agent with its words
+- A coding task's chat payload carries the owner's presses, from the same function as a general chat's
+- The Push card reads its files, its review marks and its button labels again
+
 ## 0.3.11.36 - 2026-11-10
 
 - Add application-wide light and dark themes with a header toggle

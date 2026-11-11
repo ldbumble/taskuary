@@ -240,7 +240,7 @@ Change a task's priority, title, owner or due day. Any other value is refused wi
 
 ### `task.set_kind`
 
-Say what kind of work a task is.
+Say who does a task - an agent kind starts that agent on it.
 
 - `kind` - task (the owner does it) | general (a non-coding agent) | coding
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table

@@ -2,6 +2,26 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.46 - 2026-11-11
+
+- One hand-over is written once and stands in the order it came, a turn names only what it heard, and a coding agent is told its duties once
+- What Taskuary tells a working coding agent goes in together, said whole and once, and a line is heard and taken in one step
+- What comes in while his line waits by the box waits there with it, and a hand-over never enters above what was drawn
+- His stop stands where he pressed it, the lines that waited enter under it, and a turn cut at any point says it was cut
+- A turn he stopped is stopped from the press, and what is at work stands under it
+- A playbook that says nothing of how the job is done is refused at the one gate, and the recorded walk reads every frame for anything drawn empty
+- A terminal agent launched on its prompt is at work until its CLI shows its first turn
+- A launched pane's hold ends with its CLI's first hook event, and its ceiling is a minute and a half
+- A pane takes one delivery at a time: the next only once the last was taken
+- The chat's old roads are gone from the page, "working" is one function, and an untrusted sender's task starts no agent until Trust
+- An untrusted sender's hold is judged once per change, reads right on a worked thread, and the demo's chat is the recorded list
+- The tests run their agents on threads he trusts, and a note held for an untrusted sender says what it waits for
+- A sign-in the agent has no password for is done on the page, and an answer that asks for one is taken back by its agent
+- Lines that waited through a restart stay by the box and go in as one turn when the agent is ready
+- A pane is being typed into only by Taskuary's own count, never by a stand-in's stray attribute
+- A stop ends its own turn and never the one that begins after it
+- A watched task handed to an agent starts it, goes back under Tasks at once, and says so in sentences
+
 ## 0.3.11.45 - 2026-11-11
 
 - No approval box over a tool at work, and words typed to the agent are never refused with a state code

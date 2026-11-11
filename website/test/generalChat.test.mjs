@@ -78,8 +78,9 @@ test("the chat box says the agent, never \"the assistant\" over an analyst (emai
 // session is down, but never resets the thread - the server's copy has neither the reason nor words the agent never took
 test("a failed send keeps the owner's words and the reason in the chat", () => {
   const failed = workspace.slice(workspace.indexOf("const failed = useCallback("), workspace.indexOf("const loaded = !!data"));
-  assert.match(failed, /\.then\(\(r\) => accept\(r\.data\)\)/);
-  assert.doesNotMatch(failed, /setRevision/, "a revision bump swaps the thread for the server's copy");
+  // ...the server's copy handed to the thread only when it says the failure (general.with_failure): a poll's copy from before it, applied as the run
+  // ended, wiped the turn's "⚠" and left his line under a head spinning for a minute (the overnight walk, 2026-11-11)
+  assert.match(failed, /accept\(r\.data\); if \(r\.data\?\.messages\?\.at\(-1\)\?\.failed\) setRevision\(\(k\) => k \+ 1\)/);
   assert.match(workspace, /onEnded=\{failed\}/);
   // ...and the adapter still says the reason under the message on both roads: an error event and a refused request
   assert.match(workspace, /onEnded\?\.\(\);\s*\n\s*yield \{ content: content\(`⚠ \$\{event\.error/);

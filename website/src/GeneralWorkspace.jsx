@@ -1414,9 +1414,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // 2026-11-02: "the text goes no where"). The page still learns the session is down (accept -> onSession); the thread keeps both.
   // ...and the task read again with it: the page's own "starting" stood on the stale task, its running head over a start that was refused and
   // its hold said under it (the recorded walk, 2026-11-10: "AGENT · ran 50s" over "Waiting for you ... Trust them")
+  // ...unless the server's copy SAYS the failure (general.with_failure: his line, then the reason): then it is handed over. A poll's read taken
+  // while the turn ran is applied as the run ends - its copy from before the failure wiped the turn's own "⚠", and his line stood alone under a
+  // head spinning for a minute over an agent long dead (the overnight walk, 2026-11-11)
   const failed = useCallback(() => {
     if (coding) return;
-    api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => accept(r.data)).catch(() => {});
+    api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => { accept(r.data); if (r.data?.messages?.at(-1)?.failed) setRevision((k) => k + 1); }).catch(() => {});
     onChanged?.();
   }, [accept, task.TaskId, coding, onChanged]);
   const loaded = !!data, knownSid = data?.session?.sid || "";

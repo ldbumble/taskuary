@@ -2510,7 +2510,7 @@ IDLE_WAITING = 45
 # A state observed in the terminal must survive this long before the rest of Taskuary sees it.
 # This is deliberately shorter than the UI polls: a genuine question is visible on the next
 # poll, while the clear/draw/clear frames of one TUI repaint can never become a hand raise.
-LAUNCH_WAIT = 240               # seconds a pane launched on its prompt may take to show its first turn (stable_phase_of)
+LAUNCH_WAIT = 90                # seconds a pane launched on its prompt may take to show its first turn (stable_phase_of)
 PHASE_DWELL = 3.0
 
 # What the last lines of the screen say. Claude Code shows "esc to interrupt" (and a spinner)
@@ -2558,7 +2558,8 @@ def stable_phase_of(t, now: float = None) -> str:
     # A PANE LAUNCHED ON ITS PROMPT IS AT WORK UNTIL ITS CLI SHOWS IT WORKING (the recorded flood, 2026-11-11): the prompt rides the command
     # line, so nothing is typed and nothing waits to be accepted - and while the CLI was still coming up its screen read as the bare prompt.
     # The waiting room typed thirty of his lines and notes into it half a minute before its first turn; none reached the agent, and the
-    # chat showed them all heard. Until the screen first reads working - or LAUNCH_WAIT, for a CLI whose working screen is not known
+    # chat showed them all heard. Until its first hook event (hooks._events) or its screen first reads working - or LAUNCH_WAIT, for a CLI
+    # that shows neither
     if getattr(t, 'launching', 0):
         if raw == 'working' or at - t.launching > LAUNCH_WAIT: t.launching = 0
         else: return 'working'

@@ -94,6 +94,10 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(terminal.stable_phase_of(t, at + 61), 'working'); self.assertFalse(t.launching)                     # its first turn: from here the screen says
         t._tail = ['Done.', '? for shortcuts']
         terminal.stable_phase_of(t, at + 70); self.assertEqual(terminal.stable_phase_of(t, at + 71 + terminal.PHASE_DWELL), 'parked')
+        # ...its first hook event says the same (a CLI whose screen is not read): its prompt was taken
+        from taskuary import hooks
+        h = FakeTerm(1, idle=60, tail=['? for shortcuts']); h.launching, h.store, h.sid, h.bg = at, MemoryStore(), 'run1', {}
+        hooks._events(h, {'hook_event_name': 'UserPromptSubmit', 'prompt': 'look at the totals'}); self.assertFalse(h.launching)
         # ...and a CLI whose working screen is never recognised is not held for good
         u = FakeTerm(1, idle=60, tail=['? for shortcuts']); u.status_tail = lambda n=8: u._tail[-n:]; u.launching = at
         terminal.stable_phase_of(u, at + terminal.LAUNCH_WAIT + 1)

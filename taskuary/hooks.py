@@ -377,6 +377,7 @@ def _events(t, p: dict) -> None:
     st = getattr(t, 'store', None)
     if not st or not getattr(t, 'task_id', None): return
     ev, tid, sid = str(p.get('hook_event_name') or ''), t.task_id, t.sid
+    t.launching = 0                         # its CLI is up and speaking: from here its own events and screen say whether it works (terminal.stable_phase_of)
     from . import background
     if not isinstance(getattr(t, 'bg', None), dict): t.bg = {}
     background.track(t.bg, p)

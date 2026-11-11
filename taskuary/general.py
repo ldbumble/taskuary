@@ -89,9 +89,6 @@ def wait_line(store, tid: int, text: str, files=None, line_id=None) -> int:
     from . import handraise
     handraise.moved(tid)
     return wid
-# ...AND A RESTART NEVER SENDS THEM (the owner, 2026-11-07: "it should show the old messages pending in the prompt box instead of sending
-# automatically"): lines no turn took when the process went away go back into the owner's box, theirs to send, change or clear
-BOX_TYPE = 'assistant_box'
 # ...AND A TURN THE RESTART CUT KEEPS WHAT IT SAID (the product audit, 2026-11-08): its words and steps went with the process, and nothing in
 # the chat said the turn was cut. Filed at start-up as the turn's answer so far, its steps under it, with one quiet line under its words
 CUT = f'_Cut short when Taskuary restarted - {CARRY_ON}._'
@@ -111,18 +108,22 @@ def keep_cut_turns(store) -> list:
         out.append(tid)
 
     return out
-def to_box(store, tid: int) -> int:
-    "This task's kept lines back into the owner's box: how many."
-    rows = [r for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE]
-    for r in rows: store._exec('UPDATE comment SET ActorType=? WHERE CommentId=?', (BOX_TYPE, r['CommentId']))
-    return len(rows)
-def box_text(store, tid: int) -> str:
-    "What the owner's box holds again after a restart - '' when nothing."
-    return '\n\n'.join(t for r in store.list_comments(tid, internal=True) if r.get('ActorType') == BOX_TYPE and (t := _line_of(r['Body'])['text']))
-def box_sent(store, tid: int):
-    "The owner sent from the box: what it held again is theirs now, kept or cleared - never offered twice."
-    for r in store.list_comments(tid, internal=True):
-        if r.get('ActorType') == BOX_TYPE: store.drop_comment(r['CommentId'])
+def run_kept(store, tid: int) -> bool:
+    """A CHAT'S LINES NOBODY IS TAKING GO IN WHEN ITS AGENT IS READY (the owner, 2026-11-11: "yes pending should go in when agent ready"): the turn
+    that would have taken them went with the process - a restart - and they wait by the box. One turn takes them all, as a turn at its end
+    does: the first begins it (say_line), the rest go with it (send_prompt). Run on the waiting room's clock; True when a turn was begun."""
+    if tid in OPENING or _IN_FLIGHT.get(tid) or _at_work(_live_of(tid)): return False
+    t, kept = store.get_task(tid) or {}, waiting_lines(store, tid)
+    from . import origin
+    if kept and origin.hold(store, tid): return False              # an untrusted sender's task: they wait behind its Trust, as every line does
+    if not kept or not handles(t) or t.get('Status') not in ('open', 'in_progress', 'waiting') or not provider_options(store): return False
+    w = kept[0]
+    PRESSED[tid] = time.time(); _IN_FLIGHT[tid] = 1; OPENING.add(tid)
+    def go():
+        try: _start_line(store, tid, t, w['text'], w['files'], 'owner', w.get('line'), w['id'], None, {})
+        except Exception as e: logger.warning(f'task {tid}: the lines that waited did not start their turn - {e}')
+    threading.Thread(target=go, daemon=True, name=f'line-{tid}').start()
+    return True
 def new_line_id() -> str: return 's' + uuid.uuid4().hex[:14]
 def waiting_lines(store, tid: int) -> list:
     "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
@@ -3397,7 +3398,6 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     if not text and not files: raise ValueError('empty message')
     t = reopen(store, tid, actor)
     if not t: raise ValueError(f'no task {tid}')
-    box_sent(store, tid)
     # ...AN UNTRUSTED SENDER'S TASK HANDS NOTHING TO AN AGENT (origin.hold): his line is kept and waits by the box, behind the Trust action
     from . import origin
     if (h := origin.hold(store, tid)): return {'kept': wait_line(store, tid, text, files, line_id), 'held': h['line']}

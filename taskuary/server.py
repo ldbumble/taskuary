@@ -2404,7 +2404,6 @@ def _assistant_payload(task_id: int, session=None):
             # waiting for the agent, each at the time it was typed
             # ...and the turn they asked for, at work from the press: `working` and `turnStarted`, as the coding chat's payload says them
             **general.line_state(store, task_id, kept, was),
-            'box': general.box_text(store, task_id),      # ...and what a restart put back in the owner's box (general.to_box)
             'demo': demo.enabled(),          # the demo's turns are written in advance: no AI to connect, so no banner asking for one
             # the conversations of the agents run before this one: drawn IN the chat now (shown_history: every run), never a fold of their own
             'earlier': [],
@@ -2972,17 +2971,7 @@ def resume_asking(actor: str = 'startup') -> list:
             logger.warning(f'task {tid}: the agent waiting on the owner was not brought back after the restart - {e}')
             store.tag_task(tid, hub_term.INTERRUPTED, True, actor)        # a start that got as far as clearing it: still interrupted
             store.audit('task', tid, 'resume-asking', actor, 'system', detail={'fromSid': last['Sid'], 'failed': str(e)[:300]})
-    lines_to_box()
     return out
-
-
-def lines_to_box() -> list:
-    """THE OWNER'S LINES A RESTART CUT OFF GO BACK INTO THEIR BOX (the owner, 2026-11-07: "it should show the old messages pending in the
-    prompt box instead of sending automatically"): typed while a turn ran, kept (general.wait_line), and with no process left to hand them on.
-    Nothing starts an agent for them - the box holds them for the owner to send, change or clear. [task ids]"""
-    from . import general
-    return [tid for tid in sorted({int(r['TaskId']) for r in store._rows('SELECT DISTINCT TaskId FROM comment WHERE ActorType=?', (general.WAITING_TYPE,))})
-            if not general.session_for(tid) and general.to_box(store, tid)]
 
 
 HANDED_OVER = ("THE OWNER HANDED THIS TO YOU: triage first read it as the owner's to do themselves, and the owner chose an agent instead. "

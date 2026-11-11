@@ -394,7 +394,8 @@ def tick(store) -> int:
     from .general import WAITING_TYPE      # ...and the owner's lines kept for a coding agent (_lines): a chat's own turn takes its own
     kept = [r['TaskId'] for r in store._rows('SELECT DISTINCT TaskId FROM comment WHERE ActorType=?', (WAITING_TYPE,))]
     for tid in sorted(set(store.tasks_with_waiting()) | set(kept)):
-        try: n += deliver(store, tid)['delivered']
+        # ...a chat's own turn takes its lines itself - and where none is left to (a restart), one begins for them (general.run_kept)
+        try: n += 0 if general.run_kept(store, tid) else deliver(store, tid)['delivered']
         except Exception as e: logger.warning(f'waiting room: {task_ref(tid)}: {e}')
     from . import peers                        # ...and the notes agents left each other, on the same clock (peers.py)
     try: n += peers.tick(store)

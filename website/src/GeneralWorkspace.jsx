@@ -485,7 +485,7 @@ const withMine = (list, mine) => {
 
 
 function AssistantThread({ task, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack,
-  prompt, onPromptUsed, name = "Taskuary", asking, onAnswer, drafts = [], acts = [], onDraftDecided, noComposer = false, box = "",
+  prompt, onPromptUsed, name = "Taskuary", asking, onAnswer, drafts = [], acts = [], onDraftDecided, noComposer = false,
   chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, queued = null, hold = null, onTrusted, hint = "", placeholder = "",
   empty = "", seed = null, list = null, reloadList = null }) {
   // A TASK'S CHAT DRAWS THE SERVER'S LIST (Conversation) - whatever agent works it; this holds the box, what it sent, and the view's end
@@ -544,14 +544,6 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
   }, [task, list, onAsked, road, sendLine]);
   // ...a coding source keeps Reopen, then Continue, over a closed task (a chat task is typed into to go on, closed or not)
   const closedChat = !chat && ["done", "dropped"].includes(String(task?.Status || ""));
-  // WHAT A RESTART PUT BACK IN THE BOX (general.to_box, the owner 2026-11-07): lines no turn took are the owner's again to send, change or
-  // clear - never sent for them. Into an empty box, once per text; sending anything from the box ends the offer (general.box_sent)
-  const boxed = useRef("");
-  useEffect(() => {
-    const c = runtime.thread.composer;
-    if (!box || boxed.current === box || c.getState().text) return;
-    boxed.current = box; c.setText(box);
-  }, [box, runtime]);
   // ...and WHAT A CONTINUE LIT FOR THIS TASK SAID (TaskPage `intoChat`): its note, into an empty box, once per press - never over the owner's words
   const seeded = useRef(null);
   useEffect(() => {
@@ -913,7 +905,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
         name={name}
-        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} box={data?.box || ""} seed={seed}
+        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} seed={seed}
         chat={chat} reading={chat && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat ? came : null} closedLine={chat ? closedLine : ""} queued={chat ? queued : null} hold={conv.list?.hold || null} onTrusted={() => { conv.load(); onAnswered?.(); onChanged?.(); }}

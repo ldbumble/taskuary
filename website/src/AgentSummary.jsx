@@ -114,11 +114,14 @@ export function NoAgentChat({ task, reviews = [], cards = null, closed = "", onS
     const words = text.trim();
     if ((!words && !pics.paths.length) || busy || pics.busy) return;
     setBusy(true); setErr("");
+    // ...SENT IS NOT UNSENT, FROM THE PRESS (the recorded walk, 2026-11-11): the chat drew itself the moment the agent started, before this box
+    // had emptied, found the words still kept and put them back in its own box - under the same words in his bubble. A send that fails keeps them
+    keepUnsent(task.TaskId, "");
     try {
       const { data } = await api.post(`/api/tasks/${task.TaskId}/dispatch`, { kind: "general", instruction: withImages(words, pics.paths) });
       setText(""); pics.clear(); onStarted?.(data);
     }
-    catch (e) { setErr(e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then send it again."); }
+    catch (e) { keepUnsent(task.TaskId, text); setErr(e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then send it again."); }
     finally { setBusy(false); }
   };
   return (

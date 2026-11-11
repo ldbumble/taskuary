@@ -41,3 +41,10 @@ test("both of a task's boxes keep them: the chat's composer and the box before i
   assert.match(first, /else keepUnsent\(task\.TaskId, text\);/);
 });
 
+test("words sent from the box before the first agent are not kept: the chat that draws next finds its box empty", () => {
+  // the recorded walk, 2026-11-11: his first line stood in his bubble AND in the box under it, and his next line went out glued to it
+  const first = src("AgentSummary.jsx"), send = first.slice(first.indexOf("const send = async () => {"));
+  const cleared = send.indexOf('keepUnsent(task.TaskId, "");'), posted = send.indexOf("await api.post(`/api/tasks/${task.TaskId}/dispatch`");
+  assert.ok(cleared > 0 && cleared < posted, "cleared at the press, before the start is asked for");
+  assert.match(send, /catch \(e\) \{ keepUnsent\(task\.TaskId, text\);/, "a start that failed keeps them");
+});

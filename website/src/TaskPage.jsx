@@ -877,7 +877,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const detailReads = useRef(null);
   // ...and whether a read brought anything new, for the poll below to calm on (pollCalming): the screen's own lines and idle clock
   // are left out of it - the terminal pane draws those live over its own socket, and they move on every read while an agent prints
-  const detailLast = useRef(""), detailMoves = useRef(0);
+  const detailLast = useRef(""), detailMoves = useRef(0), loadFailed = useRef(false);
   detailReads.current ||= coalesce(async (id, signal) => {
     try {
       const asked = Date.now();             // the read's age, against the rail's (taskDetail.noteRead)
@@ -886,6 +886,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       const seen = detailSeen(data);
       if (seen !== detailLast.current) { detailLast.current = seen; detailMoves.current += 1; }
       setDetail(data); keepTask(id, data, undefined, asked);
+      // ...A READ THAT WORKS TAKES BACK THE ONE THAT DID NOT (the recorded restart, 2026-11-11): the app restarted under an open task, one poll
+      // failed, and its red "Failed to load task" stood over a task that had loaded every three seconds since
+      if (loadFailed.current) { loadFailed.current = false; setErr(""); }
       // ...and no waiting room after it: read on every 3 s poll, in series behind the task, into state nothing drew any more - half of
       // what a running agent's page asked for (the agents walk, 2026-10-26). The notes box reads its own (ui.jsx)
     } catch (e) {
@@ -899,7 +902,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         setErr("That task is gone - it was deleted.");
         return;
       }
-      setErr(e?.response?.data?.detail || "Failed to load task");
+      loadFailed.current = true; setErr(e?.response?.data?.detail || "Failed to load task");
     }
   });
   const loadDetail = useCallback(async (id, first = false) => {

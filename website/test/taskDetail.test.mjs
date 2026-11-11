@@ -104,3 +104,10 @@ test("the rail stamps its reads and its rows and the header pill take the task's
   assert.match(view, /useEffect\(\(\) => watchReads\(\(\) => reread\(\(n\) => n \+ 1\)\), \[\]\);/, "the rail draws again on a new read");
   assert.match(page, /page: rail\?\.tid \? pageRead\(rail\.tid\) : null,\n/, "the header pill takes the same read");
 });
+
+// THE RECORDED RESTART (2026-11-11): one poll failed while the app restarted and the red line stood over a task that loaded fine ever after
+test("a task read that works takes back the line a failed one left", () => {
+  const page = src("TaskPage.jsx").replace(/\r\n/g, "\n"), read = page.slice(page.indexOf("detailReads.current ||= coalesce("), page.indexOf("const loadDetail = useCallback("));
+  assert.match(read, /setDetail\(data\); keepTask\(id, data, undefined, asked\);[\s\S]*?if \(loadFailed\.current\) \{ loadFailed\.current = false; setErr\(""\); \}/, "cleared by the next read that works");
+  assert.match(read, /loadFailed\.current = true; setErr\(e\?\.response\?\.data\?\.detail \|\| "Failed to load task"\);/, "...and only the line this read wrote: another error is not its to clear");
+});

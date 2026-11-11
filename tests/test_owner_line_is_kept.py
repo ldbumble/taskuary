@@ -66,17 +66,23 @@ class OwnerLineIsKept(unittest.TestCase):
         self.assertEqual({w: rows[w] for w in typed}, typed)                                          # ...each at the time it was typed
         self.assertEqual(general.waiting_lines(self.s, self.tid), [])
 
-    def test_a_line_kept_when_the_server_restarted_goes_back_into_the_box_never_to_the_agent(self):
-        general.wait_line(self.s, self.tid, 'And copy Erin Blake.')                    # typed mid-turn; then the process went away
-        self.assertEqual(server.lines_to_box(), [self.tid])
-        time.sleep(0.3)
-        self.assertEqual(self.said(), [])                                               # nothing started an agent for it
-        self.assertEqual(general.waiting_lines(self.s, self.tid), [])
-        self.assertEqual(server._assistant_payload(self.tid)['box'], 'And copy Erin Blake.')   # ...it is back in the owner's box
+    def test_lines_kept_when_the_server_restarted_stay_by_the_box_and_go_in_as_one_turn_when_the_agent_is_ready(self):
+        """The owner, 2026-11-11: "yes pending should go in when agent ready" - they came back as text in his box, his to send again."""
+        from taskuary import conversation, waitroom
+        for w in ('And copy Erin Blake.', 'Before Friday.'): general.wait_line(self.s, self.tid, w)    # typed mid-turn; then the process went away
+        self.assertFalse(hasattr(general, 'to_box') or hasattr(server, 'lines_to_box'))
+        self.assertNotIn('box', server._assistant_payload(self.tid))
+        self.assertEqual([x['text'] for x in conversation.items(self.s, self.tid)['pending']], ['And copy Erin Blake.', 'Before Friday.'])   # ...by the box
         self.brain.delay = 0
-        general.take_line(self.s, self.tid, 'And copy Erin Blake, please.')               # they send it, changed
-        self.assertEqual(general.box_text(self.s, self.tid), '')                          # ...offered once, never twice
-        self.assertEqual([b for t, b in self.said() if t == general.USER_TYPE], ['And copy Erin Blake, please.'])
+        waitroom.tick(self.s)                                                              # the clock: nobody is taking them, so one turn begins
+        self.assertFalse(general.run_kept(self.s, self.tid))                               # ...one, not one a tick
+        end = time.time() + 15
+        while (general.ASSISTANT_TYPE, 'Answer 1.') not in self.said() and time.time() < end: time.sleep(0.05)
+        self.assertEqual(self.said(), [(general.USER_TYPE, 'And copy Erin Blake.'), (general.USER_TYPE, 'Before Friday.'), (general.ASSISTANT_TYPE, 'Answer 1.')])
+        self.assertEqual(len(self.brain.calls), 1)                                         # both in one turn, each said once
+        self.assertEqual(general.waiting_lines(self.s, self.tid), [])
+        time.sleep(0.2); waitroom.tick(self.s); time.sleep(0.2)
+        self.assertEqual(len(self.brain.calls), 1)                                         # ...and nothing left to start another
 
     def test_a_held_line_behind_a_turn_that_failed_starts_the_agent_again_quietly(self):
         "Bug 10: the held road had no restart - the line came back 'reload the page and ask again'."

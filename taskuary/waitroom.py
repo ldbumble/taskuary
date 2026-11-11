@@ -138,6 +138,7 @@ def state(store, tid: int) -> tuple:
     t = next((x for x in list(term.SESSIONS.values()) if x.task_id == tid and x.alive), None)
     if t is None:
         return ('working', None) if any(r.get('TaskId') == tid for r in store.running_runs()) else ('no_session', None)
+    if getattr(t, 'typing', 0): return 'working', t         # its last delivery is still going in: nothing is typed over it, a held ask's answer included
     # A HELD ASK IS ASKING, WHATEVER THE SCREEN SAYS (B11, the owner, 2026-10-11): while hooks.ask holds a question
     # Claude keeps its spinner up, so the screen read `working` and the owner's typed answer queued until the 540 s
     # hold ran out - then went in as keystrokes on a form. The hold is waiting on exactly these words.

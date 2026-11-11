@@ -2553,6 +2553,10 @@ def stable_phase_of(t, now: float = None) -> str:
     held for PHASE_DWELL seconds. Process exit is separate (`alive=False`) and remains immediate.
     """
     if prompt_pending(t): return 'working'
+    # A PANE TAKING TASKUARY'S OWN WORDS IS NOT AT REST (the recorded flood, 2026-11-11): a paste goes in over seconds - bites, its echo, Enter -
+    # with the bare prompt on screen all the while, and the waiting room typed its next batch into the first: the TUI ran the two together and
+    # the record drew Taskuary's notes as the owner's line. One delivery at a time: the next only once the last was taken (type_into)
+    if getattr(t, 'typing', 0): return 'working'
     at = time.time() if now is None else float(now)
     raw = _observed_phase(t)
     # A PANE LAUNCHED ON ITS PROMPT IS AT WORK UNTIL ITS CLI SHOWS IT WORKING (the recorded flood, 2026-11-11): the prompt rides the command
@@ -2905,7 +2909,13 @@ def type_into(t, text: str, done=None, brief: bool = False):
             t.write('\x15')
             if _until(lambda: not in_box(t, tail), .5, t): break
         done(False)
-    threading.Thread(target=go, daemon=True).start()
+    # ...in flight from this call, not from its thread's first step: the caller's next look already reads it at work (stable_phase_of). What
+    # Enter took begins a turn, so it leaves the pane latched working - the screen says parked again in its own time, after its dwell
+    t.typing = getattr(t, 'typing', 0) + 1
+    def run():
+        try: go()
+        finally: t.typing, t._phase_stable, t._phase_candidate = max(0, t.typing - 1), 'working', None
+    threading.Thread(target=run, daemon=True).start()
 
 
 FORM_KEY_GAP = 0.8                  # between keys on Claude's question form - a digit re-draws the next tab

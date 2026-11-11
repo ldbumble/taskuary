@@ -85,7 +85,7 @@ class Run:
         # ...by the state, never the clock: its words drawn in the chat first (a loaded machine files them seconds after they were said)
         if say.strip(): until(lambda: any(say.strip()[:40] in x for x in self.payload()['said']), secs)
         self.settle()
-        self.snap(label or f'turn {self.k}: {say[:40]}')
+        self.snap(label or f'turn: {say[:40]}')          # ...named by what it said: a stopped turn's prompt may or may not have come
         return prompt
 
     def quiet(self, secs=1.5, label=None) -> bool:
@@ -94,9 +94,10 @@ class Run:
         self.snap(label or 'quiet')
         return not self.started
 
-    def drop(self, secs=20):
+    def drop(self, secs=5):
         "The turn at work was stopped under the agent: its prompt, if it came, is released unanswered as far as the chat goes."
-        if until((self.d / f'{self.k}.in').is_file, secs):
+        # ...its prompt, while the turn is still at work: a stop that came before the prompt left nothing to release
+        if until(lambda: (self.d / f'{self.k}.in').is_file() or not self.payload()['working'], secs) and (self.d / f'{self.k}.in').is_file():
             # ...released only once the stop has reached the turn - its CLI gone, or the call it waits on marked stopped - never before it,
             # or a slow machine files the answer the stop was for
             from taskuary import general
@@ -272,7 +273,8 @@ class Run:
             named = turns.get(str(r['ReviewId']), ...)
             # ...where the payload names no turn the page places it by time (agentSummary.turnOf): the newest answer stamped at or before it
             by_time = max((i for i, a in enumerate(ats) if a <= str(r['CreatedAt'])), default=len(ats) - 1 if ats else None)
-            turn = ids.index(named) if named in ids else None if named is None else by_time
+            # ...an email owed is no card of a turn (the task's emails draw it - test_cards_stand_in_their_turn): it has no place to keep
+            turn = None if r['Kind'] == 'slot' else ids.index(named) if named in ids else None if named is None else by_time
             what = proposals._action(r) if r['Kind'] == 'action' else r['Kind']
             out.append({'id': r['ReviewId'], 'kind': what, 'status': r['Status'], 'text': ' '.join(str(r.get('FinalText') or r.get('DraftText') or '').split())[:80],
                         'turn': turn, 'named': named is not ..., 'passed': proposals.passed(r) or bool(r.get('Stale')),
@@ -298,7 +300,7 @@ class Run:
             rec = {**(rulebook.recommended(self.s, it, unlit=True) or {}), 'lane': it.get('lane')}
         except Exception as e: rec = {'error': str(e)}
         t = self.s.get_task(self.tid) or {}
-        self.snaps.append({'step': label, 'lines': p['lines'], 'said': p['said'], 'events': p['events'], 'working': p['working'], 'waiting': p['waiting'],
+        self.snaps.append({'step': label, 't': round(time.time(), 1), 'lines': p['lines'], 'said': p['said'], 'events': p['events'], 'working': p['working'], 'waiting': p['waiting'],
                            'asking': p['asking'], 'permissions': p['permissions'], 'cards': self.cards(), 'status': t.get('Status'),
                            'chip': (ts := taskstate.task_state(self.s, tid=self.tid)).key, 'idle': (ts.idle or {}).get('line') or '', 'lit': rec.get('verb'), 'why': rec.get('why') or '',
                            'lane': rec.get('lane'), 'state': rec.get('state') or rec.get('error'),
@@ -656,6 +658,9 @@ def l_no_connector(r: Run):
                                                      'text': 'Hello - we would like to order 20 office chairs. Alex Doyle, Northwind'}))
 
 
+# ...OPEN on a coding task (the audit, 2026-11-10): Remind me pressed while its session came up left the chat at work for a minute, and the
+# next line's turn waited behind it. Listed in the report; not a coding shape here until its start and its rest are the chat's one road
+@on('cli', 'acp', 'api')
 def m_remind_while_working(r: Run):
     "(m) Remind me pressed while the agent works -> one line, the task put away, the agent told once."
     r.task('Plan the offsite')

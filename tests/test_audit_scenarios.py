@@ -4,15 +4,13 @@ they should be one. AUDIT_DUMP=<folder> keeps each cell's snapshots and prompts 
 
 OPEN names what the audit found and has not fixed yet, each with its reason: a cell must break exactly those rules - a new break fails, and a
 fixed one fails too until it is taken off the list. The coding chat's parity with the general one is the largest of them (see OPEN_PARITY)."""
-import json, os, sys
+import json, os
 
 import pytest
 
 import audit_scenarios as A
 
-# ...and not on CI's macOS yet: its slow runners start a turn later than the corpus waits ("turn 0 never started", 2026-11-10) - it runs
-# there again once every wait in the corpus is for a state, never for a time
-pytestmark = [pytest.mark.acp, pytest.mark.skipif(sys.platform == 'darwin' and bool(os.environ.get('CI')), reason='the corpus waits by time on a slow runner')]
+pytestmark = pytest.mark.acp            # the stand-in adapter is this suite's own (conftest.no_real_acp_adapters)
 RUNS = {}                               # (scenario, backend) -> its run, for the parity check after the cells
 # (scenario, backend) -> the rules it still breaks, by their mark - each a finding of the audit (2026-11-10), open:
 OPEN = {}

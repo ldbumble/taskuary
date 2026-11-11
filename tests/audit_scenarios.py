@@ -12,7 +12,7 @@ After every step `snap` reads what the page reads (the chat payload, the task pa
 (general.turn_facts), normalized so two backends doing the same thing read the same. tests/test_audit_scenarios.py runs every scenario on every
 backend and holds the snapshots to the parity rule and the goal rules (`broken`). The replay sheet for the page is REPLAY in this file.
 Invented people only (CLAUDE.md)."""
-import contextlib, json, os, re, subprocess, sys, threading, time
+import contextlib, json, os, re, shutil, subprocess, sys, threading, time
 from pathlib import Path
 from unittest import mock
 
@@ -378,6 +378,8 @@ def world(backend: str, tmp: Path, monkeypatch):
             # ...every task it made, by id: the next test's store numbers its tasks from 1 again, and a start mark left here would be theirs
             for t in [x['TaskId'] for x in s._rows('SELECT TaskId FROM task')]:
                 general.IDLED.pop(t, None); acpcoding.IDLED.pop(t, None); general.answered(t, every=True); general.OPENING.discard(t)
+                from taskuary import outputs
+                shutil.rmtree(outputs.folder(t), ignore_errors=True)     # ...and the files it made: the folder is named by the task's number too
             clipool.close('')
             MARK.unlink(missing_ok=True)
 

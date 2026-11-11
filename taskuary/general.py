@@ -352,7 +352,7 @@ def _cli_of_pick(store, pick: str) -> str:
     row = hub_agents.agent_row(store, str(pick or '')[4:]) or {}
     try: prof = json.loads(row.get('Config') or '{}')
     except ValueError: prof = {}
-    return hub_agents.cli_of(prof)
+    return hub_agents.cli_of(prof) or str(pick or '')[4:]              # a pick with no row of its own is named by the pick
 
 
 def _browser_task(task: dict) -> bool:

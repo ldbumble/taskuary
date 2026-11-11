@@ -127,9 +127,6 @@ def _arrival(store, item: dict):
     return min(stamps, key=lambda s: funnel._activity_time(s) or funnel.datetime.max) if stamps else item.get('arrived_at')
 
 
-def _ok(row: dict) -> list: return list(funnel.order_key(row))
-
-
 def _tuple(at): return tuple(at) if at is not None else None
 
 
@@ -444,15 +441,9 @@ def top(store) -> dict | None:
 def section(store, level: str, actor: str = 'owner', press: str = None) -> dict:
     """A section heading clicked: its first row, and Next walks on down the rail past the section's end (Q6: no "Reports done." stop)."""
     rows = _rows(store)
-    first = next_in(line(rows) if level not in AWAY else rows, level)
+    first = _first((r for r in (line(rows) if level not in AWAY else rows) if lanes.level_of(r) == level and not r.get('settling')), None)
     if not first: return {'item': None, 'say': '', 'options': [], 'chips': [], 'walk': _walk(store, state(store), rows)}
     return open(store, first['key'], actor, press)
-
-
-def next_in(rows, level):
-    for r in rows:
-        if lanes.level_of(r) == level and not r.get('settling'): return r
-    return None
 
 
 HOW = {'done': 'task.complete', 'note': 'task.complete', 'remind': 'task.defer', 'not_task': 'task.not_a_task', 'not_ours': 'message.file',

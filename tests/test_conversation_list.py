@@ -115,6 +115,19 @@ class TheList(unittest.TestCase):
         words = [str(x.get('text') or x.get('words') or '') for x in self.list()['items'] if x['kind'] in ('line', 'arrival')]
         self.assertEqual([w[:8] for w in words if w.startswith('flood ')], [f'flood {i + 1:02d}' for i in range(n)])
 
+    def test_what_comes_in_while_his_line_waits_waits_by_the_box_with_it_and_nothing_enters_above_what_was_drawn(self):
+        """The recorded flood on a pane, 2026-11-11: the pane read at rest while his lines waited, so each message that came in was drawn at
+        once - and when the hand-over took them all, in the order they came, his lines entered above messages already on the screen."""
+        old = self.mail('Before his line.')
+        general.wait_line(self.s, self.tid, 'Near a station.', line_id='l-w')               # kept: nobody has taken it yet, nothing is at work
+        new = self.mail('After his line.')
+        got = self.list()
+        self.assertEqual([x['id'] for x in got['pending']], ['l-w', f'm:{new}']); drawn = [x['id'] for x in got['items']]
+        self.assertIn(f'm:{old}', drawn)
+        general.take_kept(self.s, self.tid, turn=True)
+        now = [x['id'] for x in self.list()['items'] if not x['id'].startswith('t:')]
+        self.assertEqual(now, [*drawn, 'l-w', f'm:{new}'])
+
     def test_a_kept_line_is_heard_and_taken_in_one_step(self):
         "The recorded flood, 2026-11-11: read between its take and its hear, a line stood for a frame at the time it was typed, above what came in since."
         self.brain.delay = 0.5

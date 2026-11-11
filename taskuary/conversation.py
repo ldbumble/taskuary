@@ -95,15 +95,21 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
     drawn moves under his line. Each input once, whoever calls and however often. -> how many were new.
     WHAT ONE HAND-OVER TAKES STANDS IN THE ORDER IT CAME (the recorded flood, 2026-11-11: his lines were written down first, then his own
     replies, then the sender's mail in the order triage got through them - "34, 31, 46"): by each one's own time, and inside one second - a
-    stamp is no finer - by the order the store took them in: a line knows the newest message that was there when it was typed."""
+    stamp is no finer - by the order the store took them in: a line knows the newest message that was there when it was typed.
+    ...AND NEVER ABOVE WHAT WAS DRAWN: what was on the task before his oldest waiting line was typed stood in the chat already - from that
+    line on, what comes in waits by the box with it (items) - so those keep the order they stood in, ahead of the rest."""
     from . import general
     tid, now = int(tid), time.time()
-    refs = []                                      # ((its second, the newest message before it, kind, its place in its kind), kind, name)
+    rows = [x for x in lines if isinstance(x, dict)]
+    first, typed = min((_after(x.get('Body')) for x in rows), default=INF), min((ep(x.get('CreatedAt')) for x in rows), default=INF)
+    # (where, kind, name) - where: (0, when it joined, id) it stood drawn | (1, its second, the newest message before it, kind, place) | (2, n) sent now
+    refs = []
     if turn or standing:
         since = _since(store, tid) - 1
-        refs += [((int(ep(x.get('SentAt') or x.get('CreatedAt')) or x['T']), x['MessageId'], 0, x['MessageId']), 'mail', str(x['MessageId'])) for x in _mail(store, tid) if x['T'] >= since]
-        refs += [((int(ep(p[1])), INF, 2, i), 'press', str(p[0])) for i, p in enumerate(general.presses(store, tid)) if ep(p[1]) >= since]
-    refs += [((int(ep(x.get('CreatedAt'))), _after(x.get('Body')), 1, x['CommentId']), 'line', str(x.get('LineId') or '')) if isinstance(x, dict) else ((INF, INF, 1, i), 'line', str(x))
+        refs += [((0, x['T'], x['MessageId']) if x['MessageId'] <= first else (1, int(ep(x.get('SentAt') or x.get('CreatedAt')) or x['T']), x['MessageId'], 0, x['MessageId']),
+                  'mail', str(x['MessageId'])) for x in _mail(store, tid) if x['T'] >= since]
+        refs += [((0, ep(p[1]), i) if ep(p[1]) < typed else (1, int(ep(p[1])), INF, 2, i), 'press', str(p[0])) for i, p in enumerate(general.presses(store, tid)) if ep(p[1]) >= since]
+    refs += [((1, int(ep(x.get('CreatedAt'))), _after(x.get('Body')), 1, x['CommentId']), 'line', str(x.get('LineId') or '')) if isinstance(x, dict) else ((2, i), 'line', str(x))
              for i, x in enumerate(lines) if x]
     refs = [(k, r) for _, k, r in sorted(refs, key=lambda x: x[0]) if r]
     if turn: refs.append(('turn', str(time.time_ns())))
@@ -269,7 +275,7 @@ def items(store, tid: int) -> dict:
             body = general._line_of(c['Body']) if ty == WAITING_TYPE else {'text': c.get('Body') or '', 'files': []}
             it = {'id': c.get('LineId') or f'c:{cid}', 'kind': 'line', 'at': c['CreatedAt'], **body}
             h = led.get(('line', c.get('LineId') or ''))
-            if not h and ty == WAITING_TYPE: pend.append(it); continue
+            if not h and ty == WAITING_TYPE: pend.append({**it, '_after': _after(c['Body'])}); continue
             if h: it['_h'] = h['At']
             # ...one the ledger heard stands at its hand-over's own moment, beside what was taken with it (in the ledger's order, `put`): moved
             # a hair on for each line before it, every message of a flood stood above its second line
@@ -327,7 +333,7 @@ def items(store, tid: int) -> dict:
             else: put(s['T'], 1, {'kind': 'step', 'sid': sid, 'seg': n, 'step': {k_: v for k_, v in s.items() if k_ != 'T'}, 'T': s['T']})
 
     # what came in, and what he pressed: at the moment the agent heard it, else at its own time
-    at_work = was or state['working']
+    at_work, waits = was or state['working'], min((x.pop('_after') for x in pend), default=INF)
     began = (state.get('turnStarted') or max((r['At'] for r in led.values()), default=0.) or INF) if at_work else INF
     for x in _mail(store, tid):
         # ...the task's OWN row (ownwork.ensure: his ask, filed as the task was made) never "came in": it is drawn only where the chat has nothing else
@@ -336,7 +342,9 @@ def items(store, tid: int) -> dict:
         row = general.mail_row(store, x)
         it = {'id': f"m:{x['MessageId']}", 'kind': 'arrival', **row, 'joined': stamp(x['T']), **({'_hm': h['At']} if h else {})}
         # ...a stamp is a whole second: one that joined in the turn's first second came in under it (it stood ABOVE the turn at work)
-        if not h and at_work and x['T'] + 1 > began: pend.append(it)
+        # ...and one that came in while a line of his waits by the box waits there with it: drawn at once, the line entered above it when
+        # both were heard, in the order they came (the recorded flood on a pane, 2026-11-11)
+        if not h and (at_work and x['T'] + 1 > began or x['MessageId'] > waits): pend.append(it)
         else: put(h['At'] if h else x['T'], 0 if h else -1, it, h['HId'] if h else 0)
     stop = f"You {general.PRESSES['stopped_turn']({})}."
     for m in general.press_lines(store, tid):

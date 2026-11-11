@@ -1300,8 +1300,11 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         # task is no longer queued - the task page's own terminal door skipped all three and left them stale
         resume_task(store, task_id, actor); store.tag_task(task_id, SAVED, False, actor); store.clear_dispatch(task_id)
         store.tag_task(task_id, 'held:repo', False, actor)    # funnel.HELD_REPO: the repository it waited for is found
-    if task_id and store.hold_reviews(task_id, 'held while an agent works the task - the reply is written from what it finds'):
-        logger.debug(f'held the pending reply on task {task_id} while {agent or "a session"} works it')
+    # ...and a reply an EARLIER session drafted is out of sight while this one works, as a chat's start does (general.start_session): the
+    # arrival draft stays where it stands, greyed once the owner prompts past it - holding it emptied a coding chat of its card (2026-11-11)
+    if task_id and actor not in INTERRUPTING:
+        from . import wrapup
+        wrapup.hold_stale(store, task_id, t.sid)
     store.audit('terminal', 0, 'open', actor, detail={'sid': t.sid, 'agent': agent, 'cwd': cwd, 'task': task_id})
     return t
 

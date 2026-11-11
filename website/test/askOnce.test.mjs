@@ -25,7 +25,16 @@ test("with no open question nothing changes", () => {
   assert.equal(withoutAsked(msgs, null), msgs);
 });
 
-test("the canvas draws the box from the same question it took out of the answer", () => {
+// ...and a coding agent's too: its turn's words are said parts drawn from its session (chatStream.partsMessage)
+test("a coding turn's words drop the question the box shows", () => {
+  const turn = { role: "assistant", content: [{ type: "data", name: "agent_parts", data: { parts: [{ type: "said", text: `Read totals.py.\n\n${asking.text} (Keep / Drop)` }, { type: "work", steps: [] }] } }] };
+  const [shown] = withoutAsked([turn], asking);
+  assert.deepEqual(shown.content[0].data.parts, [{ type: "said", text: "Read totals.py." }, { type: "work", steps: [] }]);
+});
+
+test("the canvas draws the box from the same question it took out of the answer - both sources, one read", () => {
   const g = readFileSync(fileURLToPath(new URL("../src/GeneralWorkspace.jsx", import.meta.url)), "utf8");
-  assert.match(g, /withoutAsked\(messagesWithTrace\(data\?\.messages, session, dock\),\s*!dock && data\?\.asking && data\.asking\.request_id !== answered \? data\.asking : null\)/);
+  assert.match(g, /const ask = \(coding \? cc\.got : data\)\?\.asking, asking = ask && ask\.request_id !== answered \? ask : null;/);
+  assert.match(g, /const shownMessages = withoutAsked\(/);
+  assert.match(g, /\}\)\(\), dock \? null : asking\);/);
 });

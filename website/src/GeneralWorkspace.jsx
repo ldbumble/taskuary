@@ -1422,7 +1422,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...AND ONCE IT IS UP FOR THE OWNER IT STAYS UP until the agent answers again (the owner, 2026-11-05, signing in to a site in two steps: "I put
   // in username then hit next the box disappeared then reopened to put in password. You can leave it open until auth is done"): between a
   // sign-in's pages there is a moment with no ask open, and the page went away under them
-  const needRaw = needsOwner(data?.asking && data.asking.request_id !== answered ? data.asking : null,
+  // ...what the agent asks, by the one read both payloads carry (taskstate.asking): gone from the card the moment it is answered
+  const ask = (coding ? cc.got : data)?.asking, asking = ask && ask.request_id !== answered ? ask : null;
+  const needRaw = needsOwner(asking,
       (data?.browserActs || []).map((r) => heldOn(r, data?.session?.sid)).filter(Boolean)), answers = (data?.messages || []).filter((m) => m?.role === "assistant").length;
   const [needHeld, setNeedHeld] = useState(null);
   useEffect(() => { if (needRaw) setNeedHeld(answers); }, [needRaw]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -1436,14 +1438,13 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     : <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
   // ...the question the answer box below shows is said there only (askOnce.js)
-  const shownMessages = (() => { const general = withoutAsked(messagesWithTrace(data?.messages, session, dock),
-    !dock && data?.asking && data.asking.request_id !== answered ? data.asking : null);
+  const shownMessages = withoutAsked((() => { const general = messagesWithTrace(data?.messages, session, dock);
     // ...a coding turn at work is stamped from its own first step (`since`), never from the mail above it - or from the press that began it, the
     // earlier (general.line_state `turnStarted`): its first step comes once the adapter is up, and the head read "ran 2s" after "ran 9s"
     const pressed = cc.got?.turnStarted ? cc.got.turnStarted * 1000 : null;
     const turns = rowMessages(cc.rows).map((m) => (String(m.id).startsWith("live-") && m.createdAt ? { ...m, since: turnFrom(+asUtc(m.createdAt) || null, pressed) || undefined } : m));
     // ...and each press a quiet line at its time, the general chat's own (general.press_lines: the coding payload's `presses`)
-    return coding ? byTime([...general, ...turns, ...(cc.got?.presses || [])]) : general; })();
+    return coding ? byTime([...general, ...turns, ...(cc.got?.presses || [])]) : general; })(), dock ? null : asking);
   // ...and what typing does there: into the running CLI as its next line, or the session picked back up with these words leading - the files
   // named to the CLI by their paths after the words (promptImages.withImages), as every coding CLI reads a file
   // ...and what a coding source reads once a line is in: its own sessions (the line itself goes the one road, holdText)
@@ -1485,8 +1486,6 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // beside it. It used to be one of four bodies behind a switcher (a fake terminal of the same
   // conversation, a browser button, a numbers panel); a general agent is a chat the way a coding
   // agent is a terminal, so there is nothing to switch (the owner, 2026-09-22).
-  // ...gone from the card the moment it is answered: the snapshot carries it until the agent's next word lands
-  const asking = data?.asking && data.asking.request_id !== answered ? data.asking : null;
   // THE ANSWER GOES WHERE THE QUESTION CAME FROM: this conversation's own agent takes it as its next message, streamed here as any
   // other (its new turn overtakes the question - workerstate.open_requests); an agent asking from a terminal on this task gets it
   // through the worker's answer road (workerstate.answer), and the card's state clears with the `answered` it records
@@ -1495,6 +1494,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     if (isTurn(req) && (req.choices || []).includes(text)) return handBack();      // the Done of a step on the page: a press wherever it is drawn
     // ...and a chat agent's question kept after its process idled out (`resting`): the answer is its next turn, which starts it again
     if (req.resting || (session?.sid && String(req.sid) === String(session.sid))) { setOwnPrompt({ id: `ask:${req.request_id}`, text }); setAnswered(req.request_id); return; }
+    // ...and a coding agent's as any line typed to it (general.take_line): its next turn takes the line, and that closes the question
+    if (road && req.kind !== "approval_needed") { await api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text }, { timeout: 0 }); setAnswered(req.request_id); road(); return; }
     await api.post(`/api/tasks/${task.TaskId}/worker/answer`, { request_id: req.request_id, text });
     setAnswered(req.request_id); onAnswered?.();
   };

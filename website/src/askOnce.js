@@ -12,6 +12,9 @@ export function withoutAsked(messages, asking) {
   // a paragraph that IS the question - "Which vendor?" or "Which vendor? (Acme / Globex)" - goes; the rest of the answer stays
   const drop = (text) => String(text || "").split(/\n{2,}/).filter((p) => { const f = flat(p); return f !== q && !(f.startsWith(q) && /^\s*\(.*\)$/.test(f.slice(q.length))); }).join("\n\n");
   const m = messages[i];
-  const content = (m.content || []).map((c) => (c.type === "text" ? { ...c, text: drop(c.text) } : c)).filter((c) => c.type !== "text" || c.text.trim());
+  // ...and from a coding turn's words, its said parts (chatStream.partsMessage): the same answer, drawn from its session
+  const said = (ps) => ps.map((p) => (p.type === "said" ? { ...p, text: drop(p.text) } : p)).filter((p) => p.type !== "said" || p.text.trim());
+  const content = (m.content || []).map((c) => (c.type === "text" ? { ...c, text: drop(c.text) } : c.data?.parts ? { ...c, data: { ...c.data, parts: said(c.data.parts) } } : c))
+    .filter((c) => c.type !== "text" || c.text.trim());
   return [...messages.slice(0, i), { ...m, content }, ...messages.slice(i + 1)];
 }

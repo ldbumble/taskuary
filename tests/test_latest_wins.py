@@ -278,21 +278,3 @@ def test_a_letter_filed_while_his_line_still_waits_for_the_turn_is_a_new_draft()
     assert out['ok'] and out['review_id'] != rid
     old = s.get_review(rid)
     assert (old['Status'], old['DecideNote'], old['DraftText']) == ('closed_unsent', wrapup.REPLACED, OLD)
-
-
-def test_a_draft_held_for_the_agent_at_work_is_old_news_once_he_has_prompted_past_it():
-    """...the same in a coding chat, where the arrival draft is HELD for the agent the owner's line started (store.hold_reviews): the agent's
-    new letter took it over in place, unheld, so the card he had prompted past came back with words he never saw written."""
-    s = MemoryStore(); tid, mid = task_with(s)
-    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': OLD})
-    at(s, 'review', 'ReviewId', rid, '2026-11-06 14:48:00')
-    s.hold_reviews(tid, 'an agent is working this task')
-    assert s.get_review(rid)['Status'] == 'held'
-    at(s, 'comment', 'CommentId', s.add_comment(tid, 'owner', general.USER_TYPE, 'make it shorter'), '2026-11-06 15:22:00')
-    out = wrapup.agent_reply(s, tid, NEW, 'assistant', sid='c1')
-    assert out['ok'] and out['review_id'] != rid
-    assert (s.get_review(rid)['Status'], s.get_review(rid)['DecideNote']) == ('closed_unsent', wrapup.REPLACED)
-    # ...while a held draft nobody has prompted past is still the one the agent's letter fills
-    s2 = MemoryStore(); t2, m2 = task_with(s2)
-    r2 = s2.add_review({'TaskId': t2, 'MessageId': m2, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': OLD}); s2.hold_reviews(t2, 'working')
-    assert wrapup.agent_reply(s2, t2, NEW, 'assistant', sid='c1')['review_id'] == r2

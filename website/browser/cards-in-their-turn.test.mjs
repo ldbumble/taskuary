@@ -152,10 +152,9 @@ test("a reply rewritten after the owner prompts: the old card greys in place at 
 
 // ...AND THE SAME IN A CODING CHAT (one road for both chats): the task's agent is the stand-in ACP adapter (fixture/coding), which files the new
 // letter as the real one's shell does (FAKE_ACP_SCRIPT -> `taskuary --reply`)
-// ...TODO until the morning's ruling (OVERNIGHT 2026-11-10, item 5): a coding start HOLDS the arrival draft (terminal.start_on_task ->
-// store.hold_reviews), so for the turn's first second the old card is gone from the chat instead of greyed where it stood
-test("a reply rewritten in a coding chat: the old card greys in place at the press, the new one stands live under his line", { timeout: 600000,
-  todo: "the held arrival draft leaves the chat while the coding turn starts" }, async (t) => {
+// ...a coding start held the arrival draft, so for the turn's first second the old card was gone from the chat (2026-11-11): it holds only an
+// earlier session's now, as a chat's start does
+test("a reply rewritten in a coding chat: the old card greys in place at the press, the new one stands live under his line", { timeout: 600000 }, async (t) => {
   const w = await world(t);
   const page = await w.newPage();
   await page.setViewport({ width: 1600, height: 900 });
@@ -341,5 +340,62 @@ test("a stranger's task its AI cannot start says why under the owner's line, wit
   }
   assert.ok(held != null, `the hold is said under his line with its Trust: ${JSON.stringify(last)}`);
   assert.deepEqual(bad.slice(0, 4), []);
+  assert.deepEqual(errors, []);
+});
+
+// A CODING AGENT'S QUESTION IS ON ITS CHAT, AND HIS ANSWER IS HIS NEXT LINE (one road with the general chat, 2026-11-11): the coding payload carries
+// what the agent asks (taskstate.asking) and the page read it on a general task only - the question stood nowhere but in the agent's words. Typed
+// into the box, the answer goes the way every line to it goes (general.take_line), never the terminal's answer road (/worker/answer)
+const ASKS = [{ when: "yes, with tax", anywhere: true, first: "Done - the totals include tax now." },
+  { when: "comment the totals", anywhere: true, first: "Read totals.py.\n\n[[TASKUARY-ASK]] Should the totals include tax? | Yes | No" }];
+test("a coding agent's question stands in its chat; the owner's typed answer is his next line and the agent goes on under it", { timeout: 300000 }, async (t) => {
+  const w = await world(t, ASKS);
+  const page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const errors = [], answers = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("request", (r) => { if (/\/worker\/answer/.test(r.url())) answers.push(r.url()); });
+  const git = execFileSync(process.platform === "win32" ? "where" : "which", ["git"], { encoding: "utf8" }).trim().split(/\s*\n/)[0].trim();
+  const made = await w.api("/api/fixture/coding", { git });
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  const name = process.env.N17_NAME || "coding-asks", dir = path.join(out, "video", name); await mkdir(dir, { recursive: true });
+  // ...its first line posted as the page posts one (browser/coding-line-timeline): a coding task with no session yet draws its box once it has one
+  await w.api(`/api/tasks/${made.taskId}/assistant/messages`, { text: "comment the totals" });
+  await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 60000 });
+  const rec = await record(page, dir), bad = [], said = "yes, with tax";
+  const vp = () => page.evaluate(() => { const v = document.querySelector("[data-tq-task-page] .tq-aui-viewport");
+    return { text: v?.innerText || "", asks: v?.querySelectorAll("[data-tq-asking]").length || 0 }; });
+  let asked = null, done = null;
+  try {
+    const t0 = Date.now();
+    while (Date.now() - t0 < 60000 && !asked) { const s = await vp(); if (s.asks) asked = s; else await new Promise((r) => setTimeout(r, 200)); }
+    if (!asked) bad.push("the question never stood on the chat");
+    else if (/TASKUARY-ASK/.test(asked.text)) bad.push("the bare marker is drawn");
+    await new Promise((r) => setTimeout(r, 1000));
+    await page.evaluate(() => document.querySelector("[data-tq-task-page] .tq-aui-input")?.focus());
+    await page.keyboard.type(said); await page.keyboard.press("Enter");
+    const t1 = Date.now();
+    while (Date.now() - t1 < 60000) {
+      const s = await vp(), mine = s.text.lastIndexOf(said), ans = s.text.indexOf("the totals include tax now");
+      if (mine < 0 && Date.now() - t1 > 1500) bad.push(`${Date.now() - t1} ms: his answer is not drawn`);
+      if (ans >= 0) { if (mine < 0 || ans < mine) bad.push("the agent's answer is not under his line"); done = Date.now() - t1; break; }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+    if ((await vp()).asks) bad.push("the question still stands after the agent answered");
+    if (answers.length) bad.push(`the answer went the terminal's road: ${answers[0]}`);
+  } finally {
+    await page.screenshot({ path: path.join(out, `${name}.png`) });
+    await rec.stop();
+    await writeFile(path.join(dir, "server.log"), w.backend.output());
+    await note(dir, { done: "A coding task on the stand-in ACP agent; the owner asks it to comment the totals; it asks whether totals include tax; he types 'yes, with tax'.",
+      expect: "The question in the chat as the agent's (no bare marker); his answer drawn as his line at the press; the agent's next turn under it; the question gone.",
+      saw: !asked ? "no question on the chat within 60 s" : done == null ? "no answer under his line within 60 s" : bad.length ? bad.slice(0, 4).join("\n") : `as expected; answered ${done} ms after his line`,
+      verdict: asked && done != null && !bad.length ? "PASS" : "FAIL" });
+  }
+  assert.ok(asked, "the question stands on the chat");
+  assert.ok(done != null, "the agent answered under his line");
+  assert.deepEqual([...new Set(bad)].slice(0, 4), []);
   assert.deepEqual(errors, []);
 });

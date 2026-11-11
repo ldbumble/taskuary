@@ -5,7 +5,7 @@ import json, os, sys, tempfile, threading, time, unittest
 from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import server, terminal
+from taskuary import server, terminal, wrapup
 # these pin the OWNER's seed; a sender nobody has vouched for is a stranger's, which rides in a file (tests/test_origin_seed.py)
 _owner = mock.patch('taskuary.origin.of_task', new=lambda *a, **k: ('owner', 'test'))
 
@@ -1204,7 +1204,7 @@ class DurableWrapTests(unittest.TestCase):
         self.assertIn(rid, pending())
         t = terminal.Term(ECHO, os.getcwd(), 'coding', tid, 'coding', store=server.store)
         terminal.SESSIONS[t.sid] = t
-        server.store.hold_reviews(tid, 'held while an agent works the task')   # what open_session does
+        server.store.hold_reviews(tid, 'held while an agent works the task')   # what a look-first outbox task does (outbox.compose)
         self.assertNotIn(rid, pending())                                        # out of the queue
         held = [r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'held'}).json()['data']]
         self.assertIn(rid, held)                                                # but visible, not vanished
@@ -1217,6 +1217,22 @@ class DurableWrapTests(unittest.TestCase):
         self.assertIn(rid, pending())                        # the SAME review back in the queue, not a second one
         self.assertIn("the agent's to write", server.store.get_review(rid)['Reason'])
         self.assertEqual(server.store.get_review(rid)['Stale'], 1)       # ...its words from before the work never go as the answer
+
+    def test_a_coding_start_leaves_the_arrival_draft_where_it_stands_as_a_chat_start_does(self):
+        """One road for both chats (2026-11-11): a coding start held the arrival draft, so the owner's card left his coding chat for the
+        turn's first second; a chat start holds only what an EARLIER session drafted (wrapup.hold_stale). Now the coding start does the same."""
+        server.store.upsert_agent('Atlas', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': os.getcwd()}))
+        tid = self._task('arrival draft stays')
+        mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:STAY1', 'Channel': 'email', 'FromEmail': 'erin@northwind.example',
+                                        'BodyText': 'is the import fixed?', 'Status': 'routed'})
+        arrival = server.store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Looking now.'})
+        earlier = server.store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Fixed.'})
+        server.store._exec('UPDATE review SET DraftBy=? WHERE ReviewId=?', (wrapup.AGENT_DRAFT + 'assistant', earlier)); server.store.set_review_sid(earlier, 's-earlier')
+        with mock.patch.object(terminal, 'Term') as T, mock.patch('taskuary.agents._resolve_cmd', return_value=['claude']), mock.patch('taskuary.origin.launch_mode', return_value='full'):
+            T.return_value = mock.Mock(sid='stay1', cwd=os.getcwd())
+            try: terminal.open_session(server.store, 'Atlas', tid)
+            finally: terminal.SESSIONS.pop('stay1', None)
+        self.assertEqual((server.store.get_review(arrival)['Status'], server.store.get_review(earlier)['Status']), ('pending', 'held'))
 
     def test_a_held_reply_can_be_released_without_waiting(self):
         tid = self._task('released reply task')

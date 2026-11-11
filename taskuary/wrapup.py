@@ -475,9 +475,6 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # an EARLIER SESSION'S draft is not rewritten into this one: it is closed as superseded, its words kept, and this is a new review
     sid = str(sid or _sid_now(store, task_id) or '') or None
     if sid and held and stale_draft(store, held, sid): supersede(store, held, agent); held = {}
-    # ...and one HELD for the agent at work (store.hold_reviews) once the owner has prompted past it is old news too (_turn_after, as a live one
-    # below): unheld and rewritten, the arrival draft took the new letter in place over his line in a coding chat (the overnight audit, 2026-11-10)
-    if held and _turn_after(store, task_id, held): store.decide_review(held['ReviewId'], 'closed_unsent', None, agent, note=REPLACED); held = {}
     live = None if held else (store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False))
     # ...and a reply pending to SOMEONE ELSE is theirs: rewriting it into this letter took the one to them off the table (2026-11-02)
     # ...measured by whom it ANSWERS: a later line from someone else re-pins its MessageId to the newest message, and the night run (2026-11-09)

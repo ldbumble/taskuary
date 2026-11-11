@@ -68,7 +68,7 @@ test("the general agent's question is drawn in its canvas, answered by its press
   assert.match(view, /\{!dock && asking && <AgentAsks asking=\{asking\} name=\{name\} onAnswer=\{onAnswer\} taskId=\{task\.TaskId\} \/>\}/);
   assert.match(view, /setOwnPrompt\(\{ id: `ask:\$\{req\.request_id\}`, text \}\)/);
   assert.match(view, /api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/worker\/answer`, \{ request_id: req\.request_id, text \}\)/);
-  assert.match(view, /data\.asking\.request_id !== answered/, "answered here, it goes at once - the snapshot still carries it");
+  assert.match(view, /ask\.request_id !== answered/, "answered here, it goes at once - the snapshot still carries it");
 });
 
 // ONE BOX TYPES THE ANSWER (the owner, 2026-11-03: "i hate this double ui. we don't need question box if we have way to answer on the

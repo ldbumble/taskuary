@@ -127,7 +127,10 @@ for line in sys.stdin:
         rule = next((r for r in (json.load(open(os.environ['FAKE_ACP_SCRIPT'], encoding='utf-8')) if os.environ.get('FAKE_ACP_SCRIPT') else [])
                      if re.search(r['when'], said, re.I)), None)
         if rule:
-            for p in rule.get('post') or []: post(p)
+            # ...each post the shell call a real agent makes for it, reported running before it files and done after - never a card ahead of its turn
+            for i, p in enumerate(rule.get('post') or []):
+                update('tool_call', toolCallId=f'post_{i}', title='taskuary', kind='execute', status='in_progress', rawInput={'command': f"taskuary {p['path'].rsplit('/', 1)[-1]}"})
+                post(p); update('tool_call_update', toolCallId=f'post_{i}', status='completed')
             update('agent_message_chunk', content={'type': 'text', 'text': rule.get('first') or 'Ok.'}); reply(mid, ended()); continue
         if folder_of():                                # a scenario's own turn (fake_director.py): its words, no permission asked
             _prompt_id = mid                           # ...on a thread, so a session/cancel meanwhile ends the turn as a real adapter's does

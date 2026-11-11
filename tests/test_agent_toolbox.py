@@ -208,7 +208,7 @@ class TheTable(unittest.TestCase):
         for name, (cls, desc, schema, (method, path)) in agenttools.TOOLS.items():
             self.assertIn(guard.classify(method, path)[0], ('read', 'agent'), name)
             self.assertTrue(any(m == method and re.fullmatch(re.sub(r'\{[^}]+\}', r'[^/]+', p), path) for m, p in routes), f'{name}: {path}')
-            self.assertIn(cls, ('read', 'own', 'propose'))
+            self.assertIn(cls, ('read', 'reach', 'own', 'propose'))
         self.assertEqual(guard.classify('POST', '/api/mcp')[0], 'agent')
 
     def test_claude_gets_our_server_with_no_secret_written(self):

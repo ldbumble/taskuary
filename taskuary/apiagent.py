@@ -178,6 +178,8 @@ def taskuary_tools(tid: int, sid: str, stranger: bool = False, post=None) -> lis
     try: listed = _mcp(tid, sid, 'tools/list', stranger=stranger, post=post).get('tools') or []
     except Exception as e:
         logger.warning(f'apiagent: task {tid} gets no Taskuary tools - {e}'); return []
+    # ...and which only read Taskuary's own records, by the catalogue's own marks (agenttools.ANNOTATIONS): a repeat is answered from the turn
+    READS[(tid, sid)] = {t['name'] for t in listed if (a := t.get('annotations') or {}).get('readOnlyHint') is True and a.get('openWorldHint') is False}
     return [_fn(t['name'], str(t.get('description') or '')[:1024], _clean(t.get('inputSchema') or _S({}))) for t in listed if t.get('name')]
 
 
@@ -375,13 +377,14 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
 
 
 TOOLBOX, STRANGERS, OFFERED = {}, set(), {}   # ...and OFFERED: every name a turn was offered - nothing else runs          # (tid, sid) -> the Taskuary tool names this turn was offered; the sessions on a stranger's task
+READS = {}                     # (tid, sid) -> the Taskuary tools that only read its own records (taskuary_tools)
 
 
 def forget(tid: int, sid: str):
     """A SESSION THAT IS GONE KEEPS NOTHING HERE. What each was offered stayed for every session there had ever been, until the app was
     closed. Asked by a session with no turn on (general: idled out, closed), never under one: `call` reads these, and every turn that
     comes after says them again first (tools_for)."""
-    for d in (TOOLBOX, OFFERED, DEFERRED): d.pop((tid, sid), None)
+    for d in (TOOLBOX, OFFERED, DEFERRED, READS): d.pop((tid, sid), None)
     STRANGERS.discard((tid, sid))
 
 
@@ -437,6 +440,18 @@ DROPPED = '(dropped to save room - run it again if you need it)'
 # prompt cache), and the whole is held under the `agent_request_chars` setting.
 KEEP_STEPS, REQUEST_CHARS = 3, 120_000
 def _stub(name, args, n) -> str: return f'(the answer to {name}({str(args or "")[:160]}), {n:,} characters, is not repeated here - call it again if you need it)'
+
+
+# A READ MADE AGAIN IN ONE TURN IS ANSWERED FROM THE FIRST: a model that searched or read the same thing twice paid for the whole answer twice,
+# and the server ran it twice. Only a tool that reads Taskuary's own records or the agent's files (READS, FILES) is answered so, only while
+# nothing else has run since: any other call - a tick, a write, a command, a click - clears the turn's record, since it may have changed it
+def _again(msgs: list, first: dict, text: str, name: str) -> str:
+    "A pointer where the first answer still goes whole with every call (sent); else that answer again, as it came, without running it."
+    steps = [i for i, m in enumerate(msgs) if m.get('tool_calls')]
+    cut = steps[-KEEP_STEPS] if len(steps) >= KEEP_STEPS else 0
+    if any(m is first for m in msgs[cut:]) and first.get('content') == text:
+        return f'(the same as your earlier {name} call this turn, answered above - nothing since could change it)'
+    return text
 
 
 def _size(m: dict) -> int:
@@ -507,7 +522,8 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
     mine = {'role': 'user', 'content': content}
     msgs, begun = [{'role': 'system', 'content': system}, *(history or []), mine], False
     load(tid, sid, tools, [(c.get('function') or {}).get('name') for m in history or [] for c in m.get('tool_calls') or []])   # what it used before
-    why, read, idle = 'You are out of steps for this turn.', set(), 0
+    why, read, idle, seen = 'You are out of steps for this turn.', set(), 0, {}
+    reads = {*READS.get((tid, sid), ()), *(t['function']['name'] for t in FILES)}
     budget, idle_n = _setting(store, 'agent_request_chars', REQUEST_CHARS), _setting(store, 'agent_idle_steps', IDLE_STEPS)
     stopped = lambda: cancel is not None and cancel.is_set()
     def said(m):
@@ -540,13 +556,19 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                 except ValueError: a = {}
                 if trace: trace('tool_call', name, {'args': a})
                 if name in (DEFERRED.get((tid, sid)) or {}): load(tid, sid, tools, [name])       # called by the name it was given: loaded as it runs
-                try: out, err = (load(tid, sid, tools, a.get('names')) if name == LOAD else _await(lambda: run_tool(store, tid, sid, name, a), cancel)), False
-                except Exception as e:
-                    if stopped(): raise
-                    out, err = f'{name} failed: {e}', True
-                    logger.info(f'apiagent: task {tid} {name} failed - {e}')
+                key, again = (name, json.dumps(a, sort_keys=True, default=str)), False
+                if name in reads and key in seen: out, err, again = _again(msgs, *seen[key], name), False, True
+                else:
+                    try: out, err = (load(tid, sid, tools, a.get('names')) if name == LOAD else _await(lambda: run_tool(store, tid, sid, name, a), cancel)), False
+                    except Exception as e:
+                        if stopped(): raise
+                        out, err = f'{name} failed: {e}', True
+                        logger.info(f'apiagent: task {tid} {name} failed - {e}')
+                    if name not in reads and name != LOAD: seen.clear()
                 if trace: trace('tool_result', name, {'result': out, 'is_error': err})
-                msgs.append({'role': 'tool', 'tool_call_id': c.get('id') or name, 'content': _cut(out)})
+                msgs.append(ans := {'role': 'tool', 'tool_call_id': c.get('id') or name, 'content': _cut(out)})
+                if name in reads and not err and not again: seen[key] = (ans, ans['content'])
+                if again: continue                  # ...and it is nothing new read: going in circles is still counted (idle)
                 # PROGRESS IS SOMETHING NEW READ (the owner, 2026-11-10: "are we leaking tokens?"): a small model calling a search again
                 # with other words, or a page that failed again, is not working - a line no earlier answer of this turn held is
                 lines = {' '.join(l.split()) for l in str(out).splitlines() if l.strip()} if not err else set()

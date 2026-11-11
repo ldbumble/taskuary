@@ -67,7 +67,7 @@ TOOLS = {
     # ...and a how-to read when the work comes to one, instead of riding in every prompt (guides.py, 2026-11-09)
     'guide': ('read', "Read one of Taskuary's how-tos before work that needs it - " + __import__('taskuary.guides', fromlist=['index']).index()
               + ". Read-only.", _S({'topic': _STR}, ('topic',)), ('GET', '/api/tasks/1')),
-    'run_system': ('read', "Run one tool on one of the owner's systems (list_systems): {type, connector_id, ...its fields}. Reads run"
+    'run_system': ('reach', "Run one tool on one of the owner's systems (list_systems): {type, connector_id, ...its fields}. Reads run"
                            " at once; a file saved to SharePoint or OneDrive runs at write Authority and says where it landed. A "
                            "send, post, pay or order never runs here - it waits for the owner's press, and you are told so.",
                    {'type': 'object', 'properties': {'type': _STR, 'connector_id': _INT}, 'required': ['type'],
@@ -215,8 +215,9 @@ TOOLS = {
                 {'type': 'object', 'properties': {'action': _STR, 'why': _STR}, 'required': ['action', 'why'],
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),
 }
-ANNOTATIONS = {'read': {'readOnlyHint': True, 'openWorldHint': False}, 'own': {'readOnlyHint': False, 'destructiveHint': False},
-               'propose': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}}
+# ...`reach`: a read of a system outside Taskuary (run_system) - its answer can change under the agent, and a save it runs is a write
+ANNOTATIONS = {'read': {'readOnlyHint': True, 'openWorldHint': False}, 'reach': {'readOnlyHint': True, 'openWorldHint': True},
+               'own': {'readOnlyHint': False, 'destructiveHint': False}, 'propose': {'readOnlyHint': False, 'destructiveHint': False, 'openWorldHint': False}}
 # A STRANGER'S SESSION GETS THE OWNER'S HARMLESS TOOLS (the owner, 2026-11-09: "remind me ..." on a stranger's task came back "I can't set a
 # reminder" beside the task's own Remind me button). Its CLI conversation stays open across turns, so what it is wired with is there for the
 # stranger's words too - each tool here is one a stranger's text could have it call to no harm: it moves only this task's own clock, sends

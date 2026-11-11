@@ -160,6 +160,28 @@ class OneRoundTripTests(unittest.TestCase):
         same = lambda a, b: next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
         self.assertTrue(all(same(a, b) >= 8000 for a, b in zip(seen, seen[1:])), 'the system and the task lead every call, byte for byte')
 
+    def test_a_read_made_again_in_one_turn_is_answered_from_the_first_until_something_else_runs(self):
+        """A model that read the same file or brief twice paid for the whole answer twice and the server ran it twice. A read-only tool
+        (the catalogue's mark) called again with the same arguments is answered by a pointer while the first answer still goes whole, by
+        that answer again once it has gone out of what is sent - never run again - and any call that is not a read clears the record."""
+        plan = [('file_read', {'path': 'a'}), ('my_task', {}), ('file_read', {'path': 'a'}), ('my_task', {}), ('file_read', {'path': 'b'}),
+                ('file_read', {'path': 'c'}), ('file_read', {'path': 'd'}), ('file_read', {'path': 'a'}), ('tick', {'item': '1'}), ('file_read', {'path': 'a'})]
+        class Reader:
+            def chat(self, msgs, tools, max_tokens, **kw):
+                k = sum(1 for m in msgs if m.get('tool_calls'))
+                if k == len(plan): return {'content': 'Done.'}
+                return {'tool_calls': [{'id': f'c{k}', 'function': {'name': plan[k][0], 'arguments': json.dumps(plan[k][1])}}]}
+        page, kept = lambda n, a: f"{n} {a.get('path', '')} " + 'x' * 2000, []
+        apiagent.READS[(1, 's')] = {'my_task'}
+        try:
+            with mock.patch.object(apiagent, 'run_tool', side_effect=lambda s, t, i, n, a: page(n, a)) as ran:
+                apiagent.turn(Reader(), MemoryStore(), 1, 's', 'sys', 'go', 500, history=kept)
+        finally: apiagent.READS.pop((1, 's'), None)
+        self.assertEqual([c.args[3:] for c in ran.call_args_list], [plan[i] for i in (0, 1, 4, 5, 6, 8, 9)])
+        said = [m['content'] for m in kept if m['role'] == 'tool']
+        self.assertTrue(said[2].startswith('(the same as your earlier file_read') and said[3].startswith('(the same as your earlier my_task'))
+        self.assertEqual(said[7], page('file_read', {'path': 'a'}), 'gone out of what is sent: said again from the record, not run')
+
     def test_stop_ends_the_turn_at_once_under_a_model_call_or_a_tool(self):
         "Stop was read between steps: it waited out the model's answer, the page, the command."
         import threading, time
@@ -385,6 +407,17 @@ class TheToolboxTests(unittest.TestCase):
         from taskuary import guard
         self.assertIn('X-Taskuary-Token', h); self.assertIn(guard.TASK_HDR, h)
         self.assertEqual(got[0]['function']['parameters'], {'type': 'object', 'properties': {'words': {'type': 'string'}}})
+
+    def test_what_may_be_answered_again_from_the_turn_is_the_catalogues_own_read_only_closed_world_marks(self):
+        from taskuary import agenttools
+        def post(url, json, headers, timeout): return _R({'jsonrpc': '2.0', 'id': 1, 'result': {'tools': agenttools.listing()}})
+        try:
+            apiagent.taskuary_tools(7, 'r', post=post)
+            reads = apiagent.READS[(7, 'r')]
+            self.assertTrue({'my_task', 'read_message', 'search_messages', 'person'} <= reads)
+            self.assertFalse(reads & {'run_system', 'tick', 'propose_reply', 'todos'}, 'an outside system, or anything that moves, runs every time')
+        finally: apiagent.forget(7, 'r')
+        self.assertNotIn((7, 'r'), apiagent.READS)
 
     def test_a_property_named_like_a_dropped_key_is_kept(self):
         # a gateway's Gemini refused the whole turn: "required fields ['title'] are not defined" once `title` the FIELD was cut (2026-11-09)

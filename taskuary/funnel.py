@@ -174,7 +174,6 @@ def says(r: dict) -> str:
 
 
 CHAT_READY_LANES = ('blocked', 'approve')
-def lane_index(lane: str) -> int: return LANES.index(lane) if lane in LANES else len(LANES)
 
 
 def _item(key, kind, lane, title, *, who='', when='', since='', why='', mid=None, tid=None, rid=None,
@@ -1381,12 +1380,6 @@ def page_fyi(payload: dict, n: int, keep=()) -> dict:
 def full_items(store) -> list | None:
     """The cached build with read items kept, for a same-request lookup of the item on the table."""
     return _CACHE['full'] if _CACHE.get('store') is store and _CACHE['pile'] else None
-
-
-def built_as_of_now(store) -> bool:
-    """Has nothing been written since the cached rail's build began? (Unknowable - no dirty-row top - counts as yes.)"""
-    top = _rail_top(store)
-    return top is None or _CACHE.get('store') is not store or _CACHE.get('mark') == top
 
 
 def unwritten_full_items(store) -> list | None:

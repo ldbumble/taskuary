@@ -249,7 +249,6 @@ ASSISTANT_DEFAULT = llm_mod.ASSISTANT_DEFAULT      # the Assistant's model when 
 LIVE_KEY = 'concierge'                  # clipool key prefix for the chat's live CLI process
 SID_KEY = 'concierge_cli_sid'          # the CLI's own conversation, resumed turn to turn (per dock task)
 CURRENT_KEY = 'assistant_current'      # what is on the table, per dock task - persisted, validated on restore (PW-162)
-CURRENT_CLOSED = 'assistant_current_closed'   # ...and whether its task was already done when it went up
 
 
 AI_KEY, MODEL_KEY = 'concierge_ai', 'concierge_model'   # this page's own choice - the old dock's assistant_ai stays the dock's and WhatsApp's
@@ -775,17 +774,6 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     if any(str(c or '').strip() for c in cc): d['cc'] = [str(c).strip()[:120] for c in cc if str(c or '').strip()][:6]
     return text[:m.start()].strip(), d
 
-
-
-# what the card's primary button does, said as a word. Anything not here has no yes-able action.
-ASSENT_VERB = {'review': 'approve', 'action': 'approve', 'agent': 'answer_agent'}
-
-
-def assent_verb(item: dict | None) -> str | None:
-    """"yes" / "go ahead" on the thing on the table: the verb its own card would run."""
-    if not item: return None
-    if item.get('kind') == 'review' and not item.get('draft'): return 'reply'   # nothing drafted yet: write one
-    return ASSENT_VERB.get(item.get('kind'))
 
 
 # What a card must HAVE for a verb to be carried out on it - the same map the page checks. The
@@ -4108,23 +4096,6 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
                    "do it, or that it is not something done from here. Nothing was changed.")
 
 
-def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, actor: str) -> dict:
-    """A hand-off to a person: already a REVIEW for the owner's yes rather than a proposal card (a draft, sent
-    only on approval). A switch used to come here too, as a canned sentence; settings are the setting.set tool."""
-    rec = lambda body, card=None: record_related(store, tid, item0, 'assistant', body, card)
-    if words['verb'] == 'forward':
-        try: out = forward_item(store, item0 or {}, words.get('who') or '', words.get('text') or '', actor)
-        except Exception as e:
-            say_ = f"I could not hand that over - {e}. Open the task and use Hand off, where you can pick the person and the channel."
-            rec(say_)
-            return {'say': say_, 'options': [], 'decision': None}
-        say_ = (f"Written as a hand-off to {out['to']} - it is below for your yes, and nothing goes until you give it. "
-                f"{buttons.label('approve')} sends it - this one stays open until you {buttons.label('close')}.")
-        rec(say_, out['card'])
-        return {'say': say_, 'options': [], 'decision': {'verb': 'forwarded', 'reviewId': out['reviewId'], 'to': out['to']}}
-    raise ValueError(f"{words['verb']} is a proposal - it is never carried out on the words alone")
-
-
 def _agent_task(store, item0: dict | None, text: str) -> int | None:
     """Which task the owner means when they say "close the agent": the one they NAMED, else the one on
     the table if an agent is on it - nothing else. Never a task just because its card
@@ -4160,23 +4131,6 @@ def split_item(store, item: dict, text: str, actor: str = 'owner') -> dict:
     new = reshape.split_task(store, tid, prop['second'], prop.get('first'), prop.get('move_message_ids') or [], actor)
     return {'ref': task_ref(tid), 'kept': (store.get_task(tid) or {}).get('Title') or '',
             'newRef': task_ref(new), 'taskId': new, 'title': (store.get_task(new) or {}).get('Title') or ''}
-
-
-def propose_switch(store, changes: list, says: str, text: str, actor: str = 'owner') -> dict:
-    """The owner named a switch: queue it as a proposal for their yes. Nothing is applied here - the
-    approval road (verdicts.decide -> proposals.execute) is the only thing that writes a setting."""
-    from . import proposals
-    p = {'action': 'settings', 'changes': changes, 'why': _cut(text.strip(), 200)}
-    ok, why = proposals.validate(store, p)
-    if not ok: raise ValueError(why)
-    rid = store.add_review({'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p),
-                            'Reason': f'you asked for this setting: {says}',
-                            '_task_title': f'Setting · {says}'[:140], '_task_kind': 'task'})
-    store.audit('review', rid, 'setting_proposed', actor, detail={'changes': changes})
-    funnel.invalidate()
-    return {'reviewId': rid, 'card': {'key': f'review:{rid}', 'kind': 'action', 'lane': 'approve', 'rid': rid,
-                                      'title': says, 'who': 'you asked for it', 'why': 'a setting waits for your yes',
-                                      'when': _ts(datetime.now())}}
 
 
 def person(store, who: str) -> dict | None:

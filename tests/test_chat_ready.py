@@ -47,3 +47,16 @@ def test_after_the_owner_sends_a_chat_agent_is_done_until_typed_to_again():
     s._exec("UPDATE comment SET CreatedAt='2999-01-02 00:00:00' WHERE TaskId=?", (tid,))
     assert not taskstate.chat_moved_on(s, tid), 'it answered again since the send: waiting on you'
     assert funnel.lane_word({'lane': 'yours', 'kind': 'wrapup', 'chat_done': True}) == lanes.word('chat_done') == 'agent done'
+
+
+def test_a_chat_agent_whose_turn_was_stopped_is_not_done():
+    """The audit, 2026-11-10 (CI, on a slow runner): Remind me pressed while the agent worked stopped its turn, and in the beat before its
+    session rested the row lit Mark done - "agent done" over a turn that answered nothing. A stopped turn is no turn that ended."""
+    from taskuary import taskstate, workerstate as ws
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Plan the offsite', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+    live = {'alive': True, 'waiting': True, 'state': 'parked', 'sid': 'g-1', 'mode': 'assistant'}
+    ws.record(s, tid, 'g-1', 'turn_end', text='The plan is above.', source='api')
+    assert taskstate.done_for_now(s, s.get_task(tid), live)
+    ws.record(s, tid, 'g-1', 'stopped', text='stopped', source='api')
+    assert not taskstate.done_for_now(s, s.get_task(tid), live) and taskstate.state(s, s.get_task(tid), session=live) != 'agentdone'

@@ -196,12 +196,14 @@ def done_for_now(store, t: dict, session: dict) -> bool:
     if (session.get('state') or 'parked') != 'parked' or session.get('request') or session.get('held'): return False
     tid = t['TaskId']
     if t.get('ReviewStatus') == 'pending' or store.waiting_on_owner(tid): return False
-    from .general import handles
-    # ...a chat agent in its own chat; one of its kind run in a pane (a routine's run) is read by its turns, as a coding agent is
-    if handles(t) and (session.get('mode') or 'assistant') == 'assistant': return True
     from . import landing, workerstate as ws
-    evs = [e for e in ws.events(store, tid, session.get('sid')) if e['Kind'] not in ws.NOTES]
-    return bool(evs) and evs[-1]['Kind'] == 'turn_end' and not landing.asked(store, tid)
+    from .general import handles
+    last = next((e['Kind'] for e in reversed(ws.events(store, tid, session.get('sid'))) if e['Kind'] not in ws.NOTES), None)
+    # ...a chat agent in its own chat, unless its last turn was STOPPED (the audit, 2026-11-10: Remind me pressed mid-turn lit Mark done over the
+    # turn it had just stopped, in the beat before its session rested); one of its kind in a pane (a routine's run) is read by its turns, as a
+    # coding agent is
+    if handles(t) and (session.get('mode') or 'assistant') == 'assistant': return last not in ('stopped', 'failed')
+    return last == 'turn_end' and not landing.asked(store, tid)
 
 
 def task_state(store, t: dict = None, session=None, queued=None, tid=None) -> TaskState:

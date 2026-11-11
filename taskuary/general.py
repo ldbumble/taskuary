@@ -886,8 +886,11 @@ def draft_turns(store, tid: int) -> list:
     for rv in store._rows("SELECT ReviewId, CreatedAt FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') "
                           "AND IFNULL(DraftText,'')<>'' ORDER BY ReviewId", (tid,)):
         s = wrapup.left_by(store, rv['ReviewId']); at = str((s or rv).get('CreatedAt') or '')
-        turn = s['CommentId'] if s else next((c['CommentId'] for c in outs if str(c.get('CreatedAt') or '') >= at), None)
         later = next((i for i in ins if i > at), None)
+        # ...the first answer after it wrote it only with no line in between: an answer after the owner's line is that line's, and a draft made
+        # before it - on arrival - jumped from under the mail to that answer's Next steps (the recorded walk, 2026-11-10)
+        turn = s['CommentId'] if s else next((c['CommentId'] for c in outs if str(c.get('CreatedAt') or '') >= at
+                                               and not (later and later < str(c.get('CreatedAt') or ''))), None)
         # ...STALE ONLY UNTIL THE AGENT HAS READ WHAT CAME AFTER IT (the owner, 2026-11-08: "it says draft is still applicable but i can't send
         # it"): each turn hears the draft waiting and withdraws or rewrites one the newest message undoes (latest_block, WITHDRAW_LINE), so a
         # draft still pending after a later turn is one the agent KEPT - current, with its Send. Until that turn it reads "before your last message"

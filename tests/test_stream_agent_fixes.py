@@ -295,3 +295,23 @@ def test_a_draft_the_agent_keeps_after_the_owner_prompted_is_raised_again_as_the
     assert s.get_review(old)['DraftText'] == 'Two real flaws, details below.', 'the old card keeps its words'
     # ...and saved twice in the turn that wrote it, it is one card, rewritten in place
     assert wrapup.agent_reply(s, tid, 'Two real flaws - and one small one.', 'assistant')['review_id'] == new
+
+
+def test_a_draft_made_before_the_owner_s_line_is_not_the_card_of_the_turn_that_answered_it():
+    # the recorded walk, 2026-11-10: a reply drafted on arrival stood under the mail; the owner typed a line, the agent answered it and left the
+    # draft alone - and the card jumped from above his line to under that answer's Next steps. The first answer after a draft wrote it only
+    # when no line came in between: an answer after his line was his line's
+    s = MemoryStore(); tid = s.create_task({'Title': 'Vendor review', 'Status': 'in_progress'}, 't')
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'm1', 'Channel': 'email', 'FromName': 'Paula Vance', 'FromEmail': 'paula@vendor.example',
+                         'SentAt': '2026-11-10 08:00:00', 'BodyText': 'Your review of the tool?', 'Status': 'routed'})
+    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'A long review of every flaw.'})
+    s._exec("UPDATE review SET CreatedAt='2026-11-10 08:01:00' WHERE ReviewId=?", (rid,))
+    for at, who, kind, words in (('2026-11-10 09:00:00', 'owner', general.USER_TYPE, 'make it shorter and attach the sheet'),
+                                 ('2026-11-10 09:00:30', 'assistant', general.ASSISTANT_TYPE, 'Ok.')):
+        s._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', (at, s.add_comment(tid, who, kind, words)))
+    [d] = general.draft_turns(s, tid)
+    assert (d['review'], d['turn']) == (rid, None), 'it stands by its time, under the mail it answers'
+    # ...and one written while a turn worked is still that turn's, its answer stamped when the turn ends
+    s._exec("UPDATE review SET CreatedAt='2026-11-10 09:00:10' WHERE ReviewId=?", (rid,))
+    [d] = general.draft_turns(s, tid)
+    assert d['turn'] is not None and d['turn'].startswith('comment-')

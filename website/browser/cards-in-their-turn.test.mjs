@@ -149,3 +149,41 @@ test("a reply rewritten after the owner prompts: the old card greys in place at 
   await rewrite(t, w, page, { tid: made.taskId, rid: made.reviewId, name: process.env.N17_NAME || "rewrite-general" });
   assert.deepEqual(errors, []);
 });
+
+// A STRANGER'S TASK ON A CLI TOO OLD FOR ITS REVIEWER (the walk, 2026-11-10): its first turn drew a running head with nothing behind it and never
+// said why. It reads and answers in the CLI's read-only mode now (origin.launch_mode 'look') - and the reply drafted on arrival, which the
+// answer left alone, stays under the mail it answers: it jumped from over his line to under the answer's Next steps (general.draft_turns)
+test("a stranger's task on a CLI too old for its reviewer answers under the owner's line, the arrival draft staying where it stood", { timeout: 300000 }, async (t) => {
+  process.env.FAKE_CLAUDE_VERSION = "2.1.100";
+  t.after(() => { delete process.env.FAKE_CLAUDE_VERSION; });
+  const w = await world(t);
+  const page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const made = await w.api("/api/fixture/mail-task", { stranger: true });
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  const name = process.env.N17_NAME || "stranger-old-cli", dir = path.join(out, "video", name); await mkdir(dir, { recursive: true });
+  await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 60000 });
+  const rec = await record(page, dir);
+  const said = "make it shorter and attach the sheet";
+  await page.evaluate(() => document.querySelector("[data-tq-task-page] .tq-aui-input")?.focus());
+  await page.keyboard.type(said); await page.keyboard.press("Enter");
+  const t0 = Date.now(), bad = []; let answered = false;
+  while (Date.now() - t0 < 90000) {
+    const s = await look(page, made.reviewId, said), card = s.old[0];
+    answered = /\bOk\.|could not|did not start|Trust them/.test(s.text.slice(s.text.lastIndexOf(said)));
+    if (card && s.bubble && card.top > s.bubble.top) bad.push(`${Date.now() - t0} ms: the arrival draft stands under his line`);
+    if (answered && Date.now() - t0 > 2000) { await new Promise((r) => setTimeout(r, 2500)); const e = await look(page, made.reviewId, said);
+      if (e.old[0] && e.bubble && e.old[0].top > e.bubble.top) bad.push("at rest: the arrival draft stands under his line"); break; }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  await page.screenshot({ path: path.join(out, `${name}.png`) });
+  await rec.stop();
+  const text = await page.evaluate(() => document.querySelector("[data-tq-task-page] .tq-aui-viewport")?.innerText || "");
+  await note(dir, { done: "A stranger's mail task with a reply drafted on arrival; the stand-in CLI reports a version too old for a stranger's reviewer; the owner types a line.",
+    expect: "Under his line the agent's head and its answer (read-only); the arrival draft stays above his line, under the mail, greyed in place.",
+    saw: !answered ? `no answer within 90 s:\n${text.slice(-600)}` : bad.length ? bad.slice(0, 3).join("\n") : "answered under his line; the draft stayed where it stood",
+    verdict: answered && !bad.length ? "PASS" : "FAIL" });
+  assert.ok(answered, `the turn answered under his line:\n${text.slice(-800)}`);
+  assert.deepEqual(bad.slice(0, 3), []);
+});

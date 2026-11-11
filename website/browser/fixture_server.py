@@ -97,9 +97,10 @@ def _install_fresh_routes(app, store):
         store.set_setting("owner_name", "Alex Doyle", "owner"); store.set_setting("owner_email", "alex@northwind.example", "owner")
         tid = store.create_task({"Title": "Vendor review for Erin", "Kind": body.get("kind") or "general", "Status": "open",
                                  "Summary": "Erin Blake asks for our review of the vendor tool"}, "owner")
-        mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-{tid}", "Channel": "email", "FromName": "Erin Blake", "FromEmail": "erin@northwind.example",
+        who, addr = ("Paula Vance", "paula@vendor.example") if body.get("stranger") else ("Erin Blake", "erin@northwind.example")
+        mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-{tid}", "Channel": "email", "FromName": who, "FromEmail": addr,
                                  "ToEmail": "alex@northwind.example", "Subject": "Your review of the tool?", "SentAt": "2026-11-10 08:00:00",
-                                 "BodyText": "Hi Alex, could you send me your review of the tool? Thanks, Erin", "Status": "routed"})
+                                 "BodyText": f"Hi Alex, could you send me your review of the tool? Thanks, {who.split()[0]}", "Status": "routed"})
         rid = store.add_review({"TaskId": tid, "MessageId": mid, "Kind": "draft_reply", "Status": "pending", "Channel": "email",
                                 "DraftText": body.get("draft") or "Hi Erin, here is a long review of every flaw we found in the tool, one by one. Alex"})
         return {"taskId": tid, "reviewId": rid, "messageId": mid}

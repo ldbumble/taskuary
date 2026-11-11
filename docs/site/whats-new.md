@@ -2,6 +2,11 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.40 - 2026-11-11
+
+- A coding chat keeps the drafted email in place and shows its agent's question
+- A coding chat's cards stand in the turn the server names, and the demo's coding task shows what it waits on
+
 ## 0.3.11.39 - 2026-11-11
 
 - A read the agent makes again in one turn is answered from its first answer, not run and paid for twice

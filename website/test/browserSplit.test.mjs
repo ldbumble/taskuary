@@ -87,6 +87,8 @@ test("keystrokes carry text for printable keys and Enter, none for chords and sp
   assert.equal(pasteMessages("P@ss!w0rd#$%^&*()").map((m) => m.text).join(""), "P@ss!w0rd#$%^&*()");
   assert.equal(keyMessage("keydown", { key: "a", code: "KeyA", ctrlKey: true }).text, undefined);
   assert.equal(keyMessage("keydown", { key: "Enter", code: "Enter" }).text, "\r");
+  // ...and as a key that types: Chrome drops a rawKeyDown's text, so Enter in a password box sent no form
+  assert.equal(keyMessage("keydown", { key: "Enter", code: "Enter" }).eventType, "keyDown");
   assert.equal(keyMessage("keydown", { key: "Tab", code: "Tab" }).eventType, "rawKeyDown");
   assert.equal(keyMessage("keyup", { key: "a", code: "KeyA" }).eventType, "keyUp");
   assert.equal(keyMessage("keypress", { key: "a", code: "KeyA" }), null);

@@ -254,6 +254,9 @@ class HandedToAnAgentTests(Watched):
         self.assertEqual(self.level(), 'task')
         self.assertEqual(self.lines(), ['You stopped watching it - it is back under Tasks.'])
         self.assertEqual(self.started, [], 'back on his list is his to do: nobody starts')
+        # ...and its pair says where the task went, as this one does - one composer for both (general.PRESSES)
+        from taskuary import general
+        self.assertEqual(f"You {general.PRESSES['watch']({})}.", 'You chose Watch it - it is under Watching until the thread moves.')
 
     def test_a_row_written_in_his_name_with_no_words_is_no_line_of_his(self):
         "The composer said any such row by its bare name: \"You routing learned.\" (routingmemory's bookkeeping, written as the actor it is given)."

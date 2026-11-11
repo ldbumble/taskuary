@@ -148,6 +148,25 @@ def unheard(store, tid: int) -> set:
     return {x['MessageId'] for x in _mail(store, tid) if str(x['MessageId']) not in led and x['T'] + 1 > m['a']}
 
 
+TOOK_BACK = 'Asked for the sign-in details, then took that back: a sign-in is done on the page, never in the chat.'
+def take_back(store, tid: int, said: str = None, why: str = '', since: float = 0.) -> None:
+    """AN ANSWER THAT WAS ONLY A STEP ON THE WAY IS A STEP OF THE WORK, NEVER AN ANSWER (the recorded sign-in walks, 2026-11-11): one its agent
+    is made to take back - it asked him for the password, was woken to open the sign-in page instead, and the ask stood in the chat above the
+    page it opened - and one that only handed Taskuary a sign-in the saved one then did ("once you have signed in..." over a sign-in nobody
+    was asked for; `why`: the line that says what happened instead, `since`: only an answer filed from then on). Marked by the answer's own
+    row - or, read before that row is filed, as the next answer after the newest row - and drawn by `items` as that turn's work with one
+    line in place of the words, the turn that goes on under it."""
+    from .general import ASSISTANT_TYPE
+    rows = store.list_comments(int(tid), internal=True)
+    c = next((c for c in reversed(rows) if c.get('ActorType') == ASSISTANT_TYPE), None)
+    if said is None:
+        if not c or ep(c['CreatedAt']) < since - 1: return
+        ref = str(c['CommentId'])
+    else: ref = str(c['CommentId']) if c and str(c.get('Body') or '')[:4000] == said[:4000] else f">{max((r['CommentId'] for r in rows), default=0)}"
+    store._exec('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (int(tid), 'back', ref, time.time(), 0, 0, why))
+    store._poke('task-changed', task_id=int(tid))
+
+
 def unhear(store, tid: int, lines) -> None:
     "A start that was refused took nothing: its lines are pending again (general._start_line), never drawn as heard by nobody."
     for x in lines or []: store._exec("DELETE FROM heard WHERE TaskId=? AND Kind='line' AND Ref=?", (int(tid), str(x)))
@@ -256,6 +275,7 @@ def items(store, tid: int) -> dict:
     led = {(r['Kind'], r['Ref']): r for r in store._rows('SELECT * FROM heard WHERE TaskId=? ORDER BY HId', (tid,))}
     era = min((r['At'] for r in led.values()), default=INF)
     marks = [r for (k, _), r in led.items() if k == 'turn']
+    backs = [int(r[1:]) for k, r in led if k == 'back' and r[:1] == '>']      # an answer taken back before its row was filed (take_back)
     pend, ev = [], []                              # ev: (when, rank - an input before the work it began, order, entry)
     put = lambda t, rank, e, hid=0: ev.append((t, rank, hid, len(ev), e))        # ...and what one hand-over took, in the order it took it
 
@@ -295,6 +315,9 @@ def items(store, tid: int) -> dict:
             began = max((m['At'] for m in marks if m['Seq'] < cid), default=0.)
             last = max(last + 1e-7, began)
             st = _said(steps_of.get(cid, []), body)
+            # ...one it was made to take back (take_back): its words are a step of the work that goes on under it
+            if (('back', str(cid)) in led or any(n < cid for n in backs)) and body:
+                st, body, backs = [*st, {'k': 'note', 'text': (led.get(('back', str(cid))) or {}).get('Sid') or TOOK_BACK}], '', [n for n in backs if n >= cid]
             t = {'kind': 'turn', 'at': stamp(began) or c['CreatedAt'], 'state': 'done', 'steps': st, 'text': body, 'cards': [], 'started': began or None,
                  'ended': ep(c['CreatedAt']), 'answer': f'comment-{cid}', **({'summary': summ[cid]} if cid in summ else {})}
             # ...and each draft this turn left that a later turn rewrote: greyed where it stood, never moved

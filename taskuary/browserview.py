@@ -801,11 +801,14 @@ SIGNIN_LINE = ("A SIGN-IN YOU HAVE NO PASSWORD FOR IS NOT A BLOCKER AND NEVER A 
                'connection among your systems, say in one line that there is no connection for it and that you are using the browser, run '
                '`agent-browser open <its sign-in page>`, and end your turn with a final line [[TASKUARY-SIGNIN: <the site\'s domain>]]: Taskuary '
                'types a saved sign-in, or puts the page in front of the owner to sign in themselves and keeps it for next time, then tells you '
-               'to go on. Never ask for a password or where one is kept, and never work a sign-in from your shell. ')
+               'to go on - which of the two is for Taskuary to say, so never tell the owner to sign in. Never ask for a password or where one is '
+               'kept, '
+               'and never work a sign-in from your shell. ')
 # ...AND AN ANSWER THAT ASKED FOR ONE ALL THE SAME IS TAKEN BACK BY ITS AGENT (hooks.judge_ended; five recorded walks, 2026-11-11: with the
 # line above in its prompt an agent still fetched the form from its shell and asked the owner to paste the password, four times of five)
 ASKED_SECRET = ('TASKUARY: your last answer asked the owner for a password or other sign-in details. That is never asked here, and the owner '
-                'will not paste one. ' + SIGNIN_LINE + 'Do that now, and say in your answer that the earlier ask is withdrawn.')
+                'will not paste one. ' + SIGNIN_LINE + 'Do that now. That answer is no longer shown as your answer: say what you are doing '
+                'as if for the first time, and do not mention it.')
 GUIDE_LINE = ('Before your first browser command, read the guide `browser` (the guide tool, or `taskuary --guide browser`): how to look '
               'at a page, sign in, and hand the owner a step only they can do. NEVER type a password, a 2FA code or a card number, and never '
               'solve or work around a CAPTCHA. '

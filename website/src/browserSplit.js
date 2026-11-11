@@ -86,8 +86,10 @@ export const keyCodeOf = (e) => {
 // Ctrl+V (Cmd+V) is not sent as a key: the page's clipboard is the agent's browser's, empty. The paste event brings the owner's own
 // clipboard instead (pasteMessages).
 export const isPaste = (e) => (e.ctrlKey || e.metaKey) && !e.altKey && String(e.key).toLowerCase() === "v";
+// ENTER IS A KEY THAT TYPES: Chrome sends a form on the character a keyDown carries, and a rawKeyDown carries none - so Enter in a sign-in's
+// password box did nothing and the page stayed up (the recorded browser walk, 2026-11-11). It goes as a paste's line break does (pasteMessages).
 export const keyMessage = (type, e) => {
-  const eventType = type === "keydown" ? (e.key.length === 1 ? "keyDown" : "rawKeyDown") : type === "keyup" ? "keyUp" : null;
+  const eventType = type === "keydown" ? (e.key.length === 1 || e.key === "Enter" ? "keyDown" : "rawKeyDown") : type === "keyup" ? "keyUp" : null;
   if (!eventType) return null;
   const m = { type: "input_keyboard", eventType, key: e.key, code: e.code, modifiers: modifiers(e) };
   const vk = keyCodeOf(e);

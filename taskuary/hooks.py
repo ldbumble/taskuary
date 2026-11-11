@@ -602,6 +602,7 @@ def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = F
             why = SECRET if v.get('asks_secret') is True else (' '.join(str(v.get('why') or '').split())[:300] or 'work of its own') if v['unfinished'] else ''
             if len(_ENDED) >= _ENDED_MAX: _ENDED.pop(next(iter(_ENDED)))
             _ENDED[key] = why
+        logger.debug(f'turn-end judge for task {tid}: {why or "finished"}')
         if not why: return
         # ...and a turn that ended on a step held for the owner's Approve (shellgate, browsergate) is waiting on them, not short: it read
         # "Failed - it ended its turn still waiting on the owner to press Approve" with Try again over the held delete (2026-11-03)
@@ -613,7 +614,7 @@ def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = F
             try:
                 if why == SECRET:
                     from . import browserview
-                    then('', browserview.ASKED_SECRET)
+                    then('', browserview.ASKED_SECRET, said)
                 else: then(waits_on(why))
             except Exception as e: logger.debug(f'task {tid}: the agent was not woken after its short turn - {e}')
     if wait: return go()

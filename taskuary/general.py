@@ -608,7 +608,7 @@ HANDED_OFF = 'Handed off to '
 # ...each said in the owner's voice, so one phrase serves both: "You set a reminder for ..." on the page, "set a reminder for ..." to the agent
 # ...Remind me says what it did and where the task is now, as Send and close does (the owner, 2026-11-10: "it should show reminded for now")
 PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - put away until then" if d.get('to') else 'took the reminder off',
-           'watch': lambda d: 'chose Watch it - it waits quietly for a reply', 'unwatch': lambda d: 'stopped watching it - it is back under Tasks',
+           'watch': lambda d: 'chose Watch it - it is under Watching until the thread moves', 'unwatch': lambda d: 'stopped watching it - it is back under Tasks',
            'stopped_turn': lambda d: 'stopped the agent',       # the x on a turn at work (stop_turn)
            # ...who does it, changed to an agent (server.update_task): the change wrote no row of its own, and the task said only what the
            # change taught - "You routing learned." (the owner, 2026-11-11)
@@ -640,6 +640,9 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - pu
            'desktop_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_refused': lambda d: 'approved it - the page did not take it',
            # ...and a step the agent handed them ON ITS PAGE - a captcha, the last button of a checkout: the page moved on, or they pressed Done
            'browser_act_pressed': lambda d: _on_page(d),
+           # ...and A SIGN-IN OF THEIRS, on the page shown them or the fill page (signin._audit; the vault's own fill is Taskuary's, and no line):
+           # the chat went from the agent's "the sign-in page is open" to its answer with nothing between, and nowhere said it was kept
+           'signin_fill': lambda d: _signed_in(d),
            # ...AND EVERY OTHER PRESS OF THEIRS THAT HAD NO WORDS (the stress round, 2026-11-10): with none it is said by its audit row's
            # bare name, and the chat read "You check back cancelled.", "You merged from task.", "You split from task." on the task a
            # break-out made, "You dispatch cancel."
@@ -684,6 +687,10 @@ def clock_of(at) -> str:
 def _detail(r):
     try: d = json.loads(r.get('Detail') or '{}'); return d if isinstance(d, dict) else {}
     except ValueError: return {}
+def _signed_in(d) -> str:
+    from . import words
+    if not d.get('ok'): return f"tried to sign in to {d.get('site')} - it did not go in"
+    return f"signed in to {d.get('site')}" + (f" - saved for next time (remove it under {words.name('agent_permissions')}, Saved sign-ins)" if d.get('saved') else '')
 def presses(store, tid: int, since: str = '') -> list:
     "The owner's presses on task `tid` after `since`, oldest first: [(audit id, at, what)] - its own and its shares."
     from .processing_unread import OWNER_ACTORS
@@ -3203,12 +3210,16 @@ class GeneralSession:
         c.set()
         return True
 
-    def wake(self, why: str, said: str = ''):
+    def wake(self, why: str, said: str = '', back: str = ''):
         """Wake the agent ONCE after a turn that ended still waiting on work of its own (hooks.judge_ended): it is told to do it now. Never
         filed as the owner's words, never again until the owner writes - a woken turn that ends short again stays the answer it gave.
-        `said`: the words in place of WAKE's (SILENT, which its next turn answers or else asks COULD_NOT)."""
+        `said`: the words in place of WAKE's (SILENT, which its next turn answers or else asks COULD_NOT). `back`: the answer this wake has
+        the agent take back - from here a step of the work that goes on, never its answer (conversation.take_back)."""
         if getattr(self, 'woke', False) or not self.alive: return
         self.woke, self.silent = True, said == SILENT
+        if back:
+            from . import conversation
+            conversation.take_back(self.store, self.task_id, back)
         def go():
             try: self.send_prompt(said or WAKE.format(why=why or 'work of its own'), as_owner=False, echo=False)
             except Exception as e: logger.info(f'task {self.task_id}: the agent was not woken to finish - {e}')

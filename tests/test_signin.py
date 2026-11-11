@@ -240,7 +240,13 @@ class Asking(unittest.TestCase):
             raised.append(('open while typing', signin.pending(self.s, self.tid))); typed.append(a)
         with on_page('https://login.bank.example/'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}),              mock.patch.object(ws, 'record', spy):
             self.assertTrue(signin.needs(self.s, self.tid, 'sess1', 'bank.example', fill=fill)['auto'])
+            # ...the answer that handed the sign-in over is filed a moment after the ask (general._file), as the saved one goes in
+            from taskuary import conversation, general
+            self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The sign-in page is open. Once you have signed in I will read the balance.')
             self.wait_for(lambda: sess.said)
+        # ...and is a step of the work, never an answer telling him to sign in where nobody was asked to (the recorded walk, 2026-11-11)
+        turn = [x for x in conversation.items(self.s, self.tid)['items'] if x['kind'] == 'turn'][-1]
+        self.assertEqual((turn['text'], [st['text'] for st in turn['steps']]), ('', ['Signed in to bank.example with the saved sign-in.']))
         self.assertEqual(typed, [('sess1', 'bank.example', USER, PW)])
         self.assertEqual(raised, [('open while typing', None)])
         self.assertIsNone(signin.pending(self.s, self.tid))
@@ -252,7 +258,25 @@ class Asking(unittest.TestCase):
         with on_page('https://login.bank.example/'): self.assertTrue(signin.needs(self.s, self.tid, self.sid, fill=boom, watch=None)['auto'])
         self.wait_for(lambda: signin.pending(self.s, self.tid))
         self.assertEqual(signin.pending(self.s, self.tid)['request_id'], 'signin:bank.example')
+        # ...and the ask says why the page is in front of him, in its one line
+        self.assertEqual(signin.pending(self.s, self.tid)['text'], 'The saved sign-in for bank.example did not work - sign in on the page, and it is saved again when it works')
         self.assertIn('did not work', ' '.join(r['Body'] for r in self.s._rows('SELECT * FROM comment WHERE TaskId=?', (self.tid,))))
+
+    def test_a_code_asked_after_the_saved_sign_in_is_the_owners_step_and_the_agent_is_not_told_it_is_signed_in(self):
+        """The recorded walk, 2026-11-11: the saved password went in, the site asked for an authenticator code nobody keeps, the agent was
+        told "Signed in - continue", read the code page, said so and ended its turn - with nothing asked of anyone."""
+        signin.save(self.s, 'bank.example', USER, PW)
+        class Chat:
+            sid, alive, task_id = 'sess1', True, self.tid
+            said = []
+            def send_prompt(s, text, as_owner=True): s.said.append(text)
+        sess = Chat()
+        with on_page('https://login.bank.example/'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}), \
+             mock.patch.object(signin, 'asks_code', return_value=True):
+            self.assertTrue(signin.needs(self.s, self.tid, 'sess1', 'bank.example', fill=lambda *a, **k: {}, watch=None)['auto'])
+            self.wait_for(lambda: signin.pending(self.s, self.tid))
+        self.assertEqual(signin.pending(self.s, self.tid)['text'], 'bank.example took the saved sign-in and asks for a code - type it on the page to continue')
+        self.assertEqual(sess.said, [])
 
     def test_a_saved_sign_in_is_never_typed_on_another_site(self):
         signin.save(self.s, 'bank.example', USER, PW)
@@ -331,7 +355,7 @@ class TheOwnerSignsInOnThePage(Asking):
         class Chat:
             sid, alive = 'sess1', True
             def __init__(s, tid): s.said, s.task_id = [], tid
-            def send_prompt(s, text, as_owner=True): s.said.append(text)
+            def send_prompt(s, text, as_owner=True): s.said.append(text); s.open_then = bool(signin.pending(self.s, self.tid))
         return Chat(self.tid)
 
     def test_a_password_page_still_loading_is_not_taken_for_signed_in(self):
@@ -359,6 +383,12 @@ class TheOwnerSignsInOnThePage(Asking):
         self.assertIn('Runtime.addBinding', page.calls)
         self.assertEqual(sess.said, ['Signed in to bank.example - continue.'])        # the agent hears the words, never what was typed
         self.assertFalse(ws.status(self.s, self.tid)['requests'])
+        # ...the ask was over BEFORE the agent's turn ran (a chat agent's turn runs inside the telling): nothing read "sign in" over it at work
+        self.assertFalse(sess.open_then)
+        # ...and his sign-in is one line of the chat in his voice, saying it is kept and where to remove it
+        from taskuary import general
+        self.assertEqual([m['content'][0]['text'] for m in general.press_lines(self.s, self.tid)],
+                         ['You signed in to bank.example - saved for next time (remove it under Settings → Agent permissions, Saved sign-ins).'])
         row = signin.saved(self.s, 'bank.example')
         self.assertEqual((vault.unseal(row['User']), vault.unseal(row['Secret'])), (USER, PW))
         self.assertEqual(signin.extra_of(row), {'Account code': 'NW-0042'})          # ...and the other box it typed, by its label

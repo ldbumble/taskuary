@@ -48,6 +48,8 @@ STEP_WAIT = 20.0                # a two-step sign-in: how long the password page
 CODE_WAIT = 15.0                # after the password: how long a site is given to show its code prompt before none is taken as asked
 PREFIX = 'signin:'              # the request id of a sign-in ask: `signin:<site>`
 DONE = 'Signed in'
+FAILED_ASK = 'The saved sign-in for {site} did not work - sign in on the page, and it is saved again when it works'
+CODE_ASK = '{site} took the saved sign-in and asks for a code - type it on the page to continue'
 LOOPBACK = ('localhost', '127.0.0.1', '::1')
 # TWO-LABEL PUBLIC SUFFIXES - where the registrable domain is THREE labels. Without them "bank.co.uk" would pin "co.uk", and a
 # saved sign-in would fill on every site in the UK. Not the whole Public Suffix List (no dependency carries it here); the
@@ -339,7 +341,18 @@ def on_signin_page(sid: str, conn=None) -> bool:
     try: f = c.fields('') or {}
     finally:
         if conn is None: c.close()
-    return bool(f.get('top') and f.get('password'))
+    return bool(f.get('top') and (f.get('password') or f.get('otp')))      # ...or its code box: the second step of one is a sign-in page too
+
+
+def asks_code(sid: str, conn=None) -> bool:
+    "Is the page the browser is on asking for a sign-in code? False whenever it cannot be read."
+    try:
+        c = conn or connect(sid)
+        try: f = c.fields('') or {}
+        finally:
+            if conn is None: c.close()
+    except Exception: return False
+    return bool(f.get('top') and f.get('otp'))
 
 
 def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) -> dict:
@@ -364,7 +377,8 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) ->
     # through signed_in, never the chooser (2026-10-25)
     # NO PRESSES ON IT (the owner, 2026-11-03: "remove that stupid box again ... just have the question and link to fill it out securely"):
     # the ask is its words; Taskuary sees the sign-in happen on the page itself (watch), and "done" typed in the chat's box still tells it
-    def ask():
+    def ask(said=None):
+        text = said or f'Sign in to {site} to continue'
         ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, choices=None, source='api')
         if watch: threading.Thread(target=watch, args=(store, tid, sid, site, rid), daemon=True, name=f'signin-watch-{tid}').start()
     row, last = saved(store, site), _TRIED.get((tid, site), 0)
@@ -394,14 +408,27 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
         ex = extra_of(row)
         got = fill(sid, site, user, pw, **({'code': code} if code else {}), **({'extra': ex} if ex else {})) or {}
         _used(store, site)
+        # THE PASSWORD WENT IN AND THE SITE ASKS A CODE NOBODY KEEPS: that step is the owner's, on the page, and it is said in one line - the
+        # agent is not told "signed in" over a code prompt (the recorded walk, 2026-11-11: it was, read the page, said so and ended; nothing
+        # was asked of anyone)
+        if ask and not got.get('code') and asks_code(sid):
+            _audit(store, tid, site, 'vault', True, 'a code was asked')
+            from . import conversation
+            if _chat(sid): conversation.take_back(store, tid, why=f'Typed the saved sign-in for {site} - it asks for a code next.', since=_TRIED.get((tid, site), 0))
+            return ask(CODE_ASK.format(site=site))
         _audit(store, tid, site, 'vault', True, code=bool(got.get('code')) if code else None)
+        # ...and the answer that only handed the sign-in over ("once you have signed in...") is a step of the work: nobody was asked to
+        from . import conversation
+        if _chat(sid): conversation.take_back(store, tid, why=f"Signed in to {site} with the saved sign-in{' and its authenticator code' if got.get('code') else ''}.", since=_TRIED.get((tid, site), 0))
         _continue(store, tid, rid, site, 'taskuary', bool(got.get('code')))
     except NotAccepted as e:
         _audit(store, tid, site, 'vault', False, str(e))
         why = str(e) if 'also asks for' in str(e) else (f'The saved password for {site} did not work - {site} kept its sign-in form up. '
                                                       'Sign in on the page, or fill it in securely with the right one - it is saved when it works.')
         store.add_comment(tid, 'taskuary', 'agent', why[0].upper() + why[1:] + ('.' if not why.endswith('.') else ''))
-        if ask: ask()
+        # ...and the ask itself says why the page is in front of him (the recorded walk, 2026-11-11: it read "Sign in to ... to continue" over a
+        # form the site had just refused the saved password on)
+        if ask: ask(FAILED_ASK.format(site=site) if 'also asks for' not in str(e) else None)
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
@@ -473,6 +500,9 @@ def _continue(store, tid, rid, site, actor, code=False):
         from .general import BRIEF_ACTOR, USER_TYPE
         if hasattr(sess, 'send_prompt'): store.add_comment(tid, BRIEF_ACTOR, USER_TYPE, f'{did}.')
     except Exception as e: logger.debug(f'signin: the trigger line for task {tid} was not filed - {e}')
+    # THE ASK IS OVER THE MOMENT THE SIGN-IN IS PAST, not when the agent's next turn ends (the recorded walk, 2026-11-11: a chat agent's turn
+    # runs inside this call, so all the while it worked the task still read "Sign in to ... to continue" and the page beside it "your turn")
+    ws.record(store, tid, sess.sid, 'answered', request_id=rid, text=DONE, source='owner' if actor == 'owner' else 'api')
     try:
         if hasattr(sess, 'send_prompt'): sess.send_prompt(said, as_owner=False)
         else: term.type_into(sess, said, brief=True)      # Taskuary's, never the owner's line
@@ -480,7 +510,6 @@ def _continue(store, tid, rid, site, actor, code=False):
         logger.warning(f'signin: task {tid} signed in to {site}, but the agent was not told - {e}')
         store.add_comment(tid, actor, 'agent', f'{did}, but the agent could not be told - say "{said}" to it.')
         return False
-    ws.record(store, tid, sess.sid, 'answered', request_id=rid, text=DONE, source='owner' if actor == 'owner' else 'api')
     store.add_comment(tid, actor, 'agent', f'{did} - the agent goes on.')
     return True
 

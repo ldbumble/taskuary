@@ -345,7 +345,8 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
   if (site) return (
     <p className="tq-aui-signin" data-tq-asking={asking.request_id} data-tq-signin-ask={site}>
       {String(asking.text || `Sign in to ${site} to continue`).replace(/\.?\s*$/, "")}
-      {taskId ? <> - <a href="#" onClick={fillPage} data-tq-signin-link=""
+      {/* ...a step that is his alone on the page - the code a site asks after the saved sign-in (signin.CODE_ASK) - is its own line, whole */}
+      {asking.text && asking.text !== `Sign in to ${site} to continue` ? "." : taskId ? <> - <a href="#" onClick={fillPage} data-tq-signin-link=""
         title={`A one-time page to type the ${site} sign-in - Taskuary types it into the browser and the agent never sees it`}>fill it in securely</a>
         , or sign in on the page.</> : ", on the page."}
       {err && <span className="tq-aui-asking-err" role="alert"> {err}</span>}
@@ -812,7 +813,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       (data?.browserActs || []).map((r) => heldOn(r, data?.session?.sid)).filter(Boolean)), answers = (conv.list?.items || []).filter((x) => x.kind === "turn" && x.state !== "working" && x.state !== "starting").length;
   const [needHeld, setNeedHeld] = useState(null);
   useEffect(() => { if (needRaw) setNeedHeld(answers); }, [needRaw]);   // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (needHeld != null && !needRaw && (answers > needHeld || !data?.session?.sid)) setNeedHeld(null); }, [answers, needRaw, needHeld, data?.session?.sid]);
+  // ...or is AT WORK again: his part is done the moment it goes on (the owner, 2026-11-11: "seamlessly hand off once login is in to go back to
+  // normal chat") - a sign-in's ask stays open through every page of it (signin.watch), so the gap this hold covers is never a turn at work
+  useEffect(() => { if (needHeld != null && !needRaw && (answers > needHeld || busy || !data?.session?.sid)) setNeedHeld(null); }, [answers, needRaw, needHeld, busy, data?.session?.sid]);
   const needNow = needRaw || needHeld != null;
 
   // ...a start the page already knows of says so before the conversation's first read lands, never a 520px spinner over nothing

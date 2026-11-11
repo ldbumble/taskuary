@@ -87,7 +87,7 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
         from taskuary import browserview
         s = MemoryStore(); a_claude(self); tid = researcher(s)
         asked = 'I have no Payworth login. Send me the email and password, or name a file that holds them.'
-        seen = turn(s, tid, [asked, 'There is no connection for Payworth, so I am using the browser. The earlier ask is withdrawn.'],
+        seen = turn(s, tid, [asked, 'There is no connection for Payworth, so I am using the browser.'],
                     judge=lambda *a, **k: json.dumps({'unfinished': False, 'why': '', 'asks_secret': True}))
         self.assertEqual(len(seen['prompts']), 2)                     # told once, by the one wake
         for want in ('asked the owner for a password', 'you do not need the password', '[[TASKUARY-SIGNIN:'): self.assertIn(want, seen['prompts'][1])
@@ -95,6 +95,13 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
         bodies = [str(c['Body']) for c in s.list_comments(tid)]
         self.assertTrue(any('using the browser' in b for b in bodies)); self.assertFalse(any('TASKUARY: your last answer' in b for b in bodies))
         self.assertIn('asks_secret', hooks.ENDED_SYSTEM)
+        # ...and the ask it took back is a step of the work, never an answer standing in the chat above the page it then opened
+        from taskuary import conversation
+        turns = [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn']
+        self.assertEqual([x['text'] for x in turns], ['', 'There is no connection for Payworth, so I am using the browser.'])
+        self.assertEqual([st.get('text') for st in turns[0]['steps'] if st.get('k') == 'note'], [conversation.TOOK_BACK])
+        self.assertNotIn(asked, str(turns))
+        self.assertIn('do not mention it', seen['prompts'][1])
 
     def test_a_woken_turn_that_ends_short_again_is_not_woken_again(self):
         s = MemoryStore(); a_claude(self); tid = researcher(s)

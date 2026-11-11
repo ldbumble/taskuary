@@ -164,10 +164,16 @@ def read(slug: str, deleted: bool = False) -> str | None:
     return p.read_text(encoding='utf-8') if p.is_file() else None
 
 
-def write(slug: str, text: str) -> str:
-    """File it and return the slug - derived from the title when none is given (the 'new' door)."""
+def check(text: str) -> dict:
+    "The playbook `text` parsed, or ValueError saying what it lacks - one rule for its writing and for an agent's proposal of it."
     pb = parse(text)
     if not pb['title'] or not pb['when']: raise ValueError('a playbook needs a "# title" line and a "when:" line')
+    return pb
+
+
+def write(slug: str, text: str) -> str:
+    """File it and return the slug - derived from the title when none is given (the 'new' door)."""
+    pb = check(text)
     slug = slugify(slug) if slug and slug != 'new' else slugify(pb['title'])
     d = folder(); d.mkdir(parents=True, exist_ok=True)
     (d / f'{slug}.md').write_text(str(text).rstrip() + '\n', encoding='utf-8')

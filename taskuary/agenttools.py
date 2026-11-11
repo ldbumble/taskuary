@@ -511,6 +511,11 @@ def proposal_of(args: dict) -> dict:
     a = str((args or {}).get('action') or '').strip()
     if a in HELD_ACTS: raise ValueError(f'{a} is raised by Taskuary itself when it holds a step - it cannot be proposed. Run the step: Taskuary holds it and asks the owner')
     if a in (*NOT_ASKED, 'push_direct'): raise ValueError(f'{a} is the owner\'s own act - it cannot be proposed')
+    # ...and a playbook that could never be saved is said to the agent NOW, so it writes it again itself - it was queued, the owner pressed
+    # Approve, and only then read "a playbook needs a title" with the agent long gone (the recorded walk, 2026-11-10)
+    if a == 'write_playbook':
+        from . import playbooks
+        playbooks.check(str((args or {}).get('text') or ''))
     return {**{k: v for k, v in (args or {}).items() if k not in (*MARKS, 'task_id')}, 'action': a}
 
 

@@ -31,6 +31,14 @@ class WhatAnAgentMayAsk(unittest.TestCase):
         self.assertEqual(agenttools.proposal_of({**ask, 'task_id': 4}), want)
         self.assertEqual(proposals.parse(f'{proposals.MARK} {json.dumps(ask)}'), [want])
 
+    def test_a_playbook_that_could_never_be_saved_is_refused_to_the_agent_at_once(self):
+        # the recorded walk, 2026-11-10: queued without its "# title" and "when:" lines, it failed only at the owner's Approve - the agent,
+        # long gone, never heard; refused at the door, the agent writes it again itself
+        with self.assertRaisesRegex(ValueError, 'needs a "# title" line and a "when:" line'):
+            agenttools.proposal_of({'action': 'write_playbook', 'slug': 'vendor-review', 'text': 'Read the export first.', 'why': 'w'})
+        ok = agenttools.proposal_of({'action': 'write_playbook', 'slug': 'vendor-review', 'text': '# Vendor review\nwhen: a vendor tool is reviewed\n\nRead the export first.', 'why': 'w'})
+        self.assertEqual(ok['action'], 'write_playbook')
+
 
 class Acts(unittest.TestCase):
     def setUp(self):

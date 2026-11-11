@@ -188,6 +188,72 @@ test("a stranger's task on a CLI too old for its reviewer answers under the owne
   assert.deepEqual(bad.slice(0, 3), []);
 });
 
+// A HELD CARD IS A ROW IN THE CHAT, AND THE AGENT GOES ON UNDER IT (the owner, 2026-11-10: "it's just a row in the chat"; rules part 1: the agent
+// sets the step up as one card and says what it does after the press). The owner asks for a playbook; the stand-in agent files it for his press
+// (`taskuary --propose write_playbook`); he presses Approve; the agent is woken and answers. Sampled every 100 ms from the press to the answer:
+// nothing of a turn - head, clock, spin - ever stands above the card, and the answer stands under it
+const PLAY = [{ when: "pressed .* went through", anywhere: true, first: "Saved - the next vendor review follows it." },
+  { when: "keep how we review vendors", anywhere: true, first: "Set it up as a playbook - press Approve and I file it.",
+    post: [{ path: "/api/agent/propose", body: { action: "write_playbook", slug: "vendor-review", text: "# Vendor review\nwhen: a vendor tool is to be reviewed\n\nRead the tool's export first, then its sign-on.", why: "so the next vendor review goes the same way" } }] }];
+test("a held card is a row in the chat: after Approve the agent's turn stands under it, nothing spins above it", { timeout: 300000 }, async (t) => {
+  const w = await world(t, PLAY);
+  const page = await w.newPage();
+  await page.setViewport({ width: 1600, height: 900 });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const made = await w.api("/api/fixture/mail-task", {});
+  await page.goto(w.ui, { waitUntil: "domcontentloaded" });
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  const name = process.env.N17_NAME || "held-approve", dir = path.join(out, "video", name); await mkdir(dir, { recursive: true });
+  await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 60000 });
+  const rec = await record(page, dir), bad = [];
+  let pressed = null, done = null;
+  try {
+    await page.evaluate(() => document.querySelector("[data-tq-task-page] .tq-aui-input")?.focus());
+    await page.keyboard.type("keep how we review vendors"); await page.keyboard.press("Enter");
+    await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-task-page] button")].some((b) => /^Approve/.test(b.innerText.trim()) && !b.disabled),
+      { timeout: 60000, polling: 200 });
+    await new Promise((r) => setTimeout(r, 1500));
+    // ...the card: the box round the Approve that names the playbook's why
+    const look = () => page.evaluate(() => {
+      const pane = document.querySelector("[data-tq-task-page]"), vp = pane?.querySelector(".tq-aui-viewport");
+      const y = (r) => Math.round(r.top - (vp ? vp.getBoundingClientRect().top - vp.scrollTop : 0));
+      const why = [...pane.querySelectorAll("*")].filter((e) => e.children.length === 0 && /next vendor review goes the same way/.test(e.textContent)).pop();
+      const card = why?.closest(".tq-aui-message") || why;
+      const turn = [...(vp?.querySelectorAll("[data-tq-run-clock], [data-tq-pending-turn], .tq-aui-thinking, [data-tq-working]") || [])].filter((e) => e.getBoundingClientRect().height > 0);
+      const saved = [...(vp?.querySelectorAll(".tq-aui-agent") || [])].find((e) => /Saved - the next vendor review/.test(e.innerText));
+      return { card: card ? { top: y(card.getBoundingClientRect()), bottom: y({ top: card.getBoundingClientRect().bottom }) } : null,
+        above: turn.map((e) => ({ top: y(e.getBoundingClientRect()), html: e.outerHTML.slice(0, 120) })), saved: saved ? y(saved.getBoundingClientRect()) : null,
+        working: /Working|Starting…|Continuing…/.test(vp?.innerText || "") };
+    });
+    const before = await look();
+    assert.ok(before.card, "the held card is drawn");
+    await page.evaluate(() => [...document.querySelectorAll("[data-tq-task-page] button")].find((b) => /^Approve/.test(b.innerText.trim()) && !b.disabled).click());
+    pressed = Date.now();
+    while (Date.now() - pressed < 60000) {
+      const s = await look(), at = Date.now() - pressed, why = [];
+      if (s.card) for (const h of s.above) if (h.top < s.card.top) why.push(`a turn's ${h.html.slice(0, 60)} above the card`);
+      if (s.working) why.push("the old 'Working' words");
+      if (s.saved != null && s.card && s.saved < s.card.bottom) why.push("the answer above the card");
+      if (why.length) bad.push(`${at}: ${why.join("; ")}`);
+      if (s.saved != null) { done = at; break; }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  } finally {
+    await page.screenshot({ path: path.join(out, `${name}.png`) });
+    await rec.stop();
+    await writeFile(path.join(dir, "server.log"), w.backend.output()); await copyFile(w.log, path.join(dir, "agent.jsonl")).catch(() => {});
+    await note(dir, { done: "A general task; the owner asks the agent to keep how vendors are reviewed; the stand-in agent files a playbook for his press; he presses Approve.",
+      expect: "The card a row in the chat. After Approve: his press as a line, the agent's head under the card at once, its answer under it - nothing spinning above the card, no 'Working' words.",
+      saw: done == null ? "no answer under the card within 60 s" : bad.length ? bad.slice(0, 5).join("\n") : `as expected; the answer ${done} ms after the press`,
+      verdict: done != null && !bad.length ? "PASS" : "FAIL" });
+  }
+  assert.ok(done != null, "the agent answered after the press");
+  assert.deepEqual(bad.slice(0, 5), []);
+  assert.deepEqual(errors, []);
+});
+
 // A START REFUSED FOR A STRANGER IS KEPT WHERE IT HAPPENED, WITH THE WAY PAST IT (rules part 4; the walk, 2026-11-10: a running "AGENT · ran 32s"
 // head with nothing behind it, never saying why). The AI is a CLI too old for its reviewer and with no read-only mode Taskuary can hold it to (/api/fixture/no-readonly), so a
 // stranger's task cannot start on it (origin.launch_mode). The owner types a line: under it, the hold in one sentence and its Trust press - never

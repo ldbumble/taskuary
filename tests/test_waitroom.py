@@ -284,11 +284,22 @@ class GeneralTests(unittest.TestCase):
             out = waitroom.add(s, tid, 'Also put Northwind Payroll on the list.')
             time.sleep(0.3)
         self.assertEqual((out['delivered'], out['state']), (1, 'parked'))
-        (brief, b), (who, note) = self.said(s, tid)
-        self.assertEqual((brief, who, note), ('taskuary', 'owner', 'Also put Northwind Payroll on the list.'))
-        self.assertIn('The owner left 1 note for you', b); self.assertNotIn('While you were working', b); self.assertNotIn('Northwind Payroll', b)
+        # ...his line alone: the head round it is the agent's, typed with it - filed, it drew on his screen as a line saying nothing
+        self.assertEqual(self.said(s, tid), [('owner', 'Also put Northwind Payroll on the list.')])
         [(turn, kw)] = ses.sent                                     # the agent's turn is the batch, filed here already
+        self.assertIn('The owner left 1 note for you', turn); self.assertNotIn('While you were working', turn)
         self.assertIn('(1) Also put Northwind Payroll on the list.', turn); self.assertEqual(kw, {'kept': True, 'brief': True})
+
+    def test_taskuarys_word_to_a_parked_agent_leaves_no_head_on_the_owners_screen(self):
+        """The overnight audit, 2026-11-10: he pressed Approve on a playbook the agent set up; its card left the chat and a grey line "Taskuary
+        left 1 note for you. Take them in order:" stood in its place - the head the agent's own words were typed under."""
+        from taskuary import general
+        s = MemoryStore(); tid, ses = self.general(s)
+        said = general.APPROVED.format(press='Approve', what='saved the playbook vendor-review') + 'Say what you did and what comes next.'
+        with mock.patch.dict(terminal.SESSIONS, {'g': ses}, clear=True):
+            waitroom.add(s, tid, said, 'router'); time.sleep(0.3)
+        self.assertEqual(self.said(s, tid), [('taskuary', said)], "the word itself, kept as Taskuary's for the record - and nothing else")
+        self.assertIn('Taskuary left 1 note for you', ses.sent[0][0])
 
     def test_an_ended_general_agent_reopens_with_the_same_split(self):
         from taskuary import general
@@ -298,7 +309,7 @@ class GeneralTests(unittest.TestCase):
             out = waitroom.add(s, tid, 'and sort it')
             time.sleep(0.3)
         self.assertEqual(out['state'], 'restarted')
-        self.assertEqual([w for w, _ in self.said(s, tid)], ['taskuary', 'owner'])
+        self.assertEqual([w for w, _ in self.said(s, tid)], ['owner'])
         self.assertIn('after the last session ended', ses.sent[0][0])
 
 class DripTests(unittest.TestCase):

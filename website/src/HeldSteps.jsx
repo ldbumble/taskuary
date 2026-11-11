@@ -10,6 +10,7 @@ import { heldCard } from "./reviewProposal.js";
 import { useVerbs } from "./actionRow.js";
 import { label as btn } from "./buttons.js";
 import { failLine, pressSteps } from "./press.js";
+import { PressedButton } from "./PassedCard.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
@@ -51,9 +52,7 @@ export default function HeldSteps({ reviews, onChanged, toRow = false }) {
           {!!c.said && <Typography sx={{ fontSize: 11.5, color: FAINT }}>{c.said}</Typography>}
         </> : <>
           {/* ...the press it took, drawn pressed, and what came of it on the same line */}
-          <Button size="small" variant={c.pressed !== "dismissed" ? "contained" : "outlined"} disableElevation disabled data-tq-pressed={c.pressed}
-            sx={{ "&.Mui-disabled": c.pressed !== "dismissed" ? { bgcolor: "var(--tq-tint-sage, #dfe8dd)", color: "var(--tq-success, #47654a)" } : { color: FAINT } }}>
-            {c.pressed !== "dismissed" ? "✓ Approved" : "✗ Dismissed"}</Button>
+          <PressedButton pressed={c.pressed} />
           <Typography data-tq-act-done="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{c.said}
             {c.url && <> · <a href={c.url} target="_blank" rel="noreferrer">{c.url.replace(/^https?:\/\//, "").slice(0, 70)}</a></>}</Typography>
         </>}

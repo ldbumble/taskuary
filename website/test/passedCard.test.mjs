@@ -11,8 +11,8 @@ test("a passed card is the server's word, drawn once in its turn, greyed, never 
   const card = src("PassedCard.jsx"), page = src("TaskPage.jsx");
   assert.match(card, /export const PASSED_NOTE = "set aside when you moved on";/, "proposals.SET_ASIDE, word for word");
   assert.match(card, /r\?\.Status === "superseded" && r\?\.DecideNote === PASSED_NOTE/);
-  assert.match(card, /data-tq-act-state="passed"/); assert.match(card, /<Button size="small" variant="outlined" disabled data-tq-pressed="passed"/);
-  assert.match(page, /const \{ asks: askCards, past: pressedHeld \} = splitHeld\(allReviews\.filter\(\(r\) => !isPassed\(r\)\), asks\)/, "never drawn as Dismissed");
+  assert.match(card, /pressed = passed \? "passed"/); assert.match(card, /data-tq-act-state=\{pressed\}/); assert.match(card, /<Button size="small" variant="outlined" disabled data-tq-pressed="passed"/);
+  assert.match(page, /const \{ asks: askCards, past: pressedCards \} = splitHeld\(allReviews\.filter\(\(r\) => !isPassed\(r\)\), \[\.\.\.asks, \.\.\.decidedAsks\]\)/, "never drawn as Dismissed");
   assert.match(page, /const turnCards = \[\.\.\.passedCards, /, "in the turn that raised it");
 });
 

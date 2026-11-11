@@ -37,10 +37,10 @@ def said(note) -> str:
     return f'{o} ({extra})' if extra else o
 
 
-def batch(notes: list, after_restart: bool = False, remaining: int = 0, words: bool = True, waited: bool = True) -> str:
+def batch(notes: list, after_restart: bool = False, remaining: int = 0, waited: bool = True) -> str:
     """The notes as one typed message. Flattened to one line: in a TUI a newline is Enter.
     `remaining` = notes still waiting behind these (the drip): the agent is told the next one
-    comes when it stops again, so it does not go looking for it. `words=False`: Taskuary's part alone, the notes left out.
+    comes when it stops again, so it does not go looking for it.
     `waited=False`: handed over the moment they were written, to an agent at rest - nothing was queued behind its work (_deliver)."""
     n = len(notes)
     # ...a message relayed from someone else (terminal.say_to_task, CreatedBy 'router') is not the owner's note: it names its own sender
@@ -53,22 +53,20 @@ def batch(notes: list, after_restart: bool = False, remaining: int = 0, words: b
             'after finishing the step you are on; if one conflicts with work already done, say so instead of undoing it:')
     tail = (f' ({remaining} more note{"s" if remaining > 1 else ""} wait{"" if remaining > 1 else "s"} behind this one - the next comes when you stop again; '
             'finish this and stop, do not ask for it.)' if remaining else '')
-    each = ' '.join(f'({i}) {said(x.get("Note"))}' for i, x in enumerate(notes, 1)) if words else ''
-    extra = '' if words else ' '.join(f'{general_relay()} ({i}) {e}' for i, x in enumerate(notes, 1) if (e := parts(x.get('Note'))[1]))
-    return ' '.join((head + ' ' + each + extra + tail).split())[:MAX_BATCH]
-
-
-def general_relay() -> str:
-    from .general import RELAY
-    return RELAY
+    each = ' '.join(f'({i}) {said(x.get("Note"))}' for i, x in enumerate(notes, 1))
+    return ' '.join((head + ' ' + each + tail).split())[:MAX_BATCH]
 
 
 # A GENERAL AGENT'S CHAT SAYS WHO SAID WHAT (the overnight run, 2026-11-03): the batch typed into its conversation was filed whole as the
 # owner's, so YOU read "While you were working, the owner queued 1 note for you. Take them in order..." - Taskuary's words in the owner's
 # bubble. Taskuary's part is its brief (the grey line), each note its writer's own words, and the agent's turn is the batch, as it was
+# ...and the head round them ("Taskuary left 1 note for you. Take them in order:") is the AGENT'S, typed with the notes - filed, it drew on the
+# owner's screen as an event line where the card he had just approved had stood (the overnight audit, 2026-11-10). What the Assistant added
+# to his note is the one part of Taskuary's that the record keeps
 def to_general(store, tid, session, notes: list, after_restart: bool = False, remaining: int = 0, waited: bool = True) -> None:
     from . import general
-    store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, batch(notes, after_restart, remaining, words=False, waited=waited))
+    if (extra := ' '.join(f'{general.RELAY} ({i}) {e}' for i, x in enumerate(notes, 1) if (e := parts(x.get('Note'))[1]))):
+        store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, extra)
     for x in notes:
         store.add_comment(tid, 'owner' if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE) else general.BRIEF_ACTOR, general.USER_TYPE,
                           parts(x.get('Note'))[0])

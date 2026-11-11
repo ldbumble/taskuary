@@ -104,7 +104,7 @@ import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
   AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
-import { askNote, closeoutOf, heldGroups, splitHeld } from "./reviewProposal.js";
+import { askNote, closeoutOf, decidedAsk, heldGroups, splitHeld } from "./reviewProposal.js";
 import PassedCard, { isPassed, isReplaced } from "./PassedCard.jsx";
 import ReplacedDraft from "./ReplacedDraft.jsx";
 import SentCard from "./SentCard.jsx";
@@ -2726,7 +2726,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // it is with buttons grayed out") - never a pressed card's "Dismissed"
   const passedCards = heldGroups(allReviews.filter(isPassed)).map((g) => ({ key: `passed:${g.reviews[0].ReviewId}`, at: g.reviews[0].CreatedAt || "",
     rid: g.reviews[0].ReviewId, node: <PassedCard reviews={g.reviews} /> }));
-  const { asks: askCards, past: pressedHeld } = splitHeld(allReviews.filter((r) => !isPassed(r)), asks), kept = askCards.flatMap((g) => (g.held ? g.reviews : [])).filter((r) => r.Status !== "pending");
+  const decidedAsks = allReviews.filter((r) => decidedAsk(r) && !isCardReview(r));       // ...pressed, each stays its card in its turn
+  const { asks: askCards, past: pressedCards } = splitHeld(allReviews.filter((r) => !isPassed(r)), [...asks, ...decidedAsks]), kept = askCards.flatMap((g) => (g.held ? g.reviews : [])).filter((r) => r.Status !== "pending");
   // ...AND ONCE THE OWNER WRITES AGAIN EACH PRESSED CARD STAYS IN ITS TURN (the owner, 2026-11-09: "leave the card in the turn with the pressed
   // button"): the held steps it approved, and every reply that went - drawn by the chat in the turn that set it up (GeneralWorkspace turnCards)
   const liveAsks = askCards.filter((g) => g.reviews.some((r) => r.Status === "pending")).length;
@@ -2739,8 +2740,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // new email action box under it"): by its time, as it stood while it waited (agentSummary.draftHome), the new card in the turn that wrote it
   const replacedCards = allReviews.filter(isReplaced).map((r) => ({ key: `replaced:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, byRow: true, record: true,
     node: <ReplacedDraft review={r} /> }));
-  const turnCards = [...passedCards, ...replacedCards, ...pressedHeld.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
-      node: <HeldSteps reviews={g.reviews} onChanged={decided} /> })),
+  const turnCards = [...passedCards, ...replacedCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
+      node: g.held ? <HeldSteps reviews={g.reviews} onChanged={decided} /> : <PassedCard reviews={g.reviews} /> })),
     ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),
       node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
         : <ReviewDecision review={g.reviews[0]} toRow={inRow && !pendingReview && proposals.length === 1} onChanged={decided} /> })),

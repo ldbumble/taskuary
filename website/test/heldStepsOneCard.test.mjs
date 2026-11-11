@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { heldCard, heldGroups, keptHeld, splitHeld } from "../src/reviewProposal.js";
+import { decidedAsk, heldCard, heldGroups, keptHeld, splitHeld } from "../src/reviewProposal.js";
 
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const step = (id, turn, command, about, status = "pending", extra = {}) => ({ ReviewId: id, TaskId: 7, Kind: "action", Status: status,
@@ -54,7 +54,7 @@ test("pressed, the card stays in the turn with the press it took and what came o
 
 test("a pressed card - held steps approved, a reply sent - is drawn in the turn that set it up, whatever came after", () => {
   const page = read("TaskPage.jsx"), chat = read("GeneralWorkspace.jsx");
-  assert.match(page, /const turnCards = \[\.\.\.passedCards, \.\.\.replacedCards, \.\.\.pressedHeld\.map\(\(g\) =>/);
+  assert.match(page, /const turnCards = \[\.\.\.passedCards, \.\.\.replacedCards, \.\.\.pressedCards\.map\(\(g\) =>/);
   assert.match(page, /node: <SentCard id=\{r\.ReviewId\}/);
   assert.match(page, /turnCards=\{turnCards\}/);
   assert.match(chat, /const placed = React\.useMemo\(\(\) => placeCards\(turnCards, messages, turns\), \[turnCards, messages, turns\]\);/, "placed in the turn that raised it (agentSummary.placeCards)");
@@ -63,8 +63,23 @@ test("a pressed card - held steps approved, a reply sent - is drawn in the turn 
 
 test("the task page draws a turn's held steps as one HeldSteps card, one Approve through the batch door", () => {
   const page = read("TaskPage.jsx"), card = read("HeldSteps.jsx");
-  assert.match(page, /const \{ asks: askCards, past: pressedHeld \} = splitHeld\(allReviews\.filter\(\(r\) => !isPassed\(r\)\), asks\)/);
+  assert.match(page, /const \{ asks: askCards, past: pressedCards \} = splitHeld\(allReviews\.filter\(\(r\) => !isPassed\(r\)\), \[\.\.\.asks, \.\.\.decidedAsks\]\)/);
   assert.match(page, /g\.held\s*\n?\s*\? <HeldSteps/);
   assert.match(card, /pressSteps\(api, c\.waiting, verb\)/);          // the batch door, through the one press (press.js)
   assert.equal((card.match(/data-tq-held-approve/g) || []).length, 1, "one Approve on the card");
+});
+
+// THE OVERNIGHT AUDIT, 2026-11-10: Approve on a playbook the agent set up took its card out of the chat at the press - nothing said it was
+// approved, and Taskuary's note to the agent stood where it had been. A decided proposal is a pressed card in its turn, as held steps are
+test("an approved or dismissed proposal stays in its turn as its pressed card; a close-out's is its own card's", () => {
+  const pb = (id, Status, action = "write_playbook") => ({ ReviewId: id, TaskId: 7, Kind: "action", Status, CreatedAt: `2026-11-10 09:0${id}:00`,
+    DraftText: JSON.stringify({ action, slug: "vendor-review", text: "# Vendor review" }) });
+  const rows = [pb(1, "approved"), pb(2, "rejected"), pb(3, "pending"), pb(4, "approved", "merge_pr"), pb(5, "superseded")];
+  assert.deepEqual(rows.filter(decidedAsk).map((r) => r.ReviewId), [1, 2]);
+  const { asks, past } = splitHeld(rows, [pb(3, "pending"), ...rows.filter(decidedAsk)]);
+  assert.deepEqual(asks.map((g) => g.key), ["rv3"], "only the one still waiting asks");
+  assert.deepEqual(past.map((g) => [g.key, g.at]), [["rv1", "2026-11-10 09:01:00"], ["rv2", "2026-11-10 09:02:00"]], "each in the turn that raised it");
+  const page = read("TaskPage.jsx");
+  assert.match(page, /node: g\.held \? <HeldSteps reviews=\{g\.reviews\} onChanged=\{decided\} \/> : <PassedCard reviews=\{g\.reviews\} \/>/);
+  assert.match(read("PassedCard.jsx"), /<PressedButton pressed=\{pressed\} \/>/); assert.match(read("HeldSteps.jsx"), /<PressedButton pressed=\{c\.pressed\} \/>/);
 });

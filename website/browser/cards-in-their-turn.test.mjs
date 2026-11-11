@@ -218,13 +218,16 @@ test("a held card is a row in the chat: after Approve the agent's turn stands un
     const look = () => page.evaluate(() => {
       const pane = document.querySelector("[data-tq-task-page]"), vp = pane?.querySelector(".tq-aui-viewport");
       const y = (r) => Math.round(r.top - (vp ? vp.getBoundingClientRect().top - vp.scrollTop : 0));
-      const why = [...pane.querySelectorAll("*")].filter((e) => e.children.length === 0 && /next vendor review goes the same way/.test(e.textContent)).pop();
-      const card = why?.closest(".tq-aui-message") || why;
+      // ...by where it saves, which it says waiting and pressed alike (PassedCard)
+      const title = [...pane.querySelectorAll("*")].filter((e) => e.children.length === 0 && /Playbooks → vendor-review\.md/.test(e.textContent) && e.getBoundingClientRect().height > 0).pop();
+      const card = title?.closest("[data-tq-passed]") || title?.closest(".tq-aui-message") || title;
       const turn = [...(vp?.querySelectorAll("[data-tq-run-clock], [data-tq-pending-turn], .tq-aui-thinking, [data-tq-working]") || [])].filter((e) => e.getBoundingClientRect().height > 0);
       const saved = [...(vp?.querySelectorAll(".tq-aui-agent") || [])].find((e) => /Saved - the next vendor review/.test(e.innerText));
       return { card: card ? { top: y(card.getBoundingClientRect()), bottom: y({ top: card.getBoundingClientRect().bottom }) } : null,
         above: turn.map((e) => ({ top: y(e.getBoundingClientRect()), html: e.outerHTML.slice(0, 120) })), saved: saved ? y(saved.getBoundingClientRect()) : null,
-        working: /Working|Starting…|Continuing…/.test(vp?.innerText || "") };
+        working: /Working|Starting…|Continuing…/.test(vp?.innerText || ""), approved: !!card?.querySelector?.('[data-tq-pressed="approved"]'),
+        // ...Taskuary's head over its word to the agent ("Taskuary left 1 note for you. Take them in order:") is the agent's, never his screen's
+        machinery: /notes? for you|Take them in order/.test(vp?.innerText || "") };
     });
     const before = await look();
     assert.ok(before.card, "the held card is drawn");
@@ -232,6 +235,8 @@ test("a held card is a row in the chat: after Approve the agent's turn stands un
     pressed = Date.now();
     while (Date.now() - pressed < 60000) {
       const s = await look(), at = Date.now() - pressed, why = [];
+      if (!s.card) why.push("the card is gone from the chat");
+      if (s.machinery) why.push("Taskuary's note to the agent drawn as a line");
       if (s.card) for (const h of s.above) if (h.top < s.card.top) why.push(`a turn's ${h.html.slice(0, 60)} above the card`);
       if (s.working) why.push("the old 'Working' words");
       if (s.saved != null && s.card && s.saved < s.card.bottom) why.push("the answer above the card");
@@ -240,12 +245,15 @@ test("a held card is a row in the chat: after Approve the agent's turn stands un
       await new Promise((r) => setTimeout(r, 100));
     }
     await new Promise((r) => setTimeout(r, 1500));
+    // ...and at rest: the card where it stood, its press drawn pressed - his press's record in the chat (the owner, 2026-11-09)
+    const end = await look();
+    if (!end.card || !end.approved) bad.push(`at rest: the card ${end.card ? "stands unpressed" : "is gone"}`);
   } finally {
     await page.screenshot({ path: path.join(out, `${name}.png`) });
     await rec.stop();
     await writeFile(path.join(dir, "server.log"), w.backend.output()); await copyFile(w.log, path.join(dir, "agent.jsonl")).catch(() => {});
     await note(dir, { done: "A general task; the owner asks the agent to keep how vendors are reviewed; the stand-in agent files a playbook for his press; he presses Approve.",
-      expect: "The card a row in the chat. After Approve: his press as a line, the agent's head under the card at once, its answer under it - nothing spinning above the card, no 'Working' words.",
+      expect: "The card a row in the chat. After Approve: the card stays where it stood, pressed (✓ Approved), the agent's head under it at once, its answer under it - nothing spinning above the card, no 'Working' words, no 'Taskuary left 1 note' line.",
       saw: done == null ? "no answer under the card within 60 s" : bad.length ? bad.slice(0, 5).join("\n") : `as expected; the answer ${done} ms after the press`,
       verdict: done != null && !bad.length ? "PASS" : "FAIL" });
   }

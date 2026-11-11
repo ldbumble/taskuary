@@ -283,6 +283,8 @@ export const resultOf = (review) => {
 // why it waits said once, the folder once, the steps numbered, every command under one "Show the commands", one Approve that runs them in order
 // (/api/reviews/steps) and one Dismiss. A step held after the owner wrote again is another turn's card. Each item: { key, reviews }
 const isHeldStep = (r) => proposalFrom(r)?.action === "shell_act";
+// ...a proposal the owner pressed, kept as its pressed card (PassedCard) - a close-out's press is its own card's (closeoutState)
+export const decidedAsk = (r) => r?.Kind === "action" && ["approved", "edited", "rejected"].includes(r.Status) && !isHeldStep(r) && !closeoutOf(r);
 const turnKey = (r) => { const p = proposalFrom(r); return p?.turn == null ? `rv${r.ReviewId}` : `${r.TaskId}|${p.sid || ""}|${p.turn}|${p.where || p.cwd || ""}`; };
 export const heldGroups = (rows) => {
   const out = [], at = new Map();
@@ -325,8 +327,10 @@ export const keptHeld = (reviews, comments) => {
 // it gave way to a one-line summary, and the task's comments carry no owner line to tell "since" by): `asks` the cards still waiting - every
 // other ask, and a turn's held steps while any of them waits (the ones that ran ticked in it) - and `past` each turn's pressed card, with when
 // its turn held it (GeneralWorkspace's turn cards)
+// ...AND SO DOES EVERY OTHER PROPOSAL ONCE DECIDED (decidedAsk; the owner, 2026-11-10: "it should stay where it is with buttons grayed out"): an
+// approved playbook left its turn at the press, and Taskuary's note to its agent stood where it had been
 export const splitHeld = (reviews, asks) => {
   const gs = heldGroups([...(reviews || []).filter(isHeldStep), ...(asks || []).filter((r) => !isHeldStep(r))].sort((a, b) => a.ReviewId - b.ReviewId));
-  const waits = (g) => !g.held || g.reviews.some((r) => r.Status === "pending");
+  const waits = (g) => g.reviews.some((r) => r.Status === "pending");
   return { asks: gs.filter(waits), past: gs.filter((g) => !waits(g)).map((g) => ({ ...g, at: g.reviews[0].CreatedAt || "" })) };
 };

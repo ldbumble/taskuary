@@ -92,14 +92,15 @@ def _install_fresh_routes(app, store):
     @app.post("/api/fixture/mail-task")
     def fixture_mail_task(body: dict = Body(...)):
         """A task from a mail of Erin Blake's with a reply already drafted for it - the arrival road's draft, waiting (browser/cards-in-their-turn).
-        `kind`: the task's kind (general by default; `coding` on the stand-in ACP agent, after /api/fixture/coding)."""
+        `kind`: the task's kind (general by default; `coding` on the stand-in ACP agent, after /api/fixture/coding); `title` and `sent`: another
+        mail of its own, at its own time (browser/walk-presses: an arrival mid-walk)."""
         # ...the owner named, so a colleague on his own domain is no stranger (senders.own_domains)
         store.set_setting("owner_name", "Alex Doyle", "owner"); store.set_setting("owner_email", "alex@northwind.example", "owner")
-        tid = store.create_task({"Title": "Vendor review for Erin", "Kind": body.get("kind") or "general", "Status": "open",
+        tid = store.create_task({"Title": body.get("title") or "Vendor review for Erin", "Kind": body.get("kind") or "general", "Status": "open",
                                  "Summary": "Erin Blake asks for our review of the vendor tool"}, "owner")
         who, addr = ("Paula Vance", "paula@vendor.example") if body.get("stranger") else ("Erin Blake", "erin@northwind.example")
         mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-{tid}", "Channel": "email", "FromName": who, "FromEmail": addr,
-                                 "ToEmail": "alex@northwind.example", "Subject": "Your review of the tool?", "SentAt": "2026-11-10 08:00:00",
+                                 "ToEmail": "alex@northwind.example", "Subject": body.get("title") or "Your review of the tool?", "SentAt": body.get("sent") or "2026-11-10 08:00:00",
                                  "BodyText": f"Hi Alex, could you send me your review of the tool? Thanks, {who.split()[0]}", "Status": "routed"})
         rid = store.add_review({"TaskId": tid, "MessageId": mid, "Kind": "draft_reply", "Status": "pending", "Channel": "email",
                                 "DraftText": body.get("draft") or "Hi Erin, here is a long review of every flaw we found in the tool, one by one. Alex"})

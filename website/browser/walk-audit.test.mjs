@@ -10,7 +10,8 @@ import { note, record } from "./recorder.mjs";
 /* THE WALK, ROW BY ROW, AS THE OWNER PRESSES IT (the owner, 2026-11-10: "keep on doing audits of the next/triage walk through"). The demo world,
    walked from the day card by the bar's Next to its end. At every press: Next greys at once until the move lands; the row it lands on is the one
    the rail marked next (never a skip); the rail's rows keep their order; once settled the bar holds navigation only (the owner, 2026-11-10: "on
-   bottom the only buttons should be nav") and nothing greyed is left standing beside it. Then Back once, from the middle. Recorded. */
+   bottom the only buttons should be nav") and nothing greyed is left standing beside it; the item on the table, of every kind the demo holds,
+   carries its own moves. Then Back once, from the middle. Recorded, each row with its kind and the ms it stood at. */
 const out = path.join(process.env.TEMP || os.tmpdir(), "claude", "n17");
 const NAV = /^(Back|Next|All read, next|Walk me through my tasks)$/;
 const read = (page) => page.evaluate(() => {
@@ -18,7 +19,10 @@ const read = (page) => page.evaluate(() => {
   const bar = [...document.querySelectorAll("[data-tq-row] button")].filter((b) => b.getBoundingClientRect().width > 0 && getComputedStyle(b).visibility !== "hidden")
     .map((b) => ({ text: b.innerText.trim(), off: b.disabled }));
   return { keys: rows.map((e) => e.getAttribute("data-tq-key")), on: rows.filter((e) => /\b(current|inbatch)\b/.test(e.className)).map((e) => e.getAttribute("data-tq-key")),
-    next: rows.find((e) => /\bnext\b/.test(e.className))?.getAttribute("data-tq-key") || null, bar };
+    next: rows.find((e) => /\bnext\b/.test(e.className))?.getAttribute("data-tq-key") || null, bar,
+    // ...the item's own moves: every button drawn on the item itself - not the bar, the rail, the ask box
+    own: [...document.querySelectorAll(".tq-asst-col button, .tq-asst-col [role=button]")].filter((b) => !b.closest("[data-tq-row], [data-tq-rail], .tq-compose, .tq-chat-unit")
+      && b.getBoundingClientRect().width > 0 && getComputedStyle(b).visibility !== "hidden" && b.innerText.trim()).map((b) => b.innerText.trim().split("\n")[0].slice(0, 30) + (b.disabled ? " (off)" : "")) };
 });
 const press = (page, re) => page.evaluate((src) => { const b = [...document.querySelectorAll("[data-tq-row] button")].find((x) => new RegExp(src).test(x.innerText.trim()) && !x.disabled
   && x.getBoundingClientRect().width > 0); b?.click(); return !!b; }, re);
@@ -36,20 +40,27 @@ test("the walk, row by row: Next greys until it lands, lands on the row marked n
   await page.setViewport({ width: 1600, height: 900 });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  // ...WHAT EACH ROW IS, by the walk's own answer (railwalk's item): its kind, lane and title - the audit is read per kind
+  const items = new Map();
+  page.on("response", async (r) => { if (!/\/api\/walk\/(start|next|back|open|leave)$/.test(new URL(r.url()).pathname)) return;
+    try { const i = (await r.json())?.item; if (i?.key) items.set(i.key, { kind: i.kind || "", lane: i.lane || "", title: String(i.title || "").slice(0, 50) }); } catch { /* not json */ } });
   await page.goto(h.ui, { waitUntil: "domcontentloaded" });
   const name = process.env.N17_NAME || "walk-audit", dir = path.join(out, "video", name); await mkdir(dir, { recursive: true });
   await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => /^Walk me through my tasks/.test(b.innerText.trim())), { timeout: 60000 });
-  const rec = await record(page, dir), steps = [], bad = [];
+  const rec = await record(page, dir), steps = [], bad = [], t0 = Date.now();
   try {
     await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => /^Walk me through my tasks/.test(b.innerText.trim()))?.click());
     let s = await settle(page, { on: [] }), order = s.keys.slice(), backed = false;
     for (let n = 0; n < 60; n++) {
-      const step = { n, on: s.on, next: s.next, bar: s.bar.map((b) => b.text + (b.off ? " (off)" : "")).join(" | ") };
+      const step = { n, at: Date.now() - t0, on: s.on, ...(items.get(s.on[0]) || (s.on.length > 1 ? { kind: "fyi", lane: "batch" } : {})), next: s.next, bar: s.bar.map((b) => b.text + (b.off ? " (off)" : "")).join(" | "), own: s.own.join(" | ") };
       steps.push(step);
       const stray = s.bar.filter((b) => !NAV.test(b.text));
       if (stray.length) bad.push(`${n} ${s.on.join(",")}: the bar holds more than navigation: ${stray.map((b) => b.text).join(", ")}`);
       const greyed = s.bar.filter((b) => b.off && b.text !== "Back");
       if (greyed.length) bad.push(`${n} ${s.on.join(",")}: greyed and left standing: ${greyed.map((b) => b.text).join(", ")}`);
+      // ...and THE ITEM'S MOVES ARE ON THE ITEM, whatever its kind (a task, a reply, a post, a coding task, a meeting, a goal, a report, a
+      // dashboard, an fyi batch): an item the walk stands on with nothing of its own to press is a dead end
+      if (s.on.length && !s.own.filter((o) => !/\(off\)$/.test(o)).length) bad.push(`${n} ${step.kind || s.on.join(",")}: nothing of its own to press on the item`);
       // ...the rows that stay keep their order: a row never moves
       const kept = order.filter((k) => s.keys.includes(k)), now = s.keys.filter((k) => order.includes(k));
       if (JSON.stringify(kept) !== JSON.stringify(now)) bad.push(`${n}: the rail's rows moved: ${JSON.stringify(now.slice(0, 8))}`);
@@ -80,7 +91,9 @@ test("the walk, row by row: Next greys until it lands, lands on the row marked n
     await writeFile(path.join(dir, "steps.json"), JSON.stringify(steps, null, 1));
     await note(dir, { done: "The demo world walked from the day card by the bar's Next to its end, Back once at the fourth row.",
       expect: "Next greys at once and lands on the row the rail marked next; rows never move; the bar is navigation only, nothing greyed left beside it.",
-      saw: bad.length ? bad.slice(0, 12).join("\n") : `as expected over ${steps.length} rows`, verdict: bad.length ? "FAIL" : "PASS" });
+      saw: (bad.length ? bad.slice(0, 12).join("\n") : `as expected over ${steps.length} rows`)
+        + `\nkinds walked: ${[...new Set(steps.map((x) => x.kind && `${x.kind}/${x.lane}`).filter(Boolean))].join(", ")} - per row in steps.json (at = ms into the video)`,
+      verdict: bad.length ? "FAIL" : "PASS" });
   }
   assert.deepEqual(bad.slice(0, 12), []);
   assert.deepEqual(errors, []);

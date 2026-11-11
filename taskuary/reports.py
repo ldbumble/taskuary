@@ -7,7 +7,7 @@ except the ones in PLANNED, which fail loudly so a misconfig is visible on the t
 of silently absent. Building a planned type = one ~15-line function + its REGISTRY entry, and
 taking it out of PLANNED - PRs welcome.
 """
-import contextlib, contextvars, io, json, os, re, sqlite3, threading, time
+import contextlib, contextvars, hashlib, io, json, os, re, sqlite3, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
 from . import apireads, spawn
@@ -1600,7 +1600,10 @@ def headline_from(summary: str, fallback: str) -> str:
 
 
 
-def render_report(store, cfg: dict, llm=None, notes: list = None, files: list = None):
+UNCHANGED = 'Nothing new since the last run: its sources returned the same rows, so the AI summary was not asked for again.'
+
+
+def render_report(store, cfg: dict, llm=None, notes: list = None, files: list = None, mark: str = None):
     """Run the executor(s), then (optionally) the AI pass: cfg['ai_prompt'] + a configured
     AI connector turn raw rows into the summary that lands on the timeline. The report may
     name its own brain and model (report_llm); `llm` is the default it falls back to.
@@ -1637,6 +1640,15 @@ def render_report(store, cfg: dict, llm=None, notes: list = None, files: list = 
             raise Skipped("Skipped: Taskuary's own data could not be read - " + str(e)[:300] if own
                           else f'Skipped: {source_title(t)} could not be read - {plain_reason(e)}') from e
         sections = {source_key(cfg, 1): summary}
+    # A SCHEDULED RUN WHOSE SOURCES SAY WHAT THEY SAID LAST TIME is not summarised again (the owner, 2026-11-10: "the ai limits as much as
+    # possible to use ai"): the run still lands on its schedule, saying so, with the rows under it. `mark`: the setting holding the last data's hash
+    seen = mark and hashlib.sha256(f"{cfg.get('ai_prompt')}|{summary}".encode('utf-8', 'replace')).hexdigest()
+    if seen and cfg.get('ai_prompt') and llm and store.get_setting(mark) == seen:
+        return head, f'{UNCHANGED}{RAW_MARK}{summary[:4000]}'
+    # ...and past the day's ceiling for AI work nobody asked for at that moment, the scheduled run lands with its rows and says why (auto_held)
+    from .brainroute import auto_held
+    if mark and cfg.get('ai_prompt') and llm and (held := auto_held(store)):
+        return head, f'No AI summary this run: {held}.{RAW_MARK}{summary[:4000]}'
     if cfg.get('ai_prompt') and llm:
         try:
             # a prompt that names a source gets that source's rows in its place; the rest, and a
@@ -1658,6 +1670,7 @@ def render_report(store, cfg: dict, llm=None, notes: list = None, files: list = 
         # report exists for the summary (the owner, 2026-09-27)
         if not ai: raise RuntimeError('the model returned an empty summary - it may have spent its budget thinking. '
                                       'Try a shorter prompt, or a non-reasoning model for report summaries.')
+        if seen: store.set_setting(mark, seen, 'report')
         return headline_from(ai, head), f"{ai}{RAW_MARK}{summary[:4000]}"
     if cfg.get('ai_prompt') and not llm:
         return head, f'{NO_BRAIN} - raw data below)\n\n{summary}'
@@ -2039,7 +2052,7 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     fetched = []        # files a source fetched as it read (an invoice PDF), to go on the report's message
     try:
         if failed_model: raise RuntimeError(failed_model)
-        head, summary = render_report(store, cfg, llm, notes=notes, files=fetched)
+        head, summary = render_report(store, cfg, llm, notes=notes, files=fetched, mark=f"report_read_mark:{src['SourceId']}" if trigger == 'schedule' else None)
         subject, body = f'{title} — {head}', summary
     except NothingToReport as e:
         return {'message_id': None, 'subject': f'{title} — nothing to report on', 'files': 0, 'said': 0, 'failed': False, 'summary': str(e)}

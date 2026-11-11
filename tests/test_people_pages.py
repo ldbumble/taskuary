@@ -58,6 +58,9 @@ class PageTests(unittest.TestCase):
         self.assertEqual(people_pages.pages(s)[0]['who'], WHO)
         self.assertIsNone(people_pages.compile(s, other, llm=brain_saying('')))
         with mock.patch.object(people_pages, 'build_llm', return_value=None): self.assertEqual(people_pages.refresh(s), [])
+        # ...and a page whose ledger has not moved since it was compiled is not compiled again (the owner, 2026-11-10: "the ai limits ...")
+        asked = mock.Mock(return_value='- again')
+        self.assertEqual(people_pages.refresh(s, llm=asked), []); asked.assert_not_called()
 
 
     def test_refresh_skips_the_owner_and_an_auto_replier(self):

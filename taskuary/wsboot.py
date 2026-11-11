@@ -257,10 +257,14 @@ REFRESH = ("You keep one section of an owner's JOB.md current. You are given the
            "message; never name a customer, patient or resident. Answer only the section.")
 
 
+REFRESH_MARKS = 'workstreams_refresh_marks'       # {slug: the newest of the owner's words a rewrite read}
+
+
 def refresh(store, llm, days: int = RECENT_DAYS) -> dict:
     """Each active workstream's section rewritten from its last `days`; one with no owner activity in QUIET_DAYS goes quiet (its index
     line stays, its section leaves readers' prompts until it wakes), a quiet one with activity wakes. {slug: 'refreshed'|'quiet'|'woke'}."""
     out, xs = {}, W.streams(store)
+    marks = json.loads(store.get_setting(REFRESH_MARKS) or '{}')
     for w in xs:
         if w['personal']: continue
         own = store._rows("SELECT substr(BodyText,1,240) b FROM message WHERE Workstream=? AND (Direction='out' OR Status='context') AND SentAt>=? "
@@ -269,19 +273,23 @@ def refresh(store, llm, days: int = RECENT_DAYS) -> dict:
             if w['status'] == 'active': w['status'] = 'quiet'; out[w['slug']] = 'quiet'
             continue
         if w['status'] == 'quiet': w['status'] = 'active'; out[w['slug']] = 'woke'
-        recent = store._rows("SELECT substr(BodyText,1,240) b FROM message WHERE Workstream=? AND (Direction='out' OR Status='context') AND SentAt>=? "
+        recent = store._rows("SELECT substr(BodyText,1,240) b, SentAt s FROM message WHERE Workstream=? AND (Direction='out' OR Status='context') AND SentAt>=? "
                              "ORDER BY SentAt DESC LIMIT 15", (w['slug'], _ago(days)))
         if not recent or llm is None: continue
+        # ...and only when the owner wrote there since its last rewrite (the owner, 2026-11-10: "the ai limits as much as possible to use ai")
+        if marks.get(w['slug']) == str(recent[0]['s']): continue
         try:
             new = str(llm(REFRESH, f"THE SECTION:\n{W.section(store, w['slug'])}\n\nTHE OWNER'S RECENT WORDS:\n"
                                    + '\n'.join(f"- {' '.join(str(r['b'] or '').split())}" for r in recent)) or '').strip()
         except Exception as e:
             logger.warning(f"workstream {w['slug']} not refreshed: {e}"); continue
         if new and '<!--' not in new and len(new) < 4000: W.write_section(store, w['slug'], new, 'wsrefresh'); out[w['slug']] = 'refreshed'
+        marks[w['slug']] = str(recent[0]['s'])
         # ...and how the owner writes there, where it differs from the shared style (stylews, S9 - an option the owner can switch off)
         from . import stylews
         if stylews.on(store): stylews.write(store, llm, w['slug'])
     if out: W.save(store, xs, 'wsrefresh')
+    store.set_setting(REFRESH_MARKS, json.dumps(marks), 'wsboot')
     return out
 
 

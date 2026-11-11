@@ -285,6 +285,21 @@ class DigestReportTests(unittest.TestCase):
         self.assertIn('OPEN WORK', s2.get_message(out2['message_id'])['BodyText'])
 
 
+    def test_a_scheduled_report_whose_data_did_not_change_is_not_summarised_again(self):
+        """The owner, 2026-11-10: "the ai limits as much as possible to use ai". The run still lands on its schedule, saying why there is no
+        new summary (run_report_source marks only a scheduled run; a digest's data carries its own clock, so it is summarised each day)."""
+        from taskuary.store import MemoryStore
+        from taskuary import reports
+        s, asked, rows = MemoryStore(), mock.Mock(return_value='Two invoices are overdue.'), ['invoice,due' + chr(10) + '7,2026-11-01']
+        cfg = {'type': 'rest', 'ai_prompt': 'Say what is overdue.'}
+        with mock.patch.object(reports, 'executor_for', return_value=lambda c: ('1 row', rows[0])), mock.patch.object(reports, 'gate'),              mock.patch.object(reports, 'resolve_cfg', side_effect=lambda st, c: c), mock.patch.object(reports, 'report_llm', side_effect=lambda st, c, l: l):
+            run = lambda: reports.render_report(s, cfg, asked, notes=[], mark='report_read_mark:7')[1]
+            assert run().startswith('Two invoices') and run().startswith(reports.UNCHANGED) and asked.call_count == 1
+            rows[0] += chr(10) + '8,2026-11-03'
+            assert run().startswith('Two invoices') and asked.call_count == 2
+            assert reports.render_report(s, cfg, asked, notes=[])[1].startswith('Two invoices') and asked.call_count == 3     # Run now
+
+
 class LocalAndOpenRouterTests(unittest.TestCase):
     class _R:
         status_code, text = 200, ''

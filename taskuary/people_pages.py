@@ -54,21 +54,28 @@ def compile(store, who: str, llm=None):
     return name
 
 
+MARKS = 'people_pages_marks'          # {who: '<resolved rows>:<newest>' when their page was last compiled}
+
+
 def refresh(store, llm=None, limit: int = 5, days: int = 30) -> list:
     """At reflection: the people with three or more resolved rows in the window, most first, one small call each."""
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-    rows = store._rows("SELECT json_extract(FactsJson, '$.who') AS who, COUNT(*) AS n FROM outcome WHERE ResolvedAt IS NOT NULL AND At>=? "
+    rows = store._rows("SELECT json_extract(FactsJson, '$.who') AS who, COUNT(*) AS n, MAX(ResolvedAt) AS last FROM outcome WHERE ResolvedAt IS NOT NULL AND At>=? "
                        "AND json_extract(FactsJson, '$.who') IS NOT NULL AND json_extract(FactsJson, '$.who')!='' GROUP BY who HAVING n>=3 ORDER BY n DESC LIMIT ?",
                        (since, limit))
     from .autoreply import STATUS as AUTO
     me = str(store.get_setting('owner_email', '') or '').lower()
-    out = []
+    # ...and a page is compiled again only when its ledger moved (the owner, 2026-11-10: "the ai limits as much as possible to use ai")
+    import json
+    out, marks = [], json.loads(store.get_setting(MARKS) or '{}')
     for r in rows:
         # not a page about the owner, and none about a mailbox that only ever auto-replies
         if r['who'] == me or store._one('SELECT 1 x FROM message WHERE lower(FromEmail)=? AND Status=? LIMIT 1', (r['who'], AUTO)): continue
+        if marks.get(r['who']) == f"{r['n']}:{r['last']}": continue
         try:
-            if compile(store, r['who'], llm): out.append(r['who'])
+            if compile(store, r['who'], llm): out.append(r['who']); marks[r['who']] = f"{r['n']}:{r['last']}"
         except Exception as e: logger.warning(f"people_pages: {r['who']} not compiled - {e}")
+    store.set_setting(MARKS, json.dumps(marks), 'reflect')
     return out
 
 

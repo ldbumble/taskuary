@@ -41,6 +41,17 @@ class StuckAndLostTests(unittest.TestCase):
         self.assertEqual((t.get('intent'), t.get('error')), ('fyi', None))
 
 
+    def test_an_idea_whose_triage_keeps_failing_is_asked_three_times_then_left(self):
+        "It was asked again on every Advisor run, for ever (the owner, 2026-11-10: \"the ai limits as much as possible to use ai\")."
+        s = MemoryStore()
+        s.upsert_idea({'key': 'idea:y', 'kind': 'idea', 'text': 'The export failed again.', 'sig': 'b',
+                       'action': {'triage': {'error': 'HTTP 500', 'sig': 'b'}}}, '2026-09-25 08:00:00')
+        def fails(*a, **k): raise RuntimeError('HTTP 500')
+        with mock.patch('taskuary.llm.build_llm', return_value=fails) as built:
+            for _ in range(5): assistant.retry_stuck_ideas(s)
+        self.assertEqual(built.call_count, assistant.RETRY_IDEAS)
+
+
 class RulesTests(unittest.TestCase):
     def test_a_rule_can_only_skip_ignore_or_escalate(self):
         self.assertEqual(policy.PRECEDENCE, ('skip', 'ignore', 'escalate'))

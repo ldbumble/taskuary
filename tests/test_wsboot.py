@@ -204,3 +204,6 @@ def test_the_weekly_refresh_rewrites_a_section_and_a_quiet_workstream_is_put_by(
     assert 'Q1 plan due 2027-01-31' in W.section(s, 'northwind-finance-systems') and W.get(s, 'ledger-app')['status'] == 'quiet'
     assert sorted(w['slug'] for w in W.streams(s)) == ['ledger-app', 'northwind-finance-systems']     # quiet stays listed, its index says so
     assert '(quiet)' in s.get_doc('job')
+    # ...and a second pass with nothing new from the owner there asks nothing (the owner, 2026-11-10: "the ai limits as much as possible to use ai")
+    asked = []
+    assert wsboot.refresh(s, lambda system, user, **k: asked.append(1) or '- again') == {} and asked == []

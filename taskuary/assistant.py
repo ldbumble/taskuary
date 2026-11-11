@@ -1662,6 +1662,9 @@ def raised_by(store, t: dict, messages=()) -> dict | None:
     return {'by': str((line or {}).get('FromName') or 'Advisor'), 'text': text} if text and (i or line) else None
 
 
+IDEA_TRIES, RETRY_IDEAS = 'idea_triage_tries', 3
+
+
 def retry_stuck_ideas(store, report_id=None, report_title: str = None) -> int:
     """L3 (the owner, 2026-09-25): an open idea whose triage FAILED, or that waited for a brain, is judged again on
     the next run of the report that said it - under that report's name, not every report's as "Advisor" (I8)."""
@@ -1671,7 +1674,11 @@ def retry_stuck_ideas(store, report_id=None, report_title: str = None) -> int:
         try: t = (json.loads(i.get('ActionJson') or '{}') or {}).get('triage') or {}
         except ValueError: continue
         if t.get('error') or t.get('pending'): stuck.append(i)
+    # ...each at most RETRY_IDEAS times: one whose triage fails for its own reasons was asked again on every run, for ever (2026-11-10)
+    tries = json.loads(store.get_setting(IDEA_TRIES) or '{}')
+    stuck = [i for i in stuck if tries.get(str(i['IdeaId']), 0) < RETRY_IDEAS]
     if not stuck: return 0
+    store.set_setting(IDEA_TRIES, json.dumps({**tries, **{str(i['IdeaId']): tries.get(str(i['IdeaId']), 0) + 1 for i in stuck}}), 'assistant')
     try:
         from .llm import build_llm
         brain = build_llm(store, job='triage')

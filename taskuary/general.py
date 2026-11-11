@@ -3327,7 +3327,7 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     # stands in the chat from the press with the turn under it; one sent while a turn works waits by the box until a road takes it (take_kept)
     if rest:
         from . import conversation
-        conversation.hear(store, tid, [line_id])
+        conversation.hear(store, tid, [line_id], standing=True)
     _IN_FLIGHT[tid] = _IN_FLIGHT.get(tid, 0) + 1
     OPENING.add(tid)
     if not wait:

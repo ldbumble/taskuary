@@ -54,18 +54,21 @@ def _since(store, tid: int) -> float:
     return max(ep((c or {}).get('a')), ep((s or {}).get('a')))
 
 
-def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '') -> int:
+def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing: bool = False) -> int:
     """THE ONE HAND-OVER. Called at the moment a road gives the agent its input: `lines` - the names (LineId) of his lines it takes now;
     `turn` - a turn begins, and with it the agent is told everything that came in or was pressed since its last one (general.turn_facts), so
-    those are heard here too, and the turn's own start is marked. Each input once, whoever calls and however often. -> how many were new."""
+    those are heard here too, and the turn's own start is marked. `standing`: a line that begins a turn at the press - what already stood in
+    the chat unheard is heard with it, before it, so nothing drawn moves under his line. Each input once, whoever calls and however often.
+    -> how many were new."""
     from . import general
     tid, now = int(tid), time.time()
-    refs = [('line', str(x)) for x in lines if x]
-    if turn:
+    refs = []
+    if turn or standing:
         since = _since(store, tid) - 1
         refs += [('mail', str(x['MessageId'])) for x in _mail(store, tid) if x['T'] >= since]
         refs += [('press', str(p[0])) for p in general.presses(store, tid) if ep(p[1]) >= since]
-        refs.append(('turn', str(time.time_ns())))
+    refs += [('line', str(x)) for x in lines if x]
+    if turn: refs.append(('turn', str(time.time_ns())))
     if not refs: return 0
     n = 0
     with store.lock:
@@ -180,7 +183,7 @@ def items(store, tid: int) -> dict:
     era = min((r['At'] for r in led.values()), default=INF)
     marks = [r for (k, _), r in led.items() if k == 'turn']
     pend, ev = [], []                              # ev: (when, rank - an input before the work it began, order, entry)
-    put = lambda t, rank, e: ev.append((t, rank, len(ev), e))
+    put = lambda t, rank, e, hid=0: ev.append((t, rank, hid, len(ev), e))        # ...and what one hand-over took, in the order it took it
 
     # the comments are one chain, in the order they were filed: his lines, Taskuary's briefs (never drawn - a turn begins there), the answers
     rows, clean = store.list_comments(tid, internal=True), {c['CommentId']: c for c in general.chat_rows(store, tid)}
@@ -200,17 +203,17 @@ def items(store, tid: int) -> dict:
             h = led.get(('line', c.get('LineId') or ''))
             if not h and ty == WAITING_TYPE: pend.append(it); continue
             if h: it['_h'] = h['At']
-            last = max(last + 1e-4, h['At'] if h else ep(c['CreatedAt'])); put(last, 0, it); lines.append((last, _flat(body['text']), len(ev) - 1)); texts.add(_flat(body['text']))
+            last = max(last + 1e-7, h['At'] if h else ep(c['CreatedAt'])); put(last, 0, it, h['HId'] if h else 0); lines.append((last, _flat(body['text']), len(ev) - 1)); texts.add(_flat(body['text']))
         elif ty == USER_TYPE:
-            last = max(last + 1e-4, ep(c['CreatedAt']))
+            last = max(last + 1e-7, ep(c['CreatedAt']))
             if str(c.get('Body') or '').startswith(FOLD_HEAD):
                 put(last, 0, {'id': f'n:c{cid}', 'kind': 'note', 'at': c['CreatedAt'], 'text': 'Folded in ' + c['Body'][len(FOLD_HEAD):].split('\n', 1)[0]})
         elif ty == ASSISTANT_TYPE:
             body = str((clean.get(cid) or c).get('Body') or '')
             if c.get('Actor') == sessionrecord.NOTE_ACTOR:
-                last = max(last + 1e-4, ep(c['CreatedAt'])); put(last, 0, {'id': f'n:c{cid}', 'kind': 'note', 'at': c['CreatedAt'], 'text': body}); continue
+                last = max(last + 1e-7, ep(c['CreatedAt'])); put(last, 0, {'id': f'n:c{cid}', 'kind': 'note', 'at': c['CreatedAt'], 'text': body}); continue
             began = max((m['At'] for m in marks if m['Seq'] < cid), default=0.)
-            last = max(last + 1e-4, began)
+            last = max(last + 1e-7, began)
             st = [s for s in steps_of.get(cid, []) if not (s.get('k') == 'said' and str(s.get('text') or '').strip() == body.strip())]
             t = {'kind': 'turn', 'at': stamp(began) or c['CreatedAt'], 'state': 'done', 'steps': st, 'text': body, 'cards': [], 'started': began or None,
                  'ended': ep(c['CreatedAt']), 'answer': f'comment-{cid}', **({'summary': summ[cid]} if cid in summ else {})}
@@ -224,9 +227,9 @@ def items(store, tid: int) -> dict:
     ses = general.session_for(tid)
     if ses is not None and getattr(ses, 'busy', False):
         answered = max(turn_of, default=0)
-        began = max((m['At'] for m in marks if m['Seq'] >= answered), default=0.) or max(last + 1e-4, getattr(ses, 'last', 0) or 0)
+        began = max((m['At'] for m in marks if m['Seq'] >= answered), default=0.) or max(last + 1e-7, getattr(ses, 'last', 0) or 0)
         trace = list(getattr(ses, 'trace', None) or [])
-        put(max(last + 1e-4, began), 1, {'kind': 'turn', 'at': stamp(began), 'state': 'working', 'steps': sessionrecord.trace_steps(trace), 'text': '', 'cards': [],
+        put(max(last + 1e-7, began), 1, {'kind': 'turn', 'at': stamp(began), 'state': 'working', 'steps': sessionrecord.trace_steps(trace), 'text': '', 'cards': [],
                                         'started': general.PRESSED.get(tid) or began, 'ended': None, 'sid': getattr(ses, 'sid', '')})
 
     # a coding session's record: its steps, cut into turns where it was given something. What it was given is never drawn from the record -
@@ -262,20 +265,20 @@ def items(store, tid: int) -> dict:
         row = general.mail_row(store, x)
         it = {'id': f"m:{x['MessageId']}", 'kind': 'arrival', **row, 'joined': stamp(x['T'])}
         if not h and at_work and x['T'] > began: pend.append(it)
-        else: put(h['At'] if h else x['T'], 0 if h else -1, it)
+        else: put(h['At'] if h else x['T'], 0 if h else -1, it, h['HId'] if h else 0)
     stop = f"You {general.PRESSES['stopped_turn']({})}."
     for m in general.press_lines(store, tid):
         aid, text = m['id'].split('-')[1], m['content'][0]['text']
         h, it = led.get(('press', aid)), {'id': f'p:{aid}', 'kind': 'press' if m.get('press') else 'note', 'at': m['createdAt'], 'text': text, **({'stop': True} if text == stop else {})}
         if not h and at_work and ep(m['createdAt']) > began and m.get('press') and text != stop: pend.append(it)
-        else: put(h['At'] if h else ep(m['createdAt']), 0 if h else -1, it)
+        else: put(h['At'] if h else ep(m['createdAt']), 0 if h else -1, it, h['HId'] if h else 0)
 
     # in order - and an input nobody heard never cuts a turn's work in two: it stands after the turn it came in under
     out, held, run = [], [], None
     def close():
         nonlocal run
         run = None; out.extend(held); held.clear()
-    for t, rank, _, e in sorted(ev, key=lambda x: x[:3]):
+    for t, rank, _, _, e in sorted(ev, key=lambda x: x[:4]):
         if e['kind'] == 'step':
             if run is None or run['sid'] != e['sid'] or run['seg'] != e['seg']:
                 close(); run = {'kind': 'turn', 'sid': e['sid'], 'seg': e['seg'], 'at': stamp(e['T']), 'state': 'done', 'steps': [], 'text': '', 'cards': [], 'started': e['T'], 'ended': e['T']}

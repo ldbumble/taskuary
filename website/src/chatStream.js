@@ -9,6 +9,7 @@ import { baseName, describeCall, isWork, stepsOf } from "./agentSteps.js";
 import { editHunks, stat } from "./diffView.js";
 import { liveTerminal } from "./taskLayout.js";
 import { filesOf, viewOf } from "./viewSpec.js";
+import { asUtc } from "./dates.js";
 
 // ── ACP's session/update -> the log's step shape ─────────────────────────────────────────────────
 // an ACP tool call names its KIND (read, edit, execute...), not a tool: the name a log would carry for it, so describeCall reads both alike
@@ -189,7 +190,7 @@ export const ownerIn = (text) => (/^FROM THE OWNER:[ \t]*([^\n]+(?:\n(?!\n)[^\n]
 // `cuts`: when each card of the task was raised (TaskPage turnCards). A CARD IS A ROW OF THE CHAT where its turn raised it (the owner, 2026-11-10:
 // "approve should be there then once that's done it shoudl continue after it not above it.. it's just a row in the chat"): a turn that goes on past
 // a card - an Approve lets an ACP turn carry on - is two rows, the card between them (agentSummary.turnOf puts it after the first)
-export function chatRows({ sessions = [], mails = [], live = null, permissions = [], cuts = [] } = {}) {
+export function chatRows({ sessions = [], mails = [], live = null, permissions = [], cuts = [], turnStarted = null } = {}) {
   const marks = [...new Set((cuts || []).map(at).filter(Boolean))].sort();
   // THE TURN THAT ENDED IS NOT WORKING (the owner's live coding task, 2026-11-06: the turn ended on "Should I go ahead?", the chip said "agent
   // waiting on you", and "Working on this…" still turned under the answer): a live session is one that is alive, not one at work - it works
@@ -225,7 +226,13 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
     close();
     // ...its newest turn is the one at work while its CLI runs
     const last = rows.at(-1);
-    if (now && last?.kind === "turn" && last.sid === ses.sid) last.running = true;
+    // ...unless it ended before the turn at work began - from the press (general.line_state `turnStarted`), else the live session's own start: a
+    // session woken for his line drew the turn before "running" again, over that line, while its adapter came up (the recorded coding walk, 2026-11-10)
+    const begun = turnStarted || live?.turnStarted;
+    // ...and none is while the live session has not yet been handed the prompt (`promptPending`): a conversation reopened replays its history
+    // as new rows, stamped as it loads (the recorded walk, 2026-11-10)
+    const before = !!live?.promptPending || (begun && last?.at && +asUtc(last.at) < begun * 1000 - 2000);
+    if (now && last?.kind === "turn" && last.sid === ses.sid && !before) last.running = true;
   });
   // ...each mail where it came in: over the first entry at or after it, a run of them one row (the general chat's Arrived)
   const out = [], pending = [...mails].sort((a, b) => at(a.joined || a.at).localeCompare(at(b.joined || b.at)));

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { describeCall, pageOf, present, stepLabel, stepsOf } from "../src/agentSteps.js";
-import { clockText, turnBegan, turnStamp } from "../src/agentWork.js";
+import { clockText, turnBegan, turnFrom, turnStamp } from "../src/agentWork.js";
 
 const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const doing = (name, args) => stepLabel({ ...describeCall(name, args), status: "running" });
@@ -82,4 +82,26 @@ test("the running turn's head carries the x that stops it, on the chat's own sto
   assert.match(clock, /stop = React\.useContext\(StopCtx\)/);
   assert.match(clock, /\{stop && <IconButton size="small" data-tq-stop-run="" aria-label="Stop the agent"[^>]*onClick=\{stop\}/);
   assert.match(ws, /<StopCtx\.Provider value=\{dock \? null : onStop\}>/);
+});
+
+// THE CLOCK COUNTS FROM THE PRESS AND NEVER RESTARTS (the owner, 2026-11-10; the recorded coding walk: "ran 9s" under his line while the adapter
+// started, then "ran 2s" once the turn's own row came - its clock from the turn's first step): a running turn counts from the earlier of its own
+// start and the line it answers - a mail that joined mid-turn is newer than the turn and never sets it back
+test("a running turn's clock is the earlier of its start and the line it answers", () => {
+  assert.equal(turnFrom(9000, 1000), 1000, "the adapter took 8 s: still from the press");
+  assert.equal(turnFrom(1000, 5000), 1000, "a mail joined at 5 s: still from the turn's start");
+  assert.equal(turnFrom(null, 1000), 1000); assert.equal(turnFrom("2026-11-10T10:00:00Z", null), Date.parse("2026-11-10T10:00:00Z"));
+  assert.equal(turnFrom(null, null), null);
+});
+
+test("the coding chat's running turn and every running head count by turnFrom, from the press", () => {
+  const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(gw, /since: turnFrom\(\+asUtc\(m\.createdAt\) \|\| null, pressed\) \|\| undefined/);
+  assert.match(gw, /const start = running \? turnFrom\(since, before\) : before/);
+});
+
+test("the pending turn's clock keeps the earliest start it was told while it stands", () => {
+  const gw = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(gw, /else first\.current = Math\.min\(first\.current \?\? Date\.now\(\), Number\.isFinite\(told\) \? told : Infinity\);/);
+  assert.match(gw, /<RunClock start=\{first\.current\} \/>/);
 });

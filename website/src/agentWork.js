@@ -94,6 +94,11 @@ export const clockText = (ms) => { const s = Math.max(0, Math.floor((ms || 0) / 
 // ...FROM WHEN IT BEGAN: the newest of everything above it, not the row just above (the owner, 2026-11-05): a mail read in while the turn before
 // ran is drawn between that answer and the re-think it woke, stamped when it came in - read as the start, the re-think "ran" from before the
 // answer above it had finished
+// ...A RUNNING TURN COUNTS FROM THE EARLIER OF ITS OWN START AND THE LINE IT ANSWERS (the owner, 2026-11-10: the clock runs from the press and never
+// restarts): a coding agent's first step comes seconds after the press its adapter took to start, and its head read "ran 2s" after "ran 9s"; a mail
+// that joined mid-turn is newer than the turn and never sets it back. ms, or null
+export const turnFrom = (since, line) => { const ms = [since, line].map((t) => (t == null ? NaN : +new Date(t))).filter(Number.isFinite);
+  return ms.length ? Math.min(...ms) : null; };
 export const turnBegan = (times) => (times || []).reduce((a, t) => { const ms = +new Date(t ?? NaN); return Number.isFinite(ms) && (a == null || ms > a) ? ms : a; }, null);
 export const turnStamp = ({ running, start, end, now }) => {
   const t0 = +new Date(start || NaN), t1 = +new Date((running ? now : end) || NaN), ms = t1 - t0;

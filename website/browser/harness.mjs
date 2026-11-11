@@ -314,7 +314,8 @@ export async function startHarness({ fresh = false, bin = "", tour = false } = {
       await waitHttp(`${fixtureApi}/api/health`, backend, { "X-Taskuary-Token": token });
     };
 
-    return { backendPort, frontendPort, fixtureApi, ui, home, token, backend, frontend, newPage, close, restart };
+    // `log()`: what the server running now has said - after a restart, the new one's
+    return { backendPort, frontendPort, fixtureApi, ui, home, token, backend, frontend, newPage, close, restart, log: () => backend.output() };
   } catch (error) {
     await browser?.close().catch(() => {});
     await stopProcess(frontend);

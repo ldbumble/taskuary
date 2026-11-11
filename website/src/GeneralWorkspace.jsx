@@ -40,7 +40,7 @@ import ViewSpec, { PlanRow } from "./ViewSpec.jsx";
 import { wantsAsk, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
-import { agentName, workOf, doingNow, turnStart, elapsedText, turnStamp, turnBegan } from "./agentWork.js";
+import { agentName, workOf, doingNow, turnStart, elapsedText, turnStamp, turnBegan, turnFrom } from "./agentWork.js";
 import { AGENT_TURN, MESSAGE, instructionsHint } from "./kinds.js";
 import { assignedAgent } from "./agentIdentity.js";
 import { LinkPopups, LocalFiles, Md } from "./md.jsx";
@@ -362,6 +362,26 @@ const TurnAsks = ({ cards, also = false, sx = null }) => !cards.length ? null : 
   </Box>);
 // what a turn's Next steps count against (agentSummary.nextSteps): the task's reviews and checklist. Null in the dock, which has no turns
 // of an agent's to sum up and draws its steps as ever
+// THE OWNER'S LINES NOT IN THE THREAD YET, read from the SAME snapshot of the thread the messages are drawn from (heldLines): read from a copy the
+// page kept of it, a line the agent took was let go a commit before the thread drew it, and in a coding chat it vanished for a frame (the
+// recorded walk, 2026-11-10)
+// ...and the turn they asked for knows from that same snapshot whether it stands under them at the foot or under the thread (PendingTurn `feed`)
+const useFoot = ({ waiting, held, messages }) => {
+  const thread = useAuiState((s) => s.thread.messages), mine = (thread || []).filter((m) => m.role === "user");
+  // ...the server's copy of a line stands in for the page's own wherever the page no longer draws its own: a coding line is known by its words and
+  // by counting, and another of his lines arriving first took it away while the server still said it waited (the recorded walk, 2026-11-10)
+  const shown = notShown(held, mine);
+  return [...waitingShown(waiting, shown, mine, messages).map((w) => ({ id: `waiting-${w.id}`, text: w.text, at: w.at })), ...shown];
+};
+const FootLines = ({ waiting, held, messages, hint }) => {
+  const lines = useFoot({ waiting, held, messages });
+  return lines.map((l) =>
+    <div key={l.id} className="tq-aui-message tq-aui-user" data-tq-held="">
+    {/* ...under the owner's own head, as every line of theirs is - "you" in grey read as somebody else's (the product audit, 2026-11-08) */}
+    <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{l.at ? ` · ${when(l.at)}` : ""}</div>
+    <div className="tq-aui-user-bubble" dir="auto">{l.text}</div>
+    {l.err ? <div className="tq-aui-hint" role="alert">{l.err}</div> : hint && <div className="tq-aui-hint" data-tq-waiting="">Waiting for the agent</div>}</div>);
+};
 const WorkCtx = React.createContext(null);
 // ...when the owner last pressed a line on this page (ms): a line held while a turn works is in no thread yet, and the draft it passes greys at once
 const PressedCtx = React.createContext(0);
@@ -476,13 +496,19 @@ const AtWork = ({ since, began, compacting = false, ...props }) => {
 // press; a turn the thread draws takes the same spot at the same render (both read the thread's state). Where the thread already draws the live
 // turn, only the line under it, as ever
 // ...`foot`: the turn answers a line held at the chat's foot (an answer sent on the server's road), so its row stands under that line
-const PendingTurn = ({ busy, sent, at, foot = false, atFoot = false, children }) => {
-  const thread = useAuiState((s) => s.thread.messages), [shown] = useState(() => Date.now()), name = React.useContext(AgentNameCtx);
+const PendingTurn = ({ busy, sent, at, foot = false, feed, children }) => {
+  const atFoot = useFoot(feed).length > 0;
+  const thread = useAuiState((s) => s.thread.messages), name = React.useContext(AgentNameCtx);
   const due = pendingTurn(thread, { busy, sent });
+  // ...its clock from the EARLIEST start it has been told while it stands, never a later one (the owner, 2026-11-10: from the press, never
+  // restarting): a coding turn's server start moved from the press to the adapter's turn as it came up, and "ran 9s" read "ran 2s"
+  const first = React.useRef(null), told = +new Date(sent?.at || at || NaN);
+  if (!due) first.current = null;
+  else first.current = Math.min(first.current ?? Date.now(), Number.isFinite(told) ? told : Infinity);
   if (!due) return busy && !foot ? children : null;
   if (foot !== atFoot) return null;
   return <div className="tq-aui-message tq-aui-agent" data-tq-pending-turn="">
-    <div className="tq-aui-role">{name}<RunClock start={+new Date(sent?.at || at || shown)} /></div>
+    <div className="tq-aui-role">{name}<RunClock start={first.current} /></div>
     <div className="tq-aui-agent-body">{children}</div></div>;
 };
 // WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
@@ -495,7 +521,7 @@ const RanFor = () => {
   // ...and the live message is drawn anew at every step, so its own time is the latest step's: the turn began at the server's `since`, else
   // at the line it answers
   const running = useAuiState((s) => live(s.message)), since = useAuiState((s) => s.message.metadata?.custom?.since);
-  const start = running ? since || before : before, t = running && start ? new Date(start) : at ? new Date(at) : null;
+  const start = running ? turnFrom(since, before) : before, t = running && start ? new Date(start) : at ? new Date(at) : null;
   if (!t || Number.isNaN(+t)) return null;
   if (running) return <RunClock start={+t} />;
   const ran = running ? "" : turnStamp({ start: before, end: t });
@@ -964,7 +990,6 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     seeded.current = seed.id;
     if (seed.text && !c.getState().text) c.setText(seed.text);
   }, [seed, runtime]);
-  useEffect(() => { setHeld((h) => (h.length ? stillHeld(h, messages) : h)); }, [messages]);
   // the owner's lines the thread on screen draws - its own appends too, which the server's copy has not caught up with (heldLines.notShown)
   const [mineDrawn, setMineDrawn] = useState([]);
   useEffect(() => {
@@ -972,6 +997,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
       setMineDrawn((was) => (was.length === ms.length && was.every((m, i) => m === ms[i]) ? was : ms)); };
     read(); return runtime.thread.subscribe(read);
   }, [runtime]);
+  // ...and a held line is let go once THAT thread draws it - by the payload alone it went a render before the thread drew it, and in a coding chat
+  // his line vanished for a frame the moment the agent took it (the recorded walk, 2026-11-10)
+  useEffect(() => { setHeld((h) => (h.length ? stillHeld(h, mineDrawn, "drawn") : h)); }, [mineDrawn]);
   // WHAT IS TYPED AND NOT SENT is this task's, and outlives a reload and this pane drawn afresh (unsent.js): put back into an empty box, kept
   // as it is typed, gone once the box is empty - sent, held or wiped
   useEffect(() => {
@@ -1017,9 +1045,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const sentWork = sent && !dock ? <AtWork name={name} provider={provider} work={work} since={sent.at} began={serverBusy ? began : null} compacting={compacting}
     starting={serverBusy ? starting : starting || startingLine(name, provider)} /> : atWork;
   const pressedAt = Math.max(sent?.at || 0, ...held.map((l) => +String(l.id).split("-")[1] || 0));
-  const footLines = [...waitingShown(waiting, held, mineDrawn, messages).map((w) => ({ id: `waiting-${w.id}`, text: w.text, at: w.at })), ...notShown(held, mineDrawn)];
-  // ...the turn a line asked for stands UNDER that line, wherever the line is drawn - never over it (the owner, 2026-11-10)
-  const atFoot = footLines.length > 0;
+  // ...the turn a line asked for stands UNDER that line, wherever the line is drawn - never over it (the owner, 2026-11-10): both read the one
+  // snapshot of the thread (useFoot)
+  const feed = { waiting, held, messages };
   return (
     <AssistantRuntimeProvider runtime={runtime}><LandingCtx.Provider value={landAt && !dock ? { after: landAt, node: landNode } : null}><TurnCardsCtx.Provider value={dock ? [] : placed}><StopCtx.Provider value={dock ? null : onStop}><PressedCtx.Provider value={pressedAt}>
       <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>
@@ -1047,7 +1075,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               reopened - and the poll is what tells us so */}
           {/* ...drawn as the agent's turn, its head and its line, until the thread draws that turn itself (PendingTurn) */}
           <ThreadPrimitive.If running={false}>{dock ? serverBusy && atWork
-            : <PendingTurn busy={serverBusy} sent={sent} at={began || since} atFoot={atFoot}>{sentWork}</PendingTurn>}</ThreadPrimitive.If>
+            : <PendingTurn busy={serverBusy} sent={sent} at={began || since} feed={feed}>{sentWork}</PendingTurn>}</ThreadPrimitive.If>
           {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
           {!dock && cards}
           {/* Only once it has stopped typing. An offer to "run this again, daily" hanging under a
@@ -1088,14 +1116,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               clock, an empty head with the owner's words below it (the scenario run, 2026-11-06) */}
           {/* ...the SERVER'S copy first (`waiting`, kept the moment each was sent - on every screen, through a reload or a restart), each at the
               time it was typed, then this screen's own not yet kept; all of them waiting for the agent until a turn takes them (2026-11-07) */}
-          {footLines.map((l) =>
-            <div key={l.id} className="tq-aui-message tq-aui-user" data-tq-held="">
-            {/* ...under the owner's own head, as every line of theirs is - "you" in grey read as somebody else's (the product audit, 2026-11-08) */}
-            <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{l.at ? ` · ${when(l.at)}` : ""}</div>
-            <div className="tq-aui-user-bubble" dir="auto">{l.text}</div>
-            {l.err ? <div className="tq-aui-hint" role="alert">{l.err}</div> : !(sent || serverBusy) && <div className="tq-aui-hint" data-tq-waiting="">Waiting for the agent</div>}</div>)}
+          <FootLines waiting={waiting} held={held} messages={messages} hint={!(sent || serverBusy)} />
           {/* ...and the turn its answer asked for, under it (PendingTurn `foot`) */}
-          {atFoot && <ThreadPrimitive.If running={false}><PendingTurn busy={serverBusy} sent={sent} foot atFoot>{sentWork}</PendingTurn></ThreadPrimitive.If>}
+          <ThreadPrimitive.If running={false}><PendingTurn busy={serverBusy} sent={sent} foot feed={feed}>{sentWork}</PendingTurn></ThreadPrimitive.If>
           {/* ...a chat no turn has summed up yet: its cards (TaskPage's chatCards), under the thread */}
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
           {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}
@@ -1412,8 +1435,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...the question the answer box below shows is said there only (askOnce.js)
   const shownMessages = (() => { const general = withoutAsked(messagesWithTrace(data?.messages, session, dock),
     !dock && data?.asking && data.asking.request_id !== answered ? data.asking : null);
-    // ...a coding turn at work is stamped from its own first step (`since`), never from the mail above it
-    const turns = rowMessages(cc.rows).map((m) => (String(m.id).startsWith("live-") && m.createdAt ? { ...m, since: +asUtc(m.createdAt) || undefined } : m));
+    // ...a coding turn at work is stamped from its own first step (`since`), never from the mail above it - or from the press that began it, the
+    // earlier (general.line_state `turnStarted`): its first step comes once the adapter is up, and the head read "ran 2s" after "ran 9s"
+    const pressed = cc.got?.turnStarted ? cc.got.turnStarted * 1000 : null;
+    const turns = rowMessages(cc.rows).map((m) => (String(m.id).startsWith("live-") && m.createdAt ? { ...m, since: turnFrom(+asUtc(m.createdAt) || null, pressed) || undefined } : m));
     return coding ? byTime([...general, ...turns]) : general; })();
   // ...and what typing does there: into the running CLI as its next line, or the session picked back up with these words leading - the files
   // named to the CLI by their paths after the words (promptImages.withImages), as every coding CLI reads a file

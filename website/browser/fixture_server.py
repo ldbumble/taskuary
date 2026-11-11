@@ -84,7 +84,8 @@ def _install_fresh_routes(app, store):
         git("init", "-q"); git("config", "user.name", "Alex Doyle"); git("config", "user.email", "alex@northwind.example"); git("add", "."); git("commit", "-qm", "start")
         store.set_setting(agents.DEV_MODE, "1", "owner")
         fake = str(Path(__file__).resolve().parents[2] / "tests" / "fake_acp_server.py")
-        store.upsert_agent("coding", "coding", "cli", json.dumps({"cmd": "claude", "acp_cmd": [sys.executable, fake], "cwd": str(repo)}))
+        # ...under the CLI's own name too: a conversation reopened after a restart starts its session by the name it kept (waitroom.reopen_coding)
+        for name in ("coding", "claude"): store.upsert_agent(name, "coding", "cli", json.dumps({"cmd": "claude", "acp_cmd": [sys.executable, fake], "cwd": str(repo)}))
         tid = store.create_task({"Title": body.get("title") or "Comment the ledger totals", "Kind": "coding", "Status": "in_progress"}, "owner")
         return {"taskId": tid, "repo": str(repo)}
 

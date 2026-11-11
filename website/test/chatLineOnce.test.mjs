@@ -36,7 +36,7 @@ test("Taskuary's own brief is not the owner's line: a held line waits for theirs
 
 test("the chat draws its held lines through notShown, and a failed answer takes its held copy back", () => {
   const gw = read("GeneralWorkspace.jsx");
-  assert.match(gw, /\.\.\.notShown\(held, mineDrawn\)\];[\s\S]*\{footLines\.map\(\(l\) =>/);
+  assert.match(gw, /const shown = notShown\(held, mine\);\s*return \[\.\.\.waitingShown\(waiting, shown, mine, messages\)[^\n]*\.\.\.shown\];[\s\S]*<FootLines waiting=\{waiting\} held=\{held\} messages=\{messages\}/);
   assert.doesNotMatch(gw, /\{held\.map\(\(l\) => <div key=\{l\.id\}/);
   assert.match(gw, /\.catch\(\(x\) => \{ setHeld\(\(h\) => h\.filter\(\(l\) => l\.id !== id\)\); setSent\(null\); c\.setText\(w\)/);
   // ...and a coding source's lines are held the same way, on the same road - one post for every agent (general.take_line, 2026-11-10)

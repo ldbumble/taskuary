@@ -102,7 +102,16 @@ test("a press drawn as the owner's line never counts as the held line arriving",
 test("a held line wears the owner's own head and stands last, under the turn's files and cards", async () => {
   const { readFileSync } = await import("node:fs");
   const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  const held = ws.indexOf('data-tq-held=""'), shut = ws.lastIndexOf("</ThreadPrimitive.If>", held);
+  const held = ws.indexOf("<FootLines "), shut = ws.lastIndexOf("</ThreadPrimitive.If>", held);
   assert.ok(held > ws.indexOf("<PublishedPages pages={published} deliver />") && shut > 0, "after the turn's own cards");
-  assert.match(ws.slice(held, held + 600), /<div className="tq-aui-user-head"><PersonOutlineIcon[^>]*\/>You\{l\.at \? ` · \$\{when\(l\.at\)\}` : ""\}<\/div>/);
+  assert.match(ws.slice(ws.indexOf('data-tq-held=""'), ws.indexOf('data-tq-held=""') + 600), /<div className="tq-aui-user-head"><PersonOutlineIcon[^>]*\/>You\{l\.at \? ` · \$\{when\(l\.at\)\}` : ""\}<\/div>/);
+});
+
+// THE LINE IS LET GO ONLY ONCE THE THREAD ON SCREEN DRAWS IT (the recorded walk, 2026-11-10: in a coding chat his line vanished for a frame the
+// moment the agent took it - the held copy was let go when the server's payload had the line, a render before the thread drew it)
+test("a held line is let go by the thread on screen, never by the payload alone", async () => {
+  const { readFileSync } = await import("node:fs");
+  const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(ws, /useEffect\(\(\) => \{ setHeld\(\(h\) => \(h\.length \? stillHeld\(h, mineDrawn, "drawn"\) : h\)\); \}, \[mineDrawn\]\);/);
+  assert.doesNotMatch(ws, /stillHeld\(h, messages\)/);
 });

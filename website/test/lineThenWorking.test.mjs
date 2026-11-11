@@ -18,7 +18,7 @@ test("every typed line keeps its press, so the turn is drawn from the press on e
 });
 
 test("the turn a line asked for stands under the lines at the foot, never over them", () => {
-  assert.match(src, /const atFoot = footLines\.length > 0;/);
+  assert.match(src, /const atFoot = useFoot\(feed\)\.length > 0;/);   // ...from the one snapshot of the thread its lines are drawn from
   const thread = [{ role: "user", id: "u1" }, { role: "assistant", id: "a1" }];
   const sent = sentNow(thread, 1);
   assert.equal(pendingTurn(thread, { sent }), true, "drawn from the press, before the server says a word");

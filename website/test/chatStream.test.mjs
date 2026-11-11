@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { chatRows, ownerIn, stepsFromAcp } from "../src/chatStream.js";
+import { asUtc } from "../src/dates.js";
 import { editHunks, headerOf, hunksOf, hunkText, langOf, numbered, parseUnified, tokens } from "../src/diffView.js";
 
 const before = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
@@ -265,4 +266,17 @@ test("a user-role update the server marks as the agent's is drawn as the agent's
     { sessionUpdate: "user_message_chunk", content: { type: "text", text: "Compacted: 3 files read" }, _meta: { taskuary: "agent" } },
   ]);
   assert.deepEqual(steps.map((s) => [s.k, s.text]), [["you", "merge it in"], ["said", "Compacted: 3 files read"]]);
+});
+
+test("a turn that ended before the live session's turn began is not the one at work", () => {
+  // the recorded coding walk, 2026-11-10: a line typed to a session that had idled out - while its adapter came back up the turn before stood
+  // "running" again, its x and "ran 4s" OVER his new line, and nothing under it. The turn at work is the one the live session began
+  const steps = LOG.slice(0, 7), live = (at) => ({ working: true, ...(at ? { turnStarted: +asUtc(at) / 1000 } : {}) });
+  assert.equal(chatRows({ sessions: [ses({ live: true, steps })], live: live("2026-11-06 09:30:00") }).at(-1).running, false);
+  assert.equal(chatRows({ sessions: [ses({ live: true, steps })], live: live("2026-11-06 09:00:00") }).at(-1).running, true);
+  assert.equal(chatRows({ sessions: [ses({ live: true, steps })], live: live() }).at(-1).running, true, "no start said: as before");
+  // ...a session reopened for his line replays its history as new rows before it is handed his prompt: none of them is at work
+  assert.equal(chatRows({ sessions: [ses({ live: true, steps })], live: { working: true, promptPending: true } }).at(-1).running, false);
+  // ...the press is the turn's start where the payload says it (line_state `turnStarted`), the woken session's own not up yet
+  assert.equal(chatRows({ sessions: [ses({ live: true, steps })], live: live("2026-11-06 09:00:00"), turnStarted: +asUtc("2026-11-06 09:30:00") / 1000 }).at(-1).running, false);
 });

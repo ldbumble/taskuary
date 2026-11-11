@@ -173,7 +173,7 @@ def full_on_stranger(store, tid: int, t) -> bool:
 
 
 _DELIVERING, _DLOCK = {}, threading.Lock()
-HELD = {'full', 'closed', 'no_provider', 'held_stranger', 'not_a_choice', 'held_teammate'}      # nothing will take the notes now (_deliver)
+HELD = {'full', 'closed', 'no_provider', 'held_stranger', 'held_ask', 'held_teammate'}      # nothing will take the notes now (_deliver)
 
 
 def deliver(store, tid: int, new: int = None) -> dict:
@@ -261,10 +261,9 @@ def _deliver(store, tid: int, new: int = None) -> dict:
         text = (extra or own) if len(notes) == 1 else batch(notes, remaining=left)
         who = notes[0].get('CreatedBy') or 'owner'
         out = ws.answer_open(store, tid, text, who, owner=own if extra else None)
-        # ...words that name none of a chooser's options are not typed into it: Enter would submit whatever is
-        # highlighted (B12). The note keeps its place and the owner is told why; it waits for the chooser to go.
-        if out.get('state') == 'not_a_choice':
-            return {'delivered': 0, 'state': 'not_a_choice', 'why': out.get('why') or '', 'left': len(pending)}
+        # ...words that name none of a held request's buttons are no answer to it (workerstate.LINE): the line keeps its place, waiting for
+        # the agent as any line does, and goes in once the buttons were pressed - nothing is refused and nothing is said
+        if out.get('state') == 'line': return {'delivered': 0, 'state': 'held_ask', 'left': len(pending)}
         if not out.get('delivered'):
             term.type_into(t, text, **ws._as(who))
             store.add_comment(tid, who, 'human', f'Answered the agent: {text[:500]}')

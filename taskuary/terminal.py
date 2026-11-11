@@ -2683,6 +2683,9 @@ def screen_question(t, n: int = 40) -> dict | None:
     already the reason we know it is waiting (`screen_asking`), so an ordinary numbered list in an
     agent's prose can never be mistaken for a question.
     """
+    # ...and only a terminal has one: over ACP the "screen" is the agent's own words (screen_lines), and a numbered list in a question it
+    # asked a turn ago was read as the chooser an approval stood on (the owner's live task, 2026-11-11)
+    if is_acp(get(t) if isinstance(t, str) else t): return None
     snap = screen(getattr(t, 'sid', t), n)
     if not snap: return None
     lines = [l.rstrip() for l in snap['lines'] if l.strip() and not _TUI_FURNITURE.search(l) and not _CHROME.search(l)]

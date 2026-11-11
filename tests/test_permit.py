@@ -27,10 +27,17 @@ def test_the_group_answer_road_releases_it_too():
     ws.answer_group(s, t, {r['request_id']: 'Allow'}, 'owner'); th.join(5)
     assert not th.is_alive() and _beh(out[0])['behavior'] == 'allow'
 
-def test_anything_but_allow_is_a_refusal_in_plain_words():
-    for said in ('Deny', 'Allow nothing'):
-        s = MemoryStore(); t, th, out = _held(s); ws.answer(s, t, _req(s, t)['request_id'], said, 'owner'); th.join(5)
-        assert not th.is_alive() and _beh(out[0]) == {'behavior': 'deny', 'message': 'the owner did not allow it'}, said
+def test_deny_is_a_refusal_in_plain_words():
+    s = MemoryStore(); t, th, out = _held(s); ws.answer(s, t, _req(s, t)['request_id'], 'Deny', 'owner'); th.join(5)
+    assert not th.is_alive() and _beh(out[0]) == {'behavior': 'deny', 'message': 'the owner did not allow it'}
+
+def test_words_that_name_neither_button_are_no_answer_and_the_request_stays_lit():
+    "They were read as a refusal (2026-11-11): 'Allow nothing' typed under Allow / Deny is his next line to the agent, never a press."
+    s = MemoryStore(); t, th, out = _held(s)
+    assert ws.answer(s, t, _req(s, t)['request_id'], 'Allow nothing', 'owner')['state'] == 'line'
+    th.join(.3)
+    assert th.is_alive() and not out and _req(s, t)['choices'] == ['Allow', 'Deny']
+    ws.release(t); th.join(5)
 
 def test_a_session_that_ends_while_held_is_refused():
     s = MemoryStore(); t, th, out = _held(s); ws.release(t); th.join(5)

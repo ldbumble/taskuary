@@ -11,7 +11,7 @@ await mkdir(out, { recursive: true });
 const where = (n) => execFileSync("where", [n], { encoding: "utf8" }).trim().split(/\r?\n/).map((s) => s.trim());
 const claude = where("claude").find((p) => /\.cmd$/i.test(p)), exe = path.join(path.dirname(claude), "node_modules", "@anthropic-ai", "claude-code", "bin");
 const git = where("git")[0];
-process.env.TASKUARY_BROWSER_REAL_CLI = [exe, path.dirname(where("node")[0]), path.dirname(git)].join(path.delimiter);
+process.env.TASKUARY_BROWSER_REAL_CLI = [exe, path.dirname(where("npx")[0])          /* the folder npx is in: an ACP adapter is launched through it */, path.dirname(git)].join(path.delimiter);
 const h = await startHarness({ fresh: true });
 const api = (p, body) => fetch(`${h.fixtureApi}${p}`, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: body && JSON.stringify(body) }).then((r) => r.json());
 console.log("ai", JSON.stringify(await api("/api/setup/first-run/ai", { name: "claude" })).slice(0, 300));

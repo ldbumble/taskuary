@@ -474,6 +474,10 @@ def answer_group(store, tid: int, answers: dict, actor: str = 'owner') -> dict:
     return {'delivered': True, 'state': 'delivered', 'sid': sess.sid}
 
 
+LINE = {'delivered': False, 'state': 'line', 'why': 'those words are your next line to the agent, not an answer to its buttons'}
+PUT_DOWN = .6            # a TUI's chooser closing on Esc, before a line is typed into the box under it
+
+
 _NUMBERED = re.compile(r'(?:^|[\n,;])\s*(\d{1,2})\s*[:.)\-]?\s+([^\n,;]+)')
 
 
@@ -505,7 +509,12 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', ow
     if not asked or request_id in answered: return {'delivered': False, 'state': 'resolved', 'why': 'that request is no longer outstanding'}
     req = asked
     h = HELD.get(group_of(request_id) or '')
-    if h and h['tid'] == tid: return _answer_held(store, tid, h, {request_id: text}, actor)
+    # WORDS THAT NAME NONE OF A HELD REQUEST'S BUTTONS ARE NO ANSWER TO IT (the owner, 2026-11-11): typed under an Allow / Deny they were
+    # handed to the hold, which read anything but Allow as a refusal. They are his next line to the agent (LINE: the caller's line road
+    # takes them) and the request stays lit with its buttons
+    if h and h['tid'] == tid:
+        if req['kind'] == 'approval_needed' and req.get('choices') and not pick_of(req['choices'], text): return dict(LINE)
+        return _answer_held(store, tid, h, {request_id: text}, actor)
     sess = _live(tid)
     # THE VIEW'S DONE closes the hand-over and Taskuary tells the agent - the one that asked, or none running (it is started on it). A
     # different run on the task is never handed it: stale, below
@@ -536,16 +545,17 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', ow
     words = req['kind'] == 'input_needed' and req.get('source') != 'screen' and (not req.get('choices') or _cli(sess) == 'codex')
     # ...and so is a HOOK's chooser once its hold ran out and Claude drew the form (B12, the owner, 2026-10-11): its label
     # typed + Enter submitted whichever option was highlighted, and the log said "delivered". An approval reports no
-    # options, so they are read off the pane; where none can be read the words go as they always did.
-    opts = None if hasattr(sess, 'send_prompt') or words else (req.get('choices') or (_on_screen(sess) if req['kind'] == 'approval_needed' else None))
-    if opts:
-        pick = pick_of(opts, text)
-        if not pick:
-            return {'delivered': False, 'state': 'not_a_choice', 'choices': opts,
-                    'why': f'{who} is waiting on a pick - say one of: ' + '; '.join(f'{i}. {c}' for i, c in enumerate(opts, 1))
-                           + ' - or answer it in the terminal'}
-        send = str(pick)
+    # options, so they are read off the pane; where none can be read the words go as they always did. Only a terminal stands on a
+    # chooser: a chat and a session over ACP take words as their next prompt, whatever was asked
+    opts = None if hasattr(sess, 'send_prompt') or term.is_acp(sess) or words else (
+        req.get('choices') or (_on_screen(sess) if req['kind'] == 'approval_needed' else None))
+    # WORDS THAT NAME NONE OF ITS OPTIONS ARE HIS NEXT LINE (the owner, 2026-11-11: "just ask"): they were refused with "not_a_choice: coding is
+    # waiting on a pick - say one of ...", kept, and every line after them piled up behind a chooser nothing would ever answer. The chooser
+    # is put down with its own Esc - never Enter, which submits whatever is highlighted (B12) - and the words are typed as any line is
+    pick = pick_of(opts, text) if opts else None
+    if pick: send = str(pick)
     try:
+        if opts and not pick: sess.write(''); time.sleep(PUT_DOWN)
         # ...a chat is handed the owner's own words, with what the Assistant added to them folded as Taskuary's (general.say_relayed)
         if hasattr(sess, 'send_prompt'):
             from . import general

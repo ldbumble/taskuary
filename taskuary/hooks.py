@@ -362,6 +362,12 @@ def _questions(p: dict) -> list:
     return out
 
 
+def _asked_in_code(t) -> bool:
+    "A session whose permission asks are answered by Taskuary's gate, never by the owner at a prompt: one run over ACP (acpgate)."
+    from . import terminal as term
+    return term.is_acp(t)
+
+
 def _events(t, p: dict) -> None:
     """The hook as a worker event (workerstate.py). A prompt submitted is Working; a question is Input
     needed with its text; a permission is Approval needed with the action; a turn that died on a wall
@@ -429,13 +435,19 @@ def _events(t, p: dict) -> None:
                 for i, (text, choices) in enumerate(_questions(p), 1):
                     ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i), text=text, choices=choices, source='hook')
             elif getattr(t, 'mode', 'full') == 'auto': pass     # a stranger's session: the permit door (permit) owns this card
+            # OVER ACP NOTHING WAITS ON THE OWNER HERE (the owner, 2026-11-11: "Stop making popups for approvals"): the adapter asks for
+            # every tool and Taskuary's own gate answers in code at once (acpgate.answerer) - what it holds is the one card with its
+            # buttons. Claude fires this hook for each of those asks all the same, so a five-minute test run stood in the chat as "the
+            # agent needs your approval" over a tool at work, with nothing to press. Only a terminal's own prompt is a stop
+            elif _asked_in_code(t): pass
             else:
                 # the decision point itself, with the tool and what it wants to do - not a sentence about it
                 text = _describe(str(p.get('tool_name') or 'a tool'), p.get('tool_input'))
                 ws.record(st, tid, sid, 'approval_needed', request_id=ws.request_id_for(text), text=text, source='hook')
         elif ev == 'Notification':
             kind, msg = str(p.get('notification_type') or '').lower(), str(p.get('message') or '').strip()
-            if kind == 'permission_prompt' or (not kind and 'permission' in msg.lower()):
+            if _asked_in_code(t): pass
+            elif kind == 'permission_prompt' or (not kind and 'permission' in msg.lower()):
                 # the generic sentence that FOLLOWS PermissionRequest's specific one, six seconds later: the
                 # same stop recorded twice, and the newest won the card - "Claude needs your permission" over
                 # "Edit taskuary/server.py" (measured 2026-09-20). It stands alone only when nothing else does.

@@ -2032,6 +2032,11 @@ def worker_answer(task_id: int, body: WorkerAnswerBody):
     from . import workerstate as ws
     try: out = ws.answer(store, task_id, body.request_id, body.text, ACTOR, press=body.press)
     except ValueError as e: raise HTTPException(422, str(e))
+    # ...words that are no answer to its buttons are his next line, on the one road a line takes (general.take_line)
+    if out['state'] == 'line':
+        from . import general
+        general.take_line(store, task_id, body.text, None, ACTOR, wait=False)
+        return {'delivered': True, 'state': 'line'}
     if not out['delivered']:
         raise HTTPException(409 if out['state'] in ('resolved', 'stale') else 422, f"{out['state']}: {out.get('why') or ''}")
     return out

@@ -83,6 +83,7 @@ def _install_fresh_routes(app, store):
         git = lambda *a: subprocess.run([body.get("git") or "git", "-C", str(repo), *a], check=True, capture_output=True)
         git("init", "-q"); git("config", "user.name", "Alex Doyle"); git("config", "user.email", "alex@northwind.example"); git("add", "."); git("commit", "-qm", "start")
         store.set_setting(agents.DEV_MODE, "1", "owner")
+        if "pty" in body: store.set_setting(agents.ACP_SETTING, "0" if body["pty"] else "1", "owner")      # ...in its terminal, not over ACP
         fake = str(Path(__file__).resolve().parents[2] / "tests" / "fake_acp_server.py")
         # ...under the CLI's own name too: a conversation reopened after a restart starts its session by the name it kept (waitroom.reopen_coding)
         # ...`real`: the CLI on PATH through its own adapter, not the stand-in (a recorded walk with TASKUARY_BROWSER_REAL_CLI)

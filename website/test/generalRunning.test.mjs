@@ -91,6 +91,20 @@ test("the question card has no box of its own - the composer answers an open que
   assert.doesNotMatch(read("generalWorkspace.css"), /tq-aui-asking-box/);
 });
 
+// NOTHING THE AGENT ASKS IS A BOX (the owner, 2026-11-11: "Stop making popups for approvals. just ask. there is no buttons anyway"): a
+// request for leave drew a boxed "Agent needs your approval" over a command, with nothing to press, and words typed under it came back as
+// "not_a_choice: coding is waiting on a pick". It is a line of the chat with its buttons where it has any, and words that are no answer to
+// its buttons are his next line - the request stays lit
+test("a request for leave is a line of the chat, and words under its buttons are his next line", () => {
+  const view = read("GeneralWorkspace.jsx");
+  const card = view.slice(view.indexOf("export function AgentAsks"), view.indexOf("function AssistantThread("));
+  assert.doesNotMatch(card, /"tq-aui-asking"|<b>\{says\(/, "no boxed lead for an approval or a stuck turn");
+  assert.match(card, /<div className="tq-aui-asked" data-tq-asking=\{asking\.request_id\}>/);
+  assert.doesNotMatch(read("generalWorkspace.css"), /\.tq-aui-asking \{/);
+  assert.match(view, /if \(got\?\.state !== "line"\) setAnswered\(req\.request_id\);/, "words that named no button leave the request lit");
+  assert.doesNotMatch(read("ui.jsx"), /not_a_choice/, "no state code is ever read out to him");
+});
+
 // A SIGN-IN THE AGENT WAITS ON (signin.py) offers the one-time fill page beside its answers: minted by the owner's press, opened in a
 // tab - or, in the desktop app with no browser of its own, by the server - and never for any other question
 test("a sign-in ask offers the fill page, and no other ask does", () => {

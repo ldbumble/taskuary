@@ -7,7 +7,12 @@ screen says: the words go straight to the hook.
 B12: after the hold times out Claude draws its own form, and the request keeps source='hook'. One answer was typed as
 WORDS + Enter, so Enter submitted whichever option was highlighted (option 1) while the log said "delivered"; a
 permission prompt answered "no, don't delete that" got Enter on its default Yes. A pick is the option's NUMBER; words
-that name no option are refused out loud, never typed into a chooser, never claimed delivered.
+that name no option are never typed into a chooser.
+
+2026-11-11: ...and never refused either. They were kept with "not_a_choice: coding is waiting on a pick - say one of: ..." and every line
+after them piled up behind the chooser. They are the owner's next line: a terminal's chooser is put down with its own Esc and the words
+typed as any line; under a held request's buttons they wait as a line does and the request stays lit; over ACP there is no screen to
+read a chooser off at all - the agent's own numbered list a turn back was read as one.
 """
 import threading, time, unittest
 from types import SimpleNamespace
@@ -90,22 +95,21 @@ class APickIsItsNumber(Base):
         self.assertTrue(out['delivered']); self.assertEqual(typed, ['2'])
         self.assertTrue(any('release/2026-10' in c['Body'] for c in self.s.list_comments(self.tid)), 'the comment keeps what was chosen')
 
-    def test_words_that_name_no_option_are_refused_not_typed_and_not_delivered(self):
+    def test_words_that_name_no_option_put_the_chooser_down_and_go_in_as_his_line(self):
         self.asked(); typed = []
-        with mock.patch.object(term, 'type_into', side_effect=lambda t, x: typed.append(x)):
+        with mock.patch.object(term, 'type_into', side_effect=lambda t, x: typed.append(x)), mock.patch.object(ws, 'PUT_DOWN', 0):
             out = ws.answer(self.s, self.tid, 'q1', 'use whatever the last release used')
-        self.assertEqual((out['delivered'], out['state'], typed), (False, 'not_a_choice', []))
-        self.assertIn('release/2026-10', out['why'])
-        self.assertEqual([r['request_id'] for r in ws.status(self.s, self.tid)['requests']], ['q1'], 'still open')
-        self.assertFalse(any('delivered' in c['Body'] for c in self.s.list_comments(self.tid)))
+        self.assertEqual((out['delivered'], out['state']), (True, 'delivered'), 'never refused with a state code')
+        self.assertEqual((self.t.written, typed), (['\x1b'], ['use whatever the last release used']), 'Esc on the chooser - never Enter - then his words')
+        self.assertEqual(ws.status(self.s, self.tid)['requests'], [], 'a question he answered in words is closed by that answer')
 
-    def test_the_waiting_room_does_not_type_a_refused_answer_into_the_form(self):
+    def test_the_waiting_room_hands_such_words_over_too(self):
         self.asked(); self.t.waiting = lambda: True; typed = []
-        with mock.patch.object(term, 'type_into', side_effect=lambda t, x: typed.append(x)):
+        with mock.patch.object(term, 'type_into', side_effect=lambda t, x: typed.append(x)), mock.patch.object(ws, 'PUT_DOWN', 0):
             out = waitroom.add(self.s, self.tid, 'use whatever the last release used')
-        self.assertEqual((out['delivered'], typed), (0, []))
-        self.assertEqual(out['state'], 'not_a_choice'); self.assertTrue(out.get('why'))
-        self.assertEqual(len(self.s.waiting_notes(self.tid)), 1, 'kept, not lost')
+        self.assertEqual((out['delivered'], out['state'], typed), (1, 'answered', ['use whatever the last release used']))
+        self.assertEqual(self.t.written, ['\x1b']); self.assertNotIn('why', out)
+        self.assertEqual(self.s.waiting_notes(self.tid), [], 'nothing piles up behind the chooser')
 
     def test_a_codex_question_with_choices_is_still_answered_in_words(self):
         self.t.argv, self.t.cli = ['codex'], 'codex'; self.asked(); typed = []
@@ -125,9 +129,20 @@ class APermissionIsAPickToo(Base):
             return ws.answer(self.s, self.tid, rid, words), typed
 
     def test_no_in_a_sentence_never_lands_on_the_default_yes(self):
-        self.asked(); out, typed = self.answer("no, don't delete that")
-        self.assertEqual((out['delivered'], out['state'], typed), (False, 'not_a_choice', []))
-        self.assertIn('Yes', out['why'])
+        self.asked()
+        with mock.patch.object(ws, 'PUT_DOWN', 0): out, typed = self.answer("no, don't delete that")
+        self.assertEqual((out['delivered'], self.t.written, typed), (True, ['\x1b'], ["no, don't delete that"]), 'the prompt is put down, his words are his line')
+
+    def test_over_acp_there_is_no_screen_to_read_a_chooser_off(self):
+        """The live shape (2026-11-11): the agent asked "1. short 2. long" in words a turn back, he answered in words, and "yes do it" typed
+        under a later approval was refused with those two as the options - the session's transcript read as a pane."""
+        self.t.acp, said = True, []
+        self.t.say = lambda x, done=None: said.append(x)
+        self.t.screen_lines = lambda n=32: ['Which do you want?', '1. A short one-line docstring', '2. A long one covering the arguments']
+        self.asked()
+        self.assertIsNone(term.screen_question(self.t))
+        out = ws.answer(self.s, self.tid, 'p1', 'yes do it')
+        self.assertEqual((out['delivered'], said, self.t.written), (True, ['yes do it'], []))
 
     def test_the_options_own_words_and_numbers_pick(self):
         for i, (words, key) in enumerate((('yes', '1'), ('No', '3'), ('2', '2'), ("Yes, and don't ask again for rm commands in this folder", '2'))):
@@ -140,6 +155,35 @@ class APermissionIsAPickToo(Base):
         with mock.patch.object(term, 'type_into', side_effect=lambda t, x: typed.append(x)):
             self.assertTrue(ws.answer(self.s, self.tid, 'p1', 'yes')['delivered'])
         self.assertEqual(typed, ['yes'])
+
+
+class WordsUnderButtonsAreALine(Base):
+    "A held request with buttons (a stranger's permit door, the owner's Allow / Reject): words that name none of them never answer it."
+    def held(self):
+        g = ws.group_key('permit:x'); rid = ws.question_id(g, 1)
+        ws.hold(self.tid, 'run1', g, [rid])
+        ws.record(self.s, self.tid, 'run1', 'approval_needed', request_id=rid, text='The agent wants to use Bash: git push', choices=['Allow', 'Deny'], source='hook')
+        return g, rid
+
+    def test_words_leave_the_hold_waiting_and_are_handed_back_as_a_line(self):
+        g, rid = self.held()
+        self.assertEqual(ws.answer(self.s, self.tid, rid, 'what does it push?')['state'], 'line')
+        self.assertIn(g, ws.HELD, 'the hold still waits on its buttons'); self.assertEqual(len(ws.status(self.s, self.tid)['requests']), 1)
+        out = waitroom.add(self.s, self.tid, 'what does it push?')
+        self.assertEqual((out['delivered'], out['state']), (0, 'held_ask')); self.assertNotIn('why', out)
+        self.assertEqual(len(self.s.waiting_notes(self.tid)), 1, 'kept as his line, waiting for the agent')
+
+    def test_a_button_named_in_words_still_presses_it(self):
+        g, rid = self.held()
+        self.assertTrue(ws.answer(self.s, self.tid, rid, 'allow')['delivered'])
+        self.assertEqual(ws.status(self.s, self.tid)['requests'], [])
+
+    def test_the_answer_door_sends_such_words_down_the_line_road(self):
+        from taskuary import general
+        g, rid = self.held(); took = []
+        with mock.patch.object(server, 'store', self.s), mock.patch.object(general, 'take_line', side_effect=lambda st, tid, text, *a, **k: took.append((tid, text))):
+            out = server.worker_answer(self.tid, server.WorkerAnswerBody(request_id=rid, text='what does it push?'))
+        self.assertEqual((out, took), ({'delivered': True, 'state': 'line'}, [(self.tid, 'what does it push?')]))
 
 
 class NeverDefaultsToYes(Base):

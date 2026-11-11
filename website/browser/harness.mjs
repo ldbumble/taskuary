@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
@@ -214,6 +214,13 @@ export async function startHarness({ fresh = false, bin = "", tour = false } = {
       for (const k of ["HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY"]) {
         if (process.env[k] === undefined) delete backendEnv[k]; else backendEnv[k] = process.env[k];
       }
+      // ...and the person's own user-level Claude hooks post every CLI event to THEIR running Taskuary (their settings.json: curl to its port),
+      // a scratch session's among them. curl reads CURL_HOME/.curlrc: every such port is sent to a closed one, so nothing of a walk reaches it.
+      let theirs = ""; try { theirs = readFileSync(path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "settings.json"), "utf8"); } catch {}
+      const ports = [...new Set(["7787", ...[...theirs.matchAll(/127\.0\.0\.1:(\d+)\/api\/hooks/g)].map((m) => m[1])])].filter((p) => p !== String(backendPort));
+      mkdirSync(xdgConfig, { recursive: true });
+      writeFileSync(path.join(xdgConfig, ".curlrc"), ports.map((p) => `connect-to = "127.0.0.1:${p}:127.0.0.1:9"`).join("\n") + "\n");
+      backendEnv.CURL_HOME = xdgConfig;
     }
     delete backendEnv.TASKUARY_DEMO;
     if (process.platform === "win32") delete backendEnv.Path;

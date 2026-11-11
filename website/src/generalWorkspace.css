@@ -23,13 +23,7 @@
 .tq-aui-agent-body pre, .tq-aui-agent-body code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-agent-body table { width: 100%; table-layout: fixed; }
 .tq-aui-agent-body th, .tq-aui-agent-body td, .tq-aui-agent-body a { overflow-wrap: anywhere; word-break: break-word; }
-/* WHAT THE AGENT ASKED (AgentAsks, the UI audit's W6): the amber of a raised hand; the choices wrap under the question at any width -
-   the answer is typed in the composer below, never a box of the card's own (2026-11-03) */
-.tq-aui-asking { width: 100%; box-sizing: border-box; margin: 2px auto 10px; padding: 10px 12px; border: 1px solid var(--tq-edge-brass, #d8c9a8); border-left: 3px solid var(--tq-edge-brass, #b08b4f);
-  border-radius: 11px; background: var(--tq-panel, #fbf7ee); display: flex; flex-direction: column; gap: 8px; }
-.tq-aui-asking b { color: var(--tq-secondary, #4d514b); font-size: 12px; }
-.tq-aui-asking-q { color: var(--tq-text, #3f423d); font-size: 13px; white-space: pre-wrap; }
-.tq-aui-asking-hint { color: var(--tq-muted, #7a756b); font-size: 11.5px; }
+/* the choices of what the agent asked wrap under its line at any width (AgentAsks) - a line of the chat, never a box (2026-11-11) */
 .tq-aui-asking-choices { display: flex; gap: 6px; flex-wrap: wrap; }
 /* a sign-in ask is a line of the conversation, not a card (2026-11-03): its words, and the fill page's link */
 .tq-aui-signin { margin: 2px 0 10px; color: var(--tq-text, #3f423d); font-size: 13px; line-height: 1.5; }

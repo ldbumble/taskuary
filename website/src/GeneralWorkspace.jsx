@@ -809,13 +809,13 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
     </p>
   );
   // A QUESTION IS SAID IN PLAIN WORDS (the closeout-in-chat spec, 2026-11-04): the agent's own sentence, a line of the conversation - not
-  // a card headed "Taskuary asked you something". An approval or a stuck turn keeps its lead: its words are a command, not a question
-  const plain = subState({ request: asking }) === "asking" && String(asking.text || "").trim();
+  // a card headed "Taskuary asked you something". NOTHING THE AGENT ASKS IS A BOX (the owner, 2026-11-11: "Stop making popups for approvals.
+  // just ask" - "only actions should have boxes"): a request for leave or a stuck turn used to keep a boxed lead ("Agent needs your
+  // approval") over its words; it is a line of the chat as a question is, its buttons under it where it has any
+  const plain = String(asking.text || "").trim() || says(subState({ request: asking }), name);
   return (
-    <div className={plain ? "tq-aui-asked" : "tq-aui-asking"} data-tq-asking={asking.request_id}>
-      {plain ? <p className="tq-aui-asked-q">{plain}</p> : <>
-        <b>{says(subState({ request: asking }), name)}</b>
-        <span className="tq-aui-asking-q">{asking.text}</span></>}
+    <div className="tq-aui-asked" data-tq-asking={asking.request_id}>
+      <p className="tq-aui-asked-q">{plain}</p>
       {!!choices.length && <div className="tq-aui-asking-choices">
         {choices.map((c) => <Button key={c} size="small" variant="outlined" disabled={going} onClick={() => send(c)}>{c}</Button>)}
       </div>}
@@ -1529,8 +1529,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     if (req.resting || (session?.sid && String(req.sid) === String(session.sid))) { setOwnPrompt({ id: `ask:${req.request_id}`, text }); setAnswered(req.request_id); return; }
     // ...and a coding agent's as any line typed to it (general.take_line): its next turn takes the line, and that closes the question
     if (road && req.kind !== "approval_needed") { await api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text }, { timeout: 0 }); setAnswered(req.request_id); road(); return; }
-    await api.post(`/api/tasks/${task.TaskId}/worker/answer`, { request_id: req.request_id, text });
-    setAnswered(req.request_id); onAnswered?.();
+    // ...words that are no answer to a request's buttons are his next line (workerstate.LINE): the request stays lit
+    const { data: got } = await api.post(`/api/tasks/${task.TaskId}/worker/answer`, { request_id: req.request_id, text });
+    if (got?.state !== "line") setAnswered(req.request_id);
+    onAnswered?.(); road?.();
   };
   /* WHAT WAITS ON THE BROWSER IS ON THE BROWSER (the owner, 2026-10-28: "it should show up as a BROWSER inside the agent canvas ... so it
      flows better to go back and continue"). A held act of this session's browser shows its Approve / Dismiss on the view, and the

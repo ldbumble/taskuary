@@ -102,6 +102,16 @@ class QuestionAndPermissionTests(Base):
         self.fire('PostToolUse', tool_name='Bash', tool_input={'command': 'rm -rf build'}, tool_response={})
         self.assertEqual(self.state()['requests'], [])
 
+    def test_over_acp_a_permission_request_is_no_stop(self):
+        """The live shape (2026-11-11): over ACP the adapter asks for every tool and Taskuary's gate answers in code at once, yet Claude's
+        hook fired for each ask - "the agent needs your approval: Bash cd ...; timeout 300 ..." stood over a test run for as long as it ran,
+        with nothing to press."""
+        self.session().acp = True
+        self.fire('UserPromptSubmit', prompt='run the tests')
+        self.fire('PermissionRequest', tool_name='Bash', tool_input={'command': 'cd ../other; timeout 300 python -m pytest -q 2>&1 | tail -3'})
+        self.fire('Notification', notification_type='permission_prompt', message='Claude needs your permission to use Bash')
+        self.assertEqual((self.state()['state'], self.state()['requests']), ('working', []))
+
     def test_the_typed_permission_notification_still_works(self):
         self.session()
         self.fire('Notification', notification_type='permission_prompt', message='Claude needs your permission to use Bash')

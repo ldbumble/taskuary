@@ -1,0 +1,33 @@
+// JOB A: a coding agent that asked a two-option question (answered in words), then runs a long compound shell line in a folder outside its checkout.
+import path from "node:path";
+import { api, connect, open, shot, timeline, save, buttons, sleep, type, quiet, out, info } from "./real-lib.mjs";
+import { record } from "./recorder.mjs";
+const [name, road = "acp"] = process.argv.slice(2);
+const got = await api("/api/fixture/coding", { git: info.git, real: true, pty: road === "pty" });
+console.log("task", JSON.stringify(got));
+const { browser, page } = await connect();
+await page.reload({ waitUntil: "domcontentloaded" }); await sleep(3000);
+await open(page, got.taskId);
+await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 60000 });
+const rec = await record(page, path.join(out, "video", name));
+const all = [];
+await type(page, road === "pty" ? "I want a docstring on total(). Before you touch anything, ask me with your question tool whether it should be short or long (two options) and wait."
+  : "I want a docstring on total(). Before you touch anything, ask me in plain words which I want: 1. a short one-line docstring, or 2. a long one covering arguments and return value. Do not use a question tool - just ask in your reply as a numbered list and stop.");
+all.push(...await timeline(page, 25000, 250, 900)); await quiet(page, 180000, 6000);
+await shot(page, `${name}-1asked`);
+await type(page, "the short one, but do not write it yet - just say ok");
+all.push(...await timeline(page, 15000, 250, 900)); await quiet(page, 180000, 6000);
+await shot(page, `${name}-2answered`);
+const other = path.join(info.home, "other").replaceAll("\\", "/");
+await type(page, `Now run exactly this as ONE shell command, unchanged, and tell me its last line: cd ${other}; sleep 45 2>&1 | tail -3; git status`);
+all.push(...await timeline(page, 30000, 250, 1200));
+await shot(page, `${name}-3running`); console.log("BUTTONS3", await buttons(page));
+await type(page, "yes do it");
+all.push(...await timeline(page, 12000, 200, 1200));
+await shot(page, `${name}-4typed`);
+all.push(...await timeline(page, 60000, 500, 1200)); await quiet(page, 180000);
+await shot(page, `${name}-5after`);
+await save(`${name}-timeline.json`, all);
+await rec.stop({ sheet: 12 });
+console.log("TASK", got.taskId, "BUTTONS", await buttons(page));
+await browser.disconnect();

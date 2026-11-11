@@ -275,6 +275,14 @@ const headOf = (x) => x.own ? ["You", ON_WORD[String(x.channel || "").toLowerCas
 // the subject when it says something the words do not: not over a chat line (none), not the same as the line before's, not the words themselves
 export const subjectOf = (x, prev) => { const sub = String(x?.subject || "").trim(), bare = (v) => String(v || "").replace(/^\s*((re|fw|fwd)\s*:\s*)+/i, "").trim().toLowerCase();
   return !sub || x.own || bare(sub) === bare(prev?.subject) || bare(sub) === bare(x.words) ? "" : sub; };
+/* WHAT CAME IN READS IN PLACE (the owner, 2026-11-11: "you should be able to hit expand and read the whole email"): a few lines, and - only
+   where they are cut - one toggle that opens the whole message where it stands, whatever channel it came on */
+const ArrivedWords = ({ words }) => {
+  const el = useRef(null), [open, setOpen] = useState(false), [cut, setCut] = useState(false);
+  React.useLayoutEffect(() => { const e = el.current; if (e && !open) setCut(e.scrollHeight > e.clientHeight + 1); }, [words, open]);
+  return <><span ref={el} className={`tq-aui-arrived-words${open ? " tq-aui-arrived-open" : ""}`} dir="auto">{words}</span>
+    {(cut || open) && <button type="button" className="tq-aui-arrived-more-btn" data-tq-arrived-expand="" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? "Show less" : "Show all"}</button>}</>;
+};
 const Arrived = ({ mail, prev = null }) => mail.map((x, i0, list) => {
   const all = prev ? [prev, ...list] : list, i = i0 + (prev ? 1 : 0);
   const more = sameAs(all[i - 1], x), stamp = x.at ? when(x.at) : "", again = more && stamp === (all[i - 1].at ? when(all[i - 1].at) : "");
@@ -284,7 +292,7 @@ const Arrived = ({ mail, prev = null }) => mail.map((x, i0, list) => {
     {/* ...a mail's subject over its words, once a run (the owner, 2026-11-09: "you can't see anything about the email") - the words are the
         sender's NEW ones, the stamp and the quoted chain left out on the server (general.mail_row) */}
     {!!subjectOf(x, all[i - 1]) && <span className="tq-aui-arrived-subject" dir="auto">{x.subject}</span>}
-    {!!mailWords(x) && <span className="tq-aui-arrived-words" dir="auto" title={x.words}>{mailWords(x)}</span>}
+    {!!mailWords(x) && <ArrivedWords words={mailWords(x)} />}
     <CameWith x={x} />
   </div>;
 });
@@ -834,13 +842,15 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 // The server owns the list (conversation.py): what came in, his lines, his presses, the agent's turns - each where the agent heard it - and
 // what still waits for the agent, apart. This draws it: one row per item, keyed by the item's own name, whatever agent works the task and
 // whatever road it runs on. Nothing here decides an order, a place for a card, or whether a line was heard.
+// ...the list last read of each task: a chat drawn again (the pane remounts when its session starts) draws what it held at once, never a blank beat
+const LISTS = new Map();
 export function useConversation(tid, on) {
-  const [list, setList] = useState(null), rev = useRef("");
+  const [list, setList] = useState(() => LISTS.get(tid) || null), rev = useRef(LISTS.get(tid)?.rev || "");
   const load = useCallback(() => (on ? api.get(`/api/tasks/${tid}/conversation`, { params: { rev: rev.current } }).then(({ data: d }) => {
     if (!d || d.same) return false;
-    rev.current = d.rev; setList(d); return true;
+    rev.current = d.rev; LISTS.set(tid, d); setList(d); return true;
   }).catch(() => false) : Promise.resolve(false)), [tid, on]);
-  useEffect(() => { rev.current = ""; setList(null); load(); }, [load]);
+  useEffect(() => { rev.current = LISTS.get(tid)?.rev || ""; setList(LISTS.get(tid) || null); load(); }, [load]);   // eslint-disable-line react-hooks/exhaustive-deps
   const going = !!list?.working;
   // ...a turn at work is read as it goes; at rest the server's own poke (task-changed) brings what is new, and a slow look backs it up
   useEffect(() => { if (!on) return undefined; const t = setInterval(load, going ? 600 : 5000); return () => clearInterval(t); }, [on, going, load]);

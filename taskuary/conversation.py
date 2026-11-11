@@ -35,6 +35,27 @@ def stamp(ts) -> str: return datetime.fromtimestamp(ts).isoformat(sep=' ', times
 def _flat(s) -> str: return ' '.join(str(s or '').split())
 
 
+def clean(text) -> str:
+    """THE AGENT'S WORDS, WITHOUT WHAT IT WROTE FOR THE APP - one function for every road's turn (a chat's answer, a quick answer, a coding
+    session's words, the turn at work): the summary block it is asked to end on (selfclose.SUMMARY_OPEN), closed or not - an opening marker
+    with no close goes to the end of the text - and the marker of a question. A turn that said nothing but the block says the block's own
+    sentence, once."""
+    from .selfclose import asked_inline, without_summary
+    t = str(text or ''); out = asked_inline(without_summary(t))[0].strip()
+    if out or not t.strip(): return out
+    try: j = json.loads(t[t.index('{'):t.rindex('}') + 1])
+    except ValueError: return ''
+    return str(j.get('did') or j.get('about') or '').strip() if isinstance(j, dict) else ''
+def _said(steps: list, body: str = '') -> list:
+    "A turn's steps with its words cleaned (clean) - and a step that says only what the turn's answer says, or nothing, left out."
+    out = []
+    for s in steps:
+        if s.get('k') != 'said': out.append(s); continue
+        w = clean(s.get('text'))
+        if w and w != body.strip(): out.append({**s, 'text': w})
+    return out
+
+
 # ── the ledger ───────────────────────────────────────────────────────────────────────────────────
 def _mail(store, tid: int) -> list:
     "Every message on the task's thread the chat draws (general.JOINED, and his own lines filed elsewhere), each with `T`: when it joined."
@@ -186,7 +207,7 @@ def items(store, tid: int) -> dict:
     put = lambda t, rank, e, hid=0: ev.append((t, rank, hid, len(ev), e))        # ...and what one hand-over took, in the order it took it
 
     # the comments are one chain, in the order they were filed: his lines, Taskuary's briefs (never drawn - a turn begins there), the answers
-    rows, clean = store.list_comments(tid, internal=True), {c['CommentId']: c for c in general.chat_rows(store, tid)}
+    rows, kept = store.list_comments(tid, internal=True), {c['CommentId']: c for c in general.chat_rows(store, tid)}
     summ, steps_of, last, lines, texts = general.turn_summaries(store, tid), {}, 0., [], set()
     p = sessionrecord._gen_path(tid)
     if p.is_file():
@@ -209,12 +230,12 @@ def items(store, tid: int) -> dict:
             if str(c.get('Body') or '').startswith(FOLD_HEAD):
                 put(last, 0, {'id': f'n:c{cid}', 'kind': 'note', 'at': c['CreatedAt'], 'text': 'Folded in ' + c['Body'][len(FOLD_HEAD):].split('\n', 1)[0]})
         elif ty == ASSISTANT_TYPE:
-            body = str((clean.get(cid) or c).get('Body') or '')
+            body = clean(str((kept.get(cid) or c).get('Body') or ''))
             if c.get('Actor') == sessionrecord.NOTE_ACTOR:
                 last = max(last + 1e-7, ep(c['CreatedAt'])); put(last, 0, {'id': f'n:c{cid}', 'kind': 'note', 'at': c['CreatedAt'], 'text': body}); continue
             began = max((m['At'] for m in marks if m['Seq'] < cid), default=0.)
             last = max(last + 1e-7, began)
-            st = [s for s in steps_of.get(cid, []) if not (s.get('k') == 'said' and str(s.get('text') or '').strip() == body.strip())]
+            st = _said(steps_of.get(cid, []), body)
             t = {'kind': 'turn', 'at': stamp(began) or c['CreatedAt'], 'state': 'done', 'steps': st, 'text': body, 'cards': [], 'started': began or None,
                  'ended': ep(c['CreatedAt']), 'answer': f'comment-{cid}', **({'summary': summ[cid]} if cid in summ else {})}
             # ...and each draft this turn left that a later turn rewrote: greyed where it stood, never moved
@@ -229,7 +250,7 @@ def items(store, tid: int) -> dict:
         answered = max(turn_of, default=0)
         began = max((m['At'] for m in marks if m['Seq'] >= answered), default=0.) or max(last + 1e-7, getattr(ses, 'last', 0) or 0)
         trace = list(getattr(ses, 'trace', None) or [])
-        put(max(last + 1e-7, began), 1, {'kind': 'turn', 'at': stamp(began), 'state': 'working', 'steps': sessionrecord.trace_steps(trace), 'text': '', 'cards': [],
+        put(max(last + 1e-7, began), 1, {'kind': 'turn', 'at': stamp(began), 'state': 'working', 'steps': _said(sessionrecord.trace_steps(trace)), 'text': '', 'cards': [],
                                         'started': general.PRESSED.get(tid) or began, 'ended': None, 'sid': getattr(ses, 'sid', '')})
 
     # a coding session's record: its steps, cut into turns where it was given something. What it was given is never drawn from the record -
@@ -283,7 +304,7 @@ def items(store, tid: int) -> dict:
             if run is None or run['sid'] != e['sid'] or run['seg'] != e['seg']:
                 close(); run = {'kind': 'turn', 'sid': e['sid'], 'seg': e['seg'], 'at': stamp(e['T']), 'state': 'done', 'steps': [], 'text': '', 'cards': [], 'started': e['T'], 'ended': e['T']}
                 out.append(run)
-            run['steps'].append(e['step']); run['ended'] = e['T']
+            run['steps'] += _said([e['step']]); run['ended'] = e['T']
         elif rank == -1 and run is not None: held.append(e)
         else: close(); out.append(e)
     close()
@@ -322,6 +343,8 @@ def items(store, tid: int) -> dict:
     # A TURN'S CARDS STAND LAST IN IT: each action under the turn that set it up (the one that last left a draft as it stands), else where it was made
     def place(card, at, cid=None):
         t = turn_of.get(cid) if cid else None
+        # ...the turn that was at work when it was made: the first one that had begun (where its start is known) and had not yet ended
+        if t is None: t = next((x for x in out if x['kind'] == 'turn' and (x.get('ended') is None or x['ended'] + 1 >= at - 0.999) and (x.get('started') or 0) <= at), None)
         if t is None:
             i = max((j for j, x in enumerate(out) if ep(x.get('started') or x.get('at')) <= at), default=-1)
             if i >= 0 and out[i]['kind'] == 'turn': t = out[i]

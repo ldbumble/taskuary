@@ -79,7 +79,9 @@ class FailedSendToAgentTests(PhoneCase):
         said = text_of(got)
         self.assertNotIn('Done', said)
         self.assertRegex(said, r"(?i)did not start|didn't start")
-        self.assertIn('the claude CLI is not installed on this computer', said)                 # why
+        # why - in the failure's own words, as the task page and the desk say it (failures.classify): one sentence for one fact
+        from taskuary import failures
+        self.assertIn(failures.classify(RuntimeError('the claude CLI is not installed on this computer'))['sentence'], said)
         self.assertNotIn('I will tell you here when it finishes', said)                          # no promise over nothing
         ref = f'TQ-{tid:04d}'
         self.assertIn(ref, said)

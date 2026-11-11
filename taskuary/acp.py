@@ -134,7 +134,8 @@ class ACPClient:
                 err = ''.join(self._err).strip()[:300]
                 # ...a turn it died holding is said as a chat CLI's that died mid-turn (clipool.MID_TURN): one sentence for one fact, whatever the agent
                 from .clipool import MID_TURN
-                if method == 'session/prompt': raise ACPAgentError(f"{MID_TURN} ({err or 'the agent exited'})")
+                # ...and nothing of the process after it, which the chat drew as "(the agent exited)" - that detail is the log's
+                if method == 'session/prompt': logger.warning(f"acp: died mid-turn - {err or 'the agent exited'}"); raise ACPAgentError(MID_TURN)
                 raise ACPAgentError(f'the agent stopped during {method}' + (f': {err}' if err else ''))
             if 'error' in m: raise ACPAgentError(f"{method}: {m['error'].get('message', m['error'])}")
             return m.get('result')

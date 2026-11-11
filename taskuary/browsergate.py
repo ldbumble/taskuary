@@ -620,7 +620,7 @@ def done(store, tid: int, rid: str) -> bool:
     from . import browserview, buttons, workerstate as ws
     req = next((r for r in ws.open_requests(ws.events(store, tid)) if r['RequestId'] == rid), None)
     lost = bool(req) and gone(req['Sid'])
-    h = _close(store, tid, rid, 'Try again' if lost else 'Done')
+    h = _close(store, tid, rid, 'Try again' if lost else browserview.TURN_DONE)
     if not h: return False
     turn = h.get('kind') == 'turn' or not str(rid).startswith(PRESS)
     if lost:
@@ -632,7 +632,7 @@ def done(store, tid: int, rid: str) -> bool:
         return True
     step = f"the step you handed them ({h.get('what') or 'on the page'})" if turn else f"pressing {h['btn']}"
     store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '' if turn else h['btn'], 'by': 'done'})
-    _tell(store, tid, f"The owner pressed Done: they say they finished {step} on the page. Taskuary did not see the page move - "
+    _tell(store, tid, f"The owner pressed {browserview.TURN_DONE}: they say they finished {step} on the page. Taskuary did not see the page move - "
                       "look at it as it is now and continue.", wake=True)
     return True
 
@@ -656,7 +656,8 @@ def owner_said(store, tid: int, sid: str, text: str) -> str:
     if not req: return ''
     words = ' '.join(str(text or '').split()).rstrip('.!')
     with _HANDS_LOCK: h = HANDS.pop(req['RequestId'], None) or {}
-    if words in (browserview.TURN_DONE, browserview.TURN_BACK.rstrip('.')): return ''
+    # ...'Done': the choice an ask raised by an older build still carries
+    if words in (browserview.TURN_DONE, 'Done', browserview.TURN_BACK.rstrip('.')): return ''
     # ...and past the watch's half hour nothing saw the page, so nothing is claimed about it (the owner, 2026-11-05: typing continues it)
     if h.get('expired'):
         return (f"THE OWNER SPOKE WHILE {h.get('btn') or 'the button'} WAITED FOR THEIR PRESS, after Taskuary had stopped watching the page - "

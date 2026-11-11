@@ -100,10 +100,11 @@ def fetch(say=lambda s: None, get=None) -> str:
     get = get or (lambda url: requests.get(url, stream=True, timeout=(10, 60)))
     roads = [('npm', f'{NPM}/agent-browser-{VERSION}.tgz', lambda b: _from_npm(b, a))]
     if 'musl' not in a: roads.insert(0, ('GitHub', f'{GITHUB}/v{VERSION}/agent-browser-{a}', lambda b: b))
-    say('Setting up the browser - downloading agent-browser (one time)')
+    # ...in the turn, where the program's own name is machinery (the overnight walk, 2026-11-11: "downloading agent-browser" in the chat)
+    say('Setting up the browser - downloading its driver (one time)')
     said = []
     for name, url, pick in roads:
-        try: blob = pick(_pull(get, url, say, 'agent-browser'))
+        try: blob = pick(_pull(get, url, say, 'its driver'))
         except (requests.RequestException, OSError, tarfile.TarError, KeyError, AttributeError) as e:
             said.append(f'{name}: {str(e)[:120]}'); continue
         if hashlib.sha256(blob).hexdigest() != SHA256[a]:

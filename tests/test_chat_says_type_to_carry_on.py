@@ -29,7 +29,8 @@ class TypeToCarryOn(unittest.TestCase):
         with mock.patch.object(clipool, 'run', side_effect=clipool.Ended(f'{clipool.MID_TURN} (the CLI exited (3))')):
             with self.assertRaises(RuntimeError) as got:
                 agents._run_live({}, 'claude', ['claude'], 'hi', lambda *a: None, 'task:1', None, None, None)
-        self.assertTrue(str(got.exception).startswith(clipool.MID_TURN), str(got.exception))
+        # ...nor "(the CLI exited (3))" after it: machinery words the coding chat never showed (the overnight walk, 2026-11-11)
+        self.assertEqual(str(got.exception), clipool.MID_TURN)
 
     def test_a_check_back_that_could_not_wake_the_agent(self):
         with mock.patch.object(general, 'session_for', return_value=None), \

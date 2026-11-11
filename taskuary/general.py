@@ -637,7 +637,8 @@ def _land_how(d) -> str:
     return HOW.get(d.get('how'), 'the button')
 def _on_page(d) -> str:
     site, btn = d.get('site') or 'the page', d.get('btn')
-    if d.get('by') == 'done': return f"pressed Done: {f'{btn} on {site} is pressed' if btn else f'the step on {site} is finished'}"
+    from .browserview import TURN_DONE
+    if d.get('by') == 'done': return f"pressed {TURN_DONE}: {f'{btn} on {site} is pressed' if btn else f'the step on {site} is finished'}"
     return f'pressed {btn} on {site}' if btn else f'did the step on {site}'
 ANSWERED = {'allow_once': 'allowed', 'allow_always': 'allowed, from now on', 'reject_once': 'refused', 'reject_always': 'refused, from now on'}
 def _held_what(d) -> str: return _cut(' '.join(str(d.get('about') or d.get('what') or '').split()), 120) or 'the held step'
@@ -1054,8 +1055,13 @@ def shown_history(store, tid: int) -> list:
         if m['id'] in summ: m['summary'] = summ[m['id']]
         if (got := snaps.get(_cid(m['id']))): m['drafts_then'] = got
     # ...and the owner's presses, each a line of theirs at its time (press_lines) - placed among the turns, never moving one
+    stop = f"You {PRESSES['stopped_turn']({})}."
     for p in press_lines(store, tid):
         at = next((k for k, m in enumerate(msgs) if str(m.get('createdAt') or '') > str(p['createdAt'])), len(msgs))
+        # ...and a turn he STOPPED is a turn, ended there: it files no answer, so the page it showed stood under his line with no AGENT head
+        # where a coding chat keeps "AGENT · ran 1s" (the overnight walk, 2026-11-11) - its head and what it showed stand on this entry
+        if p['content'][0]['text'] == stop and at and msgs[at - 1]['role'] == 'user' and not msgs[at - 1].get('press'):
+            msgs.insert(at, {'id': f"stopped-{p['id']}", 'role': 'assistant', 'content': [], 'createdAt': p['createdAt']}); at += 1
         msgs.insert(at, p)
     return msgs
 def _record_turn(store, tid: int) -> list:

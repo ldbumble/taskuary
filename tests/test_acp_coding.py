@@ -178,7 +178,8 @@ def test_an_agent_that_dies_mid_turn_is_said_as_a_chat_cli_that_did(world, monke
     t = open_(s, tid, repo, seed='break now')
     assert until(lambda: any(u['sessionUpdate'] == 'error' for u in codingchat.acp_updates(tid, t.sid)))
     [e] = [u for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'error']
-    assert e['content']['text'].startswith(MID_TURN) and 'session/prompt' not in e['content']['text'], e['content']['text']
+    # ...and nothing of the process after it: "(the agent exited)" is the log's (the overnight walk, 2026-11-11)
+    assert e['content']['text'] == f'{MID_TURN}.', e['content']['text']
 
 
 def test_a_note_from_the_waiting_room_is_drawn_as_the_owners_words(world):

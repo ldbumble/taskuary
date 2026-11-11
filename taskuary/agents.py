@@ -1989,8 +1989,10 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         limit = rate_limited(said)
         if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
         if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
-        # ...a turn its CLI died in says so in the one sentence an ACP agent's death says too (acp.py), no process name before it
-        raise RuntimeError(said[:500] if said.startswith(clipool.MID_TURN) else f'{name}: {said[:500]}')
+        # ...a turn its CLI died in says so in the one sentence an ACP agent's death says too (acp.py), no process name before it and no
+        # "(the CLI exited (3))" after it (the overnight walk, 2026-11-11) - that is the log's
+        if said.startswith(clipool.MID_TURN): logger.warning(f'{name}: {said[:500]}'); raise RuntimeError(clipool.MID_TURN)
+        raise RuntimeError(f'{name}: {said[:500]}')
     aiusage.claude_result(final)                      # a turn that failed still used what it used
     if final.get('is_error'):
         said = str(final.get('result') or final.get('subtype') or 'the CLI reported an error')

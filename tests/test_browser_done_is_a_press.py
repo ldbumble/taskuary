@@ -47,10 +47,11 @@ class DoneIsAPress(unittest.TestCase):
         self.assertEqual((out['delivered'], out['state']), (True, 'delivered'))
         [(words, as_owner)] = self.heard()
         self.assertFalse(as_owner, "Taskuary's note to the agent, never the owner's line")
-        self.assertIn('The owner pressed Done', words); self.assertIn("tick the \"I'm not a robot\" box", words)
+        self.assertIn("The owner pressed I'm done", words); self.assertIn("tick the \"I'm not a robot\" box", words)
         self.assertIn('did not see the page move', words); self.assertIn('look at it as it is now', words)
         self.assertEqual(self.said(), [], 'no bubble, and no line by Taskuary either')
-        self.assertEqual(self.lines(), [f'You pressed Done: the step on {SITE} is finished.'])
+        # ...in the words of the button he pressed: the view's "I'm done" left "You pressed Done" (the overnight walk, 2026-11-11)
+        self.assertEqual(self.lines(), [f"You pressed I'm done: the step on {SITE} is finished."])
         self.assertEqual(self.open(), []); self.assertEqual(bg.HANDS, {})
         again = ws.answer(self.s, self.tid, rid, '', press=True)                  # a second press, or the watch got there first
         self.assertEqual((again['delivered'], again['state']), (False, 'resolved')); self.assertEqual(len(self.told), 1)
@@ -59,7 +60,7 @@ class DoneIsAPress(unittest.TestCase):
         rid = self.press()
         self.assertTrue(ws.answer(self.s, self.tid, rid, '', press=True)['delivered'])
         self.assertIn(f'pressing {BTN}', self.heard()[0][0])
-        self.assertEqual(self.lines(), [f'You pressed Done: {BTN} on {SITE} is pressed.'])
+        self.assertEqual(self.lines(), [f"You pressed I'm done: {BTN} on {SITE} is pressed."])
 
     def test_the_press_the_page_saw_is_one_line_in_plain_words(self):
         rid = self.press()
@@ -87,7 +88,7 @@ class DoneIsAPress(unittest.TestCase):
             self.assertTrue(ws.answer(self.s, self.tid, rid, '', press=True)['delivered'])
             end = time.time() + 5
             while not typed and time.time() < end: time.sleep(.01)
-        self.assertIn('The owner pressed Done', typed[0][0]); self.assertEqual(typed[0][1], {'brief': True})
+        self.assertIn("The owner pressed I'm done", typed[0][0]); self.assertEqual(typed[0][1], {'brief': True})
 
     def test_a_resting_agent_is_started_on_it(self):
         rid, woke = self.turn(), []

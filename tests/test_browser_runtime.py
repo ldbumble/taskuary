@@ -61,6 +61,8 @@ class TheProgramTests(Base):
         exe = rt.fetch(said.append, get)
         self.assertEqual(Path(exe).read_bytes(), BLOB); self.assertEqual(rt.find(), exe); self.assertTrue(rt.mine(exe))
         self.assertEqual(asked, [f'{rt.GITHUB}/v{rt.VERSION}/agent-browser-{self.a}']); self.assertIn('one time', said[0])
+        # ...said in the turn, where the program's own name is machinery (the overnight walk, 2026-11-11)
+        self.assertEqual([s for s in said if 'agent-browser' in s], [])
         self.assertEqual(rt.fetch(get=lambda url: self.fail('fetched twice')), exe)
 
     def test_a_firewall_that_blocks_github_still_gets_it_from_npm(self):
@@ -103,14 +105,14 @@ class TheSetUpTests(Base):
 
     def test_a_turn_that_needs_it_joins_the_download_already_under_way(self):
         go, heard, fetched = threading.Event(), [], []
-        def get(url): fetched.append(url); rt._tell('Setting up the browser - downloading agent-browser (one time)'); go.wait(5); return Resp(BLOB)
+        def get(url): fetched.append(url); rt._tell('Setting up the browser - downloading its driver (one time)'); go.wait(5); return Resp(BLOB)
         t = threading.Thread(target=lambda: rt.ensure(get=get, run=self.chrome_ok)); t.start()
         while not fetched: time.sleep(.01)
         u = threading.Thread(target=lambda: rt.ensure(heard.append, get=lambda url: self.fail('a second download'), run=lambda c: self.fail('a second install')))
         u.start()
         while not heard: time.sleep(.01)
         go.set(); t.join(5); u.join(5)
-        self.assertIn('downloading agent-browser', heard[0]); self.assertEqual(len(fetched), 1); self.assertTrue(rt.whole())
+        self.assertIn('downloading its driver', heard[0]); self.assertEqual(len(fetched), 1); self.assertTrue(rt.whole())
 
     def test_the_way_in_says_why_in_words_and_the_background_try_is_not_made_every_keystroke(self):
         with mock.patch.object(rt, 'ensure', side_effect=RuntimeError('agent-browser could not be downloaded (GitHub: refused)')), \
@@ -187,7 +189,7 @@ class TheCliAgentTests(unittest.TestCase):
         sess.browser_wanted, seen, here = wanted, {}, {'yes': False}
         def answer(system, user, **kw): seen.update(system=system); return 'Done.'
         def set_up(say=None):
-            if say: say('Setting up the browser - downloading agent-browser (one time)')
+            if say: say('Setting up the browser - downloading its driver (one time)')
             here['yes'] = not why
             return why
         with mock.patch.object(bv, 'start') as start, mock.patch.object(bv, 'installed', side_effect=lambda: here['yes']), \
@@ -201,7 +203,7 @@ class TheCliAgentTests(unittest.TestCase):
     def test_a_task_that_asked_for_a_browser_waits_for_it_and_is_then_offered_it(self):
         sess, system, m = self.turn(wanted=True)
         m.wait.assert_called_once(); self.assertIn('NO BROWSER IS OPEN', system); self.assertNotIn('DID NOT OPEN', system)
-        self.assertTrue(any(e.get('name') == 'browser' and 'downloading agent-browser' in str(e.get('detail')) for e in sess.trace))
+        self.assertTrue(any(e.get('name') == 'browser' and 'downloading its driver' in str(e.get('detail')) for e in sess.trace))
 
     def test_one_that_could_not_be_set_up_says_the_real_reason(self):
         sess, system, m = self.turn(wanted=True, why='Chrome could not be downloaded (connection reset)')

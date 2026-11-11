@@ -448,7 +448,9 @@ def last_frame(tid) -> dict | None:
 # A chat's ask carries Done as a choice for where no view is drawn; a terminal CLI's choices are a chooser answered by number, so its ask
 # carries none. TURN_BACK: the words a page left open from an older build still sends - read as their Done (browsergate.owner_said).
 TURN_PREFIX = 'yourturn:'
-TURN_DONE = 'Done'
+# ...worded as the view's button says it, so the line his press leaves says what he pressed (the overnight walk, 2026-11-11: the view's
+# "I'm done" left "You pressed Done")
+TURN_DONE = "I'm done"
 TURN_BACK = 'Done - I finished that in the browser. Look at the page as it is now and continue.'
 
 def your_turn(store, tid: int, sid: str, what: str = '', watch=...) -> str:

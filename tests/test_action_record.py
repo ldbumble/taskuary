@@ -80,6 +80,15 @@ class EveryPressOfTheOwnersIsSaidInWords(Acts):
             self.assertFalse(general.stop_turn(self.s, self.tid), 'nothing at work: nothing stopped, nothing said')
         self.assertEqual(self.lines(), ['You stopped the agent.', 'You stopped the agent.'])
 
+    def test_a_stopped_turn_is_a_turn_in_the_chat(self):
+        # the overnight walk, 2026-11-11: a general turn he stopped filed no answer, so the page it showed stood under his line with no AGENT
+        # head, where a coding chat keeps "AGENT · ran 1s" - the turn stands, ended at the stop, between his line and the press
+        self.s.add_comment(self.tid, 'owner', general.USER_TYPE, 'Start the draft for Paula Vance')
+        self.s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (self.tid,))
+        with mock.patch.object(general, 'session_for', return_value=SimpleNamespace(stop=lambda: True)): general.stop_turn(self.s, self.tid)
+        shown = [(m['role'], bool(m.get('press'))) for m in general.shown_history(self.s, self.tid)]
+        self.assertEqual(shown[-3:], [('user', False), ('assistant', False), ('user', True)])
+
     def test_the_task_a_break_out_made_says_where_it_came_from(self):
         f = Factory(self.s); f.message(self.tid, from_name='Erin Blake', body='Where is the Payworth invoice?')
         mid = f.message(self.tid, from_name='Erin Blake', body='Also, can we renew the Trainly seats?')

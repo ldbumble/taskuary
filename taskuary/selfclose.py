@@ -277,7 +277,7 @@ SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --r
 # reverse and an agent reading both without this line picks the one with a command in it. It says
 # what `declare` does: the command is refused here and the owner completes the task.
 STAY_LINE = ('THE OWNER OPENED THIS SESSION: `taskuary --done` is refused. Reply via `taskuary --reply "<text>" --to "<who>"`, not chat. '
-             'Summarize, then wait.')
+             'Answer what is asked, then wait.')
 # ...because this line REPLACES SEED_LINE (terminal.seed_parts), the reply road was the one thing an owner-opened session never
 # heard of: an agent wrote the whole reply into its chat, ran a refused --done, said "the reply above is ready", and the
 # drafter wrote a placeholder from that pointer (2026-10-13)

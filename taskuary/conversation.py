@@ -279,14 +279,6 @@ def items(store, tid: int) -> dict:
         elif rank == -1 and run is not None: held.append(e)
         else: close(); out.append(e)
     close()
-    # ...and what was taken together reads in the order it came: the inputs between two turns, by their own time
-    own = lambda x: ep(x.get('joined') or x.get('at'))
-    i = 0
-    while i < len(out):
-        j = i
-        while j < len(out) and out[j]['kind'] != 'turn': j += 1
-        out[i:j] = sorted(out[i:j], key=own); i = j + 1
-
     # the turn at work is the last thing in the list: one the agent has not yet said a word in is there too, the moment its input was heard
     tail = next((x for x in reversed(out) if x['kind'] in ('turn', 'line', 'arrival')), None)
     # ...A LINE A LIVE AGENT WAS HANDED IS BEING WORKED ON, from the hand-over until its first step shows: a pane takes seconds to say it works,

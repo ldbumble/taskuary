@@ -1202,7 +1202,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const [landState, setLandState] = useState(null);
   const landAt = landing ? turnOf(messages, landState?.at || "") : null;
   const landNode = landing ? React.cloneElement(landing, { onState: setLandState }) : null;
-  const nextRid = [...(nextAt?.reviews || [])].reverse().find((r) => r.Status === "pending" && ["draft_reply", "draft"].includes(r.Kind))?.ReviewId ?? null;
+  // ...the reply that waits stands at its own card - and once it went, where it stood: the newest reply of the task, waiting or not
+  const replies = [...(nextAt?.reviews || [])].reverse().filter((r) => ["draft_reply", "draft"].includes(r.Kind));
+  const nextRid = (replies.find((r) => r.Status === "pending") || replies[0])?.ReviewId ?? null;
   const placed = React.useMemo(() => placeCards(turnCards, messages, turns), [turnCards, messages, turns]);
   // ...the chat's cards stand at the foot (no turn has summed it up, none holds the draft): what waits beside them there is "Also"
   const footNext = !dock && nextAt?.next && freshNext(nextAt.reviews) && !summed && !working && !draftHome(nextAt.reviews, messages) && (!chat || messages?.at(-1)?.role !== "assistant");

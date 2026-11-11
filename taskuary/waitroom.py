@@ -352,7 +352,7 @@ def reopen_coding(store, tid: int, notes: list, said: str, actor: str = 'router'
                                   f"starting a fresh {last.get('Brain') or 'agent'} session with the handover instead.")
         sent = continuity.sent_block(store, tid, quote=0, cmd='`taskuary --follow-up --reply "<text>"`')
         got = term.start_on_task(store, tid, last.get('Agent') or hub_agents.default_agent(store), actor=actor, cwd=last.get('Cwd') or None,
-                                 instruction='\n\n'.join(x for x in (said, continuity.RESUME_PROMPT, sent) if x), brain=last.get('Brain') or None)
+                                 instruction='\n\n'.join(x for x in (said, *((continuity.RESUME_PROMPT, sent) if last else ())) if x), brain=last.get('Brain') or None)
         how = 'seeded'
     t = term.SESSIONS.get((got or {}).get('sid')) or next((x for x in list(term.SESSIONS.values()) if x.task_id == tid and x.alive), None)
     if t is not None and term.is_acp(t): t.carries(_shown(notes))

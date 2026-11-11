@@ -3302,6 +3302,11 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     t = reopen(store, tid, actor)
     if not t: raise ValueError(f'no task {tid}')
     box_sent(store, tid)
+    # ...A TASK HE TYPES INTO IS HIS TO END (selfclose.claim, as a session he opened): its agent answers and waits - told to close the task when
+    # finished, a coding agent spent a plain question's answer on wrapping up (the recorded walk, 2026-11-11)
+    if not handles(t):
+        from . import selfclose
+        selfclose.claim(store, tid, actor)
     from . import outputs
     files = outputs.take_in(tid, files) if files and handles(t) else files
     # ...A START READS THE CHAT FIRST, as it always did (server._refresh_for_turn), at work from the press all the while: a sync that fails

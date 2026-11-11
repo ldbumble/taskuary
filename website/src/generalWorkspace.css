@@ -206,6 +206,10 @@
 
 /* THE CONVERSATION'S PENDING STRIP (Conversation.PendingStrip): what was accepted and waits for the agent, by the box - never in the chat until heard */
 .tq-conv-pending { margin: 0 auto 8px; max-width: 760px; padding: 6px 10px; border: 1px dashed var(--tq-border, #d9d4cb); border-radius: 10px; background: var(--tq-panel-2, #f4f1ea); max-height: 132px; overflow-y: auto; }
+.tq-aui-viewport:has(> .tq-conv) { overflow-anchor: none; }      /* the chat pins its own end (GeneralWorkspace): the browser's anchoring moved it back as a turn's steps folded */
+.tq-conv-past { margin: 8px 0 2px; padding: 6px 10px; border: 1px dashed var(--tq-border, #d9d4cb); border-radius: 8px; color: var(--tq-muted, #8b877e); font-size: 12.5px; }
+.tq-conv-past-head { font-weight: 600; }
+.tq-conv-past-words { margin-top: 4px; white-space: pre-wrap; max-height: 4.5em; overflow: hidden; }
 .tq-conv-pending-head { font-size: 11px; font-weight: 600; color: var(--tq-muted, #8b877e); margin-bottom: 2px; }
 .tq-conv-pending-row { display: flex; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--tq-text, #292824); }
 .tq-conv-pending-who { flex: 0 0 auto; color: var(--tq-muted, #8b877e); }

@@ -511,7 +511,8 @@ WITHDRAW_MARK = '[[TASKUARY-WITHDRAW: <why, one line>]]'
 # so an email to the wrong person stood beside the right one with its Send (agent-flow audit, 2026-11-07)
 WITHDRAW_LINE = (f'To withdraw the pending draft, put {WITHDRAW_MARK} on its own line - or, with a shell, run `taskuary --withdraw-draft "<why>"` '
                  '(the withdraw_draft tool). An email, a post or another proposal you set up: [[TASKUARY-WITHDRAW which=<its review id or who it '
-                 'was to>: <why>]], one line each. It is kept under Not sent for the owner; nothing is sent or deleted.')
+                 'was to>: <why>]], one line each. It is kept under Not sent for the owner; nothing is sent or deleted. A review id (rv7) is '
+                 'for these markers only: the owner sees cards, never ids, so say what the card is, not its id.')
 _WITHDRAW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?WITHDRAW\b\s*(?:which\s*=\s*(?:"([^"]*)"|([^\s:\]]+)))?\s*:?\s*(.*?)\s*\]\][ \t]*\n?',
                           re.I | re.M)
 def withdraw_markers(text: str) -> tuple:

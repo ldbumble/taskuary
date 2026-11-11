@@ -66,8 +66,11 @@ def _mail(store, tid: int) -> list:
 
 
 def _since(store, tid: int) -> float:
-    "When the agent last took anything on this task: the ledger's newest row, else (a task from before it) its last answer or session."
-    r = store._one('SELECT MAX(At) AS a FROM heard WHERE TaskId=?', (tid,))
+    """From when the ledger answers for this task: its FIRST row, else (a task from before it) its last answer or session. Everything that
+    came in or was pressed from then on is in the ledger or still unheard - so a hand-over takes ALL of it, whatever was heard a moment
+    before (the recorded flood, 2026-11-11: the lines' own hear, a millisecond earlier, made ten waiting mails "older than the last hand-over";
+    they were never heard, entered above the turn that was at work, and got a turn of their own)."""
+    r = store._one('SELECT MIN(At) AS a FROM heard WHERE TaskId=?', (tid,))
     if r and r['a']: return r['a']
     from .general import ASSISTANT_TYPE
     c = store._one('SELECT MAX(CreatedAt) AS a FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE))
@@ -100,6 +103,20 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
         store.cx.commit()
     if n: store._poke('task-changed', task_id=tid)
     return n
+
+
+def heard(store, tid: int, kind: str, refs) -> bool:
+    "Has the agent been handed every one of these (`refs` of one kind) already?"
+    refs = list({str(r) for r in refs or [] if r})
+    return bool(refs) and store._one(f"SELECT COUNT(*) AS n FROM heard WHERE TaskId=? AND Kind=? AND Ref IN ({','.join('?' * len(refs))})", (int(tid), kind, *refs))['n'] == len(refs)
+
+
+def with_turn(store, tid: int) -> list:
+    """The messages (ids) the turn that just began heard: everything heard since the turn before it began. [] for a task's first turn - its
+    prompt carries the thread. What `hear` writes down as heard, the turn's own words must carry (general.came_in): never heard and not told."""
+    m = store._rows("SELECT HId FROM heard WHERE TaskId=? AND Kind='turn' ORDER BY HId DESC LIMIT 2", (int(tid),))
+    if len(m) < 2: return []
+    return [int(r['Ref']) for r in store._rows("SELECT Ref FROM heard WHERE TaskId=? AND Kind='mail' AND HId>? AND HId<? ORDER BY HId", (int(tid), m[1]['HId'], m[0]['HId']))]
 
 
 def unhear(store, tid: int, lines) -> None:
@@ -285,13 +302,14 @@ def items(store, tid: int) -> dict:
         h, it = led.get(('mail', str(x['MessageId']))), None
         row = general.mail_row(store, x)
         it = {'id': f"m:{x['MessageId']}", 'kind': 'arrival', **row, 'joined': stamp(x['T'])}
-        if not h and at_work and x['T'] > began: pend.append(it)
+        # ...a stamp is a whole second: one that joined in the turn's first second came in under it (it stood ABOVE the turn at work)
+        if not h and at_work and x['T'] + 1 > began: pend.append(it)
         else: put(h['At'] if h else x['T'], 0 if h else -1, it, h['HId'] if h else 0)
     stop = f"You {general.PRESSES['stopped_turn']({})}."
     for m in general.press_lines(store, tid):
         aid, text = m['id'].split('-')[1], m['content'][0]['text']
         h, it = led.get(('press', aid)), {'id': f'p:{aid}', 'kind': 'press' if m.get('press') else 'note', 'at': m['createdAt'], 'text': text, **({'stop': True} if text == stop else {})}
-        if not h and at_work and ep(m['createdAt']) > began and m.get('press') and text != stop: pend.append(it)
+        if not h and at_work and ep(m['createdAt']) + 1 > began and m.get('press') and text != stop: pend.append(it)
         else: put(h['At'] if h else ep(m['createdAt']), 0 if h else -1, it, h['HId'] if h else 0)
 
     # in order - and an input nobody heard never cuts a turn's work in two: it stands after the turn it came in under
@@ -354,6 +372,18 @@ def items(store, tid: int) -> dict:
         if r['Kind'] in ('draft_reply', 'draft') and r['Status'] == 'pending' and not str(r.get('DraftText') or '').strip() and not r.get('DraftError'): continue
         left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])
         place(_card(r), ep(r['CreatedAt']) + 0.999, (left or {}).get('CommentId'))
+
+    # THE NEXT THING TO PRESS IS RIGHT ABOVE THE BOX (the recorded walk, 2026-11-11: the agent said "check the card before you press Send" of a
+    # card a screen above its words): an action still live after a later turn ended is one that turn KEPT - each turn is told what waits and
+    # takes back what it undoes - so it stands last in the newest turn that said something, and where it stood says so, greyed
+    turns = [x for x in out if x['kind'] == 'turn']
+    if (kept := next((t for t in reversed(turns) if t['state'] in ('done', 'stopped') and (t['text'] or t['steps'])), None)):
+        ghost = lambda c: {**c, 'id': c['id'] + ':k', 'status': 'kept'}
+        for i, x in enumerate(out[:out.index(kept)]):
+            if x['kind'] == 'turn':
+                live = [c for c in x['cards'] if c['status'] == 'pending']
+                x['cards'] = [ghost(c) if c['status'] == 'pending' else c for c in x['cards']]; kept['cards'] += live
+            elif x['kind'] == 'card' and x['status'] == 'pending': out[i] = ghost(x); kept['cards'].append(x)
 
     for x in out: x.pop('stop', None); x.pop('_h', None)
     body = {'items': out, 'pending': pend, 'working': at_work, 'started': state.get('turnStarted') if at_work else None}

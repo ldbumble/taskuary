@@ -17,7 +17,7 @@ const sampler = () => {
       const sig = JSON.stringify(f);
       if (sig !== last) { last = sig; window.__frames.push({ t: Math.round(performance.now()), ...f }); }
     }
-    window.__raf = requestAnimationFrame(tick);
+    window.__raf = requestAnimationFrame(() => setTimeout(tick, 0));     // read AFTER the frame is painted: what he saw, never a layout the page had not pinned yet
   };
   tick();
 };
@@ -33,7 +33,7 @@ export function check(frames) {
       const was = new Set(prev.items.map((x) => x[0])), lastOld = Math.max(-1, ...ids.map((id, i) => (was.has(id) ? i : -1)));
       ids.forEach((id, i) => { if (!was.has(id) && i < lastOld) say(f.t, `${id} drawn ABOVE ${ids[lastOld]}, which was already there`); });
       // ...the view went back: only where it is no longer at its end, or went back though nothing above got shorter (a fold closing at the end keeps it pinned)
-      if (f.top < prev.top - 2 && (f.h - f.top - f.ch > 60 || f.h >= prev.h)) say(f.t, `scrolled back ${prev.top} -> ${f.top} (height ${prev.h} -> ${f.h})`);
+      if (f.top < prev.top - 2 && f.h - f.top - f.ch > 2 && (f.h - f.top - f.ch > 60 || f.h >= prev.h)) say(f.t, `scrolled back ${prev.top} -> ${f.top} (height ${prev.h} -> ${f.h})`);
       // his line, the frame it enters the conversation: a turn at work right under it
       ids.forEach((id, i) => { if (!was.has(id) && /^(l|s)[0-9a-z]/.test(id) && !f.items.slice(i + 1).some((x) => x[1] === "starting" || x[1] === "working")) say(f.t, `${id} heard with no turn at work under it in that frame`); });
     }
@@ -76,8 +76,10 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     else if (k === "mail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: "email", subject: "Re: Offsite venue", from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
     else if (k === "press") console.log(await press(page, new RegExp(arg), "[data-tq-task-page]"));
     else if (k === "flood") { const n = Number(arg) || 50;
+      // ...three voices, mixed: the sender on the channel, his own replies on that channel, lines typed here
       for (let i = 0; i < n; i++) { const w = `flood line ${i + 1} of ${n}: note ${i + 1}`;
-        if (i % 3 === 0) await api("/api/ingest/push", { channel: "email", subject: "Re: Offsite venue", from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: w });
+        if (road === "general" && i % 3 === 1) api("/api/fixture/own-reply", { id: `own-${name}-${i}`, conversation: `conv-${name}`, subject: "Re: Offsite venue", body: w }).catch((e) => console.log("own", e.message));
+        else if (road === "general" && i % 3 === 0) api("/api/ingest/push", { channel: "email", subject: "Re: Offsite venue", from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: w }).catch(() => {});      // a mail's triage takes its time: never waited for either
         else api(`/api/tasks/${tid}/assistant/messages`, { text: w, line_id: `lflood${name}${i}` }).catch(() => {});      // not waited for: typed as fast as he can
         await sleep(150); } }
     else if (k === "snap") await snap(arg || "snap");

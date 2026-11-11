@@ -109,6 +109,14 @@ def _install_fresh_routes(app, store):
                                 "DraftText": body.get("draft") or "Hi Erin, here is a long review of every flaw we found in the tool, one by one. Alex"})
         return {"taskId": tid, "reviewId": rid, "messageId": mid}
 
+    @app.post("/api/fixture/own-reply")
+    def fixture_own_reply(body: dict = Body(...)):
+        "The owner's own line on the task's channel, read back from it as a poll reads it (channels.ingest_own_message) - a recorded flood's third voice."
+        from taskuary.channels import ingest_own_message
+        ingest_own_message(store, {"external_id": body["id"], "channel": body.get("channel") or "email", "conversation_id": body["conversation"], "source_name": body.get("source") or "",
+                                   "subject": body.get("subject") or "", "body": body["body"]}, "your own reply on the thread - kept for context")
+        return {"ok": True}
+
     @app.post("/api/fixture/session")
     def fixture_session(body: dict = Body(...)):
         "The task's live session put where time would put it: `ended` (closed, forgotten) or `idled` (closed quietly, the next line wakes it)."

@@ -2541,8 +2541,8 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
     # free, with every line that joined - one turn
     with _PASS_LOCK:
         waiting = _PASSING.get(tid)
-        if waiting is not None: waiting.append(turn or _pass_turn(msg))
-        else: _PASSING[tid] = [turn or _pass_turn(msg)]
+        if waiting is not None: waiting.append((turn or _pass_turn(msg), msg.get('message_id')))
+        else: _PASSING[tid] = [(turn or _pass_turn(msg), msg.get('message_id'))]
     if waiting is not None:
         store.add_comment(tid, 'router', 'agent', f"Passed {_who_said(msg)}'s new message to the agent - it joins the turn already waiting.")
         return
@@ -2554,12 +2554,16 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
             time.sleep(.25); ses = general.session_for(tid) or ses
         time.sleep(PASS_GATHER)                    # ...and the rest of a burst still landing
     finally:
-        with _PASS_LOCK: lines = _PASSING.pop(tid, None) or [turn or _pass_turn(msg)]
+        with _PASS_LOCK: got = _PASSING.pop(tid, None) or [(turn or _pass_turn(msg), msg.get('message_id'))]
+    lines, mails = [x[0] for x in got], [x[1] for x in got if x[1]]
+    # ...what a turn since has already heard (general.send_prompt hears everything that came in when it begins) is not said a second time
+    from . import conversation
+    if mails and len(mails) == len(got) and conversation.heard(store, tid, 'mail', mails): return
     said = lines[0] if len(lines) == 1 else f'{len(lines)} NEW LINES ON THIS TASK, in the order they came - one turn for all of them:\n\n' + '\n\n---\n\n'.join(lines)
     try:
         # a session of quick answers re-decides on the task's depth now: still quick, one more call on it; else the turn runs the agent
         if ses.quick and quickwork.takes(store, tid): quickwork.again(store, tid, ses, said)
-        else: ses.send_prompt(said, brief=True)      # Taskuary's brief, shown in the chat as coding's typed line is
+        else: ses.send_prompt(said, brief=True, mails=mails if len(mails) == len(got) else ())      # Taskuary's brief, shown in the chat as coding's typed line is
     except Exception as e:
         # ...the session ended under it - the agent closed its own at the end of the turn this line waited behind (the stress run,
         # 2026-11-05): the line is not lost to a Continue, it carries the conversation on in a session of its own, as a mail on a quiet task does

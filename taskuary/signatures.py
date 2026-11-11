@@ -86,6 +86,17 @@ def agent_signed(store, rv: dict, text: str, msg: dict = None) -> str:
     return strip_signoff(text, own_lines(store)) or text
 
 
+def told(store) -> str:
+    """THE AGENT IS TOLD HOW ITS EMAILS ARE SIGNED, up front (the recorded walk, 2026-11-11: asked to "sign it Alex" it wrote that, the card
+    showed the saved block, and it warned the owner to check the card): one sentence where it is told how to reply - '' with nothing saved."""
+    from .responder import signature_for
+    from . import words
+    sig = ' / '.join(l.strip() for l in signature_for(store).splitlines() if l.strip())
+    return (f'HOW AN EMAIL IS SIGNED: Taskuary signs every email itself with the owner\'s saved signature ("{sig[:200]}") and takes off any sign-off '
+            f"you write, so how one is signed is not yours to change: asked to sign it another way, say that the draft carries the saved signature, "
+            f"and that they can edit the draft before sending or change the signature in {words.name('replies')}.") if sig else ''
+
+
 def suggest(store, mailbox: str = None) -> str:
     """The signature this mailbox's own sent mail ends with - read, never saved: the owner checks it before it goes on anything."""
     from .responder import learn_signature

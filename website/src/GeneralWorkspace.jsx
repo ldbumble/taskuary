@@ -894,11 +894,18 @@ const ConvLine = ({ x, more, waits = false }) => {
     <div className="tq-aui-user-bubble" dir="auto">{x.text}</div>
     {!!x.err && <div className="tq-aui-hint" role="alert">{x.err}</div>}</div>;
 };
+/* AN ACTION WHERE IT STOOD, once it is no longer the one to press there: a draft a later turn rewrote, or one the agent's latest turn kept -
+   which stands under that turn, right above the box. Greyed, nothing to press */
+const PAST = { kept: (c) => `${/draft/.test(c.what || "") ? "This draft" : "This action"} still waits - it stands below, under the agent's latest answer`, superseded: () => "Earlier draft - rewritten below" };
+const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.status} role="note">
+  <div className="tq-conv-past-head">{PAST[c.status](c)}</div>
+  {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
 function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, name, tid, onChanged }) {
   const used = new Set();
   const draw = (cs) => (cs || []).flatMap((c) => {
+    if (PAST[c.status]) return [<PastCard key={c.id} c={c} />];
     const got = nodes.filter((n) => n.rid === c.review && !used.has(n.key)), post = posts.find((p) => p.ReviewId === c.review);
     got.forEach((n) => used.add(n.key));
     return [...got.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>),
@@ -1049,7 +1056,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     v.addEventListener("scroll", on, { passive: true }); ro.observe(el);
     return () => { v.removeEventListener("scroll", on); ro.disconnect(); };
   }, [conv, !!list]);   // eslint-disable-line react-hooks/exhaustive-deps
-  React.useLayoutEffect(() => { const v = viewport.current; if (conv && v && stick.current) v.scrollTop = v.scrollHeight; }, [conv, merged]);
+  // ...after EVERY draw, not only the list's: a card's own words (the page's node) grow the chat too
+  React.useLayoutEffect(() => { const v = viewport.current; if (conv && v && stick.current && v.scrollTop + v.clientHeight < v.scrollHeight) v.scrollTop = v.scrollHeight; });
   /* WHAT ARRIVED WHILE YOU WERE TYPING goes into the thread that is already standing. This used to
      be a key bump, which remounts - and the draft lives in the composer INSIDE this runtime, so the
      2.5s busy poll emptied the box under the owner's fingers every time the agent took another step
@@ -1213,7 +1221,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const landAt = landing ? turnOf(messages, landState?.at || "") : null;
   const landNode = landing ? React.cloneElement(landing, { onState: setLandState }) : null;
   // ...the reply that waits stands at its own card - and once it went, where it stood: the newest reply of the task, waiting or not
-  const replies = [...(nextAt?.reviews || [])].reverse().filter((r) => ["draft_reply", "draft"].includes(r.Kind));
+  // ...by its number, never by the order the page happened to hold them in: the newest was read as the oldest, and the card he had just
+  // pressed Send on went to the first draft's turn, screens above (the recorded walk, 2026-11-11)
+  const replies = (nextAt?.reviews || []).filter((r) => ["draft_reply", "draft"].includes(r.Kind)).sort((a, b) => b.ReviewId - a.ReviewId);
   const nextRid = (replies.find((r) => r.Status === "pending") || replies[0])?.ReviewId ?? null;
   const placed = React.useMemo(() => placeCards(turnCards, messages, turns), [turnCards, messages, turns]);
   // ...the chat's cards stand at the foot (no turn has summed it up, none holds the draft): what waits beside them there is "Also"

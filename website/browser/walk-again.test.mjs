@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -23,6 +23,8 @@ test("at the end of a walk with tasks still open, the bar offers the walk again 
   await page.setViewport({ width: 1600, height: 900 });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  const reqs = [];
+  page.on("request", (r) => { const u = new URL(r.url()); if (u.pathname.startsWith("/api/") && r.method() !== "GET") reqs.push(`${Date.now()} ${r.method()} ${u.pathname} ${(r.postData() || "").slice(0, 120)}`); });
   await page.goto(h.ui, { waitUntil: "domcontentloaded" });
   const name = process.env.N17_NAME || "walk-again", dir = path.join(out, "video", name); await mkdir(dir, { recursive: true });
   await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => /^Walk me through my tasks/.test(b.innerText.trim())), { timeout: 60000 });
@@ -52,11 +54,17 @@ test("at the end of a walk with tasks still open, the bar offers the walk again 
     ok = end && await step("the end: the walk again on the bar", "^Walk me through my tasks") && await step("the end: Back lit", "^Back$");
     await page.screenshot({ path: path.join(out, `${name}.png`) });
     ok = ok && await press(page, "^Back$") && await step("Back: the last row on the table again, its way on", "^(Next|All read, next)");
+    // ...and the end's walk again gone from the bar once that row is back: it stood there greyed beside Back and Next (the recorded walk, 2026-11-10)
+    if (ok) { await new Promise((r) => setTimeout(r, 2000)); const left = (await barButtons(page)).filter((b) => /^Walk me through my tasks/.test(b.text));
+      steps.push(`${left.length ? "STALE" : "ok"} - the walk again gone from the bar under the row: ${await barNow()}`); ok = !left.length; }
     ok = ok && await press(page, "^(Next|All read, next)") && await step("on from it: the end again", "^Walk me through my tasks");
+    if (ok) await new Promise((r) => setTimeout(r, 1500));          // ...pressed as a person does, once the end has drawn
     ok = ok && await press(page, "^Walk me through my tasks") && await step("the walk again: the first row, its Next", "^(Next|All read, next)");
   } finally {
     await page.screenshot({ path: path.join(out, `${name}-end.png`) });
     await rec.stop();
+    await writeFile(path.join(dir, "server.log"), h.backend.output());
+    await writeFile(path.join(dir, "requests.txt"), reqs.join("\n"));
     await note(dir, { done: "The demo world: the day card's walk, then the bar's Next until it is gone - the walk at its end, tasks still on the rail; then Back, Next, and the walk again.",
       expect: "At the end, on the bar: Back (lit, to the last row walked) and Walk me through my tasks - never Back alone. Back brings the last row back; Next ends again; the walk again starts at the top.",
       saw: steps.join("\n") || "the walk never reached its end", verdict: ok ? "PASS" : "FAIL" });

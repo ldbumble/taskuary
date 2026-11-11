@@ -11,10 +11,10 @@ import { api, connect, open, shot, save, sleep, type, press, buttons, out, info 
 import { record } from "./recorder.mjs";
 
 // THE BUTTONS' OWN NAMES (taskuary/buttons.json, one name per button) and the ones a card draws: what "names a button" is read against
-const NAMES = [...new Set([...Object.values(JSON.parse(await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "taskuary", "buttons.json"), "utf8")).verbs).map((v) => v.label || v.name || v),
+export const NAMES = [...new Set([...Object.values(JSON.parse(await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "taskuary", "buttons.json"), "utf8")).verbs).map((v) => v.label || v.name || v),
   "Approve", "Reject", "Allow once", "Trust", "Withdraw", "Not now"].filter((x) => typeof x === "string" && x))];
 
-const sampler = (names) => {
+export const sampler = (names) => {
   window.__frames = []; let last = "";
   const seen = new Set(names), esc = (s) => s.replace(/[^A-Za-z0-9 ]/g, "\\$&");
   // ...named: a name of several words anywhere; a single word only as a name in the middle of a sentence or marked ("your Send", `Send`) -
@@ -78,7 +78,7 @@ export function check(frames) {
 const frames = (page) => page.evaluate(() => window.__frames);
 const working = (page) => page.evaluate(() => !!document.querySelector("[data-tq-task-page] .tq-aui-viewport [data-tq-working]"));
 // at rest by the SERVER's word and the page's both - the two disagreeing for long is a finding (said when it ends)
-async function rest(page, tid, timeout = 300000, settle = 4000) { const end = Date.now() + timeout; let calm = 0, split = 0, how = "";
+export async function rest(page, tid, timeout = 300000, settle = 4000) { const end = Date.now() + timeout; let calm = 0, split = 0, how = "";
   while (Date.now() < end) { const dom = await working(page), srv = (await api(`/api/tasks/${tid}/conversation`)).working;
     if (dom !== srv) { split += 400; how = `page ${dom ? "working" : "at rest"}, server ${srv ? "working" : "at rest"}`; }
     // ...and where the server says nothing works, nothing on the page spins: a turn left at work under a finished one is a finding at once

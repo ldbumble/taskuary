@@ -160,13 +160,14 @@ export async function startHarness({ fresh = false, bin = "", tour = false } = {
   const localAppData = path.join(home, "localappdata");
   const codexHome = path.join(home, "codex");
   const claudeHome = path.join(home, "claude");
-  const agentBrowserHome = path.join(home, "agent-browser");
   const userHome = path.join(home, "user");
+  // ...under the scratch profile, by the name the driver itself gives it: a program run with that profile keeps its state where Taskuary reads it
+  const agentBrowserHome = path.join(userHome, ".agent-browser");
   const xdgConfig = path.join(home, "xdg-config");
   const xdgCache = path.join(home, "xdg-cache");
   const xdgData = path.join(home, "xdg-data");
   await Promise.all([browserProfile, appData, localAppData, codexHome, claudeHome, agentBrowserHome, userHome, xdgConfig, xdgCache, xdgData]
-    .map((folder) => mkdir(folder)));
+    .map((folder) => mkdir(folder, { recursive: true })));
 
   const fixtureApi = `http://127.0.0.1:${backendPort}`;
   const ui = `http://127.0.0.1:${frontendPort}`;

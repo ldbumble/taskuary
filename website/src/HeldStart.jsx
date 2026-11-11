@@ -1,6 +1,6 @@
 // A START HELD FOR A NEW SENDER IS SAID IN THE CHAT, with its one way on (the owner, 2026-11-09): a coding task held because its sender was new
 // opened on "waiting to start" over an empty chat, and Came from said "anything risky waits for your OK" with nothing to press. The chat says
-// who sent it and why nothing started by itself (funnel.agent_story's held line, the router's held_note). Two ways on, both through the hold's
+// who sent it and why nothing started by itself (funnel.agent_story's held line, the router's not_started line). Two ways on, both through the hold's
 // own release (server.release_task): Run anyway starts this task once and the sender stays unknown; Trust sender vouches for them as well.
 import React, { useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";

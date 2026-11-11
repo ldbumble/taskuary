@@ -291,13 +291,6 @@ def _start_workflow(store, msg: dict, intent: dict, actor: str, note: str = '') 
     return {'status': 'attached' if out.get('busy') else 'created', 'task_id': tid, 'message_id': mid, 'workflow': intent['workflow']}
 
 
-def held_note(who, kind: str) -> str:
-    """The task's line for a start that waited: the reason as its own sentence, then where it stands. A STATE, NEVER AN
-    INSTRUCTION: the task's own row carries the button that starts it, so the line names none - "press Send to agent" stood on
-    tasks whose row had no such button, and a stranger's hold was told two next steps at once (2026-10-18)."""
-    return f"Waiting for you: {who} No agent has started on it."
-
-
 # One drain at a time: a conversation's second line must find the task its first one opened.
 # Fresh chat channels go to the front of the line (the chat lane in server.py names them, and a
 # drain already running is told through mark_fresh); within a channel the order stays arrival.
@@ -1214,15 +1207,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     if f['kind'] == 'coding': starts.append((_auto_code, store, tid))
                     else: starts.append((_auto_general, store, tid, advisor_brief(store, msg, mid)))
                 else:
+                    # ...said on the task in the one sentence every road that holds a start writes (not_started) - a stranger's held
+                    # as their hold, which the feed row and the release read (senders.known decided it; HOLD_TAG records it)
                     held = who
-                    # A stranger's first message is its own state, not just an absent session. An
-                    # inbound message is a PROMPT, and this one is a prompt from an address that has
-                    # never written before - so the timeline says so in as many words and offers one
-                    # button, instead of a task that merely looks like nobody got round to it. The
-                    # tag rides on the task because that is what the feed row and the release both
-                    # read (senders.known decided it; HOLD_TAG only records the decision).
-                    if getattr(who, 'stranger', False): store.tag_task(tid, HOLD_TAG)
-                    store.add_comment(tid, 'router', 'agent', held_note(who, f['kind']))
+                    not_started(store, tid, who)
                     store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': who})
     # the route row is the JUDGEMENT's record, and the timeline panel quotes it verbatim: the
     # verdict leads (what the classifier decided and why), routing explains new-vs-attached,

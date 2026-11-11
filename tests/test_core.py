@@ -139,7 +139,7 @@ class CoreTests(unittest.TestCase):
         spawn.assert_not_called(); wt.assert_called_once()
         t = s.get_task(out['task_id'])
         self.assertEqual((t['Kind'], t['Status']), ('coding', 'open'))                      # a task, on the Board, not worked
-        self.assertTrue(any(c['Body'].startswith('Waiting for you:') for c in s.list_comments(out['task_id'])))
+        self.assertTrue(any(c['Body'].startswith('No agent started:') for c in s.list_comments(out['task_id'])))
         self.assertIn('you have never written to them', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
         # the same stranger writes again: still a stranger. Their own first mail, held for the owner,
         # used to make the second one 'known' and start the agent the hold exists to stop (audit 2026-09-02)

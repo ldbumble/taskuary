@@ -81,7 +81,7 @@ def _install_fresh_routes(app, store):
         repo = Path(os.environ["TASKUARY_HOME"]) / "ledger"; repo.mkdir(exist_ok=True)
         (repo / "totals.py").write_text("def total(a, tax):\n    return a + tax\n", encoding="utf-8")
         git = lambda *a: subprocess.run([body.get("git") or "git", "-C", str(repo), *a], check=True, capture_output=True)
-        git("init", "-q"); git("config", "user.name", "Alex Doyle"); git("config", "user.email", "alex@northwind.example"); git("add", "."); git("commit", "-qm", "start")
+        git("init", "-q"); git("config", "user.name", "Alex Doyle"); git("config", "user.email", "alex@northwind.example"); git("add", "."); git("commit", "-qm", "start", "--allow-empty")       # ...a second coding task of one home: nothing new to commit
         store.set_setting(agents.DEV_MODE, "1", "owner")
         if "pty" in body: store.set_setting(agents.ACP_SETTING, "0" if body["pty"] else "1", "owner")      # ...in its terminal, not over ACP
         fake = str(Path(__file__).resolve().parents[2] / "tests" / "fake_acp_server.py")

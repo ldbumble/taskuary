@@ -132,11 +132,14 @@ def take_kept(store, tid: int, ids=None, **how) -> list:
     """The owner's kept lines (`ids`, else all) taken as his lines of the conversation (store.take_lines) - by the turn that takes them, any
     agent's. `how`: what else this hand-over is (conversation.hear's `turn`, `sid`) - ONE hand-over is written down once, so what it took
     stands together, in the order it came."""
-    got = store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'], ids=ids) if ids is None or ids else []
-    # ...THE HAND-OVER, written down (conversation.hear): from here each stands in the chat where the agent heard it
     from . import conversation
-    conversation.hear(store, tid, got, **how)
-    return got
+    # ...THE HAND-OVER, written down (conversation.hear): from here each stands in the chat where the agent heard it
+    # ...heard and taken in ONE step: read between the two, a line that was taken and not yet heard stood for a frame at the time it was
+    # typed, above everything that came in since (the recorded flood, 2026-11-11)
+    with store.lock:
+        rows = [r for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE and (ids is None or r['CommentId'] in ids)] if ids is None or ids else []
+        conversation.hear(store, tid, rows, **how)
+        return store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'], ids={r['CommentId'] for r in rows}) if rows else []
 # A SESSION THAT ENDED UNDER A LINE (failed, closed, idled out) - never "reload the page" (the owner, 2026-11-07): say_line starts a fresh one,
 # which takes the kept line. 'has ended' is what every caller reads it by
 ENDED = 'this assistant session has ended - it starts again with the next line you send'

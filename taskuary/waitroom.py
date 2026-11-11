@@ -53,8 +53,24 @@ def batch(notes: list, after_restart: bool = False, remaining: int = 0, waited: 
             'after finishing the step you are on; if one conflicts with work already done, say so instead of undoing it:')
     tail = (f' ({remaining} more note{"s" if remaining > 1 else ""} wait{"" if remaining > 1 else "s"} behind this one - the next comes when you stop again; '
             'finish this and stop, do not ask for it.)' if remaining else '')
-    each = ' '.join(f'({i}) {said(x.get("Note"))}' for i, x in enumerate(notes, 1))
-    return ' '.join((head + ' ' + each + tail).split())[:MAX_BATCH]
+    # ...the closing paragraph Taskuary's own notes share, word for word, is said once after them, not once each: thirty messages that came in
+    # together each carried the same instructions, and the agent answered each with the same sentence (the recorded flood, 2026-11-11)
+    ends = [n.rpartition('\n\n')[2] if '\n\n' in n else '' for n in (str(x.get('Note') or '') for x in notes if x.get('CreatedBy') == 'router')]
+    once = ends[0] if len(ends) > 1 and ends[0] and len(set(ends)) == 1 else ''
+    cut = lambda x: str(x.get('Note') or '')[:-len(once)] if once and x.get('CreatedBy') == 'router' else x.get('Note')
+    each = ' '.join(f'({i}) {said(cut(x))}' for i, x in enumerate(notes, 1))
+    return ' '.join((head + ' ' + each + (f' FOR EACH MESSAGE ABOVE: {once}' if once else '') + tail).split())[:MAX_BATCH]
+def together(lines: list, waiting: list) -> list:
+    """What one hand-over takes of the waiting room, behind the owner's typed `lines`. WHAT TASKUARY ITSELF TELLS THE AGENT GOES IN TOGETHER
+    (the owner, 2026-11-11: a flood is one hand-over): each message that came in and each press, as many as one message holds whole
+    (MAX_BATCH - what does not fit waits for the next stop, never cut) - dripped one per stop, a flood of thirty was thirty turns. The owner's
+    own queued notes keep their drip: the one at the head of the line, alone, and none behind lines he typed."""
+    if waiting and waiting[0].get('CreatedBy') != 'router' and not lines: return waiting[:1]
+    fit = []
+    for x in (x for x in waiting if x.get('CreatedBy') == 'router'):
+        if (lines or fit) and len(batch([*lines, *fit, x], remaining=9)) >= MAX_BATCH: break
+        fit.append(x)
+    return fit
 
 
 # A GENERAL AGENT'S CHAT SAYS WHO SAID WHAT (the overnight run, 2026-11-03): the batch typed into its conversation was filed whole as the
@@ -233,7 +249,7 @@ def _deliver(store, tid: int, new: int = None) -> dict:
     if not pending: return {'delivered': 0, 'state': state(store, tid)[0]}
     st, t = state(store, tid)
     # the drip: one note per stop, the rest keep their place in line - the owner's typed lines all at once, as one turn
-    notes = lines + (waiting[:1] if drip(store) and not lines else [] if drip(store) else waiting)
+    notes = lines + (together(lines, waiting) if drip(store) else waiting)
     left = len(pending) - len(notes)
     # MID-TURN, INTO THE TURN (the owner, 2026-11-06): an ACP coding session whose adapter steers (acpcoding.steerable) takes the words now,
     # into the turn at work, rather than at its end - the parked road below, under every one of its holds

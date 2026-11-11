@@ -331,6 +331,29 @@ class DripTests(unittest.TestCase):
             self.assertIn('(1) rename the flag', t.typed()); self.assertIn('1 more note waits', t.typed())
             self.assertEqual(len(s.waiting_notes(tid)), 1)
 
+    def test_what_taskuary_tells_a_working_agent_goes_in_together_and_its_shared_closing_is_said_once(self):
+        """The recorded flood, 2026-11-11: thirty messages came in on a coding task while its agent worked, each a note of Taskuary's with the
+        same closing instructions - dripped one per stop they were thirty turns, and the agent said the same sentence thirty times."""
+        from taskuary import ingest
+        s = MemoryStore(); tid = task(s)
+        t = FakeTerm(tid, idle=3, tail=['Working...'])
+        said = [ingest.replan_turn({'body': f'flood {i} of 9', 'from_name': 'Gail Moreno', 'from_email': 'gail@northwind.example', 'channel': 'email'}) for i in range(1, 10)]
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
+            for x in said: waitroom.add(s, tid, x, 'router')
+            waitroom.add(s, tid, 'and rename the flag')                                       # ...his own queued note keeps its drip
+            self.assertEqual(len(s.waiting_notes(tid)), 10); self.assertEqual(t.typed(), '')   # working: all of it waits
+            t._idle = terminal.IDLE_WAITING + 5
+            self.assertEqual(waitroom.tick(s), 9); time.sleep(0.4)
+            typed = t.typed()
+            for i in range(1, 10): self.assertEqual(typed.count(f'flood {i} of 9'), 1)
+            self.assertEqual(typed.count(' '.join(ingest.REPLAN.split())[:200]), 1)
+            self.assertEqual([w['Note'] for w in s.waiting_notes(tid)], ['and rename the flag'])
+            # ...and more than one message holds waits whole for the next stop: never cut
+            big = [x for x in ({'WId': i, 'CreatedBy': 'router', 'Note': f'{"word " * 300}{i}\n\n{ingest.REPLAN}'} for i in range(9))]
+            fit = waitroom.together([], big)
+            self.assertEqual(len(waitroom.together([{'Note': 'and the tax line?', 'CreatedBy': 'owner', 'line': 7}], big)), len(fit))      # ...behind a line he typed, too
+            self.assertTrue(0 < len(fit) < 9); self.assertLessEqual(len(waitroom.batch(fit, remaining=9 - len(fit))), waitroom.MAX_BATCH - 1)
+
     def test_split_many_strips_bullets_and_joins_continuations(self):
         self.assertEqual(waitroom.split_many('• one\n* two\n3. three\n  still three\n\nfour'), ['one', 'two', 'three still three', 'four'])
         self.assertEqual(waitroom.split_many('  \n'), [])

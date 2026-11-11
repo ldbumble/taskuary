@@ -2154,7 +2154,7 @@ def reach_why(store, tid, msg: dict, mid, follow: dict | None, kind: str, own: b
     if not own and (held := brainroute.auto_held(store)): return held
     if live and live != kind: return 'another agent is live on it'
     # ...nor a line that reads as steering an AI (the owner, 2026-10-28): it waits for the owner's press
-    if not own and (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d}) - it waits for you'
+    if not own and (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d})'
     if lack or (own and live): return lack
     ok, why = senders.start_known(store, msg, mid) if live else auto_start_ok(store, msg, mid, kind, own=own)
     return '' if ok else str(why)
@@ -2198,7 +2198,7 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
     if (store.get_task(tid) or {}).get('Kind') == 'reply': return agent_on_reply(store, tid, msg, mid, follow, actor)
     if why := carry_on_why(store, tid, msg, mid, follow):
         if why in FIRST_AGENT and (went := first_agent(store, tid, msg, mid, follow, actor)) is not None: return went
-        if why not in _QUIET_CARRY: not_started(store, tid, why)
+        if why not in QUIET_WHY: not_started(store, tid, why)
         return False
     from . import blackboard as bb, general, quickwork
     coding = not general.handles(store.get_task(tid) or {})
@@ -2278,8 +2278,10 @@ def first_agent(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> 
 
 # WHY NO AGENT STARTED IS ALWAYS SAID (the owner, 2026-10-28: "yes" - "No agent started: auto-start is off in Settings"). carry_on_why
 # answered "not an agent's task" and wrote it nowhere, so a task that needed an agent sat looking as if nobody had got round to it.
-# Silent only where nothing was asked of an agent (no new work) or one is already on it (_pass_in says its own why).
-_QUIET_CARRY = ('not new work', 'an agent is live on it', 'the task is closed', 'passing lines to the agent is switched off')
+# Silent only where nothing was asked of an agent, the owner switched it off, one is already on it or another road is its own (the line
+# went nowhere an agent was ever going to be): ONE list for carrying on, passing in and waking - three had drifted apart
+QUIET_WHY = ('not new work', 'an agent is live on it', 'the task is closed', 'passing lines to the agent is switched off', 'no live session to pass it to',
+         'not an assistant task', 'no agent conversation', 'triage could not read it')
 NOT_STARTED = 'No agent started:'
 
 
@@ -2402,7 +2404,7 @@ def reply_to_agent(store, tid, rid, msg: dict = None) -> bool:
             if not general.handles(t):
                 return _carry_on(store, tid, msg, m['MessageId'], {'intent': 'task', 'kind': t.get('Kind'), 'why': rv.get('Reason') or ''}, 'triage')
             # ...its conversation's own road said why where it refused (thread_moved); only what that road keeps quiet is said here
-            why = w if (w := wake_why(store, tid, msg, m['MessageId'], None)) in _QUIET_WAKE else ''
+            why = w if (w := wake_why(store, tid, msg, m['MessageId'], None)) in QUIET_WHY else ''
             if why: not_started(store, tid, f'{why} - {general.carry_on(t)}')
             return False
         try: return agent_on_reply(store, tid, msg, m['MessageId'], {'intent': 'task', 'kind': 'general', 'why': rv.get('Reason') or ''}, 'triage', opening=True)
@@ -2483,14 +2485,10 @@ def mark_browser(store, tid, actor: str = 'triage') -> bool:
     return True
 
 
-# Only a line that WOULD have gone in says why it did not: the switch off, or no new work, is silence.
-_QUIET = ('not new work', 'passing lines to the agent is switched off', 'no live session to pass it to', 'the task is closed')
-
-
 def _pass_in(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bool:
     why = pass_in_why(store, tid, msg, mid, follow)
     if why:
-        if why not in _QUIET: store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message was not passed to the agent: {why} It waits for you.")
+        if why not in QUIET_WHY: store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message was not passed to the agent: {why.rstrip('.')}. It waits for you.")
         return False
     store.audit('task', tid, 'passed_to_agent', actor, 'agent', {'message_id': mid})
     # the wrapper triage named (a banner, a legal footer) rides with the line, so the agent is handed only what the sender wrote
@@ -2635,8 +2633,6 @@ REPLAN = ('Re-plan the WHOLE next step from here, not only the draft: it may nee
           'needs no real response at all - a thanks, an acknowledgement, a sign-off; your judgement of the thread, not a word list - the '
           'whole turn is ONE line saying what it was ("Ray thanked you."), with a summary of only that line as "did", "about" empty, no steps '
           'and no draft. You never send or close anything. End with the [[TASKUARY-SUMMARY]] block.')
-_QUIET_WAKE = ('the task is closed', 'not an assistant task', 'no agent conversation', 'triage could not read it',
-               'passing lines to the agent is switched off')
 
 
 def replan_turn(msg: dict, follow: dict | None = None, own: bool = False) -> str:
@@ -2677,7 +2673,7 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
     from . import general
     if not own and (went := start_lifted(store, tid, msg, mid, actor)) is not None: return went
     if why := wake_why(store, tid, msg, mid, follow, own):
-        if why not in _QUIET_WAKE: not_started(store, tid, why)
+        if why not in QUIET_WHY: not_started(store, tid, why)
         return False
     turn = replan_turn(msg, follow, own)
     store.audit('task', tid, 'thread_moved', actor, 'agent', {'message_id': mid, 'own': own})
@@ -2733,7 +2729,7 @@ def folded_in(store, tid, src, title: str, msgs: list, result: str = '', drafts:
     from . import general
     msg = {'from_name': task_ref(src)}
     if why := wake_why(store, tid, msg, None, None, own=True):
-        if why not in _QUIET_WAKE: not_started(store, tid, why)
+        if why not in QUIET_WHY: not_started(store, tid, why)
         return False
     turn = fold_turn(store, src, title, msgs, result, drafts)
     store.audit('task', tid, 'fold_to_agent', actor, 'agent', {'from_task': src, 'messages': [m['MessageId'] for m in msgs]})

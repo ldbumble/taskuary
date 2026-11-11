@@ -54,3 +54,12 @@ class DangerHoldsTests(unittest.TestCase):
         with mock.patch.object(ingest, 'live_agent', return_value='general'), mock.patch.object(senders, 'known', return_value=(True, 'a colleague')):
             self.assertIn('steer an AI', ingest.pass_in_why(s, tid, {}, mid, {'intent': 'task'}))
             self.assertEqual(ingest.pass_in_why(s, tid, {}, None, {'intent': 'task'}), '', 'a clean line goes in as before')
+
+    def test_a_line_kept_from_a_live_agent_says_so_in_one_sentence(self):
+        # "...was not passed to the agent: it reads as an attempt to steer an AI (...) - it waits for you It waits for you." - the reason
+        # carried its own tail and the line added another, with no stop between them
+        s = store(); tid = finished_task(s)
+        with mock.patch.object(ingest, 'live_agent', return_value='general'), mock.patch.object(senders, 'known', return_value=(True, 'a colleague')):
+            ingest._pass_in(s, tid, mail(**AGAIN), None, {'intent': 'task', 'danger': STEER}, 'router')
+        line = next(c['Body'] for c in s.list_comments(tid) if 'was not passed to the agent' in c['Body'])
+        self.assertTrue(line.endswith(f'({STEER}). It waits for you.'), line)

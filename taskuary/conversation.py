@@ -200,7 +200,7 @@ def items(store, tid: int) -> dict:
             h = led.get(('line', c.get('LineId') or ''))
             if not h and ty == WAITING_TYPE: pend.append(it); continue
             if h: it['_h'] = h['At']
-            last = max(last + 1e-4, h['At'] if h else ep(c['CreatedAt'])); put(last, 0, it); lines.append((last, _flat(body['text']))); texts.add(_flat(body['text']))
+            last = max(last + 1e-4, h['At'] if h else ep(c['CreatedAt'])); put(last, 0, it); lines.append((last, _flat(body['text']), len(ev) - 1)); texts.add(_flat(body['text']))
         elif ty == USER_TYPE:
             last = max(last + 1e-4, ep(c['CreatedAt']))
             if str(c.get('Body') or '').startswith(FOLD_HEAD):
@@ -242,8 +242,13 @@ def items(store, tid: int) -> dict:
                 if k == 'brief' or s.get('line') and ('line', s['line']) in led: continue
                 f = _flat(s.get('text'))
                 # ...one of his the ledger already placed (heard up to the step's own time): the same words, once
-                hit = next((j for j, (at, w) in enumerate(took) if at <= s['T'] + 2 and w and (w == f or f.startswith(w[:150]) or w.startswith(f[:150]))), None) if s['T'] >= era - 2 else None
-                if hit is not None: took.pop(hit); continue
+                hit = next((j for j, (at, w, _) in enumerate(took) if at <= s['T'] + 2 and w and (w == f or f.startswith(w[:150]) or w.startswith(f[:150]))), None) if s['T'] >= era - 2 else None
+                if hit is not None:
+                    # ...and where its own record says WHEN it took the line, that is when it heard it: a pane's CLI holds a typed line until
+                    # its turn ends, and the answer before it was drawn under it (the recorded walk, 2026-11-11)
+                    at, _, at_ev = took.pop(hit)
+                    if s['T'] > at: ev[at_ev] = (s['T'], *ev[at_ev][1:])
+                    continue
                 put(s['T'], 0, {'id': f'y:{sid}:{i}', 'kind': 'line', 'at': stamp(s['T']), 'text': s.get('text') or '', 'files': []})
             else: put(s['T'], 1, {'kind': 'step', 'sid': sid, 'seg': n, 'step': {k_: v for k_, v in s.items() if k_ != 'T'}, 'T': s['T']})
 

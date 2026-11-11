@@ -267,6 +267,7 @@ def _drop_stale_hold(store, t: dict, why: str):
 
 def raise_to(store, tid: int, to: str, actor: str):
     "The owner's say-so: everything on the task so far counts as `to`. A later message is judged on its own."
+    _HOLDS.pop((id(store), int(tid)), None)
     if to not in ('trusted', 'owner'): raise ValueError(f'cannot raise a task to {to!r}')
     ms = store.list_messages(tid); last = max((m['MessageId'] for m in ms), default=0)
     senders.vouch(store, ms)          # a chat sender the owner vouched for here is trusted on their next task too
@@ -309,11 +310,23 @@ def _claude_version(cmd: str) -> tuple:
 # what came in, one plain line why nothing works on it, and one Trust action. Trust (server.task_trust) records it and starts the agent as
 # any task's. One function says it (`hold`); every road that hands an agent anything asks it.
 HELD_LINE = "{who} is not someone you have trusted yet, so no agent is working on this. Trust them and it starts."
+# ...and where an agent already worked the thread they wrote on: it is handed nothing more until he says so
+JOINED_LINE = "{who} is not someone you have trusted yet, so what they wrote waits and the agent is handed nothing more. Trust them and it carries on."
+_HOLDS = {}                   # (store, task) -> (what it was judged on, when, the hold): a chat at work reads this twice a second
 def hold(store, tid) -> dict | None:
     "{line, person (the Trust action's label), org, who, mids (the untrusted messages)} while an untrusted sender's words stand on the task."
+    import time
     if not tid or not (t := store.get_task(int(tid))) or t.get('Status') in ('done', 'dropped'): return None
-    msgs = store.list_messages(int(tid))
-    if of_task(store, int(tid), msgs)[0] != 'stranger': return None
+    # ...judged again when the thread or what he vouched for moved, else every few seconds (a trust given elsewhere - an organisation's -
+    # changes it with neither): a long group chat is not judged line by line on every read of its list
+    n = store._one('SELECT COUNT(*) AS n, MAX(MessageId) AS m FROM message WHERE TaskId=?', (int(tid),)) or {}
+    key, sig, now = (id(store), int(tid)), (n.get('n'), n.get('m'), t.get('TrustedThrough'), t.get('OriginBase')), time.time()
+    if (was := _HOLDS.get(key)) and was[0] == sig and now - was[1] < 5: return was[2]
+    _HOLDS[key] = (sig, now, got := _hold(store, int(tid), t))
+    return got
+def _hold(store, tid: int, t: dict) -> dict | None:
+    msgs = store.list_messages(tid)
+    if of_task(store, tid, msgs)[0] != 'stranger': return None
     through, memo, seen = int(t.get('TrustedThrough') or 0), {}, {}
     mids = [m['MessageId'] for m in msgs if m['MessageId'] > through and not _own(m) and (m.get('Channel') or '') not in OURS
             and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger']

@@ -466,5 +466,6 @@ def items(store, tid: int) -> dict:
     body = {'items': out, 'pending': pend, 'working': at_work, 'started': t0 if at_work else None,
             'asking': taskstate.asking(store, store.get_task(tid) or {'TaskId': tid}, general.session_for(tid) or (live if codingchat._live(tid) else None)),
             'permissions': permissions.pending(tid, store), 'live': codingchat.live_of(codingchat._live(tid)),
-            'hold': hold_ and {k: hold_[k] for k in ('line', 'person', 'org')}, 'published': published, 'ran': bool(turn_of) or any(x['kind'] == 'turn' for x in out)}
+            'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
+                              **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if any(x['kind'] == 'turn' for x in out) else {})}, 'published': published, 'ran': bool(turn_of) or any(x['kind'] == 'turn' for x in out)}
     return {'rev': hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16], **body}

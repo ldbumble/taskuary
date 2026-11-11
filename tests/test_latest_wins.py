@@ -26,6 +26,7 @@ def task_with(s):
                          'Subject': 'Vendor list', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'SentAt': '2026-11-05 09:00:00',
                          'BodyText': 'Can you send me the vendor list?', 'Status': 'routed'})
     s._exec("UPDATE message SET CreatedAt='2026-11-05 09:00:00' WHERE MessageId=?", (mid,))
+    s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))      # he trusts this thread: an untrusted sender's task starts no agent (origin.hold)
     return tid, mid
 
 
@@ -63,7 +64,7 @@ def test_already_sent_replies_are_in_the_turns_context():
     s = MemoryStore(); tid, *_ = the_owners_day(s)
     _, turn = general._prompt(s, tid)
     assert 'ALREADY SENT ON THIS TASK - never draft these again' in turn
-    line = next(l for l in turn.splitlines() if SENT in l)
+    line = next(l for l in turn.split('ALREADY SENT ON THIS TASK')[1].splitlines() if SENT in l)
     assert 'to Gail Moreno' in line and line.startswith('- 06:10 PM')
 
 def test_a_resumed_turn_carries_the_draft_and_the_sent_but_not_a_bare_answer():

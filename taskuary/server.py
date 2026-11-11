@@ -2091,7 +2091,7 @@ def _trusted_starts(task_id: int) -> str:
     if t.get('Status') in ('done', 'dropped') or t.get('Kind') not in _ing.task_kinds.AGENT: return ''
     if _ing.live_agent(store, task_id):
         m = next((m for m in reversed(store.list_messages(task_id)) if not _ing.is_ours(m)), None)
-        if m: _ing._spawn(_ing.thread_moved, store, task_id, {**senders.row_msg(m), 'body': m.get('BodyText') or '', 'subject': m.get('Subject') or ''}, m['MessageId'], None, ACTOR)
+        if m: _ing._spawn(_ing.thread_moved, store, task_id, {**senders.row_msg(m), 'body': m.get('BodyText') or '', 'subject': m.get('Subject') or ''}, m['MessageId'], None, 'router')       # Taskuary hands it on: his press is its own one line
         else: waitroom.later(store, 0.2)
         return 'handed'
     if general.handles(t): _ing._spawn(_ing._auto_general, store, task_id)

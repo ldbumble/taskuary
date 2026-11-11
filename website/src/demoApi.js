@@ -492,6 +492,10 @@ const write = (method, url, body) => {
     return { dispatch: "assistant", started: !existing, existing, taskId: NUMBERS_TASK, ref: "TQ-0018", agent: "analyst", demo: true };
   }
 
+  // TRUST <SENDER> (the chat's one action on an untrusted sender's task, server.task_trust): the hold is gone from the task's recorded list
+  const trusted = method === "post" && p.match(/^\/api\/tasks\/(\d+)\/trust$/);
+  if (trusted) { const c = state["/api/tasks/detail"]?.[`${trusted[1]}:conversation`]; if (c) c.hold = null; return { origin: "trusted", why: "", started: "" }; }
+
   if (method === "post" && p === "/api/assistant/dock/new") {
     const previous = scriptedAssistant.chats.find((c) => c.taskId === scriptedAssistant.activeTaskId);
     if (previous) previous.open = false;

@@ -90,12 +90,14 @@ async function untilWorking(page, timeout = 60000) { const end = Date.now() + ti
 if (process.argv[1]?.endsWith("real-conv.mjs")) {
   const [name, road = "general", ...steps] = process.argv.slice(2);
   let tid;
-  if (road === "general") {
-    const got = await api("/api/ingest/push", { channel: "email", subject: "Offsite venue", from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`,
+  // ...`stranger`: a general task whose first mail is from someone the owner never trusted (no agent starts: the hold and its Trust action)
+  const who = road === "stranger" ? { from_name: "Paula Vance", from_email: "paula@vendor.example" } : { from_name: "Gail Moreno", from_email: "gail@northwind.example" };
+  if (road === "general" || road === "stranger") {
+    const got = await api("/api/ingest/push", { channel: "email", subject: "Offsite venue", ...who, conversation_id: `conv-${name}`,
       body: "Hi Alex,\n\nCan you suggest two venues for the March offsite, about 40 people, and tell me which one you would pick? A short answer is fine.\n\nThanks,\nGail" });
     console.log("push", JSON.stringify(got).slice(0, 200)); tid = got.task_id;
   } else { const got = await api("/api/fixture/coding", { git: info.git, real: true, pty: road === "pty", conversation: `conv-${name}` }); tid = got.taskId; }
-  const subject = road === "general" ? "Re: Offsite venue" : "Re: Ledger totals";
+  const subject = road === "general" || road === "stranger" ? "Re: Offsite venue" : "Re: Ledger totals";
   const { browser, page } = await connect();
   await page.reload({ waitUntil: "domcontentloaded" }); await sleep(3000);
   await open(page, tid);
@@ -111,6 +113,8 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     else if (k === "say") { await type(page, arg); await sleep(300); }
     else if (k === "busy") await untilWorking(page);                     // wait until a turn is at work
     else if (k === "wait") await sleep(Number(arg));
+    // ...a stranger writes on the thread: his words wait by the box, behind the Trust action
+    else if (k === "strangermail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: "email", subject, from_name: "Omar Keller", from_email: "omar@other.example", conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
     else if (k === "mail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: "email", subject, from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
     else if (k === "press") console.log(await press(page, new RegExp(arg), "[data-tq-task-page]"));
     else if (k === "flood") { const n = Number(arg) || 50;

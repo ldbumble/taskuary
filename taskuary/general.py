@@ -3421,14 +3421,17 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
             if not held and not _IN_FLIGHT.get(tid): OPENING.discard(tid); PRESSED.pop(tid, None)
             raise
         prepare = None
-    wid = wait_line(store, tid, text, files, line_id)
+    # ...AT WORK BEFORE THE LINE IS KEPT: keeping it tells every screen to read, and a read between the two drew his line with nothing at work
+    # under it, so the next line he typed was taken as one sent to an agent at rest (the recorded walk, 2026-11-11)
+    _IN_FLIGHT[tid] = _IN_FLIGHT.get(tid, 0) + 1
+    OPENING.add(tid)
+    try: wid = wait_line(store, tid, text, files, line_id)
+    except Exception: answered(tid, every=True); raise
     # ...AN AGENT AT REST HEARS IT NOW (the owner, 2026-11-11: "where the agent listens to it is where it shows"): the line begins its turn, so it
     # stands in the chat from the press with the turn under it; one sent while a turn works waits by the box until a road takes it (take_kept)
     if rest:
         from . import conversation
         conversation.hear(store, tid, [line_id], standing=True)
-    _IN_FLIGHT[tid] = _IN_FLIGHT.get(tid, 0) + 1
-    OPENING.add(tid)
     if not wait:
         threading.Thread(target=lambda: _start_line(store, tid, t, text, files, actor, line_id, wid, prepare, kw), daemon=True, name=f'line-{tid}').start()
         return {'kept': wid}

@@ -377,10 +377,15 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 const LISTS = new Map();
 export function useConversation(tid, on) {
   const [list, setList] = useState(() => LISTS.get(tid) || null), rev = useRef(LISTS.get(tid)?.rev || "");
-  const load = useCallback(() => (on ? api.get(`/api/tasks/${tid}/conversation`, { params: { rev: rev.current } }).then(({ data: d }) => {
+  // ...READS LAND IN THE ORDER THEY WERE ASKED (the recorded walk, 2026-11-11: on a loaded machine an older read came back after a newer one -
+  // his line vanished, the chat read "at rest" over a turn at work, and his next line was drawn as heard): one that a later read overtook is dropped
+  const asked = useRef(0), shown = useRef(0);
+  const load = useCallback(() => { const n = ++asked.current; return (on ? api.get(`/api/tasks/${tid}/conversation`, { params: { rev: rev.current } }).then(({ data: d }) => {
+    if (n < shown.current) return false;
+    shown.current = n;
     if (!d || d.same) return false;
     rev.current = d.rev; LISTS.set(tid, d); setList(d); return true;
-  }).catch(() => false) : Promise.resolve(false)), [tid, on]);
+  }).catch(() => false) : Promise.resolve(false)); }, [tid, on]);
   useEffect(() => { rev.current = LISTS.get(tid)?.rev || ""; setList(LISTS.get(tid) || null); load(); }, [load]);   // eslint-disable-line react-hooks/exhaustive-deps
   const going = !!list?.working;
   // ...a turn at work is read as it goes; at rest the server's own poke (task-changed) brings what is new, and a slow look backs it up
@@ -500,7 +505,7 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
     if (given == null) c.setText("");
     if (files.length) onClearAttachments(files.map((a) => a.path));
     const id = `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, sel = selectionRef.current || {};
-    setMine((m) => [...m, { id, kind: "line", text: w || withImages("", files.map((a) => a.path)), at: new Date(), rest: !listNow.current?.working }]);
+    setMine((m) => [...m, { id, kind: "line", text: w || withImages("", files.map((a) => a.path)), at: new Date(), rest: !listNow.current?.working && !listNow.current?.hold }]);      // ...on an untrusted sender's task it waits by the box at once (the list's `hold`)
     stick.current = true;
     api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id, pick: sel.connectorId || null, model: sel.model || null }, { timeout: 0 })
       .then((r) => { if (road) road(); else if (r.data?.messages) onSent?.(r.data); reloadList?.(); })

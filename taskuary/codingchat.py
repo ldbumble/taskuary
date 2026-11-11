@@ -108,7 +108,7 @@ def waiting(store, tid: int, t=None) -> list:
     # by that id, the page drew the line twice while the session held it (the browser walk, 2026-11-10)
     return out + [{'id': f'q{i}', 'text': w['text'], 'at': None, 'kept': w.get('line'), **({'line': w['name']} if w.get('name') else {})}
                   if isinstance(w, dict) else {'id': f'q{i}', 'text': w, 'at': None}
-                  for i, (_t, _b, shown, _d) in enumerate(held) for w in lines(_t, _b, shown)]
+                  for i, (_t, _b, shown, _d) in enumerate(held) for w in lines(_t, _b, shown) if not (isinstance(w, dict) and w.get('drawn'))]
 
 
 def _once(waiting: list, sessions: list) -> list:
@@ -123,9 +123,21 @@ def _once(waiting: list, sessions: list) -> list:
 def _local(steps: list) -> list: return [{**s, 'at': sessionrecord._local(s['at'])} if s.get('at') else s for s in steps]
 
 
+def _worded(ups: list) -> list:
+    """Each run of the agent's words ONE update, read as a chat's answer is (selfclose.asked_inline): its [[TASKUARY-ASK]] came a token at a time,
+    and the coding chat drew the bare marker where a general one draws the question (the audit, 2026-11-10)."""
+    from .selfclose import asked_inline
+    words = lambda u: u.get('sessionUpdate') == 'agent_message_chunk' and (u.get('content') or {}).get('type') == 'text'
+    out = []
+    for u in ups:
+        if words(u) and out and words(out[-1]): out[-1] = {**out[-1], 'content': {'type': 'text', 'text': out[-1]['content']['text'] + str(u['content'].get('text') or '')}}
+        else: out.append(u)
+    return [{**u, 'content': {'type': 'text', 'text': asked_inline(u['content']['text'])[0]}} if words(u) else u for u in out]
+
+
 def _session(tid: int, sid: str, cli: str, ext: str, at: str, live: bool = False) -> dict:
     s = {'sid': sid, 'cli': cli or '', 'at': str(at or '').replace('T', ' ')[:19], 'live': live}
-    if (ups := acp_updates(tid, sid)): return {**s, 'source': 'acp', 'updates': ups}
+    if (ups := acp_updates(tid, sid)): return {**s, 'source': 'acp', 'updates': _worded(ups)}
     saved = sessionrecord._saved_path(tid, sid)
     # a live session's log is read fresh - its saved copy, if any, is from an earlier save of the same pane
     if not live and saved.is_file():
@@ -155,21 +167,22 @@ def sessions(store, tid: int) -> list:
 def chat(store, tid: int) -> dict:
     """What the coding chat draws (GeneralWorkspace.jsx): the sessions' steps or ACP updates, the mail that came in, and the live CLI - one that
     idled out (acpcoding.idle_out) still, at rest: the chat stays as it was, and its box is the input that brings it back."""
-    from . import acpcoding, permissions
-    from . import general
+    from . import acpcoding, general, permissions, taskstate
     t = _live(int(tid)) or (acpcoding.IDLED.get(int(tid)) if acpcoding.idled(int(tid), store) else None)
     from .landing import has_checkout
     # A LINE MOVES ONE WAY - kept, held by its session, drawn in its record - so it is read in that order: read after the sessions, a line
     # taken between the two reads was in neither (CI, 2026-11-10). One caught in two is drawn once, by its kept row's id (_once)
-    w = waiting(store, tid, t)
+    was, w = general.at_work(int(tid)), waiting(store, tid, t)
     ss = owned(store, tid, sessions(store, tid))
     # ...and what the indicator and the lines read, from the one function the general chat's payload calls (general.line_state)
     return {'task': int(tid), 'sessions': ss, 'mails': mails(store, tid), 'live': live_of(t),
             'checkout': has_checkout(store, tid, getattr(t, 'cwd', '') or ''),
-            **general.line_state(store, int(tid), _once(w, ss)),
+            **general.line_state(store, int(tid), _once(w, ss), was),
             # ...and the owner's presses, each one quiet line at its time - the general chat's own (general.press_lines): a coding task's Remind me
             # or Push left no line in its chat at all (the audit, 2026-11-10)
             'presses': general.press_lines(store, int(tid)),
+            # ...and what it asks the owner, by the general chat's own read (taskstate.asking)
+            'asking': taskstate.asking(store, store.get_task(int(tid)) or {'TaskId': int(tid)}, t if getattr(t, 'alive', False) else None),
             'permissions': permissions.pending(int(tid), store)}         # what the agent waits on the owner's button for
 
 

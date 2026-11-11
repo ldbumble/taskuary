@@ -174,7 +174,7 @@ test("regression: the mail that came in stays above the owner's first typed line
   const rows = chatRows({ sessions: [{ sid: "s", at: "2026-11-06 09:00:00", steps: [{ k: "you", text: "Look at this one first.", at: "2026-11-06 09:05:00" }, ...LOG.slice(1).map((s) => ({ ...s, at: "2026-11-06 09:06:00" }))] }],
     mails: [{ who: "Ray Colton", words: "Any news on the tax line?", channel: "email", at: "2026-11-06 09:02:00" }] });
   assert.deepEqual(rows.map((r) => r.kind), ["mail", "you", "turn"]);
-  assert.match(gw, /return coding \? byTime\(\[\.\.\.general, \.\.\.turns\]\) : general;/);
+  assert.match(gw, /return coding \? byTime\(\[\.\.\.general, \.\.\.turns, \.\.\.\(cc\.got\?\.presses \|\| \[\]\)\]\) : general;/);   // ...each press a line at its time
 });
 
 test("regression: no 'Working on this…' after the turn ends or while it waits on the owner", () => {

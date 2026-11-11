@@ -123,6 +123,9 @@ def waiting_lines(store, tid: int) -> list:
     "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
     return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body']), **({'line': r['LineId']} if r.get('LineId') else {})}
             for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE]
+def take_kept(store, tid: int, ids=None) -> list:
+    "The owner's kept lines (`ids`, else all) taken as his lines of the conversation (store.take_lines) - by the turn that takes them, any agent's."
+    return store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'], ids=ids)
 # A SESSION THAT ENDED UNDER A LINE (failed, closed, idled out) - never "reload the page" (the owner, 2026-11-07): say_line starts a fresh one,
 # which takes the kept line. 'has ended' is what every caller reads it by
 ENDED = 'this assistant session has ended - it starts again with the next line you send'
@@ -690,14 +693,16 @@ def agent_set(store, tid: int) -> list:
     return [{'id': f"set-{r['Id']}", 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f"{AGENT_SET[r['Action']](_detail(r))}."}],
              'createdAt': r['CreatedAt']} for r in rows]
 def _last_answer(store, tid: int) -> str:
-    "When task `tid`'s agent last answered - '' before any answer."
-    return (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE)) or {}).get('at') or ''
+    """When task `tid`'s agent last answered - a chat's filed answer, or a turn's end on its worker record, which a coding agent's turn leaves
+    in place of one: told from the answers alone, a coding agent heard none of what the owner pressed (the audit, 2026-11-10). '' before any."""
+    at = lambda sql, *a: (store._one(sql, (tid, *a)) or {}).get('at') or ''
+    return max(at('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', ASSISTANT_TYPE),
+               at("SELECT MAX(CreatedAt) AS at FROM worker_event WHERE TaskId=? AND Kind='turn_end'"))
 def owner_did(store, tid: int) -> list:
     "The owner's presses on task `tid` since its agent last answered, oldest first: ['<time>: <what>']. [] before any answer."
     from .processing_unread import OWNER_ACTORS
     from .slots import DROPPED          # an email let go is said by its press (PRESSES.slot_dropped), never again as its draft turned down
-    since = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE)) or {}).get('at')
-    if not since: return []
+    if not (since := _last_answer(store, tid)): return []
     who = ','.join('?' * len(OWNER_ACTORS))
     out = [(at, what) for _, at, what, *_r in presses(store, tid, since)]
     out += [(r['DecidedAt'], _decided(store, r))
@@ -780,10 +785,12 @@ def approved(store, tid: int, press: str, what: str, actor: str = 'owner', revie
     if got and r: store.audit('review', int(review), TOLD, actor, 'system', {'task': int(tid), 'how': got})
     return got
 def last_turn_began(store, tid: int) -> str | None:
-    "When the turn task `tid`'s agent last answered BEGAN - the owner's line or Taskuary's brief it answered; None before any answer."
-    at = lambda kind, upto='9999': (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=? AND CreatedAt<=?',
-                                               (tid, kind, upto)) or {}).get('at')
-    return (at(USER_TYPE, last) or last) if (last := at(ASSISTANT_TYPE)) else None
+    """When the turn task `tid`'s agent last answered BEGAN - the owner's line or Taskuary's brief it answered, or its start on the worker record,
+    where a coding turn begun on a mail keeps it (no brief is filed for one); None before any answer."""
+    if not (last := _last_answer(store, tid)): return None
+    at = lambda sql, *a: (store._one(sql, (tid, *a, last)) or {}).get('at') or ''
+    return max(at('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=? AND CreatedAt<=?', USER_TYPE),
+               at("SELECT MAX(CreatedAt) AS at FROM worker_event WHERE TaskId=? AND Kind='working' AND CreatedAt<=?")) or last
 # WHAT THE OWNER SAID ON THE THREAD THEMSELVES (the owner, 2026-11-08: replies from their phone between the other side's lines): a line of theirs
 # in a chat is never a turn of its own (channels.ingest_own_message), so the next turn hears each one since the agent last answered
 def own_replies(store, tid: int, since: str = None) -> list:
@@ -806,11 +813,11 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     rv = store.pending_review(tid, 'draft_reply', live_only=False) or store.pending_review(tid, 'draft', live_only=False)
     rv = rv if rv and str(rv.get('DraftText') or '').strip() else None
     rows = store.list_comments(tid, internal=True)
-    answers = [c['CommentId'] for c in rows if c.get('ActorType') == ASSISTANT_TYPE]
-    answered = not resumed and bool(answers)
-    # ...NEWEST ONLY UNTIL IT IS ANSWERED (selfclose.NO_NEW_LINE): the owner's line by the answer filed after it, a mail by the turn that
-    # began once it had joined - one that joined while a turn worked was not in that turn's prompt, and is still new
-    heard = bool(new) and (any(a > new['cid'] for a in answers) if new.get('cid') else new['at'] <= (last_turn_began(store, tid) or ''))
+    answers, last = [c['CommentId'] for c in rows if c.get('ActorType') == ASSISTANT_TYPE], _last_answer(store, tid)
+    answered = not resumed and bool(last)
+    # ...NEWEST ONLY UNTIL IT IS ANSWERED (selfclose.NO_NEW_LINE): the owner's line by the answer filed after it - a coding turn's by its end, it
+    # files none - a mail by the turn that began once it had joined - one that joined while a turn worked was not in that turn's prompt, and is still new
+    heard = bool(new) and ((any(a > new['cid'] for a in answers) or str(new['at']) < last) if new.get('cid') else new['at'] <= (last_turn_began(store, tid) or ''))
     from . import verdicts                    # ...and the rest it set up and has not sent: named, so a marker can take one back by its id
     others = [x for x in verdicts.unsent(store, tid) if not rv or x['rid'] != rv['ReviewId']]
     handed = [c for c in rows if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
@@ -822,9 +829,9 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         asked = [r['text'] for r in ws.status(store, tid)['requests'] if r.get('kind') == 'input_needed' and r.get('text')]
     except Exception: asked = []
     from . import proposals
-    refused = proposals.unheard(store, tid, last_turn_began(store, tid) or '') if answers else []
+    refused = proposals.unheard(store, tid, last_turn_began(store, tid) or '') if last else []
     # ...and the cards it raised that the conversation moved past (proposals.move_on): old news, said once in the turn after
-    passed = proposals.passed_since(store, tid, _last_answer(store, tid)) if answers else []
+    passed = proposals.passed_since(store, tid, last) if last else []
     if not (rv or sent or answered or others or handed or did or own or asked or nowhere or refused or passed): return ''
     out = [selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE]
     if new: out.append(f"{'THE LAST MESSAGE, WHICH YOU ANSWERED' if heard else 'THE NEWEST MESSAGE'} - from {new['who']}, at {clock(new['at'])}: "
@@ -1389,6 +1396,18 @@ def said_nothing(store, tid: int, reply: str) -> bool:
     "A turn's filed answer with no words, and no card of any kind waiting on the owner on task `tid`."
     return not str(reply or '').strip() and not store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status IN ('pending','held') "
                                                           "AND IFNULL(DraftText,'')<>'' LIMIT 1", (int(tid),))
+# THE SILENT TURN'S ROAD, EVERY AGENT'S (the audit, 2026-11-10: a coding agent's empty turn sat as nothing at all): `s` is the session - a chat's
+# or a coding one's - with its own wake(why, said) and `silent`, the mark of a turn woken for saying nothing
+def could_not(s, reply: str) -> str:
+    "A woken-for-silence turn that says nothing again is the agent asking, in its name, the one thing left (COULD_NOT): -> the reply to file."
+    if not getattr(s, 'silent', False): return reply
+    s.silent = False
+    from .selfclose import ASK_MARKER
+    return f'{ASK_MARKER} {COULD_NOT}' if said_nothing(s.store, s.task_id, reply) else reply
+def woke_for_silence(s, reply: str, owned: bool) -> bool:
+    "An owner's ask answered with nothing is said back first, from the task's own rows - no judge to ask: woken once with SILENT. True when it was."
+    if not (owned and said_nothing(s.store, s.task_id, reply)): return False
+    s.wake('', said=SILENT); return True
 # SEARCH BEFORE ASKING (the owner, 2026-11-05, from Hermes' session_search): a fact an earlier task already settled - found, confirmed, used
 # - is read from that task's ending (search.outcomes), never asked of the owner again. {where}: how this session reads them
 ASK_AFTER = ("SEARCH BEFORE YOU ASK: before asking the owner for a fact - a vendor id, a login route, the account they prefer - check whether "
@@ -2397,7 +2416,7 @@ class GeneralSession:
         if mine:
             # ...every line kept for it, each with the files sent with it (the owner, 2026-11-06), filed as this turn's own at the time it was
             # typed. None left: an earlier turn took them with its own, and answers for them
-            took = [{**r, **_line_of(r['Body'])} for r in self.store.take_lines(self.task_id, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'])]
+            took = [{**r, **_line_of(r['Body'])} for r in take_kept(self.store, self.task_id)]
             if not took: self._lock.release(); return ''
             lines, attachments = [r['text'] for r in took], list(dict.fromkeys(p for r in took for p in r['files']))
             text, kept = '\n\n'.join(lines), True
@@ -2942,17 +2961,8 @@ class GeneralSession:
         reply, closing = selfclose.chat_marker(reply)
         reply, signing = selfclose.signin_marker(reply)      # a sign-in it needs: Taskuary's to do, never the agent's (signin.py)
         reply, turn = selfclose.turn_marker(reply)           # a step only the owner can do on the page: handed over on the browser view
-        # ...a turn woken for saying nothing that says nothing again asks the owner, in the agent's name, the one thing left (COULD_NOT)
-        if getattr(self, 'silent', False):
-            self.silent = False
-            if said_nothing(self.store, self.task_id, reply): reply = f'{selfclose.ASK_MARKER} {COULD_NOT}'
-        reply, asks = selfclose.ask_markers(reply)
-        # THE QUESTION STAYS IN THE ANSWER. The marker line IS the question - ASK_LINE asks for it there - and cutting the
-        # marker cut the question with it, so the chat showed "the laptop spend needs your yes first" and never what to say
-        # yes to. Since the question card left the chat (2026-10-19: "the agent's question is in its own answer above, and
-        # the reply goes in the composer") the answer above is the only place it can be read (walk 2026-10-21).
-        said = '\n\n'.join(q + (f" ({' / '.join(c)})" if c else '') for q, c in asks if q not in reply)
-        reply = '\n\n'.join(x for x in (reply, said) if x) or (closing or '')
+        reply, asks = selfclose.asked_inline(could_not(self, reply))
+        reply = reply or closing or ''
         if signing is not None and not reply: reply = 'I need the site signed in to go on.'
         if turn is not None and not reply: reply = turn or 'Your turn in the browser.'
         # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
@@ -2989,8 +2999,7 @@ class GeneralSession:
             try: path = sessionrecord.READERS['claude'][0](self.cli_sid) if self.cli_sid and self.pick.startswith('cli:') and _cli_of_pick(self.store, self.pick) == 'claude' else None
             except Exception as e: logger.debug(f'task {self.task_id}: its CLI log was not found - {e}'); path = None
             # ...and an owner's ask answered with nothing is said back first, from the task's own rows - no judge to ask (said_nothing)
-            if getattr(self, 'owned', False) and said_nothing(self.store, self.task_id, reply): self.wake('', said=SILENT)
-            else: hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ, jobs=background.left(self.trace, path))
+            if not woke_for_silence(self, reply, getattr(self, 'owned', False)): hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake, summ=summ, jobs=background.left(self.trace, path))
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         # ...and the files this turn wrote, as it left them: a later turn rewrites them in place (outputs.keep_turn, the owner 2026-11-07)
         from . import outputs
@@ -3243,15 +3252,20 @@ def _at_work(s) -> bool:
     except Exception: return bool(getattr(s, 'busy', False))
 
 
-def line_state(store, tid: int, rows: list = None) -> dict:
+def at_work(tid: int) -> bool: return tid in OPENING or _at_work(_live_of(tid))
+
+
+def line_state(store, tid: int, rows: list = None, was: bool = False) -> dict:
     """WHAT EVERY CHAT DRAWS OF THE OWNER'S LINES AND THE TURN THEY ASKED FOR, for every kind of agent - one function, both payloads (the owner,
     2026-11-10: "IT should not say waiting on top of the prompt only under it and it should happen right away"): `working` - a start in flight
     for an accepted line (OPENING) or a turn at work; `turnStarted` - that turn's clock, from the press (PRESSED) where a press began it; and
     `waiting` - the lines kept for the agent (wait_line) that no turn has taken, each once. `rows`: the lines already read by the caller, read
-    BEFORE what a turn turns them into (send_prompt's take, a session's record) - a line moves from one to the other, never through neither."""
+    BEFORE what a turn turns them into (send_prompt's take, a session's record) - a line moves from one to the other, never through neither.
+    `was`: at_work read BEFORE the caller read the conversation - a turn that ended between the two reads is still at work in this one, its
+    answer not in what was read: read only after, the payload drew his line with no answer under it and nothing at work (CI, 2026-11-10)."""
     s = _live_of(tid)
     at = PRESSED.get(tid) or (getattr(s, 'turn_at', 0) or getattr(s, 'last', 0) if _at_work(s) else 0) or None
-    return {'working': tid in OPENING or _at_work(s), 'turnStarted': at, 'waiting': waiting_lines(store, tid) if rows is None else rows}
+    return {'working': was or tid in OPENING or _at_work(s), 'turnStarted': at, 'waiting': waiting_lines(store, tid) if rows is None else rows}
 
 
 def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=None, prepare=None, wait=True, **kw):
@@ -3311,7 +3325,7 @@ def _start_line(store, tid, t, text, files, actor, line_id, wid, prepare, kw):
             # ...a coding start that could not happen is said where it happened, and the line is his line of the chat, never retried on
             # every tick of the waiting room's clock (a chat's failed turn keeps its line the same way: send_prompt takes it first)
             answered(tid, every=True)
-            store.take_lines(tid, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'], ids={wid})
+            take_kept(store, tid, {wid})
             from .ingest import held_start
             if not held_start(store, tid, e): store.add_comment(tid, 'router', 'agent', f"The agent did not start: {' '.join(str(e).split())[:300]}")
         raise

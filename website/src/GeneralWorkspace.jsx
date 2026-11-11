@@ -1442,7 +1442,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     // earlier (general.line_state `turnStarted`): its first step comes once the adapter is up, and the head read "ran 2s" after "ran 9s"
     const pressed = cc.got?.turnStarted ? cc.got.turnStarted * 1000 : null;
     const turns = rowMessages(cc.rows).map((m) => (String(m.id).startsWith("live-") && m.createdAt ? { ...m, since: turnFrom(+asUtc(m.createdAt) || null, pressed) || undefined } : m));
-    return coding ? byTime([...general, ...turns]) : general; })();
+    // ...and each press a quiet line at its time, the general chat's own (general.press_lines: the coding payload's `presses`)
+    return coding ? byTime([...general, ...turns, ...(cc.got?.presses || [])]) : general; })();
   // ...and what typing does there: into the running CLI as its next line, or the session picked back up with these words leading - the files
   // named to the CLI by their paths after the words (promptImages.withImages), as every coding CLI reads a file
   // ...and what a coding source reads once a line is in: its own sessions (the line itself goes the one road, holdText)

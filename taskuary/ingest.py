@@ -2672,13 +2672,14 @@ def wake_why(store, tid, msg: dict, mid, follow: dict | None, own: bool = False)
     from . import general
     t = store.get_task(tid) or {}
     if t.get('Status') in ('done', 'dropped'): return reason('closed')
-    if not general.handles(t): return reason('not_assistant')
+    # ...and a coding agent live on it hears it the same way (the audit, 2026-11-10: a sender's second mail woke no turn of a parked coding session)
+    if (kind := 'general' if general.handles(t) else 'coding') == 'coding' and live_agent(store, tid) != 'coding': return reason('not_assistant')
     # ...with the assistant's conversation on it: a writer's draft alone (a reply task, an invite and its banter) never starts an agent
     # by itself - the reply writer's own redraft (attach, above) is that task's road
     # A turn still OPENING counts (the night run, 2026-11-09: a colleague answered the group 6s into the task's quick call, the line went
     # unheard, and the turn asked the owner for a password nobody needed any more)
     if not live_agent(store, tid) and not general.history(store, tid): return reason('no_conversation')
-    return reach_why(store, tid, msg, mid, follow, 'general', own)
+    return reach_why(store, tid, msg, mid, follow, kind, own)
 
 
 def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, own: bool = False) -> bool:
@@ -2702,7 +2703,10 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
     return True
 
 
-def _replan_pass(store, tid, msg: dict, turn: str): _pass_general(store, tid, msg, turn)
+def _replan_pass(store, tid, msg: dict, turn: str):
+    from . import general           # ...a coding agent's by the one road Taskuary's words to it take (general.tell)
+    if general.handles(store.get_task(tid) or {}): _pass_general(store, tid, msg, turn)
+    else: general.tell(store, tid, turn)
 
 
 def _replan_general(store, tid, turn: str):

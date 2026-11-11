@@ -52,6 +52,17 @@ def open_question(store, tid: int) -> dict | None:
     return workerstate.shown_ask([r for r in workerstate.status(store, tid)['requests'] if workerstate.own_question(r)])
 
 
+def asking(store, task: dict, session=None) -> dict | None:
+    """WHAT THE AGENT ASKS THE OWNER, as every chat draws it - the general payload and the coding one alike (the audit, 2026-11-10: a coding agent's
+    [[TASKUARY-ASK]] over ACP was recorded and drawn nowhere): its live run's open request, else - an agent at rest, idled out or after a restart -
+    its saved question, `resting`: typing answers it as the next turn. A step handed over on a page that has closed since says so (browsergate)."""
+    from . import acpcoding, browsergate, general
+    tid = task['TaskId']
+    if (s := session or workerstate._live(tid)): return browsergate.shown_ask(workerstate.asking_of(store, s))
+    rests = general.handles(task) or acpcoding.idled(tid, store)
+    return browsergate.shown_ask({**q, 'resting': True}) if rests and (q := open_question(store, tid)) else None
+
+
 def _chat_resting(store, t: dict) -> str | None:
     "An open chat task with no live agent: 'blocked' while its question is open, 'agentdone' once it has answered, else None."
     from .general import ASSISTANT_TYPE, handles, is_dock
@@ -111,6 +122,15 @@ class TaskState:
     def finished(self) -> bool: return funnel.session_finished(self.store, self.tid, self.events)
     @cached_property
     def failed(self): return funnel.run_failed(self.store, self.tid, st=self)
+    # ...and ITS LIVE SESSION, read as the page reads it (info) when the caller holds none: the rail and the story read a coding agent parked over
+    # a reply waiting as "stopped - ran on this and left without finishing it", where its page and a chat read approve (the audit, 2026-11-10)
+    @cached_property
+    def live(self) -> dict | None:
+        if self.session is not None: return self.session
+        from . import terminal
+        s = terminal.session_for(self.tid)
+        try: return s.info(details=False) if s is not None and s.alive else None
+        except Exception: return None
 
     # ── the rules ──
     @cached_property
@@ -134,7 +154,7 @@ class TaskState:
         The lane word for that is `stopped`, never `queued`: a restart killed the agent's session on TQ-0616, the task list said
         interrupted / needs you, and the rail said "handed to an agent, not started yet" (2026-09-17). Never over news: what is open
         then is the message, not the session that went before it."""
-        if self.news: return ''
+        if self.news or self.live: return ''
         return funnel.left_by_facts(self.t.get('Tags'), self.runs) or (
             'stopped' if self.end in workerstate.TERMINAL or (bool(self.transcript) and not self.finished) else '')
 
@@ -149,7 +169,7 @@ class TaskState:
         ...and where it still reads less than `left` does, it reads what it always read - the owner's to settle, not this record's
         (the spine audit, 2026-11-09): only the LATEST run's status where the rail takes any run that stopped, a bare transcript only
         under an `agent:` assignee and whether or not its session finished, and no word about mail that came after the agent."""
-        store, t, session, tid = self.store, self.t, self.session, self.tid
+        store, t, session, tid = self.store, self.t, self.live, self.tid
         live = bool(session and session.get('alive', True))
         # a live session is the fact happening now - a done task continued is work in progress again (T8). A session that
         # PREDATES the close is a terminal nobody shut, not the task picked back up (the Board's old rule, kept).
@@ -165,6 +185,10 @@ class TaskState:
             return 'agentdone' if done_for_now(store, t, session) else 'blocked'
         st = t.get('Status')
         if st == 'dropped': return 'dropped'
+        # ...and a start in flight for his line is at work from the press, whichever agent comes up (general.OPENING - one mark for every kind): a
+        # coding task read "yours" while its adapter came up, a chat "working" (the audit, 2026-11-10)
+        from .general import OPENING
+        if tid in OPENING and st in ('open', 'in_progress'): return 'working'
         if st == 'done':
             if str(t.get('UpdatedBy') or '') in OWNER_ACTORS: return 'closed'        # yours: no need to read its notes
             return 'agentdone' if finish_evidence(store, tid) else 'closed'

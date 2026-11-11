@@ -25,7 +25,7 @@ from collections import deque
 from datetime import datetime
 from loguru import logger
 
-from . import acp as acp_mod, codingchat
+from . import acp as acp_mod, codingchat, general
 
 FELL_BACK: set = set()            # the CLIs that did not start over ACP this process: said once in the log
 SCROLLBACK = 200_000
@@ -102,6 +102,7 @@ class ACPCoding:
         self._drawn = set()                                       # ids of steered items already drawn: a steer that falls back to the next turn is not drawn twice
         self.touched, self.calls, self.history, self.has_output, self._live_at = {}, {}, [], False, 0.
         self.held, self.steps, self.gate, self.turns = {}, None, None, 0
+        self.owned = self.woke = self.silent = self.stop_next = False    # his turn; woken once (wake); woken for saying nothing; stop the turn as it goes
 
     # ── the terminal a Wall cell and the Terminal toggle show ──────────────────────────────────────────────────────────────
     def _out(self, s: str, output: bool = False):
@@ -144,7 +145,7 @@ class ACPCoding:
         prompt"): a line typed here mid-turn went straight to the session's queue in memory - on no screen, in no record, gone with a restart.
         Kept on the task, it is drawn as the owner's on every screen until a turn takes it. A session on no task has no room: its prompt."""
         if not (self.store and self.task_id): return self.prompt(line)
-        from . import general                  # ...the one road every line the owner types takes (general.take_line, 2026-11-10)
+        # ...the one road every line the owner types takes (general.take_line, 2026-11-10)
         threading.Thread(target=lambda: general.take_line(self.store, self.task_id, line, wait=False), daemon=True).start()
 
     # ── what the rest of Taskuary reads off a session ──────────────────────────────────────────────────────────────────────
@@ -236,9 +237,11 @@ class ACPCoding:
         while self.alive:
             self._wake.wait(1.0); self._wake.clear()
             # ...drawn BEFORE it leaves the queue: between the two the owner's line was in neither, and a read then named it nowhere (2026-11-10)
-            with self._qlock: items = list(self._q)
-            if items: self._show(items); self._drawn.update(map(id, items))
-            with self._qlock: self._q = self._q[len(items):]
+            # ...in ONE hold of the queue: a line carried onto the prompt between the two (carries) went with the copy the turn never took - his
+            # line never sent, never his in the chat, and the chat "working" over nothing for the rest of the run (the audit, 2026-11-10)
+            with self._qlock:
+                if (items := list(self._q)): self._show(items); self._drawn.update(map(id, items))
+                self._q = []
             if items: self._turn(items)
             elif self.busy and self.client and not self._take_waiting(): self._idle(turn=False)      # reopened with nothing to say: back at its prompt
 
@@ -265,7 +268,6 @@ class ACPCoding:
         if self.cli not in FELL_BACK:
             FELL_BACK.add(self.cli); logger.warning(f'acp: {self.cli} coding session did not start over ACP ({e}) - running it in its terminal')
         if not self.fallback:
-            from . import general
             general.answered(self.task_id, every=True)
             self.store.add_comment(self.task_id, 'router', 'agent', f'{self.cli} did not start over ACP ({str(e)[:200]}).'); return self._emit_end()
         self.store.add_comment(self.task_id, 'router', 'agent', f'{self.cli} did not start over ACP ({str(e)[:200]}) - it runs in its terminal instead.')
@@ -289,12 +291,6 @@ class ACPCoding:
         drawn as its brief; `shown`: the owner's own lines it carries, drawn as theirs. `done(ok)` hears whether the agent took it."""
         text = str(text or '').strip()
         if not text or not self.alive: return False
-        # ...the conversation moves on: every card before this prompt is old news (proposals.move_on - the one rule, every agent kind)
-        if self.store and self.task_id:
-            from . import proposals
-            try:          # ...and said to it in this prompt, the next it reads
-                if (note := proposals.passed_note(self.store, proposals.move_on(self.store, self.task_id))): text = f'{text}\n\n{note}'
-            except Exception as e: logger.debug(f'task {self.task_id}: the cards before this prompt stayed live - {e}')
         item = (text, brief, list(shown or []), done)
         if self.steerable(): threading.Thread(target=self._steer, args=(item,), daemon=True).start(); return True
         with self._qlock: self._q.append(item)
@@ -302,11 +298,20 @@ class ACPCoding:
         return True
 
     def carries(self, shown: list):
-        """The owner's own lines the opening prompt carries (waitroom.reopen_coding), drawn as his when it goes - the seed is Taskuary's brief.
-        Onto the newest prompt still queued; one already gone gets them as a line of their own."""
+        """The owner's own lines the opening prompt carries (waitroom.reopen_coding) - its seed's batch holds them in its words. Drawn as his NOW,
+        as a chat draws the line it starts on: they stood "waiting" through the adapter's start (the audit, 2026-11-10). Taken as his with the
+        seed's turn - or now, once that is gone: sent again as a prompt of their own, they were a second turn the agent answered twice."""
         with self._qlock:
-            if self._q: t, b, s, d = self._q[-1]; self._q[-1] = (t, b, list(s) + list(shown), d); return
-        if shown: self.prompt(' '.join(x['text'] if isinstance(x, dict) else x for x in shown), shown=shown)
+            self._mine(shown)
+            if self._q: t, b, s, d = self._q[-1]; self._q[-1] = (t, b, list(s) + [{**x, 'drawn': True} if isinstance(x, dict) else {'text': x, 'drawn': True} for x in shown], d); return
+        if (lines := self._his(('', True, list(shown), None))):
+            general.answered(self.task_id, len(lines)); self.owned, self.woke, self.silent = True, False, False
+
+    def _his(self, *items) -> set:
+        "The owner's kept lines these prompts carry, taken as his lines of the conversation (general.take_kept) - the ids taken."
+        lines = {s['line'] for _t, _b, shown, _d in items for s in shown if isinstance(s, dict) and s.get('line')}
+        if lines and self.store and self.task_id: general.take_kept(self.store, self.task_id, lines)
+        return lines
 
     def steerable(self) -> bool:
         "Does a prompt now go into the running turn: a turn on, and an adapter that said at initialize it takes words mid-turn (acp.can_steer)."
@@ -336,15 +341,24 @@ class ACPCoding:
     def _show(self, items: list):
         "Each prompt as the chat, the transcript and the Terminal draw it: the owner's own lines as theirs, Taskuary's words as its brief."
         for t, brief, shown, _d in [i for i in items if id(i) not in self._drawn]:
-            for s in shown:
-                # ...marked his, with the row it was kept as (general.take_line): only what he typed is drawn as his (codingchat.marked)
-                w, line = (s['text'], s.get('line')) if isinstance(s, dict) else (s, None)
-                self._record({'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': w},
-                              '_meta': {'taskuary': 'owner', **({'line': line} if line else {})}}); self.history.append(('you', w))
+            self._mine([s for s in shown if not (isinstance(s, dict) and s.get('drawn'))])
             self._record({'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': t},
                           **({'_meta': {'taskuary': 'brief'}} if brief or shown else {})})
             self.history.append(('brief' if brief or shown else 'you', t))
             self._out(f"\r\n\x1b[1;34m{'taskuary' if brief or shown else 'you'}>\x1b[0m {_crlf(t if len(t) < 400 else t[:400] + ' …')}\r\n")
+
+    def _mine(self, shown: list):
+        "The owner's own lines, drawn as his - marked so, with the row each was kept as (general.take_line): only what he typed is his (codingchat.owned)."
+        for s in shown:
+            w, line = (s['text'], s.get('line')) if isinstance(s, dict) else (s, None)
+            self._record({'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': w},
+                          '_meta': {'taskuary': 'owner', **({'line': line} if line else {})}}); self.history.append(('you', w))
+
+    def wake(self, why: str, said: str = ''):
+        "The chat's wake (general.GeneralSession.wake): ONCE per turn of the owner's, Taskuary's words as its next prompt - `said` in WAKE's place."
+        if self.woke or not self.alive: return
+        self.woke, self.silent = True, said == general.SILENT
+        self.prompt(said or general.WAKE.format(why=why or 'work of its own'), brief=True)
 
     def say(self, text: str, done=None):
         "terminal.type_into / tell for this session: a prompt, never keystrokes. `done(True)` once it is sent."
@@ -360,13 +374,15 @@ class ACPCoding:
         self.busy, self.seeding, self.accepted, self.stop_reason, self.turn_at = True, False, True, None, time.time()
         self.seeded = self.seeded or text
         self.witness.note({'k': 'turn'})
+        text, lines = self._begins(items, text)
         self._event('UserPromptSubmit', prompt=text)
         # ...a turn that takes the owner's typed lines runs from his press, its clock never restarting (general.take_line, the owner 2026-11-10) - after the
         # turn's own start record, which stamps its clock now (hooks._events)
-        if (took := sum(isinstance(s, dict) and bool(s.get('line')) for _t, _b, shown, _d in items for s in shown)):
-            from . import general
+        if (took := len(lines)):
             self.turn_at = general.PRESSED.get(self.task_id) or self.turn_at
             general.answered(self.task_id, took)
+            self.woke = self.silent = False             # ...a turn his words began may be woken once again (wake)
+        self.owned = bool(took)
         self.steps = agents.ACPSteps(self._trace, self.cli, self.held)
         self.gate = acpgate.answerer({'store': self.store, 'task_id': self.task_id, 'cli': self.cli, 'cwd': self.cwd, 'sid': self.sid},
                                      self._trace, self.held)
@@ -377,11 +393,11 @@ class ACPCoding:
         stop, said, ok = None, '', False
         self.in_turn = True
         since, t0 = datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time.monotonic()
-        try: stop, said = self.client.prompt(text); ok = True
+        stop_now, self.stop_next = self.stop_next, False
+        try: stop, said = self.client.prompt(text, sent=self.client.cancel if stop_now else None); ok = True
         except acp_mod.ACPAgentError as e:
             logger.warning(f'acp coding {self.sid}: the turn failed - {e}')
-            from .general import CARRY_ON
-            self._say('progress', 'acp', why := f'The turn failed: {str(e)[:300]} - {CARRY_ON}.')
+            self._say('progress', 'acp', why := f'The turn failed: {str(e)[:300]} - {general.CARRY_ON}.')
             # ...IN THE CHAT, where it happened (rules part 4): said only on its Terminal, the chat - drawn from the kept updates - showed the
             # turn's first words and stopped. Taskuary's own update, marked as its brief is (chatStream.stepsFromAcp draws it as the turn's error)
             self._record({'sessionUpdate': 'error', 'content': {'type': 'text', 'text': why}, '_meta': {'taskuary': 'error'}})
@@ -392,7 +408,29 @@ class ACPCoding:
         self.stop_reason, self.turns = stop, self.turns + 1
         if ok: self._used(since, int((time.monotonic() - t0) * 1000))
         if not self.client.alive(): return self._gone()
+        # ...a turn the owner STOPPED is recorded so, as a chat's stopped turn is - never as its answer (the audit, 2026-11-10)
+        if stop == 'cancelled' and self.store and self.task_id:
+            from . import workerstate as ws
+            ws.record(self.store, self.task_id, self.sid, 'stopped', text=said[:4000], source='acp'); return self._idle(said, turn=False)
+        # ...and a turn that said nothing takes the chat's road (general.could_not, woke_for_silence): woken once, then its one question
+        if ok and (asked := general.could_not(self, said)) != said:
+            said = asked; self._record({'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': said}})
         self._idle(said)
+        if ok: general.woke_for_silence(self, said, self.owned)
+
+    def _begins(self, items: list, text: str) -> tuple:
+        """A TURN BEGINS AS A CHAT'S DOES (general.send_prompt): the owner's lines it takes are his in the record (take_kept - the waiting room
+        took them only after the turn had begun), every card the conversation moved past is old news (proposals.move_on), and the turn is told
+        what any agent's is (general.turn_facts) - what the owner pressed, a send that failed, the cards set aside. It was told only the passed
+        cards, and the facts read his new line as answered (the audit, 2026-11-10). -> (the prompt, the lines it took)."""
+        from . import proposals
+        lines = self._his(*items)
+        if self.store and self.task_id:
+            try:
+                proposals.move_on(self.store, self.task_id)
+                if (lb := general.turn_facts(self.store, self.task_id, resumed=True)): text = f'{lb}\n\n{text}'
+            except Exception as e: logger.debug(f'task {self.task_id}: the turn was not told its facts - {e}')
+        return text, lines
 
     def _used(self, since: str, ms: int):
         "What the turn used - the adapter's count, else the CLI's own log - added onto this session's route row (aiusage.coding_turn)."
@@ -422,9 +460,12 @@ class ACPCoding:
         except Exception as e: logger.debug(f'acp coding {self.sid}: worker event {ev} not written - {e}')
 
     def cancel(self) -> bool:
-        "Stop: session/cancel - the turn ends, the conversation stays, and what is typed next carries on."
-        if not (self.alive and self.busy and self.client): return False
-        self.client.cancel(); return True
+        """Stop: session/cancel - the turn ends, the conversation stays, and what is typed next carries on. Pressed while its adapter comes up
+        (Remind me, the audit 2026-11-10: the chat read "working" for a minute) it stops the turn it was opened for, the moment that is sent."""
+        if not (self.alive and self.busy): return False
+        if self.client and self.in_turn: self.client.cancel()
+        else: self.stop_next = True
+        return True
 
     # ── updates, steps, permissions ────────────────────────────────────────────────────────────────────────────────────────
     def _echo(self, u: dict) -> bool:
@@ -520,7 +561,6 @@ class ACPCoding:
     def _gone(self):
         "Its process ended by itself: filed, and the task released as a pty's exit releases it (Term._pump's ending)."
         if not self.alive: return
-        from . import general
         general.answered(self.task_id, every=True)          # ...no turn will take the lines it was opened for: never "working" over nothing
         self.alive, self.ended, self.busy = False, time.time(), False
         self._wake.set()
@@ -537,8 +577,7 @@ class ACPCoding:
         "'' when this session may idle out now (idle_out), else why it stays - general.GeneralSession.idle_why's rules, for a coding session."
         if not self.alive: return 'ended'
         if self.busy or self.in_turn or self.seeding or self._q or not self.client: return 'a turn is on'
-        from .general import idle_for
-        if ((now or time.time()) - self.last) < idle_for(): return 'not idle long enough'
+        if ((now or time.time()) - self.last) < general.idle_for(): return 'not idle long enough'
         if not self.ext_id: return 'it has no conversation to resume'
         from . import workerstate as ws
         if self.store.waiting_notes(self.task_id): return 'notes wait for it'
@@ -568,9 +607,8 @@ class ACPCoding:
         except Exception as e: logger.debug(f'the browser of task {self.task_id} was not closed on idle: {e}')
         term.SESSIONS.pop(self.sid, None)
         self._emit_end()
-        from .general import idle_for
         self.store.audit('task', self.task_id, 'agent_idled_out', 'assistant', 'agent', {'sid': self.sid})
-        logger.info(f'task {self.task_id}: its agent was idle for {int(idle_for())}s and closed quietly - the next input starts it again')
+        logger.info(f'task {self.task_id}: its agent was idle for {int(general.idle_for())}s and closed quietly - the next input starts it again')
         handraise.moved(self.task_id)
         return True
 

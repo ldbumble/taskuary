@@ -203,7 +203,7 @@ def _handed(store, tid: int, notes: list, how: str):
     from . import general
     store.deliver_waiting([x['WId'] for x in notes if x.get('WId') is not None], how)
     if (ids := [x['line'] for x in notes if x.get('line')]):
-        store.take_lines(tid, general.WAITING_TYPE, general.USER_TYPE, lambda b: general._line_of(b)['text'], ids=set(ids))
+        general.take_kept(store, tid, set(ids))
 
 
 def _shown(notes: list) -> list:
@@ -243,6 +243,14 @@ def _deliver(store, tid: int, new: int = None) -> dict:
     # own answer - the card, the box, their reply on the channel - is what lets the question go
     if st == 'asking' and any((x.get('CreatedBy') or '') == TEAMMATE for x in notes):
         return {'delivered': 0, 'state': 'held_teammate', 'left': len(pending)}
+    # ...a coding agent over ACP is answered as a chat is: by its next turn, his words drawn as his and the turn at work from them - typed as a
+    # bare answer, his line was nobody's and the chat read "working" for the rest of the run (the audit, 2026-11-10)
+    if st == 'asking' and term.is_acp(t):
+        from . import workerstate as ws
+        if (req := ws.asking_of(store, t)):
+            who = 'owner' if any((x.get('CreatedBy') or 'owner') == 'owner' for x in notes) else 'router'
+            ws.record(store, tid, t.sid, 'answered', request_id=req['request_id'], text=parts(notes[0]['Note'])[0][:500], source=ws.said_by(who))
+        st = 'parked'
     if st == 'asking':
         # An agent parked on a QUESTION is asking the OWNER, so the words they write next are the
         # ANSWER to it: bound to its open request where the worker reported one, typed in plainly

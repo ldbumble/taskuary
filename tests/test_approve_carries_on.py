@@ -285,12 +285,10 @@ def _line(s, tid, agent, said):
         with mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: heard.append(user) or 'On it.'):
             sess.send_prompt(said)
         return '\n'.join(heard)
-    if agent == 'acp':                            # a coding agent over ACP: its next prompt
+    if agent == 'acp':                            # a coding agent over ACP: what its next turn is sent, as that turn begins (_begins)
         a = acpcoding.ACPCoding.__new__(acpcoding.ACPCoding)
-        a.store, a.task_id, a.alive, a._qlock, a._q, a._wake = s, tid, True, threading.Lock(), [], threading.Event()
-        a.steerable = lambda: False
-        assert a.prompt(said)
-        return a._q[-1][0]
+        a.store, a.task_id = s, tid
+        return a._begins([(said, False, [], None)], said)[0]
     told = []                                     # a coding agent in a terminal: its prompt hook, then Taskuary's next line
     with mock.patch.object(general, 'tell', lambda st, t, note, actor='owner': told.append(note) or 'told'):
         hooks._events(SimpleNamespace(store=s, task_id=tid, sid='run1', bg={}), {'hook_event_name': 'UserPromptSubmit', 'prompt': said})

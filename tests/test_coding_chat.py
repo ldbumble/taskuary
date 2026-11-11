@@ -177,3 +177,22 @@ def test_a_press_on_a_coding_task_is_a_line_in_its_chat_as_in_a_general_one(home
     got = c.get(f'/api/tasks/{tid}/coding-chat').json()['data']['presses']
     assert [m['content'][0]['text'] for m in got] == [m['content'][0]['text'] for m in general.press_lines(srv.store, tid)]
     assert len(got) == 1 and got[0]['content'][0]['text'].startswith('You set a reminder for')
+
+
+def test_a_coding_agent_s_question_reads_as_a_chat_s_does(home, server, monkeypatch):
+    """The audit, 2026-11-10: over ACP a coding agent's [[TASKUARY-ASK]] came a token at a time - the chat drew the bare marker, and the
+    payload carried no question to answer. Its words read as a general answer's (selfclose.asked_inline), its ask by the one read (taskstate.asking)."""
+    from types import SimpleNamespace
+    from taskuary import workerstate as ws
+    srv, c = server
+    tid = Factory(srv.store).task(title='Pick the vendor', kind='coding')
+    for w in ('Q3 totals are in the reply. One thing only you can say:\n[[TASKU', 'ARY-ASK]] Which vendor - Payworth or Trainly?'):
+        codingchat.record_update(tid, 'acp-8', {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': w}})
+    ws.record(srv.store, tid, 'acp-8', 'input_needed', request_id='q1', text='Which vendor - Payworth or Trainly?', source='hook')
+    from taskuary import terminal                                      # ...its session at rest over ACP, the question waiting on him
+    live = SimpleNamespace(task_id=tid, sid='acp-8', alive=True, acp=True, started='2026-11-10 09:00:00', cli='claude', cwd='', _q=[], phase=lambda: 'parked')
+    monkeypatch.setitem(terminal.SESSIONS, 'acp-8', live)
+    d = c.get(f'/api/tasks/{tid}/coding-chat').json()['data']
+    (said,) = [u['content']['text'] for u in d['sessions'][0]['updates'] if u['sessionUpdate'] == 'agent_message_chunk']
+    assert said == 'Q3 totals are in the reply. One thing only you can say:\n\nWhich vendor - Payworth or Trainly?'
+    assert d['asking']['text'] == 'Which vendor - Payworth or Trainly?'

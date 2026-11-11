@@ -3,7 +3,7 @@ general agent reads the same on every backend it runs on but for what is the bac
 they should be one. AUDIT_DUMP=<folder> keeps each cell's snapshots and prompts there, for the replay sheet and for reading a failure.
 
 OPEN names what the audit found and has not fixed yet, each with its reason: a cell must break exactly those rules - a new break fails, and a
-fixed one fails too until it is taken off the list. The coding chat's parity with the general one is the largest of them (see OPEN_PARITY)."""
+fixed one fails too until it is taken off the list. OPEN_PARITY names the cells whose reads are not yet one road with the rest."""
 import json, os
 
 import pytest
@@ -14,10 +14,12 @@ pytestmark = pytest.mark.acp            # the stand-in adapter is this suite's o
 RUNS = {}                               # (scenario, backend) -> its run, for the parity check after the cells
 # (scenario, backend) -> the rules it still breaks, by their mark - each a finding of the audit (2026-11-10), open:
 OPEN = {}
-# the coding agent and its chat against the general one, not yet one road: its chip after a turn ('stopped' where a chat reads 'approve' or
-# 'agent done'), what each turn is told (the coding prompt carries none of general.turn_facts), where its cards stand (the coding payload
-# names no turn for them: the page places them by time), and a mail joining a parked coding session
-OPEN_PARITY = {'coding'}
+# (scenario, backend) whose reads are not yet one road with the others', each with its reason - the coding agent's chat and turns are one road
+# with the general chat's (2026-11-11); what is left is the rail's and the arrival's, not the chat's:
+OPEN_PARITY = {('j', 'coding'),     # a reply owed on arrival is a 'draft' review the general road opens and a joined mail marks behind; a coding
+                                    # task's reply is the agent's own draft_reply, which no join marks (ingest: behind = pending_review(kind='draft'))
+               ('m', 'coding'),     # put to rest, the rail lights Continue on a coding task (rulebook MOVES 'stopped') and nothing on a chat
+               ('r', 'coding')}     # held for a stranger, the rail lights Send to agent (regular_agent) on a general task and nothing on a coding one
 
 
 @pytest.mark.parametrize('backend', A.BACKENDS)
@@ -37,6 +39,6 @@ def test_scenario(name, backend, tmp_path, monkeypatch):
 
 @pytest.mark.parametrize('name', sorted(A.SCENARIOS))
 def test_parity(name):
-    runs = {b: RUNS[name, b].snaps for b in A.BACKENDS if (name, b) in RUNS and b not in OPEN_PARITY}
+    runs = {b: RUNS[name, b].snaps for b in A.BACKENDS if (name, b) in RUNS and (name, b) not in OPEN_PARITY}
     if len(runs) < 2: pytest.skip('fewer than two backends ran it')
     assert A.parity(runs) == []

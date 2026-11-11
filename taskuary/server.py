@@ -2328,6 +2328,7 @@ def _assistant_payload(task_id: int, session=None):
     if str(task.get('Kind') or '') == 'coding':
         raise HTTPException(422, 'a coding task is worked in its terminal, not a chat')
     session = session or general.session_for(task_id)
+    was = general.at_work(task_id)                        # ...and whether a turn works, before it too (line_state `was`)
     kept = general.waiting_lines(store, task_id)          # ...BEFORE the conversation: a turn takes a line from one into the other (line_state)
     messages = general.with_failure(store, task_id, general.shown_history(store, task_id))
     took = {(m.get('line'), m.get('createdAt'), ''.join(c.get('text', '') for c in m.get('content') or [])) for m in messages if m['role'] == 'user'}
@@ -2379,7 +2380,7 @@ def _assistant_payload(task_id: int, session=None):
             # THE OWNER'S LINES NO TURN HAS TAKEN YET (general.wait_line, the owner 2026-11-07): kept as they were sent, drawn on every screen as
             # waiting for the agent, each at the time it was typed
             # ...and the turn they asked for, at work from the press: `working` and `turnStarted`, as the coding chat's payload says them
-            **general.line_state(store, task_id, kept),
+            **general.line_state(store, task_id, kept, was),
             'box': general.box_text(store, task_id),      # ...and what a restart put back in the owner's box (general.to_box)
             'demo': demo.enabled(),          # the demo's turns are written in advance: no AI to connect, so no banner asking for one
             # the conversations of the agents run before this one: drawn IN the chat now (shown_history: every run), never a fold of their own
@@ -2409,8 +2410,7 @@ def _assistant_payload(task_id: int, session=None):
             # ...and a chat agent's question after its process idled out or the server restarted (taskstate.open_question, the owner 2026-11-07):
             # still open, and `resting` - typing answers it as the next turn, which starts the agent again
             # ...and a step handed over on a page that has closed since says so, its one press bringing it back (browsergate.shown_ask)
-            'asking': _browsergate().shown_ask(_workerstate().asking_of(store, asker) if (asker := session or _workerstate()._live(task_id))
-                       else {**q, 'resting': True} if general.handles(task) and (q := taskstate.open_question(store, task_id)) else None),
+            'asking': taskstate.asking(store, task, session),
             # pages its Claude session published (claude_artifacts) and files it chose to show (selfclose.SHOW_LINE) - the
             # conversation draws each under the answer that made it, and lists any it cannot place at its foot
             'published': published,

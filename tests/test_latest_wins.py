@@ -195,6 +195,19 @@ def test_the_owners_presses_since_the_last_turn_are_in_the_turns_context():
     assert all(m['role'] == 'user' for m in lines) and not [m for m in general.history(s, tid) if m.get('press')]
 
 
+def test_a_coding_turn_is_told_what_any_agent_s_turn_is():
+    # the audit, 2026-11-10: a coding turn files no answer of its own - its end is on its worker record - so every "since your last answer"
+    # read none: its next turn never heard the owner's Send, and the facts read as before any turn ("THE NEWEST MESSAGE")
+    from taskuary import workerstate as ws
+    s = MemoryStore(); tid = s.create_task({'Title': 'Fix the refund total', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
+    ws.record(s, tid, 'acp-1', 'turn_end', text='The reply to Ray waits for your Send.', source='hook')
+    s._exec("UPDATE worker_event SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
+    rid = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'Reason': 'the reply to Ray', 'DraftText': 'Hi Ray - fixed.'})
+    s.decide_review(rid, 'approved', 'Hi Ray - fixed.', 'owner')
+    assert [x.split(': ', 1)[1] for x in general.owner_did(s, tid)] == [f'approved (sent, if it sends) rv{rid} (the reply to Ray)']
+    assert 'WHAT THE OWNER DID SINCE YOUR LAST TURN' in general.turn_facts(s, tid, resumed=True)
+
+
 def test_an_email_the_owner_dropped_is_told_to_its_agent_and_is_a_line_in_the_chat():
     # the agent walk, 2026-11-09: "Don't send" on one of two emails - its agent heard "turned down rv3 (<its own caption>)", or nothing at
     # all for an email not drafted yet, and went on saying the dropped one "waits for Send"

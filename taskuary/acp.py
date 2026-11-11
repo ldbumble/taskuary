@@ -122,11 +122,13 @@ class ACPClient:
             logger.warning(f'acp: the permission rule raised, so the call is refused - {e}')
             return pick(params.get('options'), False)
 
-    def request(self, method, params=None, timeout=None):
+    def request(self, method, params=None, timeout=None, sent=None):
         with self._idlock: self._id += 1; mine = self._id; q = self._waiters[mine] = queue.Queue()
         try:
             if not self._alive: q.put(None)
-            else: self._send({'jsonrpc': '2.0', 'id': mine, 'method': method, **({'params': params} if params else {})})
+            else:
+                self._send({'jsonrpc': '2.0', 'id': mine, 'method': method, **({'params': params} if params else {})})
+                if sent: sent()                           # ...once it is on its way: a cancel then is this request's (prompt)
             m = q.get(timeout=timeout or self.timeout)
             if m is None:
                 raise ACPAgentError(f'the agent stopped during {method}' + (f': {"".join(self._err)[:300]}' if self._err else ''))
@@ -201,7 +203,7 @@ class ACPClient:
         self.options = (r or {}).get('configOptions') or self.options
         return True
 
-    def prompt(self, text) -> tuple:
+    def prompt(self, text, sent=None) -> tuple:
         """(stopReason, what the agent answered). Text is collected from the same agent_message_chunk updates that stream to the
         trace - one pass, two consumers.
 
@@ -223,7 +225,7 @@ class ACPClient:
         self.on_update = collect
         try:
             r = self.request('session/prompt', {'sessionId': self.session_id,
-                                                'prompt': [{'type': 'text', 'text': str(text or '')}]}) or {}
+                                                'prompt': [{'type': 'text', 'text': str(text or '')}]}, sent=sent) or {}
         finally:
             self.on_update = outer
         self.last_turn = r              # ...the whole PromptResponse: its `usage` and _meta are what the turn used (aiusage.acp)

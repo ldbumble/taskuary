@@ -181,3 +181,19 @@ def test_a_coding_line_waiting_is_named_by_the_page_s_own_id_wherever_it_waits(w
         seen += [w for w in c.get(f'/api/tasks/{tid}/coding-chat').json()['data']['waiting'] if w['text'] == LINE]
         time.sleep(0.05)
     assert seen and all(w.get('line') == 'held-7' for w in seen), {str(w.get('id'))[:1] + ':' + str(w.get('line')) for w in seen}
+
+
+def test_a_turn_that_ends_while_the_chat_is_read_is_at_work_in_that_read(tmp_path, monkeypatch):
+    # CI, 2026-11-10 (acp-midturn): the payload read the record, the turn ended, then `working` was read - his line with no answer under it and
+    # nothing at work, one poll long. Whether a turn works is read on both sides of the record (general.line_state `was`)
+    from types import SimpleNamespace
+    monkeypatch.setattr(session_artifacts, 'root', lambda: tmp_path)
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Comment the ledger totals', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
+    live = SimpleNamespace(task_id=tid, sid='s1', alive=True, busy=True, acp=True, started='2026-11-10 09:00:00', cli='claude', cwd='', _q=[])
+    live.phase = lambda: 'working' if live.busy else 'parked'
+    real = codingchat.sessions
+    def ends(store, t):
+        got = real(store, t); live.busy = False; return got           # ...its answer lands just after this read
+    monkeypatch.setattr(codingchat, 'sessions', ends)
+    with mock.patch.dict(terminal.SESSIONS, {'s1': live}, clear=True): assert codingchat.chat(s, tid)['working']

@@ -662,6 +662,10 @@ def idle_state(store, tid, st=None) -> dict:
                        'queued - waiting its turn')
         return out('queued', f'Waiting its turn. Every agent slot is busy, and {agent} starts on this when one frees up.' + old,
                    'queued - starts when a slot frees')
+    # A LIVE SESSION IS NOT "NOT STARTED" (the stress test, 2026-11-02): a general session leaves no run row and no transcript while it lives, so
+    # a parked one fell through every fact below to "Not started yet" - and NOT "LEFT" EITHER (the audit, 2026-11-10): a coding session parked
+    # over its reply read "ran on this and left without finishing it" off the transcript an earlier session of it filed
+    if (live := live_session_state(tid, agent)): return out('live', *live)
     # A RUN THAT FAILED SAYS SO, with its reason in plain words (owner-approved, 2026-10-21): it read "Not started yet. Nothing has
     # started the assistant on this." under a chip saying stopped, while the run's own last word was why it failed
     if (f := st.failed): return out('failed', f"Failed - {f['sentence']}", f"failed - {f['sentence'][:1].lower()}{f['sentence'][1:]}")
@@ -714,9 +718,6 @@ def idle_state(store, tid, st=None) -> dict:
         return out('held', f'Waiting for you. Starting {agent} by itself is switched off, so it waits for you.' + old,
                    'held for you - not started')
     # ...the box says the hold is gone, and that it still waits for the owner's own Start: trusting is not starting (2026-10-26)
-    # ...and A LIVE SESSION IS NOT "NOT STARTED" (the stress test, 2026-11-02): a general session leaves no run row and no transcript while it
-    # lives, so a parked one fell through every fact above to "Not started yet. Nothing has started the assistant on this." - beside "needs you"
-    if (live := live_session_state(tid, agent)): return out('live', *live)
     if lifted: return out('idle', f'Not started yet. The sender is trusted now - start {agent} when you want it; what was held never starts by itself.' + old,
                           'not started yet')
     # ...and ANY START REFUSED ON ITS WAY IN says its reason here, as the log line that refused it did (ingest.not_started): a reply owed held
@@ -735,9 +736,12 @@ def live_session_state(tid, agent: str = 'the agent') -> tuple | None:
         s = terminal.session_for(tid)
         if not (s and getattr(s, 'alive', False)): return None
         waiting = bool(s.waiting()) if callable(getattr(s, 'waiting', None)) else getattr(s, 'busy', True) is False
+        from . import workerstate as ws
+        asks = waiting and ws.asking_of(s.store, s) is not None
     except Exception: return None
-    # ...a CHAT agent's parked turn is ready for you, whatever its next move is (lane_word, the owner 2026-11-05); a coding one waits on you
-    if waiting and type(s).__name__ == 'GeneralSession':
+    # ...an agent's parked turn is ready for you, whatever its next move is (lane_word, the owner 2026-11-05) - a coding agent's as a chat's (the
+    # audit, 2026-11-10: one read for every kind); one that asked you something waits on your answer
+    if waiting and not asks:
         return (f'Ready for you. {_cap(agent)} finished its turn - the next move is yours.', lanes.word('chat_ready'))
     return (f'Waiting for you. {_cap(agent)} finished its turn and waits on you.', 'waiting on you') if waiting \
         else (f'{_cap(agent)} is working on this.', 'working')

@@ -42,6 +42,23 @@ class StateTests(unittest.TestCase):
         self.assertEqual(taskstate.state(s, row(s, t), parked), 'agentdone')
         self.assertEqual(taskstate.state(s, row(s, task(s)), parked), 'blocked')                         # a coding agent parked still waits on you
 
+    def test_a_coding_agent_parked_over_its_reply_reads_as_a_chat_s_does_to_every_reader(self):
+        # the audit, 2026-11-10: read with no session in hand (the rail, the story), a coding agent parked over the reply it set up read "stopped -
+        # ran on this and left without finishing it" off the transcript an earlier session filed, where its page and a chat read approve
+        from unittest import mock
+        from taskuary import funnel
+        s = MemoryStore(); t = task(s, Assignee='agent:coding')
+        s.add_transcript(t, 'old', 'Agent: looked at it', 'coding', '.', 'ext-1', brain='claude')
+        class Parked:
+            task_id, alive, sid, started, store = t, True, 'live-1', '2026-11-10 09:00:00', s
+            def waiting(self): return True
+            def info(self, details=True): return {'sid': self.sid, 'alive': True, 'waiting': True, 'state': 'parked', 'request': None, 'mode': 'full'}
+        with mock.patch.dict(terminal.SESSIONS, {'live-1': Parked()}, clear=True):
+            s.add_review({'TaskId': t, 'Kind': 'draft_reply', 'DraftText': 'Hi Ray - fixed.', 'Status': 'pending'})
+            st = taskstate.task_state(s, tid=t)
+            self.assertEqual((st.key, st.left), ('approve', ''))
+            self.assertTrue(funnel.idle_state(s, t)['line'].startswith('Ready for you.'), funnel.idle_state(s, t))
+
     def test_a_done_task_continued_is_live_work_but_a_stale_terminal_is_not(self):
         s = MemoryStore(); t = task(s); s.update_task(t, {'Status': 'done'}, 'owner')
         closed = s.get_task(t)['ClosedAt']

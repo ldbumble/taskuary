@@ -675,6 +675,15 @@ def ask_markers(text: str) -> tuple:
     return t[:cuts[0].start()].rstrip(), asks
 
 
+def asked_inline(text: str) -> tuple:
+    """(the answer with its questions as plain lines, [(question, choices)]). THE QUESTION STAYS IN THE ANSWER: the marker line IS the question,
+    and cutting the marker cut the question with it - the chat showed "the laptop spend needs your yes first" and never what to say yes to (walk
+    2026-10-21). Every chat's answer reads so: a coding turn's over ACP drew the bare marker (the audit, 2026-11-10)."""
+    reply, asks = ask_markers(text)
+    said = '\n\n'.join(q + (f" ({' / '.join(c)})" if c else '') for q, c in asks if q not in reply)
+    return '\n\n'.join(x for x in (reply, said) if x), asks
+
+
 def ask_marker(text: str) -> tuple:
     """(cleaned reply, question, choices) - or (text, None, []) when the reply asks nothing structurally."""
     m = _ASK_RE.search(text or '')

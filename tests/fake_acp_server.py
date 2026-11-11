@@ -23,7 +23,7 @@ Set in its environment, for the tests that need more:
   FAKE_DIRECTOR=<folder> each turn's words come from a scenario (fake_director.py), no permission asked; a session/cancel ends it meanwhile
 It offers config options (mode, model, effort) the way claude-agent-acp and codex-acp do, and says what they were set to.
 """
-import json, os, sys
+import json, os, re, sys
 from fake_director import directed, folder_of
 
 SID = 'sess_fake_1'
@@ -118,7 +118,9 @@ for line in sys.stdin:
     elif method == 'session/prompt':
         STARTS += 1
         if os.environ.get('FAKE_ACP_THINK'): __import__('time').sleep(float(os.environ['FAKE_ACP_THINK']))
-        said = ' '.join(str(b.get('text') or '') for b in msg['params'].get('prompt') or [])
+        # ...said back without Taskuary's markers its brief explains: a real agent never quotes them back, and one echoed from the brief raised a
+        # sign-in nobody asked for
+        said = re.sub(r'\[\[[^\]]*\]\]', '', ' '.join(str(b.get('text') or '') for b in msg['params'].get('prompt') or []))
         _heard = f"heard: {said} [mode={SET['mode']} model={SET['model']} effort={SET['effort']} turn={STARTS}" + (f' resumed={RESUMED}' if RESUMED else '') + ']'
         if folder_of():                                # a scenario's own turn (fake_director.py): its words, no permission asked
             _prompt_id = mid                           # ...on a thread, so a session/cancel meanwhile ends the turn as a real adapter's does

@@ -257,7 +257,7 @@ class Run:
             keep = [i for i, x in enumerate(said) if x.strip()]
             return {'lines': lines, 'said': [said[i] for i in keep], 'ats': [ats[i] for i in keep], 'ids': [f'c{i}' for i in keep],
                     'events': [text_of(m) for m in d.get('presses') or []], 'working': d['working'],
-                    'waiting': [w['text'] for w in d['waiting']], 'asking': None, 'permissions': [p['title'] for p in d.get('permissions') or []],
+                    'waiting': [w['text'] for w in d['waiting']], 'asking': (d.get('asking') or {}).get('text'), 'permissions': [p['title'] for p in d.get('permissions') or []],
                     'cards': d.get('cards'), 'turns': d.get('turns')}
         d = self.c.get(f'/api/tasks/{self.tid}/assistant').json()
         ms = d['messages']
@@ -467,9 +467,11 @@ def normal(s: dict) -> dict:
     "A snapshot as two backends must read alike: what the page draws and lights, the cards by kind and place."
     kind = lambda k: 'reply' if k in ('draft', 'draft_reply') else k
     own = s['step'].startswith(OWN)
-    return {'step': s['step'], 'lines': s['lines'], 'said': s['said'], 'events': s['events'], 'working': None if own else s['working'], 'waiting': s['waiting'],
-            'asking': s['asking'], 'cards': [(kind(c['kind']), c['status'], c['turn'], c['passed']) for c in s['cards'] if live(c) or c['status'] != 'pending'],
-            'status': None if own else s['status'], 'chip': None if own else s['chip'], 'lit': None if own else s['lit'], 'told': sorted(set(re.findall(r'^([A-Z][A-Z \'-]{6,}?)(?: -|:|\()', s['told'], re.M)))}
+    # ...HIS LINES AS THE PAGE DRAWS THEM, taken by a turn or waiting for one, in order: the moment a turn takes one is the backend's clock (a chat
+    # takes it in the request, a coding adapter once it is up), and so is the task's status on the press that starts it. An empty answer draws nothing
+    return {'step': s['step'], 'his': s['lines'] + s['waiting'], 'said': [x for x in s['said'] if x.strip()], 'events': s['events'],
+            'working': None if own else s['working'], 'asking': s['asking'], 'cards': [(kind(c['kind']), c['status'], c['turn'], c['passed']) for c in s['cards'] if live(c) or c['status'] != 'pending'],
+            'status': None if own or s['step'].startswith('type') else s['status'], 'chip': None if own else s['chip'], 'lit': None if own else s['lit'], 'told': sorted(set(re.findall(r'^([A-Z][A-Z \'-]{6,}?)(?: -|:|\()', s['told'], re.M)))}
 
 
 def parity(snaps: dict) -> list:
@@ -553,9 +555,6 @@ def d_page_step(r: Run):
     r.turn('Saved: the record now shows the bank details. Nothing else was wrong with it.')
 
 
-# ...OPEN on a coding task (the audit, 2026-11-10): its [[TASKUARY-ASK]] over ACP was no question on the page, and the chat read `working` for
-# forty seconds after its turn ended. Listed in the report; not a coding shape here until they are one road with the chat's
-@on('cli', 'acp', 'api')
 def e_three_asks(r: Run):
     "(e) One mail, three asks, one only the owner can answer -> two done, ONE question -> his answer -> the reply."
     r.arrive({'intent': 'task', 'kind': 'general', 'title': 'Gail: numbers, room, vendor'}, from_email='gail@northwind.example', from_name='Gail Moreno',
@@ -638,9 +637,6 @@ def i_late_answer(r: Run):
     r.quiet()
 
 
-# ...OPEN on a coding task (the audit, 2026-11-10): the sender's second mail woke no turn of its parked ACP session - its draft not greyed, the
-# chip "stopped", the line "ran on this and left without finishing it" over a reply waiting. Listed in the report; not a coding shape here yet
-@on('cli', 'acp', 'api')
 def j_answered_outside(r: Run):
     "(j) The owner answers outside the app, then the sender writes again -> the agent re-plans: the old draft passed, a new card."
     r.arrive({'intent': 'reply_only', 'kind': 'task', 'title': 'Erin asks for the venue'}, body='Which venue did we pick for the offsite?')
@@ -674,9 +670,6 @@ def l_no_connector(r: Run):
                                                      'text': 'Hello - we would like to order 20 office chairs. Alex Doyle, Northwind'}))
 
 
-# ...OPEN on a coding task (the audit, 2026-11-10): Remind me pressed while its session came up left the chat at work for a minute, and the
-# next line's turn waited behind it. Listed in the report; not a coding shape here until its start and its rest are the chat's one road
-@on('cli', 'acp', 'api')
 def m_remind_while_working(r: Run):
     "(m) Remind me pressed while the agent works -> one line, the task put away, the agent told once."
     r.task('Plan the offsite')
@@ -697,8 +690,6 @@ def n_full_house(r: Run):
     r.turn('The Q3 deck outline is above.')
 
 
-# ...a coding agent's silent turn is read by the turn judge's model, not the chat's SILENT road (general.SILENT): open, listed in the report
-@on('cli', 'acp', 'api')
 def o_silent_turn(r: Run):
     "(o) A turn that says nothing -> one follow-up -> still nothing -> the agent's question 'I could not ... what should I do?'."
     r.task('Tidy the vendor list')

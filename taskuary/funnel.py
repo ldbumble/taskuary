@@ -165,9 +165,10 @@ def says(r: dict) -> str:
     # reading "rrdbreports@northwind.example - Northwind - PCC ..."). Only the agent rows ever preferred it.
     # the TASK's title first - it is the whole job, where a follow-up's own line is only the latest
     # thing said about it - then this message's own verdict line, for the rows that never became work
-    title = _short(r.get('Title') or r.get('TriageTitle') or '', 140)
-    if title and not _CHAT_TITLE.match(title): return title
-    subj = _short(r.get('Subject') or '', 140)
+    # ...and the chat's own name stands aside only where it IS the title - the subject a connector wrote, copied over when triage named
+    # none: a title triage wrote stands whatever its words ("Chat with Gail about the budget" was swapped for the opening line)
+    title, subj = _short(r.get('Title') or r.get('TriageTitle') or '', 140), _short(r.get('Subject') or '', 140)
+    if title and not (title == subj and _CHAT_TITLE.match(title)): return title
     said = f"{r.get('FromName') or ''} in {r.get('SourceName') or ''}"
     if subj and subj != said and not _CHAT_TITLE.match(subj): return subj
     return _cut(_gist(r.get('Preview') or r.get('BodyText') or '', 240), PILL) or subj

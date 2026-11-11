@@ -145,6 +145,12 @@ class AutomaticRoadTests(unittest.TestCase):
         self.assertIsNone(row['TriageTitle'])
         self.assertEqual(funnel.says(dict(row) | {'Title': None}), 'Our October newsletter')
 
+    def test_a_title_triage_wrote_stands_whatever_its_words_and_the_chats_own_name_stands_aside(self):
+        from taskuary import funnel
+        row = {'Subject': 'Teams chat with Gail Moreno', 'FromName': 'Gail Moreno', 'SourceName': 'team', 'BodyText': 'can you move the budget review?'}
+        self.assertEqual(funnel.says(row | {'Title': 'Chat with Gail about the budget review'}), 'Chat with Gail about the budget review')
+        self.assertEqual(funnel.says(row | {'Title': 'Teams chat with Gail Moreno'}), 'can you move the budget review?')
+
     def test_a_task_keeps_its_own_title_over_a_follow_up_s(self):
         """The row for a task is about the JOB. A follow-up's own verdict line describes only the
         latest thing said on it, so Title outranks TriageTitle and the rail does not rename a task

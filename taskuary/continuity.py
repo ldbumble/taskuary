@@ -56,7 +56,11 @@ RESUME_PROMPT = (
     'work stopped. Briefly say what is already done, then continue the next unfinished step. '
     'Verify the current state before repeating any action. If you were waiting for an answer or '
     'approval, restate that one question and wait; do not invent the answer or treat Resume as approval '
-    'to send, publish, or execute a pending action. If the result is ready, point the owner to it for review.'
+    'to send, publish, or execute a pending action. If the result is ready, point the owner to it for review. '
+    # ...WHAT IT FINDS IS ITS OWN CONTEXT, NOT NEWS (the recorded walks, 2026-11-11: "Nothing was awaiting approval, so the next step is...",
+    # "Nothing was saved from before the pause", "Nothing had been done before this resume" - each check it was asked to make, read back)
+    'All of that is for you: tell the owner only what is done, what you are doing and what you need from them - never that something '
+    'was absent (nothing saved, nothing pending, nothing awaiting approval).'
 )
 # RUN AGAIN ON THE STRONG MODEL picks up from the saved work, as Resume does - an agent that can act may have done half of it, so a
 # blank start could do it twice - but it is not a Resume press: the agent was told "the owner chose Resume" and the hover said "from

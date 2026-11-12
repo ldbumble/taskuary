@@ -2,6 +2,21 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.52 - 2026-11-12
+
+- An Advisor idea the app put down as it was raised is left out of the owner's record
+- Next onto a coding task draws it at once instead of a loading frame first
+- The rail never scrolls under the pointer to reveal the row he just clicked
+- A new row comes in at its own slot instead of sliding down across the rows above it
+- A task's header pill reads the same words as its rail row when it is a chat task with a draft waiting
+- Triage reads a machine's notice as the owner's work only when it puts something on him
+- Who does it picked again starts that agent, and a line typed to a watched task brings it back under Tasks
+- A chat only grows at its foot: cards stay where their turn left them, a reply he writes past greys in place
+- The chat page never draws an older list, a loose card, or "pick the session back up" over a turn at work
+- A reply draft the sender writes past greys in its place too, and the turn that hears her drafts under her mail
+- What the basic flow's check found across the corpora, kept in place: a moved message, a run's left note, his task's ask, a session's turns
+- No letter's words in a turn's summary once his line set the draft aside, and no task title as his line in the beat his line is heard
+
 ## 0.3.11.51 - 2026-11-12
 
 - A peer's note names its sender's task by title, the way the owner is told of it

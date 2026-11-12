@@ -11,7 +11,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
-import { heldChat, heldConversation } from "./taskDetail.js";
+import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
 import { AttachChip, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
 import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
@@ -716,7 +716,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     // Looking at a general task is not sending it to an agent. Load saved state only; the first
     // actual message (or an explicit Send to agent action) starts the regular agent.
     if (coding) return () => { live = false; };
-    api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => live && accept(r.data)).catch((e) => live && setError(errText(e)));
+    // ...the read asked ahead with the task, still on its way, is drawn the moment it lands - unless this view's own, newer, landed first
+    let own = false;
+    if (!first()) aheadChat(task.TaskId)?.then((d) => { if (live && !own && d) accept(d); });
+    api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => { own = true; if (live) accept(r.data); }).catch((e) => live && setError(errText(e)));
     return () => { live = false; };
   }, [accept, task.TaskId, coding]);
 
@@ -851,10 +854,13 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const needNow = needRaw || needHeld != null;
 
   // ...a start the page already knows of says so before the conversation's first read lands, never a 520px spinner over nothing
-  if (!data && !error) return opening
+  // ...and a task's chat with its list in hand is drawn from the list (the conversation IS the list - conversation.items): the agent's state
+  // read beside it fills in what only it knows as it lands (recorded 2026-11-12 on the built app: a chat whose list was held stood as this
+  // spinner under its head for up to 300 ms on a rail click, its /assistant read still out)
+  if (!data && !error && !(chat && conv.list)) return opening
     ? <Box data-tq-starting="" sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.75, overflow: "hidden", bgcolor: PANEL2, px: 1.5, pt: 1.5, ...(compact ? { height: "auto" } : { flex: "0 0 auto" }) }}>
         <AgentBand name={agentName(task)} work={workOf([])} starting={startingLine(agentName(task))} /></Box>
-    : <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
+    : <Box data-tq-chat-reading="" sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
   // ...the agent's turns, as the list holds them: what each said, by the name the page keys a turn by
   const turnsNow = (conv.list?.items || []).filter((x) => x.kind === "turn");
@@ -949,7 +955,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         hint={!coding ? "" : acp ? (cli.working ? "Enter sends it when this turn ends · Shift+Enter adds a line" : "Enter sends it to the agent · Shift+Enter adds a line")
           : cli ? "Enter types it into the running agent · Shift+Enter adds a line" : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}
         empty={coding && conv.list ? (cli ? "The agent is starting - its turns show here as it works." : "No session has run on this task yet - write below to start one.") : ""}
-        noAi={!coding && chat && !data?.providers?.length && !noAiSaid && !data?.demo
+        noAi={!!data && !coding && chat && !data.providers?.length && !noAiSaid && !data?.demo
           ? <div className="tq-aui-noai" data-tq-no-ai="">No AI is connected yet - what you type waits for one. <ConnectAi size="small" variant="text" /></div> : null} />
     </LocalFiles.Provider>
     </OutputsCtx.Provider>

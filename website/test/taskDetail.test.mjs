@@ -70,6 +70,26 @@ test("a task read ahead brings what its chat stands on, and the chat is drawn fr
   assert.doesNotMatch(view, /setData\(null\)/, "a chat drawn again never empties itself to read");
 });
 
+// ...AND A VIEW MOUNTED BEFORE IT LANDED DRAWS IT AS IT LANDS (recorded 2026-11-12 on the built app: a rail row clicked straight away drew
+// its head and then 830 ms of spinner where the chat goes - the read asked at the press landed half-way through and was never drawn)
+test("a chat read still on its way when the view mounts is handed over as it lands, unless the view's own read came first", async () => {
+  forgetTasks();
+  const { aheadChat, heldChat } = await import("../src/taskDetail.js");
+  let land; const chat = { messages: [], providers: [] };
+  const api = { get: (url) => (url.endsWith("/assistant") ? new Promise((r) => { land = () => r({ data: chat }); }) : Promise.resolve({ data: url.endsWith("/conversation") ? { items: [] } : { task: { TaskId: 7 } } })) };
+  prefetchTask(api, 7); await new Promise((r) => setTimeout(r, 0));
+  const p = aheadChat(7);
+  assert.ok(p, "a read on its way is offered to the view");
+  land(); assert.equal(await p, chat);
+  assert.equal(heldChat(7), chat); assert.equal(aheadChat(7), null, "once landed it is held, not ahead");
+  const view = src("GeneralWorkspace.jsx");
+  assert.match(view, /if \(!first\(\)\) aheadChat\(task\.TaskId\)\?\.then\(\(d\) => \{ if \(live && !own && d\) accept\(d\); \}\);/);
+  assert.match(view, /\.then\(\(r\) => \{ own = true; if \(live\) accept\(r\.data\); \}\)/, "the view's own read is newer: what lands ahead after it is not drawn");
+  // ...and a chat with its list in hand is drawn from the list while that read is out - with no "No AI is connected" said before it is known
+  assert.match(view, /if \(!data && !error && !\(chat && conv\.list\)\) return opening/);
+  assert.match(view, /noAi=\{!!data && !coding && chat && !data\.providers\?\.length/);
+});
+
 test("a failed read ahead holds nothing, so the view reads it itself", async () => {
   forgetTasks();
   await prefetchTask({ get: async () => { throw new Error("down"); } }, 5);

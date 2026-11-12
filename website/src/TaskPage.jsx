@@ -42,7 +42,8 @@ import { opError, runOperation } from "./taskOps.js";
 import { ClosingCard, WriteupBlock, WriteupLine, closeAfterSend, completeTask, writeUpThenClose } from "./closeAgent.jsx";
 import { writeupView } from "./writeupState.js";
 import { agentName } from "./agentWork.js";
-import { lazyGeneral } from "./lazyGeneral.js";
+import { loadGeneral } from "./lazyGeneral.js";
+import { lazyView } from "./lazyView.jsx";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
 import { noteKey, noteOf, onYouLine, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
@@ -138,7 +139,9 @@ import { announceRemoved, fromAnswer } from "./removed.js";
 import { aheadTask, heldSteps, heldTask, heldTerm, keepTask, keepTerms, pageRead } from "./taskDetail.js";
 import { coalesce } from "./coalesce.js";
 
-const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
+// ...through lazyView, fetched at the first idle moment and drawn synchronously once in (recorded 2026-11-12 on the built app: React.lazy
+// suspends on its first draw even with the chunk long loaded, so the first task ever opened stood its head over a spinner where the chat goes)
+const GeneralWorkspace = lazyView(loadGeneral, (m) => m.GeneralWorkspace);   // the guard lives in lazyGeneral.js
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 // the repository question in plain words - "pick a repo" read as code-speak on the card (the walk's WORDS, 2026-10-17); it is only

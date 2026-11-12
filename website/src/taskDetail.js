@@ -30,12 +30,16 @@ export const prefetchTask = (api, tid) => {
   api.get(`/api/tasks/${id}/conversation`).then(({ data }) => { if (Array.isArray(data?.items)) rec.conv = data; }).catch(() => {});
   // ...AND WHAT ITS CHAT STANDS ON (recorded 2026-11-12 on every rail click, Next and Back: the task's header over a spinner for up to a
   // second - list in hand, the chat drew nothing until its own read of the agent's state had landed)
-  api.get(`/api/tasks/${id}/assistant`).then(({ data }) => { if (data && typeof data === "object") rec.chat = data; }).catch(() => {});
+  // ...and a view mounted before it landed waits for it rather than its own read beside it (aheadChat; recorded 2026-11-12 on the built
+  // app: a rail row clicked straight away drew its head, then 830 ms of spinner where the chat goes - the read asked at the press had
+  // landed half-way through, and only the view's own later one was drawn)
+  rec.chatP = api.get(`/api/tasks/${id}/assistant`).then(({ data }) => { if (data && typeof data === "object") rec.chat = data; return rec.chat || null; }).catch(() => null);
   held.set(id, rec);
   return rec.p;
 };
 export const heldConversation = (tid) => { const e = held.get(Number(tid)); return fresh(e) && e.conv ? e.conv : null; };
 export const heldChat = (tid) => { const e = held.get(Number(tid)); return fresh(e) && e.chat ? e.chat : null; };
+export const aheadChat = (tid) => { const e = held.get(Number(tid)); return fresh(e) && !e.chat ? e.chatP || null : null; };
 // ...and the agents' sessions: whether the task has one decides half its row (Answer it, Review changes, Stop and save), and a view that
 // waited to look put a session-less row up first - Reply and Send out results for ~100ms over a task whose agent was waiting on the
 // owner (G8, verified 2026-10-20). One list for every task, read with any task ahead

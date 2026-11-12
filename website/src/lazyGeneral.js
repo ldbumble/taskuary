@@ -23,5 +23,3 @@ export const loadGeneral = () => import("./GeneralWorkspace.jsx").then((m) => {
   }
   throw error;
 });
-
-export const lazyGeneral = (name = "GeneralWorkspace") => () => loadGeneral().then((m) => ({ default: m[name] }));

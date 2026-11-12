@@ -26,6 +26,10 @@ test("each is loaded through lazyView where the first screen draws it", () => {
   assert.match(read("AssistantView.jsx"), /const FirstRun = lazyView\(\(\) => import\("\.\/FirstRun\.jsx"\)\)/);
   assert.match(read("AssistantView.jsx"), /const CanvasBrowse = lazyView\(\(\) => import\("\.\/CanvasBrowse\.jsx"\)\)/);
   assert.match(read("AssistantView.jsx"), /const GeneralWorkspace = lazyView\(loadGeneral\)/);
+  // ...and the task view's chat too: React.lazy suspended on its first draw with the chunk long in, so the first task opened stood its
+  // head over a spinner where the chat goes (recorded 2026-11-12 on the built app)
+  assert.match(read("TaskPage.jsx"), /const GeneralWorkspace = lazyView\(loadGeneral, \(m\) => m\.GeneralWorkspace\)/);
+  assert.doesNotMatch(read("TaskPage.jsx"), /React\.lazy\(/);
   for (const v of ["ConnectorsView", "ReportsView", "SettingsView"]) assert.match(read("CanvasBrowse.jsx"), new RegExp(`const ${v} = lazyView\\(\\(\\) => import\\("\\./${v}\\.jsx"\\)\\)`));
   assert.match(read("TaskHubPage.jsx"), /const BoardView = lazyView\(\(\) => import\("\.\/BoardView\.jsx"\)\)/);
 });

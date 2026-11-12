@@ -60,7 +60,8 @@ class TheDefaultIsTheCliAgentsOwnHandsTests(unittest.TestCase):
         store = MemoryStore(); a_claude(self)
         store.save_connector({'Type': 'mssql', 'Name': 'SQL Server', 'Active': 1, 'Roles': 'report,tool', 'Scope': 'read'}, 'test')
         prompt = turn(store, task(store))['prompt']
-        self.assertIn('SQL Server', prompt); self.assertIn('/api/tools/run', prompt)
+        # ...and how: by Taskuary's own run_system where the session has it (Claude does), never a curl the shell gate holds (2026-11-12)
+        self.assertIn('SQL Server', prompt); self.assertIn('Call one with run_system', prompt)
         self.assertIn('authority read', prompt)          # so a write is proposed rather than attempted
 
     def test_look_only_takes_the_hands_away(self):
@@ -172,3 +173,12 @@ class TheBriefNamesRealToolsTests(unittest.TestCase):
         self.assertIn('handbook_search', hub)
         for t in [w.strip(' ,)') for w in hub.split('tools:')[1].split(',')]:
             self.assertIn(t.split()[0], reports.REGISTRY, t)
+
+    def test_a_session_with_taskuary_s_tools_is_told_to_call_a_system_with_them_never_with_curl(self):
+        """The recorded walk, 2026-11-12: a session with run_system read "Call one: curl ..." too, ran the curl, and the shell gate held it as
+        data sent to a web address - an Approve card for a read of the owner's own database."""
+        from taskuary import docsync
+        store = MemoryStore()
+        tooled, shell = docsync.agent_systems(store, True), docsync.agent_systems(store, False)
+        self.assertIn('Call one with run_system', tooled); self.assertNotIn('curl', tooled)
+        self.assertIn('Call one: curl', shell); self.assertNotIn('run_system {', shell)

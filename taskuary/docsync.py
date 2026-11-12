@@ -115,11 +115,14 @@ def agent_systems(store, tooled: bool = True) -> str:
     if not tools: return mail
     lines = [f"- {c['Name'] or c['Type']} (connector_id {c['ConnectorId']}, authority {scopes.scope_of(c)}) - tools: {', '.join(k)}"
              for c, k in tools]
-    return ('YOUR SYSTEMS (the owner\'s connections you may use)\n' + '\n'.join(lines) + '\n' + (mail + '\n' if mail else '') +
+    # ...BY THE ONE ROAD THE SESSION HAS (the recorded walk, 2026-11-12: a session with Taskuary's tools read "Call one: curl ..." too, ran the
+    # curl, and the shell gate held it as data sent to a web address - an Approve card for a read of the owner's own database)
+    call = ('Call one with run_system {"type": "<one of its tools>", "connector_id": <id>, ...its fields}' if tooled else
             'Call one: curl -s -X POST "$TASKUARY_URL/api/tools/run" -H "X-Taskuary-Token: $TASKUARY_TOKEN" '
             '-H "X-Taskuary-Task-Token: $TASKUARY_TASK_TOKEN" -H "Content-Type: application/json" '
-            '-d \'{"type": "<one of its tools>", "connector_id": <id>, "task_id": \'"$TASKUARY_TASK"\', ...}\' - saved credentials are '
-            'filled in for you.\n'
+            '-d \'{"type": "<one of its tools>", "connector_id": <id>, "task_id": \'"$TASKUARY_TASK"\', ...}\'')
+    return ('YOUR SYSTEMS (the owner\'s connections you may use)\n' + '\n'.join(lines) + '\n' + (mail + '\n' if mail else '') +
+            call + ' - saved credentials are filled in for you.\n'
             # the owner, 2026-10-25: never sent without their press - so the agent is told the call waits, not that it failed
             'A call that would SEND, post, pay or place an order - and an MCP tool its server does not mark read-only - never runs '
             'from here: it answers {"queued": true} and waits on the task, on its card, for the owner to press Approve. Do not retry it.\n'

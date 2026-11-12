@@ -203,6 +203,18 @@ def test_the_default_question_lists_every_cli_that_can_take_work_and_ends_with_t
         note = agents.default_ask(s)['note']
         assert ' are all connected ' in note and 'left out' not in note
         assert f"Claude Code (resting until {brainroute.cooldowns(s)['cli:claude'].strftime('%H:%M')})" in note
+        # ...THE ONE IT TOOK, RESTING (rendered 2026-11-11): the card's RUNS line named the CLI that had the work meanwhile and the question
+        # under it still said "work runs on" the resting one - it does once it is back; and a card whose AI rests with nothing to
+        # take its work says until when, as the "right now" rows do
+        assert 'once it is back' not in note
+        brainroute.cool(s, 'cli:codex', datetime.now() + timedelta(hours=2))
+        till = brainroute.cooldowns(s)['cli:codex'].strftime('%H:%M')
+        assert f'so work runs on OpenAI Codex CLI, the first one ready, once it is back.' in agents.default_ask(s)['note']
+        s.set_setting('triage_backup_ai', '', 'owner')
+        gen, rows = aidefaults.resolve(s, cfg, 'assistant_ai'), brainroute.now(s, cfg)
+        assert gen['runs']['brain'] == 'OpenAI Codex CLI' and gen['runs']['why'] == f'OpenAI Codex CLI is limited until {till}'
+        assert {r['why'] for r in rows} == {f'OpenAI Codex CLI is limited until {till}'} and brainroute.resting(s, 'cli:gemini') == ''
+        s.set_setting(brainroute.COOL_KEY, json.dumps({'cli:claude': brainroute.cooldowns(s)['cli:claude'].isoformat(sep=' ', timespec='minutes')}), 'router')
         # ...and THE CURRENT ONE, CHOSEN, IS A CHOICE: the same value, now the owner's - the question is over and nothing else moved
         card = aidefaults.apply(s, cfg, 'default_brain', value=aidefaults.resolve(s, cfg, 'default_brain')['value'])
         assert s.get_setting('default_brain') == 'codex' and s.setting_writer('default_brain') == 'owner'

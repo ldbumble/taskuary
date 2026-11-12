@@ -760,8 +760,16 @@ def now(store, cfg=None) -> list:
         x = runs(store, 'general', cfg, ASKED_AS[tier]); r = x.pop('route')
         # ...moved off the card's AI or off the level asked - or an AI set for this level that could not take it
         moved = not r.pick or r.pick != card or (r.tier in LEVEL_OF and r.tier != tier) or (LEVEL_OF[tier] in sets and not r.level)
-        out.append({**x, 'level': LEVEL_OF[tier], 'why': r.why if moved else ''})
+        out.append({**x, 'level': LEVEL_OF[tier], 'why': r.why if moved else resting(store, r.pick)})
     return out
+
+
+def resting(store, pick: str) -> str:
+    """'Claude Code is limited until 14:05' while `pick` rests on its usage limit, else ''. What a Settings line says beside an AI the
+    work is still on though it rests - nothing else was there to take it - so "right now it runs on X" is never said of a resting X
+    without its time."""
+    t = cooldowns(store).get(pick) if pick else None
+    return f"{_said(store, pick)} is limited until {t.strftime('%H:%M')}" if t else ''
 
 
 def default_level(store, cfg=None) -> dict:

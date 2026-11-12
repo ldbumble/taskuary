@@ -31,3 +31,24 @@ test("a card's RUNS line is the router's answer, and re-choosing the AI it shows
   assert.ok(ai.includes("onClick={() => repick(slot, o.value) && onSave({ value: o.value })}"));
   assert.ok(!ai.includes("draft_ai") && !ai.includes("which brain"));
 });
+
+// rendered with two CLIs connected (2026-11-11): "Claude Code · quick: haiku · normal: ..." stood right over three "right now" rows saying
+// the same three facts; and with that AI resting and nothing to take its work, the rows named it with no word that it rests
+test("the routing card says each fact once: no line of levels the rows repeat, and a reason all three rows share stands once under them", async () => {
+  const { levelLines, nowRows, sharedWhy } = await import("../src/aiCards.js");
+  const claude = { pick: "cli:claude", brain: "Claude Code", quick: "haiku", normal: "opus", hard: "opus, high effort" };
+  const now = ["quick", "normal", "hard"].map((level) => ({ level, pick: claude.pick, brain: claude.brain, model: claude[level], why: "" }));
+  assert.deepEqual(levelLines({ levels: [claude], now }), [], "the rows already say it");
+  const moved = now.map((n) => (n.level === "hard" ? { ...n, pick: "cli:codex", brain: "OpenAI Codex CLI", model: "gpt-5.4", why: "set for hard work" } : n));
+  assert.deepEqual(levelLines({ levels: [claude], now: moved }), [claude], "a level that runs elsewhere right now: what the AI itself is set to is news");
+  assert.deepEqual(levelLines({ levels: [claude], now: [] }), [claude], "and with no rows the line is all there is");
+  assert.deepEqual(nowRows(moved).map((n) => n.why), ["", "", "set for hard work"], "a row's own reason stays under it");
+  const rest = now.map((n) => ({ ...n, why: "Claude Code is limited until 14:05" }));
+  assert.equal(sharedWhy(rest), "Claude Code is limited until 14:05");
+  assert.deepEqual(nowRows(rest).map((n) => [n.level, n.why]), [["quick", ""], ["normal", ""], ["hard", ""]], "said once, under the three");
+  const same = now.map((n) => ({ ...n, model: "opus", why: "Claude Code is limited until 14:05" }));
+  assert.deepEqual(nowRows(same).map((n) => [n.level, n.why]), [["every level", "Claude Code is limited until 14:05"]], "one row keeps its own reason");
+  assert.equal(sharedWhy(same), "");
+  const rr = read("RouteRules.jsx");
+  assert.ok(rr.includes("{levelLines(p).map((l) => (") && rr.includes("{nowRows(p.now).map((n) => (") && rr.includes("{sharedWhy(p.now)}"));
+});

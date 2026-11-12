@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Autocomplete, Box, Button, MenuItem, Select, Switch, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
-import { levelDefault, levelModel } from "./aiCards.js";
+import { levelDefault, levelLines, levelModel, nowRows, sharedWhy } from "./aiCards.js";
 
 const JOB = { triage: "triage", draft: "redrafts", summary: "summaries", advisor: "the Advisor", memory: "memory", rank: "ranking",
   general: "general work", coding: "coding", judge: "judgements" };
@@ -105,9 +105,9 @@ export function RouteRules() {
         {auto ? `${SAYS} An AI you pick for something always wins.`
           : "Every job runs exactly as its card says. Auto lets triage judge each task quick, normal or hard and pick the model for it."}
       </Typography>
-      {auto && !!(p.levels || []).length && (
+      {auto && !!levelLines(p).length && (
         <Box sx={{ mt: 1 }} data-tq-route-levels="">
-          {p.levels.map((l) => (
+          {levelLines(p).map((l) => (
             <Typography key={l.pick} sx={{ fontSize: 12.5, color: DIM }} data-tq-route-level={l.pick}>
               <Box component="span" sx={{ color: INK, fontWeight: 600 }}>{l.brain}</Box>
               {` · quick: ${l.quick} · normal: ${l.normal} · hard: ${l.hard}`}
@@ -122,8 +122,7 @@ export function RouteRules() {
         <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }} data-tq-route-now="">
           <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.25 }}>RIGHT NOW, AGENT WORK RUNS ON</Typography>
           {/* three levels on one AI and model for one reason are one line, not the same line three times */}
-          {(p.now.every((n) => n.pick === p.now[0].pick && n.model === p.now[0].model && n.why === p.now[0].why)
-            ? [{ ...p.now[0], level: "every level" }] : p.now).map((n) => (
+          {nowRows(p.now).map((n) => (
             <Box key={n.level} data-tq-route-now-level={n.level} sx={{ mb: 0.25 }}>
               <Typography sx={{ fontSize: 12.5, color: DIM }}>
                 {`${n.level}: `}
@@ -133,6 +132,7 @@ export function RouteRules() {
               {n.why && <Typography variant="caption" sx={{ color: FAINT, display: "block", ml: 1.5 }} data-tq-route-now-why="">{n.why}</Typography>}
             </Box>
           ))}
+          {!!sharedWhy(p.now) && <Typography variant="caption" sx={{ color: FAINT, display: "block" }} data-tq-route-now-why="all">{sharedWhy(p.now)}</Typography>}
         </Box>
       )}
       {auto && <ByLevel p={p} save={save} />}

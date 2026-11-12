@@ -1002,8 +1002,9 @@ def default_ask(store) -> dict:
     names = [name(k) + (f" (resting until {cold[f'cli:{k}'].strftime('%H:%M')})" if f'cli:{k}' in cold else '') for k in ready]
     out = [name(k) for k, c in connection_brains(store) if tests.get(k) is False and runs_here(c)]
     one, runs = len(out) == 1, default_brain(store)
+    # ...and where the one it took is itself resting, the work is on it only once it is back: the card's RUNS line names what has it now
     facts = (f"{_and(names)} are {'both' if len(names) == 2 else 'all'} connected and you have not chosen between them, so work runs on "
-             f"{name(runs)}, the first one ready."
+             f"{name(runs)}, the first one ready{', once it is back' if f'cli:{runs}' in cold else ''}."
              + (f" {_and(out)} {'is' if one else 'are'} left out: {'its' if one else 'their'} last test failed - press Test on "
                 f"{'it' if one else 'them'} under Connections." if out else ''))
     # one set of facts for the bell and the Settings card; each ends with the move where it is read (`detail` the bell's, `note` the card's)

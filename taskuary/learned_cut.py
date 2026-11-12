@@ -146,8 +146,9 @@ def cut(ls: list, budget: int, about: dict = None, first: str = 'care') -> tuple
         return (r, bool(s) and s != first, bool(s) and bool(TAG.match(raw)), i)
     used, keep, over = 0, [], []
     for _, (raw, k, *_s) in sorted(enumerate(ls), key=key):
-        if used + len(raw) + 1 > budget: over.append(k); continue
-        keep.append(raw); used += len(raw) + 1
+        n = len(said(raw)) + 1                  # ...what the reader is given, not the tag it never sees
+        if used + n > budget: over.append(k); continue
+        keep.append(raw); used += n
     return keep, over
 
 
@@ -174,6 +175,15 @@ def used(store, target: str = None, reader: str = None, limit: int = 20) -> list
     if reader: q += ' AND Reader=?'; a.append(reader)
     rows = store._rows(q + ' ORDER BY Id DESC LIMIT ?', (*a, limit))
     return [{'reader': r['Reader'], 'target': r['Target'], 'keys': json.loads(r['KeysJson'] or '[]'), 'at': r['At']} for r in rows]
+
+
+def said(raw: str) -> str:
+    """A line as a READER gets it: its words, without the `[s:N | ev: ... | seen: ... | k: ...]` tag. The tag is the reflection's
+    bookkeeping - no reader is told what it means - and its `seen` date and evidence move on every reflection, so a memory block that
+    carried them was new bytes, billed whole again, each time a line was merely confirmed (2026-11-12)."""
+    from .learnedgraph import TAG
+    m = TAG.match(raw or '')
+    return f"- {m.group('text').strip()}" if m else str(raw or '').rstrip()
 
 
 def names(raw: str) -> set:
@@ -223,7 +233,7 @@ def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: 
     except Exception: pass
     got = sorted([(raw, k, s) for raw, k, s in ls if raw in at], key=lambda x: at[x[0]])      # closest to this item first, in each section
     receipt(store, reader, target, [k for _, k, _ in got])
-    say = (lambda raw, k: f'{raw} (id {cite_of(k)})') if cite else (lambda raw, k: raw)
+    say = (lambda raw, k: f'{said(raw)} (id {cite_of(k)})') if cite else (lambda raw, k: said(raw))
     return '\n\n'.join(f'{SECTIONS[s]}\n' + '\n'.join(say(raw, k) for raw, k, x in got if x == s) for s in want if any(x == s for *_, x in got))
 
 
@@ -241,7 +251,7 @@ def whole(store, reader: str = 'triage', target: str = '', doc: str = None, cap:
         if sections and s not in sections: continue
         ls = lines(doc or '', head)
         if not ls: continue
-        b = head + '\n' + '\n'.join(raw for raw, _ in ls)
+        b = head + '\n' + '\n'.join(said(raw) for raw, _ in ls)
         if used + len(b) + 2 > cap:
             over += [k for _, k in ls]
             from loguru import logger

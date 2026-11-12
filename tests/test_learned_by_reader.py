@@ -134,12 +134,26 @@ def test_triage_reads_the_whole_memory_every_time():
     assert learned_cut.used(s, 'mail:r11-1', 'triage')[0]['keys'], 'the read left a receipt'
 
 
+def test_a_reader_gets_the_words_and_a_reflection_that_only_confirmed_a_line_changes_no_byte_of_it():
+    """The `[s:N | ev | seen | k]` tag is the reflection's bookkeeping, explained to no reader, and its date and evidence move every time a
+    line is confirmed - so triage's cached memory block was new bytes after each reflection, though no line said anything new (2026-11-12)."""
+    s = full()
+    before = {r: learned_cut.whole(s, r) for r in ('triage', 'agents')} | {'advisor': learned_cut.for_reader(s, 'advisor'),
+                                                                        'assistant': learned_cut.for_reader(s, 'assistant')}
+    assert all('[s:' not in v and '| seen:' not in v for v in before.values()), 'the words, never the tag'
+    assert '- Vendor statements from vendor.example are fyi, never a task.' in before['triage']
+    s.save_doc('learned', s.get_doc('learned').replace('ev: mem1, mem2, mem3 | seen: 2026-10-20', 'ev: mem1, mem2, mem3, rv9 | seen: 2026-11-12')
+               .replace('[s:4 | ev: out4', '[s:6 | ev: out4'), 'reflect')
+    assert {r: learned_cut.whole(s, r) for r in ('triage', 'agents')} | {'advisor': learned_cut.for_reader(s, 'advisor'),
+                                                                        'assistant': learned_cut.for_reader(s, 'assistant')} == before
+
+
 def test_the_whole_memory_keeps_whole_sections_and_logs_what_did_not_fit():
     s = full()
     got = learned_cut.whole(s, 'triage')
     assert [h for h in learned_cut.SECTIONS.values() if h in got] == list(learned_cut.SECTIONS.values()), 'every section, in order'
-    cut = learned_cut.whole(s, 'triage', cap=len(learned_cut.PEOPLE) + len(ERIN_LINE) + len(GAIL_LINE) + 4)
-    assert cut.startswith(learned_cut.PEOPLE) and GAIL_LINE in cut and learned_cut.CARE not in cut, 'a whole section, never half of one'
+    cut = learned_cut.whole(s, 'triage', cap=len(learned_cut.PEOPLE) + len(learned_cut.said(ERIN_LINE)) + len(learned_cut.said(GAIL_LINE)) + 4)
+    assert cut.startswith(learned_cut.PEOPLE) and learned_cut.said(GAIL_LINE) in cut and learned_cut.CARE not in cut, 'a whole section, never half of one'
     assert learned_cut.over_budget(s).get('vendor statements') == ['triage'], 'what did not fit is noted, not silently dropped'
     assert learned_cut.whole(MemoryStore(), 'triage') == '', "a fresh memory is placeholders"
 
@@ -213,8 +227,8 @@ def test_budget_takes_whole_lines_closest_scope_first_and_records_what_did_not_f
     s.save_doc('learned', put(s.get_doc('learned'), learned_cut.CARE, *general, mine), 'owner')
     out = learned_cut.for_reader(s, 'triage', {'sender': 'erin@northwind.example', 'domain': 'northwind.example'}, budget=600)
     body = out.split('\n')[1:]
-    assert body[0] == mine.strip(), 'the line about this sender leads'
-    assert all(l in general + [mine] for l in body), 'whole lines, never a cut through one'
+    assert body[0] == learned_cut.said(mine), 'the line about this sender leads'
+    assert all(l in map(learned_cut.said, general + [mine]) for l in body), 'whole lines, never a cut through one'
     over = learned_cut.over_budget(s)
     assert len(over) == 15 - len(body) and all(r == ['triage'] for r in over.values()), 'what did not fit is marked, not silently dropped'
     g = {l['key']: l for l in learnedgraph.graph(s)['lines']}

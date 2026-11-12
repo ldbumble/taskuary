@@ -86,7 +86,7 @@ def test_a_wait_reads_the_memory_like_every_state(w):
 
 def test_people_lines_rank_by_who_is_on_the_item_then_its_subject():
     ls = [(RAY, 'ray payroll'), (C.ERIN_LINE, 'erin blake manager answer'), (GAIL_PROMISE, 'gail monday sheet')]
-    one = max(len(r) for r, _ in ls) + 1
+    one = max(len(lc.said(r)) for r, _ in ls) + 1
     # every colleague shares the domain: by domain alone, the document's first line won the budget
     assert lc.cut(ls, one, {'domain': 'northwind.example'})[0] == [RAY]
     assert lc.cut(ls, one, {'domain': 'northwind.example', 'people': ['gail@northwind.example']})[0] == [GAIL_PROMISE]

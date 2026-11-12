@@ -110,7 +110,7 @@ const connector = async () => {
   console.log("connector", JSON.stringify(await api("/api/connectors", { ...(had ? { ConnectorId: had.ConnectorId } : {}), Type: "database", Name: "Trainly",
     ConfigJson: JSON.stringify({ conn_str: `sqlite:///${db.replace(/\\/g, "/")}` }), Active: true, Roles: "tool", Scope: "read" })));
 };
-// BACKEND=coding: each walk is a coding task on the real CLI over ACP (fixture/coding, real), his ask typed into it - no mail
+// BACKEND=coding: each walk is a coding task on the real CLI over ACP (fixture/coding, real; CODING_PTY=1 runs it in its terminal), his ask typed into it - no mail
 const coding = process.env.BACKEND === "coding";
 for (const k of process.env.WALKS || "abcd") {
   const [m, body, who, ask, typed] = tasks[k];
@@ -119,7 +119,7 @@ for (const k of process.env.WALKS || "abcd") {
   // ...a first sign-in is first: a saved one from an earlier walk on this home is let go of
   if (k === "a") console.log("forget", JSON.stringify(await api(`/api/signins/${new URL(site).hostname}`, undefined, "DELETE")).slice(0, 120));
   const t = k === "e" && !coding ? await api("/api/tasks", { Title: who[2], Kind: "general", Summary: body }).then((x) => ({ task_id: x.taskId }))
-    : coding ? await api("/api/fixture/coding", { git: info.git, real: true, title: (who || ["", "", "Payworth: next payroll run"])[2] }).then((x) => ({ task_id: x.taskId }))
+    : coding ? await api("/api/fixture/coding", { git: info.git, real: true, pty: process.env.CODING_PTY === "1", title: (who || ["", "", "Payworth: next payroll run"])[2] }).then((x) => ({ task_id: x.taskId }))
     : await mail(`conv-${name}-${k}`, body, who);
   console.log("push", JSON.stringify(t).slice(0, 160));
   await walk(k, t.task_id, page, coding || k === "e" ? `${body.split("\n\n")[0]} ${ask}` : ask, typed);

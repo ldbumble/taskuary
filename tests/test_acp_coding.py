@@ -513,6 +513,38 @@ def test_a_peers_note_never_begins_a_turn_on_an_agent_he_stopped_and_rides_the_t
     assert 'totals.py is free again' in told and 'Carry on.' in told, told
 
 
+@pytest.mark.parametrize('hold', ['1', 'said'], ids=['never answered', 'answered before the stop'])
+def test_a_line_typed_into_a_turn_he_then_stops_is_answered_by_one_turn_under_the_stop(world, monkeypatch, tmp_path, hold):
+    """The recorded stop, 2026-11-11: two lines typed into a coding turn joined it (steered), he pressed Stop, and nothing ever answered them -
+    the CLI took them off its queue and was interrupted. Nothing he typed is dropped: what the stopped turn took in and never spoke to goes
+    back as ONE turn under the stop, where a chat's waiting lines enter - drawn once, where it stood. A line the agent had spoken to
+    before the stop begins nothing; and a second Stop ends that turn too, with no third."""
+    from taskuary import conversation
+    s, tid, repo = world
+    rules = tmp_path / 'rules.json'; rules.write_text(json.dumps([{'when': 'stopped your turn', 'wait': 60, 'first': 'Rounded.'}]), encoding='utf-8')
+    for k, v in {'FAKE_ACP_HANG': '1', 'FAKE_ACP_STEER': '1', 'FAKE_ACP_STEER_ECHO': '1', 'FAKE_ACP_STEER_HOLD': hold, 'FAKE_ACP_SCRIPT': str(rules)}.items(): monkeypatch.setenv(k, v)
+    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
+    general.take_line(s, tid, 'Comment the totals function.', line_id='l-one'); assert until(lambda: t.in_turn and t.steerable())
+    general.take_line(s, tid, 'And mention rounding.', line_id='l-two')
+    mine = lambda: [u['content']['text'] for u in codingchat.acp_updates(tid, t.sid) if (u.get('_meta') or {}).get('taskuary') == 'owner']
+    assert until(lambda: mine() == ['Comment the totals function.', 'And mention rounding.'] and not t._echoes), (mine(), t._echoes)
+    if hold == 'said': assert until(lambda: any(u['content']['text'] == 'On it. ' for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'agent_message_chunk'))
+    assert general.stop_turn(s, tid)
+    kinds = lambda: [x['kind'] for x in conversation.items(s, tid)['items']]
+    if hold == 'said':
+        assert idle(t) and t.turns == 1 and not conversation.items(s, tid)['working'] and kinds()[-1] == 'press'
+        return
+    assert until(lambda: t.turns == 1 and t.in_turn), (t.turns, t.busy, t.stop_reason)
+    got = conversation.items(s, tid)
+    assert got['working'] and not got['pending'] and [x['kind'] for x in got['items']][-2:] == ['press', 'turn'], got['items']
+    assert [x['id'] for x in got['items'] if x['kind'] == 'line'] == ['l-one', 'l-two']             # drawn once, where it stood: above his stop
+    told = next(x for k, x in reversed(t.history) if k == 'brief')
+    assert 'And mention rounding.' in told and 'stopped your turn' in told and sum('mention rounding' in x for k, x in t.history if k == 'you') == 1
+    # ...and stopped again, it stays stopped: the lines were handed over, and his stop is his
+    assert general.stop_turn(s, tid) and idle(t, 2)
+    assert until(lambda: not conversation.items(s, tid)['working']) and t.turns == 2 and not t._q
+
+
 def test_a_held_step_stays_the_one_lit_card_when_he_asks_the_coding_agent_a_question(world, monkeypatch):
     """The owner's live coding task, 2026-11-11 ("the question has 2 approve buttons?"): his question set the held step aside and the agent
     raised it again beside the greyed one. It stays lit, his line stands with the turn at work under it, and the same step run again by

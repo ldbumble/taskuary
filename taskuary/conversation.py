@@ -412,7 +412,8 @@ def items(store, tid: int) -> dict:
     stop = f"You {general.PRESSES['stopped_turn']({})}."
     for m in general.press_lines(store, tid):
         aid, text = m['id'].split('-')[1], m['content'][0]['text']
-        h, it = led.get(('press', aid)), {'id': f'p:{aid}', 'kind': 'press' if m.get('press') else 'note', 'at': m['createdAt'], 'text': text, **({'stop': True} if text == stop else {})}
+        h = led.get(('press', aid))
+        it = {'id': f'p:{aid}', 'kind': 'press' if m.get('press') else 'note', 'at': m['createdAt'], 'text': text, **({'stop': True, '_hs': bool(h)} if text == stop else {})}
         if not h and at_work and ep(m['createdAt']) + 1 > began and m.get('press') and text != stop: pend.append(it)
         # ...A PRESS NOBODY HEARD YET STANDS AFTER ALL OF ITS OWN SECOND - its stamp is no finer: a stop pressed in the second its turn's line was
         # heard sorted above that line, and the stop's mark fell on the answer before it (a same-second tie, seen as a flash and a red test)
@@ -452,9 +453,12 @@ def items(store, tid: int) -> dict:
     # ...A TURN HE STOPPED IS STOPPED FROM THE PRESS (the recorded stop, 2026-11-11: its CLI took seconds to let go, and all that time the turn
     # spun above "You stopped the agent"): what is at work from there is the turn his waiting lines begin, under the press - with none
     # waiting, nothing is
-    halted = bool(tail and tail['kind'] == 'turn' and any(x.get('stop') for x in out[out.index(tail):]))
+    # ...UNTIL A TURN BEGINS UNDER THE STOP: one that heard his stop (its hand-over wrote the press down, `hear`) answers what the stopped
+    # turn took in and never spoke to (acpcoding._unanswered) - its lines stand above the stop, so no input of its own is under it
+    halted = bool(tail and tail['kind'] == 'turn' and any(x.get('stop') and not x['_hs'] for x in out[out.index(tail):]))
     if halted:
-        at_work = bool(pend)
+        # ...and from the press too where the stopped turn owes him an answer: that turn is on its way, and nothing else says so meanwhile
+        at_work = bool(pend) or bool(getattr(general._live_of(tid), 'owes_stop', lambda: False)())
         if tail['state'] in ('working', 'starting'): tail.update(state='done', ended=tail.get('ended') or time.time())
     # ...A TURN IS MADE ONCE, AT ITS HAND-OVER: the live session's last turn is the one at work only where its work came after the newest
     # hand-over - one that ended before it is finished, and the turn now beginning stands under it (a wake after a press marked the answer
@@ -533,7 +537,7 @@ def items(store, tid: int) -> dict:
         if x['kind'] == 'card': out[i] = {**x, 'status': 'kept'}; t['cards'].append({**card, 'id': card['id'] + ':live'})
         else: x['cards'] = [{**c, 'id': c['id'] + ':k', 'status': 'kept'} if c is card else c for c in x['cards']]; t['cards'].append(card)
 
-    for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None)
+    for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None)
     # ...and what the agent waits on him for, and the CLI that runs: read by the page off this one list (the chat's own payloads are gone)
     from . import permissions, taskstate
     live = general._live_of(tid)

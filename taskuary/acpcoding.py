@@ -31,6 +31,9 @@ FELL_BACK: set = set()            # the CLIs that did not start over ACP this pr
 SCROLLBACK = 200_000
 HOT_S = 30                        # a file touched this recently is "under its hands" (touching)
 ECHO_SECS = 600                   # how long a steer's echo is waited for: it comes when the CLI takes the words in, after the tool at work
+# What a turn under his stop is told (_unanswered): his stop stands - only what he wrote into the stopped turn is answered
+STOPPED_ON = ('The owner stopped your turn. What follows reached you during that turn and you had not answered it. Answer it now, and go back '
+              'to the work you were stopped in only if it asks you to:')
 _SHELL = re.compile(r'^(bash|powershell|pwsh|shell|execute|terminal|local_shell|exec_command|cmd)$', re.I)
 
 
@@ -100,9 +103,11 @@ class ACPCoding:
         self._q, self._qlock, self._wake, self._steer_lock = [], threading.Lock(), threading.Event(), threading.Lock()
         self._echoes = {}                                         # steered words -> when sent: the adapter's echo of them is not a line of its own
         self._drawn = set()                                       # ids of steered items already drawn: a steer that falls back to the next turn is not drawn twice
+        self._steered = []                                        # [prompt, taken in] of what went INTO the turn at work and it has not spoken to since (_unanswered)
         self.touched, self.calls, self.history, self.has_output, self._live_at = {}, {}, [], False, 0.
         self.held, self.steps, self.gate, self.turns = {}, None, None, 0
         self._carried = False                    # his lines were carried onto the turn now running, after it left the queue (carries)
+        self._again = False                      # the turn about to begin answers what his stop left unanswered (_unanswered)
         self.owned = self.woke = self.silent = self.stop_next = False   # his turn; woken once (wake); woken for saying nothing; stop the turn as it goes
         self.duties = False                                              # told its duties about drafts (selfclose.DRAFTS_ONCE) - once, in _begins
 
@@ -343,6 +348,8 @@ class ACPCoding:
             if got != 'injected': self._echoes.pop(item[0], None)
             if got == 'injected':
                 self._drawn.discard(id(item)); self.witness.note({'k': 'turn'})
+                # ...in the turn, and not yet spoken to (an echo that beat this reply has said it was taken in)
+                self._steered.append([item, item[0] not in self._echoes])
                 return item[3] and item[3](True)
             with self._qlock: self._q.append(item)
             self._wake.set()
@@ -394,7 +401,8 @@ class ACPCoding:
             self.turn_at = general.PRESSED.get(self.task_id) or self.turn_at
             general.answered(self.task_id, took)
             self.woke = self.silent = False             # ...a turn his words began may be woken once again (wake)
-        self.owned = bool(took) or self._carried          # ...his by the lines it took, or by the ones its opener carried onto it meanwhile (carries)
+        # ...his by the lines it took, by the ones its opener carried onto it meanwhile (carries), or by the ones his stop left unanswered
+        self.owned, self._again, self._steered = bool(took) or self._carried or self._again, False, []
         self.steps = agents.ACPSteps(self._trace, self.cli, self.held)
         self.gate = acpgate.answerer({'store': self.store, 'task_id': self.task_id, 'cli': self.cli, 'cwd': self.cwd, 'sid': self.sid},
                                      self._trace, self.held)
@@ -429,12 +437,31 @@ class ACPCoding:
         # ...a turn the owner STOPPED is recorded so, as a chat's stopped turn is - never as its answer (the audit, 2026-11-10)
         if stop == 'cancelled' and self.store and self.task_id:
             from . import workerstate as ws
-            ws.record(self.store, self.task_id, self.sid, 'stopped', text=said[:4000], source='acp'); return self._idle(said, turn=False)
+            ws.record(self.store, self.task_id, self.sid, 'stopped', text=said[:4000], source='acp')
+            return self._unanswered() or self._idle(said, turn=False)
         # ...and a turn that said nothing takes the chat's road (general.could_not, woke_for_silence): woken once, then its one question
         if ok and (asked := general.could_not(self, said)) != said:
             said = asked; self._record({'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': said}})
         self._idle(said)
         if ok: general.woke_for_silence(self, said, self.owned)
+
+    def _unanswered(self) -> bool:
+        """NOTHING HE TYPED IS DROPPED BY HIS STOP (the owner's rule; the recorded stop, 2026-11-11: two lines typed into a coding turn joined
+        it, he pressed Stop, and nobody ever answered them - the CLI had taken them off its queue and was interrupted). What went into the
+        stopped turn and it never spoke to - not taken in yet, or taken in with no word of the agent's since - goes back as ONE prompt: a turn
+        under his stop, where a chat's waiting lines enter. Drawn already, where it stood; nothing is drawn again. -> was there any."""
+        left, self._steered = [x[0] for x in self._steered], []
+        if not left or not self.alive: return False
+        item = (STOPPED_ON + '\n\n' + '\n\n'.join(t for t, *_ in left), True, [], None)
+        with self._qlock: self._q.append(item); self.busy, self._again = True, True
+        self._wake.set()
+        try:
+            from . import live
+            live.emit('task-changed', task_id=self.task_id)
+        except Exception: pass
+        return True
+
+    def owes_stop(self) -> bool: return bool(self._steered or self._again)      # a turn he stops now is followed by one that answers (conversation.items)
 
     def _begins(self, items: list, text: str) -> tuple:
         """A TURN BEGINS AS A CHAT'S DOES (general.send_prompt): the owner's lines it takes are his in the record (take_kept - the waiting room
@@ -495,12 +522,15 @@ class ACPCoding:
         "Is this update the adapter echoing words we steered in (and drew ourselves, _show)? Each echo is dropped once, within ECHO_SECS."
         if u.get('sessionUpdate') != 'user_message_chunk' or not self._echoes: return False
         now = time.time(); self._echoes = {k: v for k, v in self._echoes.items() if now - v < ECHO_SECS}
-        return self._echoes.pop(str((u.get('content') or {}).get('text') or '').strip(), None) is not None
+        if self._echoes.pop(w := str((u.get('content') or {}).get('text') or '').strip(), None) is None: return False
+        for x in self._steered: x[1] = x[1] or x[0][0] == w     # ...the echo is the CLI taking the words in: what it says from here is said having read them
+        return True
 
     def _update(self, u: dict):
         if self._echo(u): return
         self._record(u)
         kind = u.get('sessionUpdate')
+        if kind == 'agent_message_chunk' and self._steered: self._steered = [x for x in self._steered if not x[1]]      # spoken to: no longer owed (_unanswered)
         if kind in ('tool_call', 'tool_call_update'):
             iid = str(u.get('toolCallId') or '')
             c = self.calls.setdefault(iid, {'streamed': False, 'shown': False})

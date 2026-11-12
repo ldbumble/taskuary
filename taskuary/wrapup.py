@@ -407,6 +407,18 @@ def _addrs(v) -> list | None:
     return out
 
 
+# A LETTER WITH A BLANK LEFT TO FILL IS NO CARD (the recorded walk, 2026-11-11: a reply filed for the owner's Send read "Hi [NAME FROM ACCOUNT
+# PAGE]" - one press from going out so). A structure check, no reading of meaning: words alone in square brackets or doubled braces, as a
+# template leaves them - never a link's text, a numbered note or a ticked box. The agent is told its two ways on.
+_BLANK = re.compile(r"\[[A-Za-z][A-Za-z '/_-]{2,60}\](?!\()|\{\{[^{}\n]{1,60}\}\}")
+def blanks(text) -> list: return list(dict.fromkeys(m.group(0) for m in _BLANK.finditer(str(text or ''))))
+def blank_why(text) -> str:
+    "'' or what to tell the agent whose letter still holds a blank: fill it from what it can read, or ask the owner the one question."
+    b = blanks(text)
+    return (f"the letter still has a blank left to fill ({', '.join(b[:3])}) - nothing was set up. Fill it from what you can read, or ask "
+            "the owner the one thing it needs and write the letter when you have it.") if b else ''
+
+
 def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None, follow_up: bool = False,
                 to: str = '', sid: str = None, answers: int | None = None, only: bool = False, cc=None, why_to: str = '') -> dict:
     """Put the agent's reply on the task as the pending draft - the same review the responder would
@@ -424,6 +436,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         if not rv: return {'ok': False, 'why': 'there is no pending reply to attach to - save one with --reply first'}
         return {'ok': True, 'review_id': rv['ReviewId'], **_told(store, rv['ReviewId'], attach_files(store, rv['ReviewId'], files, agent))}
     if not text: return {'ok': False, 'why': "no reply text - put the letter's words in the reply and save it again"}
+    if (why := blank_why(text)): return {'ok': False, 'why': why}
     # THE SAME LETTER TWICE IS A MISTAKE, never a new draft: a resumed session saved its first session's reply again after the
     # owner had sent it, and it went back on the table aimed at the sender's "Thanks!" (2026-10-16) - one press from a resend
     if (sent := already_sent(store, task_id, text)):

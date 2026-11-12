@@ -150,6 +150,8 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     # ...a recipient with no words is no email (the owner, 2026-11-10: "it created reply with nothing in it ... if you have nothing to reply just
     # ask what should i reply?"): nothing is filed, and the agent is told its two ways on
     if not text: return {'ok': False, 'why': NO_WORDS}
+    from .wrapup import blank_why
+    if agent != 'owner' and (why := blank_why(text)): return {'ok': False, 'why': why}       # a blank left to fill is no letter (wrapup.blanks)
     mailbox = str(mailbox or '').strip()
     if mailbox:
         from . import outbound

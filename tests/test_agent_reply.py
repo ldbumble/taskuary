@@ -359,5 +359,19 @@ def test_the_agent_is_told_where_the_card_ends_otherwise_than_it_wrote():
     assert 'ends_with' not in wrapup.agent_reply(s, tid, 'Hi Dana, it is fixed now.\n\nAlex Doyle', 'assistant')      # ...as it wrote it: nothing to say
 
 
+def test_a_letter_with_a_blank_left_to_fill_is_no_card():
+    "A reply filed for the owner's Send read 'Hi [NAME FROM ACCOUNT PAGE]': refused at the door, with the two ways on - a structure check."
+    s = MemoryStore(); s.set_setting('owner_name', 'Alex Doyle', 't')
+    tid, _ = task_with(s)
+    out = wrapup.agent_reply(s, tid, 'Hi [NAME FROM ACCOUNT PAGE],\n\nYour export is fixed.', 'assistant')
+    assert out['ok'] is False and '[NAME FROM ACCOUNT PAGE]' in out['why'] and 'ask the owner' in out['why']
+    assert not s.pending_review(tid, 'draft_reply', live_only=False)
+    assert wrapup.blanks('Date: [date] and {{venue}}') == ['[date]', '{{venue}}']
+    # ...never what a letter may carry in brackets: a link's text, a numbered note, a ticked box, a ticket's tag
+    for fine in ('See [the notes](https://northwind.example/n).', 'As agreed [1], it is done.', '- [x] exported', 'Re: [TQ-0012] export'):
+        assert wrapup.blanks(fine) == [], fine
+    assert wrapup.agent_reply(s, tid, 'Hi Dana, the August export is fixed [1].', 'assistant')['ok']
+
+
 if __name__ == '__main__':
     unittest.main()

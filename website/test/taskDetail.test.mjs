@@ -101,6 +101,18 @@ test("an empty read never replaces a chat that has drawn", () => {
   assert.match(view, /if \(!\(d\.items \|\| \[\]\)\.length && \(LISTS\.get\(tid\)\?\.items \|\| \[\]\)\.length\) return false;\s*rev\.current = d\.rev; LISTS\.set\(tid, d\); setList\(d\);/);
 });
 
+// THE RAIL WALK (2026-11-12): a coding task has no chat read - the server answers 422 - and that answer left its read "still on the way" for
+// the whole two minutes it is held, so Next onto a stopped coding task drew the loading frame first, then the page faded in
+test("a chat read that answered with nothing is no longer ahead: the view draws the task at once", async () => {
+  forgetTasks();
+  const { aheadChat } = await import("../src/taskDetail.js");
+  const api = { get: (url) => (url.endsWith("/assistant") ? Promise.reject(Object.assign(new Error("422"), { response: { status: 422 } }))
+    : Promise.resolve({ data: url.endsWith("/conversation") ? { items: [] } : { task: { TaskId: 9, Kind: "coding" } } })) };
+  await prefetchTask(api, 9); await new Promise((r) => setTimeout(r, 0));
+  assert.equal(aheadChat(9), null, "answered, even with no chat: nothing to wait for");
+  assert.equal(heldTask(9).task.TaskId, 9, "...and the task's own read is drawn from its first frame");
+});
+
 test("a failed read ahead holds nothing, so the view reads it itself", async () => {
   forgetTasks();
   await prefetchTask({ get: async () => { throw new Error("down"); } }, 5);

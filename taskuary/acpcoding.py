@@ -109,6 +109,7 @@ class ACPCoding:
         self._carried = False                    # his lines were carried onto the turn now running, after it left the queue (carries)
         self._again = False                      # the turn about to begin answers what his stop left unanswered (_unanswered)
         self._owed = []                          # ...and what a SECOND stop left unanswered: it rides on his next prompt (_turn)
+        self._began = None                       # when the turn now queued began: his press, else the moment it was queued (prompt)
         self.owned = self.woke = self.silent = self.stop_next = False   # his turn; woken once (wake); woken for saying nothing; stop the turn as it goes
         self.duties = False                                              # told its duties about drafts (selfclose.DRAFTS_ONCE) - once, in _begins
 
@@ -302,7 +303,11 @@ class ACPCoding:
         item = (text, brief, list(shown or []), done)
         if self.steerable(): threading.Thread(target=self._steer, args=(item,), daemon=True).start(); return True
         # ...at work from here: the turn that takes it begins a beat later, and read "at rest" in between the waiting room handed it over twice
-        with self._qlock: self._q.append(item); self.busy = True
+        # ...AND ITS CLOCK STARTS HERE, from his press (line_state reads it): the press is let go once his line is handed over - which is here,
+        # a beat before the turn begins - and in that beat the clock read the last turn's start, then the turn's own now (a loaded machine)
+        with self._qlock:
+            if not self.in_turn and self._began is None: self._began = self.turn_at = general.PRESSED.get(self.task_id) or time.time()
+            self._q.append(item); self.busy = True
         self._wake.set()
         return True
 
@@ -393,7 +398,7 @@ class ACPCoding:
         self._show(items); self._drawn.difference_update(map(id, items))
         # ...ITS CLOCK IS SET ONCE, HERE (the 0.3.11.50 release run: it read the turn's start, then the CLI's own prompt hook's time, then the
         # press - "working Ns" restarting): his press where one began it, read before anything below takes his lines and lets the press go
-        pressed = general.PRESSED.get(self.task_id)
+        pressed, self._began = self._began or general.PRESSED.get(self.task_id), None
         self.busy, self.seeding, self.accepted, self.stop_reason, self.turn_at = True, False, True, None, pressed or time.time()
         self.seeded = self.seeded or text
         self.witness.note({'k': 'turn'})

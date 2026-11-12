@@ -64,6 +64,33 @@ class ClockTests(unittest.TestCase):
             with self.assertRaises(StopIteration): server.poll_forever()
         slept.assert_called_once()          # it reached the sleep, so the next cycle would come
 
+    def test_the_shipped_interval_sits_under_a_provider_s_cache_window(self):
+        """A prompt cache lives ~5 quiet minutes on either road; at 10 the first mail of every poll paid for the guide again."""
+        from taskuary.store import DEFAULT_SETTINGS, MemoryStore
+        self.assertLess(int(DEFAULT_SETTINGS['poll_minutes']) * 60 + server.POLL_TICK, 5 * 60)
+        self.assertEqual(MemoryStore().get_setting('poll_minutes'), DEFAULT_SETTINGS['poll_minutes'])
+
+    def test_the_old_seed_moves_and_a_typed_ten_stays(self):
+        import tempfile, os
+        from taskuary.store import SQLiteStore
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+            for writer, after in ((None, '4'), ('owner', '10')):
+                p = os.path.join(d, f'{writer}.db'); s = SQLiteStore(p)
+                s.cx.execute("UPDATE setting SET Value='10', UpdatedBy=? WHERE Name='poll_minutes'", (writer,)); s.cx.commit(); s.close()
+                s = SQLiteStore(p)
+                self.assertEqual(s.get_setting('poll_minutes'), after, writer); s.close()
+
+    def test_a_poll_that_brought_nothing_asks_no_model(self):
+        """What makes a faster clock free: nothing new read, nothing owed from before, no brain called."""
+        from taskuary import ingest
+        from taskuary.store import MemoryStore
+        asked = []
+        def llm(*a, **k): asked.append(a); return '{}'
+        s = MemoryStore()
+        with ingest.deferred(): pass
+        self.assertEqual(ingest.retry_failed_triage(s, llm), 0)
+        self.assertEqual(asked, [])
+
     def test_the_cadence_is_published_so_the_caption_can_stop_guessing(self):
         from fastapi.testclient import TestClient
         server.store.set_setting('poll_minutes', '4', 't')

@@ -10302,6 +10302,11 @@ _HEARTBEAT = [0.0]              # ...and when we last wrote down that the app is
 HEARTBEAT_TICK = 300
 POLL_TICK = 30                  # how often the full loop wakes to look at the clock
 QUICK_TICK = 5                  # the chat loop looks more often, so "every 30 seconds" means that
+def poll_minutes() -> int:
+    """Minutes between full polls, read in the one place both clocks and the caption ask (0 = off; junk = what it ships as)."""
+    from .store import DEFAULT_SETTINGS
+    try: return int(store.get_setting('poll_minutes') or 0)
+    except (TypeError, ValueError): return int(DEFAULT_SETTINGS['poll_minutes'])
 SLOW_CHAT_READ = 3.0            # a chat read past this is logged with its length: it is a late phone answer
 
 
@@ -10638,7 +10643,7 @@ def _context_update_line(freshness: dict) -> str:
 
 
 def poll_forever():
-    """The ten-minute sync the Timeline has always PROMISED - made by the server, at last.
+    """The background sync the Timeline has always PROMISED - made by the server, at last.
 
     It used to be the BROWSER'S: a setInterval living inside the Timeline tab. So it stopped
     the moment you opened Board or Tasks, because that tab unmounts; it restarted its ten-minute
@@ -10657,8 +10662,7 @@ def poll_forever():
             # rather than the scheduler has to be able to tell those two apart (TQ-0451)
             if time.time() - _HEARTBEAT[0] >= HEARTBEAT_TICK:
                 _HEARTBEAT[0] = time.time(); note_app_up(store)
-            try: mins = int(store.get_setting('poll_minutes') or 0)
-            except (TypeError, ValueError): mins = 10
+            mins = poll_minutes()
             if mins > 0 and time.time() - _LAST_POLL[0] >= mins * 60:
                 _poll_reports(0, what='syncing')
         except Exception as e:
@@ -10714,9 +10718,7 @@ def quick_forever():
             welcome.flush(store, wait=False)              # a press kept while the store was busy (welcome.pressed)
             try: remote_assistant.push_alerts(store)
             except Exception as e: logger.warning(f'could not send an interruption to the chat: {e}')
-            try: mins = int(store.get_setting('poll_minutes') or 0)
-            except (TypeError, ValueError): mins = 10
-            if mins > 0:
+            if poll_minutes() > 0:
                 quick = _quick_due()
                 if quick: _poll_on_quick_clock(quick)
         except Exception as e:
@@ -11237,8 +11239,7 @@ def ingest_status():
         store.set_setting('ingest_status', json.dumps(st), 'system')
     # the cadence rides along so the timeline's caption can state the truth instead of a
     # hardcoded "every 10 min" that stayed on screen after somebody set the interval to 0
-    try: every = int(store.get_setting('poll_minutes') or 0)
-    except (TypeError, ValueError): every = 10
+    every = poll_minutes()
     try:
         fetched_at = float(store.get_setting('ingest_last_fetch_completed_at'))
         if not 0 < fetched_at < float('inf'): fetched_at = None

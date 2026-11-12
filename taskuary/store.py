@@ -897,7 +897,10 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # minutes between background polls while the app is OPEN. The Timeline said
                     # "auto-syncs every 10 min" for a long time while the only clock was a
                     # setInterval inside its own tab - see server.poll_forever. 0 = off.
-                    'poll_minutes': '10',
+                    # FOUR, because a provider forgets a cached prompt after ~5 quiet minutes (Anthropic 5; OpenAI 5-10; a Claude
+                    # CLI 5): at 10 the first mail of every poll paid for the whole triage guide and the memory again, on either
+                    # road. An empty poll asks no model, so the price of 4 is the mailbox being read 2.5x as often.
+                    'poll_minutes': '4',
                     'vision_enabled': '1',          # send attached images to the AI, when the model can see
                     'report_images_enabled': '1',   # reports hand back a chart, and draw it in the body
                     # the ONE copy of your name. The docs say {{owner}} / {{owner_first}} /
@@ -1571,6 +1574,10 @@ class SQLiteStore:
             # writer; a Fixed the owner chose carries who saved it (brainroute.set_panel, the Settings row), so only the seed moves
             self.cx.execute("UPDATE setting SET Value='auto', UpdatedBy='migration' WHERE Name='ai_route_mode' AND Value='fixed' "
                             "AND COALESCE(UpdatedBy, '')=''")
+            # ...and the poll's old seed of 10 moves under the cache window the same way (the owner, 2026-11-11: "if you have to
+            # move triage to 5 minutes to keep cache it's worth it"): a 10 somebody typed carries its writer and stays
+            self.cx.execute("UPDATE setting SET Value=?, UpdatedBy='migration' WHERE Name='poll_minutes' AND Value='10' "
+                            "AND COALESCE(UpdatedBy, '')=''", (DEFAULT_SETTINGS['poll_minutes'],))
             from . import apireads, connectorcatalog
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
                          ('slack', 'Slack'), ('github', 'GitHub'),

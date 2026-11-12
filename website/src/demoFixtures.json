@@ -510,10 +510,10 @@
    },
    {
     "Name": "poll_minutes",
-    "Value": "10",
+    "Value": "4",
     "Description": null,
     "UpdatedBy": null,
-    "Default": "10"
+    "Default": "4"
    },
    {
     "Name": "processing_membership_rules",

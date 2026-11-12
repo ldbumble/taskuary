@@ -465,7 +465,9 @@ def _events(t, p: dict) -> None:
                 # ...nor the idle notice over an ask that already stands (the recorded coding walk, 2026-11-12: a minute after the agent asked to
                 # be signed in, "Claude is waiting for your input" took the sign-in's place - no page shown, nothing to press), as the
                 # permission notice already gives way to the request it follows
-                if kind == 'idle_prompt' and ws.open_requests(evs): pass
+                # ...nor the idle notice a minute after a turn that ENDED (the same walk: every coding turn's answer was followed by "Agent asked
+                # you: Claude is waiting for your input"): the turn's end already says the next move is his, in its own words
+                if kind == 'idle_prompt' and (ws.open_requests(evs) or (evs and evs[-1]['Kind'] == 'turn_end')): pass
                 elif not (kind == 'idle_prompt' and evs and ws.background_jobs(evs[-1])):
                     text = msg or 'Claude is waiting for your input'
                     ws.record(st, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, source='hook')

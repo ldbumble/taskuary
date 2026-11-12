@@ -100,6 +100,13 @@ class QuestionAndPermissionTests(Base):
         self.fire('Notification', notification_type='idle_prompt', message='Claude is waiting for your input')
         self.assertEqual([r['text'] for r in self.state()['requests']], ['Sign in to payworth.example to continue'])
 
+    def test_the_idle_notice_after_a_turn_that_ended_is_no_question(self):
+        """The same walk: every coding turn's answer was followed a minute later by "Agent asked you: Claude is waiting for your input"."""
+        self.session()
+        self.fire('Stop', last_assistant_message='The next payroll run is on March 14.')
+        self.fire('Notification', notification_type='idle_prompt', message='Claude is waiting for your input')
+        self.assertEqual(self.state()['requests'], [])
+
     def test_a_permission_request_names_the_tool_and_its_arguments(self):
         self.session()
         self.fire('PermissionRequest', tool_name='Bash', tool_input={'command': 'rm -rf build'}, tool_use_id='tu1')

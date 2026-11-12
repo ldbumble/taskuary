@@ -94,6 +94,13 @@ test("a chat read still on its way when the view mounts is handed over as it lan
   assert.match(view, /if \(!data && !error\) return opening/);
 });
 
+// A CHAT THAT HAS DRAWN NEVER DRAWS EMPTY (recorded 2026-11-12 on the ACP sign-in walk: two seconds after the hand-back the whole chat stood
+// empty for a second, his ask and his press gone): a read with no items over a held list that has some is not drawn
+test("an empty read never replaces a chat that has drawn", () => {
+  const view = src("GeneralWorkspace.jsx");
+  assert.match(view, /if \(!\(d\.items \|\| \[\]\)\.length && \(LISTS\.get\(tid\)\?\.items \|\| \[\]\)\.length\) return false;\s*rev\.current = d\.rev; LISTS\.set\(tid, d\); setList\(d\);/);
+});
+
 test("a failed read ahead holds nothing, so the view reads it itself", async () => {
   forgetTasks();
   await prefetchTask({ get: async () => { throw new Error("down"); } }, 5);

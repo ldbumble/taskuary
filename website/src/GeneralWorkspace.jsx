@@ -396,6 +396,10 @@ export function useConversation(tid, on) {
     if (n < shown.current) return false;
     shown.current = n;
     if (!d || d.same) return false;
+    // ...AND A CHAT THAT HAS DRAWN NEVER DRAWS EMPTY (recorded 2026-11-12 on the ACP sign-in walk: two seconds after the hand-back the whole chat
+    // stood empty for a second, his ask and his press gone, then came back): a read with nothing in it over a list that has something is no
+    // newer word on the conversation - nothing he typed or was told is ever taken back - and is not drawn
+    if (!(d.items || []).length && (LISTS.get(tid)?.items || []).length) return false;
     rev.current = d.rev; LISTS.set(tid, d); setList(d); return true;
   }).catch(() => false) : Promise.resolve(false)); }, [tid, on]);
   useEffect(() => { const l = listOf(tid); rev.current = l?.rev || ""; setList(l); load(); }, [load]);   // eslint-disable-line react-hooks/exhaustive-deps

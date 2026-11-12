@@ -110,8 +110,10 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   // nothing - its button still named the card that drew it before the task page's card was registered again, and press found no verb there)
   const spineBy = verbs === now ? held : Object.fromEntries(Object.entries(held).map(([k, vs]) => [k, vs.map((v) => ({ ...v, of: liveOf(v.id)?.of ?? v.of }))]));
   useEffect(() => { putSpineVerbs(spineBy); });
-  // ...the row's line: a greyed head's reason, else - nothing lit - the state's own sentence (`says`, railStatus.rowWhy)
-  const { ref, decide, agent, more, next, back } = row, why = row.why || says;
+  // ...the row's line: a greyed head's reason, else - nothing lit - the state's own sentence (`says`, railStatus.rowWhy). ON THE ITEM'S OWN
+  // ROW ONLY (the owner, 2026-11-11: "never ever do put text there"): the bar under the page is its buttons and nothing else - a sentence
+  // under Back and Next read as theirs, and the task above already says it
+  const { ref, decide, agent, more, next, back } = row, why = inline ? row.why || says : "";
   // ...a phone's row is Nav, Mark done, as many moves as fit and one ▾ (foldsOf.phone) - the width the page calls a phone (AssistantView)
   const phone = useMediaQuery("(max-width:600px)");
   // the card's own move, advised, is lit on the card (rowOf's `lit`); only the row that is drawn says which

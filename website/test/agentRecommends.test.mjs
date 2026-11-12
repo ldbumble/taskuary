@@ -98,9 +98,10 @@ test("a lit Chase is drawn on the task's row, only while it is the recommended m
   assert.match(page, /runOperation\(api, "task\.chase", t\.TaskId, \{ key: `task:\$\{t\.TaskId\}` \}\)/, "the slipped card's own road, keyed by the task");
 });
 
-// A ROW WITH NOTHING LIT SAYS WHY ON THE DESK TOO (the owner, 2026-11-10: "if it's consistent do it"): the server's sentence for it, as the
-// phone says it, on the row's own line - the dock's and the narrow window's - and nothing filled
-test("a row with nothing lit draws the server's line on its own line, and fills nothing", async () => {
+// A ROW WITH NOTHING LIT SAYS WHY ON THE ITEM'S OWN ROW - a phone's, the narrow window's: the server's sentence for it, and nothing filled.
+// NEVER ON THE BAR UNDER THE PAGE (the owner, 2026-11-11: "never asked to have any text under the back next button"): the desk's bar is
+// nav only, and for a day it carried that sentence under Back and Next - a sender's "asked 2 hours ago" read as the buttons' own caption
+test("a row with nothing lit says why on the item's own row, and the bar under the page draws only its buttons", async () => {
   const { rowWhy, unlitWhy } = await import("../src/railStatus.js");
   const { adviceShown } = await import("../src/advice.js");
   const rec = { verb: null, label: "", why: "Stopped mid-work: the test database was not reachable.", state: "stopped" };
@@ -109,7 +110,9 @@ test("a row with nothing lit draws the server's line on its own line, and fills 
   assert.equal(adviceShown(pick, { key: "task:4", lane: "stopped" }, false), null, "nothing is lit by it");
   assert.equal(rowWhy({ recommended: pick }), rec.why); assert.equal(unlitWhy({ verb: "close", why: "Finished." }), "", "a lit move says its own");
   assert.equal(rowWhy({ why: "An agent is working on this" }), "An agent is working on this", "the rail's own line where nothing is said");
-  assert.match(src("ActionRow.jsx"), /why = row\.why \|\| says/);
-  assert.match(src("AssistantView.jsx"), /says=\{!litNow && !setupLit \? rowWhy\(\{ recommended: tableAdvice \}\) : ""\}/);
+  assert.match(src("ActionRow.jsx"), /why = inline \? row\.why \|\| says : ""/, "no line on a row that is not the item's own");
+  const bar = src("AssistantView.jsx").match(/<div className="tq-dock-line">[\s\S]*?<\/div>/)[0];
+  assert.match(bar, /<ActionRow advised=\{stripPick \|\| setupLit\} hold=\{rowHold\} early=\{rowEarly\} \/>/, "the bar is handed no sentence");
+  assert.doesNotMatch(bar, /says=|rowWhy/);
   assert.match(src("CanvasItem.jsx"), /says=\{lit \? "" : rowWhy\(\{ recommended: read \}\)\}/);
 });

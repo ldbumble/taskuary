@@ -67,9 +67,9 @@ def test_a_turn_his_line_began_runs_from_his_press_and_its_clock_never_moves(wor
             if (v := general.line_state(s, tid)['turnStarted']): seen.append(v)
             time.sleep(0.005)
     w = threading.Thread(target=watch, daemon=True); w.start()
-    general.take_line(s, tid, 'Comment the totals function.', line_id='l-one'); pressed = min(seen or [time.time()])
+    pressed = time.time(); general.take_line(s, tid, 'Comment the totals function.', line_id='l-one')
     assert idle(t, 1); done.set(); w.join(2)
-    assert seen and set(seen) == {pressed}, sorted(set(seen))[:4]
+    assert seen and len(set(seen)) == 1 and abs(seen[0] - pressed) < 1.0, (sorted(set(seen))[:4], pressed)      # one value, from the press
     # ...and nothing after sets it again: the CLI's own prompt hook (hooks._events) moved it on a slow runner, where the press had gone
     was = t.turn_at; time.sleep(0.05); from taskuary import hooks; hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': 'x'})
     assert t.turn_at == was

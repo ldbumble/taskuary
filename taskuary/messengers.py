@@ -201,7 +201,7 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
 TG_BUTTONS = 'tg_buttons'              # tg_buttons:<chat> -> {"msg": id, "labels": [...]} - the one message whose buttons answer
 
 
-def tg_send(store, chat_id: str, body: str, connector_id=None, buttons: list = None) -> dict:
+def tg_send(store, chat_id: str, body: str, connector_id=None, buttons: list = None, quote: dict = None) -> dict:
     """`buttons`: the choices numbered in `body`, as tappable buttons under it - Telegram's own, so no poll is needed (the
     owner, 2026-09-29: "if buttons work in telegram no need for polls"). A tap comes back as a callback_query
     (poll_telegram) carrying the button's index. Only the NEWEST message's buttons answer; the ones before are taken off,
@@ -212,7 +212,9 @@ def tg_send(store, chat_id: str, body: str, connector_id=None, buttons: list = N
     if not (c and c.get('Secret')): raise RuntimeError('the Telegram connection is not set up')
     labels = [str(b) for b in (buttons or []) if str(b).strip()][:12]      # whole: a tap is matched by its words
     markup = {'reply_markup': {'inline_keyboard': [[{'text': t, 'callback_data': f'p{i}'}] for i, t in enumerate(labels)]}} if labels else {}
-    sent = tg(c['Secret'], 'sendMessage', chat_id=int(chat_id), text=body[:4000], **markup)
+    # `quote` ({id} of the line it answers, outbound.chat_quote): a reply to it, sent anyway if that line is gone
+    reply = {'reply_parameters': {'message_id': int(quote['id']), 'allow_sending_without_reply': True}} if quote and str(quote.get('id')).isdigit() else {}
+    sent = tg(c['Secret'], 'sendMessage', chat_id=int(chat_id), text=body[:4000], **markup, **reply)
     # ...and ANY newer message takes the older buttons off, one with none of its own too: a typed answer under a card left the card's
     # buttons drawn and looking live above it, while the list they named had been spent (F2)
     key = f'{TG_BUTTONS}:{chat_id}'

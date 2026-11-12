@@ -90,6 +90,16 @@ class TelegramTests(unittest.TestCase):
         self.assertEqual(out, {'channel': 'telegram', 'chat': '777'})
         self.assertEqual((sent['chat_id'], sent['text']), (777, 'Fixed.'))
 
+    def test_a_reply_answers_the_line_it_is_for(self):
+        "As WhatsApp's do: two answers in one chat each name their message - and still go if that line was deleted."
+        s, _ = self._store()
+        sent = []
+        msg = {'Channel': 'telegram', 'ConversationId': 'telegram:777', 'ExternalId': 'telegram:777:42', 'BodyText': 'is the export done?'}
+        with mock.patch.object(messengers, 'tg', lambda t, m, **p: sent.append(p)):
+            outbound.reply_to_message(s, msg, 'Fixed.')
+            outbound.reply_to_message(s, {**msg, 'ExternalId': None}, 'Fixed.')
+        self.assertEqual([p.get('reply_parameters') for p in sent], [{'message_id': 42, 'allow_sending_without_reply': True}, None])
+
 
 class WhatsAppTests(unittest.TestCase):
     def _store(self):
@@ -375,6 +385,48 @@ class WhatsAppTests(unittest.TestCase):
             outbound.reply_to_message(s, {**msg, 'ExternalId': None}, 'Fixed.')
         self.assertGreater(len(bodies), 2)
         self.assertEqual([b.get('quote', {}).get('id') for b in bodies], ['3EB0C3'] + [None] * (len(bodies) - 1))
+
+
+class TeamsQuoteTests(unittest.TestCase):
+    "A Teams reply goes as Teams' own quoted reply to the line it answers (Graph replyWithQuote), like WhatsApp's - in a group chat and a 1:1."
+    G, CHAT = outbound.GRAPH, '19:ops@thread.v2'
+
+    def _send(self, msg, *codes):
+        s = MemoryStore()
+        c = s.get_connector_by_type('teams')
+        s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Secret': 'trt',
+                          'ConfigJson': json.dumps({'auth': 'user', 'account': 'alex@northwind.example'})}, 'o')
+        posted, codes = [], list(codes)
+        def post(url, headers=None, data=None, timeout=None):
+            posted.append((url[len(f'{self.G}/chats/'):], json.loads(data)))
+            code = codes.pop(0) if codes else 201
+            return mock.Mock(status_code=code, json=lambda: {'id': '900'}, text='' if code < 300 else '{"error":{"message":"Invalid message id"}}')
+        with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch('requests.post', side_effect=post):
+            out = outbound.reply_to_message(s, msg, 'Friday works.\nSee you then.')
+        return out, posted
+
+    def msg(self, chat=CHAT, mid='1731000000001'):
+        return {'Channel': 'teams', 'ConversationId': f'teams:{chat}', 'ExternalId': f'teams:{chat}:{mid}' if mid else None,
+                'SourceName': 'alex@northwind.example', 'FromName': 'Gail Moreno', 'BodyText': 'can we move it to Friday?'}
+
+    def test_the_reply_quotes_the_message_it_answers(self):
+        for chat in (self.CHAT, '19:alex_gail@unq.gbl.spaces'):                      # a group chat and a 1:1 alike
+            out, posted = self._send(self.msg(chat))
+            self.assertEqual(posted, [(f'{chat}/messages/replyWithQuote', {'messageIds': ['1731000000001'],
+                                       'replyMessage': {'body': {'contentType': 'text', 'content': 'Friday works.\nSee you then.'}}})])
+            self.assertEqual(out, {'channel': 'teams', 'chat': chat, 'quoted': True})
+
+    def test_a_quote_graph_refuses_still_sends_the_reply_once_plain(self):
+        out, posted = self._send(self.msg(), 400)
+        self.assertEqual([u for u, _ in posted], [f'{self.CHAT}/messages/replyWithQuote', f'{self.CHAT}/messages'])
+        self.assertEqual(posted[1][1], {'body': {'contentType': 'text', 'content': 'Friday works.\nSee you then.'}})
+        self.assertEqual(out, {'channel': 'teams', 'chat': self.CHAT, 'quoted': False})
+
+    def test_a_message_with_no_graph_id_goes_plain(self):
+        for m in (self.msg(mid=None), {**self.msg(), 'ExternalId': f'teams:{self.CHAT}'}):    # the chat id alone is no line to quote
+            out, posted = self._send(m)
+            self.assertEqual([u for u, _ in posted], [f'{self.CHAT}/messages'])
+            self.assertEqual(out, {'channel': 'teams', 'chat': self.CHAT})
 
 
 class OwnerTests(unittest.TestCase):

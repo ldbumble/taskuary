@@ -454,8 +454,11 @@ def main():
         r, out = got
         # ...saying to WHOM it was saved: "reply saved" alone let a question meant for one requester sit as an answer to another (2026-11-02)
         to = f" to {out['to']}" if not drafting and out.get('to') else ''
+        # ...and HOW IT IS SPOKEN OF, said where a coding agent hears it - the chat agent's draft tools answer the same sentence (the recorded
+        # coding walk, 2026-11-12: told "waiting on the owner to approve and send it", it said so over the card, and again the turn after)
+        from .selfclose import CARD_SAID
         if text or not out.get('ok'): print(out.get('says') or "saved on the task as its result." if out.get('saved') == 'result'
-                                            else f"{'email' if drafting else 'reply'}{to} saved on the task, waiting on the owner to approve and send it." if out.get('ok')
+                                            else f"{'email' if drafting else 'reply'}{to} saved on the task. {CARD_SAID}" if out.get('ok')
                                             else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}")
         if out.get('ok') and out.get('people'):
             print(f"this task has more than one person on it ({', '.join(out['people'])}) - if it is meant for someone else, save it again with --to <name or address>")

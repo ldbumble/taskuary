@@ -51,7 +51,7 @@ BRIEF = ('YOUR TOOLS: you drive Taskuary\'s browser for this task with browser_o
          'ask for one - open the site\'s sign-in page, then end your turn with a final line [[TASKUARY-SIGNIN: <the site\'s domain>]]. '
          'Taskuary signs in with the login saved in its vault and wakes you to continue; if none is saved, the owner fills it in securely '
          '(and can save it to the vault for next time). An act that can\'t be undone (submit, pay, send, delete) may be HELD for the owner: '
-         'when a tool says so, stop and say what waits for them. Say what you found from the page itself, and what you could not check.')
+         'when a tool says so, stop and say what you will do once they approve. Say what you found from the page itself, and what you could not check.')
 # ── PHASE 2: the rest of what a CLI's hands do (the owner, 2026-11-09: "make sure hipaa thing matches capabilities of claude cli") ──────
 # Files in the task's own outputs folder (the one folder the task page serves), read with Taskuary's own readers (attachtext); a page fetched
 # through the address guard every other fetch of an untrusted URL takes (webguard); a search on the owner's connected search card, run

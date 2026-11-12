@@ -908,7 +908,7 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
                    f"{_quote(rv['DraftText'], 1500)}{wd}")
     # ...each letter with its words (the audit's real turn, 2026-11-10: asked to make the email shorter, the agent read only "the email to
     # paula@..." and asked the owner what it said)
-    if others: out.append('ALSO SET UP AND NOT SENT - take back any the newest message undoes:\n' + '\n'.join(
+    if others: out.append('ALSO SET UP AND NOT SENT - take back any the newest message undoes or the work no longer needs:\n' + '\n'.join(
         f"- rv{x['rid']}: {x['what']}" + (f": {_quote(x['text'], 600)}" if x.get('text') else '') for x in others)
         + ('' if rv else wd))
     if nowhere: out.append('AN EMAIL YOU DRAFTED HAS NO ADDRESS:\n' + '\n'.join(f'- rv{r}: {slots.to_missing(w)}' for r, w in nowhere))

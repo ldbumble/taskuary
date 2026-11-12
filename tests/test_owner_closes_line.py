@@ -29,11 +29,13 @@ def test_a_draft_is_said_in_a_line_and_its_words_are_the_cards():
     s.add_message({'TaskId': t, 'Channel': 'email', 'Subject': 'March invoice batch', 'FromName': 'Gail Moreno',
                    'FromEmail': 'gail@northwind.example', 'BodyText': 'Can you check the March batch?', 'Status': 'routed'})
     line = selfclose.owner_closes_line()
-    assert 'say in ONE short line what you set up and for whom' in line and 'never repeat any of that' in line and 'assum' in line
+    # ...and ONE duty about a card (the owner's rule, 2026-11-11: no repeating what the card says): told to say what it set up and for whom,
+    # it said that over the card that says it. It adds only what the card cannot say
+    assert 'Say none of that' in line and 'Add only what the card cannot say' in line and 'assum' in line and 'what you set up and for whom' not in line
     # ...nor its id (agent walk 2, 2026-11-10: "send it after rv3"): the prompt names drafts by Taskuary's handle, which the owner never sees
     assert selfclose.HANDLES_LINE in line and 'the owner never sees it' in line
     marked = general._prompt(s, t)[0]; tooled = general.by_tool(marked)
-    for system in (marked, tooled): assert system.count("never repeat any of that") == 1
+    for system in (marked, tooled): assert system.count('Add only what the card cannot say') == 1
     # ...a session that drafts by marked block writes the words once, in the block: there the block IS the draft
     assert 'the block IS the draft' in selfclose.REPLY_LINE and 'the block IS the draft' in selfclose.DRAFT_LINE
     assert 'the block IS the draft' not in tooled and 'never as text in the conversation' not in marked
@@ -46,3 +48,9 @@ def test_the_draft_tools_answer_says_the_same_one_sentence():
     assert selfclose.CARD_SAID in selfclose.owner_closes_line() and 'the file it carries' in selfclose.CARD_SAID
     assert agenttools.said_once({'ok': True, 'review_id': 7})['shown'] == selfclose.CARD_SAID
     assert 'shown' not in agenttools.said_once({'ok': False, 'why': 'nothing was saved'})
+    # ...and a coding agent, which saves its reply by the `taskuary` command, hears that same sentence there (the recorded coding walk,
+    # 2026-11-12: told "waiting on the owner to approve and send it", it said so over the card - and again the turn after)
+    import inspect
+    from taskuary import cli
+    src = inspect.getsource(cli)
+    assert 'saved on the task. {CARD_SAID}' in src and 'waiting on the owner to approve and send it' not in src

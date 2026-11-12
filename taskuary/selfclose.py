@@ -302,9 +302,13 @@ CHAT_LINE = (
 # ...SAID ONCE (the agent walk, 2026-11-10): each draft stood twice - its subject and body quoted in the answer, over the card that showed the
 # same words - and the owner, 2026-11-10: a replaced reply was quoted whole, with its scratch folder's path under it. One sentence, read
 # from the guide every general turn carries (owner_closes_line) and from the draft tools' own answer (agenttools.propose_reply/propose_email)
-CARD_SAID = ('After you set up a reply, an email or an act, say in ONE short line what you set up and for whom, with any assumption you made in '
-             'it (an address you guessed, a date you picked), and stop: its card under your answer shows its words, the file it carries, that it '
-             'waits for the press and that nothing went - never repeat any of that, nor what it replaced.')
+# ...ONE DUTY LINE (the owner's rule 8, 2026-11-11: the agent talks like a person helping - "no repeating what the card says"): it was told
+# to say what it set up and for whom, and said that over a card that says it - then "it waits for your Send", "nothing has been sent". What
+# the card shows is never said; the agent adds only what the card cannot
+CARD_SAID = ('A reply, an email or an act you set up is its card under your answer: the card shows what it is, whom it is to, its words, the '
+             'file it carries, that it waits for the press and that nothing went. Say none of that, nor what it replaced. Add only what the '
+             'card cannot say, in one short line - what you will do once it is pressed, an assumption you made in it (an address you guessed, '
+             'a date you picked), or the one question you need answered - and nothing where there is none.')
 HANDLES_LINE = ('An id Taskuary gives a draft or a card (rv4, the review number a tool returned) is its handle for your tools and your '
                 'withdraw line - the owner never sees it: to them, name a thing by what it is and whom it is to.')
 # ...and WHERE THE OWNER CLOSES IT (no CHAT_LINE: nobody wrote in, or the owner keeps the task to finish): the agent said "I couldn't

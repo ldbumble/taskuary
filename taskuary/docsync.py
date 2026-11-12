@@ -122,7 +122,7 @@ def agent_systems(store, tooled: bool = True) -> str:
             'filled in for you.\n'
             # the owner, 2026-10-25: never sent without their press - so the agent is told the call waits, not that it failed
             'A call that would SEND, post, pay or place an order - and an MCP tool its server does not mark read-only - never runs '
-            'from here: it answers {"queued": true} and waits on the task for the owner to press Approve. Say so; do not retry it.\n'
+            'from here: it answers {"queued": true} and waits on the task, on its card, for the owner to press Approve. Do not retry it.\n'
             'AUTHORITY is the owner\'s ceiling on each one: at read you may look but not change anything (a SQL batch that '
             'writes is rolled back). To change something on a read-level system, PROPOSE it and the owner approves it on the '
             'task: TASKUARY-PROPOSE {"action": "run_tool", "type": "<one of its tools>", "connector_id": <id>, ...} - say in '

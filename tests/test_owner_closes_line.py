@@ -53,4 +53,4 @@ def test_the_draft_tools_answer_says_the_same_one_sentence():
     import inspect
     from taskuary import cli
     src = inspect.getsource(cli)
-    assert 'saved on the task. {CARD_SAID}' in src and 'waiting on the owner to approve and send it' not in src
+    assert 'saved on the task. {CARD_SAID}' in src and 'saved on the task, waiting on the owner' not in src

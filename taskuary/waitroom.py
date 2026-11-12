@@ -279,7 +279,12 @@ def _deliver(store, tid: int, new: int = None) -> dict:
     # ...a coding agent over ACP is answered as a chat is: by its next turn, his words drawn as his and the turn at work from them - typed as a
     # bare answer, his line was nobody's and the chat read "working" for the rest of the run (the audit, 2026-11-10)
     if st == 'asking' and term.is_acp(t):
-        from . import workerstate as ws
+        from . import permissions, workerstate as ws
+        # ...BUT A STEP THAT WAITS ON HIS ALLOW IS ANSWERED BY ITS BUTTONS ALONE (the pane's rule below, workerstate.LINE; the recorded hold,
+        # 2026-11-11): its turn is still on, stopped at that call, so a line typed then can be heard by nobody until he presses. It was
+        # written down as the answer, steered at the stopped turn - dots under it for as long as he did not press - and handed over a second
+        # time once the turn moved: told twice, drawn twice. It keeps its place by the box and goes in when the buttons were pressed
+        if permissions.pending(tid, store): return {'delivered': 0, 'state': 'held_ask', 'left': len(pending)}
         if (req := ws.asking_of(store, t)):
             who = 'owner' if any((x.get('CreatedBy') or 'owner') == 'owner' for x in notes) else 'router'
             ws.record(store, tid, t.sid, 'answered', request_id=req['request_id'], text=parts(notes[0]['Note'])[0][:500], source=ws.said_by(who))
@@ -309,6 +314,9 @@ def _deliver(store, tid: int, new: int = None) -> dict:
         # ...an ACP coding session (acpcoding.py) takes it as its next prompt, the batch as Taskuary's brief and each of the owner's own notes
         # drawn as theirs in the coding chat - never "While you were working, the owner queued..." in the owner's bubble (to_general's rule)
         elif term.is_acp(t):
+            # ...INTO THE TURN OR AS THE NEXT ONE IS THE SESSION'S OWN WORD (prompt steers whenever a turn is on): read off the task's state
+            # alone, a line that prompt steered was left for "the turn that begins" to take, and the next look handed it over again
+            steer = bool(getattr(t, 'steerable', lambda: False)())
             t.prompt(' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left, waited=waited)) if x), brief=True, shown=_shown(notes))
             how = 'sent into the running turn of' if steer else 'sent to'
         # ...with what other agents said since its last turn in front, framed as theirs (peers.py) - one turn, not two

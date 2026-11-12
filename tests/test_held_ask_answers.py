@@ -173,6 +173,19 @@ class WordsUnderButtonsAreALine(Base):
         self.assertEqual((out['delivered'], out['state']), (0, 'held_ask')); self.assertNotIn('why', out)
         self.assertEqual(len(self.s.waiting_notes(self.tid)), 1, 'kept as his line, waiting for the agent')
 
+    def test_over_acp_a_line_typed_while_a_step_waits_on_his_allow_keeps_its_place_and_the_step_stays_lit(self):
+        """The recorded hold, 2026-11-11: a coding agent over ACP waited on Allow once / Reject for a delete, he typed "is that the only file
+        it removes?", and the line was written down as the answer and sent at the stopped turn - dots under it while nothing ran, then
+        handed over a second time when the turn moved (told twice, drawn twice). It waits as a line does; the request stays open."""
+        from taskuary import permissions
+        g, rid = self.held()
+        sent = []; self.t.prompt = lambda *a, **k: sent.append(a); self.t.steerable = lambda: True
+        with mock.patch.object(term, 'is_acp', return_value=True), mock.patch.object(permissions, 'pending', return_value=[{'id': 'p1'}]):
+            out = waitroom.add(self.s, self.tid, 'is that the only file it removes?')
+        self.assertEqual((out['delivered'], out['state']), (0, 'held_ask'))
+        self.assertEqual(sent, []); self.assertIn(g, ws.HELD); self.assertEqual(len(ws.status(self.s, self.tid)['requests']), 1)
+        self.assertEqual(len(self.s.waiting_notes(self.tid)), 1)
+
     def test_a_button_named_in_words_still_presses_it(self):
         g, rid = self.held()
         self.assertTrue(ws.answer(self.s, self.tid, rid, 'allow')['delivered'])

@@ -316,6 +316,18 @@ class TheList(unittest.TestCase):
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
         self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}:k', 'kept')], [(f'r:{rid}', 'failed')], []])
 
+    def test_a_step_that_waits_on_his_allow_is_one_card_never_the_agents_question_beside_it(self):
+        """The owner's live task, 2026-11-11 ("the question has 2 approve buttons?"), recorded on a coding agent: the permission's card with
+        Allow once / Reject, and under it the same request again as the agent's question with the same two buttons. The list hands the
+        page the permission; the request it made is not also `asking`. A question the agent asked in words still is."""
+        from taskuary import permissions, taskstate
+        self.say('Remove the old export.', 'l-one'); self.rest()
+        ask = {'request_id': 'q:1:1', 'kind': 'approval_needed', 'text': 'The agent wants to run `rm old-export.csv`', 'choices': ['Allow once', 'Reject'], 'source': 'permission'}
+        with mock.patch.object(taskstate, 'asking', return_value=ask), mock.patch.object(permissions, 'pending', return_value=[{'id': 'p1', 'tid': self.tid}]):
+            got = self.list()
+        self.assertEqual((len(got['permissions']), got['asking']), (1, None))
+        with mock.patch.object(taskstate, 'asking', return_value={**ask, 'source': 'acp', 'choices': []}): self.assertTrue(self.list()['asking'])
+
     def test_a_reply_waiting_for_his_send_stands_with_its_send_through_a_restart_and_the_session_after_it(self):
         """The recorded restart, 2026-11-11, and the owner's ruling on it ("reply cards should survive untouched"): the agent's reply waited
         for his Send, Taskuary restarted with a line of his by the box, the new session held the card as "an earlier session's" and told

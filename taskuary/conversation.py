@@ -520,11 +520,16 @@ def items(store, tid: int) -> dict:
     ask = taskstate.asking(store, store.get_task(tid) or {'TaskId': tid}, general.session_for(tid) or (live if codingchat._live(tid) else None))
     # A QUESTION IS SAID ONCE, IN ITS TURN'S OWN WORDS, ABOVE ITS CARD (the owner, 2026-11-11; the recorded walk drew it a second time under
     # the reply card): where the newest answer already holds the ask's words the list says `said`, and the page draws no line of its own
+    # A STEP THAT WAITS ON HIS ALLOW IS ONE CARD (the owner, 2026-11-11: "the question has 2 approve buttons?" - recorded on a coding agent: the
+    # permission's card with Allow once / Reject, and under it the same request again as the agent's question, with the same two buttons):
+    # the request a permission made is `permissions`' to draw, never the agent's question beside it
+    perms = permissions.pending(tid, store)
+    if ask and ask.get('source') == 'permission' and perms: ask = None
     flat = lambda v: ' '.join(re.sub(r'[*_`]', '', str(v or '')).split())
     last = next((x for x in reversed(out) if x['kind'] == 'turn'), None)
     if ask and last and flat(ask.get('text')) and flat(ask['text']) in flat(last.get('text')): ask = {**ask, 'said': True}
     body = {'items': out, 'pending': pend, 'working': at_work, 'started': t0 if at_work else None, 'asking': ask,
-            'permissions': permissions.pending(tid, store), 'live': codingchat.live_of(codingchat._live(tid)),
+            'permissions': perms, 'live': codingchat.live_of(codingchat._live(tid)),
             'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
                               **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if any(x['kind'] == 'turn' for x in out) else {})}, 'published': published, 'ran': bool(turn_of) or any(x['kind'] == 'turn' for x in out)}
     return {'rev': hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16], **body}

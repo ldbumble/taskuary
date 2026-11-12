@@ -123,7 +123,9 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
   await api("/api/fixture/outbox", {});          // ...the mailbox that sends nowhere lives in the server's process: set again after a restart of it
   // ...`stranger`: a general task whose first mail is from someone the owner never trusted (no agent starts: the hold and its Trust action)
   const who = road === "stranger" ? { from_name: "Paula Vance", from_email: "paula@vendor.example" } : { from_name: "Gail Moreno", from_email: "gail@northwind.example" };
-  if (road === "general" || road === "stranger") {
+  // ...TID: carry on a task an earlier walk left (leave and come back; a timeline of several walks on one task)
+  if (process.env.TID) tid = Number(process.env.TID);
+  else if (road === "general" || road === "stranger") {
     // ...TOPIC_SUBJECT / TOPIC_BODY: another ask than the venue one - a second walk of one instance with the same words is read as the same mail again
     const got = await api("/api/ingest/push", { channel: "email", subject: process.env.TOPIC_SUBJECT || "Offsite venue", ...who, conversation_id: `conv-${name}`,
       body: (process.env.TOPIC_BODY || "Hi Alex,\n\nCan you suggest two venues for the March offsite, about 40 people, and tell me which one you would pick? A short answer is fine.\n\nThanks,\nGail").replace(/\\n/g, "\n") });

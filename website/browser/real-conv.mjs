@@ -33,8 +33,11 @@ export const sampler = (names, owner = "Alex") => {
     const vp = document.querySelector("[data-tq-task-page] .tq-aui-viewport");
     // A TASK IS NEVER ITS HEAD OVER NOTHING (recorded 2026-11-12: on every rail click, Next and Back the chat's room stood with a spinner in
     // it for up to a second): how long the room was drawn with no chat in it, said on the first frame that has one
-    if (!vp && document.querySelector("[data-tq-task-page] [data-tq-agent-room]")) window.__bare ||= performance.now();
-    if (vp) {
+    // ...and a chat drawn but not yet SEEN counts as none (the rail walk, 2026-11-12: its section faded in from nothing on every Next and row
+    // click, the head over an empty body for ~0.4 s)
+    const faded = !!vp && +getComputedStyle(vp.closest("[role=region]") || vp).opacity < 0.99;
+    if ((!vp && document.querySelector("[data-tq-task-page] [data-tq-agent-room]")) || faded) window.__bare ||= performance.now();
+    if (vp && !faded) {
       const items = [...vp.querySelectorAll("[data-tq-item]")].map((e) => [e.getAttribute("data-tq-item"), e.getAttribute("data-tq-turn") || "", Math.round(e.getBoundingClientRect().top - vp.getBoundingClientRect().top + vp.scrollTop)]);
       const pend = [...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].map((e) => e.getAttribute("data-tq-pending-item"));
       watch(vp);
@@ -73,6 +76,9 @@ export const sampler = (names, owner = "Alex") => {
       // the canvas had scrolled the task to centre a waiting line): its top is never above the top of the canvas's own scroller
       const card = vp.closest(".tq-canvas-live"), body = card?.closest(".tq-chat-body");
       if (card && body && body.getBoundingClientRect().top - card.getBoundingClientRect().top > 2) f.cut = Math.round(body.getBoundingClientRect().top - card.getBoundingClientRect().top);
+      // THE CORNER'S "BACK TO" IS FOR A PAGE OVER THE TASK, NEVER OVER A TASK ITSELF (the rail walk, 2026-11-12: it flashed the task just left
+      // on every Next) - the task in view is the one worked on, from the frame it is drawn
+      if (document.querySelector("[data-tq-back-work]")) f.backOver = true;
       if (box && (box.right > innerWidth + 1 || box.bottom > innerHeight + 1)) f.boxOff = [Math.max(0, Math.round(box.right - innerWidth)), Math.max(0, Math.round(box.bottom - innerHeight))];
       if ([...vp.querySelectorAll(".tq-aui-agent-body > .tq-md + .tq-md")].some((e) => e.getBoundingClientRect().top - e.previousElementSibling.getBoundingClientRect().bottom < 4)) f.tight = true;
       // ...and where each card stands, by its own first line and the item it is under: one that goes back UP the chat is a finding (check)
@@ -135,6 +141,7 @@ export function check(frames) {
     for (const id of f.empty || []) if (!(prev?.empty || []).includes(id)) say(f.t, `${id} is drawn empty`);
     if (f.peak) say(f.t, `a painted frame stood ${f.peak} px short of the chat's end, which it had been at`);
     if (f.bare > 120) say(f.t, `the task stood ${f.bare} ms with its head drawn and no chat under it`);
+    if (f.backOver && !prev?.backOver) say(f.t, "the corner offers \"Back to\" another task while a task is in view");
     if (f.deadButton && !prev?.deadButton) say(f.t, "a card nobody can press draws a button");
     if (f.cut && !prev?.cut) say(f.t, `the task's card stands ${f.cut} px under the canvas's head`);
     if (f.cardTwice && !prev?.cardTwice) say(f.t, "one action stands in the chat as two cards");

@@ -32,6 +32,15 @@ test("a browse page over a remembered task shows Back + the pencil; the task its
   assert.equal(workWords({ ref: "TQ-0007", title: "" }), "Back to TQ-0007");
 });
 
+// THE RAIL WALK (2026-11-12): Next from TQ-0012 to TQ-0040 drew "Back to TQ-0012" in the corner for the frames before the effect that keeps the
+// worked task caught up, then took it away - a flash on every Next and row click. The corner reads the task in view now, in the same render.
+test("a task coming into view is the one worked on in the frame it is drawn - no Back to the task just left", () => {
+  const was = workedOn(tableOf({ current: "task:12" }), item), next = tableOf({ current: "task:40" }), nextItem = { key: "task:40", tid: 40, ref: "TQ-0040" };
+  assert.equal(backToWork(next, workedOn(next, nextItem) || was, 40), false);
+  assert.equal(backToWork(tableOf({ browsing: "reports" }), workedOn(tableOf({ browsing: "reports" }), {}) || was, 0), true);   // a page in front keeps it
+  assert.match(view, /backToWork\(table, \(inView && workedOn\(table, \{ \.\.\.currentItem, tid: litTable\.tid \}\)\) \|\| worked, litTable\.tid\)/);
+});
+
 // the owner, 2026-11-09: "drop pencil if it's a duplicate" - one pencil on screen: the head's corner or the pill's, never both
 test("the head draws Back and New chat in its corner, the pill drops its own pencil then, and no way of opening a task is singled out", () => {
   assert.match(view, /\{backWork && <Tooltip[^]*?data-tq-back-work=\{worked\.tid\} onClick=\{toWork\}/);

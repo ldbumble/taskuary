@@ -3691,7 +3691,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const newChatIcon = (attr) => <Tooltip title="New chat — archives this one"><IconButton size="small" {...{ [attr]: "" }} onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>;
   // ...ONE PENCIL ON SCREEN (the owner, 2026-11-09: "drop pencil if it's a duplicate"): while the head's corner holds New chat, the pill's goes
   const headPencil = iconsInPill && !firstRun && !old;
-  const backWork = !firstRun && !old && !walk && backToWork(table, worked, litTable.tid);
+  // ...read against the task in view NOW, not the one the effect above last kept: on every Next and row click the corner drew "Back to" the task
+  // just left for a frame or three, then took it away (the rail walk, 2026-11-12)
+  const backWork = !firstRun && !old && !walk && backToWork(table, (inView && workedOn(table, { ...currentItem, tid: litTable.tid })) || worked, litTable.tid);
   // ...the page put down over its own task, else that task pulled back by number (any task, on the rail or not)
   const toWork = () => { if (!worked) return; if (table.place && table.key === worked.key) unfoldTable(); else pull(`task:${worked.tid}`, null); };   // ...never both: in the pill only while a task or page is open over the chat
   const ownIcons = <>

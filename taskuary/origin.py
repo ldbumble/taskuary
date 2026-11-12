@@ -309,9 +309,10 @@ def _claude_version(cmd: str) -> tuple:
 # task past what he vouched for, nothing is handed to an agent on it - no start, no next turn, no typed line - by any road; the chat shows
 # what came in, one plain line why nothing works on it, and one Trust action. Trust (server.task_trust) records it and starts the agent as
 # any task's. One function says it (`hold`); every road that hands an agent anything asks it.
-HELD_LINE = "{who} is not someone you have trusted yet, so no agent is working on this. Trust them and it starts."
+# ...ONE SHORT SENTENCE TO HIM, NO "THEY" FOR ONE NAMED PERSON (rule 8, 2026-11-12): the Trust button under it says the rest
+HELD_LINE = "You have not trusted {who} yet, so no agent works on this until you do."
 # ...and where an agent already worked the thread they wrote on: it is handed nothing more until he says so
-JOINED_LINE = "{who} is not someone you have trusted yet, so what they wrote waits and the agent is handed nothing more. Trust them and it carries on."
+JOINED_LINE = "You have not trusted {who} yet, so the agent hears nothing more from this thread until you do."
 _HOLDS = {}                   # (store, task) -> (what it was judged on, when, the hold): a chat at work reads this twice a second
 def hold(store, tid) -> dict | None:
     "{line, person (the Trust action's label), org, who, mids (the untrusted messages)} while an untrusted sender's words stand on the task."

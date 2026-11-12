@@ -45,8 +45,8 @@ To-dos that depend on each other stay in order.
 ## Closing out
 You do not write the report. Taskuary reads this session's transcript and writes it. The reply
 to whoever asked is yours to write when you know the answer best: save it with
-**`taskuary --reply "<text>" --to <who>`** (or `--reply-file <path>`) and it is the reply waiting on John's
-approval, in your words. A reply written only in this chat is kept nowhere - the task's chat shows what
+**`taskuary --reply "<text>" --to <who>`** (or `--reply-file <path>`) and it is the reply's card, in your
+words - the card says it waits, so you never do. A reply written only in this chat is kept nowhere - the task's chat shows what
 `--reply` saved and nothing else. A file the reply sends goes with it: **`--attach <path>`**, once per file - "attached" in
 words carries nothing. If you end your run without a reply that is owed, you are asked for it. The owner says, in any words, no reply is needed: write none, and put the waiting one down with **`taskuary --reply-not-needed "<why>"`**. A reply already SENT is answered: no second one unless the owner asks, then say so with **`taskuary --follow-up --reply "<text>"`**. Keep the session readable: say what you found, changed (files, commands, records, ids) and what is left, in plain lines
 as you go and at each checklist item - a silent finished job looks like a stuck one. When the work is over - not waiting on John's go-ahead - say so:

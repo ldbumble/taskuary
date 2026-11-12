@@ -122,7 +122,11 @@ export function check(frames) {
   // NO DEAD END AT THE END (the recorded restart, 2026-11-11: his line stood heard, nothing under it, nothing at work): the walk's last frame
   // never ends on a line of his with no turn at work
   const end = frames.at(-1), tail = end?.items.at(-1);
-  if (tail && /^(l[0-9a-z]|s[0-9a-z]|a:|c:|y:)/.test(tail[0]) && !end.working) say(end.t, `the chat ends on his line ${tail[0]} with nothing under it and nothing at work`);
+  const his = (x) => !!x && /^(l[0-9a-z]|s[0-9a-z]|a:|c:|y:)/.test(x[0]);
+  if (his(tail) && !end.working) say(end.t, `the chat ends on his line ${tail[0]} with nothing under it and nothing at work`);
+  // ...nor on his press with a line of his right above it that no turn answered (recorded on a coding agent, 2026-11-11: two lines sent
+  // into the turn, Stop - and they stood over "You stopped the agent" for good)
+  if (tail && /^p:/.test(tail[0]) && his(end.items.at(-2)) && !end.working && !end.pend.length) say(end.t, `the chat ends on his press with his line ${end.items.at(-2)[0]} above it and no turn that answered it`);
   return bad;
 }
 const frames =(page) => page.evaluate(() => window.__frames);

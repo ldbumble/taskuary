@@ -132,7 +132,7 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
     joined = {str(x['MessageId']): x['T'] for x in _mail(store, tid)} if any(k == 'mail' for k, _ in new) else {}
     if (at := max([now for k, _ in new if k == 'line'] + [joined.get(r, 0) for k, r in new if k == 'mail'], default=0)):
         from . import proposals
-        proposals.set_aside_drafts(store, tid, at)
+        proposals.set_aside_drafts(store, tid, at, actions=now if any(k == 'line' for k, _ in new) else 0)
     if n: store._poke('task-changed', task_id=tid)
     return n
 
@@ -617,7 +617,11 @@ def items(store, tid: int) -> dict:
 
     # A TURN'S CARDS STAND LAST IN IT: each action under the turn that set it up (the one that last left a draft as it stands), else where it was made
     # ...the turn that was at work when a thing was made: the first one that had begun (where its start is known) and had not yet ended
-    made_in = lambda at: next((x for x in out if x['kind'] == 'turn' and (x.get('ended') is None or x['ended'] + 1 >= at - 0.999) and (x.get('started') or 0) <= at), None)
+    # ...and a turn still at work before one that ended a moment ago (2026-11-12: a stamp is a whole second, so the turn that ended just
+    # before can still read as open by it - a step held in the turn at work went up to the one before, above his line)
+    def made_in(at):
+        open_ = [x for x in out if x['kind'] == 'turn' and (x.get('ended') is None or x['ended'] + 1 >= at - 0.999) and (x.get('started') or 0) <= at]
+        return next((x for x in open_ if x.get('ended') is None), open_[0] if open_ else None)
     # ...and each page it showed or published, by that same rule, named by its turn (`after`: the page's key for a turn); None: at the foot
     from . import outputs
     published = [{**p, 'after': (t.get('answer') or t['id']) if (t := made_in(ep(p.get('created_at')) + 0.999)) else None} for p in outputs.pages(store, tid)]
@@ -715,8 +719,8 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     backwards") - pure structure, no meaning judged. `got`: a list `items` served; `was`: the one served before it, for what may never change
     between two. Each break is one sentence; [] is a list a person would expect. Every corpus that builds lists runs it (tests/conftest.py).
     a his newest line has no turn at work above it, and the turn it began under it while one works
-    b one live card per action, and no reply draft above a newer input (his line, a message) still pressable (an action that waits for his press keeps its card
-      lit where it stands until pressed, replaced or withdrawn - the owner's rule of 2026-11-11 for held steps)
+    b one live card per action, and no card above his newest line still pressable - nor a reply draft above a newer message (the owner,
+      2026-11-12: the live action is always the last thing; one he wrote past greys in place and the agent raises it again if still needed)
     c nothing on the canvas goes: every item and every card of the list before is in this one
     d nothing is drawn empty
     e "working" is one fact: one turn at work, the last one, exactly when the list says working
@@ -738,7 +742,7 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     for r in {c['review'] for _, c in lit if [d['review'] for _, d in lit].count(c['review']) > 1}: say(f'b: review {r} stands as two live cards')
     came = max((i for i, x in enumerate(xs) if x['kind'] in ('line', 'arrival')), default=-1)
     for i, c in lit:
-        if i < came and c.get('what') in DRAFTS: say(f"b: the live card {c['id']} stands above a newer input {ids[came]}")
+        if i < came and c.get('what') in DRAFTS or i < his: say(f"b: the live card {c['id']} stands above a newer input {ids[came]}")
     # d
     for x in xs:
         k = x['kind']

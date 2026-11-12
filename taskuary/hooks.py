@@ -397,7 +397,9 @@ def _events(t, p: dict) -> None:
                 try:                                         # ...past every card raised before it (proposals.move_on, 2026-11-10)
                     from . import proposals
                     # ...said to it as Taskuary's next line: the prompt that passed them is already in (general.tell, the one road)
-                    if (note := proposals.passed_note(st, proposals.move_on(st, tid))):
+                    # ...and every card he wrote past, set aside as his line goes in (proposals.set_aside_drafts - the terminal's line is heard here)
+                    now_ = time.time()
+                    if (note := proposals.passed_note(st, proposals.move_on(st, tid) + proposals.set_aside_drafts(st, tid, now_, actions=now_))):
                         from . import general
                         general.tell(st, tid, note)
                 except Exception as e: logger.debug(f'task {tid}: a held step stayed pending - {e}')

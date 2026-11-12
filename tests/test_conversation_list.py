@@ -479,13 +479,14 @@ class TheList(unittest.TestCase):
         css = (Path(__file__).parent.parent / 'website' / 'src' / 'generalWorkspace.css').read_text(encoding='utf-8')
         self.assertIn('.tq-aui-chat .tq-aui-arrived { justify-self: end;', css); self.assertIn('.tq-aui-chat .tq-aui-arrived-own { justify-self: start;', css)
 
-    def test_a_held_step_he_asks_a_question_about_stays_the_one_lit_card_right_above_the_box(self):
+    def test_a_held_step_he_writes_past_greys_in_its_place_and_its_agent_is_told_to_raise_it_again(self):
         """The owner's live task, 2026-11-11 ("just asked it a question dots above the prompt starting going then the question has 2 approve
         buttons? i thought we got rid of those??"): a step in a connected system waited for his Approve, he typed a question, and the line set
         the card aside - a greyed card with a dead Approve drawn UNDER the live one the agent raised again, the last thing above the box.
-        The card stays lit, once, IN THE TURN THAT RAISED IT (the owner, 2026-11-12: "nothing ever goes backwards" - no copy of it moves under
-        a later answer, no ghost stays behind). And his line is heard before it is kept, so no read has it by the box with the answer above
-        it at work."""
+        ONE RULE FOR EVERY CARD (2026-11-12, from his own root rule - a chat only grows at its foot and the live action is the last thing): the
+        card he wrote past greys IN ITS OWN PLACE, never moved or copied, and the turn that answers him is told it was set aside because he
+        wrote again - never that he declined - and to raise it again at its end if it is still needed. And his line is heard before it is
+        kept, so no read has it by the box with the answer above it at work."""
         import json
         from taskuary import proposals
         self.say('Fix the tax rows.', 'l-one'); self.rest()
@@ -497,15 +498,18 @@ class TheList(unittest.TestCase):
         self.rest()
         self.assertEqual(at_keep, [True])
         rows = self.s._rows("SELECT ReviewId, Status FROM review WHERE TaskId=? AND Kind='action'", (self.tid,))
-        self.assertEqual([(r['ReviewId'], r['Status']) for r in rows], [(rid, 'pending')])
+        self.assertEqual([(r['ReviewId'], r['Status']) for r in rows], [(rid, 'superseded')])
+        self.assertTrue(proposals.passed(self.s.get_review(rid)))
         got = self.list()['items']; turns = [x for x in got if x['kind'] == 'turn']
-        self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'pending')], []])
+        self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'passed')], []])
+        told = self.brain.calls[-1]
+        self.assertIn(proposals.PASSED_TOLD, told); self.assertIn(f'- rv{rid}:', told); self.assertNotIn('declin', proposals.PASSED_TOLD)
         # ...and one an earlier build set aside is that record in its OWN turn, by its own name - never moved, never read as a rewritten draft
         old = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({**step, 'command': 'sqlcmd -Q "SELECT 1"'}), 'Reason': 'r'})
         self.s._exec('UPDATE review SET CreatedAt=(SELECT CreatedAt FROM review WHERE ReviewId=?) WHERE ReviewId=?', (rid, old))
         self.s.decide_review(old, 'superseded', None, 'taskuary', proposals.SET_ASIDE)
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
-        self.assertEqual([(c['id'], c['status']) for c in turns[0]['cards']], [(f'r:{rid}', 'pending'), (f'r:{old}', 'passed')])
+        self.assertEqual([(c['id'], c['status']) for c in turns[0]['cards']], [(f'r:{rid}', 'passed'), (f'r:{old}', 'passed')])
 
     def test_a_step_he_approved_that_failed_stays_under_the_answer_he_pressed_it_under(self):
         """The recorded held step, 2026-11-11: he asked about a held delete, pressed Approve under the answer, and the step failed - the card
@@ -514,12 +518,11 @@ class TheList(unittest.TestCase):
         from taskuary import proposals, shellgate
         self.say('Remove the old export.', 'l-one'); self.rest()
         rid = proposals.queue(self.s, self.tid, {'action': 'shell_act', 'sid': general.session_for(self.tid).sid, 'command': 'rm old-export.csv', 'what': 'delete old-export.csv'})['reviewId']
-        self.say('What does it remove?', 'l-two'); self.rest()
-        self.s.decide_review(rid, 'superseded', None, 'taskuary', shellgate.FAILED)
+        self.s.decide_review(rid, 'superseded', None, 'taskuary', shellgate.FAILED)       # ...he pressed it, and it failed
         self.brain.delay = 1.1                      # ...the turn the failure wakes ends in a later second than the press: a stamp is no finer
         self.say('Try it again.', 'l-three'); self.rest()
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
-        self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'failed')], [], []])
+        self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'failed')], []])
 
     def test_a_step_that_waits_on_his_allow_is_one_card_never_the_agents_question_beside_it(self):
         """The owner's live task, 2026-11-11 ("the question has 2 approve buttons?"), recorded on a coding agent: the permission's card with

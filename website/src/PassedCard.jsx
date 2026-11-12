@@ -9,7 +9,8 @@ import { proposalPresentation, heldLead, proposalFrom, resultOf } from "./review
 import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 export const PASSED_NOTE = "set aside when you moved on";
-export const PASSED_LINE = "Set aside when you moved on - ask the agent to bring it back.";
+// ...said as what happens next (the owner, 2026-11-12: "the agent should bring it up"): its agent was told, and raises it again if still needed
+export const PASSED_LINE = "Set aside when you wrote again - the agent raises it again if it is still needed.";
 export const isPassed = (r) => r?.Status === "superseded" && r?.DecideNote === PASSED_NOTE;
 
 // A DRAFT THE AGENT REPLACED IN A LATER TURN (wrapup.REPLACED): its record where it stood - what it said, dimmed, nothing to press

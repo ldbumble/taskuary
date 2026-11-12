@@ -497,7 +497,7 @@ def test_a_coding_agent_is_told_its_duties_about_drafts_once_and_each_turn_after
                          'BodyText': 'What does total() return?', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example'})
     s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'Channel': 'email', 'DraftText': 'Hi Gail, the sum plus tax. Alex'})
     for n, w in enumerate(('and the tax line?', 'thanks'), 2): t.prompt(w); assert idle(t, n)
-    assert len(told) == 3 and all('THE DRAFT WAITING NOW' in x for x in told[1:]), told
+    assert len(told) == 3 and all('the sum plus tax' in x for x in told[1:]), told    # ...the draft in each turn's facts: waiting, then set aside
     assert [x.count(selfclose.WITHDRAW_LINE) for x in told] == [0, 1, 0] and [x.count(selfclose.LATEST_LINE) for x in told] == [0, 1, 0]
     assert not any(selfclose.NO_NEW_LINE in x for x in told)
 
@@ -632,11 +632,11 @@ def test_a_line_is_never_the_answer_to_a_step_whose_buttons_are_a_beat_away(worl
     assert [e['Kind'] for e in s.worker_events(tid)][-1] == 'approval_needed' and len(s.waiting_notes(tid)) == 1
 
 
-def test_a_held_step_stays_the_one_lit_card_when_he_asks_the_coding_agent_a_question(world, monkeypatch):
+def test_a_held_step_he_asks_the_coding_agent_about_greys_in_place_and_is_held_anew_when_run_again(world, monkeypatch):
     """The owner's live coding task, 2026-11-11 ("the question has 2 approve buttons?"): his question set the held step aside and the agent
     raised it again beside the greyed one. It stays lit IN ITS TURN (2026-11-12: nothing moves), his line stands with the turn at work under
     it, and the same step run again by that session is the card that waits (tests/test_conversation_list.py has the chat's)."""
-    from taskuary import conversation, shellgate
+    from taskuary import conversation, proposals, shellgate
     s, tid, repo = world
     monkeypatch.setenv('FAKE_ACP_THINK', '0.6'); monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
     t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
@@ -649,10 +649,12 @@ def test_a_held_step_stays_the_one_lit_card_when_he_asks_the_coding_agent_a_ques
     general.take_line(s, tid, 'What does that step change?', line_id='l-two', wait=False)
     got = conversation.items(s, tid)
     assert [(x['kind'], x.get('state', '')) for x in got['items']][-2:] == [('line', ''), ('turn', 'starting')] and not got['pending'], got['items']
-    assert idle(t, 2); hold()
-    assert [(r['ReviewId'], r['Status']) for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))] == [(rv['ReviewId'], 'pending')]
+    assert idle(t, 2)
+    # ...his line set the step aside, greyed where it stood (2026-11-12, one rule for every card); run again, it is held anew - the live one
+    rows = [(r['ReviewId'], r['Status']) for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' ORDER BY ReviewId", (tid,))]
+    assert rows == [(rv['ReviewId'], 'superseded')] and proposals.passed(s.get_review(rv['ReviewId'])), rows
     turns = [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn']
-    assert [c['status'] for c in turns[0]['cards']] == ['pending'] and not any(t['cards'] for t in turns[1:])
+    assert [c['status'] for c in turns[0]['cards']] == ['passed'], turns
 
 
 def _restart(s, tid, t):

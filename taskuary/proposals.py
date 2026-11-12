@@ -529,14 +529,23 @@ def move_on(store, tid, before: str = None) -> list:
     return out
 
 
-def set_aside_drafts(store, tid: int, before: float) -> list:
-    """A REPLY DRAFT HE WROTE PAST IS SET ASIDE THE MOMENT HIS LINE IS HEARD (the owner, 2026-11-12: "I thought we keep it but grey out buttons
-    right away"): it stays where it stood, greyed, and its agent is told it is old news (passed_since / passed_note) - it drafts again in the
-    turn that answers him if a reply is still owed. Every road hears a line through conversation.hear, which calls this. -> the review ids."""
+def set_aside_drafts(store, tid: int, before: float, actions: float = 0) -> list:
+    """A CARD HE WROTE PAST IS SET ASIDE THE MOMENT HIS LINE IS HEARD (the owner, 2026-11-12: "I thought we keep it but grey out buttons right
+    away"; and for every kind - a chat only grows at its foot, and the live action is the last thing): it stays where it stood, greyed, and its
+    agent is told it was set aside because he wrote again (passed_since / passed_note - never that he declined), to raise it again at the end
+    of its turn if it is still needed. A reply draft older than `before` (his line, or a message that came in), and the agent's own actions -
+    a held step, a proposal - older than `actions` (his line only). Never what Taskuary raised itself: a close-out, a playbook, a routine's step.
+    Every road hears an input through conversation.hear, which calls this. -> the review ids."""
     from .conversation import ep
-    rows = store._rows("SELECT ReviewId, CreatedAt, DraftText FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') "
-                       "AND DeliveryClaim IS NULL", (int(tid),))
-    out = [r['ReviewId'] for r in rows if str(r.get('DraftText') or '').strip() and ep(r['CreatedAt']) < before
+    rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft','action') AND DeliveryClaim IS NULL", (int(tid),))
+    def ours(r):
+        if r['Kind'] != 'action': return False
+        try: d = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): d = {}
+        return isinstance(d, dict) and not (d.get('closeout') or d.get('action') in CLOSEOUT or d.get('action') in PLAYBOOKS or d.get('block')
+                                            or str(r.get('Reason') or '').startswith('the workflow'))
+    out = [r['ReviewId'] for r in rows if (r['Kind'] != 'action' and str(r.get('DraftText') or '').strip() and ep(r['CreatedAt']) < before
+                                            or actions and ours(r) and ep(r['CreatedAt']) < actions)
            and store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', note=SET_ASIDE)]
     if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out})
     return out

@@ -297,20 +297,22 @@ def _line(s, tid, agent, said):
 
 @pytest.mark.parametrize('agent', ['general', 'acp', 'pty'])
 @pytest.mark.parametrize('kind', list(CARDS))
-def test_a_card_that_waits_for_his_press_stays_lit_through_his_next_line_on_every_agents_road(kind, agent):
-    """REVISED 2026-11-11 (the owner, of a held step he asked a question about: "the question has 2 approve buttons? i thought we got rid of
-    those??"): his line set the waiting card aside - greyed, with a dead Approve - and the agent raised the step again beside it. A card
-    that waits stays lit until he presses it, a newer one takes its place or its agent withdraws it; nothing tells the agent it is old news."""
+def test_a_card_he_writes_past_greys_in_its_place_on_every_agents_road_and_its_agent_is_told(kind, agent):
+    """REVISED 2026-11-12 (from the owner's root rule - a chat only grows at its foot and the live action is the last thing, "the agent should
+    bring it up"): his next line sets a waiting card aside on every agent's road - greyed in its own place, never pressable - and the turn
+    that hears him is told it was set aside because he wrote again (never that he declined), to raise it again if it is still needed.
+    (2026-11-11's "a waiting card stays lit" is replaced: the card he asked about now greys, and the agent raises it again below, last.)"""
+    from taskuary import conversation
     s = MemoryStore(); tid = Factory(s).task('Fix the August export')
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I set it up - it waits for your press.')
     s._exec("UPDATE comment SET CreatedAt='2026-01-01 09:00:00' WHERE TaskId=?", (tid,))
     rid = _raised(s, tid, CARDS[kind])
+    if agent == 'acp': conversation.hear(s, tid, ['l-acp'])            # ...the coding session's road hears his line as its turn begins
     heard = _line(s, tid, agent, 'What does that step change?')
     rv = s.get_review(rid)
-    assert rv['Status'] == 'pending' and not proposals.passed(rv), rv
-    assert proposals.PASSED_TOLD not in heard, heard
-    # ...and one an earlier build set aside keeps its record: never pressable, said so
-    s.decide_review(rid, 'superseded', None, 'taskuary', proposals.SET_ASIDE)
+    assert proposals.passed(rv), rv
+    assert proposals.PASSED_TOLD in heard and f'rv{rid}' in heard, heard
+    # ...and it keeps its record: never pressable, said so
     out = verdicts.decide(s, s.get_review(rid), 'approve')
     assert (out['ok'], out['send_error']) == (False, proposals.PASSED_SAID), out
 

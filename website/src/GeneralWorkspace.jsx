@@ -455,7 +455,7 @@ const ConvLine = ({ x, more }) => {
     <div className="tq-aui-user-bubble" dir="auto">{x.text}</div>
     {/* ...a send that failed: ONE plain line under his words, with the way past it - never glued into them */}
     {!!x.err && <div className="tq-aui-hint" role="alert" data-tq-line-failed="">{x.err}{retry && <> · <button type="button" className="tq-aui-arrived-more-btn"
-      data-tq-try-again="" onClick={() => retry(x)}>Try again</button></>}</div>}</div>;
+      data-tq-try-again="" onClick={() => retry(x)}>{btn("try_again")}</button></>}</div>}</div>;
 };
 /* A DRAFT WHERE IT STOOD, once it is no longer the one to press: rewritten by a later turn, set aside as he wrote again (the owner, 2026-11-12:
    "I thought we keep it but grey out buttons right away"), or taken back by its agent - greyed in its own place with its words, nothing to press.
@@ -519,7 +519,7 @@ const PendingStrip = ({ items, now = false, onRetry = null, onDrop = null, onNow
       data-tq-drop-line="" onClick={() => onDrop(x)}><DeleteOutlineIcon sx={{ fontSize: 15 }} /></button>}</div>)}
   {/* ...a send that failed says so in its own plain line, never inside his words (the owner's live task, 2026-11-12) */}
   {shown.filter((x) => x.err).map((x) => <div key={`e-${x.id}`} className="tq-aui-hint" role="alert" data-tq-line-failed="">{x.err}{onRetry && <> · <button type="button"
-    className="tq-aui-arrived-more-btn" data-tq-try-again="" onClick={() => onRetry(x)}>Try again</button></>}</div>)}
+    className="tq-aui-arrived-more-btn" data-tq-try-again="" onClick={() => onRetry(x)}>{btn("try_again")}</button></>}</div>)}
 </div>; };
 
 function AssistantThread({ task, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack,

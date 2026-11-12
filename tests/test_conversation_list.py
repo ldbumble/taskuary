@@ -145,6 +145,17 @@ class TheList(unittest.TestCase):
         now = [x['id'] for x in self.list()['items'] if not x['id'].startswith('t:')]
         self.assertEqual(now, [*drawn, 'l-w', f'm:{new}'])
 
+    def test_his_close_is_one_line_with_its_note(self):
+        """The recorded closed task, 2026-11-12: "You marked it done" and right under it the page's own "Mark done 4m ago" - one press, two
+        lines. The press that closed it is marked `closes` (the page then draws no line of its own) and carries the note he closed it with."""
+        from taskuary import concierge
+        self.say('Suggest two.'); self.rest()
+        self.s.add_comment(self.tid, 'owner', 'human', 'Closed out: booked the Mill')
+        self.assertTrue(concierge.close_task(self.s, self.tid, 'owner'))
+        shut = [x for x in self.list()['items'] if x.get('closes')]
+        self.assertEqual([x['text'] for x in shut], ['You marked it done - booked the Mill.'])
+        self.assertEqual(self.list()['items'][-1]['id'], shut[0]['id'])
+
     def test_his_stop_stands_where_he_pressed_it_and_what_waited_enters_under_it(self):
         """The recorded stop, 2026-11-11: he stopped a turn that had said nothing, with two lines waiting. The stop's mark fell on the finished
         answer above the line it never answered, and the waiting lines entered above "You stopped the agent", which was already drawn."""
@@ -234,6 +245,24 @@ class TheList(unittest.TestCase):
         self.assertEqual(got['pending'], []); self.assertEqual(got['items'][-1]['id'], f'm:{mid}')    # nobody took it: it stands after the turn it came in under
         self.say('And that?', 'l-two'); self.rest()
         self.assertEqual([x['id'] for x in self.list()['items'][-3:-1]], [f'm:{mid}', 'l-two'])        # heard with his line, before it: it did not move
+
+    def test_the_agents_words_are_read_for_what_code_can_see(self):
+        """The real-CLI walks, 2026-11-12 (rule 8: the agent talks like a person helping): "Overlap with TQ-0004", "set up for Alex to
+        approve", and the reply quoted whole above its own card. Structure only - an id this app mints, the owner's own name, a card's words
+        said again above it; a turn that does none of these reads clean."""
+        draft = 'Hi Gail, the totals function now has a short comment that says it adds the tax amount to the total. Best, Alex'
+        self.brain.said = {1: f'Overlap with TQ-0004: it is the same ask. I set the deletion up for Alex to approve. The reply says: {draft}',
+                           2: 'The comment is in; it still returns 108 for 100 and 8.'}
+        self.say('Comment it.', 'l-one'); self.rest()
+        cid = self.s.list_comments(self.tid, internal=True)[-1]['CommentId']
+        rid = self.s.add_review({'TaskId': self.tid, 'MessageId': self.s.list_messages(self.tid)[0]['MessageId'], 'Kind': 'draft_reply', 'Status': 'pending',
+                                 'Channel': 'email', 'DraftText': draft})
+        self.s._exec('UPDATE review SET CreatedAt=(SELECT CreatedAt FROM comment WHERE CommentId=?) WHERE ReviewId=?', (cid, rid))
+        first = self.list()['items'][-1]['id']
+        self.assertEqual(sorted(w for _, w in conversation.odd_words(self.s, self.tid)),
+                         ["calls the owner 'Alex' to his face", "names 'TQ-0004'", f'quotes its card {rid}'])
+        self.say('Thanks.', 'l-two'); self.rest()
+        self.assertEqual({t for t, _ in conversation.odd_words(self.s, self.tid)}, {first})          # the clean answer under it: nothing
 
     def test_a_turns_cards_stand_last_and_a_live_one_is_kept_under_the_latest_answer(self):
         self.say('Draft it.', 'l-one'); self.rest()

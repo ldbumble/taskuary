@@ -14,7 +14,7 @@ import { record } from "./recorder.mjs";
 export const NAMES = [...new Set([...Object.values(JSON.parse(await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "taskuary", "buttons.json"), "utf8")).verbs).map((v) => v.label || v.name || v),
   "Approve", "Reject", "Allow once", "Trust", "Withdraw", "Not now"].filter((x) => typeof x === "string" && x))];
 
-export const sampler = (names) => {
+export const sampler = (names, owner = "Alex") => {
   window.__frames = []; let last = "";
   const seen = new Set(names), esc = (s) => s.replace(/[^A-Za-z0-9 ]/g, "\\$&");
   // ...named: a name of several words anywhere; a single word only as a name in the middle of a sentence or marked ("your Send", `Send`) -
@@ -76,6 +76,16 @@ export const sampler = (names) => {
       const lit = (window.__lit ||= {}), key = tail?.getAttribute("data-tq-item"), had = (lit[key] ||= []);
       named.filter((n) => shown.some(([b, on]) => on && b === n) && !had.includes(n)).forEach((n) => had.push(n));
       if (named.length && !f.working) { f.named = named; f.unlit = named.filter((n) => !had.includes(n)); if (!f.unlit.length) delete f.unlit; }
+      // THE AGENT'S WORDS, WHAT CODE CAN SEE OF THEM (conversation.odd_words, rule 8): an id this app mints, the owner named to his face, and
+      // the turn's own card said again above it - read once the turn is at rest, structure only
+      if (said && !f.working) {
+        const odd = [...said.matchAll(/\b(?:TQ-\d{3,}|rv\d+|m-?\d+)\b|\((?:review|mail|message) #?\d+\)|\b(?:mail|message|review) #\d+\b/g)].map((m) => `names "${m[0]}"`);
+        if (owner && new RegExp(`\\b${owner}\\b`).test(said)) odd.push(`calls the owner "${owner}" to his face`);
+        const words = (s) => s.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(Boolean), w = words(said).join(" ");
+        for (const t of tail.querySelectorAll("[data-tq-turn-cards] textarea")) { const b = words(t.value);
+          for (let i = 0; i + 12 <= b.length; i++) if (w.includes(b.slice(i, i + 12).join(" "))) { odd.push("quotes its own card"); break; } }
+        if (odd.length) f.odd = [...new Set(odd)];
+      }
       const sig = JSON.stringify(f);
       if (sig !== last) { last = sig; window.__frames.push({ t: Math.round(performance.now()), ...f }); }
     }
@@ -117,6 +127,7 @@ export function check(frames) {
     // NOTHING JUMPS OR RESIZES (the owner, 2026-11-11): a chat whose width changes and is back within 600 ms drew a layout nobody meant - the
     // pane beside it arriving in three steps, the section's room changing as its agent started - and the box never stands past the window
     if (prev && before && f.w && f.w === before.w && prev.w !== f.w && f.t - before.t < 600) say(f.t, `the chat's width jumped ${before.w} -> ${prev.w} -> ${f.w} px within ${f.t - before.t} ms`);
+    for (const o of f.odd || []) if (!(prev?.odd || []).includes(o)) say(f.t, `the agent's words: ${o}`);
     if (f.boxOff && !prev?.boxOff) say(f.t, `the box stands past the window's edge (${f.boxOff[0]} px right, ${f.boxOff[1]} px down)`);
     before = prev;
     if (f.staleUnder && !prev?.staleUnder) say(f.t, "a settled card stands under the live one");

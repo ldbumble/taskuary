@@ -619,7 +619,8 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
             {/* AN UNTRUSTED SENDER'S TASK: one plain line why no agent works on it, and its one action (the list's `hold`, origin.hold) */}
             {hold && <HeldStart taskId={task.TaskId} hold={hold} onChanged={onTrusted} />}
             {queued && <div className="tq-aui-message tq-aui-agent" data-tq-queued-turn=""><div className="tq-aui-role">{AGENT_TURN}</div><div className="tq-aui-agent-body">{queued}</div></div>}
-            {closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
+            {/* ...said once: where the list holds his close as a press (`closes`), that line is the close (one press, one line) */}
+            {closedLine && !merged.items.some((x) => x.closes) && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
           </div>
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">

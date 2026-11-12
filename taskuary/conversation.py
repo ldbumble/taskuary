@@ -416,10 +416,16 @@ def items(store, tid: int) -> dict:
         if not h and (at_work and x['T'] + 1 > began or x['MessageId'] > waits or (hold_ and x['MessageId'] in hold_['mids'] and (turn_of or live_sid))): pend.append(it)
         else: put(h['At'] if h else x['T'], 0 if h else -1, it, h['HId'] if h else 0)
     stop = f"You {general.PRESSES['stopped_turn']({})}."
+    # ...HIS CLOSE IS ONE LINE (the recorded closed task, 2026-11-12: "You marked it done" and under it the page's "Mark done 4m ago"): the
+    # press that closed an open-again-never task is marked `closes`, with the note he closed it with, and the page draws no line of its own
+    shut = (store._one("SELECT Id FROM audit WHERE EntityType='task' AND EntityId=? AND Action='close_from_assistant' ORDER BY Id DESC LIMIT 1", (tid,))
+            if (store.get_task(tid) or {}).get('Status') == 'done' else None)
     for m in general.press_lines(store, tid):
         aid, text = m['id'].split('-')[1], m['content'][0]['text']
-        h = led.get(('press', aid))
-        it = {'id': f'p:{aid}', 'kind': 'press' if m.get('press') else 'note', 'at': m['createdAt'], 'text': text, **({'stop': True, '_hs': bool(h)} if text == stop else {})}
+        h, closes = led.get(('press', aid)), bool(shut) and aid == str(shut['Id'])
+        if closes and (note := next((c['note'] for c in reversed(store.closeouts(tid)) if c['what'] == 'closed'), '')): text = f"{text.rstrip('.')} - {note.rstrip('.')}."
+        it = {'id': f'p:{aid}', 'kind': 'press' if m.get('press') else 'note', 'at': m['createdAt'], 'text': text, **({'closes': True} if closes else {}),
+              **({'stop': True, '_hs': bool(h)} if text == stop else {})}
         if not h and at_work and ep(m['createdAt']) + 1 > began and m.get('press') and text != stop: pend.append(it)
         # ...A PRESS NOBODY HEARD YET STANDS AFTER ALL OF ITS OWN SECOND - its stamp is no finer: a stop pressed in the second its turn's line was
         # heard sorted above that line, and the stop's mark fell on the answer before it (a same-second tie, seen as a flash and a red test)
@@ -569,3 +575,26 @@ def items(store, tid: int) -> dict:
             'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
                               **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if any(x['kind'] == 'turn' for x in out) else {})}, 'published': published, 'ran': bool(turn_of) or any(x['kind'] == 'turn' for x in out)}
     return {'rev': hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16], **body}
+
+
+# WHAT CODE CAN SEE OF THE AGENT'S WORDS (the owner's rule 8, 2026-11-12: "agent wording should be fixed everywhere"): structure only, never
+# a word list that judges meaning - an id this app mints, the owner named to his face, and a card's own words said again above it. Read by
+# the recorded walks' check and the unit test over recorded shapes; the model's meaning is the model's
+MINTED = re.compile(r'\b(?:TQ-\d{3,}|rv\d+|m-?\d+)\b|\((?:review|mail|message) #?\d+\)|\b(?:mail|message|review) #\d+\b')
+QUOTED_WORDS = 12                          # a run of this many of a card's words in the turn above it is the card said again
+def odd_words(store, tid: int, got: dict = None) -> list:
+    "[(turn id, what)] for each agent turn of task `tid`'s list that names a minted id, says the owner's name, or quotes its own card."
+    from .welcome import first_name
+    me = first_name(str(store.get_setting('owner_name') or '')) if hasattr(store, 'get_setting') else ''
+    flat = lambda s: re.sub(r'[^\w\s]', ' ', str(s or '').lower()).split()
+    out = []
+    for x in (got or items(store, tid))['items']:
+        if x['kind'] != 'turn' or not (said := str(x.get('text') or '')): continue
+        out += [(x['id'], f'names {m.group(0)!r}') for m in MINTED.finditer(said)]
+        if me and re.search(rf'\b{re.escape(me)}\b', said): out.append((x['id'], f'calls the owner {me!r} to his face'))
+        w = ' '.join(flat(said))
+        for c in x.get('cards') or []:
+            body = flat((store.get_review(c['review']) or {}).get('DraftText')) if c.get('review') else []
+            if any(' '.join(body[i:i + QUOTED_WORDS]) in w for i in range(0, max(0, len(body) - QUOTED_WORDS + 1))):
+                out.append((x['id'], f"quotes its card {c['review']}"))
+    return out

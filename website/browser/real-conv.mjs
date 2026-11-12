@@ -117,6 +117,9 @@ export const sampler = (names, owner = "Alex") => {
       const hostAt = (c) => items.findIndex((x) => x[0] === c.closest("[data-tq-item]")?.getAttribute("data-tq-item"));
       if (his >= 0 && cardsOf.some((c) => c.querySelector("button:not([disabled])") && hostAt(c) >= 0 && hostAt(c) < his)) f.liveAbove = items[his][0];
       f.cardN = cardsOf.length;
+      // ...and the one live line beside a turn's dots: what it does, or what we wait for (workingLine)
+      const doing = vp.querySelector("[data-tq-working-line]")?.textContent || ""; if (doing) f.doing = doing;
+      if (vp.querySelector("[data-tq-working]") && !doing && !vp.querySelector("[data-tq-compacting]")) f.bareDots = true;
       f.hint = document.querySelector("[data-tq-task-page] .tq-aui-input")?.getAttribute("placeholder") || "";
       // THE AGENT'S WORDS, WHAT CODE CAN SEE OF THEM (conversation.odd_words, rule 8): an id this app mints, the owner named to his face, and
       // the turn's own card said again above it - read once the turn is at rest, structure only
@@ -193,6 +196,7 @@ export function check(frames) {
     if (f.liveAbove && f.liveAbove !== prev?.liveAbove) say(f.t, `a card above his newer line ${f.liveAbove} still has live buttons`);
     if (prev && f.cardN < prev.cardN) say(f.t, `a card vanished from the canvas (${prev.cardN} -> ${f.cardN})`);
     if (f.working && /pick .*back up/i.test(f.hint || "") && !(prev?.working && prev.hint === f.hint)) say(f.t, `the box says "${f.hint}" while a turn is at work`);
+    if (f.bareDots && !prev?.bareDots) say(f.t, "the dots stand alone - no line says what the agent does or what we wait for");
     if (f.allows > 1 && !(prev?.allows > 1)) say(f.t, `${f.allows} lit "Allow once" buttons: one step drawn as two cards`);
     for (const w of f.twice || []) if (!(prev?.twice || []).includes(w)) say(f.t, `his line "${w.slice(0, 60)}" stands in the chat twice, one under the other`);
     // THE CHAT OPENS WITH AN INPUT, NEVER WITH THE AGENT (the owner, 2026-11-11: "it did not show the prompt i asked it to do"): the first
@@ -280,6 +284,8 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
         else api(`/api/tasks/${tid}/assistant/messages`, { text: w, line_id: `lflood${name}${i}` }).catch(() => {});      // not waited for: typed as fast as he can
         await sleep(150); } }
     else if (k === "snap") await snap(arg || "snap");
+    // ...the chat's level after a turn ends (summary | steps | everything), for both kinds of agent
+    else if (k === "level") { for (const name of ["chat_detail_other", "chat_detail_coding"]) await api("/api/settings", { name, value: arg }, "PATCH"); await page.reload({ waitUntil: "domcontentloaded" }); await sleep(2500); await open(page, tid); await sleep(2500); await page.evaluate((id) => { window.__tid = id; }, tid); await page.evaluate(sampler, NAMES); }
     // ...the waiting room's own presses: the newest row's trash (noted, so its leaving is his), Send now
     else if (k === "drop") console.log("drop", await page.evaluate(() => { const r = [...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].filter((e) => e.querySelector("[data-tq-drop-line]")).pop();
       if (!r) return "no row"; (window.__dropped ||= []).push(r.getAttribute("data-tq-pending-item")); r.querySelector("[data-tq-drop-line]").click(); return r.getAttribute("data-tq-pending-item"); }));

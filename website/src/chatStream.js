@@ -196,3 +196,16 @@ export const waitingChips = (pending, came = "") => {
   return [...by].map(([base, ids]) => ({ key: base, came: !!came && base === came, ids,
     label: `${base} · ${ids.length}${base.startsWith("You on") ? "" : " new"}` }));
 };
+// THE WORKING LINE SAYS WHAT IS HAPPENING, AND WHAT WE ARE WAITING FOR (the owner, 2026-11-12: "in summary it says what its doing while it's
+// working instead of just ... which means nothing"; and on every level, "what it's doing and what are we waiting for"): one line beside a turn's
+// dots, from what the list already holds - what the turn waits on him for (`ask`), else the newest step at work in its own words
+// (agentSteps.stepLabel), else the model writing; a turn not begun yet waits for its agent to start. Plain code, never a model call
+export const workingLine = (parts, label, { starting = false, ask = "" } = {}) => {
+  if (ask) return ask;
+  const steps = (parts || []).filter((p) => p.type === "work").flatMap((p) => p.steps || []), last = steps.at(-1);
+  if (!last) return starting ? "Waiting for the agent to start" : "Thinking…";
+  return last.status === "running" ? String(label(last) || "").split(/\r?\n/)[0].trim() || "Working…" : "Thinking…";
+};
+// ...what a turn at work waits on HIM for, in words: the step its session is stopped at, a sign-in, a question
+export const waitingOn = (list) => (list?.permissions?.length ? "Waiting for your Allow once"
+  : !list?.asking ? "" : String(list.asking.request_id || "").startsWith("signin:") ? "Waiting for you to sign in" : "Waiting for your answer");

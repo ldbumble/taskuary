@@ -17,7 +17,8 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, newerList, withMine, waitingChips } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, newerList, withMine, waitingChips, workingLine, waitingOn } from "./chatStream.js";
+import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
@@ -247,7 +248,6 @@ const WorkCtx = React.createContext(null);
 // ...and a fold the owner opened stays open: the server's live message is `live-<sid>-<trace revision>` - a new id at every step - and the pane
 // itself mounts again when the owner comes back to the task. Kept by the turn, never by the message's id or the DOM
 const OPEN_FOLDS = new Set();
-const LIVE_SHOWN = 6;
 const foldKey = (id) => String(id || "").replace(/^(live-.+)-\d+$/, "$1");
 // HOW MUCH OF THE WORK IS DRAWN (chatDetail.js): "summary", "steps" or "everything" - the task's own, else its kind's default from Settings
 const LevelCtx = React.createContext("steps");
@@ -265,13 +265,6 @@ const Fold = ({ k, label, quiet = false, children }) => {
   const toggle = (e) => { const o = e.currentTarget.open; if (o) OPEN_FOLDS.add(k); else OPEN_FOLDS.delete(k); setOpen(o); };
   return <details className="tq-aui-working-fold" data-tq-steps-fold={quiet ? "summary" : ""} open={open} onToggle={toggle}><summary>{label}</summary>{children}</details>;
 };
-// WHILE IT RUNS ITS STEPS ARE OPEN (the owner, 2026-11-05: "it has to show what it's working on a little more than this like pulling from url's
-// etc.. look how other chat libraries show intermediately the tool calls"): a quiet line a step, the newest at the foot with its spinner, the
-// last LIVE_SHOWN of them - those before fold into "N earlier steps"
-const LiveSteps = ({ steps }) => { const cut = Math.max(0, steps.length - LIVE_SHOWN);
-  return <div className="tq-aui-live-steps" data-tq-live-steps="" role="status" aria-live="polite">
-    {!!cut && <details className="tq-aui-live-earlier"><summary>{plural(cut, "earlier step")}</summary><AgentSteps data={{ steps: steps.slice(0, cut) }} /></details>}
-    <AgentSteps data={{ steps: steps.slice(cut) }} /></div>; };
 // ONE RULE FOR EVERY FOLD OF A TURN'S WORK: it is drawn round steps of work. One with none in it - only Taskuary's own notes, as a turn the app
 // started holds before its first step - read "Along the way ▸" over nothing he could see (the overnight walk, 2026-11-11): its notes stand open
 const WorkFold = ({ k, quiet = false, parts, draw }) => { const n = workCount(parts);
@@ -290,17 +283,17 @@ const TurnWorkView = ({ data, now, ended, k }) => {
   // ...where nothing sums a turn up (the dock), its trail as ever: one line a step, its edits among them
   if (!at) return <AgentSteps data={{ steps: parts.flatMap((p) => (p.type === "work" ? p.steps : p.type === "said" ? [{ id: p.id, kind: "said", summary: p.text }]
     : p.type === "edit" ? [{ id: p.id, kind: "edit", summary: p.summary, status: "done" }] : [])) }} />;
-  const last = parts.length - 1;
   const draw = (p, i, lvl) => p.type === "said" ? <Md key={p.id} text={p.text} /> : p.type === "edit" ? <EditRow key={p.id} p={p} />
     : p.type === "plan" ? <PlanRow key={p.id} p={p} />
     : p.type === "view" ? <ViewSpec key={p.id} spec={p.spec} raw={p.raw} />
     // ...a file the agent showed (show `files`) is drawn by its kept copy, placed in its turn by the server for both chats (ShownCtx), never twice
     : p.type === "files" ? null
     : lvl === "everything" ? <AgentSteps key={p.id} data={{ steps: p.steps }} />
-    // IN THE ORDER IT HAPPENED (the owner, 2026-11-06: "never write above what was written already"): a group with a call still running stays
-    // open with its spinner, and what the agent says after it draws below it
-    : now && (i === last || p.steps.some((x) => x.status === "running")) ? <LiveSteps key={p.id} steps={p.steps} />
     : <WorkFold key={p.id} k={`${key}:${p.id}`} parts={[p]} draw={draw} />;
+  // WHILE IT RUNS EVERY LEVEL IS THE SAME (the owner, 2026-11-12: "that setting is what displays after it runs"): the agent's words as they
+  // come and what it showed - no list of steps open - with ONE live line at the foot saying what it does or what we wait for (ConvTurn,
+  // workingLine). Once the turn has ended the level decides: summary folds its work, steps lists it, everything shows it whole
+  if (now) return <>{parts.filter((p) => ["said", "view", "files"].includes(p.type)).map((p, i) => draw(p, i, "everything"))}</>;
   // SUMMARY: the agent's words, in order; every step, edit and plan behind one quiet "n steps" line over them that opens on them all. A turn its
   // summary sums up folds whole - its summary says the words
   if (level === "summary") {
@@ -433,6 +426,7 @@ const ConvTurn = ({ t, more, cards, name }) => {
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
   const compacting = live && ((x) => x?.k === "compact" && !!x.status && !["completed", "failed", "cancelled"].includes(x.status))((t.steps || []).at(-1));
+  const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting", ask: React.useContext(WaitOnCtx) }) : "";
   if (quiet) return null;
   return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}
@@ -440,7 +434,10 @@ const ConvTurn = ({ t, more, cards, name }) => {
     <div className="tq-aui-agent-body">
       <TurnWorkView data={{ parts }} now={live} ended={!!t.text && !live} k={t.id} />
       {!!words && <SaidText text={words} mid={key} />}
-      {live && <div className="tq-aui-thinking" role="status" aria-label="The agent is at work" data-tq-working="" {...(t.state === "starting" ? { "data-tq-starting-line": "" } : {})}><i /><i /><i />{compacting && <span data-tq-compacting="" style={{ marginLeft: 8, fontSize: 12.5 }}>Compacting…</span>}</div>}
+      {/* ...and the dots say what is happening, or what we wait for, on every level: one quiet line that keeps its place (workingLine) */}
+      {live && <div className="tq-aui-thinking" role="status" aria-label="The agent is at work" data-tq-working="" {...(t.state === "starting" ? { "data-tq-starting-line": "" } : {})}><i /><i /><i />{compacting
+        ? <span data-tq-compacting="" style={{ marginLeft: 8, fontSize: 12.5 }}>Compacting…</span>
+        : doing ? <span className="tq-aui-working-line" data-tq-working-line="" title={doing}>{doing}</span> : null}</div>}
       {t.state === "failed" && !!t.fail && <div className="tq-aui-hint" role="alert" data-tq-turn-failed="">⚠ {t.fail}</div>}
       {!!rest.length && <PublishedPages pages={rest} open />}
       {!!made.length && <TurnFiles files={made} />}
@@ -448,6 +445,7 @@ const ConvTurn = ({ t, more, cards, name }) => {
     </div></div>;
 };
 const RetryCtx = React.createContext(null);
+const WaitOnCtx = React.createContext("");
 const ConvLine = ({ x, more }) => {
   const stamp = x.at ? when(x.at instanceof Date ? x.at : String(x.at)) : "", retry = React.useContext(RetryCtx);
   return <div className={`tq-aui-message tq-aui-user${more ? " tq-aui-user-more" : ""}`} data-tq-item={x.id} data-tq-chat-line={x.id}>
@@ -633,8 +631,8 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
             {!!list && !merged.items.length && !empty && !(chat && reading) && <div className="tq-aui-welcome"><TaskuaryMark size={22} /><div>
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
-            <RetryCtx.Provider value={retry}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
-              landing={landNode} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} /></RetryCtx.Provider>
+            <RetryCtx.Provider value={retry}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
+              landing={landNode} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} /></WaitOnCtx.Provider></RetryCtx.Provider>
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
             {asking && <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} />}

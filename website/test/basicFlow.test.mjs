@@ -90,3 +90,22 @@ test("the box says what the header says: never \"pick the session back up\" whil
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /cli \|\| convWorks \|\| !conv\.list\?\.ran \? MESSAGE : "Write to pick the session back up…"/);
 });
+
+test("a turn at work says what is happening, or what we wait for, beside its dots - one line, on every level", async () => {
+  const { workingLine } = await import("../src/chatStream.js");
+  const label = (s) => (s.status === "running" ? s.doing : s.summary);
+  const parts = [{ type: "work", steps: [{ summary: "Read invoices.csv", status: "done" }] }, { type: "said", text: "x" },
+    { type: "work", steps: [{ summary: "Ran a command", doing: "Running a command", status: "running" }] }];
+  assert.equal(workingLine(parts, label), "Running a command");
+  // ...and what we wait for, where no step runs: the model writing, a session opening, his press (waitingOn)
+  assert.equal(workingLine([{ type: "work", steps: [{ summary: "Read a.csv", status: "done" }] }], label), "Thinking…");
+  assert.equal(workingLine([], label, { starting: true }), "Waiting for the agent to start");
+  assert.equal(workingLine(parts, label, { ask: "Waiting for your Allow once" }), "Waiting for your Allow once");
+  const { waitingOn } = await import("../src/chatStream.js");
+  assert.equal(waitingOn({ permissions: [{}] }), "Waiting for your Allow once");
+  assert.equal(waitingOn({ asking: { request_id: "signin:bank.example" } }), "Waiting for you to sign in");
+  assert.equal(waitingOn({ asking: { request_id: "q1" } }), "Waiting for your answer");
+  assert.equal(waitingOn({}), "");
+  const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /: doing \? <span className="tq-aui-working-line" data-tq-working-line="" title=\{doing\}>\{doing\}<\/span> : null/);
+});

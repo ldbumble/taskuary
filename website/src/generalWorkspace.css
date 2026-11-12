@@ -226,3 +226,5 @@
 .tq-aui-arrived-words.tq-aui-arrived-open { display: block; -webkit-line-clamp: unset; overflow: visible; }
 .tq-aui-arrived-more-btn { align-self: flex-start; margin-top: 2px; padding: 0; border: 0; background: none; color: var(--tq-muted, #8b877e); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .tq-aui-arrived-more-btn:hover { color: var(--tq-text, #292824); text-decoration: underline; }
+/* the working line beside a turn's dots (GeneralWorkspace ConvTurn): the newest step's words, one quiet line, only its words change */
+.tq-aui-working-line { margin-left: 8px; min-width: 0; max-width: 60ch; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12.5px; color: var(--tq-muted, #8b877e); }

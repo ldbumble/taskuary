@@ -52,11 +52,12 @@ test("the turn's stamp: working m:ss while it runs, ran once it answered, nothin
   assert.equal(clockText(3_725_000), "1:02:05");
 });
 
-test("a running turn shows its steps open, the newest six, and ONE clock - its working line's, never a second on its head", () => {
+test("a running turn shows its words and ONE live line on every level - the level decides only once it ended - and ONE clock", () => {
   const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /const LIVE_SHOWN = 6;/);
-  assert.match(ws, /data-tq-live-steps=""/);
-  assert.match(ws, /plural\(cut, "earlier step"\)/);
+  // ...the owner, 2026-11-12: "that setting is what displays after it runs": no open list of steps while it runs
+  assert.match(ws, /if \(now\) return <>\{parts\.filter\(\(p\) => \["said", "view", "files"\]\.includes\(p\.type\)\)\.map/);
+  assert.doesNotMatch(ws, /data-tq-live-steps=""|LIVE_SHOWN/);
+  assert.match(ws, /doing \? <span className="tq-aui-working-line" data-tq-working-line="" title=\{doing\}>\{doing\}<\/span> : null/);
   assert.match(ws, /const WorkFold = \(\{ k, quiet = false, parts, draw \}\) => \{ const n = workCount\(parts\);\s+return n \? <Fold k=\{k\} quiet=\{quiet\} label=\{plural\(n, "step"\)\}>/, "an ended turn folds to N steps");
   // ...and a fold with no step in it is never drawn: "Along the way ▸" over a turn the app started, before its first step (the overnight walk, 2026-11-11)
   assert.doesNotMatch(ws, /"Along the way"/);

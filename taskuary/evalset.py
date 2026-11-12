@@ -279,7 +279,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     conf, rows, by_signal = Counter(), [], {'colleague_replied': Counter(), 'alone': Counter()}
     pconf = Counter()                  # (the owner's priority, triage's) where the owner set one by hand
     jconf = {k: Counter() for k in JOIN_KEYS}
-    by_channel = {}
+    by_channel, by_class = {}, {}
     for c in cases:
         if not c.get('body'): continue
         msg = as_message(c)
@@ -305,6 +305,9 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
         if c.get('priority_label'): pconf[(c['priority_label'], v.get('priority') or 'regular')] += 1
         by_signal['colleague_replied' if thread.get('others_replied') else 'alone'][got == c['label']] += 1
         by_channel.setdefault(c.get('channel') or '?', Counter())[got == c['label']] += 1
+        # work vs nothing per class: who wrote it as triage read it (person, automated, bulk) and where the owner stood on it
+        by_class.setdefault(f"{v.get('sender_class') or '?'} / {c.get('addressed_to_you') or c.get('channel') or '?'}",
+                            Counter())[(got in WORK) == (c['label'] in WORK)] += 1
         rows.append({'id': c['id'], 'label': c['label'], 'got': got, 'ok': got == c['label'], 'source': c['label_source'],
                      'channel': c.get('channel'), 'notes_seen': len(ns), 'why': v.get('why') or '', 'degraded': bool(v.get('degraded')),
                      # what the regex layer would make of a task (coding/general) - the second, unmeasured verdict
@@ -320,12 +323,14 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
            'degraded': sum(r['degraded'] for r in rows),
            'by_signal': {k: {'right': v[True], 'wrong': v[False]} for k, v in by_signal.items()},
            'by_channel': {k: {'right': v[True], 'wrong': v[False]} for k, v in sorted(by_channel.items())}, 'rows': rows,
+           'work_by_class': {k: {'right': v[True], 'wrong': v[False]} for k, v in sorted(by_class.items())},
            'priority': {'n': sum(pconf.values()), 'right': sum(v for (a, b), v in pconf.items() if a == b),
                         'confusion': {f'{a}->{b}': v for (a, b), v in sorted(pconf.items())}}}
     if verbose:
         print(f"{n} cases, accuracy {out['accuracy']:.0%}" + (f" ({out['degraded']} model answers unusable - scored as filed)" if out['degraded'] else '')
               if n else 'no cases with a body to classify')
         if n: print(f"  work vs nothing right {out['work_vs_nothing']} of {n}")
+        for k, v in out['work_by_class'].items(): print(f"    {k:22s} right {v['right']:3d}  wrong {v['wrong']:3d}")
         for k, v in out['confusion'].items(): print(f'  {k:22s} {v}')
         for k, v in out['join'].items(): print(f"  join {k:13s} right {v['right']:3d}  wrong {v['wrong']:3d}")
         for k, v in out['by_signal'].items(): print(f"  {k:18s} right {v['right']:3d}  wrong {v['wrong']:3d}")

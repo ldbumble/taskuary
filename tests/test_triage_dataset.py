@@ -269,6 +269,7 @@ class JoinSetTests(unittest.TestCase):
             return out
         res, seen = self.run_with(right)
         self.assertEqual(res['accuracy'], 1.0)
+        self.assertEqual((res['work_vs_nothing'], sum(v['right'] for v in res['work_by_class'].values())), (res['n'], res['n']))
         self.assertEqual(sum(v['wrong'] for v in res['join'].values()), 0, res['join'])
         self.assertEqual(sum(v['right'] for v in res['join'].values()), len(self.cases()))
         self.assertTrue(all(any(k in u for k in ('thread_task', 'room_tasks', 'open_work', 'open_items')) for u in seen))

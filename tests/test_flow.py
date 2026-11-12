@@ -144,6 +144,19 @@ def test_only_if_skips_on_the_ai_answer_and_the_ai_step_is_one_call_in_the_shape
     assert out['steps'][2]['status'] == 'ok' and s.get_task(out['steps'][2]['task_id'])['Title'] == 'Duplicates: same invoice twice'
 
 
+def test_a_scheduled_ai_step_that_reads_what_its_last_run_read_asks_nothing():
+    """The owner, 2026-11-11: "if nothing changed in raw stuff ... just run it on changes". The answer is kept per routine and step."""
+    s, calls = MemoryStore(), []
+    def brain(system, user, **k): calls.append(user); return '{"answer": true, "why": "two bills match"}'
+    src = source(s, [{'id': 's1', 'kind': 'ai', 'label': 'Judge', 'prompt': 'Are these duplicates?', 'output': 'yes_no'}])
+    go = lambda trigger='schedule', src=src: flow.execute(s, src, run_task(s, src), trigger=trigger, llm=brain)['steps'][0]
+    first, again = go(), go()
+    assert len(calls) == 1 and again['answer'] is True and again['why'] == first['why']          # the same words: its answer, no call
+    go('manual'); assert len(calls) == 2                                                            # Run now is the owner asking
+    other = source(s, [{'id': 's1', 'kind': 'ai', 'label': 'Judge', 'prompt': 'Are these three duplicates?', 'output': 'yes_no'}], title='Other check')
+    go(src=other); assert len(calls) == 3                                                           # other words are asked
+
+
 def test_an_ai_answer_out_of_shape_or_empty_fails_the_step():
     s = MemoryStore()
     for reply, words in (('', 'empty'), ('maybe?', 'shape'), ('{"answer": "perhaps"}', 'yes or no')):

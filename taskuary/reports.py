@@ -2091,7 +2091,15 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # retells work that already has its own row, so judging it as mail only ever made a duplicate of that work - triage
     # flipped to "task" on two runs (TQ-0938, TQ-1038: "Review today's meetings and waiting work", urgent, on the rail
     # above the very items it listed) and the owner, 2026-10-12: "should not be a task"
-    out = {} if is_digest or not d['triage'] else ingest_message(store, msg={'external_id': f'report:{src["SourceId"]}:{stamp}', 'channel': 'report',
+    # ...and A SCHEDULED RUN THAT SAYS WHAT ITS LAST RUN SAID IS NOT TRIAGED AGAIN (the owner, 2026-11-11: "if nothing changed in raw
+    # stuff ... just run it on changes"): the last run was read under the whole guide and memory, and these are its words again. It lands
+    # as the run it is, under Reports; a run with other words, and one the owner asked for, is read as before
+    seen = hashlib.sha256(f"{subject}|{text}|{work_brief(cfg) or ''}".encode('utf-8', 'replace')).hexdigest()
+    tkey = f"report_triage_mark:{src['SourceId']}"
+    same = trigger == 'schedule' and d['triage'] and (text.startswith(UNCHANGED) or store.get_setting(tkey) == seen)
+    if same: logger.info(f'report {title}: the same words as its last run - not triaged again')
+    elif trigger == 'schedule' and d['triage'] and not is_digest: store.set_setting(tkey, seen, 'report')
+    out = {} if is_digest or same or not d['triage'] else ingest_message(store, msg={'external_id': f'report:{src["SourceId"]}:{stamp}', 'channel': 'report',
                                      'subject': subject, 'body': text, 'from_name': title,
                                      'conversation_id': f'report:{src["SourceId"]}', 'sent_at': stamp,
                                      'source_link': cfg.get('link'), 'source_name': title, 'mail_meta': {'built_from': built_from(cfg)},

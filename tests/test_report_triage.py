@@ -28,6 +28,22 @@ class ReportTriageTests(unittest.TestCase):
         self.assertEqual((m['Status'], m['TaskId']), ('filed', None)); self.assertEqual(s.list_tasks(), [])
         self.assertIn('triage: nothing to do', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
+    def test_a_scheduled_run_that_says_what_its_last_run_said_is_not_triaged_again(self):
+        """The owner, 2026-11-11: "if nothing changed in raw stuff ... just run it on changes". The same words went through the whole
+        triage prompt every time the clock fired; they land as the run they are, and other words - or Run now - are read."""
+        s, read = MemoryStore(), []
+        def brain(sys_, usr, **kw): read.append(usr); return '{"intent": "fyi", "why": "a weekly trend, nothing to do"}'
+        src = self._src(s, {'type': 'agent', 'title': 'Trends', **TRIAGED})
+        def run(words, trigger='schedule'):
+            import time; time.sleep(1.1)           # a run is named by its second
+            with mock.patch.object(reports, 'render_report', return_value=('ran', words)): return reports.run_one(s, src, brain, trigger)
+        run('# Trends\nall steady this week'); run('# Trends\nall steady this week')
+        self.assertEqual(len(read), 1)
+        rows = s._rows("SELECT * FROM message WHERE Channel='report' ORDER BY MessageId")
+        self.assertEqual([r['Status'] for r in rows], ['filed', 'feed'])                  # the second run is still a row under Reports
+        run('# Trends\nthe ledger job failed twice'); self.assertEqual(len(read), 2)       # other words are read
+        run('# Trends\nthe ledger job failed twice', 'manual'); self.assertEqual(len(read), 3)   # Run now is the owner asking
+
     def test_a_new_run_retires_the_one_before_it(self):
         """Seven "Process Error Check - 0 rows" stacked up in the reports band say nothing the
         newest one does not (the owner, 2026-09-16). NOTHING IS DELETED: the earlier run is settled

@@ -766,8 +766,30 @@ def write_draft(store, task_id: int, review_id: int, actor: str = 'system', llm=
     (terminal.start_on_task); a reply is two sentences and belongs to the main AI, which
     writes it here in under a second and parks it for approval. `pressed`: the owner pressed for this draft (ASKED) - never put down as no reply.
     ONLY THE OWNER'S PRESS ASKS IT (Draft with AI, Redraft, a chase): a reply owed at arrival or at a run's end is the task's agent's to write
-    (ingest.reply_to_agent, wrapup.raise_reply - the owner, 2026-11-10: "no more triage creates draft. agent should be doing it")."""
+    (ingest.reply_to_agent, wrapup.raise_reply - the owner, 2026-11-10: "no more triage creates draft. agent should be doing it").
+    ...AND A PRESS ON A TASK AN AGENT WORKS IS THAT AGENT'S (decided 2026-11-12, rule 1: no second voice drafts): Redraft and Draft with AI
+    wake it, it writes the reply again and files its card - raised as Handed. This writer is for what no agent ever worked."""
+    if pressed and (got := to_agent(store, task_id, nudge)): raise Handed(got)
     return draft_for_review(store, task_id, review_id, llm, None, nudge, pressed)
+
+
+class Handed(Exception):
+    "The press went to the task's agent (to_agent): it writes the reply again and files the card - nothing was drafted here."
+REDRAFT = ('The owner pressed {press} on the reply waiting on this task{said}. Write that reply again and save it in place of the one '
+           'waiting - its card shows it; say nothing of the old one.')
+def to_agent(store, tid: int, nudge: str = None) -> str:
+    """Hand the owner's Redraft / Draft with AI to task `tid`'s agent, as every word of Taskuary's to an agent goes (general.tell): 'told' or
+    'woke' - and his press is a line in the chat - or '' where no agent ever worked it."""
+    from . import general, buttons
+    t = store.get_task(int(tid)) if tid else None
+    if not t or t.get('Status') in ('done', 'dropped'): return ''
+    said, rv = str(nudge or '').split(': ', 1)[-1].strip() if nudge else '', store.pending_review(int(tid))
+    press = buttons.label('redraft') if rv and str(rv.get('DraftText') or '').strip() else buttons.label('redraft', 'none')
+    # ...his press is written first: the turn it wakes reads it with what the owner did since its last answer
+    store.audit('task', int(tid), 'redraft_asked', 'owner', 'human', {'said': said[:300]})
+    got = general.tell(store, int(tid), REDRAFT.format(press=press, said=f', saying: "{said}"' if said else ''))
+    if not got: store._exec("DELETE FROM audit WHERE Id=(SELECT MAX(Id) FROM audit WHERE EntityType='task' AND EntityId=? AND Action='redraft_asked')", (int(tid),))
+    return got
 
 
 @aiusage.named('draft.reply')

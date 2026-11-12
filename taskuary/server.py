@@ -4102,11 +4102,14 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     # REPLY DRAFTS, AGENT OR NOT (the owner, 2026-11-03: "drafting reply is broken ... if its still working stay spinning until done"):
     # Reply on a task no agent had worked opened a signature-only box under Draft with AI, nothing coming (2026-10-28). Every press that
     # asks for a draft is owed one, and a writer with nothing to go on says so.
-    owed, failed = not draft and (body is None or body.draft), False
+    owed, failed, handed = not draft and (body is None or body.draft), False, False
     if owed and not later:
         try:
             draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction), pressed=True) if tid
                      else responder.draft_for_message(store, m, rid, instruction=_reply_nudge(body and body.instruction)))
+        except responder.Handed:
+            # ...the task's agent writes it again and files its card (responder.to_agent): nothing failed, and the box keeps what it held
+            handed, draft = True, before
         except Exception as e:
             logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
             failed = True
@@ -4114,7 +4117,7 @@ def open_reply(mid: int, body: OpenReplyBody = None):
             try: (store.set_review_draft_needs if isinstance(e, responder.NotDrafted) else store.set_review_draft_error)(rid, str(e))
             except Exception as e2: logger.debug(f'could not record the draft failure on review {rid}: {e2}')
     # ...an empty one is refused there and said (store.EMPTY_DRAFT): the draft before it stays
-    if body is not None and body.redraft and not failed: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
+    if body is not None and body.redraft and not failed and not handed: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
     # WHO IT GOES TO, AT ONCE: the envelope was pinned only when the AI's draft landed (responder.write_draft), so a fresh box -
     # Write another above all - showed the sender alone and no CC for the seconds the model took (2026-10-13). It is a lookup on
     # the message, nothing to wait for; a draft finds it set and keeps it, an envelope the owner set already stays.
@@ -4125,6 +4128,8 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     looped, unknown = _loop_in(rid, m, (body.cc if body is not None else None) or [])
     # A REWRITE IS SAID DONE ONLY WHEN THE DRAFT CHANGED: the Assistant said "Rewritten" over a box that stayed empty (2026-11-04) - `draft` is
     # what the review holds now, and `changed`/`why` are the receipt's to read, never the writer's return
+    if handed: return {'reviewId': rid, 'taskId': tid, 'draft': draft, 'drafting': False, 'handed': True,
+                       'receipt': _handed_receipt(tid, body.line if body is not None else None)}
     rewrite = owed and not later
     got = _rewritten(rid, before) if rewrite else {}
     # ...and the Assistant's under-way line for it ("Rewriting the draft on TQ-n.") is said again in its place, with the same receipt: a draft
@@ -4145,6 +4150,14 @@ def _draft_receipt(tid, got: dict, rewrite: bool = False, line=None) -> dict:
             f"No reply was drafted on {ref} - {why}. Write it in the box, or press {buttons.label('redraft', 'none')}.")
     concierge.settle(store, line, text, not why)
     return {'status': 'failed' if why else 'done', 'text': text}
+
+
+def _handed_receipt(tid, line=None) -> dict:
+    "The receipt of a Redraft / Draft with AI the task's agent took (responder.Handed): said once, in the Assistant's line too."
+    from . import concierge
+    text = f'The agent on {task_ref(tid)} is writing the reply again - its new card lands in the task.'
+    concierge.settle(store, line, text, True)
+    return {'status': 'done', 'text': text}
 
 
 def _rewritten(rid: int, before: str) -> dict:
@@ -7142,6 +7155,9 @@ def draft_review(rid: int, body: DraftBody = None):
             _refresh_chat_context(message_id=message['MessageId'])
             message = _latest_context_message(None, message['MessageId']) or message
             draft = responder.draft_for_message(store, message, rid, instruction=_reply_nudge(body and body.instruction))
+    except responder.Handed:
+        return {'ok': True, 'handed': True, 'draft': str(rv.get('DraftText') or ''), 'changed': False,
+                'receipt': _handed_receipt(rv.get('TaskId'), body and body.line)}
     except responder.NotDrafted as e:
         # THE WRITER SAID WHAT IT NEEDS - no draft, and no failure: a plain line on the card and Send to agent / Continue lit (rulebook
         # needs_agent). It was a 422 like any error, so the card drew a red app failure cut mid-word (walk 2026-10-29)

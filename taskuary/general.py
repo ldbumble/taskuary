@@ -628,6 +628,8 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - pu
            'set_repo': lambda d: 'changed where its code lives', 'set_workstream': lambda d: 'changed its workstream',
            'not_coding': lambda d: 'said it is not coding work', 'funnel_later': lambda d: 'put it for later',
            'close_from_assistant': lambda d: 'marked it done',      # every surface's close (concierge.close_task) writes this one row
+           # ...Redraft / Draft with AI on a task an agent works: the press goes to that agent (responder.to_agent)
+           'redraft_asked': lambda d: 'asked the agent to write the reply again' + (f': "{d["said"]}"' if d.get('said') else ''),
            # ...a Send and close that sent and did not close (concierge.close_after_send): it read "You send kept open." on the page and to the agent
            'send_kept_open': lambda d: f"asked to close it with that send - it stays open: {'; '.join(d.get('kept') or []) or 'something on it still waits'}",
            # ...and the press that LANDED it: with no phrase of its own the line read "You landed." (agent walk 2, 2026-11-10)

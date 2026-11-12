@@ -8,6 +8,6 @@ const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"
 test("the post card caps its picture and opens it whole on a press", () => {
   const card = read("ActionCard.jsx");
   assert.match(card, /const IMG_MAX = 180;/);
-  assert.match(card, /maxHeight: IMG_MAX, objectFit: "contain"/);
+  assert.match(card, /height: IMG_MAX, objectFit: "contain"/);     // ...its room held from the first frame (2026-11-12)
   assert.match(card, /onClick=\{\(\) => setViewing\(pic\)\}/);
 });

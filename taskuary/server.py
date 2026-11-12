@@ -2482,7 +2482,8 @@ def assistant_session(task_id: int, body: AssistantSessionBody = None):
     # configuration change, not a tab-local preference that vanishes on restart.
     if general.is_dock(t) and body.pick:
         store.set_setting('assistant_ai', str(body.pick), ACTOR)
-        store.set_setting('assistant_model', str(body.model or ''), ACTOR)
+        from . import aidefaults
+        aidefaults.keep_model(store, 'assistant_model', body.model, ACTOR, str(body.pick))
     try: session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
     except (ValueError, RuntimeError) as e: return _chat_failed(e)
     return _assistant_payload(task_id, session)
@@ -6480,7 +6481,8 @@ def concierge_ai(body: ConciergeAiBody):
     back to the default (the CLI agent on its quick gear). A change starts a fresh CLI conversation."""
     from . import concierge, general
     store.set_setting(concierge.AI_KEY, str(body.pick or ''), ACTOR)
-    store.set_setting(concierge.MODEL_KEY, str(body.model or ''), ACTOR)
+    from . import aidefaults
+    aidefaults.keep_model(store, concierge.MODEL_KEY, body.model, ACTOR)
     task, _ = general.dock_task(store, ACTOR)
     store.set_setting(f"{concierge.SID_KEY}:{task['TaskId']}", '', ACTOR)
     from . import clipool; clipool.close(f"{concierge.LIVE_KEY}:{task['TaskId']}")   # a new brain is a new process
@@ -11969,13 +11971,14 @@ def settings():
 
 @app.patch('/api/settings')
 def set_setting(body: SettingBody):
-    from . import settings_schema
+    from . import aidefaults, settings_schema
     if why := settings_schema.refuse(body.name, body.value): raise HTTPException(422, why)
     prev = store.get_setting(body.name)
     # the owner's name and address go through the one door that also turns them into {{owner}} tokens in the docs - set here
     # plainly, triage and every agent went on reading the template's John Smith beside the new name (the email walk, 2026-10-29)
     if body.name == 'owner_name' and str(body.value or '').strip(): store_mod.set_owner(store, str(body.value).strip(), None, ACTOR)
     elif body.name == 'owner_email': store_mod.set_owner(store, (store.get_setting('owner_name') or '').strip(), str(body.value or ''), ACTOR)
+    elif body.name in aidefaults.MODEL_OF: aidefaults.keep_model(store, body.name, body.value, ACTOR)   # a model, with the brain it is for
     else: store.set_setting(body.name, body.value, ACTOR)
     store.audit('setting', 0, 'set', ACTOR, detail={'key': body.name, 'from': prev, 'to': body.value})   # as the chat's setting.set does
     if body.name == hub_agents.DEV_MODE: live_bus.emit(live_bus.FEED)

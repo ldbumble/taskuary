@@ -71,6 +71,47 @@ SLOTS = [
 SLOT = {s['key']: s for s in SLOTS}
 
 
+# A SAVED MODEL FOLLOWS ITS BRAIN (the owner, 2026-11-11: "never change from what's in settings"). A slot's model setting held a
+# bare name, read for WHICHEVER brain the slot landed on: saved while the general agent was Claude, it was handed to Codex the day
+# the default became Codex, and Codex answered nothing. The brain it was picked on is kept beside it (`<setting>_for`), and the
+# model is read for that brain alone - on another, the slot runs that brain's own model until a model is picked for it.
+FOR = '_for'
+MODEL_OF = {s['model_setting']: s['key'] for s in SLOTS if s.get('model_setting')}
+
+
+def slot_pick(store, setting: str) -> str:
+    "The brain a model setting's slot runs on right now, as its own reader resolves it."
+    from . import concierge, general
+    if setting == 'assistant_model': return general._selected(store)[0]
+    if setting == 'concierge_model': return concierge.default_pick(store)
+    return str(store.get_setting(MODEL_OF[setting]) or '').strip()
+
+
+def keep_model(store, setting: str, model, actor, pick: str = None) -> None:
+    "Save a slot's model WITH the brain it is for (`pick`, else the one the slot is on now)."
+    model = str(model or '')
+    store.set_setting(setting, model, actor)
+    store.set_setting(setting + FOR, (pick if pick is not None else slot_pick(store, setting)) if model else '', actor)
+
+
+def _foreign(store, model: str, pick: str) -> bool:
+    """A model saved before its brain was written beside it: another brain's when this CLI's own catalogue does not list it and
+    another connected CLI's does. Anything less certain stays as the owner typed it."""
+    if not pick.startswith('cli:') or model.startswith('effort:'): return False
+    from . import general
+    clis = {o['pick']: o.get('cmd') or '' for o in general.provider_options(store) if o.get('type') == 'cli'}
+    name, lists = climodels.split_pick(model)[0], lambda c: climodels.catalog(c)['choices']
+    return pick in clis and name not in lists(clis[pick]) and any(name in lists(c) for p, c in clis.items() if p != pick)
+
+
+def model_on(store, setting: str, pick: str, settings: dict = None) -> str:
+    "The model saved in `setting`, when it was saved for `pick`; '' when it belongs to another brain."
+    get = store.get_setting if settings is None else settings.get
+    m, was = str(get(setting) or '').strip(), str(get(setting + FOR) or '').strip()
+    if not m or not pick: return m
+    return (m if was == pick else '') if was else ('' if _foreign(store, m, pick) else m)
+
+
 def _conn(cfg, key: str) -> dict:
     """The CLI connection a brain key names, with its shipped defaults - the brain itself."""
     from .cli_connections import with_defaults
@@ -216,10 +257,10 @@ def _resolve(store, cfg, slot_key: str) -> dict:
         if slot_key == 'concierge_ai':
             # what concierge.brain runs: its own model, else the Assistant default - never the brain's light model,
             # which is triage's (this card said "the coding model, the expensive gear" while every turn ran on haiku)
-            light, dflt, owner = str(settings.get(s['model_setting']) or ''), ASSISTANT_DEFAULT.get(cli, ''), 'this page'
+            light, dflt, owner = model_on(store, s['model_setting'], value, settings), ASSISTANT_DEFAULT.get(cli, ''), 'this page'
         elif slot_key == 'draft_ai':
             # its own model box, blank = what drafts ran on before: the brain's light gear (shared with triage, never written by this card)
-            light, dflt, owner = str(settings.get(s['model_setting']) or ''), light or LIGHT_DEFAULT.get(cli, ''), 'this page'
+            light, dflt, owner = model_on(store, s['model_setting'], value, settings), light or LIGHT_DEFAULT.get(cli, ''), 'this page'
         else: dflt, owner = LIGHT_DEFAULT.get(cli, ''), f'the {key} connection (light model)'
         model, effort = ('', light[7:]) if light.startswith('effort:') else climodels.split_pick(light)
         if slot_key == 'concierge_ai' and not effort:
@@ -245,7 +286,7 @@ def _resolve(store, cfg, slot_key: str) -> dict:
     except ValueError: conf = {}
     # A slot with its own model setting OWNS its model - save wrote it there (see `save` below),
     # so reading the connector's back showed the wrong box and an override you set looked lost.
-    own = str(settings.get(s['model_setting']) or '') if s.get('model_setting') else ''
+    own = model_on(store, s['model_setting'], value or f"connector:{c['ConnectorId']}", settings) if s.get('model_setting') else ''
     out.update(model=own or str(conf.get('model') or ''), choices=_conn_models(c['Type']),
                default_hint=str(conf.get('model') or '') or _conn_default(c['Type']),
                owner=('this page' if s.get('model_setting') else f"the {c['Name']} card"),
@@ -389,10 +430,10 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
         if not key: raise ValueError('no CLI is connected to set a model on')
         _save_gear(store, cfg, key, 'model', f'{model}@{effort}' if (model and effort) else model)
     elif now.startswith('cli:') and slot_key == 'concierge_ai':
-        store.set_setting(s['model_setting'], f'effort:{effort}' if (effort and not model) else model, actor)
+        keep_model(store, s['model_setting'], f'effort:{effort}' if (effort and not model) else model, actor, now)
     elif now.startswith('cli:') and slot_key == 'draft_ai':
         # its own setting, never the connection's light gear, which triage rides; '@low' is the brain's own model at that effort
-        store.set_setting(s['model_setting'], f'{model}@{effort}' if effort else model, actor)
+        keep_model(store, s['model_setting'], f'{model}@{effort}' if effort else model, actor, now)
     elif now.startswith('cli:'):
         from .agents import brain_key
         # codex on a ChatGPT plan has no smaller model, so its cheap gear is effort alone -
@@ -402,7 +443,7 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
     else:
         setting = s.get('model_setting')
         if setting:                                     # the assistant keeps a plain override
-            store.set_setting(setting, model, actor)
+            keep_model(store, setting, model, actor, now or (f"connector:{cur['connector']}" if cur.get('connector') else None))
         else:
             cid = cur.get('connector')
             if not cid: raise ValueError('no AI connector to set a model on')

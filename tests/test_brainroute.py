@@ -75,7 +75,7 @@ def _today(s, job, task=None):
     "What each job ran on before the router - the resolver its caller asked, read straight."
     if job in brainroute.ONE_SHOT: return llm.effective_pick(s), ''
     if job == 'coding': return agents.resolve_brain(s, 'coding', cli_only=True), ''
-    if job == 'assistant': return concierge.pick(s), str(s.get_setting('concierge_model') or '')
+    if job == 'assistant': return concierge.pick(s), concierge.model_of(s)      # its saved model, on the brain it was saved for
     pick = general.default_pick(s, task)
     base = general._selected(s)
     return pick, (base[2] if pick == base[0] else general._selected(s, pick=pick)[2] if pick else '')
@@ -129,6 +129,29 @@ def test_an_explicit_pick_wins_with_exactly_its_own_model(real):
         assert (r.pick, r.model) == ('cli:claude', '')
         # ...and an empty pick is what blank means - the reading build_llm always made of it, now said on the route
         assert brainroute.choose(s, 'general', want_pick='').pick == llm.effective_pick(s, '')
+
+
+def test_a_saved_model_follows_the_brain_it_was_saved_for(real):
+    """The live shape: the general card's model was picked while its brain was Claude, the default brain became Codex, and
+    Codex was started with a Claude model name - it answered nothing. A model applies to the brain it was saved for."""
+    from taskuary import aidefaults, climodels
+    real.update({'claude', 'codex'})
+    lists = {'claude': ['claude-sonnet-5-5'], 'codex': ['gpt-5.5']}
+    for stamped in (True, False):                               # saved with its brain beside it; and a row from before that
+        s, cfg, _ = _home(('claude', 'codex'), {'claude': True, 'codex': True}, {'default_brain': 'claude'})
+        with mock.patch.object(config, 'load', lambda: cfg), \
+             mock.patch.object(climodels, 'catalog', lambda cli: {'choices': lists.get(cli, [])}):
+            clic.sync(cfg, s)
+            if stamped: aidefaults.keep_model(s, 'assistant_model', 'claude-sonnet-5-5', 'owner')
+            else: s.set_setting('assistant_model', 'claude-sonnet-5-5', 'owner')
+            r = brainroute.choose(s, 'general')
+            assert (r.pick, r.model) == ('cli:claude', 'claude-sonnet-5-5'), stamped
+            s.set_setting('default_brain', 'codex', 'owner')
+            r = brainroute.choose(s, 'general')
+            assert r.pick == 'cli:codex' and r.model != 'claude-sonnet-5-5', (stamped, r.model)
+            assert s.get_setting('assistant_model') == 'claude-sonnet-5-5', 'the setting itself is never rewritten'
+            s.set_setting('default_brain', 'claude', 'owner')
+            assert brainroute.choose(s, 'general').model == 'claude-sonnet-5-5', 'and it is back with its brain'
 
 
 def test_a_browser_task_still_takes_the_brain_with_hands(real):

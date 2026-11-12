@@ -224,7 +224,8 @@ def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
         own = '' if agents.stale(store, 'draft_ai') else str(store.get_setting('draft_ai') or '').strip()
         pick = llm.effective_pick(store, own or store.get_setting('triage_ai') or '')
         # ...and its model only once a drafting brain is chosen: blank is the triage brain on its own model, exactly (2026-10-25)
-        return pick, want_model or (str(store.get_setting('draft_model') or '').strip() if own else ''), gear or 'light', _backups(store)
+        from . import aidefaults
+        return pick, want_model or (aidefaults.model_on(store, 'draft_model', own) if own else ''), gear or 'light', _backups(store)
     if job in ONE_SHOT:
         # the same reading llm._build_llm makes: the named pick, else the triage brain, else what blank means
         pick = llm.effective_pick(store, want_pick if want_pick is not None else store.get_setting('triage_ai') or '')

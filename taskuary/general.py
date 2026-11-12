@@ -490,7 +490,9 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
     choice = next((o for o in options if o['pick'] == wanted), None) \
         or next((o for o in options if (o.get('type') != 'cli' and not _unset_gateway(store, o['pick'])) or o['pick'] in ready), None)
     if not choice: return '', '', model or ''
-    saved_model = store.get_setting('assistant_model') if not explicit else ''
+    from . import aidefaults
+    # ...the card's saved model only on the brain it was saved for (aidefaults.model_on): a Claude name is never handed to Codex
+    saved_model = aidefaults.model_on(store, 'assistant_model', choice['pick']) if not explicit else ''
     return choice['pick'], choice['label'], model or saved_model or choice['model']
 
 

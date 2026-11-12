@@ -263,7 +263,9 @@ def chat_choice(store) -> dict:
 def model_of(store) -> str:
     """The model the chat speaks on: this chat's own choice, else the Assistant's configured one ('' for the brain's default)."""
     c = chat_choice(store)
-    return str((c.get('model') if c else store.get_setting(MODEL_KEY)) or '').strip()
+    if c: return str(c.get('model') or '').strip()
+    from . import aidefaults
+    return aidefaults.model_on(store, MODEL_KEY, default_pick(store))       # for the brain it was saved on, and no other
 
 def pick(store) -> str:
     """Which brain speaks: this chat's own choice (chat_choice); else the Assistant's default (default_pick)."""

@@ -13,7 +13,11 @@ class Brain:
     "The model: answers `Answer n.` after `delay` (or `said[n]`), and keeps what each turn was handed - system and user."
     def __init__(self, delay=0.0): self.delay, self.calls, self.said = delay, [], {}
     def __call__(self, system, user, **k):
-        self.calls.append(f'{system}\n{user}'); n = len(self.calls); time.sleep(self.delay)
+        self.calls.append(f'{system}\n{user}'); n = len(self.calls); end = time.time() + self.delay
+        # ...a wait that ends the moment `delay` is set to 0, as a real brain's process ends when its turn is stopped: slept whole, it held the
+        # stopped turn's floor for 30 s whenever the call began before the test let go - on a fast runner always - and the waiting line's
+        # turn stood "starting" past the test's patience
+        while self.delay and time.time() < end: time.sleep(min(0.02, self.delay))
         return self.said.get(n, f'Answer {n}.')
 
 

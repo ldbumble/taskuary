@@ -699,8 +699,7 @@ OFFER_HEAD = ('NO BROWSER IS OPEN for this task yet, but Taskuary keeps one for 
               # WHAT IS BEHIND A SIGN-IN IS OPENED HERE FROM THE START (ten recorded walks, 2026-11-11: sent to a portal, the agent fetched it
               # from its shell eight times, met the sign-in form there, and asked for the password or reported "nobody is signed in" - the rule
               # for it stood at the far end of the offer, under how to drive a browser it had not chosen to open)
-              'A site the owner has an account on - a portal, anything that answers with a sign-in - is never fetched from your shell: open '
-              'it here from the start, with no password - Taskuary signs it in. '
+              'What answers with a sign-in (a portal, an account) is never fetched from your shell: open it here from the start. '
               'NEVER use --session, --headed, profile listing, or launch Chrome separately. ')
 NOT_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET (agent-browser is not installed). Do not use a browser tool of your own CLI '
               'or of another app instead - Taskuary cannot show those to the owner or hold their presses, and they fail here. If the work needs a web page, do what you can without it (read the message, find the link), then tell the owner in one line: '
@@ -803,12 +802,10 @@ def brief(held: bool = True, open_now: bool = True) -> str:
 # rode on every task an agent MIGHT open a page on - 4,500 characters on a WhatsApp bug report. The offer keeps what must hold from the
 # first command (only this browser, no password or CAPTCHA, the last press) and names the guide; the rest is read when a page is needed.
 SIGNIN_LINE = ("A SIGN-IN YOU HAVE NO PASSWORD FOR IS NOT A BLOCKER AND NEVER A QUESTION - you do not need the password. For a site with no "
-               'connection among your systems, say in one line that there is no connection for it and that you are using the browser, run '
-               '`agent-browser open <its sign-in page>`, and end your turn with a final line [[TASKUARY-SIGNIN: <the site\'s domain>]]: Taskuary '
-               'types a saved sign-in, or puts the page in front of the owner to sign in themselves and keeps it for next time, then tells you '
-               'to go on - which of the two is for Taskuary to say, so never tell the owner to sign in. Never ask for a password or where one is '
-               'kept, '
-               'and never work a sign-in from your shell. ')
+               'connection among your systems, say so in one line, run `agent-browser open <its sign-in page>`, and end your turn with a final '
+               "line [[TASKUARY-SIGNIN: <the site's domain>]]: Taskuary types a saved sign-in, or shows the owner the page and keeps it for next "
+               'time, then tells you to go on - so never tell the owner to sign in. Never ask for a password or where one is kept, and never '
+               'work a sign-in from your shell. ')
 # ...AND AN ANSWER THAT ASKED FOR ONE ALL THE SAME IS TAKEN BACK BY ITS AGENT (hooks.judge_ended; five recorded walks, 2026-11-11: with the
 # line above in its prompt an agent still fetched the form from its shell and asked the owner to paste the password, four times of five)
 ASKED_SECRET = ('TASKUARY: your last answer asked the owner for a password or other sign-in details. That is never asked here, and the owner '

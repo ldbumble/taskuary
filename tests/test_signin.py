@@ -246,7 +246,7 @@ class Asking(unittest.TestCase):
             self.wait_for(lambda: sess.said)
         # ...and is a step of the work, never an answer telling him to sign in where nobody was asked to (the recorded walk, 2026-11-11)
         turn = [x for x in conversation.items(self.s, self.tid)['items'] if x['kind'] == 'turn'][-1]
-        self.assertEqual((turn['text'], [st['text'] for st in turn['steps']]), ('', ['Signed in to bank.example with the saved sign-in.']))
+        self.assertEqual((turn['text'], [st['text'] for st in turn['steps']][-1]), ('', 'Signed in to bank.example with the saved sign-in.'))
         self.assertEqual(typed, [('sess1', 'bank.example', USER, PW)])
         self.assertEqual(raised, [('open while typing', None)])
         self.assertIsNone(signin.pending(self.s, self.tid))

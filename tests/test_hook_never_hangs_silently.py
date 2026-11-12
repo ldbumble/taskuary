@@ -52,9 +52,10 @@ class TheAskHook(Base):
         ws.release(self.tid); th.join(5)
         self.assertEqual(seen['out'], {})
 
-    def test_a_question_asked_again_after_its_answer_is_not_held_out_of_sight(self):
-        """Its id is its words, and that id is answered - so the second asking was recorded but never shown, while the hook
-        held Claude on "running PreToolUse hook" for the whole ASK_WAIT."""
+    def test_a_question_asked_again_after_its_answer_is_shown_again_never_held_out_of_sight(self):
+        """Its id is its words, and that id was answered - so the second asking was recorded but never shown, while the hook
+        held Claude on "running PreToolUse hook" for the whole ASK_WAIT. An answer closes what was asked BEFORE it
+        (workerstate.open_requests): asked again, the question is on the page again, and what the hook holds is one he can answer."""
         th = threading.Thread(target=ask, daemon=True); th.start()
         for _ in range(250):
             if ws.HELD: break
@@ -62,9 +63,10 @@ class TheAskHook(Base):
         rid = ws.status(self.s, self.tid)['requests'][0]['request_id']
         ws.answer_group(self.s, self.tid, {rid: 'main'}, 'owner'); th.join(5)
         self.assertEqual(self.open_(), [])
-        t0 = time.monotonic(); out = ask(wait=30)
-        self.assertLess(time.monotonic() - t0, 2, 'let go at once - the form goes in the pane')
+        t0 = time.monotonic(); out = ask(wait=0.3)
+        self.assertLess(time.monotonic() - t0, 3)
         self.assertEqual((out, ws.HELD), ({}, {}))
+        self.assertEqual(self.open_(), ['Which branch should I base this on?'], 'asked again, it is shown again')
 
     def test_a_card_refused_as_another_runs_is_not_held(self):
         self.another_run_owns_the_task()

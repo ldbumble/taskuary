@@ -48,3 +48,20 @@ def test_parity(name):
     runs = {b: RUNS[name, b].snaps for b in A.BACKENDS if (name, b) in RUNS and (name, b) not in OPEN_PARITY}
     if len(runs) < 2: pytest.skip('fewer than two backends ran it')
     assert A.parity(runs) == []
+
+
+def test_a_line_carried_while_its_opening_turn_begins_still_makes_the_turn_his(tmp_path, monkeypatch):
+    """Scenario o on a coding agent, with the order a slow machine gives it (macOS, twice at a release: "coding: turn 1 never started"): the
+    session opened for his line begins its opening turn BEFORE the opener hands it the line it carries (waitroom.reopen_coding -> carries).
+    The turn then wrote itself down as nobody's, so when it said nothing it was never asked again - his ask answered by silence, for good."""
+    import threading
+    from taskuary.acpcoding import ACPCoding
+    carried, real_c, real_b = threading.Event(), ACPCoding.carries, ACPCoding._begins
+    def carries(self, shown): real_c(self, shown); carried.set()
+    def begins(self, items, text):
+        out = real_b(self, items, text)
+        carried.wait(15 * A.SLACK)             # ...the opener's hand-over lands while the turn is beginning: a state, never a sleep
+        return out
+    monkeypatch.setattr(ACPCoding, 'carries', carries); monkeypatch.setattr(ACPCoding, '_begins', begins)
+    with A.world('coding', tmp_path, monkeypatch) as r: A.SCENARIOS['o'](r)
+    assert A.broken(r) == [], A.broken(r)

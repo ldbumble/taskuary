@@ -174,7 +174,11 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // reads "Sent" and stays off - a blue Send again over a reply already gone invited a second press
   const [sent, setSent] = useState(false);
   const busy = busyNow || sent;
+  // ...AND THE PRESSED BUTTON SAYS WHAT IS HAPPENING (the owner, 2026-11-12: "the card button should say sending then close"): a spinner
+  // beside "Sending…" while it goes, then "Sent" - in place, never a line above the card
+  // (the row's verbs read the words; the card's own buttons draw them with the spinner - `sentOr` is the word, its look is `spinning`)
   const sentOr = (w) => (sent ? "Sent" : w);
+  const spinning = (w) => (sent ? "Sent" : <><CircularProgress size={11} data-tq-sending="" sx={{ color: "inherit", mr: 0.75 }} />{w}</>);
   // ...said by the send that was pressed: Close out has two, and "Sending…" stood on both
   const [pressed, setPressed] = useState("approve");
   const [err, setErr] = useState("");
@@ -797,7 +801,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
               Reply by email with the file</Button>
             <Button size="small" variant="outlined" disabled={off || !words.trim()} onClick={() => decide("approve")}
               title={`Sends only the words to ${replyContext(r)} - no file goes with them`}>
-              {busy ? sentOr("Sending…") : `${sendWord} without the file`}</Button>
+              {busy ? spinning("Sending…") : `${sendWord} without the file`}</Button>
           </>
         ) : twoSends ? (
           /* CLOSE OUT'S TWO SENDS (the owner, 2026-11-03): Send and close first and filled, Send beside it - and on a line too tight for both,
@@ -805,7 +809,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           <>
             <Button size="small" variant={closeVariant} disableElevation disabled={off || (!words.trim() && !isCal)} onClick={() => decide("approve", false, true)}
               title={closeTitle} data-tq-send="close">
-              {busy && pressed === "send_close" ? sentOr("Sending…") : `${closeWord}${copying}`}</Button>
+              {busy && pressed === "send_close" ? spinning("Sending…") : `${closeWord}${copying}`}</Button>
             {folded ? (<>
               <Button size="small" variant="outlined" disabled={off || (!words.trim() && !isCal)} onClick={(e) => setSendAt(e.currentTarget)} title={sendTitle}
                 aria-label={`More - ${sendWord}`} data-tq-send-more="" sx={{ minWidth: 0, px: 1 }}>▾</Button>
@@ -816,7 +820,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
             </>) : (
               <Button size="small" variant={lit === no("approve") ? "contained" : "outlined"} disableElevation disabled={off || (!words.trim() && !isCal)}
                 onClick={() => decide("approve", false, false)} title={sendTitle} data-tq-send="open">
-                {busy && pressed !== "send_close" ? sentOr("Sending…") : `${sendWord}${copying}`}</Button>
+                {busy && pressed !== "send_close" ? spinning("Sending…") : `${sendWord}${copying}`}</Button>
             )}
           </>
         ) : (
@@ -827,7 +831,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
             onClick={() => decide("approve")}
             title={simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}`}>
             {/* the one word for the send, as everywhere (buttons.json) */}
-            {busy ? sentOr(simulated ? "Simulating…" : "Sending…")
+            {busy ? spinning(simulated ? "Simulating…" : "Sending…")
               : simulated ? "Simulate approval" : `${sendWord}${ccNow.length ? `, copying ${ccNow.length}` : ""}`}
           </Button>
         )}
@@ -856,6 +860,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           sx={{ alignSelf: "center", color: "var(--tq-link, #55697a)", fontSize: 12.5, minWidth: 0, overflowWrap: "anywhere" }}>{why}</Typography>}
         </>
       </Box>
+      {/* ...and once a Send and close has gone, the close it goes on to, under the button until the task has closed */}
+      {sent && pressed === "send_close" && <Typography data-tq-closing="" role="status" variant="body2" sx={{ color: DIM, mt: 0.75, display: "flex", alignItems: "center" }}>
+        <CircularProgress size={11} sx={{ color: "inherit", mr: 0.75 }} />Closing…</Typography>}
       {connect && <Typography data-tq-not-connected="" variant="body2" sx={{ color: DIM, mt: 0.75 }}>{connect.says} - the draft waits here until it is.</Typography>}
       {fillLine && <Alert severity="warning" data-tq-fill-in="" sx={{ mt: 0.75 }} onClose={() => setFillIn(false)}>{fillLine} - nothing was sent.</Alert>}
       {asked && <BlankAsk line={asked.line} onCancel={() => setAsked(null)}

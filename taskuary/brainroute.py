@@ -392,9 +392,10 @@ def _level(store, job: str, tier: str, want_pick, want_model, hands, only) -> tu
     return (to, m), ''
 
 
-def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=None) -> Route:
+def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=None, difficulty: str = None) -> Route:
     """The brain for one call of `job`. An explicit pick or model (`want_*`: the owner's picker, a saved session, a
     report's own brain, a workflow's model) always wins. `task` is the task dict or id the call is about, if any.
+    `difficulty`: the judgement to answer for where no task carries one - Settings' "right now" rows (now).
 
     In Auto mode the rules pick the TIER - light, standard or strong - on the brain the cards (or an explicit pick) name. An
     explicit model is never overridden, the Assistant keeps its own model, and the guide chat keeps its quick gear."""
@@ -414,6 +415,7 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     browser = job == 'general' and browserview.wanted(task)
     hands = lambda p: (job != 'coding' and not browser) or str(p or '').startswith('cli:')
     f = facts(store, job, task) if pick and (task or mode(store) == 'auto') else {}
+    if f and difficulty: f['difficulty'] = difficulty
     # FIRST, THE DATA (a hard constraint, failing closed - in either mode, once the owner turns its rule on): over an explicit pick too
     only, held = (_first(store, f, 'only') if task and f else None), ''
     if only:
@@ -701,16 +703,41 @@ def brains(store) -> list:
              'models': list(o.get('models') or ([o['model']] if o.get('model') else []))} for o in general.brain_options(store)]
 
 
+ASKED_AS = {'light': 'quick', 'standard': 'standard', 'strong': 'hard'}      # a tier, as the difficulty triage would have judged
+
+
+def now(store, cfg=None) -> list:
+    """WHAT EACH LEVEL RUNS ON THIS MINUTE (the owner, 2026-11-11: "it should show light goes to this model etc etc. never change
+    from what's in settings"): [{level, pick, brain, model, why}] for quick, normal and hard agent work, in the page's words. Each
+    row IS `choose`, asked for a general task of that difficulty now - so the row and a task's own reason line (why_for_task: the
+    same Route.why, as logged at the call) are one function's answer and cannot disagree. `why` is said only where the work is
+    not on the general card's AI at the level asked: an AI set for the level, a brain resting until HH:MM, no strong model, the
+    day's strong calls spent, a rule switched off - or nothing to run on at all."""
+    from . import config
+    cfg = config.load() if cfg is None else cfg
+    card, out, sets = _fixed(store, 'general')[0], [], by_level(store) if mode(store) == 'auto' else {}
+    for tier in TIERS:
+        r = choose(store, 'general', difficulty=ASKED_AS[tier])
+        ran = r.tier if r.tier in LEVEL_OF else 'standard'            # Fixed mode: every level is the card's own model
+        # ...moved off the card's AI or off the level asked - or an AI set for this level that could not take it
+        moved = not r.pick or r.pick != card or (r.tier in LEVEL_OF and r.tier != tier) or (LEVEL_OF[tier] in sets and not r.level)
+        out.append({'level': LEVEL_OF[tier], 'pick': r.pick, 'brain': _said(store, r.pick),
+                    'model': (spell(r.model) or _words(store, r.pick, cfg)[LEVEL_OF[ran]]) if r.pick else '', 'why': r.why if moved else ''})
+    return out
+
+
 def panel(store) -> dict:
     "Everything the router's part of Settings draws, in one read."
     n = cap(store)
     try: lv = levels(store)
     except Exception as e: lv = []; logger.debug(f'brainroute: could not read what each level runs on - {e}')
+    try: nw = now(store)
+    except Exception as e: nw = []; logger.debug(f'brainroute: could not read what each level runs on right now - {e}')
     try: bs = brains(store)
     except Exception as e: bs = []; logger.debug(f'brainroute: could not list the AIs a level may run on - {e}')
     return {'mode': mode(store), 'rules': [{**r, 'sentence': sentence(r)} for r in rules(store)], 'cap': '' if n is None else n,
             'used_today': strong_today(store), 'jobs': list(JOBS), 'tiers': list(TIERS), 'difficulties': ['quick', 'standard', 'hard'],
-            'warning': coverage_warning(store), 'levels': lv, 'by_level': by_level(store), 'brains': bs}
+            'warning': coverage_warning(store), 'levels': lv, 'now': nw, 'by_level': by_level(store), 'brains': bs}
 
 
 def set_panel(store, mode_: str = None, rs: list = None, cap_: str = None, actor: str = 'owner', by_level_: dict = None) -> dict:

@@ -115,6 +115,24 @@ export function RouteRules() {
           ))}
         </Box>
       )}
+      {/* WHAT RUNS RIGHT NOW (the owner, 2026-11-11: "it should show light goes to this model etc etc"): the router's own answer for
+          agent work of each level this minute (brainroute.now), with its reason where that is not the card's AI - the sentence a
+          task's AI line says for the same route */}
+      {!!(p.now || []).length && (
+        <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }} data-tq-route-now="">
+          <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.25 }}>RIGHT NOW, AGENT WORK RUNS ON</Typography>
+          {p.now.map((n) => (
+            <Box key={n.level} data-tq-route-now-level={n.level} sx={{ mb: 0.25 }}>
+              <Typography sx={{ fontSize: 12.5, color: DIM }}>
+                {`${n.level}: `}
+                <Box component="span" sx={{ color: INK, fontWeight: 600 }}>{n.pick ? n.brain : "nothing"}</Box>
+                {n.pick && n.model ? ` · ${n.model}` : ""}
+              </Typography>
+              {n.why && <Typography variant="caption" sx={{ color: FAINT, display: "block", ml: 1.5 }} data-tq-route-now-why="">{n.why}</Typography>}
+            </Box>
+          ))}
+        </Box>
+      )}
       {auto && <ByLevel p={p} save={save} />}
       {say && <Alert severity="warning" sx={{ mt: 1, fontSize: 12.5 }}>{say}</Alert>}
       {p.warning && <Alert severity="warning" sx={{ mt: 1, fontSize: 12.5 }} data-tq-route-warning="">{p.warning}</Alert>}

@@ -114,3 +114,21 @@ def test_the_panel_saves_it_and_its_lines_say_it(s):
     with pytest.raises(ValueError): brainroute.save_by_level(s, {'tricky': {'pick': 'cli:claude'}})
     with pytest.raises(ValueError): brainroute.save_by_level(s, {'hard': {'pick': 'claude'}})
     assert brainroute.set_panel(s, by_level_={})['by_level'] == {} and s.get_setting(brainroute.LEVEL_KEY) == ''
+
+
+def test_settings_says_what_each_level_runs_on_right_now_and_why_in_the_router_s_own_words(s):
+    """The owner, 2026-11-11: "it should show light goes to this model etc etc. never change from what's in settings" - each
+    row is the router's own answer for work of that level this minute, with its reason where it is not the card's AI."""
+    rows = lambda: {r['level']: r for r in brainroute.panel(s)['now']}
+    assert {l: (r['pick'], r['model'], r['why']) for l, r in rows().items()} == \
+        {'quick': (s.a, 'claude-sonnet-5, low effort', ''), 'normal': (s.a, 'claude-sonnet-5', ''), 'hard': (s.a, 'claude-opus-5', '')}
+    _set(s, hard=('cli:codex', 'gpt-5.5@high'))                               # an AI set for the level: said, with the router's reason
+    hard = rows()['hard']
+    assert (hard['pick'], hard['brain'], hard['model']) == ('cli:codex', 'codex (CLI)', 'gpt-5.5, high effort')
+    assert hard['why'] == brainroute.choose(s, 'general', task=_task(s)).why, 'the line on a hard task says the same'
+    assert 'as set in AI routing' in hard['why'] and not rows()['normal']['why']
+    brainroute.cool(s, 'cli:codex', datetime.now() + timedelta(hours=1))        # ...resting on its limit: back on the card, until when
+    hard = rows()['hard']
+    assert hard['pick'] == s.a and 'but it is limited until' in hard['why']
+    s.set_setting('ai_route_mode', 'fixed', 'owner')                            # Fixed: every level is the card, and nothing to explain
+    assert {(r['pick'], r['model'], r['why']) for r in rows().values()} == {(s.a, 'claude-sonnet-5', '')}

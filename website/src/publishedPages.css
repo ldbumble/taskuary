@@ -27,6 +27,12 @@
 .tq-published-tabs button { border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; background: none; padding: 4px 10px; font: inherit; font-size: 11.5px; color: var(--tq-muted, #8a8d86); cursor: pointer; white-space: nowrap; }
 .tq-published-tabs button.on { background: var(--tq-panel, #fff); border-color: var(--tq-border, #e3ddd2); color: var(--tq-secondary, #4d514b); font-weight: 600; }
 .tq-published-tabs + .tq-published-table { border-top: 0; }
+/* A FILE DRAWN IN A TURN HOLDS ITS ROOM FROM ITS FIRST FRAME (decided 2026-11-12, recorded on the sweep's task 30: a picture landed 1.9 s after the
+   chat and its card grew 93 -> 397 px, everything above it moving up): its body - loading, a picture, a table, a page - is one fixed height,
+   and what is taller scrolls inside it. A sound is its player's own fixed row; a video holds a 16:9 frame (PublishedPages MediaPlayer) */
+.tq-published[data-tq-turn-files] .tq-published-page > :not(.tq-published-row):not(.tq-published-media) { box-sizing: border-box; height: min(60vh, 360px); max-height: none; overflow: auto; }
+.tq-published[data-tq-turn-files] .tq-published-picture { display: flex; align-items: center; justify-content: center; }
+.tq-published[data-tq-turn-files] .tq-published-picture img { max-height: 100% !important; max-width: 100%; object-fit: contain; }
 .tq-published-text { margin: 0; border-top: 1px solid var(--tq-border, #e3ddd2); padding: 10px 14px; max-height: min(70vh, 640px); overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* an agent's files, each thing once (PublishedPages deliver): its earlier versions, the rest of a long list and its working files fold */
 .tq-published .tq-published { margin: 0; }

@@ -118,7 +118,10 @@ export function SharedDashboard({ report, title }) {
   useEffect(() => { let live = true; setGot(DASHBOARDS.get(report) || null);
     api.get(`/api/dashboards/${report}`).then(({ data }) => { DASHBOARDS.set(report, data); if (live) setGot(data); }).catch(() => live && setGot((g) => g || {}));
     return () => { live = false; }; }, [report]);
-  return <Box data-tq-shared-dashboard={report} sx={{ mb: 1, border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden", maxHeight: 420, overflowY: "auto" }}>
+  // ...ITS ROOM HELD FROM THE FIRST FRAME (decided 2026-11-12, the sweep's task 32 on a first open: "Loading…" 26 px, then the dashboard 420 px,
+  // everything above it moving up): while it is read, and with its charts, it is the dashboard's whole height; only "not run yet" is a line
+  const room = !got || got.data ? { height: 420 } : { maxHeight: 420 };
+  return <Box data-tq-shared-dashboard={report} sx={{ mb: 1, border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden", ...room, overflowY: "auto", boxSizing: "border-box" }}>
     <Typography variant="caption" sx={{ display: "block", px: 1.25, pt: 0.75, color: INK, fontWeight: 600 }}>{title || "Dashboard"}
       <Box component="a" href={`#report=${report}`} sx={{ ml: 1, color: "var(--tq-link, #55697a)", fontWeight: 400 }}>Open it</Box></Typography>
     {got?.data ? <React.Suspense fallback={null}><Dashboard spec={got.config} data={got.data} /></React.Suspense>

@@ -106,7 +106,7 @@ function MediaPlayer({ page }) {
   return (
     <div className="tq-published-media" data-tq-media={V}>
       <V controls preload="metadata" src={attUrl(page)} onError={() => setErr(true)} title={page.name}
-        style={V === "video" ? { display: "block", width: "100%", maxHeight: "70vh", background: "#000" } : { display: "block", width: "100%" }} />
+        style={V === "video" ? { display: "block", width: "100%", maxHeight: "70vh", aspectRatio: "16 / 9", background: "#000" } : { display: "block", width: "100%" }} />
     </div>
   );
 }

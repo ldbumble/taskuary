@@ -364,3 +364,130 @@ class ThreadReadingTests(unittest.TestCase):
         brain.takes_want = False
         triage.classify_intent(MSG, llm=brain, system='My own rules. Answer JSON only.')
         self.assertEqual(len(asks), 1)                                  # a missing thread is never worth a second ask
+
+
+# ── the lean answer (2026-11-11) ─────────────────────────────────────────────────────────────────────────────────────────────
+# A verdict spent a third of its tokens saying "nothing here". A key whose answer is nothing may be left out; under a schema the
+# rare keys ride in one group, `more`. What every reader is handed must be the same as when each "nothing" was spelled out.
+BASE = {'intent': 'task', 'why': 'Erin asks for the numbers', 'title': 'Send Erin the Q3 accrual numbers',
+        'summary': 'Erin Blake wants the Q3 accrual numbers.', 'sender_class': 'person', 'asks_owner': True, 'difficulty': 'quick', 'sure': True}
+# every "nothing" spelled out, as the shape before it asked - one dict per field group
+NOTHING = {
+    'the rare group': {'goal': False, 'done_when': None, 'danger': None, 'danger_aim': None, 'offer': None, 'offer_is_reply': False,
+                       'needs_browser': False, 'needs_desktop': False, 'meet': None},
+    'the work': {'kind': None, 'checklist': None, 'priority': 'regular', 'priority_why': '', 'due': None, 'data_class': 'ordinary', 'wrapper': []},
+    'the menus': {'playbook': None, 'workflow': None, 'workstream': None},
+    'joining': {'same_as': None, 'new_job': None, 'refines': None, 'task_title': None, 'reword': None, 'rests_on': None, 'serves': None},
+    'a chat line': {'relationship': None, 'related_message_ids': None, 'existing_task_id': None},
+    'the thread': {'thread': {'asking': '', 'your_part': '', 'others': [], 'asks': [], 'aside': [], 'on_you': []}},
+}
+SHOWN = dict(thread={'thread_task': {'tid': 9, 'status': 'open', 'watching': True}, 'open_work': [{'tid': 7, 'title': 'Close the Q3 books'}],
+                     'exchange': ['[#3] Erin Blake: can you send the numbers?'], 'open_goals': [{'tid': 5, 'steps': [{'id': 's1'}]}]},
+             candidates=[{'id': 11, 'who': 'Erin Blake', 'when': '09:00', 'text': 'the numbers?', 'task_id': 7}],
+             playbooks='- pto: a leave request', workflows='- refund: a refund request', workstreams='- finance: the day job')
+
+
+def _answers(j, lean=True, carries=False, **kw):
+    brain = lambda *a, **k: json.dumps(j)
+    brain.takes_want = carries
+    return triage.classify_intent(dict(MSG), llm=brain, lean=lean, **{**SHOWN, **kw})
+
+
+class LeanAnswerTests(unittest.TestCase):
+    def test_a_key_left_out_reads_as_its_nothing_did_in_every_field_group(self):
+        whole = _answers({**BASE, **{k: v for g in NOTHING.values() for k, v in g.items()}})
+        for group, keys in NOTHING.items():
+            with self.subTest(group):
+                rest = {k: v for g, ks in NOTHING.items() if g != group for k, v in ks.items()}
+                self.assertEqual(_answers({**BASE, **rest}), whole)
+        self.assertEqual(_answers(BASE), whole)                           # ...and all of them left out at once
+        for k in ('title', 'summary', 'asks_owner', 'difficulty', 'sure', 'sender_class'): self.assertIn(k, whole, k)
+        self.assertEqual(whole['data_class'], 'ordinary')                 # the one "nothing" a reader recorded (store.judge_task)
+
+    def test_the_old_shape_reads_its_own_answer_as_it_always_did(self):
+        full = {**BASE, **{k: v for g in NOTHING.values() for k, v in g.items()}}
+        self.assertEqual(_answers(full, lean=False), _answers(full))
+        self.assertNotIn('data_class', _answers(BASE, lean=False))        # a judgement the old answer did not give stays not given
+
+    def test_the_rare_keys_answered_in_their_group_land_where_they_always_did(self):
+        said = {'goal': True, 'done_when': 'The books are closed.', 'danger': 'asks for a wire to a new account', 'danger_aim': 'owner',
+                'offer': 'I can pull the Q3 totals.', 'offer_is_reply': True, 'needs_browser': True, 'needs_desktop': True,
+                'meet': {'minutes': 30, 'from': None, 'to': None}}
+        flat, folded = _answers({**BASE, **said}), _answers({**BASE, 'more': said}, carries=True)
+        self.assertEqual(folded, flat)
+        for k in said: self.assertIn(k, flat, k)
+        self.assertEqual(_answers({**BASE, 'more': None}, carries=True), _answers(BASE, carries=True))
+
+    def test_a_no_that_a_reader_tells_from_silence_is_still_asked_for(self):
+        """`same_problem: false` turns a line that continues a task into a new job (relationship_of); left out, it would join."""
+        said = {**BASE, 'relationship': 'continues', 'existing_task_id': 7}
+        self.assertEqual(_answers({**said, 'same_problem': False})['relationship'], 'new')
+        self.assertEqual(_answers(said)['relationship'], 'continues')
+        self.assertIn('same_problem', triage.lean_out(chat=True)); self.assertNotIn('same_problem', triage.lean_out())
+        self.assertIn('same_problem', triage.verdict_schema(candidates=[])['schema']['required'])
+        for k in triage.ALWAYS: self.assertIn(f'"{k}"', triage.lean_out(), k)
+
+    def test_the_schema_stays_strict_with_the_rare_keys_in_one_nullable_group(self):
+        s = triage.verdict_schema(notes=True)['schema']
+        def strict(o):
+            if isinstance(o, dict):
+                if 'properties' in o:
+                    self.assertEqual(set(o['required']), set(o['properties'])); self.assertFalse(o['additionalProperties'])
+                for v in o.values(): strict(v)
+            elif isinstance(o, list): [strict(v) for v in o]
+        strict(s)
+        self.assertEqual(tuple(s['properties']['more']['properties']), triage.MORE)
+        self.assertIn('null', s['properties']['more']['type'])
+        for k in (*triage.MORE, 'notes_applied'): self.assertNotIn(k, s['properties'], k)
+        for k in ('title', 'summary', *triage.ALWAYS): self.assertIn(k, s['required'], k)
+        self.assertEqual(s['properties']['wrapper']['items']['required'], ['from', 'to'])
+
+    def test_one_argument_asks_the_old_shape_for_the_evaluation(self):
+        old = triage.verdict_schema(notes=True, lean=False)['schema']['properties']
+        for k in (*triage.MORE, 'notes_applied'): self.assertIn(k, old, k)
+        self.assertNotIn('more', old); self.assertEqual(old['wrapper']['items'], {'type': 'string'})
+        seen = {}
+        def brain(system, user, **kw):
+            seen.update(sys=str(system), want=kw.get('want')); return json.dumps(BASE)
+        for carries in (True, False):
+            brain.takes_want = carries
+            triage.classify_intent(dict(MSG), llm=brain, notes=['[lrn1] Erin is the controller.'])
+            self.assertIn(triage.WRAPPER_NAMED, seen['sys']); self.assertNotIn(triage.WRAPPER_COPIED, seen['sys'])
+            self.assertNotIn('notes_applied', seen['sys'])
+            self.assertIn(triage.LEAN_MORE if carries else triage.lean_out(), seen['sys'])
+            self.assertNotIn(triage.lean_out() if carries else triage.LEAN_MORE, seen['sys'])
+            if carries: self.assertIn('more', seen['want']['schema']['properties'])
+            v = triage.classify_intent(dict(MSG), llm=brain, notes=['[lrn1] Erin is the controller.'], lean=False)
+            self.assertIn(triage.WRAPPER_COPIED, seen['sys']); self.assertNotIn(triage.WRAPPER_NAMED, seen['sys'])
+            self.assertIn('notes_applied', seen['sys']); self.assertEqual(v['notes_applied'], [])
+            self.assertNotIn(triage.LEAN_MORE, seen['sys']); self.assertNotIn(triage.lean_out(), seen['sys'])
+            if carries: self.assertIn('goal', seen['want']['schema']['properties'])
+
+    def test_a_guide_worded_the_old_way_asks_the_new_way(self):
+        "An install's own TRIAGE.md may still say `copied`: the call's shape words it, either way round."
+        old = triage.worded(triage.SHIPPED, lean=False)
+        self.assertIn(triage.WRAPPER_COPIED, old); self.assertEqual(triage.worded(old), triage.SHIPPED)
+        seen = {}
+        def brain(system, user, **kw):
+            seen['sys'] = str(system); return json.dumps(BASE)
+        triage.classify_intent(dict(MSG), llm=brain, system=old)
+        self.assertIn(triage.WRAPPER_NAMED, seen['sys']); self.assertNotIn(triage.WRAPPER_COPIED, seen['sys'])
+
+    def test_what_ingest_keeps_and_makes_of_it_is_the_same_either_way(self):
+        "The readers past triage (the stored verdict, the task) are handed the same thing by a lean answer."
+        from taskuary import ingest
+        from taskuary.store import MemoryStore
+        full = {**BASE, **{k: v for g in NOTHING.values() for k, v in g.items()}, 'kind': 'task', 'checklist': ['Pull the numbers']}
+        lean = {**BASE, 'kind': 'task', 'checklist': ['Pull the numbers']}
+        got = []
+        for j in (full, lean):
+            s = MemoryStore()
+            for k in ('calendar_enabled', 'coding_auto_enabled'): s.set_setting(k, '0', 't')
+            brain = lambda *a, _j=j, **k: json.dumps(_j)
+            out = ingest.ingest_message(s, {'external_id': 'l1', 'channel': 'email', 'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake',
+                                            'subject': 'Q3 accrual numbers', 'body': 'Can you send me the Q3 accrual numbers before Friday?'}, llm=brain)
+            t = s.get_task(out['task_id'])
+            got.append((out['status'], s.message_verdict(out['message_id']), {k: t.get(k) for k in ('Title', 'Summary', 'Kind', 'Priority', 'Status', 'DueDate')},
+                        s.task_judged(out['task_id']).get('DataClass')))
+        self.assertEqual(got[0], got[1])
+        self.assertTrue(got[0][1]['title'])

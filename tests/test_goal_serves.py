@@ -94,7 +94,7 @@ class GoalKindTests(unittest.TestCase):
                 'urgent': False, 'sender_class': 'person', 'goal': True, 'done_when': 'the census lands in the new ledger for all three sites', **kw}
 
     def test_triage_answers_goal_only_with_a_done_when(self):
-        self.assertIn('goal', triage.verdict_schema()['schema']['properties'])
+        self.assertIn('goal', triage.verdict_schema()['schema']['properties']['more']['properties'])
         def ask(**kw):
             return triage.classify_intent({'from_email': 'gail@northwind.example', 'subject': 'Census', 'body': 'x'}, llm=lambda *a, **k: json.dumps(self._v(**kw)))
         self.assertEqual((ask()['goal'], ask()['done_when'][:10]), (True, 'the census'))

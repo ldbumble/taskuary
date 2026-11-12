@@ -334,7 +334,8 @@ class ContractTests(unittest.TestCase):
         triage.classify_intent({'subject': 'Re: Hosting', 'body': 'check back in'}, llm=fake, system=self.DOC,
                                soul='The owner runs IS at a care provider.', notes=['2026-09-01 - not ours'],
                                playbooks='- pto: PTO requests')
-        self.assertTrue(seen['sys'].rstrip().endswith(triage.TASK_FIELDS.rstrip()), seen['sys'][-400:])
+        # ...with one line under it: how little of the shape an answer needs, naming title and summary as never dropped (2026-11-11)
+        self.assertTrue(seen['sys'].rstrip().endswith(triage.TASK_FIELDS.rstrip() + '\n\n' + triage.lean_out()), seen['sys'][-400:])
 
     def test_the_shape_is_asked_for_under_the_message_too(self):
         """Moving it to the end of the instructions was not enough on a long mail - the model still

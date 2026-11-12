@@ -256,14 +256,15 @@ MEMORY_ARMS = {                      # what the classifier is allowed to remembe
 }
 
 
-def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learned: bool = True, system: str = None, people: bool = True) -> dict:
+def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learned: bool = True, system: str = None, people: bool = True, lean: bool = True) -> dict:
     """The configured classifier over the local (full-text) cases, told what the funnel would
     have told it. `notes` = 'today' (every standing note on file), 'asof' (only those written
     before the message arrived - see _AsOf) or 'none'; `learned` = whether LEARNED.md's
     promoted sections ride along (the doc has no history, so it is all or nothing). `system`
-    replaces the install's TRIAGE.md for the run - how a wording change is scored before it ships."""
+    replaces the install's TRIAGE.md for the run - how a wording change is scored before it ships; `lean` is the answer's shape
+    (triage.classify_intent's: False asks the shape before 2026-11-11, to score the same cases both ways)."""
     from .ingest import others_on_thread, owner_addresses, relevant_notes
-    from . import learned_cut
+    from . import aiusage, learned_cut
     from .routing import draft_task_fields
     from .triage import classify_intent, job_doc
     mine = owner_addresses(store)
@@ -286,8 +287,9 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
             if v and not v.get('degraded'): break
             # a throttled or garbled call is not a verdict: try again before scoring it as one
             if attempt: time.sleep(2 * attempt)
-            v = classify_intent(msg, llm=llm, soul=soul, job=job, thread=thread, learned=lrn, notes=ns,
-                                notes_left=left, system=system, mine=me)
+            with aiusage.asking('triage.eval'):       # an evaluation's calls are not the day's triage (the usage row's Caller)
+                v = classify_intent(msg, llm=llm, soul=soul, job=job, thread=thread, learned=lrn, notes=ns,
+                                    notes_left=left, system=system, mine=me, lean=lean)
         # the funnel FILES an answer it cannot read (ingest: 'degraded' -> filed, never assumed
         # work); no model at all is no verdict - scored as such, never as a keyword guess (2026-10-11)
         got = 'fyi' if v.get('degraded') else v.get('intent') or 'unjudged'
@@ -318,6 +320,24 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
         if out['priority']['n']: print(f"  priority (where you set one by hand): {out['priority']['right']} of {out['priority']['n']} {out['priority']['confusion']}")
         for r in rows:
             if not r['ok']: print(f"  MISS {r['id']:7s} owner={r['label']:10s} triage={r['got']:10s} [{r['source']}] {r['subject'][:60]}")
+    return out
+
+
+def wrapper_rebuilt(store, words: int = 5, limit: int = 5000) -> dict:
+    """NO MODEL, nothing leaves the machine: every wrapper passage the stored verdicts kept word for word, cut down to its first and
+    last `words` words and found again in its own mail by triage.passage - how often naming a passage by its two ends gives back
+    the very passage. {'passages', 'same', 'other' (found, a different stretch), 'lost' (not found: nothing would be hidden)}."""
+    from .triage import passage, wrapper_of
+    out = {'passages': 0, 'same': 0, 'other': 0, 'lost': 0}
+    for r in store._rows("SELECT r.VerdictJson v, m.BodyText b, m.OwnText o FROM route r JOIN message m ON m.MessageId=r.MessageId "
+                         "WHERE r.VerdictJson LIKE '%\"wrapper\"%' ORDER BY r.RouteId DESC LIMIT ?", (int(limit),)):
+        try: ws = wrapper_of(json.loads(r['v']))
+        except ValueError: continue
+        for w in ws:
+            t = w.split()
+            got = passage({'from': ' '.join(t[:words]), 'to': ' '.join(t[-words:])}, r['b'] or '', r['o'] or '')
+            out['passages'] += 1
+            out['same' if got.split() == t else 'other' if got else 'lost'] += 1
     return out
 
 

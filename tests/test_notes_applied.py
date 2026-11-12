@@ -1,6 +1,7 @@
 """Which standing notes bear on a message is the MODEL's word (the owner, 2026-10-28): triage is handed every note in scope, each with
-its id, ranked by meaning within a budget, and its verdict names the ones it applied - `notes_applied`, kept in route.VerdictJson.
-An id it was never shown is dropped. The model and the embedder are stand-ins; the people are invented."""
+its id, ranked by meaning within a budget. Its verdict was also asked to NAME the ones it applied (`notes_applied`) - an answer no
+code and no screen ever read, so it is not asked for any more (2026-11-11); only the old shape, kept for one evaluation, still does.
+The model and the embedder are stand-ins; the people are invented."""
 import json
 
 from taskuary import ingest, triage
@@ -19,7 +20,7 @@ def _store():
     return s
 
 
-def test_triage_names_the_notes_it_applied_by_their_ids_and_the_verdict_keeps_them():
+def test_triage_is_shown_every_note_by_its_id_and_is_not_asked_which_it_applied():
     s, seen = _store(), {}
     def llm(system, user, **kw):
         seen['sys'], seen['want'] = system, kw.get('want')
@@ -33,9 +34,20 @@ def test_triage_names_the_notes_it_applied_by_their_ids_and_the_verdict_keeps_th
                                         'subject': 'Refund for the Payworth overpayment', 'body': 'Can you refund the Payworth overpayment?'},
                                     llm=llm)
     assert len(seen['ids']) == 2 and all(seen['ids']), seen['sys'][-600:]
+    assert 'notes_applied' not in seen['sys'] and 'notes_applied' not in json.dumps(seen['want'])
+    assert 'notes_applied' not in s.message_verdict(out['message_id'])
+
+
+def test_the_old_shape_still_names_them_for_the_evaluation():
+    seen = {}
+    def llm(system, user, **kw):
+        seen['sys'], seen['want'] = str(system), kw.get('want')
+        return json.dumps({'intent': 'fyi', 'why': 'x', 'title': 't', 'summary': 's', 'notes_applied': ['lrn7', 'lrn999', 'lrn7']})
+    llm.takes_want = True
+    v = triage.classify_intent({'subject': 'Refund', 'body': 'Can you refund it?'}, llm=llm, lean=False,
+                               notes=['[lrn7] Payworth refund requests are for the AP team.'])
     assert 'notes_applied' in seen['sys'] and 'notes_applied' in seen['want']['schema']['properties']
-    v = s.message_verdict(out['message_id'])
-    assert v['notes_applied'] == [seen['ids'][0]], v
+    assert v['notes_applied'] == ['lrn7'], v
 
 
 def test_a_note_on_one_sender_leaves_the_cached_part_of_the_prompt_the_same_for_every_mail():

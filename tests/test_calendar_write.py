@@ -253,7 +253,7 @@ class ScheduleFromAThread(unittest.TestCase):
         got = triage.classify_intent({'subject': 'x', 'body': 'y', 'sent_at': sent}, llm=llm({'minutes': 9999, 'from': '1999-01-01', 'to': 'Thursday'}))
         self.assertEqual(got['meet'], {'minutes': None, 'from': None, 'to': None})
         self.assertNotIn('meet', triage.classify_intent({'subject': 'x', 'body': 'y'}, llm=llm(None)))
-        self.assertIn('meet', triage.verdict_schema()['schema']['properties'])
+        self.assertIn('meet', triage.verdict_schema()['schema']['properties']['more']['properties'])
 
 
 class TheWriteScope(unittest.TestCase):

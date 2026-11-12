@@ -6,7 +6,7 @@ from taskuary.store import MemoryStore
 
 def test_every_verdict_is_asked_for_danger():
     for kw in ({}, {'candidates': [], 'playbooks': ['x'], 'same': True, 'goals': True}):
-        sch = triage.verdict_schema(**kw)['schema']
+        sch = triage.verdict_schema(**kw)['schema']['properties']['more']      # with the other rarely-answered keys (triage.MORE)
         assert 'danger' in sch['required'] and sch['properties']['danger']['type'] == ['string', 'null']
 
 def test_the_prompt_explains_it_and_rides_on_an_owner_document_that_never_asks():

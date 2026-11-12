@@ -39,7 +39,7 @@ def owner_store():
 
 class TheVerdictSaysIt(unittest.TestCase):
     def test_needs_browser_is_asked_for_and_kept_on_a_task_only(self):
-        self.assertIn('needs_browser', triage.verdict_schema()['schema']['properties'])
+        self.assertIn('needs_browser', triage.verdict_schema()['schema']['properties']['more']['properties'])
         self.assertIn('**needs_browser**', triage.SHIPPED)
         self.assertTrue(triage.classify_intent({'body': FWD}, llm=verdict(needs_browser=True)).get('needs_browser'))
         fyi = triage.classify_intent({'body': FWD}, llm=verdict(intent='fyi', needs_browser=True))

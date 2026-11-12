@@ -35,7 +35,7 @@ def _read(**j):
 
 
 def test_the_verdict_says_whom_the_danger_is_aimed_at():
-    p = triage.verdict_schema()['schema']
+    p = triage.verdict_schema()['schema']['properties']['more']             # with the other rarely-answered keys (triage.MORE)
     assert 'danger_aim' in p['required'] and p['properties']['danger_aim']['enum'] == ['owner', 'agent', None]
     assert triage.DANGER_AIM.startswith('- **danger_aim**') and '"owner"' in triage.DANGER_AIM and '"agent"' in triage.DANGER_AIM
     assert '"danger_aim": null' in triage.TASK_FIELDS

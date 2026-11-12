@@ -80,7 +80,7 @@ def test_the_guide_keeps_banter_off_the_title_and_asks_for_an_offer():
     assert 'banter or small talk about it' in triage.REFINES and 'keeps its title' in triage.REFINES
     assert 'Banter about the ask' in g and 'adds nothing to do' in g
     assert triage.OFFER.startswith('- **offer**') and 'I can register you for the webinar' in triage.OFFER
-    assert '"offer": null' in triage.SHIPPED and 'offer' in triage.verdict_schema()['schema']['properties']
+    assert '"offer": null' in triage.SHIPPED and 'offer' in triage.verdict_schema()['schema']['properties']['more']['properties']
 
 
 # ── a long draft-for-feedback mail, judged general, goes to the assistant told its job ends in the reply ────────────────────

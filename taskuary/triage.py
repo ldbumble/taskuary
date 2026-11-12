@@ -196,6 +196,32 @@ OFFER = _bullet('offer')         # what an agent could do for the owner about th
 NEEDS_BROWSER = _bullet('needs_browser')   # the work is done on a web page: the agent gets Taskuary's browser, wherever it starts (2026-10-29)
 NEEDS_DESKTOP = _bullet('needs_desktop')   # ...in a desktop app: the task is marked "needs desktop" when Agent Desktop is on (agentdesktop, 2026-10-31)
 WRAPPER = _bullet('wrapper')     # the text its sender did not write, for a screen to leave out (2026-10-28)
+# THE LEAN ANSWER (the owner, 2026-11-11: a verdict spent a third of its tokens saying "nothing here" and retyping the mail's own footer).
+# Three cuts, none of a judgement: a key whose answer is nothing is left out (code has always read a missing key as empty), `wrapper`
+# names a passage by its two ends and code finds it (wrapper_in), and `notes_applied`, which nothing read, is not asked for.
+# classify_intent(lean=False) asks the old shape, so ONE evaluation can run the same mail both ways - then the old shape goes.
+WRAPPER_COPIED = 'each passage copied exactly as it stands'
+WRAPPER_NAMED = ('each passage named by its opening and closing few words exactly as they stand, {"from": "the words it opens with", '
+                 '"to": "the words it ends with"}, never copied whole')
+def worded(text: str, lean: bool = True) -> str:
+    "`text` asking for the wrapper the lean way (its two ends) or the old one (copied whole) - a guide written either way."
+    return str(text or '').replace(*((WRAPPER_COPIED, WRAPPER_NAMED) if lean else (WRAPPER_NAMED, WRAPPER_COPIED)))
+# the keys few mails answer: under a schema the provider enforces every key must be written, so these ride in ONE group that is null
+# as a whole (verdict_schema) - title and summary stay enforced, which is what the schema is for (TQ-0665)
+MORE = ('goal', 'done_when', 'danger', 'danger_aim', 'offer', 'offer_is_reply', 'needs_browser', 'needs_desktop', 'meet')
+ALWAYS = ('intent', 'why', 'title', 'summary', 'sender_class', 'asks_owner', 'difficulty', 'sure')
+# ...said in words to a brain with no schema to carry it (a CLI), and the group named to one that has
+# ...`same_problem` with them on a chat line: its "no" makes a line that continues a task a new job (relationship_of), which silence does not
+def lean_out(chat: bool = False) -> str:
+    return ('Leave out of the answer any key whose answer is nothing: null, false, an empty list, an empty string, "priority" regular, '
+            '"data_class" ordinary. ' + ', '.join(f'"{k}"' for k in ALWAYS + (('same_problem',) if chat else ())) + ' are always written.')
+LEAN_MORE = 'In the answer ' + ', '.join(f'"{k}"' for k in MORE) + ' go together inside "more", which is null when none of them has an answer.'
+
+
+def unfolded(j: dict) -> dict:
+    "The answer with its `more` group's keys back at the top, where every reader looks; a key answered in both places keeps the top one."
+    m = j.get('more')
+    return {**(m if isinstance(m, dict) else {}), **{k: v for k, v in j.items() if k != 'more'}}
 WATCH = _bullet('watch')       # the fourth verdict, for a document written before it (the owner, 2026-11-03)
 THREAD = _bullet('thread')         # every verdict reads the whole conversation: who asks what, the owner's part, the mails that are aside (2026-11-04)
 HANDLED = _bullet('handled_elsewhere')   # a watched task's new line: does it show somebody else dealt with it (watch.py, 2026-11-01)
@@ -268,7 +294,7 @@ def thread_of(j: dict, earlier: set):
 
 
 def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, coding=True, workflows=None,
-                   earlier=False, thread_task=False, notes=False, workstreams=False, watched=False) -> dict:
+                   earlier=False, thread_task=False, notes=False, workstreams=False, watched=False, lean=True) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
     Prose asks; a schema binds. Handed this, gpt-5.4 answered `title` and `summary` even when the
@@ -278,7 +304,10 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
     nullable one instead, and nothing outside the list may be answered. And ours: it names only
     the fields the prompt EXPLAINED. Given a wider schema on a plain mail, the model dutifully
     filled in a `relationship` for a thread that had none (TQ-0665). It never asks WHERE coding work is done: the coding agent picks
-    its repository (repochoice, the owner 2026-11-06)."""
+    its repository (repochoice, the owner 2026-11-06).
+
+    `lean` (the default) keeps strict mode and folds the rarely-answered keys (MORE) into one nullable group, `more`, names a
+    `wrapper` passage by its two ends, and never asks for `notes_applied`; lean=False is the shape before 2026-11-11."""
     # WATCH (the owner, 2026-11-03): a thread the owner cares about that somebody else will handle - a task already under Watching (watch.py)
     p = {'intent': {'type': 'string', 'enum': list(INTENTS)},
          'why': {'type': 'string'}, 'title': {'type': 'string'}, 'summary': {'type': 'string'},
@@ -312,7 +341,8 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
          # ...and in a desktop app: marks the task "needs desktop" at the door, only with Agent Desktop on (agentdesktop.mark_from_triage)
          'needs_desktop': {'type': ['boolean', 'null']},
          # the text around the sender's words that they did not write - a mail system's banner, an app's stamp, an unsubscribe
-         # strip, a legal footer - copied verbatim, so a screen can leave exactly it out (strip_wrapper; the owner, 2026-10-28)
+         # strip, a legal footer - copied verbatim on the old shape (named by its ends on the lean one, below), so a screen can leave
+         # exactly it out (strip_wrapper; the owner, 2026-10-28)
          'wrapper': {'type': ['array', 'null'], 'items': {'type': 'string'}},
          # the message asks the owner to find a time to meet: how long and which days (its row's Find a time, calwrite.py)
          'meet': {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['minutes', 'from', 'to'],
@@ -344,7 +374,7 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
     # the earlier lines of the exchange the ask rests on - shown with the task so its ask can be checked (2026-10-22)
     if earlier: p['rests_on'] = {'type': ['array', 'null'], 'items': {'type': 'integer'}}
     # ...and the standing notes it applied, by the ids they were shown with (ingest.relevant_notes): the model says which bear on it
-    if notes: p['notes_applied'] = {'type': ['array', 'null'], 'items': {'type': 'string'}}
+    if notes and not lean: p['notes_applied'] = {'type': ['array', 'null'], 'items': {'type': 'string'}}
     # how hard the WORK is and whether the reader could tell (the router, 2026-10-25): its own verdict, never the priority. Shown on
     # the task, the owner can correct it, and in Auto mode it picks the model tier - an unsure quick answer may be asked again higher up
     p.update(difficulty={'type': ['string', 'null'], 'enum': [*DIFFICULTIES, None]}, sure={'type': ['boolean', 'null']},
@@ -352,6 +382,18 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
              data_class={'type': ['string', 'null'], 'enum': [*DATA_CLASSES, None]})
     if goals: p['serves'] = {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['task', 'step', 'done'],
                              'properties': {'task': {'type': 'integer'}, 'step': {'type': 'string'}, 'done': {'type': 'boolean'}}}
+    if lean:
+        # a passage by its two ends, found in the mail by code (wrapper_in) - the mail's own footer is not typed out again
+        p['wrapper'] = {'type': ['array', 'null'], 'description': 'each passage by the few words it opens with and the few it ends with',
+                        'items': {'type': 'object', 'additionalProperties': False, 'required': ['from', 'to'], 'properties': {'from': _S, 'to': _S}}}
+        # ...and MORE as one group where the first of them stood: most mails answer `"more": null` in place of nine keys (unfolded)
+        q = {}
+        for k, v in p.items():
+            if k not in MORE: q[k] = v; continue
+            q.setdefault('more', {'type': ['object', 'null'], 'description': 'null unless one of its keys has an answer',
+                                  'additionalProperties': False, 'required': [], 'properties': {}})
+            q['more']['properties'][k] = v; q['more']['required'].append(k)
+        p = q
     return {'name': 'triage_verdict',
             'schema': {'type': 'object', 'additionalProperties': False, 'required': list(p), 'properties': p}}
 
@@ -418,6 +460,7 @@ NL = chr(10)
 # every word anyway, names them (its verdict's `wrapper`, copied verbatim), and what a SCREEN shows leaves out exactly those. A
 # model reads them whole; a message triage has not read is shown as it came.
 WRAPPER_MAX, WRAPPER_CHARS = 8, 3000
+WRAPPER_END = 8          # an end shorter than this ("The", "Thanks") stands in too many places to say where a passage is
 
 
 def _squash(t) -> str: return ' '.join(str(t or '').split()).lower()
@@ -429,11 +472,28 @@ def wrapper_of(verdict) -> tuple:
     return tuple(str(x) for x in w if str(x).strip()) if isinstance(w, list) else ()
 
 
-def wrapper_in(j: dict, body: str) -> list:
-    """The verdict's `wrapper`, kept only where the message really says it - a passage it made up hides nothing."""
-    hay = _squash(body)
-    got = [str(x).strip()[:WRAPPER_CHARS] for x in (j.get('wrapper') or []) if isinstance(x, str) and str(x).strip()]
-    return [x for x in dict.fromkeys(got) if _squash(x) in hay][:WRAPPER_MAX]
+def passage(ends: dict, *texts) -> str:
+    """The passage a verdict named by its two ends, as the message itself spells it: from where the `from` words stand to where the
+    `to` words end at or after them - the SHORTEST such stretch, so an opening the sender also wrote earlier never hides their words
+    (spacing and case aside; the two ends may overlap or be the same words). '' when an end is missing, shorter than WRAPPER_END or
+    not in the text, or the stretch runs past WRAPPER_CHARS: a passage code cannot find hides nothing - it is never guessed."""
+    a, b = (_squash(ends.get(k)) if isinstance(ends.get(k), str) else '' for k in ('from', 'to'))
+    if min(len(a), len(b)) < WRAPPER_END: return ''
+    pa, pb = (_re.compile(r'\s+'.join(map(_re.escape, s.split())), _re.I) for s in (a, b))
+    for t in map(str, texts):
+        spans = [(m.start(), n.end()) for m in pa.finditer(t) if (n := next((x for x in pb.finditer(t, m.start()) if x.end() >= m.end()), None))]
+        if spans and (s := min(spans, key=lambda x: x[1] - x[0]))[1] - s[0] <= WRAPPER_CHARS: return t[s[0]:s[1]].strip()
+    return ''
+
+
+def wrapper_in(j: dict, *texts) -> list:
+    """The verdict's `wrapper` as the exact passages of the message - each named by its two ends and found there (passage), or
+    copied whole (the shape before 2026-11-11: a stored verdict, a model that answers the old way). Kept only where the message
+    really says it - a passage it made up hides nothing."""
+    hay = _squash(NL.join(map(str, texts)))
+    got = [passage(x, *texts) if isinstance(x, dict) else str(x).strip()[:WRAPPER_CHARS] if isinstance(x, str) else ''
+           for x in (j.get('wrapper') if isinstance(j.get('wrapper'), list) else [])]
+    return [x for x in dict.fromkeys(got) if x and _squash(x) in hay][:WRAPPER_MAX]
 
 
 def strip_wrapper(text: str, wrapper=()) -> str:
@@ -783,8 +843,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     thread: dict = None, watch: str = None, playbooks: str = None,
                     candidates: list = None,
                     routing_history: list = None, seen: set = None, job: str = None,
-                    coding: bool = True, workflows: str = None, connected: list = None, workstreams: str = None) -> dict:
-    """`job` is JOB.md as job_doc() reads it - what the owner is responsible for, who they serve, what to
+                    coding: bool = True, workflows: str = None, connected: list = None, workstreams: str = None, lean: bool = True) -> dict:
+    """`lean` is the answer's shape, and exists for ONE evaluation (2026-11-11): True, the default, asks the lean answer (empty keys
+    left out, `wrapper` by its two ends, no `notes_applied`); False asks the shape before it, so a harness can run the same message
+    both ways. What comes back is read by the same code either way. Not a setting - it goes when the old shape does.
+
+    `job` is JOB.md as job_doc() reads it - what the owner is responsible for, who they serve, what to
     protect. It weighs IMPORTANCE (how much this arrival matters to the job) and never intent; blank until
     the owner wrote or generated something real, so the shipped template never rides in as noise.
 
@@ -831,7 +895,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
     note_ids = [i for i in map(note_id, notes or []) if i]
     if llm:
         try:
-            base = re.sub(r'<!--.*?-->', '', system or '', flags=re.S).strip() or INTENT_SYSTEM
+            # ...asking for the wrapper the way this call's shape does, whichever way the document was written (worded)
+            base = worded(re.sub(r'<!--.*?-->', '', system or '', flags=re.S).strip() or INTENT_SYSTEM, lean)
             # ...and with no coding agent here, the guide OFFERS no coding: its coding option and the word in its answer shape go
             # (without_coding), so the choice is general or task by what the model is given, not by a verdict turned afterwards
             if not coding: base = without_coding(base)
@@ -895,11 +960,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # each counts for is the guide's to say (templates/triage.md, section 6).
                 # ...from LEARNED.md now (memorylines, 2026-10-27): a line about one sender or topic says so at its end, `(about: ...)`
                 # ...each in front of the model whole and ranked by meaning, never matched by its words: which ones bear on THIS message is
-                # the model's call, said by their ids (notes_applied, the owner 2026-10-28)
+                # the model's call. It was asked to SAY which, by their ids (notes_applied, 2026-10-28) - an answer nothing ever read, so
+                # only the old shape still asks (lean, 2026-11-11)
                 system += ('\n\nEVIDENCE - the owner\'s own word that may bear on this: verdicts they gave on earlier mail that looks related '
                            '(each names the sender and subject it was given on, and what it is about) and what they told you they care '
                            'about, or do not' + (' - each starts with its id in brackets; name in "notes_applied" the ids of the ones that '
-                                                  'bear on this message and that you applied, [] when none does' if note_ids else '')
+                                                  'bear on this message and that you applied, [] when none does' if note_ids and not lean else '')
                            + ':\n' + '\n'.join(f'- {n}' for n in notes)
                            + (f'\n({notes_left} further note(s) also apply to this sender but did not fit.)' if notes_left else ''))
             if watch: system += "\n\nTHE REPORT'S BRIEF - why the owner runs this report and what they watch for:\n" + str(watch)[:1200]
@@ -958,12 +1024,15 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '**offer**' not in base: system += '\n\n' + OFFER        # ...and what an agent could do for them (2026-10-28)
             if not shape and '**needs_browser**' not in base: system += '\n\n' + NEEDS_BROWSER   # ...and whether it is done on a web page (2026-10-29)
             if not shape and '**needs_desktop**' not in base: system += '\n\n' + NEEDS_DESKTOP   # ...or in a desktop app (2026-10-31)
-            if not shape and '**wrapper**' not in base: system += '\n\n' + WRAPPER    # ...and what its sender did not write (2026-10-28)
+            if not shape and '**wrapper**' not in base: system += '\n\n' + worded(WRAPPER, lean)    # ...and what its sender did not write (2026-10-28)
             if '**thread**' not in base: system += '\n\n' + THREAD   # ...and the reading of the whole thread (2026-11-04)
             if '**watch**' not in base: system += '\n\n' + WATCH     # ...and the fourth verdict, someone else's to handle (2026-11-03)
             if watched and '**handled_elsewhere**' not in base: system += '\n\n' + HANDLED   # ...and whether a watched task looks handled (2026-11-01)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
-            if shape: system += '\n\n' + TASK_FIELDS
+            if shape: system += '\n\n' + worded(TASK_FIELDS, lean)
+            # ...and how little of it an answer needs: a brain held to the schema writes the rare keys as one group, any other leaves
+            # out what it has no answer for - under the shape, naming title and summary again as the two it may never drop
+            if lean: system += '\n\n' + (LEAN_MORE if getattr(llm, 'takes_want', None) else lean_out(candidates is not None))
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
             # provider enforces cannot be talked out of by a longer message. `need` is the recheck
             # behind it, for a CLI brain that has no wire to put a schema on - one more ask, naming
@@ -972,11 +1041,12 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             system = stable(fixed, menus, memory, rest=system, ttl='1h')
             answer = ask_json(llm, system, user, want=verdict_schema(candidates, playbooks, same=bool(same_ids), goals=bool(goal_steps),
                                                                      coding=coding, workflows=workflows, earlier=bool(earlier_ids), thread_task=bool(home),
-                                                                     notes=bool(note_ids), workstreams=bool(workstreams), watched=watched),
+                                                                     notes=bool(note_ids), workstreams=bool(workstreams), watched=watched, lean=lean),
                               need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
                               **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
             if j is None: raise Unreadable(answer.error or 'the response was not JSON')
+            j = unfolded(j)
             if j.get('intent') in INTENTS:
                 # `kind` is the model's SECOND verdict and it ROUTES the task to one of three
                 # places: coding starts an agent, general opens the assistant's chat, task goes on
@@ -1026,9 +1096,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 rw = [{'n': x['n'], 'text': ' '.join(str(x.get('text') or '').split())[:300]} for x in (j.get('reword') if isinstance(j.get('reword'), list) else [])
                       if isinstance(x, dict) and isinstance(x.get('n'), int) and str(x.get('text') or '').strip()][:6]
                 if rw: out['reword'] = rw
-                # notes_applied: only the ids of notes it was shown - which standing notes bore on this message is the model's word
+                # notes_applied, on the old shape only: the ids of notes it was shown. Nothing reads it, so the lean answer has none
                 applied = j.get('notes_applied') if isinstance(j.get('notes_applied'), list) else []
-                if note_ids: out['notes_applied'] = [i for i in dict.fromkeys(str(x) for x in applied) if i in note_ids]
+                if note_ids and not lean: out['notes_applied'] = [i for i in dict.fromkeys(str(x) for x in applied) if i in note_ids]
                 # serves: only a goal and a step it was actually shown - a step it made up lands nowhere (spec 2026-10-12)
                 sv = j.get('serves') if isinstance(j.get('serves'), dict) else {}
                 try: gt = int(sv.get('task')) if sv.get('task') is not None else None
@@ -1072,6 +1142,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if wide and wide.lower() not in ('null', 'none') and not out.get('refines') and (home or same_ids or candidates is not None):
                     out['task_title'] = wide
                 if j.get('data_class') in DATA_CLASSES: out['data_class'] = j['data_class']
+                # ...left out on the lean answer it IS ordinary - the one answer that was recorded where a missing one was not (store.judge_task)
+                elif lean and 'data_class' not in j: out['data_class'] = 'ordinary'
                 offer = ' '.join(str(j.get('offer') or '').split())[:240]
                 if out['intent'] in ('task', 'reply_only') and offer and offer.lower() not in ('null', 'none'):
                     out['offer'] = offer
@@ -1085,7 +1157,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     out['danger'] = dg
                     if j.get('danger_aim') in ('owner', 'agent'): out['danger_aim'] = j['danger_aim']
                 # the text around the sender's words that they did not write - what a screen leaves out (strip_wrapper)
-                wr = wrapper_in(j, f"{msg.get('body') or ''}\n{msg.get('own_text') or ''}")
+                wr = wrapper_in(j, msg.get('body') or '', msg.get('own_text') or '')
                 if wr: out['wrapper'] = wr
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, watch, or fyi"

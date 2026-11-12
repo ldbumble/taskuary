@@ -251,7 +251,7 @@ class TheMark(unittest.TestCase):
 
     def test_triage_is_asked_and_keeps_it_on_a_task_only(self):
         from taskuary import triage
-        self.assertIn('needs_desktop', triage.verdict_schema()['schema']['properties'])
+        self.assertIn('needs_desktop', triage.verdict_schema()['schema']['properties']['more']['properties'])
         self.assertIn('**needs_desktop**', triage.SHIPPED)
 
     def test_a_task_sessions_brief_names_it_only_on_a_marked_task(self):

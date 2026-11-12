@@ -34,7 +34,12 @@ from .triage import addressed_to_you
 from .categories import route_intent
 
 LABELS = ('task', 'reply_only', 'watch', 'fyi')
-RETRIES = 2                  # a model call that fails or garbles is retried this often before it counts as unusable
+WORK = ('task', 'reply_only')   # work vs nothing: a reply is work too (the owner, 2026-11-12: "things that just get reply are also task")
+# the joining answers a case may be labelled with (`join`), scored beside the intent: same_as a tid or None, new_job whether one was
+# said, relationship and same_problem for a chat line. A case carries the evidence they are chosen from in `given` (open_work,
+# thread_task, room_tasks, combine, agent_on_it ...) and a chat's same-day lines in `same_day_lines`, as judge would hand them over
+JOIN_KEYS = ('same_as', 'new_job', 'relationship', 'same_problem')
+RETRIES = 2                 # a model call that fails or garbles is retried this often before it counts as unusable
 ACCEPT_AFTER_DAYS = 3        # an untouched triage call this old is taken as accepted (weakly)
 
 
@@ -273,11 +278,12 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     soul, job, system = store.doc('soul'), job_doc(store), (system if system is not None else store.doc('triage'))
     conf, rows, by_signal = Counter(), [], {'colleague_replied': Counter(), 'alone': Counter()}
     pconf = Counter()                  # (the owner's priority, triage's) where the owner set one by hand
+    jconf = {k: Counter() for k in JOIN_KEYS}
     by_channel = {}
     for c in cases:
         if not c.get('body'): continue
         msg = as_message(c)
-        thread = others_on_thread(thread_store(c), msg, mine)
+        thread = {**others_on_thread(thread_store(c), msg, mine), **(c.get('given') or {})}
         src = store if notes == 'today' else _AsOf(store, c.get('sent_at')) if notes == 'asof' else None
         ns, left = relevant_notes(src, [msg['from_email'] or ''], f"{msg['subject']} {msg['body']}"[:4000], subject=msg['subject']) if src else ([], 0)
         # the memory as the funnel reads it for THIS mail: what the owner cares about, and the people lines about whoever is on it
@@ -289,11 +295,13 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
             if attempt: time.sleep(2 * attempt)
             with aiusage.asking('triage.eval'):       # an evaluation's calls are not the day's triage (the usage row's Caller)
                 v = classify_intent(msg, llm=llm, soul=soul, job=job, thread=thread, learned=lrn, notes=ns,
-                                    notes_left=left, system=system, mine=me, lean=lean)
+                                    notes_left=left, system=system, mine=me, lean=lean, candidates=c.get('same_day_lines'))
         # the funnel FILES an answer it cannot read (ingest: 'degraded' -> filed, never assumed
         # work); no model at all is no verdict - scored as such, never as a keyword guess (2026-10-11)
         got = 'fyi' if v.get('degraded') else v.get('intent') or 'unjudged'
         conf[(c['label'], got)] += 1
+        joined = {k: (bool(v.get(k)) if k == 'new_job' else v.get(k)) for k in JOIN_KEYS if k in (c.get('join') or {})}
+        for k, x in joined.items(): jconf[k][x == c['join'][k]] += 1
         if c.get('priority_label'): pconf[(c['priority_label'], v.get('priority') or 'regular')] += 1
         by_signal['colleague_replied' if thread.get('others_replied') else 'alone'][got == c['label']] += 1
         by_channel.setdefault(c.get('channel') or '?', Counter())[got == c['label']] += 1
@@ -303,9 +311,12 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
                      'regex_kind': draft_task_fields(msg)['kind'], 'model_kind': v.get('kind'),
                      # how hard and how sure the reader said it was (the router's judgements, 2026-10-25) - unlabelled, so shown, not scored
                      'difficulty': v.get('difficulty'), 'sure': v.get('sure'),
-                     'others_replied': thread.get('others_replied') or [], 'subject': c.get('subject')})
+                     'others_replied': thread.get('others_replied') or [], 'subject': c.get('subject'),
+                     'join': joined, 'join_ok': all(x == c['join'][k] for k, x in joined.items())})
     n = sum(conf.values()); ok = sum(v for (a, b), v in conf.items() if a == b)
     out = {'n': n, 'accuracy': (ok / n) if n else None, 'confusion': {f'{a}->{b}': v for (a, b), v in sorted(conf.items())},
+           'work_vs_nothing': sum(v for (a, b), v in conf.items() if (a in WORK) == (b in WORK)),   # a watch is not the owner's work
+           'join': {k: {'right': v[True], 'wrong': v[False]} for k, v in jconf.items() if v},
            'degraded': sum(r['degraded'] for r in rows),
            'by_signal': {k: {'right': v[True], 'wrong': v[False]} for k, v in by_signal.items()},
            'by_channel': {k: {'right': v[True], 'wrong': v[False]} for k, v in sorted(by_channel.items())}, 'rows': rows,
@@ -314,12 +325,15 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     if verbose:
         print(f"{n} cases, accuracy {out['accuracy']:.0%}" + (f" ({out['degraded']} model answers unusable - scored as filed)" if out['degraded'] else '')
               if n else 'no cases with a body to classify')
+        if n: print(f"  work vs nothing right {out['work_vs_nothing']} of {n}")
         for k, v in out['confusion'].items(): print(f'  {k:22s} {v}')
+        for k, v in out['join'].items(): print(f"  join {k:13s} right {v['right']:3d}  wrong {v['wrong']:3d}")
         for k, v in out['by_signal'].items(): print(f"  {k:18s} right {v['right']:3d}  wrong {v['wrong']:3d}")
         for k, v in out['by_channel'].items(): print(f"  {k:18s} right {v['right']:3d}  wrong {v['wrong']:3d}")
         if out['priority']['n']: print(f"  priority (where you set one by hand): {out['priority']['right']} of {out['priority']['n']} {out['priority']['confusion']}")
         for r in rows:
             if not r['ok']: print(f"  MISS {r['id']:7s} owner={r['label']:10s} triage={r['got']:10s} [{r['source']}] {r['subject'][:60]}")
+            if not r['join_ok']: print(f"  JOIN MISS {r['id']:7s} got {r['join']}")
     return out
 
 

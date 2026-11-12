@@ -232,5 +232,56 @@ class DatasetTests(unittest.TestCase):
                 self.assertTrue(not p.get('from') or p['from'].endswith('.example'), (c['id'], p.get('from')))
 
 
+class JoinSetTests(unittest.TestCase):
+    """The joining set (tests/data/triage_join.jsonl, invented shapes and the seeds with their tasks): evaluate hands the classifier
+    the evidence each case carries - the thread's task, the room's tasks and lines, the open work, the combine level - and scores
+    same_as / new_job / relationship / same_problem where a case is labelled with them. A model is measured on it by the real CLI;
+    here an oracle answering with the labels must score every one right, and one that never joins must score the joins wrong."""
+    def cases(self): return evalset.read(DATA / 'triage_join.jsonl')
+
+    def run_with(self, answer):
+        key = lambda body, cb: (body[:15], (cb or {}).get('level'))       # the prompt's body is the sender's own words, top first
+        by = {key(c['body'], (c.get('given') or {}).get('combine')): c for c in self.cases()}
+        seen = []
+        def llm(sys_, usr_, **kw):
+            u = json.loads(usr_); seen.append(u)
+            c = by[key(u['body'], u.get('combine'))]
+            return json.dumps({'intent': c['label'], 'why': 'oracle', **answer(c)})
+        return evalset.evaluate(MemoryStore(), self.cases(), llm, verbose=False), seen
+
+    def test_the_set_is_well_formed_and_covers_every_shape(self):
+        cs = self.cases()
+        self.assertGreaterEqual(len(cs), 12)
+        for c in cs:
+            self.assertIn(c['label'], evalset.LABELS, c['id'])
+            self.assertTrue(set(c['join']) and set(c['join']) <= set(evalset.JOIN_KEYS), c['id'])
+        keys = {k for c in cs for k in c['join']}
+        self.assertEqual(keys, set(evalset.JOIN_KEYS))
+        self.assertEqual({(c.get('given') or {}).get('combine', {}).get('level') for c in cs if c['channel'] == 'teams'}, {1, 2, 3, 4, 5})
+
+    def test_the_oracle_scores_every_join_right_and_the_evidence_reaches_the_prompt(self):
+        def right(c):
+            j = c['join']
+            out = {k: v for k, v in j.items() if k in ('same_as', 'same_problem', 'relationship')}
+            if j.get('new_job'): out['new_job'] = 'a different ask'
+            if 'same_problem' in j: out['relationship'] = 'continues' if j['same_problem'] else 'new'
+            if out.get('relationship') == 'continues': out['existing_task_id'] = 70
+            return out
+        res, seen = self.run_with(right)
+        self.assertEqual(res['accuracy'], 1.0)
+        self.assertEqual(sum(v['wrong'] for v in res['join'].values()), 0, res['join'])
+        self.assertEqual(sum(v['right'] for v in res['join'].values()), len(self.cases()))
+        self.assertTrue(all(any(k in u for k in ('thread_task', 'room_tasks', 'open_work', 'open_items')) for u in seen))
+        self.assertTrue(all('same_day_lines' in u for u in seen if 'room_tasks' in u))
+
+    def test_a_reader_that_never_joins_is_scored_wrong_on_every_join(self):
+        res, _ = self.run_with(lambda c: {'new_job': 'another job', 'relationship': 'new', 'same_problem': False} if 'same_as' not in c['join'] else {})
+        joins = lambda k, f: sum(1 for c in self.cases() if k in c['join'] and f(c))
+        self.assertEqual(res['join']['same_as']['wrong'], joins('same_as', lambda c: c['join']['same_as'] is not None))
+        self.assertEqual(res['join']['same_problem']['wrong'], joins('same_problem', lambda c: c['join']['same_problem']))
+        # ...a new_job is kept only on work (an fyi stays on its thread for the chain), so a "joins" label on an fyi still scores right
+        self.assertEqual(res['join']['new_job']['wrong'], joins('new_job', lambda c: not c['join']['new_job'] and c['label'] in evalset.WORK))
+
+
 if __name__ == '__main__':
     unittest.main()

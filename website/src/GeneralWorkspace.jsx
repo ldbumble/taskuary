@@ -16,7 +16,7 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue,  eventsOf, hasParts,  partsMessage, turnParts, workCount } from "./chatStream.js";
+import { chatSource, checkBackDue,  eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount } from "./chatStream.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
@@ -520,12 +520,17 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
   useEffect(() => {
     const v = viewport.current, el = inner.current;
     if (!v || !el) return undefined;
-    const on = () => { stick.current = v.scrollHeight - v.scrollTop - v.clientHeight < 56; };
+    // ...HIS scroll, not the chat's own growth (chatStream.heldAtEnd): a wheel, a finger, a key, or a press still down (the scrollbar's drag)
+    let was = v.scrollTop, used = -Infinity;
+    const mine = () => { used = performance.now(); }, down = () => { used = Infinity; };
+    const on = () => { stick.current = heldAtEnd(stick.current, { top: v.scrollTop, was, gap: v.scrollHeight - v.scrollTop - v.clientHeight, own: performance.now() - used < 1500 }); was = v.scrollTop; };
     const ro = new ResizeObserver(() => { if (stick.current) v.scrollTop = v.scrollHeight; });
     // ...and when the VIEW itself gets shorter - the box under it grew a line as he typed - as when the chat gets longer (the recorded walks,
     // 2026-11-11: 14 px behind its end for a beat each time)
     v.addEventListener("scroll", on, { passive: true }); ro.observe(el); ro.observe(v);
-    return () => { v.removeEventListener("scroll", on); ro.disconnect(); };
+    const off = [[v, "wheel", mine], [v, "touchmove", mine], [v, "pointerdown", down], [window, "pointerup", mine], [window, "pointercancel", mine], [document, "keydown", mine]];
+    off.forEach(([t, n, f]) => t.addEventListener(n, f, { passive: true, capture: true }));
+    return () => { v.removeEventListener("scroll", on); ro.disconnect(); off.forEach(([t, n, f]) => t.removeEventListener(n, f, { capture: true })); };
   }, [!!list]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...after EVERY draw, not only the list's: a card's own words (the page's node) grow the chat too
   React.useLayoutEffect(() => { const v = viewport.current; if (v && stick.current && v.scrollTop + v.clientHeight < v.scrollHeight) v.scrollTop = v.scrollHeight; });

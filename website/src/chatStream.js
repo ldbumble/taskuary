@@ -131,3 +131,10 @@ export const checkBackDue = (w) => (/^TASKUARY: the check-back you set on this t
 // ...and in the general chat a turn after a press is the same turn going on: no new head, unless an input came between (isInput)
 export const continues = (messages, i) => { for (let j = i - 1; j >= 0; j--) { const m = messages[j];
   if (m?.role === "assistant") return true; if (isInput(m)) return false; } return false; };
+/* IS THE CHAT STILL HELD AT ITS END, after a scroll event (the owner, 2026-11-11: "task should open on last thing not randomly in middle")?
+   Only HIS OWN scroll up lets go of it (`own`: a wheel, a finger, a key or a press just before; `top` under `was`), and coming back to the end
+   takes it again. A scroll event that finds the end far away is NOT him: the chat grew between the pin and the event - forty "Show all"
+   buttons measured in after the first draw, a picture getting its size - and reading that as "he moved away" left a long chat opened ~900px
+   short of its end, never to follow again. */
+export const AT_END = 56;
+export const heldAtEnd = (held, { top, was, gap, own }) => gap < AT_END || (held && !(own && top < was - 1));

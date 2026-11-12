@@ -120,15 +120,14 @@ def waiting(store) -> list:
 
 def due(store) -> bool:
     """A day (lookout_every_days) since the last pass that got an answer, RETRY_H since one that did not, and room on the rail: never more
-    than MAX_OPEN of these waiting at once."""
-    if len(waiting(store)) >= MAX_OPEN: return False
+    than MAX_OPEN of these waiting at once - the rail read last, only on a tick whose day is up."""
     last, tried = store.get_setting(LAST_KEY) or '', store.get_setting(TRIED_KEY) or ''
     if tried and tried > _ago(hours=RETRY_H): return False
-    if not last: return True
     every = _every(store)
     # once a calendar day, from the morning: not run today and it is past MORNING_H, or a whole day has gone by whatever the hour
-    if every <= 1: return last[:10] < _ts(_now())[:10] and (_now().hour >= MORNING_H or last <= _ago(days=1))
-    return last <= _ago(days=every)
+    if last and not (last[:10] < _ts(_now())[:10] and (_now().hour >= MORNING_H or last <= _ago(days=1)) if every <= 1
+                     else last <= _ago(days=every)): return False
+    return len(waiting(store)) < MAX_OPEN
 
 
 # ── WHAT IT READS ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

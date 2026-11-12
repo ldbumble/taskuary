@@ -109,12 +109,19 @@ class Holding(unittest.TestCase):
         self.assertEqual(len(self.pending()), n)
         self.assertIsNone(self.s._one("SELECT * FROM review WHERE TaskId=? AND Status='superseded'", (self.tid,)))
 
-    def test_the_prompt_hook_leaves_a_held_step_lit_whatever_the_prompt(self):
+    def test_the_prompt_hook_sets_a_held_step_aside_when_he_writes_never_on_a_wake(self):
+        """2026-11-12, one rule for every card: a line he types past a held step greys it in its place and the agent is told so - raised again
+        if still needed. A background job's wake is no line of his: the step stays lit."""
+        from taskuary import proposals
         self.held(); [rv] = self.pending()
         t = SimpleNamespace(store=self.s, task_id=self.tid, sid='run1', bg={})
-        for said in ('carry on', '<task-notification>done</task-notification>', 'no, leave the checkout - is it ready to push?'):
-            hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': said})
-            self.assertEqual([r['ReviewId'] for r in self.pending()], [rv['ReviewId']], said)
+        hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': '<task-notification>done</task-notification>'})
+        self.assertEqual([r['ReviewId'] for r in self.pending()], [rv['ReviewId']], 'a wake leaves it lit')
+        told = []
+        with mock.patch('taskuary.general.tell', lambda st, tid, note, actor='owner': told.append(note) or 'told'):
+            hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': 'no, leave the checkout - is it ready to push?'})
+        self.assertEqual(self.pending(), []); self.assertTrue(proposals.passed(self.s.get_review(rv['ReviewId'])))
+        self.assertTrue(told and proposals.PASSED_TOLD in told[0] and f"rv{rv['ReviewId']}" in told[0], told)
 
     def test_the_agents_own_words_for_the_call_ride_on_the_card(self):
         sg.check(self.s, self.tid, 'run1', 'git push origin fix-export', 'Bash', r'C:\work\ledger', about='  ship the export fix  ')

@@ -979,6 +979,24 @@ def adopt_brain_setting(store) -> bool:
     return True
 
 
+def default_ask(store) -> dict:
+    """THE DEFAULT AI IS NEVER CHOSEN SILENTLY (the owner, 2026-11-11: "never change from what's in settings"). A start names the
+    brain an install runs on (above) - with one CLI that is no choice at all; with several it took the first that was ready, and
+    a day of work ran on a tool nobody picked. So while more than one CLI runs here and the default is nobody's own - blank, or
+    written by a start - the one question is owed: {'runs': what work is on meanwhile, 'options': the CLIs}. {} once the owner
+    chose (the setting's writer is theirs), and with a single CLI. It asks; it never writes."""
+    ready = ready_brains(store)
+    v = str(store.get_setting('default_brain') or '').strip()
+    if len(ready) < 2 or (v and store.setting_writer('default_brain') != 'migration'): return {}
+    from .clis import KNOWN
+    label = {k['cmd']: k['label'] for k in KNOWN}
+    runs, names = default_brain(store), [label.get(k, k) for k in ready]
+    return {'runs': runs, 'options': ready, 'title': 'Choose your default AI',
+            # one sentence for the bell and the Settings card alike: what is connected, what runs meanwhile and why, where to say
+            'detail': f"{', '.join(names[:-1])} and {names[-1]} are both connected, and nobody chose between them: work runs on "
+                      f"{label.get(runs, runs)} because it was ready first. Pick the one you want under Settings, Coding agent."}
+
+
 BRAIN_SETTINGS = ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai', 'draft_ai')
 
 

@@ -212,6 +212,11 @@ def _resolve(store, cfg, slot_key: str) -> dict:
                    owner=f'the {key} connection' if key else '', owner_link='ai_apps', cli=cli, display=key, default=not value,
                    ready=bool(key))
         if not key: out['note'] = 'nothing will run yet - choose a CLI or an AI card above'
+        # ...and the one question a start may not answer for the owner (agents.default_ask), in the bell's own sentence, until it is
+        # answered here or put down there
+        from . import problems
+        from .agents import default_ask
+        if key and (ask := default_ask(store)) and 'default_ai' not in problems._dismissed(store): out.update(note=ask['detail'], ask=True)
         return out
 
     # the judge: blank has a second meaning here (the report's own brain, which is what this did

@@ -42,7 +42,7 @@ NEWS = 'problems:news'                # {key: what ended, and when} - the text i
 THINKING = 'problems:thinking'        # {'at': when the brain went down} for as long as the outage lasts
 AWAY = 'problems:mail_away:'          # + connector id: {'at', 'seen'} while Microsoft has the owner signed out
 OPEN = 'problems:open'                # {key: the failure as last seen, 'from' its start, 'shown' once it rang} while it lasts
-OWN_NEWS = ('signed_out', 'thinking')  # these two say their own end (watch_mail, thinking) - no second line for them
+OWN_NEWS = ('signed_out', 'thinking', 'ask')  # the first two say their own end (watch_mail, thinking), and a question's end is its answer
 
 
 def _now(): return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -320,6 +320,12 @@ def collect(store, all_of_them: bool = False) -> list:
     if held := auto_held(store):
         out.append({'key': 'auto_ai_cap', 'title': 'Automatic AI work is paused for today', 'detail': held[0].upper() + held[1:] + '.',
                     'since': datetime.now().strftime('%Y-%m-%d'), 'now': True, 'where': 'Settings', 'fix': 'Open Settings'})
+    # ...and the one question a start may not answer for the owner: which AI is the default, with several connected (agents.default_ask).
+    # Asked once - put down, it stays down; answered in Settings, it is gone and says no "working again"
+    from .agents import default_ask
+    if ask := default_ask(store):
+        out.append({'key': 'default_ai', 'title': ask['title'], 'detail': ask['detail'], 'since': datetime.now().strftime('%Y-%m-%d'),
+                    'now': True, 'where': 'Settings', 'fix': 'Open Settings', 'kind': 'ask'})
     # A REPORT'S FAILURE LIVES HERE AND NOWHERE ELSE (the owner, 2026-09-28): a failed run files no row, so
     # this reads each report's latest run - failed, or run without one of its sources - and clears itself
     # the moment a run works again

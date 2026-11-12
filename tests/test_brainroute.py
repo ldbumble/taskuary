@@ -154,6 +154,35 @@ def test_a_saved_model_follows_the_brain_it_was_saved_for(real):
             assert brainroute.choose(s, 'general').model == 'claude-sonnet-5-5', 'and it is back with its brain'
 
 
+def test_the_default_ai_is_asked_once_and_a_choice_is_never_written_over(real):
+    """The live shape: two CLIs connected, a start named the first one ready as the default, and a day of work ran on a tool
+    nobody picked. With several, the one question is owed - on the bell and on the Settings card - until answered or put down."""
+    from taskuary import aidefaults, problems
+    real.update({'claude', 'codex'})
+    s, cfg, _ = _home(('claude', 'codex'), {'claude': True, 'codex': True})
+    with mock.patch.object(config, 'load', lambda: cfg):
+        clic.sync(cfg, s)
+        assert agents.adopt_brain_setting(s) and s.setting_writer('default_brain') == 'migration'
+        ask, bell = agents.default_ask(s), lambda: [p for p in problems.collect(s) if p['key'] == 'default_ai']
+        assert sorted(ask['options']) == ['claude', 'codex'] and ask['runs'] == s.get_setting('default_brain')
+        assert len(bell()) == 1 and bell()[0]['where'] == 'Settings'
+        card = aidefaults.resolve(s, cfg, 'default_brain')
+        assert card.get('ask') and card['note'] == ask['detail'] == bell()[0]['detail'], 'one sentence, said in both places'
+        problems.dismiss(s, 'default_ai')                              # put down: it was asked, once
+        assert not bell() and not aidefaults.resolve(s, cfg, 'default_brain').get('ask')
+        assert s.setting_writer('default_brain') == 'migration', 'putting it down chose nothing for them'
+        s.set_setting(problems.DISMISSED, '{}', 't')
+        s.set_setting('default_brain', 'claude', 'owner')              # answered: theirs from here on
+        assert agents.default_ask(s) == {} and not bell() and not agents.adopt_brain_setting(s)
+        assert s.get_setting('default_brain') == 'claude' and not problems.news(s), 'no "working again" for an answered question'
+    real.clear(); real.add('codex')
+    s, cfg, _ = _home(('codex',), {'codex': True})
+    with mock.patch.object(config, 'load', lambda: cfg):
+        clic.sync(cfg, s)
+        assert agents.adopt_brain_setting(s) and agents.default_ask(s) == {}, 'one CLI is no choice: it is used, and shown'
+        assert aidefaults.resolve(s, cfg, 'default_brain')['value'] == 'cli:codex'
+
+
 def test_a_browser_task_still_takes_the_brain_with_hands(real):
     s, cfg, _ = _home(('codex',), {'codex': True}, connector='anthropic')
     real.add('codex')

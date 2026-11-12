@@ -15,6 +15,8 @@ const real = [exe, path.dirname(where("npx")[0])          /* the folder npx is i
 // THE AGENTS' BROWSER, KEPT IN THE SCRATCH HOME (REAL_BROWSER=1; a walk of the browser): the CLI signs in from the person's own profile, and the
 // browser driver keeps its sessions under whatever profile it is run with - so it is run through a stand-in of its name that hands it the
 // scratch profile (the folder above AGENT_BROWSER_HOME, harness.mjs). Nothing of a walk is written to the person's own driver folder.
+// ...REAL_EXTRA_PATH: more folders of programs - an ACP adapter installed in a scratch folder (npm i --prefix), found on PATH as the owner's own
+if (process.env.REAL_EXTRA_PATH) real.unshift(...process.env.REAL_EXTRA_PATH.split(path.delimiter));
 if (process.env.REAL_BROWSER === "own") real.push(path.dirname(where("agent-browser")[0]));
 else if (process.env.REAL_BROWSER) {
   const exe = path.join(path.dirname(where("agent-browser")[0]), "node_modules", "agent-browser", "bin", "agent-browser-win32-x64.exe"), shim = path.join(out, "shim");
@@ -40,6 +42,9 @@ exec "$(cygpath -u '${exe}')" "$@"
   real.unshift(bin); }
 process.env.TASKUARY_BROWSER_REAL_CLI = real.join(path.delimiter);
 const h = await startHarness({ fresh: true });
+// ...AND npx RUNS IN IT (the coding walk, 2026-11-12): APPDATA is the scratch home's, with no npm folder, so `npx -y <the ACP adapter>` failed
+// and every coding session fell back to its terminal - a road the owner's own machine does not take
+await mkdir(path.join(h.home, "appdata", "npm"), { recursive: true });
 const api = (p, body) => fetch(`${h.fixtureApi}${p}`, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: body && JSON.stringify(body) }).then((r) => r.json());
 console.log("ai", JSON.stringify(await api("/api/setup/first-run/ai", { name: "claude" })).slice(0, 300));
 await api("/api/setup/dismiss", { dismissed: true });

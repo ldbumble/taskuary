@@ -169,7 +169,8 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
   if (process.env.TID) tid = Number(process.env.TID);
   else if (road === "general" || road === "stranger") {
     // ...TOPIC_SUBJECT / TOPIC_BODY: another ask than the venue one - a second walk of one instance with the same words is read as the same mail again
-    const got = await api("/api/ingest/push", { channel: "email", subject: process.env.TOPIC_SUBJECT || "Offsite venue", ...who, conversation_id: `conv-${name}`,
+    // ...TOPIC_CHANNEL: the entry as a chat message (whatsapp, teams) - no subject, the sender's words alone
+    const got = await api("/api/ingest/push", { channel: process.env.TOPIC_CHANNEL || "email", subject: process.env.TOPIC_CHANNEL ? "" : process.env.TOPIC_SUBJECT || "Offsite venue", ...who, conversation_id: `conv-${name}`,
       body: (process.env.TOPIC_BODY || "Hi Alex,\n\nCan you suggest two venues for the March offsite, about 40 people, and tell me which one you would pick? A short answer is fine.\n\nThanks,\nGail").replace(/\\n/g, "\n") });
     console.log("push", JSON.stringify(got).slice(0, 200)); tid = got.task_id;
   // ...`new`: a task he made himself with New - no mail, no typed line: its ask is the task's own words, and its agent is started as the page starts it

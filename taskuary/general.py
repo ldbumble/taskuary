@@ -1695,21 +1695,25 @@ WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: a turn that asks still does 
 # (playbooks.take_lesson), and one with no playbook to go in lands in LEARNED.md, the one road every learned fact takes
 # WHAT IS LEARNED REACHES THE AGENT (the owner, 2026-11-05: "what learned.md goes to the general agent?" - none did; only `taskuary
 # --memory` on its own say): the trusted lines of LEARNED.md nearest this task, a small block - lean, the rest one command away. The
-# hypotheses still under test stay out (learn.injectable), as they do for triage
+# hypotheses still under test stay out, as they do for triage
+# ...down the ONE road every reader takes (learned_cut.for_reader, 2026-11-12): it was a second one - every bullet of the document in its own
+# order wherever no embedder ranked them, so the first 1,500 characters were the people lines about EVERYONE (the owner, 2026-10-25: an
+# agent reads how the owner deals with the people on its own task, never the rest) and the verdict lines about other senders. The people
+# on this task come in its brief (context.build); this is the rest - what the owner cares about, how they work, promises - nearest first
 LEARNED_CHARS = 1_500
-def learned_block(store, about: str, budget: int = LEARNED_CHARS) -> str:
-    from . import learn, textsim
-    try: doc = learn.injectable(store.doc(learn.DOC) or '')
+def learned_block(store, tid: int, budget: int = LEARNED_CHARS) -> str:
+    from . import learned_cut
+    from .workstreams import of_task
+    try:
+        t = store.get_task(tid) or {}
+        who = next((str(m.get('FromEmail') or '').lower() for m in reversed(store.list_messages(tid))
+                    if m.get('FromEmail') and str(m.get('Direction') or 'in') != 'out'), '')
+        about = {'sender': who, 'domain': who.rsplit('@', 1)[-1] if '@' in who else '', 'workstream': of_task(store, tid),
+                 'topic': f"{t.get('Title') or ''} {t.get('Summary') or ''}"}
+        got = learned_cut.for_reader(store, 'agents', about, budget=budget, target=f'task:{tid}', sections=('care', 'work', 'promises', 'bring'))
     except Exception as e: logger.debug(f'learned block: {e}'); return ''
-    lines = [l.strip() for l in doc.splitlines() if l.strip()[:1] in '-*' and len(l.strip()) > 2]
-    if not lines: return ''
-    try: got = textsim.rank(store, about, [(str(i), l) for i, l in enumerate(lines)], least=0.0)
-    except Exception: got = None
-    order = [lines[int(k)] for k, _ in got] if got else lines
-    out, used = [], 0
-    for l in order:
-        if out and used + len(l) > budget: break
-        out.append(l); used += len(l) + 1
+    out = [l for l in got.splitlines() if l.startswith('- ')]
+    if not out: return ''
     # ...and how to lean on them (2026-11-09, after the Model Spec's ladder): silently when little rides on it, named when it decides money,
     # a recipient or a date - and never over the thread, which is newer than anything learned
     return ('WHAT TASKUARY HAS LEARNED ABOUT THE OWNER - the lines nearest this task (`taskuary --memory` prints all of it). Use them '
@@ -1881,8 +1885,7 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     outsider = _origin.of_task(store, tid)[0] == 'stranger'
     from .workstreams import of_task as _ws_of           # ...JOB.md as this task's workstream reads it (2026-11-01)
     owner_bg = '' if outsider else _brief.background(store, workstream=_ws_of(store, tid) or None, drop=_brief.GENERAL_HAS)
-    task_ = store.get_task(tid) or {}
-    known = '' if outsider else learned_block(store, f"{task_.get('Title') or ''}\n{task_.get('Summary') or ''}")
+    known = '' if outsider else learned_block(store, tid)
     late = [known]
     system = (
         (f'{owner_bg}\n\n' if owner_bg else '') +

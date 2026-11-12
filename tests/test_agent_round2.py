@@ -298,9 +298,32 @@ def test_the_general_agent_reads_the_learned_lines_nearest_its_task():
     system = general._prompt(s, tid)[0]
     assert 'WHAT TASKUARY HAS LEARNED ABOUT THE OWNER' in system and 'Payworth is vendor 4471' in system and '--memory' in system
     # ...counted in learned lines, not characters: the head now says how to lean on them too (2026-11-09)
-    assert general.learned_block(s, 'x', budget=10).count('\n- ') == 1, 'held to its budget: the first line, never the whole doc'
+    assert general.learned_block(s, tid, budget=45).count('\n- ') == 1, 'held to its budget: whole lines, never the whole doc'
     with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'unknown sender')):
         assert 'WHAT TASKUARY HAS LEARNED' not in general._prompt(s, tid)[0], "a stranger's task is never told who the owner is"
+
+
+def test_the_general_agent_never_reads_the_owners_lines_about_people_off_its_task():
+    """Its learned block was every bullet of LEARNED.md in the document's order wherever no embedder ranked them - so the people lines
+    about EVERYONE came first, and the verdict lines about other senders after (the memory audit, 2026-11-12). The owner, 2026-10-25: an
+    agent reads how the owner deals with the people on its own task, never the rest. One road now: learned_cut.for_reader."""
+    from taskuary import context, learn, learned_cut as lc
+    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 'o')
+    tid = s.create_task({'Title': 'Offsite venues for March', 'Kind': 'general', 'Status': 'open'}, 'o')
+    s.add_message({'TaskId': tid, 'ExternalId': 'g1', 'Channel': 'email', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example',
+                   'Subject': 'Offsite venues', 'BodyText': 'Two venues for March?', 'Status': 'routed'})
+    doc = s.get_doc(learn.DOC)
+    for head, ls in ((lc.PEOPLE, ['- You answer Erin Blake (erin@northwind.example) the same morning', '- Gail Moreno (gail@northwind.example) books the offsites']),
+                     (lc.CARE, ['- Payroll questions are never yours', '- Weekly digests from this sender are reading only (about: digest@vendor.example)',
+                                '- Venue quotes from this sender go to Paula (about: gail@northwind.example)']),
+                     (lc.WORK, ['- You batch expense approvals on Monday mornings'])):
+        doc = doc.replace(head + '\n', head + '\n' + '\n'.join(ls) + '\n', 1)
+    s.save_doc(learn.DOC, doc, 'owner')
+    block, brief = general.learned_block(s, tid), context.for_prompt(s, tid)
+    assert 'Payroll questions are never yours' in block and 'Monday mornings' in block, 'what the owner cares about and how they work'
+    assert 'Venue quotes from this sender go to Paula' in block, 'a line about this very sender'
+    assert 'erin@northwind.example' not in block + brief and 'digest@vendor.example' not in block, 'nobody off the task'
+    assert (block + brief).count('books the offsites') == 1, "the task's own people once, in its brief"
 
 
 def test_a_message_that_changes_nothing_is_said_so_in_one_line():

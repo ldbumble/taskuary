@@ -1682,7 +1682,7 @@ class InlineVerbTests(unittest.TestCase):
     def _meeting(self):
         s = store()
         s.set_setting('calendar_enabled', '1', 't')
-        ev = [{'subject': 'AI Agents', 'start': ahead(20), 'end': ahead(50), 'who': ['Gail'],
+        ev = [{'subject': 'AI Agents', 'start': ahead(10), 'end': ahead(40), 'who': ['Gail'],
                'all_day': False, 'where': 'Teams', 'id': 'ev1'}]
         return s, ev
 

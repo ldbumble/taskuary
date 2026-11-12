@@ -44,7 +44,7 @@ def lane_section(lane) -> str: return (LANE.get(lane) or {}).get('section') or '
 
 
 def not_yet(item: dict) -> bool:
-    """A meeting on the timeline with nothing to say about it YET: it enters two hours out, and is urgent only inside ALERT_MIN."""
+    """A meeting on the timeline with nothing to say about it YET: it enters at ALERT_MIN, with its notification (2026-11-09)."""
     if item.get('kind') != 'meeting': return False
     if 'calendar_ready' in item: return not item['calendar_ready']
     return item.get('mins') is not None and item['mins'] > ALERT_MIN

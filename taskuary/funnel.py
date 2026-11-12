@@ -82,7 +82,7 @@ def mark_for(item: dict) -> str:
     if not item: return ''
     if owed_no_draft(item): return KIND_MARKS['owed']
     return KIND_MARKS.get(str(item.get('kind') or '')) or LANE_MARKS.get(str(item.get('lane') or ''), '')
-SOON_MIN, ALERT_MIN, STARTED_MIN = 120, lanes.ALERT_MIN, 5   # calendar visibility window; attention boundary (lanes.json `urgent`); grace after the start
+ALERT_MIN, STARTED_MIN = lanes.ALERT_MIN, 5   # when a meeting comes onto the rail and rings (lanes.json `urgent`); grace after the start
 SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand
 LATER_HOURS = 3                   # "not now" - it comes back this much later
 FEED_DAYS = 7
@@ -1611,9 +1611,8 @@ def fyi_batch_size(store) -> int:
     except (AttributeError, TypeError, ValueError): return FYI_BATCH
     return max(lo, min(hi, n))
 
-# On the timeline, but nothing to say about it YET - the walk skips it and comes back. A meeting enters the pipe two hours out
-# (SOON_MIN) so the day is visible, and the assistant opened with one still an hour and a half away, ahead of mail that wanted
-# answering now (the owner, 2026-09-04: "meetings should not go down into the chat until 15 minutes before like a agent in
+# On the timeline, but nothing to say about it YET - the walk skips it and comes back. A meeting once entered the pipe two hours
+# out, and the assistant opened with one still an hour and a half away, ahead of mail that wanted answering now (the owner, 2026-09-04: "meetings should not go down into the chat until 15 minutes before like a agent in
 # middel of working"). The same line that turns a meeting urgent (lanes.not_yet, at ALERT_MIN).
 _not_yet = lanes.not_yet
 

@@ -508,7 +508,7 @@ class LanesTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=parked):
             self.assertEqual([a['kind'] for a in funnel.alerts(s)], ['agent'])
 
-    def test_a_meeting_inside_two_hours_is_time_sensitive_and_inside_fifteen_minutes_interrupts(self):
+    def test_a_meeting_comes_onto_the_rail_fifteen_minutes_before_it_and_interrupts(self):
         s = store()
         m1 = mail(s, 'Export still broken', hours=5)
         s.add_route(m1, None, 'file', None, 'triage: fyi - a person told you something', [], 'triage')
@@ -519,7 +519,7 @@ class LanesTests(unittest.TestCase):
             p = funnel.build(s)
             al = funnel.alerts(s, p['items'])
         meetings = [i for i in p['items'] if i['kind'] == 'meeting']
-        self.assertEqual([m['title'] for m in meetings], ['Standup', 'Budget review'])
+        self.assertEqual([m['title'] for m in meetings], ['Standup'])      # 90 minutes out is the digest's strip, not the rail (2026-11-09)
         self.assertEqual(meetings[0]['lane'], 'time'); self.assertIn('with Priya, Marcus', meetings[0]['why'])
         self.assertEqual([a['kind'] for a in al], ['meeting']); self.assertIn('Standup starts in', al[0]['text'])
         funnel.settle(s, al[0]['key'], 'ack')
@@ -537,10 +537,9 @@ class LanesTests(unittest.TestCase):
         near = [{'start': ahead(10), 'end': ahead(40), 'subject': 'Standup', 'who': [], 'all_day': False}]
         with mock.patch.object(funnel, '_agenda', return_value=far):
             funnel.invalidate()
-            self.assertEqual([i['title'] for i in funnel.build(s)['items']], ['Budget review'])   # on the timeline
-            funnel.invalidate()
-            far_row = railwalk.top(s)                        # ...walked in its place like a task (Q3, 2026-10-30), never urgent yet
-            self.assertEqual(far_row['title'], 'Budget review'); self.assertFalse(lanes.is_urgent(far_row))
+            self.assertEqual([i['title'] for i in funnel.build(s)['items']], [])     # not on the rail yet: the owner, 2026-11-09, "a
+            funnel.invalidate()                                                           # notification 15 minutes before the meeting, not two hours"
+            self.assertNotEqual((railwalk.top(s) or {}).get('title'), 'Budget review')
         with mock.patch.object(funnel, '_agenda', return_value=near):
             funnel.invalidate()
             nxt = railwalk.top(s)

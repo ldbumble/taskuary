@@ -210,7 +210,7 @@ def _from_row(r: dict, store=None) -> dict:
             'subject': r.get('Subject'), 'from_name': r.get('FromName'), 'from_email': r.get('FromEmail'), 'sent_at': r.get('SentAt'),
             'body': r.get('BodyText'), 'own_text': r.get('OwnText'), 'source_link': r.get('SourceLink'), 'source_name': r.get('SourceName'),
             'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': _gh_no_auto(store, r), **({'images': images} if images else {}),
-            **({'file_text': files} if files else {})}
+            **({'file_text': files} if files else {}), **({'header_says': r['HeaderClass']} if r.get('HeaderClass') else {})}
 
 
 def _workflow_menu(store) -> str:
@@ -3456,6 +3456,8 @@ def _fields(msg, task_id):
                                                           **({'unsub': msg['unsub']} if isinstance(msg.get('unsub'), dict) else {})}) else None,
             # what the mail's own headers say sent it (categories.header_class) - the verdict overwrites it (store.add_route)
             'SenderClass': msg.get('sender_class') if msg.get('sender_class') in ('automated', 'bulk') else None,
+            # ...and kept as the headers said it, with the header that did, where the verdict never writes (HeaderClass, 2026-11-12)
+            'HeaderClass': msg.get('header_says') or None,
             # kept so a verdict can be replayed against the lines that decided it (evalset.py)
             'RecipientsJson': json.dumps({'to': list(msg.get('to') or []), 'cc': list(msg.get('cc') or [])})
                               if (msg.get('to') or msg.get('cc')) else None,

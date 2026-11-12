@@ -151,6 +151,8 @@ def build(store, include_weak: bool = True) -> list:
             'id': f"m{m['MessageId']}", 'channel': m.get('Channel'), 'conv': m.get('ConversationId'), 'sent_at': m.get('SentAt'),
             'from': m.get('FromEmail'), 'from_name': m.get('FromName'),
             'from_kind': _kind_of(m.get('FromEmail'), m.get('FromName'), mine, domains),
+            # what the mail's own headers said sent it (HeaderClass - never the verdict's word), so machine mail splits out by its headers
+            **({'header_says': m['HeaderClass']} if m.get('HeaderClass') else {}),
             'subject': m.get('Subject') or '', 'body': m.get('BodyText') or '', 'own_text': m.get('OwnText') or '',
             'to': msg['to'], 'cc': msg['cc'],
             'addressed_to_you': addressed_to_you(msg, mine) if rec else None,
@@ -232,7 +234,8 @@ def thread_store(case: dict):
 def as_message(case: dict) -> dict:
     return {'external_id': case['id'], 'channel': case.get('channel') or 'email', 'conversation_id': case.get('conv') or f"conv-{case['id']}",
             'from_email': case.get('from'), 'from_name': case.get('from_name'), 'subject': case.get('subject') or '',
-            'body': case.get('body') or '', 'sent_at': case.get('sent_at'), 'to': case.get('to'), 'cc': case.get('cc')}
+            'body': case.get('body') or '', 'sent_at': case.get('sent_at'), 'to': case.get('to'), 'cc': case.get('cc'),
+            **({'header_says': case['header_says']} if case.get('header_says') else {})}
 
 
 class _AsOf:
@@ -279,7 +282,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     conf, rows, by_signal = Counter(), [], {'colleague_replied': Counter(), 'alone': Counter()}
     pconf = Counter()                  # (the owner's priority, triage's) where the owner set one by hand
     jconf = {k: Counter() for k in JOIN_KEYS}
-    by_channel, by_class = {}, {}
+    by_channel, by_class, by_header = {}, {}, {}
     for c in cases:
         if not c.get('body'): continue
         msg = as_message(c)
@@ -309,6 +312,9 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
         # work vs nothing per class: who wrote it as triage read it (person, automated, bulk) and where the owner stood on it
         by_class.setdefault(f"{v.get('sender_class') or '?'} / {c.get('addressed_to_you') or c.get('channel') or '?'}",
                             Counter())[(got in WORK) == (c['label'] in WORK)] += 1
+        hs = str(c.get('header_says') or '')
+        by_header.setdefault('a system, by its headers' if hs.startswith('a system') else 'a list, by its headers' if hs.startswith('a mailing list')
+                             else 'no header mark', Counter())[(got in WORK) == (c['label'] in WORK)] += 1
         rows.append({'id': c['id'], 'label': c['label'], 'got': got, 'ok': got == c['label'], 'source': c['label_source'],
                      'channel': c.get('channel'), 'notes_seen': len(ns), 'why': v.get('why') or '', 'degraded': bool(v.get('degraded')),
                      # what the regex layer would make of a task (coding/general) - the second, unmeasured verdict
@@ -325,6 +331,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
            'by_signal': {k: {'right': v[True], 'wrong': v[False]} for k, v in by_signal.items()},
            'by_channel': {k: {'right': v[True], 'wrong': v[False]} for k, v in sorted(by_channel.items())}, 'rows': rows,
            'work_by_class': {k: {'right': v[True], 'wrong': v[False]} for k, v in sorted(by_class.items())},
+           'work_by_header': {k: {'right': v[True], 'wrong': v[False]} for k, v in sorted(by_header.items())},
            'priority': {'n': sum(pconf.values()), 'right': sum(v for (a, b), v in pconf.items() if a == b),
                         'confusion': {f'{a}->{b}': v for (a, b), v in sorted(pconf.items())}}}
     if verbose:
@@ -332,6 +339,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
               if n else 'no cases with a body to classify')
         if n: print(f"  work vs nothing right {out['work_vs_nothing']} of {n}")
         for k, v in out['work_by_class'].items(): print(f"    {k:22s} right {v['right']:3d}  wrong {v['wrong']:3d}")
+        for k, v in out['work_by_header'].items(): print(f"    {k:24s} right {v['right']:3d}  wrong {v['wrong']:3d}")
         for k, v in out['confusion'].items(): print(f'  {k:22s} {v}')
         for k, v in out['join'].items(): print(f"  join {k:13s} right {v['right']:3d}  wrong {v['wrong']:3d}")
         for k, v in out['by_signal'].items(): print(f"  {k:18s} right {v['right']:3d}  wrong {v['wrong']:3d}")

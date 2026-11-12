@@ -441,11 +441,11 @@ def protocol_marks(msg, me=(), tz=None) -> dict:
     message (its text/calendar part - counsel.mime_invite) and who sent it before a model has read it
     (categories.header_class). Never a subject or a body word (2026-10-11)."""
     from .autoreply import from_headers
-    from .categories import header_class
+    from .categories import header_mark, header_words
     from .counsel import mime_invite
-    out, sc = {}, header_class(msg)
+    out, hm = {}, header_mark(msg) or (None, None)
     if from_headers(msg): out['auto_reply'] = True
-    if sc: out['sender_class'] = sc
+    if hm[0]: out.update(sender_class=hm[0], header_says=header_words(*hm))
     from .unsubscribe import parse as unsub    # a list's own way off it, for the FYI card's Unsubscribe (unsubscribe.py)
     if u := unsub(msg): out['unsub'] = u
     from . import mailauth

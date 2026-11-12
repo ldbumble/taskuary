@@ -232,6 +232,39 @@ class DatasetTests(unittest.TestCase):
                 self.assertTrue(not p.get('from') or p['from'].endswith('.example'), (c['id'], p.get('from')))
 
 
+class HeaderFactTests(unittest.TestCase):
+    """What the mail's own headers say sent it is a fact the connector holds (categories.header_mark). Triage is told it in the per-mail
+    part of its prompt, the message keeps it where the verdict's word never lands (HeaderClass), and the eval splits by it - his real
+    machine mail was invisible as such once triage had overwritten SenderClass (2026-11-12)."""
+    def test_the_header_that_said_so_is_named(self):
+        from taskuary.categories import header_class, header_mark, header_words
+        self.assertEqual(header_mark({'Auto-Submitted': 'auto-generated'}), ('automated', 'Auto-Submitted: auto-generated'))
+        self.assertEqual(header_mark({'List-Id': '<news.vendor.example>'}), ('bulk', 'List-Id: <news.vendor.example>'))
+        self.assertEqual(header_mark({'Auto-Submitted': 'no', 'X-Auto-Response-Suppress': 'All'}), ('automated', 'X-Auto-Response-Suppress: All'))
+        self.assertIsNone(header_mark({'Auto-Submitted': 'no', 'Precedence': 'first-class'}))
+        self.assertEqual(header_class({'Precedence': 'bulk'}), 'bulk')
+        self.assertEqual(header_words('automated', 'Auto-Submitted: auto-generated'), 'a system (Auto-Submitted: auto-generated)')
+
+    def test_triage_is_told_and_the_message_keeps_it_past_the_verdict(self):
+        s, seen = MemoryStore(), []
+        s.save_source({'Channel': 'email', 'Address': OWNER, 'Owner': 'me', 'Active': 1}, 'test')
+        def llm(sys_, usr_, **kw):
+            seen.append((sys_, json.loads(usr_))); return json.dumps({'intent': 'fyi', 'why': 'a notice', 'sender_class': 'person'})
+        says = 'a system (Auto-Submitted: auto-generated)'
+        out = ingest.ingest_message(s, {'external_id': 'h1', 'channel': 'email', 'conversation_id': 'c-h1', 'from_email': 'monitor@corp.example',
+                                        'from_name': 'Northwind Monitor', 'subject': 'ALERT: import error', 'body': 'Job failed, 0 rows.',
+                                        'to': [OWNER], 'sender_class': 'automated', 'header_says': says}, llm=llm)
+        sys_, user = seen[-1]
+        self.assertEqual(user['headers_say'], says)
+        self.assertNotIn('Auto-Submitted', sys_)                       # the cached part is the same bytes for every mail
+        m = s.get_message(out['message_id'])
+        self.assertEqual((m['SenderClass'], m['HeaderClass']), ('person', says))      # the verdict's word, and the headers' kept apart
+        s.add_route(out['message_id'], None, 'ignore', None, 'not a task - filed by the owner', [], 'owner')
+        case = next(c for c in evalset.build(s) if c['id'] == f"m{out['message_id']}")
+        self.assertEqual(case['header_says'], says)
+        self.assertEqual(evalset.as_message(case)['header_says'], says)
+
+
 class JoinSetTests(unittest.TestCase):
     """The joining set (tests/data/triage_join.jsonl, invented shapes and the seeds with their tasks): evaluate hands the classifier
     the evidence each case carries - the thread's task, the room's tasks and lines, the open work, the combine level - and scores

@@ -987,6 +987,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # in the summary every surface leads with (the owner, 2026-09-28: "it should pull the correct name")
             user = json.dumps({'from': msg.get('from_email'), **({'from_name': person_name(msg.get('from_name'))} if person_name(msg.get('from_name')) else {}),
                                'subject': msg.get('subject'),
+                               # ...and who sent it by the mail's own headers, with the header that says so (categories.header_words): a
+                               # fact the connector already holds, in this per-mail part, never the cached one (2026-11-12)
+                               **({'headers_say': msg['header_says']} if msg.get('header_says') else {}),
                                **({'addressed_to_you': how,
                                    'recipients': len(msg.get('to') or []) + len(msg.get('cc') or [])} if how else {}),
                                **(thread or {}),

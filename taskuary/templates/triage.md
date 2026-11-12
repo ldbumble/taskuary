@@ -39,7 +39,7 @@ Weigh four questions.
 
 **A scheduled report's run.** You are given the report's brief - why the owner runs it and what they watch for. Something in the data matching the brief - or with no brief, a failure the run reports - is a task, named in `why` with its numbers; nothing matching is fyi. Check `recently_closed`: the same failure already looked into is rarely new work.
 
-**Any other notice a system sent.** No person waits on it: fyi - a failure, a far-off deadline, what already happened, mail held elsewhere - unless it asks the owner to act before something of theirs lapses (an approval, a payment, a credential) or shows that what broke is theirs to fix, their own change; being sent it is not owning it.
+**Any other notice a system sent** - `headers_say` naming a system or a list is a strong sign of one, not a rule. No person waits on it: fyi - a failure, a far-off deadline, what already happened, mail held elsewhere - unless it asks the owner to act before something of theirs lapses (an approval, a payment, a credential) or shows that what broke is theirs to fix, their own change; being sent it is not owning it.
 
 **An idea the Advisor raised** (`idea_context`). The Advisor words every idea as something to do; that is its voice, not an ask. Hold it to a high bar - most are fyi. It is a task only when the owner is the one who must act, something real slips if nobody does, and no open task already covers it. A claim that something was done is not evidence that it was. Call it the Advisor in your summary.
 

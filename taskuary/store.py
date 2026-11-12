@@ -128,7 +128,7 @@ TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Sour
              'CheckBackAt', 'CheckBackWhat')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
-            'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy', 'SenderClass', 'MeetJson')
+            'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy', 'SenderClass', 'MeetJson', 'HeaderClass')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
 def thread_pinned(thread, mid):
     # triage writes mid 0 for "the mail being judged"; a stored reading names the real message
@@ -1444,6 +1444,10 @@ class SQLiteStore:
             # 2026-10-11, which reads as a person: the address-and-footer regexes that guessed it are gone.
             if 'SenderClass' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN SenderClass TEXT')
+            # ...and what the HEADERS said, which the verdict never overwrites (header_words: "a system (Auto-Submitted: ...)"): triage
+            # is told it, and the eval splits machine-sent mail by it after SenderClass has taken the verdict's word (2026-11-12)
+            if 'HeaderClass' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN HeaderClass TEXT')
             # what the message's text tries to make an AI do, in the reading model's words (the triage verdict's `danger`,
             # or ranking's for a batched arrival): a warning on a stranger's card, never a gate
             if 'Danger' not in mcols:

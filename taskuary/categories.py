@@ -67,11 +67,23 @@ def header_class(h) -> str | None:
     Auto-Submitted and Exchange's X-Auto-Response-Suppress say a system sent it, a null Return-Path is the bounce
     envelope; RFC 2369/2919 List-* and Precedence: bulk/list say a list did. A notifier that also carries an
     unsubscribe link is the system - its own statement is the more explicit one."""
-    g = lambda k: str(h.get(k) or '').strip().lower()
-    auto = g('Auto-Submitted')
-    if (auto and not auto.startswith('no')) or g('X-Auto-Response-Suppress') or g('Return-Path') == '<>': return 'automated'
-    if g('List-Unsubscribe') or g('List-Id') or g('Precedence') in ('bulk', 'list', 'junk'): return 'bulk'
+    return (header_mark(h) or (None,))[0]
+
+
+def header_mark(h) -> tuple | None:
+    "(class, the header that said so) - header_class's answer with its evidence, which triage is told (header_words); None when none did."
+    g = lambda k: str(h.get(k) or '').strip()
+    auto = g('Auto-Submitted').lower()
+    for cls, k, hit in (('automated', 'Auto-Submitted', auto and not auto.startswith('no')), ('automated', 'X-Auto-Response-Suppress', None),
+                        ('automated', 'Return-Path', g('Return-Path') == '<>'), ('bulk', 'List-Unsubscribe', None), ('bulk', 'List-Id', None),
+                        ('bulk', 'Precedence', g('Precedence').lower() in ('bulk', 'list', 'junk'))):
+        if hit or (hit is None and g(k)): return cls, f'{k}: {g(k)}'[:80]
     return None
+
+
+def header_words(cls, header) -> str:
+    "What the headers say, as triage reads it and the message keeps it (HeaderClass): 'a system (Auto-Submitted: auto-generated)'."
+    return f"{'a system' if cls == 'automated' else 'a mailing list'} ({header})" if cls in ('automated', 'bulk') and header else ''
 
 
 def sender_class(r: dict, team_domains=()) -> str:

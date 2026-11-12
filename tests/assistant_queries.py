@@ -585,13 +585,13 @@ def idea_row(s):
                        'action': {}}, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     funnel.invalidate(); return f"idea:{i['IdeaId']}"
 def meeting_row(s):
-    "A meeting coming up in 40 minutes, on a calendar the demo world lacks (`agenda`, read by _guards) - invented people."
+    "A meeting coming up in 10 minutes - inside the fifteen the rail takes one from (2026-11-09), on a calendar the demo world lacks (`agenda`, read by _guards) - invented people."
     from datetime import datetime, timedelta
     from taskuary import funnel
     at = lambda m: (datetime.now() + timedelta(minutes=m)).strftime('%Y-%m-%dT%H:%M:%S')
-    s.agenda = [{'subject': 'Ledger cut-over plan', 'start': at(40), 'end': at(70), 'who': ['Gail Moreno', 'Paula Vance'], 'where': 'Teams',
+    s.agenda = [{'subject': 'Ledger cut-over plan', 'start': at(10), 'end': at(40), 'who': ['Gail Moreno', 'Paula Vance'], 'where': 'Teams',
                  'about': 'Which entities move first', 'join': 'https://meet.northwind.example/cutover', 'all_day': False, 'id': 'ev-cutover'}]
-    funnel.invalidate(); return f"meeting:{at(40)[:16]}:Ledger cut-over plan"
+    funnel.invalidate(); return f"meeting:{at(10)[:16]}:Ledger cut-over plan"
 AREA_RAIL = [
     Q('rail', 'whats nxt', 'todo', c('next'), 'next', freq=4),
     Q('rail', 'go back to the one before', 'todo', c('button.light', button='back'), 'card', freq=4,

@@ -1619,8 +1619,10 @@ def _memory(store, tid: int, kind: str, p: dict) -> dict:
                 return _did(store, tid, f"Saved to {at} ({memoryedit.DOC_READS[doc]}): {q(r['text'])}"
                                         + (' - it was there already.' if r.get('already') else '.'), kind, r)
             from . import learned_cut
+            # ...one full stop: a note that ends its own sentence inside its quotes is not given a second after them
+            stop = '' if str(r['text']).rstrip().endswith(('.', '!', '?')) else '.'
             return _did(store, tid, f"Remembered under {r.get('title') or 'your memory'} in {at} ({learned_cut.reads_label(r.get('section') or 'care')}): {q(r['text'])}"
-                        + (f" - {q(c['text'])} is kept as history, true until {c['until']}." if c else '.'), kind, r)
+                        + (f" - {q(c['text'])} is kept as history, true until {c['until']}." if c else stop), kind, r)
         how = str(p.get('how') or 'wrong').strip().lower()
         if how not in ('wrong', 'forget', 'ended', 'keep'): raise ValueError(f'memory.wrong how is wrong, forget, ended or keep - not {how!r}')
         key = str(p.get('key') or '')

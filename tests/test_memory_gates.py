@@ -109,3 +109,12 @@ def test_the_routing_judge_and_triage_read_every_section():
     s = _remembered()
     memoryedit.remember(s, 'Alex keeps Fridays for vendor renewals', section='work')
     assert 'Fridays for vendor renewals' in reports.judge_memory(s, {'title': 'Nightly process check'})
+
+
+def test_a_note_that_ends_its_own_sentence_is_receipted_with_one_full_stop():
+    "The bug hunt, 2026-11-12: \"Remembered under ... “Gail always wants budget figures rounded to the nearest thousand.”.\""
+    s = MemoryStore()
+    dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
+    out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail always wants budget figures rounded to the nearest thousand.',
+                                                                         }}, None, 'remember that')
+    assert out['say'].startswith('Remembered under') and out['say'].endswith('nearest thousand.”'), out['say']

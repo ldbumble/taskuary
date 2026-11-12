@@ -12,10 +12,13 @@ export const revealBy = (view, rows, head = 0, fade = 0) => {
 };
 
 // the DOM half: the rail under `wrap`, its ringed rows (the one on the table, or a batch's bracketed members)
+// ...but NEVER UNDER THE POINTER (the rail walk, 2026-11-12): a row clicked low in a scrolled rail opened its second line under the fold,
+// and the rail scrolled ~75px with the pointer on it - the row he had just pressed slid out from under it. A rail he is pointing at stays
+// where it is; what he clicked is in view already. Next, Back and the keyboard move the ring from elsewhere, and there it is revealed.
 export function revealRing(wrap) {
   const sc = wrap?.closest("[data-tq-rail]");
   const rows = [...(wrap?.querySelectorAll(".tq-pile-row.current, .tq-pile-row.inbatch") || [])];
-  if (!sc || !rows.length) return 0;
+  if (!sc || !rows.length || sc.matches(":hover")) return 0;
   const rs = rows.map((r) => r.getBoundingClientRect());
   const box = { top: Math.min(...rs.map((r) => r.top)), bottom: Math.max(...rs.map((r) => r.bottom)) };
   const head = rows[0].closest(".tq-pile-band")?.querySelector(".tq-pile-head")?.getBoundingClientRect().height || 0;

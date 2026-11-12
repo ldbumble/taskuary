@@ -176,6 +176,11 @@ def child_env(base: dict = None, home: str = None, windows: bool = None) -> dict
     """
     import ntpath                    # a Windows path, split as one wherever this runs
     env = dict(os.environ if base is None else base)
+    # ...and NO CLI KEEPS A MEMORY OF ITS OWN (the recorded walk, 2026-11-11: an agent saved a "playbook" into Claude Code's memory folder,
+    # where no card held it and no other agent reads it). It was switched off for chat agents only; a coding agent in a pane, over ACP, or a
+    # one-shot with tools still wrote there. Every CLI Taskuary starts takes its environment from here, so here it is off for all of them
+    from .clis import NO_MEMORY
+    env.update(NO_MEMORY)
     if home is None:
         try: home = str(Path.home())
         except (RuntimeError, OSError): return env      # nothing better to say than nothing

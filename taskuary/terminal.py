@@ -126,6 +126,9 @@ def clean_env(extra: dict = None, strict: bool = False) -> dict:
     # per-session additions: the browser session name that ties an agent's agent-browser to
     # its pane (browserview) - set after the strip, so it wins over an inherited one
     env.update(extra or {})
+    # ...and the CLI's own memory off, after the strip that takes every inherited CLAUDE_CODE_* away (agents.child_env says why)
+    from .clis import NO_MEMORY
+    env.update(NO_MEMORY)
     # the pane IS a real terminal (xterm.js): say so. A service started with no TERM, or TERM=dumb,
     # made codex stop at "Codex's interactive TUI may not work in this terminal. Continue? [y/N]"
     # before a single prompt - the owner typed y into a box that was built for exactly this.

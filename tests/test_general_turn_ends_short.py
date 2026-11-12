@@ -68,6 +68,19 @@ class TheCliFinishesInItsTurnTests(unittest.TestCase):
         self.assertEqual(clis.HEADLESS_ENV, {'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS': '1', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY': '1'})
         self.assertIn(general.FINISH_LINE, seen['prompt'])
 
+    def test_no_cli_taskuary_starts_keeps_a_memory_of_its_own(self):
+        """It was off for a chat agent only (2026-11-11): a coding agent in a pane - whose start strips every inherited CLAUDE_CODE_* - an
+        ACP coding agent and a one-shot with tools still wrote into Claude Code's own memory folder, where no card holds it (2026-11-12)."""
+        from taskuary import agents, acpcoding
+        off = lambda env: env.get('CLAUDE_CODE_DISABLE_AUTO_MEMORY') == '1'
+        with mock.patch.dict('os.environ', {'CLAUDE_CODE_DISABLE_AUTO_MEMORY': '0', 'CLAUDECODE': '1'}):
+            self.assertTrue(off(agents.child_env()) and off(agents.spawn_env({})) and off(agents.spawn_env({'strict_env': True})))
+            self.assertTrue(off(terminal.clean_env()) and off(terminal.clean_env({'TASKUARY_TASK': '7'}, strict=True)), 'the pane: coding agents')
+            sess = acpcoding.ACPCoding.__new__(acpcoding.ACPCoding)
+            sess.profile, sess.args, sess.model, sess.agent, sess.label, sess.task_id, sess.cwd, sess.sid = {'cmd': 'claude'}, [], None, 'coding', 'coding', 7, '.', 's7'
+            with mock.patch.object(agents, 'acp_launch', return_value={'cmd': ['adapter'], 'env': {'CLAUDE_CODE_EXECUTABLE': 'claude'}}):
+                self.assertTrue(off(sess._launch()[2]), 'the ACP adapter, whose Claude inherits its environment')
+
 
 class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
     def test_a_turn_that_ended_waiting_on_its_own_work_wakes_it_once_and_never_fails(self):

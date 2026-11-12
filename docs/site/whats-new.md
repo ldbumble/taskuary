@@ -2,6 +2,38 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.50 - 2026-11-12
+
+- A clocked Advisor look asks on its facts, not its clock
+- A report's triage line set to ask the AI is not triaged when the AI gives no answer
+- A line typed into a coding turn and stopped twice is still answered, on his next turn
+- The agent is told once what a card already says, and that what each turn hands it is for it alone
+- His close is one line in the chat, and the agent's words are checked for what code can see
+- Redraft and Draft with AI on a task an agent works wake that agent; it writes the reply again
+- A draft that cannot be sent and a coding run that left say the same words on the row, the chip and the chat
+- What a card shows is never said by the agent, and the trust hold is one plain sentence
+- A chat agent's step held in its first turn is held by the shell hook, whose words reach it
+- An agent sets a held step up by running it, and a turn nothing started never says nothing came in
+- A task's chat is drawn with its task: what it stands on is read ahead too
+- A shared dashboard in a reply card is drawn as last read on its first frame
+- A task opened for the first time draws its chat with its head
+- One name per AI on every picker and line: "Claude Code", "OpenAI Codex CLI"
+- Settings' "right now" rows give the plain reason, and no levels line where a level runs elsewhere
+- The waiting strip shows the newest lines with the count
+- An answer taken back takes its summary with it
+- A session with Taskuary's tools is told to call a system with run_system, not curl
+- A memory reader gets each line's words, not the reflection's tag
+- The general agent's learned lines come down the one memory road
+- No CLI Taskuary starts keeps a memory of its own
+- A pane closing never leaves the chat wider than its column or its box past the window
+- What the owner did is told to the agent as lines already in his chat, never to say again
+- Every correction is one line the next mail and the next agent read
+- Past its cap, triage's memory sheds lines about one sender, never a section
+- What a coding turn says right after his press reads under it, whatever millisecond it lands in
+- A task's first frame waits for its chat's read, so head and chat are one move
+- Late card content holds its room from its first frame
+- The CLI's idle notice never takes the place of an ask that stands
+
 ## 0.3.11.49 - 2026-11-12
 
 - Every card says what it does and no settled card draws a button

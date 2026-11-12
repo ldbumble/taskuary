@@ -11,6 +11,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
+import { heldConversation } from "./taskDetail.js";
 import { AttachChip, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
 import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
@@ -378,9 +379,12 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 // what still waits for the agent, apart. This draws it: one row per item, keyed by the item's own name, whatever agent works the task and
 // whatever road it runs on. Nothing here decides an order, a place for a card, or whether a line was heard.
 // ...the list last read of each task: a chat drawn again (the pane remounts when its session starts) draws what it held at once, never a blank beat
+// ...and one never read here draws the list that was asked for ahead with its task (taskDetail.prefetchTask: the row Next brings, a rail row
+// under the pointer) on its first frame - the read on mount still follows, so what is held is only ever the first paint
 const LISTS = new Map();
+const listOf = (tid) => { if (!LISTS.has(tid)) { const h = heldConversation(tid); if (h) LISTS.set(tid, h); } return LISTS.get(tid) || null; };
 export function useConversation(tid, on) {
-  const [list, setList] = useState(() => LISTS.get(tid) || null), rev = useRef(LISTS.get(tid)?.rev || "");
+  const [list, setList] = useState(() => listOf(tid)), rev = useRef(LISTS.get(tid)?.rev || "");
   // ...READS LAND IN THE ORDER THEY WERE ASKED (the recorded walk, 2026-11-11: on a loaded machine an older read came back after a newer one -
   // his line vanished, the chat read "at rest" over a turn at work, and his next line was drawn as heard): one that a later read overtook is dropped
   const asked = useRef(0), shown = useRef(0);
@@ -390,7 +394,7 @@ export function useConversation(tid, on) {
     if (!d || d.same) return false;
     rev.current = d.rev; LISTS.set(tid, d); setList(d); return true;
   }).catch(() => false) : Promise.resolve(false)); }, [tid, on]);
-  useEffect(() => { rev.current = LISTS.get(tid)?.rev || ""; setList(LISTS.get(tid) || null); load(); }, [load]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const l = listOf(tid); rev.current = l?.rev || ""; setList(l); load(); }, [load]);   // eslint-disable-line react-hooks/exhaustive-deps
   const going = !!list?.working;
   // ...a turn at work is read as it goes; at rest the server's own poke (task-changed) brings what is new, and a slow look backs it up
   useEffect(() => { if (!on) return undefined; const t = setInterval(load, going ? 600 : 5000); return () => clearInterval(t); }, [on, going, load]);
@@ -429,9 +433,9 @@ const ConvTurn = ({ t, more, cards, name }) => {
       {!!cards?.length && <div data-tq-turn-cards="">{cards}</div>}
     </div></div>;
 };
-const ConvLine = ({ x, more, waits = false }) => {
+const ConvLine = ({ x, more }) => {
   const stamp = x.at ? when(x.at instanceof Date ? x.at : String(x.at)) : "";
-  return <div className={`tq-aui-message tq-aui-user${more ? " tq-aui-user-more" : ""}`} data-tq-item={x.id} data-tq-chat-line={x.id} {...(waits ? { "data-tq-held": "" } : {})}>
+  return <div className={`tq-aui-message tq-aui-user${more ? " tq-aui-user-more" : ""}`} data-tq-item={x.id} data-tq-chat-line={x.id}>
     {!more && <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{stamp ? ` · ${stamp}` : ""}</div>}
     <div className="tq-aui-user-bubble" dir="auto">{x.text}</div>
     {!!x.err && <div className="tq-aui-hint" role="alert">{x.err}</div>}</div>;
@@ -473,10 +477,13 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
     {next && !used.has("next") && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
     {landing}</>;
 }
-/* WHAT WAITS FOR THE AGENT, BY THE BOX: accepted, not yet handed over - never in the conversation until it is (the heard rule) */
+/* WHAT WAITS FOR THE AGENT, BY THE BOX: accepted, not yet handed over - never in the conversation until it is (the heard rule).
+   ...A ROW IS NOT MARKED [data-tq-held] (seen 2026-11-11: with lines waiting, the task's card stood 8 px under the canvas's head): that name
+   is the place a link asked the canvas to hold in the middle of its view (appLinks.focusPlace, AssistantView keepTable) - one waiting line
+   and the canvas scrolled the whole task to centre it, as far as it would go */
 const PendingStrip = ({ items }) => (!items.length ? null : <div className="tq-conv-pending" data-tq-pending="" role="status">
   <div className="tq-conv-pending-head">Waiting for the agent{items.length > 1 ? ` · ${items.length}` : ""}</div>
-  {items.map((x) => <div key={x.id} className={`tq-conv-pending-row${x.err ? " tq-conv-pending-err" : ""}`} data-tq-pending-item={x.id} data-tq-held="" dir="auto" title={x.text || x.words || ""}>
+  {items.map((x) => <div key={x.id} className={`tq-conv-pending-row${x.err ? " tq-conv-pending-err" : ""}`} data-tq-pending-item={x.id} dir="auto" title={x.text || x.words || ""}>
     <span className="tq-conv-pending-who">{x.kind === "line" ? "You" : x.kind === "arrival" ? (x.own ? "You, outside" : x.who || "Someone") : ""}</span>
     <span className="tq-conv-pending-words">{x.err ? `${x.text} - ${x.err}` : x.text || x.words || ""}</span></div>)}
 </div>);
@@ -528,13 +535,7 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
     // ...HIS scroll, not the chat's own growth (chatStream.heldAtEnd): a wheel, a finger, a key, or a press still down (the scrollbar's drag)
     let was = v.scrollTop, used = -Infinity;
     const mine = () => { used = performance.now(); }, down = () => { used = Infinity; };
-    // ...AND A SCROLL THAT WAS NOT HIS, WHILE THE CHAT IS HELD AT ITS END, IS PUT BACK (the card round, 2026-11-12: a reply card under a later
-    // answer opened 9-12 px short of its end, and went back 10 px a beat after it was pinned - the browser's own scroll anchoring moved the view
-    // as the draft's box took its height, the chat's height unchanged, so nothing that watches a size saw it)
-    const on = () => { const own = performance.now() - used < 1500, gap = v.scrollHeight - v.scrollTop - v.clientHeight;
-      stick.current = heldAtEnd(stick.current, { top: v.scrollTop, was, gap, own });
-      if (stick.current && !own && gap > 1) v.scrollTop = v.scrollHeight;
-      was = v.scrollTop; };
+    const on = () => { stick.current = heldAtEnd(stick.current, { top: v.scrollTop, was, gap: v.scrollHeight - v.scrollTop - v.clientHeight, own: performance.now() - used < 1500 }); was = v.scrollTop; };
     const ro = new ResizeObserver(() => { if (stick.current) v.scrollTop = v.scrollHeight; });
     // ...and when the VIEW itself gets shorter - the box under it grew a line as he typed - as when the chat gets longer (the recorded walks,
     // 2026-11-11: 14 px behind its end for a beat each time)
@@ -594,7 +595,8 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
   return (
     <AssistantRuntimeProvider runtime={runtime}><StopCtx.Provider value={onStop}>
       <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>
-        <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport" autoScroll={false}>
+        {/* ...`data-tq-follows-end`: this scroller keeps its own place - its end, or where he scrolled to - and nothing else moves it (inView.unclip) */}
+        <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport" autoScroll={false} data-tq-follows-end="">
           <div ref={inner} className="tq-conv" data-tq-conv={list ? "loaded" : ""}>
             {chat && !!list && !merged.items.length && reading}
             {!!list && !merged.items.length && !!empty && <div className="tq-aui-hint" style={{ margin: "8px 0 16px" }}>{empty}</div>}

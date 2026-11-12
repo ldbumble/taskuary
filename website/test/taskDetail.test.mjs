@@ -30,6 +30,25 @@ test("a task read ahead is held for its view, once per task, and a goal brings i
   assert.equal(heldTask(4), null);
 });
 
+// NEVER A BLANK BEAT (seen 2026-11-11: a task opened for the first time drew its header and box over an empty chat for a quarter of a
+// second): the chat's list is asked for with the task, held with it through the view's own read, and is the chat's first frame
+test("a task read ahead brings its chat's list, and the chat draws it on its first frame", async () => {
+  forgetTasks();
+  const { heldConversation } = await import("../src/taskDetail.js");
+  const calls = [], list = { rev: "r1", items: [{ id: "m:1", kind: "arrival" }], pending: [] };
+  const api = { get: async (url) => { calls.push(url); return url.endsWith("/conversation") ? { data: list } : { data: { task: { TaskId: 4 } } }; } };
+  assert.equal(heldConversation(4), null);
+  await prefetchTask(api, 4); await new Promise((r) => setTimeout(r, 0));
+  assert.ok(calls.includes("/api/tasks/4/conversation"));
+  assert.equal(heldConversation(4).rev, "r1");
+  keepTask(4, { task: { TaskId: 4, Title: "newer" } });
+  assert.equal(heldConversation(4).rev, "r1", "the view's own read of the task keeps it");
+  forgetTasks(4); assert.equal(heldConversation(4), null, "a write to the task lets it go");
+  const view = src("GeneralWorkspace.jsx");
+  assert.match(view, /const listOf = \(tid\) => \{ if \(!LISTS\.has\(tid\)\) \{ const h = heldConversation\(tid\); if \(h\) LISTS\.set\(tid, h\); \} return LISTS\.get\(tid\) \|\| null; \};/);
+  assert.match(view, /const \[list, setList\] = useState\(\(\) => listOf\(tid\)\)/);
+});
+
 test("a failed read ahead holds nothing, so the view reads it itself", async () => {
   forgetTasks();
   await prefetchTask({ get: async () => { throw new Error("down"); } }, 5);

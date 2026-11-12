@@ -75,3 +75,13 @@ test("an approved or dismissed proposal stays in its turn as its pressed card; a
   assert.match(page, /node: g\.held \? <HeldSteps reviews=\{g\.reviews\} onChanged=\{decided\} \/> : <PassedCard reviews=\{g\.reviews\} \/>/);
   assert.match(read("PassedCard.jsx"), /<PressedButton pressed=\{pressed\} \/>/); assert.match(read("HeldSteps.jsx"), /<PressedButton pressed=\{c\.pressed\} \/>/);
 });
+
+// THE CARD ROUND, 2026-11-12: a held 60-line query opened to 1047 px of command - the card's title and why off the top of the chat. And
+// with lines waiting by the box the whole task stood 8 px under the canvas's head: a waiting row carried the mark the canvas reads as "a
+// link asked for this place, hold it in the middle" (appLinks.focusPlace), so the canvas scrolled the task to centre a waiting line
+test("a long command scrolls inside its card, and a waiting line never wears the canvas's hold mark", () => {
+  assert.match(read("HeldSteps.jsx"), /data-tq-held-commands="" tabIndex=\{0\}[^>]*maxHeight: 220, overflowY: "auto"/);
+  const view = read("GeneralWorkspace.jsx");
+  assert.doesNotMatch(view, /data-tq-held(=|"\s*:)/, "the chat marks nothing [data-tq-held]: that name is the canvas's (AssistantView keepTable)");
+  assert.match(read("AssistantView.jsx"), /const held = el\.querySelector\("\[data-tq-held\]"\)/);
+});

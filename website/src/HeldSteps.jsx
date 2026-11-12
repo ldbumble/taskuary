@@ -41,7 +41,10 @@ export default function HeldSteps({ reviews, onChanged, toRow = false }) {
       <Typography {...pressable(() => setOpen((o) => !o))} data-tq-show-command="" aria-expanded={open}
         sx={{ ...FOCUS_RING, display: "inline-block", mt: 0.4, fontSize: 11.5, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
         {open ? `Hide the command${n > 1 ? "s" : ""}` : `Show the command${n > 1 ? "s" : ""}`}</Typography>
-      {open && <Box component="pre" data-tq-held-commands="" sx={{ m: 0, mt: 0.4, p: 0.75, bgcolor: "var(--tq-inset, #f6f4f1)", borderRadius: 1, fontSize: 11.5, color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+      {/* ...A LONG COMMAND SCROLLS IN ITS OWN BOX (the card round, 2026-11-12: a 60-line query opened to 1047 px - the card's title and why went
+          off the top of the chat, and its Approve stood a screen under them) */}
+      {open && <Box component="pre" data-tq-held-commands="" tabIndex={0} sx={{ m: 0, mt: 0.4, p: 0.75, bgcolor: "var(--tq-inset, #f6f4f1)", borderRadius: 1, fontSize: 11.5, color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere",
+        maxHeight: 220, overflowY: "auto" }}>
         {c.steps.map((s, i) => `${n > 1 ? `${i + 1}. ` : ""}${s.command}`).join("\n")}</Box>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.6, flexWrap: "wrap" }}>
         {live ? <>

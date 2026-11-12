@@ -130,10 +130,14 @@ test("the chat lets go of its end only for the owner's own scroll up, never for 
   assert.equal(heldAtEnd(false, { top: 4763, was: 4500, gap: AT_END - 1, own: true }), true, "back at the end takes it again");
   assert.equal(heldAtEnd(true, { top: 4740, was: 4763, gap: 23, own: true }), true, "a nudge within the end's reach stays held");
   const view = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(view, /stick\.current = heldAtEnd\(stick\.current, \{ top: v\.scrollTop, was, gap, own \}\);/);
-  // ...and a scroll that was not his, while it is held, is put back at the end (the card round, 2026-11-12: a reply card under a later answer
-  // opened 9-12 px short and went back 10 px by the browser's scroll anchoring, the chat's height unchanged - no resize to see)
-  assert.match(view, /if \(stick\.current && !own && gap > 1\) v\.scrollTop = v\.scrollHeight;/);
+  assert.match(view, /const on = \(\) => \{ stick\.current = heldAtEnd\(stick\.current, \{ top: v\.scrollTop, was, gap: v\.scrollHeight - v\.scrollTop - v\.clientHeight, own:/);
+  // ...and nothing else moves it (the card round, 2026-11-12: a lit Send under a later answer - the helper that keeps a lit move in view
+  // "showed whole" the row cut by the chat's top edge, 11 px back from the end, each frame for a second and a half)
+  assert.match(view, /className="tq-aui-viewport" autoScroll=\{false\} data-tq-follows-end=""/);
+  const { unclip } = await import("../src/inView.js");
+  let moved = 0; const chat = { hasAttribute: (n) => n === "data-tq-follows-end", getBoundingClientRect: () => ({ top: 0, left: 0, width: 400, height: 300, bottom: 300 }), scrollTo: () => { moved += 1; }, scrollTop: 72 };
+  unclip(chat, { getBoundingClientRect: () => ({ top: 200, bottom: 230 }) });
+  assert.equal(moved, 0, "a scroller that follows its own end is never unclipped");
   assert.match(view, /const ro = new ResizeObserver\(\(\) => \{ if \(stick\.current\) v\.scrollTop = v\.scrollHeight; \}\);/, "and any resize while held pins it");
   assert.doesNotMatch(view, /stick\.current = v\.scrollHeight - v\.scrollTop - v\.clientHeight < 56/, "where it stands alone no longer decides");
 });

@@ -32,7 +32,11 @@ export const rowAcross = (p, hit) => {
   }
   return row;
 };
+// ...BUT NEVER A SCROLLER THAT FOLLOWS ITS OWN END (the card round, 2026-11-12: a task's chat with a lit Send under a later answer opened at
+// its end and went back 11 px two frames later, for a second and a half - the row cut by the chat's top edge was "shown whole", every frame,
+// against the chat's own pin): a conversation stands at its end, and a row across its top edge is how every chat reads (`data-tq-follows-end`)
 export function unclip(p, el) {
+  if (p.hasAttribute?.("data-tq-follows-end")) return;
   const b = p.getBoundingClientRect();
   if (!b.height || typeof document.elementFromPoint !== "function") return;
   const row = rowAcross(p, document.elementFromPoint(b.left + b.width / 2, b.top + 1));

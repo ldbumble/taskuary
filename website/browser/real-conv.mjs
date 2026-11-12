@@ -54,6 +54,10 @@ export const sampler = (names) => {
       // turn's words with no room between them
       const box = document.querySelector("[data-tq-task-page] .tq-aui-footer")?.getBoundingClientRect();
       f.w = Math.round(vp.getBoundingClientRect().width);
+      // THE TASK'S CARD STANDS WHOLE UNDER THE CANVAS'S HEAD (seen 2026-11-11 with lines waiting by the box: its top edge 8 px under the head -
+      // the canvas had scrolled the task to centre a waiting line): its top is never above the top of the canvas's own scroller
+      const card = vp.closest(".tq-canvas-live"), body = card?.closest(".tq-chat-body");
+      if (card && body && body.getBoundingClientRect().top - card.getBoundingClientRect().top > 2) f.cut = Math.round(body.getBoundingClientRect().top - card.getBoundingClientRect().top);
       if (box && (box.right > innerWidth + 1 || box.bottom > innerHeight + 1)) f.boxOff = [Math.max(0, Math.round(box.right - innerWidth)), Math.max(0, Math.round(box.bottom - innerHeight))];
       if ([...vp.querySelectorAll(".tq-aui-agent-body > .tq-md + .tq-md")].some((e) => e.getBoundingClientRect().top - e.previousElementSibling.getBoundingClientRect().bottom < 4)) f.tight = true;
       // ...and where each card stands, by its own first line and the item it is under: one that goes back UP the chat is a finding (check)
@@ -104,6 +108,7 @@ export function check(frames) {
     if (f.unlit?.length && JSON.stringify(f.unlit) !== JSON.stringify(prev?.unlit || [])) say(f.t, `the agent's words name ${f.unlit.map((n) => `"${n}"`).join(", ")} and no such button is lit`);
     for (const id of f.empty || []) if (!(prev?.empty || []).includes(id)) say(f.t, `${id} is drawn empty`);
     if (f.deadButton && !prev?.deadButton) say(f.t, "a card nobody can press draws a button");
+    if (f.cut && !prev?.cut) say(f.t, `the task's card stands ${f.cut} px under the canvas's head`);
     if (f.cardTwice && !prev?.cardTwice) say(f.t, "one action stands in the chat as two cards");
     if (f.rawCard && !prev?.rawCard) say(f.t, "a card shows its own JSON");
     if (f.tight && !prev?.tight) say(f.t, "two messages of one turn stand as consecutive lines, no paragraph's room between");

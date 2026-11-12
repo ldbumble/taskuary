@@ -64,7 +64,8 @@ export const firstAppLink = (text) => {
 // the words an answer linked a page with - "[AP ageing](#msg=10)" names "AP ageing" - for the line that says it was opened
 export const linkName = (text, href) => {
   const m = [...String(text || "").matchAll(/\[([^\]]+)\]\((#[^)\s]+)\)/g)].find((x) => x[2] === href);
-  return m ? m[1].trim() : "";
+  // ...the page's own name: a link worded as the press ("Open the Vendor mailbox") read "Opened Open the Vendor mailbox."
+  return m ? m[1].trim().replace(/^open(ed)?\s+(?=(the|your|its|this|that)\s)/i, "") : "";
 };
 
 // A TASK OPENED ON ITS "WHICH CODE IS THIS ABOUT?" PICKER (failures.pick_repo_href, B24): the link opens the task as #task=N does and

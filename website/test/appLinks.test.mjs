@@ -113,4 +113,7 @@ test("a report's run linked by an answer opens on the table as a Search pick doe
   assert.equal(firstAppLink("That is [TQ-0012](#task=12), from [the run](#msg=10)."), "#task=12", "a task named still opens");
   assert.equal(linkName("Here: [AP ageing over 30 days, weekly](#msg=10).", "#msg=10"), "AP ageing over 30 days, weekly");
   assert.equal(linkName("Here: [Settings](#settings=config).", "#msg=10"), "");
+  // ...and a link worded as the press itself names its page: "Opened Open the Vendor mailbox." (the bug hunt, 2026-11-12)
+  assert.equal(linkName("[Open the Vendor mailbox](#connector=339)", "#connector=339"), "the Vendor mailbox");
+  assert.equal(linkName("[Open items over 90 days](#msg=7)", "#msg=7"), "Open items over 90 days", "a name that starts with the word keeps it");
 });

@@ -191,7 +191,7 @@ def sources(store) -> list:
         # still fails is re-stamped by that poll, and says so on the next run
         if err and str(c.get('LastErrorAt') or '') < channels.BOOT: c, err = {**c, 'LastError': None}, ''
         why = ('signed out - sign in again under Connections' if problems.signed_out(c)
-               else channels.plain_error_text(err)[:200] if err else '')
+               else channels.card_error(c)[:200] if err else '')
         label = (c.get('Name') or '').strip() or (connectorcatalog.by_type(c['Type']) or {}).get('title') or c['Type']
         out.append({'label': label, 'channel': channels.CH2SRC[c['Type']], 'ok': not why, 'why': why})
     return out

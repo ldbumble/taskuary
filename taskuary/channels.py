@@ -196,20 +196,35 @@ def _status(e):
     code = getattr(r, 'status_code', None) or getattr(e, 'code', None) or getattr(e, 'status_code', None)
     if isinstance(code, int): return code
     # requests/httpx spell it "401 Client Error: Unauthorized for url" when only the text survives a re-raise
-    m = re.search(r'\b(401|403)\b[^\n]{0,20}(?:Client Error|Unauthori[sz]ed|Forbidden)', str(e), re.I)
+    m = re.search(r'\b(401|403|5\d\d)\b[^\n]{0,20}(?:Client Error|Server Error|Unauthori[sz]ed|Forbidden)', str(e), re.I)
     if m: return int(m.group(1))
     # ...and an API that answers 200 with its own word for it: Slack's "invalid_auth" was printed to the owner as it came
     return 401 if _AUTH_WORDS.search(str(e)) else None
 
-def plain_error_text(raw) -> str:
+def plain_error_text(raw, signin: bool = False) -> str:
     """A stored LastError (kept raw for problems.lapsed) in the words a fresh Test failure gets - '' for none."""
-    return plain_failure(RuntimeError(raw)) if raw else ''
+    return plain_failure(RuntimeError(raw), signin) if raw else ''
 
-def plain_failure(e: Exception) -> str:
+def card_error(c: dict) -> str:
+    """A card's last error in words - the one road the card, the bell and the evening report read it by."""
+    from .msauth import is_user
+    try: signin = c.get('Type') in ('outlook', 'teams') and is_user(_cfg(c))
+    except ValueError: signin = False
+    return plain_error_text(c.get('LastError'), signin)
+
+def plain_failure(e: Exception, signin: bool = False) -> str:
     raw = str(e)
     from .msauth import LAPSED
     if LAPSED in raw: return raw[:500]      # already says what to do: sign in again
     code = _status(e)
+    # ...the service's own trouble (a Microsoft outage, 2026-11-12): the raw line put its URL, the mailbox in it, on the card and the
+    # bell - and there is nothing on the card to change
+    if isinstance(code, int) and 500 <= code < 600:
+        return (f"The service is having trouble on its side (it answered {code}). Nothing here needs changing - "
+                "it is tried again on every poll, and what came in meanwhile is read once it is back.")
+    # ...a sign-in card has no key to paste: its sign-in still renews (a lapsed one says LAPSED above), so the service refused the read
+    if code == 401 and signin: return ("Microsoft refused the read though the sign-in still works - usually trouble on its side, and it "
+                                       "is tried again on every poll. If it lasts, sign in again on the card.")
     if code == 401: return ("The service turned the key or password down. Check it is the current one - "
                             "paste it again if it was changed or has expired - then Save and Test again.")
     if code == 403: return ("The service knows this account but would not let it in. The key may not have permission "

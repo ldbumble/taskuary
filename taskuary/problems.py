@@ -299,6 +299,7 @@ def collect(store, all_of_them: bool = False) -> list:
                         'since': away_since(store, c['ConnectorId']) or c.get('LastErrorAt') or '', 'where': 'Connections',
                         'connector': str(c['ConnectorId']), 'fix': 'Sign in', 'kind': 'signed_out', 'now': True})
             continue
+        from .channels import card_error
         # a bridge this machine runs is started again from the bell itself - its error says "Restart bridge starts it"
         from . import wabridge
         restart = c.get('Type') == 'whatsapp' and wabridge.managed(c)
@@ -306,7 +307,7 @@ def collect(store, all_of_them: bool = False) -> list:
         gave_up = restart and bool(wabridge._SUP.get('gave_up'))
         out.append({'key': f"connector:{c['ConnectorId']}", 'title': f"{c.get('Name') or c['Type']}: the last poll failed",
                     'back': f"{c.get('Name') or c['Type']} is working again",
-                    'detail': err[:400], 'since': c.get('LastErrorAt') or '', 'where': 'Connections', 'connector': str(c['ConnectorId']),
+                    'detail': card_error(c)[:400], 'since': c.get('LastErrorAt') or '', 'where': 'Connections', 'connector': str(c['ConnectorId']),
                     'fix': 'Open the card', **({'restart': True} if restart else {}), **({'now': True} if gave_up else {})})
     s = store.get_settings()
     brain = thinking(store)

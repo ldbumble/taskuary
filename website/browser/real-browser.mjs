@@ -3,7 +3,7 @@
 // page shown him, the agent goes on by itself; then a second task asks the same site again and no sign-in is asked of him. Each frame is read by
 // real-conv's sampler, with what this walk adds: the pane beside the chat, the chat's width and whether its box still fits its page.
 import path from "node:path";
-import { api, connect, open, shot, save, sleep, type, buttons, out } from "./real-lib.mjs";
+import { api, connect, open, shot, save, sleep, type, buttons, out, info } from "./real-lib.mjs";
 import { record } from "./recorder.mjs";
 import { NAMES, sampler, check, rest } from "./real-conv.mjs";
 
@@ -81,11 +81,29 @@ const tasks = {
   // ...d asks what b asks, of another sender: run it without b (WALKS=acd), or triage folds it into b's task and its signed-in browser
   d: ["changed", "Alex - which reference number does Payworth show on our account page? I need it for the bank form.\n\nMarcus", ["Marcus Reed", "marcus.reed@northwind.example", "Bank form: Payworth reference"],
     `Load Payworth at ${site} afresh and look it up - the reference number on the account page.`, [user, process.env.SITE_PW2 || ""]] };
+// e - THE SYSTEM HAS A CONNECTOR: a card for it among his connections (an "Any database" card for the training vendor, its connection string a
+// database file in the scratch home), so the agent uses that and opens no browser - no page is shown him, nothing is asked. Its topic is
+// made straight in the store (POST /api/tasks, as New does), never through triage, which folds it into the walks' Payworth task
+tasks.e = ["plain", "Alex - how many Trainly seats are we using right now, out of how many? I need it for the renewal.\n\nRay", ["Ray Colton", "ray.colton@northwind.example", "Trainly renewal: seats in use"],
+  "Find how many Trainly seats are in use, out of how many.", []];
+const connector = async () => {
+  const db = path.join(info.home, "trainly.db");
+  const { execFileSync } = await import("node:child_process");
+  execFileSync(process.env.PYTHON || "python", ["-c", "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('DROP TABLE IF EXISTS seats'); c.execute('CREATE TABLE seats (plan TEXT, seats_bought INTEGER, seats_in_use INTEGER, renews TEXT)'); c.execute(\"INSERT INTO seats VALUES ('Team',60,47,'2027-01-31')\"); c.commit()", db]);
+  const had = ((await api("/api/connectors"))?.data || []).find((c) => c.Name === "Trainly");
+  console.log("connector", JSON.stringify(await api("/api/connectors", { ...(had ? { ConnectorId: had.ConnectorId } : {}), Type: "database", Name: "Trainly",
+    ConfigJson: JSON.stringify({ connection_string: `sqlite:///${db.replace(/\\/g, "/")}` }), Active: true, Roles: "tool", Scope: "read" })));
+};
+// BACKEND=coding: each walk is a coding task on the real CLI over ACP (fixture/coding, real), his ask typed into it - no mail
+const coding = process.env.BACKEND === "coding";
 for (const k of process.env.WALKS || "abcd") {
   const [m, body, who, ask, typed] = tasks[k];
   console.log("site mode", await fetch(`${site}/_mode?${m}`).then((r) => r.text()));
-  const t = await mail(`conv-${name}-${k}`, body, who);
+  if (k === "e") await connector();
+  const t = k === "e" && !coding ? await api("/api/tasks", { Title: who[2], Kind: "general", Summary: body }).then((x) => ({ task_id: x.taskId }))
+    : coding ? await api("/api/fixture/coding", { git: info.git, real: true, title: (who || ["", "", "Payworth: next payroll run"])[2] }).then((x) => ({ task_id: x.taskId }))
+    : await mail(`conv-${name}-${k}`, body, who);
   console.log("push", JSON.stringify(t).slice(0, 160));
-  await walk(k, t.task_id, page, ask, typed);
+  await walk(k, t.task_id, page, coding || k === "e" ? `${body.split("\n\n")[0]} ${ask}` : ask, typed);
 }
 await browser.disconnect();

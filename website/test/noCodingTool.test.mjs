@@ -17,6 +17,6 @@ test("a coding picker with no tool says Pick a coding tool first, with Connect o
 });
 
 test("Send to coding agent stays off with no coding tool, on the New sheet and the task page", () => {
-  assert.match(src("NewSheet.jsx"), /const canGo = hasAbout && !noCodingTool/);
+  assert.match(src("NewSheet.jsx"), /const canGo = hasWords\(\{ agentBox, words, field: hasAbout \}\) && !noCodingTool/);
   assert.match(src("TaskPage.jsx"), /runPics\.busy \|\| !agentsRead \|\| !!runWhy\(true\)\}/);     // runWhy: capabilities.cannotStart
 });

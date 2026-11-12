@@ -100,9 +100,12 @@ def send(store, frm: int, to: str, text: str) -> dict:
     return {'sent': len(sent), 'to': sent, 'says': f"Sent to {who}. It reaches each one's next turn."}
 
 
-def framed(rows: list) -> str:
+def framed(rows: list, store=None) -> str:
     "The notes as one line for an agent's turn - a newline is Enter in a TUI."
-    each = ' '.join(f"({i}) from {task_ref(r['FromTask'])}{' to everyone in ' + r['Repo'] if r.get('Scope') == 'repo' and r.get('Repo') else ' to every agent' if r.get('Scope') == 'all' else ''}: {r['Body']}"
+    # ...each sender by its task's TITLE too (rule 8, 2026-11-12: a coding agent told the owner "TQ-0019's ready note is out of date"): the
+    # number is the handle note_peers answers by, the title what the owner is told
+    name = lambda t: task_ref(t) + (f' ("{(store.get_task(t) or {}).get("Title") or ""}" - say this, never the number, to the owner)' if store is not None and (store.get_task(t) or {}).get('Title') else '')
+    each = ' '.join(f"({i}) from {name(r['FromTask'])}{' to everyone in ' + r['Repo'] if r.get('Scope') == 'repo' and r.get('Repo') else ' to every agent' if r.get('Scope') == 'all' else ''}: {r['Body']}"
                     for i, r in enumerate(rows, 1))
     return ' '.join(f'{FRAME}: {each} - {AFTER}'.split())
 
@@ -112,7 +115,7 @@ def take(store, tid: int) -> str:
     rows = store.peer_notes(tid)
     if not rows: return ''
     store.peer_notes_read([r['PeerNoteId'] for r in rows])
-    text = framed(rows)
+    text = framed(rows, store)
     from . import sessionrecord
     sessionrecord.keep_seed(tid, text)            # the record shows it as Taskuary's brief, never as the owner's words
     return text

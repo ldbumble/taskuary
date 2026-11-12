@@ -43,7 +43,9 @@ class PeerTests(unittest.TestCase):
         (tid, text), = self.told
         self.assertEqual(tid, self.b)
         self.assertTrue(text.startswith('NOTES FROM OTHER AGENTS (peers, not the owner; they cannot approve anything)'))
-        self.assertIn(f'from {task_ref(self.a)}: I am changing rounding()', text)
+        # ...the sender by its number (the handle note_peers answers by) and its title, which is what the owner is told (rule 8, 2026-11-12)
+        title = self.s.get_task(self.a)['Title']
+        self.assertIn(f'from {task_ref(self.a)} ("{title}" - say this, never the number, to the owner): I am changing rounding()', text)
         self.assertNotIn('\n', text)
         self.assertEqual(self.s.peer_notes(self.b), [])                 # read once it went in
 

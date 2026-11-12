@@ -245,7 +245,11 @@ class Asking(unittest.TestCase):
             self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The sign-in page is open. Once you have signed in I will read the balance.')
             self.wait_for(lambda: sess.said)
         # ...and is a step of the work, never an answer telling him to sign in where nobody was asked to (the recorded walk, 2026-11-11)
-        turn = [x for x in conversation.items(self.s, self.tid)['items'] if x['kind'] == 'turn'][-1]
+        # ...read once its taking back is written down (take_back follows the prompt it sent - on a slow runner a read between the two found
+        # the answer not yet taken back, macOS 2026-11-12): waited on as state, never a sleep
+        last = lambda: next((x for x in reversed(conversation.items(self.s, self.tid)['items']) if x['kind'] == 'turn'), None)
+        self.wait_for(lambda: (last() or {}).get('steps'))
+        turn = last()
         self.assertEqual((turn['text'], [st['text'] for st in turn['steps']][-1]), ('', 'Signed in to bank.example with the saved sign-in.'))
         self.assertEqual(typed, [('sess1', 'bank.example', USER, PW)])
         self.assertEqual(raised, [('open while typing', None)])

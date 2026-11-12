@@ -396,6 +396,16 @@ class TheList(unittest.TestCase):
         said = {'items': [mail, turn('t:m:1:0', text='Done. Verified all four rates.', cards=[card('pending')])], 'working': False}
         self.assertTrue(any(b.startswith('f:') for b in conversation.flow_breaks(said, was)))            # a past turn's words changed
 
+    def test_a_message_drawn_never_goes_back_by_the_box_when_a_turn_begins_in_its_second(self):
+        """The release run on macOS, 2026-11-12 (the basic flow's check, on seven coding scenarios): the first mail was drawn, a turn began in
+        the second it had joined - before any hand-over named it - and the mail left the canvas for the waiting room. Drawn once, it stays."""
+        mid = self.s.list_messages(self.tid)[0]['MessageId']
+        self.assertEqual([x['id'] for x in self.list()['items']], [f'm:{mid}'])
+        joined = conversation.ep(next(x for x in conversation._mail(self.s, self.tid))['T'])
+        with mock.patch.object(general, 'working', return_value=True), mock.patch.object(general, 'turn_started', return_value=joined - 0.5):
+            got = self.list()
+        self.assertIn(f'm:{mid}', [x['id'] for x in got['items']]); self.assertEqual(got['pending'], [])
+
     def test_what_was_drawn_keeps_its_place_through_any_read(self):
         """The chat only grows at its foot (`shown`): an item's place is the one it was first served in - an answer filed late for a turn
         whose next input was already drawn stands under that input, never above it, and every later read gives the same order."""

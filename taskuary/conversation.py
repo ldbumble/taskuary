@@ -315,6 +315,27 @@ def _card(r) -> dict:
 DRAFTS = ('draft_reply', 'draft')
 
 
+def served_back(store, tid: int, out: list, was: dict, waiting: set) -> list:
+    """AN ITEM ONCE DRAWN IS IN EVERY READ AFTER (the basic flow's check on the release run, 2026-11-12: a turn at work whose session was
+    dropped under it left the chat with what it had done): an arrival and a turn at work are kept as drawn (the `shown` ledger's Host), and
+    one the facts no longer give is drawn from there - a turn that was at work as stopped where it stood."""
+    have = {x.get('id') for x in out}
+    for k, host in was.items():
+        if k in have or k in waiting or not host or not host.startswith('{'): continue
+        try: x = json.loads(host)
+        except ValueError: continue
+        if x.get('kind') == 'turn': out.append({**x, 'state': 'stopped' if x.get('state') in LIVE else x.get('state'), 'cards': [], 'ended': x.get('ended') or x.get('started')})
+        elif x.get('kind') == 'arrival': out.append(x)
+    return out
+
+
+def keep_shown(store, tid: int, out: list, was: dict) -> None:
+    "What served_back draws an item from: an arrival as first drawn, a turn at work as it stands - written after `served` gave each its place."
+    for x in out:
+        if x['kind'] == 'arrival' and not was.get(x['id']) or x['kind'] == 'turn' and x.get('state') in LIVE and (x.get('text') or x.get('steps')):
+            if (snap := json.dumps(x, default=str)) != was.get(x['id']): store._exec('UPDATE shown SET Host=? WHERE TaskId=? AND Key=?', (snap, int(tid), x['id']))
+
+
 def served(store, tid: int, out: list) -> list:
     """THE CHAT ONLY EVER GROWS AT ITS FOOT (the owner, 2026-11-12: "have you ever seen a chat that you type something new and the past agent
     turn changes. of course not"): each item keeps the place it was first served in (the `shown` ledger) - a reload, a reopen, a restart draw
@@ -443,6 +464,9 @@ def items(store, tid: int) -> dict:
             else: put(s['T'], 1, {'kind': 'step', 'sid': sid, 'seg': n, 'step': {k_: v for k_, v in s.items() if k_ != 'T'}, 'T': s['T']})
 
     # what came in, and what he pressed: at the moment the agent heard it, else at its own time
+    # ...what the chat has drawn (the `shown` ledger) - its place, and for an arrival or a turn at work what it said (Host): drawn once, an item
+    # is on the canvas in every read after (served_back)
+    was_shown = {r['Key']: r['Host'] for r in store._rows('SELECT Key, Host FROM shown WHERE TaskId=?', (tid,))}
     waits = min((x.pop('_after') for x in pend), default=INF)
     began = (t0 or max((r['At'] for r in led.values()), default=0.) or INF) if at_work else INF
     any_mail = False
@@ -457,7 +481,9 @@ def items(store, tid: int) -> dict:
         # ...and one that came in while a line of his waits by the box waits there with it: drawn at once, the line entered above it when
         # both were heard, in the order they came (the recorded flood on a pane, 2026-11-11)
         # ...and what an untrusted sender wrote on a thread an agent works: it waits, behind the Trust action (origin.hold)
-        if not h and (at_work and x['T'] + 1 > began or x['MessageId'] > waits or (hold_ and x['MessageId'] in hold_['mids'] and (turn_of or live_sid))): pend.append(it)
+        # ...and one the chat has drawn never goes back by the box (the release run on macOS, 2026-11-12: a coding turn began in the second the
+        # first mail joined, and the mail left the canvas for the waiting room)
+        if not h and it['id'] not in was_shown and (at_work and x['T'] + 1 > began or x['MessageId'] > waits or (hold_ and x['MessageId'] in hold_['mids'] and (turn_of or live_sid))): pend.append(it)
         else: put(h['At'] if h else x['T'], 0 if h else -1, it, h['HId'] if h else 0)
     # ...AND ONE THAT WAS DRAWN HERE STAYS, though it moved to a task of its own (a break-out; the basic flow's check, 2026-11-12: the second
     # matter left the chat with the turn that answered it): where it stood, saying where it went
@@ -506,11 +532,11 @@ def items(store, tid: int) -> dict:
     # task he made and has not started says nothing yet - shown there, the title stood as his line and went when the line he typed began it
     # ...and once drawn it stays, whatever starts or stops after (the basic flow's check, 2026-11-12: it went when the turn it began ended)
     once = bool(store._one("SELECT 1 AS x FROM shown WHERE TaskId=? AND Key=?", (tid, f'a:{tid}')))
-    # ...and never in the beat a line of his is heard and not yet filed: that line is the ask (CI parity, 2026-11-12: the task's title stood
+    # ...and never while a line of his begins the turn (PRESSED: his press; or heard and not yet filed): that line is the ask (CI parity, 2026-11-12: the task's title stood
     # as his line over the line he typed on one backend, from a read in that beat)
     drawn0 = {x.get('id') for x in out} | {p['id'] for p in pend}
     typed = any(k == 'line' and ref not in drawn0 for (k, ref) in led)
-    if (asked or once or not any_mail and at_work and not pend and not typed) and (once or first is None or first['kind'] == 'turn') and (said := ownwork.ask(store, store.get_task(tid) or {}, asked)):
+    if (asked or once or not any_mail and at_work and not pend and not typed and tid not in general.PRESSED) and (once or first is None or first['kind'] == 'turn') and (said := ownwork.ask(store, store.get_task(tid) or {}, asked)):
         at = asked['T'] if asked else ep((store.get_task(tid) or {}).get('CreatedAt'))
         out.insert(0, {'id': f'a:{tid}', 'kind': 'line', 'at': stamp(at), 'text': said, 'files': [], '_h': at})
     # ONE TURN AT WORK, AND IT IS THE LAST (the owner's live task, 2026-11-11: a second head spun under a later, finished answer while the task
@@ -649,7 +675,7 @@ def items(store, tid: int) -> dict:
     if was_left and was_left['Host'] and not any(x['id'] == 'n:left' for x in out if x.get('id')):
         out.append({'id': 'n:left', 'kind': 'note', 'at': '', 'text': was_left['Host']})
     for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None); x.pop('_seg', None)
-    out = served(store, tid, out)
+    out = served(store, tid, served_back(store, tid, out, was_shown, {p['id'] for p in pend})); keep_shown(store, tid, out, was_shown)
     # (the reply draft above a newer input, greyed - read in the order drawn)
     last_in = max((i for i, x in enumerate(out) if x['kind'] in ('line', 'arrival')), default=-1)
     for x in out[:max(last_in, 0)]:

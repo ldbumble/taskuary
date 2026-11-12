@@ -97,7 +97,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { SECTIONS, cameFrom, homeSection, liveTerminal, soloTodo, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
+import { SECTIONS, cameFrom, homeSection, liveTerminal, soloTodo, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -306,13 +306,14 @@ export const SLOT = (open, w) => ({ position: "relative", overflow: "hidden", mi
   transition: `flex-grow ${SLOT_MS}ms ease, flex-basis ${SLOT_MS}ms ease`, "@media (prefers-reduced-motion: reduce)": { transition: "none" } });
 // ...a closed body is not drawn (display none: nothing in it can be found or pressed) - but a LIVE agent's is kept laid out and only made
 // invisible, so its terminal is never measured at nothing and refitted (`keep`)
-export const SECTION = (open, w, live = false, keep = false) => ({ position: "absolute", top: 0, left: 0, bottom: 0, width: w,
+// ...and its words fade in only on a SWITCH (`fade`, taskLayout.sectionFade): the section a task is first drawn on draws at once
+export const SECTION = (open, w, live = false, keep = false, fade = true) => ({ position: "absolute", top: 0, left: 0, bottom: 0, width: w,
   display: open || keep ? "flex" : "none", flexDirection: "column", bgcolor: live ? "var(--tq-panel, #fff)" : SHADE,   // the warm ground, its cards white
   overflowY: "auto", scrollbarWidth: "thin", overscrollBehaviorY: "contain", overflowAnchor: "none", containerType: "inline-size",
   px: live ? 1 : { xs: 1.5, md: 2.5 }, py: live ? 0.65 : 1.5, boxSizing: "border-box",
   visibility: open ? "visible" : "hidden", opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none",
-  transition: open ? `opacity 160ms ease ${SLOT_MS}ms, visibility 0s` : "none",
-  ...(open ? { "@starting-style": { opacity: 0 } } : {}),
+  transition: open && fade ? `opacity 160ms ease ${SLOT_MS}ms, visibility 0s` : "none",
+  ...(open && fade ? { "@starting-style": { opacity: 0 } } : {}),
   "@media (prefers-reduced-motion: reduce)": { transition: "none" } });
 // ...a closed tab's width: 156px, and beside a LIVE agent Came from folds to a slim 44px one (the owner, 2026-10-27: "keep Came
 // from and Close out as very MINIMAL tabs ... so the live agent keeps nearly all the space")
@@ -1836,6 +1837,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the chat's Draft reply is not the lit move there: Mark done is (the owner, 2026-10-29)
   const outside = answeredOutside({ messages: taskMessages, outside: sentOutside, pending: !!pendingReview });
   const isOpen = (k) => section === k;
+  const fadeMemo = useRef(null); fadeMemo.current = sectionFade(fadeMemo.current, section, selected);
+  const fades = fadeMemo.current.moved;
   const openSection = (s) => setSecPick({ key: pickKey, sec: s });
   // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that
   // open width whether it is open or not, so the move never reflows it and a hidden terminal keeps its size
@@ -3131,7 +3134,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={fromDrawer ? "" : undefined}
                     id={fromDrawer ? "tq-from-side" : undefined} role={fromDrawer ? "complementary" : twoUp ? "region" : undefined}
                     aria-label={fromDrawer || twoUp ? "Came from" : undefined} aria-hidden={twoUp && !isOpen("from") ? true : undefined}
-                    onClickCapture={stacked && !solo ? phoneFromTap : undefined} sx={twoUp ? { ...SECTION(isOpen("from"), openW("from")), gap: 1.75 }
+                    onClickCapture={stacked && !solo ? phoneFromTap : undefined} sx={twoUp ? { ...SECTION(isOpen("from"), openW("from"), false, false, fades), gap: 1.75 }
                       : { minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75, ...(fromDrawer ? { ...card, px: 1.5, py: 1.25, ...FROM_SIDE } : PHONE_FROM(fromOpen || solo)) }}>
                     {twoUp && <SectionHead sec={SECTIONS[0]} sub="what came in, and what triage made of it" here={hereSec === "from"}
  />}
@@ -3246,7 +3249,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!solo && slot("agent", <Box data-tq-work={twoUp ? "" : undefined} data-tq-agent-section="" role={twoUp ? "region" : undefined} aria-label={twoUp ? "Agent" : undefined}
                   // ...A CHAT IS ONE WIDTH, AT REST AND AT WORK: the section's own room (20px at rest, 8px round a live session) moved the chat 12px
                   // and widened it 24px the moment its agent started, and back when it stopped (sampled every frame, 2026-11-11) - the live room, always
-                  sx={twoUp ? { ...SECTION(isOpen("agent"), openW("agent"), sessionView, liveSession), ...(chatPane ? { pb: 0.25, px: 1, pt: 0.65 } : {}) } : { display: "contents" }}>
+                  sx={twoUp ? { ...SECTION(isOpen("agent"), openW("agent"), sessionView, liveSession, fades), ...(chatPane ? { pb: 0.25, px: 1, pt: 0.65 } : {}) } : { display: "contents" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}

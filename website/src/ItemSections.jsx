@@ -17,6 +17,7 @@ import { label as btn } from "./buttons.js";
 import { AttachChip, usePromptImages } from "./promptImages.jsx";
 import { PromptBox } from "./AgentSummary.jsx";
 import "./generalWorkspace.css";
+import { sectionFade } from "./taskLayout.js";
 import { FOCUS, FOCUS_EDGE, MINI_W, OPEN_MIN, PaneStrip, SECTION, SHADE, SLOT, STRIP_H, SectionHead, SectionTab, tabW, useStackBelow } from "./TaskPage.jsx";
 import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
 import { layTable, onPressing, useSpineAll } from "./actionRow.js";
@@ -103,6 +104,8 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
   const sections = all.filter((s) => !(s.key === "agent" && !s.body));
   const [open, setOpen] = useState(about), [hand, setHand] = useState(null);
   useEffect(() => { setOpen(about); setHand(null); }, [itemKey, about]);
+  const fadeMemo = useRef(null); fadeMemo.current = sectionFade(fadeMemo.current, open, itemKey, about);
+  const fades = fadeMemo.current.moved;
   const takes = !!ask || hands, boxAt = sections.some((s) => s.key === "agent") ? "agent" : about;
   useEffect(() => {
     if (!takes) return undefined;
@@ -164,7 +167,7 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
               mini={closedW(s.key) === MINI_W} before={at(s.key) < at(open)} onOpen={() => setOpen(s.key)} />}
             {open === s.key && <PaneStrip sec={s.key} name={s.name} keys={keys} skip={skip} fold={(to) => (s.key === about ? to : about)} onFold={setOpen} />}
             <Box role="region" aria-label={s.name} aria-hidden={open !== s.key ? true : undefined} className="tq-item-sec"
-              sx={{ ...SECTION(open === s.key, w ? openW(s.key) : "100%"), gap: 1.5 }}>
+              sx={{ ...SECTION(open === s.key, w ? openW(s.key) : "100%", false, false, fades), gap: 1.5 }}>
               {s.body}
               {s.key === boxAt && box}
             </Box>

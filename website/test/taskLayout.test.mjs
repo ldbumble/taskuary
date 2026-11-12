@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, agentStatus, agentWord, answeredOutside, reportLine, writeupAt, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
+import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, agentStatus, agentWord, answeredOutside, reportLine, writeupAt, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionFade, waitingOn, workPane } from "../src/taskLayout.js";
 import { STAGE, sectionOf } from "../src/stages.js";
 import { taskSource } from "./taskSource.mjs";
 
@@ -354,4 +354,21 @@ test("every kind with a chat opens on it, Came from folded thin; one with none o
   assert.match(page, /const anyChat = !!term\?\.alive \|\| hasRecord \|\| \["general", "coding"\]\.includes\(t\?\.Kind\) \|\| \/\^agent:\/\.test\(String\(t\?\.Assignee \|\| ""\)\)/,
     "a task given to an agent - general or coding - opens on its chat before the agent says a word");
   assert.match(page, /const closedW = \(k\) => \(k === "from" \|\| \(sessionView && k !== "agent"\) \? MINI_W : tabW\(bodyW\)\);/);
+});
+
+// THE RAIL WALK (2026-11-12): every Next and row click drew the next task's header over an empty body for ~0.4s - the section's fade-in, meant
+// for a switch, ran on its first draw too. The section an item is first drawn on draws at once; a switch after it fades; another item starts again.
+test("a task's first section draws at once; only a switch fades its words in", () => {
+  let m = sectionFade(null, null, 7);                 // ...the page's first frame, before its width is known: no section yet
+  m = sectionFade(m, "agent", 7); assert.equal(m.moved, false, "the section the task is first drawn on draws at once");
+  m = sectionFade(m, "agent", 7); assert.equal(m.moved, false);
+  m = sectionFade(m, "from", 7); assert.equal(m.moved, true, "a switch fades in");
+  m = sectionFade(m, "agent", 7); assert.equal(m.moved, true, "...and so does the switch back");
+  m = sectionFade(m, "from", 8); assert.equal(m.moved, false, "the next task (Next, a rail click) draws at once whatever it opens on");
+  // ...an item that names where it opens: its stale section from the item before is no switch
+  let r = sectionFade(null, "report", "k1", "report"); r = sectionFade(r, "agent", "k2", "report"); assert.equal(r.moved, false);
+  r = sectionFade(r, "report", "k2", "report"); assert.equal(r.moved, false); r = sectionFade(r, "agent", "k2", "report"); assert.equal(r.moved, true);
+  const page = taskSource();
+  assert.match(page, /transition: open && fade \? `opacity 160ms ease \$\{SLOT_MS\}ms, visibility 0s` : "none",\s+\.\.\.\(open && fade \? \{ "@starting-style": \{ opacity: 0 \} \} : \{\}\),/);
+  for (const k of ["from", "agent"]) assert.match(page, new RegExp(`SECTION\\(isOpen\\("${k}"\\), openW\\("${k}"\\), [^)]*fades\\)`), `the ${k} section reads the page's own fade`);
 });

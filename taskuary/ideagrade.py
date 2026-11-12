@@ -7,6 +7,7 @@ An idea is graded by the owner's own acts - no new button:
   wrong    they dismissed it (or its whole kind)
   walked   a day went by and they did none of these
   pending  raised less than a day ago with nothing done yet - not graded
+  unseen   the app put it down as it was raised, before he could see it - not graded
 Useful is taken + handled. A KIND of model idea is QUIET while its useful share over the last DAYS is under BAR on MIN or more graded
 (the owner, 2026-11-01: quiet unless sure; precision over 80%) - it raises one line a day, never more (spent_today), so its record can
 mend as the window rolls. Read here and by tools/advisor_ideas.py, one grading."""
@@ -17,6 +18,7 @@ TAKEN, WRONG = ('task', 'agent', 'rule', 'accept'), ('dismiss', 'dismiss_kind')
 OWNER = ('owner', 'you', 'human')
 GRADES = ('taken', 'handled', 'wrong', 'walked')
 BAR, MIN, DAYS = 0.8, 10, 30
+UNSEEN_H = 0.1          # put down by the app within six minutes of being raised: inside the run that raised it, before any rail drew it
 # the kinds the model raises - the app's own (health, report, connect, rule, workstream, habit) are counted, never thought, and stay
 TYPES = ('second_ask', 'pattern', 'decides', 'clash', 'drift', 'promise', 'prep')      # what the model may say a line of its own is
 LOOKOUT = ('credit', 'pitch', 'money', 'early_warning', 'leverage')                       # the looking-out-for-you pass's families (lookout.py)
@@ -40,6 +42,11 @@ def grade(q, i: dict, now: str) -> str:
     # ...and one triage made a task of that was then finished: work done from it, never "walked past" (the store puts the idea down
     # with its task, DecidedBy 'task' - 2026-11-12)
     if q("SELECT 1 x FROM task WHERE SourceRef=? AND Status='done' LIMIT 1", (f"assistant:idea:{i['IdeaId']}",)): return 'taken'
+    # ...and one the app put down itself as it was raised - the report's judge, the rail, a gate - was never his to see: it says nothing
+    # about usefulness and is not graded (decided 2026-11-12). Read and left alone is still walked past
+    by, at = i.get('DecidedBy'), i.get('DecidedAt')
+    if i['Status'] in ('done', 'dismissed') and by and by not in OWNER and by != 'task' and at and str(at)[:19] <= _later(i['FirstSeen'], UNSEEN_H):
+        return 'unseen'
     return 'walked' if _later(i['FirstSeen'], 24) <= now else 'pending'
 
 

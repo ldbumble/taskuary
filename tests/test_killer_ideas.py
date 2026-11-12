@@ -78,6 +78,19 @@ def test_a_quiet_kind_still_raises_one_line_a_day_past_the_second_look_and_a_fin
     assert ideagrade.grade(s._rows, s._one('SELECT * FROM idea WHERE IdeaId=4'), ago()) == 'walked'
 
 
+def test_an_idea_the_app_put_down_as_it_was_raised_is_not_graded_and_one_left_alone_is_walked_past():
+    """Decided 2026-11-12: an idea the report's judge, the rail or a gate put down inside the run that raised it was never the owner's
+    to see - it says nothing about usefulness. One raised, left on the rail and let be is still walked past."""
+    s = MemoryStore()
+    for n, by, after in ((1, 'report', timedelta(seconds=2)), (2, 'funnel', timedelta(minutes=1)), (3, 'sweep', timedelta(days=2))):
+        _idea(s, n, 'idea', 'done', by)
+        s._exec('UPDATE idea SET DecidedAt=? WHERE IdeaId=?', ((datetime.now() - timedelta(days=3) + after).strftime('%Y-%m-%d %H:%M:%S'), n))
+    _idea(s, 4, 'idea')                                                                           # open, read and let be
+    got = {n: ideagrade.grade(s._rows, s._one('SELECT * FROM idea WHERE IdeaId=?', (n,)), ago()) for n in range(1, 5)}
+    assert got == {1: 'unseen', 2: 'unseen', 3: 'walked', 4: 'walked'}
+    assert ideagrade.record(s)['idea'] == {'taken': 0, 'handled': 0, 'wrong': 0, 'walked': 2, 'pending': 0, 'n': 2, 'pct': 0}
+
+
 def test_a_line_held_on_the_clocks_look_is_not_asked_about_again_until_something_about_it_changes():
     """The live shape (2026-11-12): a line the second look held is never posted, so every half-hour look raised it again and the second
     look was asked about the same note all night - the 'advisor' job, 3-4K tokens a call, an empty answer each time."""

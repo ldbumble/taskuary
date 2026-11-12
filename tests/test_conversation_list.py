@@ -317,13 +317,77 @@ class TheList(unittest.TestCase):
         self.s._exec('UPDATE review SET CreatedAt=(SELECT CreatedAt FROM comment WHERE CommentId=?) WHERE ReviewId=?', (cid, rid))
         t = self.list()['items'][-1]
         self.assertEqual([(c['review'], c['status']) for c in t['cards']], [(rid, 'pending')])
-        self.say('Thanks.', 'l-two'); self.rest()
-        turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
-        self.assertEqual([(c['review'], c['status']) for c in turns[-1]['cards']], [(rid, 'pending')])      # the thing to press: right above the box
-        self.assertEqual([(c['review'], c['status'], c['id']) for c in turns[-2]['cards']], [(rid, 'kept', f'r:{rid}:k')])    # where it stood, greyed
         self.s.decide_review(rid, 'approved', 'Hi Gail, which city? Alex', 'owner')
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
-        self.assertEqual([[c['status'] for c in t['cards']] for t in turns[-2:]], [['kept'], ['approved']])      # pressed, it stays where it stood when he pressed it
+        self.assertEqual([c['status'] for c in turns[-1]['cards']], ['approved'])                       # pressed, it stays where it stood
+        # ...and a draft he wrote past is set aside where it stood, greyed with its words (the owner, 2026-11-12) - never moved, never copied
+        rid = self.s.add_review({'TaskId': self.tid, 'MessageId': self.s.list_messages(self.tid)[0]['MessageId'], 'Kind': 'draft_reply', 'Status': 'pending',
+                                 'Channel': 'email', 'DraftText': 'Hi Gail, which date? Alex'})
+        self.assertEqual([(c['review'], c['status']) for c in self.list()['items'][-1]['cards']], [(rid - 1, 'approved'), (rid, 'pending')])
+        self.say('Thanks.', 'l-two'); self.rest()
+        turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
+        self.assertEqual([(c['review'], c['status'], c.get('was', {}).get('text')) for c in turns[-2]['cards']], [(rid - 1, 'approved', None), (rid, 'passed', 'Hi Gail, which date? Alex')])
+        self.assertEqual(turns[-1]['cards'], [])
+
+    def test_a_reply_card_he_writes_past_greys_in_its_place_at_once_and_the_new_turns_card_comes_when_it_ends(self):
+        """The owner's live task on 0.3.11.50, 2026-11-12 ("it shows ... on top of new prompt and action card is not greyed out ... the email
+        from prior prompt disappears. I thought we keep it but grey out buttons right away"; and "it should finish thinking and last thing
+        should be show action box"): a reply card waited, he wrote again. From the read after his press: the card greyed in its own place
+        with its words, his line under it, the turn at work under that - no card of that turn drawn while it works; at its end its draft is
+        its last thing. A draft the agent takes back stays greyed where it stood. Nothing drawn ever moves or goes."""
+        from taskuary import verdicts, wrapup
+        self.say('Draft it.', 'l-one'); self.rest()
+        rid = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, which city? Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
+        self.assertEqual([(c['review'], c['status']) for c in self.list()['items'][-1]['cards']], [(rid, 'pending')])
+        self.brain.delay = 30
+        self.say('Try now - say Leeds.', 'l-two', wait=False)
+        got = self.list(); ids = [x['id'] for x in got['items']]
+        self.assertEqual([(x['kind'], x.get('state', '')) for x in got['items']][-3:], [('turn', 'done'), ('line', ''), ('turn', got['items'][-1]['state'])])
+        self.assertIn(got['items'][-1]['state'], ('starting', 'working'))
+        self.assertEqual([(c['review'], c['status']) for c in got['items'][-3]['cards']], [(rid, 'passed')])          # greyed at once, where it stood
+        self.assertTrue(until(lambda: len(self.brain.calls) == 2)); self.assertIn(f'rv{rid}: your reply draft', self.brain.calls[-1])   # ...and its agent told so
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        rid2 = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, Leeds it is. Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
+        got = self.list()
+        self.assertEqual((got['items'][-1]['cards'], got['working']), ([], True))                                     # held back while the turn works
+        self.brain.delay = 0; self.rest()
+        got = self.list()
+        self.assertEqual([x['id'] for x in got['items']][:len(ids)], ids)                                             # nothing drawn moved
+        self.assertEqual([(c['review'], c['status']) for c in got['items'][-1]['cards']], [(rid2, 'pending')])         # ...its last thing
+        self.assertEqual(verdicts.withdraw(self.s, self.tid, 'she wrote that she will call instead', 'assistant')['ok'], True)
+        got = self.list()
+        self.assertEqual([(c['review'], c['status'], c['was']['text'][:25]) for c in got['items'][-1]['cards']], [(rid2, 'withdrawn', 'Hi Gail, Leeds it is. Alex'[:25])])
+
+    def test_the_basic_flow_names_each_shape_the_owner_saw(self):
+        "conversation.flow_breaks over the owner's frames of 2026-11-12, as lists: each breaks one rule, and the list he expects breaks none."
+        card = lambda st, what='draft_reply', rid=1: {'id': f'r:{rid}', 'kind': 'card', 'review': rid, 'what': what, 'status': st}
+        turn = lambda i, st='done', text='Done.', cards=(): {'id': i, 'kind': 'turn', 'state': st, 'text': text, 'steps': [], 'cards': list(cards)}
+        mail, line = {'id': 'm:1', 'kind': 'arrival', 'words': 'Can you make Thursday?'}, {'id': 'l-2', 'kind': 'line', 'text': 'try now'}
+        good = {'items': [mail, turn('t:m:1:0', cards=[card('passed')]), line, turn('t:l-2:0', 'working', '')], 'working': True}
+        self.assertEqual(conversation.flow_breaks(good), [])
+        dots = {'items': [mail, turn('t:m:1:0', cards=[card('pending')]), turn('t:x:0', 'starting', ''), line], 'working': True}
+        self.assertTrue(any(b.startswith('a:') for b in conversation.flow_breaks(dots)))                 # the dots above his line
+        self.assertTrue(any(b.startswith('b:') for b in conversation.flow_breaks(dots)))                 # a live card above it
+        gone = {'items': [mail, turn('t:m:1:0'), line, turn('t:l-2:0', 'working', '')], 'working': True}
+        self.assertTrue(any(b.startswith('c:') for b in conversation.flow_breaks(gone, good)))           # the card went from the chat
+        early = {'items': [mail, turn('t:m:1:0', 'working', '', [card('pending')])], 'working': True}
+        self.assertTrue(any(b.startswith('g:') for b in conversation.flow_breaks(early)))                # a card drawn while its turn works
+        above = {'items': [mail, {'id': 'p:9', 'kind': 'press', 'text': 'You sent the reply.'}, turn('t:m:1:0', cards=[card('approved')])], 'working': False}
+        was = {'items': [mail, turn('t:m:1:0', cards=[card('pending')])], 'working': False}
+        self.assertTrue(any(b.startswith('f:') for b in conversation.flow_breaks(above, was)))           # a press's line above the card pressed
+        said = {'items': [mail, turn('t:m:1:0', text='Done. Verified all four rates.', cards=[card('pending')])], 'working': False}
+        self.assertTrue(any(b.startswith('f:') for b in conversation.flow_breaks(said, was)))            # a past turn's words changed
+
+    def test_what_was_drawn_keeps_its_place_through_any_read(self):
+        """The chat only grows at its foot (`shown`): an item's place is the one it was first served in - an answer filed late for a turn
+        whose next input was already drawn stands under that input, never above it, and every later read gives the same order."""
+        self.say('Suggest two.', 'l-one'); self.rest()
+        first = [x['id'] for x in self.list()['items']]
+        self.mail('And which has parking?')
+        later = [x['id'] for x in self.list()['items']]
+        self.assertEqual(later[:len(first)], first)
+        self.s._exec('UPDATE comment SET CreatedAt=? WHERE TaskId=? AND ActorType=?', ('2000-01-01 00:00:00', self.tid, general.ASSISTANT_TYPE))
+        self.assertEqual([x['id'] for x in self.list()['items']][:len(later)], later)          # the facts read otherwise now: the order stands
 
     def test_the_ask_that_opened_a_task_he_made_is_the_first_thing_in_its_chat_with_the_first_turn_under_it(self):
         """The owner's live task, 2026-11-11 ("i create new agent it did not show the prompt i asked it to do???"): a task made with New has no
@@ -364,8 +428,9 @@ class TheList(unittest.TestCase):
         """The owner's live task, 2026-11-11 ("just asked it a question dots above the prompt starting going then the question has 2 approve
         buttons? i thought we got rid of those??"): a step in a connected system waited for his Approve, he typed a question, and the line set
         the card aside - a greyed card with a dead Approve drawn UNDER the live one the agent raised again, the last thing above the box.
-        The card stays lit, once: where it stood says so, greyed, and it stands under the newest answer. And his line is heard before it is
-        kept, so no read has it by the box with the answer above it at work."""
+        The card stays lit, once, IN THE TURN THAT RAISED IT (the owner, 2026-11-12: "nothing ever goes backwards" - no copy of it moves under
+        a later answer, no ghost stays behind). And his line is heard before it is kept, so no read has it by the box with the answer above
+        it at work."""
         import json
         from taskuary import proposals
         self.say('Fix the tax rows.', 'l-one'); self.rest()
@@ -379,20 +444,18 @@ class TheList(unittest.TestCase):
         rows = self.s._rows("SELECT ReviewId, Status FROM review WHERE TaskId=? AND Kind='action'", (self.tid,))
         self.assertEqual([(r['ReviewId'], r['Status']) for r in rows], [(rid, 'pending')])
         got = self.list()['items']; turns = [x for x in got if x['kind'] == 'turn']
-        self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}:k', 'kept')], [(f'r:{rid}', 'pending')]])
-        self.assertIs(got[-1], turns[-1])                                                   # ...the live card: the last thing above the box
+        self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'pending')], []])
         # ...and one an earlier build set aside is that record in its OWN turn, by its own name - never moved, never read as a rewritten draft
         old = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({**step, 'command': 'sqlcmd -Q "SELECT 1"'}), 'Reason': 'r'})
         self.s._exec('UPDATE review SET CreatedAt=(SELECT CreatedAt FROM review WHERE ReviewId=?) WHERE ReviewId=?', (rid, old))
         self.s.decide_review(old, 'superseded', None, 'taskuary', proposals.SET_ASIDE)
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
-        self.assertIn((f'r:{old}', 'passed'), [(c['id'], c['status']) for c in turns[0]['cards']])
-        self.assertEqual([(c['id'], c['status']) for c in turns[-1]['cards']], [(f'r:{rid}', 'pending')])
+        self.assertEqual([(c['id'], c['status']) for c in turns[0]['cards']], [(f'r:{rid}', 'pending'), (f'r:{old}', 'passed')])
 
     def test_a_step_he_approved_that_failed_stays_under_the_answer_he_pressed_it_under(self):
         """The recorded held step, 2026-11-11: he asked about a held delete, pressed Approve under the answer, and the step failed - the card
         went back up to the turn that first raised it, and where he had pressed stood nothing: no press, no failure, only the agent's next
-        turn. A card he pressed stays where it stood at the press, whatever came of it."""
+        turn. A card stays where it stood, whatever came of it - pressed, failed - in the turn that raised it, never moved (2026-11-12)."""
         from taskuary import proposals, shellgate
         self.say('Remove the old export.', 'l-one'); self.rest()
         rid = proposals.queue(self.s, self.tid, {'action': 'shell_act', 'sid': general.session_for(self.tid).sid, 'command': 'rm old-export.csv', 'what': 'delete old-export.csv'})['reviewId']
@@ -401,7 +464,7 @@ class TheList(unittest.TestCase):
         self.brain.delay = 1.1                      # ...the turn the failure wakes ends in a later second than the press: a stamp is no finer
         self.say('Try it again.', 'l-three'); self.rest()
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
-        self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}:k', 'kept')], [(f'r:{rid}', 'failed')], []])
+        self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}', 'failed')], [], []])
 
     def test_a_step_that_waits_on_his_allow_is_one_card_never_the_agents_question_beside_it(self):
         """The owner's live task, 2026-11-11 ("the question has 2 approve buttons?"), recorded on a coding agent: the permission's card with
@@ -431,7 +494,9 @@ class TheList(unittest.TestCase):
     def test_a_reply_waiting_for_his_send_stands_with_its_send_through_a_restart_and_the_session_after_it(self):
         """The recorded restart, 2026-11-11, and the owner's ruling on it ("reply cards should survive untouched"): the agent's reply waited
         for his Send, Taskuary restarted with a line of his by the box, the new session held the card as "an earlier session's" and told
-        him it still waited for his Send - with no Send anywhere. It stands, pending, under the newest answer; a newer draft takes its place."""
+        him it still waited for his Send - with no Send anywhere. A restart touches nothing; HIS LINE does (the owner, 2026-11-12: "I thought
+        we keep it but grey out buttons right away"): the card stays where it stood, greyed with its words, and the agent is told it is old
+        news - the draft it writes then is the live card, in the turn that answered him."""
         from taskuary import terminal, waitroom, wrapup
         self.say('Draft it.', 'l-one'); self.rest()
         old = general.session_for(self.tid)
@@ -442,12 +507,17 @@ class TheList(unittest.TestCase):
         waitroom.tick(self.s); self.rest()                                                             # ...and his line goes in by itself
         new = general.session_for(self.tid)
         self.assertTrue(new is not None and new.sid != old.sid)
-        self.assertEqual((self.s.get_review(rid)['Status'], self.s.pending_review(self.tid)['ReviewId']), ('pending', rid))
+        from taskuary import proposals
+        self.assertTrue(proposals.passed(self.s.get_review(rid)))
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
-        self.assertEqual([(c['review'], c['status']) for c in turns[-1]['cards']], [(rid, 'pending')])
-        # ...and the new session's own draft is what replaces it, the old words kept
+        self.assertEqual([(c['review'], c['status'], c['was']['text'][:25]) for c in turns[0]['cards']], [(rid, 'passed', 'Hi Gail, which city? Alex'[:25])])
+        self.assertTrue(any(f'rv{rid}' in c for c in self.brain.calls[1:]), 'the turn that heard his line is told the draft is old news')
+        # ...and the new session's own draft is the live card, in its own turn, the old one greyed where it was
         rid2 = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, which city and which dates? Alex', 'assistant', sid=new.sid)['review_id']
-        self.assertEqual((rid2 != rid, self.s.get_review(rid)['Status'], self.s.pending_review(self.tid)['ReviewId']), (True, 'closed_unsent', rid2))
+        self.assertEqual((rid2 != rid, self.s.pending_review(self.tid)['ReviewId']), (True, rid2))
+        turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
+        self.assertEqual([(c['review'], c['status']) for c in turns[0]['cards']], [(rid, 'passed')])
+        self.assertEqual([(c['review'], c['status']) for c in turns[-1]['cards']], [(rid2, 'pending')])
 
     def test_what_taskuary_tells_the_agent_is_never_his_line_and_one_turn_is_at_work_and_last(self):
         """The owner's live task, 2026-11-11: he pressed Approve, and Taskuary's note to the agent ("The owner pressed Approve on what you set

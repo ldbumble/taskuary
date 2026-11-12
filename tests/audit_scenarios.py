@@ -668,7 +668,9 @@ def k_send_fails(r: Run):
     r.fail = 'the mail server refused the message (550 relay denied)'
     r.send(label='send - it fails')
     r.type('try again please')
-    r.turn('It did not go: the mail server refused it. The same reply waits on its card; press Send when the mailbox is fixed.')
+    # ...his line sets the card he wrote past aside, greyed where it stood (the owner, 2026-11-12): the turn that answers him raises it again
+    r.turn('It did not go: the mail server refused it. The reply is drafted again below for when the mailbox is fixed.',
+           ('propose_reply', {'text': 'Hi Erin - agenda: budget, hiring, offsite.'}))
     r.send(label='send again - it goes')
 
 

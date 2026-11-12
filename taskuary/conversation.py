@@ -123,6 +123,10 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
         for k, r in refs:
             n += store.cx.execute('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (tid, k, r, now, grp, seq, sid or '')).rowcount
         store.cx.commit()
+    # ...a line of his heard is the conversation moving past any reply draft that waited above it (proposals.set_aside_drafts)
+    if n and any(k == 'line' for k, _ in refs):
+        from . import proposals
+        proposals.set_aside_drafts(store, tid, now)
     if n: store._poke('task-changed', task_id=tid)
     return n
 
@@ -292,9 +296,31 @@ def _card(r) -> dict:
     # (the recorded held step, 2026-11-11)
     from .proposals import passed
     from .shellgate import FAILED, NOT_RUN
+    from .wrapup import WITHDRAWN
     failed = r['Status'] == 'superseded' and r.get('DecideNote') in (FAILED, NOT_RUN)
-    return {'id': f"r:{r['ReviewId']}", 'kind': 'card', 'review': r['ReviewId'], 'what': r['Kind'], 'status': 'passed' if passed(r) else 'failed' if failed else r['Status'],
-            'at': r['CreatedAt'], 'decided': r.get('DecidedAt')}
+    # ...A DRAFT ITS AGENT TOOK BACK STAYS WHERE IT STOOD, greyed, with its words (the owner's live task, 2026-11-12: he wrote again, the agent
+    # withdrew its reply in the turn that answered him, and the card went from the chat - no page draws a draft "closed unsent")
+    # ...and one set aside as he wrote past it (proposals.set_aside_drafts) the same way: a draft is its words, which the page draws greyed
+    words = str(r.get('DraftText') or '').strip() if r['Kind'] in DRAFTS else ''
+    gone = r['Status'] == 'closed_unsent' and str(r.get('DecideNote') or '').startswith(WITHDRAWN) and words
+    st = 'passed' if passed(r) else 'failed' if failed else 'withdrawn' if gone else r['Status']
+    return {'id': f"r:{r['ReviewId']}", 'kind': 'card', 'review': r['ReviewId'], 'what': r['Kind'], 'status': st,
+            'at': r['CreatedAt'], 'decided': r.get('DecidedAt'), **({'was': {'text': r['DraftText']}} if words and st in ('passed', 'withdrawn', 'pending') else {})}
+DRAFTS = ('draft_reply', 'draft')
+
+
+def served(store, tid: int, out: list) -> list:
+    """THE CHAT ONLY EVER GROWS AT ITS FOOT (the owner, 2026-11-12: "have you ever seen a chat that you type something new and the past agent
+    turn changes. of course not"): each item keeps the place it was first served in (the `shown` ledger) - a reload, a reopen, a restart draw
+    the same order - and an item never served before goes under all of them, in the order this read made. Only an item's state changes."""
+    known = {r['Key']: r['Seq'] for r in store._rows('SELECT Key, Seq FROM shown WHERE TaskId=?', (int(tid),))}
+    new = [x for x in out if x['id'] not in known]
+    if new:
+        n = max(known.values(), default=0)
+        with store.lock:
+            store.cx.executemany('INSERT OR IGNORE INTO shown (TaskId, Key, Seq) VALUES (?,?,?)', [(int(tid), x['id'], n + i + 1) for i, x in enumerate(new)])
+            store.cx.commit()
+    return sorted((x for x in out if x['id'] in known), key=lambda x: known[x['id']]) + new
 
 
 def items(store, tid: int) -> dict:
@@ -373,7 +399,10 @@ def items(store, tid: int) -> dict:
 
     # a chat agent's turn at work: under what it was given, its steps as they come
     ses = general.session_for(tid)
-    if ses is not None and getattr(ses, 'busy', False):
+    # ...never once its answer is filed: the session reads busy for a beat after (recorded 2026-11-12: a second, empty turn spun under the
+    # answer for a frame and went) - the turn at work is the one the newest hand-over began, and that one has answered
+    done_ = turn_of and turn_of[max(turn_of)]['ended'] >= max((m['At'] for m in marks), default=INF) - 0.01
+    if ses is not None and getattr(ses, 'busy', False) and not done_:
         answered = max(turn_of, default=0)
         began = max((m['At'] for m in marks if m['Seq'] >= answered), default=0.) or max(last + 1e-7, getattr(ses, 'last', 0) or 0)
         trace = list(getattr(ses, 'trace', None) or [])
@@ -485,11 +514,28 @@ def items(store, tid: int) -> dict:
     # hand-over - one that ended before it is finished, and the turn now beginning stands under it (a wake after a press marked the answer
     # above "working" again, and the card under it lost its place)
     mark = max((m['At'] for m in marks), default=0.)
-    mine = not halted and tail and tail['kind'] == 'turn' and (tail['state'] == 'working' or tail.get('sid') == live_sid and live_sid and (tail.get('ended') or INF) >= mark - 0.01)
-    if at_work and not mine:
-        began_ = t0 or max(mark if tail and tail['kind'] == 'turn' and mark >= (tail.get('ended') or 0) else 0., (tail or {}).get('_h') or (tail or {}).get('_hm') or 0.) or time.time()      # from its hand-over, where one is written
+    # ...AND A TURN WHOSE ANSWER IS FILED AFTER THE NEWEST HAND-OVER IS THE WORK THAT WAS AT WORK (recorded 2026-11-12: its session still read
+    # busy for a beat after the answer was filed, and a second, empty turn stood "starting" under it for a frame and went): nothing new runs
+    if at_work and not pend and tail and tail['kind'] == 'turn' and tail['state'] == 'done' and tail.get('answer') and (tail.get('ended') or 0) >= mark - 0.01 \
+            and not (t0 and t0 > (tail.get('ended') or 0)): at_work = False
+    mine =not halted and tail and tail['kind'] == 'turn' and (tail['state'] == 'working' or tail.get('sid') == live_sid and live_sid and (tail.get('ended') or INF) >= mark - 0.01)
+    # ...AND NONE BEFORE THE LINE THAT BEGINS IT IS IN THE LIST (recorded 2026-11-12: a read between take_line's "at work" and its keeping the
+    # line drew the new turn's dots under the old answer, his line then under them): a line heard and not yet filed is the input it waits for
+    drawn = {x.get('id') for x in out}
+    unfiled = any(k == 'line' and r['At'] >= mark - 0.01 and ref not in drawn and ref not in {p['id'] for p in pend} for (k, ref), r in led.items())
+    if at_work and not mine and unfiled: pass
+    elif at_work and not mine:
+        began_ =t0 or max(mark if tail and tail['kind'] == 'turn' and mark >= (tail.get('ended') or 0) else 0., (tail or {}).get('_h') or (tail or {}).get('_hm') or 0.) or time.time()      # from its hand-over, where one is written
         out.append(tail := {'kind': 'turn', 'at': stamp(began_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': began_, 'ended': None})
     elif at_work and tail['state'] != 'working': tail.update(state='working', ended=None, started=t0 or tail['started'])
+    # ...AND NEVER ABOVE HIS NEWEST LINE (the owner's live task, 2026-11-12: the dots stood over "try now"; recorded on ACP the same day for a
+    # frame - the session's record had not yet cut its turn at his line): what works now is the turn his line began, under it
+    if at_work and (his := max((i for i, x in enumerate(out) if x['kind'] == 'line'), default=-1)) >= 0:
+        for x in out[:his]:
+            if x['kind'] == 'turn' and x['state'] in ('working', 'starting'): x.update(state='done', ended=x.get('ended') or x.get('started'))
+        if not any(x['kind'] == 'turn' and x['state'] in ('working', 'starting') for x in out[his + 1:]):
+            b_ = t0 or out[his].get('_h') or time.time()
+            out.append({'kind': 'turn', 'at': stamp(b_), 'state': 'starting', 'steps': [], 'text': '', 'cards': [], 'started': b_, 'ended': None})
     # ..."WORKING" IS ONE FACT, the one the task's header reads: where it is false no turn spins
     if not at_work:
         for x in out:
@@ -527,8 +573,22 @@ def items(store, tid: int) -> dict:
     # ...and each page it showed or published, by that same rule, named by its turn (`after`: the page's key for a turn); None: at the foot
     from . import outputs
     published = [{**p, 'after': (t.get('answer') or t['id']) if (t := made_in(ep(p.get('created_at')) + 0.999)) else None} for p in outputs.pages(store, tid)]
+    # ...A CARD STANDS IN THE TURN IT WAS FIRST DRAWN IN, or a later one that left it again - never back up (the `shown` ledger's Host)
+    hosts = {r['Key'][2:]: r['Host'] for r in store._rows("SELECT Key, Host FROM shown WHERE TaskId=? AND Key LIKE 'c:%'", (tid,))}
+    turns_at = {x['id']: i for i, x in enumerate(out) if x['kind'] == 'turn'}
+    newest = next((x for x in reversed(out) if x['kind'] == 'turn'), None)
     def place(card, at, cid=None):
-        t = (turn_of.get(cid) if cid else None) or made_in(at)
+        # ...a draft no turn has left yet is new now, whenever its row was made (the recorded walk, 2026-11-12: a reply owed since the mail came
+        # was filled in the turn under his line and drawn in the turn of the mail's arrival - live, above his line): it goes in the newest turn,
+        # which holds it back while it works
+        fresh = card['what'] in DRAFTS and card['status'] == 'pending' and not cid
+        t = (turn_of.get(cid) if cid else None) or (newest if fresh and newest else made_in(at))
+        h = hosts.get(card['id'])
+        # ...down only to a turn that LEFT it again (its record names that turn): a turn begun after it is not one (recorded on ACP, 2026-11-12:
+        # the session went on into a second turn and the card, drawn in the first, went from the chat until the second ended)
+        if h in turns_at and (t is None or not cid or turns_at.get(t['id'], -1) < turns_at[h]): t = out[turns_at[h]]
+        elif t is not None and h != t['id'] and not (t['state'] in LIVE):
+            store._exec('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host', (tid, f"c:{card['id']}", t['id']))
         if t is None:
             i = max((j for j, x in enumerate(out) if ep(x.get('started') or x.get('at')) <= at), default=-1)
             if i >= 0 and out[i]['kind'] == 'turn': t = out[i]
@@ -539,31 +599,18 @@ def items(store, tid: int) -> dict:
         left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])
         place(_card(r), ep(r['CreatedAt']) + 0.999, (left or {}).get('CommentId'))
 
-    # THE NEXT THING TO PRESS IS RIGHT ABOVE THE BOX (the recorded walk, 2026-11-11: the agent said "check the card before you press Send" of a
-    # card a screen above its words): an action still live after a later turn ended is one that turn KEPT - each turn is told what waits and
-    # takes back what it undoes - so it stands last in the newest turn that said something, and where it stood says so, greyed
-    # ...and one he pressed stays where it stood when he pressed it: under the newest answer of that moment, never back where it was first made
-    # ...UNDER AN ANSWER, NEVER UNDER A TURN THAT HAS NOT ENDED (recorded 2026-11-12: a reply card went down under a coding turn stopped at
-    # his Allow once, back up as he pressed, down again as the turn went on under the press, and down once more at its end): a session's
-    # turn that waits on his answer to a step is at rest and not over, and the part of a turn above an input it went on under is no answer
+    # A CARD STANDS WHERE ITS TURN LEFT IT, FOR GOOD (the owner, 2026-11-12: "It's a chat with prompts and agent turns, nothing ever goes
+    # backwards"): no card is moved under a later answer, copied there, or left behind as a ghost - he moves on past one by writing again (a
+    # draft above his newer line is set aside then, `hear`), and the agent raises what is still owed as a new card in its own turn.
+    # ...AND A TURN'S CARD IS DRAWN ONCE THE TURN HAS ENDED, as its last thing (the owner, 2026-11-12: "it should finish thinking and last thing
+    # should be show action box" - its words landed above a card drawn while it worked): a step it is stopped at waits on him mid-turn as its
+    # permission (`permissions`, drawn under the turn), never as a card in it
     from . import permissions
-    perms, turns_ = permissions.pending(tid, store), [x for x in out if x['kind'] == 'turn']
-    on = {id(a) for a, b in zip(turns_, turns_[1:]) if a.get('sid') and a.get('sid') == b.get('sid') and a.get('_seg') == b.get('_seg')}
-    if perms and turns_ and turns_[-1].get('sid') and turns_[-1].get('sid') == live_sid: on.add(id(turns_[-1]))
-    said = [(i, x) for i, x in enumerate(out) if x['kind'] == 'turn' and x['state'] in ('done', 'stopped') and (x['text'] or x['steps']) and id(x) not in on]
-    def under(i, card):
-        "The newest answer after place `i` that had ended by the time the card was decided (now, while it waits) - None: it stands where it is."
-        lim = INF if card['status'] == 'pending' else ep(card.get('decided')) if card.get('decided') else -1
-        # ...a press is stamped by the whole second: an answer that ended in that second stood there, the turn the press began ends after it
-        return next((t for k, t in reversed(said) if k > i and int(t.get('ended') or 0) <= lim), None)
-    moves = []
-    for i, x in enumerate(out):
-        for card in ([x] if x['kind'] == 'card' else x['cards'] if x['kind'] == 'turn' else []):
-            if card['status'] not in ('superseded', 'passed') and (t := under(i, card)): moves.append((i, x, card, t))
-    for i, x, card, t in moves:
-        # ...where it stood says so, greyed, under the same name: nothing drawn goes away
-        if x['kind'] == 'card': out[i] = {**x, 'status': 'kept'}; t['cards'].append({**card, 'id': card['id'] + ':live'})
-        else: x['cards'] = [{**c, 'id': c['id'] + ':k', 'status': 'kept'} if c is card else c for c in x['cards']]; t['cards'].append(card)
+    perms = permissions.pending(tid, store)
+    for x in out:
+        if x['kind'] == 'turn' and x['state'] in ('working', 'starting'): x['cards'] = []
+    # ...and a turn that ended having said, done and left nothing (a CLI turn that only took a line in) is no item: the page drew nothing for it
+    out = [x for x in out if not (x['kind'] == 'turn' and x['state'] == 'done' and not (x['text'] or x['steps'] or x['cards'] or x.get('summary')))]
 
     # A CODING RUN THAT LEFT WITHOUT FINISHING SAYS SO IN ITS CHAT (decided 2026-11-12): the header chip read "agent stopped", the rail row the
     # sentence cut by its width, and the chat nothing. The task's own idle sentence (funnel.idle_state - the one the row reads) is its last line
@@ -574,6 +621,7 @@ def items(store, tid: int) -> dict:
         if not st_.finished and (idle := funnel.idle_state(store, tid, st_))['kind'] == 'left' and idle['line']:
             out.append({'id': 'n:left', 'kind': 'note', 'at': out[-1].get('at'), 'text': idle['line']})
     for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None); x.pop('_seg', None)
+    out = served(store, tid, out)
     # ...and what the agent waits on him for, and the CLI that runs: read by the page off this one list (the chat's own payloads are gone)
     from . import taskstate
     live = general._live_of(tid)
@@ -592,6 +640,68 @@ def items(store, tid: int) -> dict:
             'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
                               **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if any(x['kind'] == 'turn' for x in out) else {})}, 'published': published, 'ran': bool(turn_of) or any(x['kind'] == 'turn' for x in out)}
     return {'rev': hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16], **body}
+
+
+LIVE = ('working', 'starting')
+def flow_breaks(got: dict, was: dict = None) -> list:
+    """THE BASIC FLOW OF A CHAT, AS INVARIANTS OVER ITS LIST (the owner, 2026-11-12: "It's a chat with prompts and agent turns, nothing ever goes
+    backwards") - pure structure, no meaning judged. `got`: a list `items` served; `was`: the one served before it, for what may never change
+    between two. Each break is one sentence; [] is a list a person would expect. Every corpus that builds lists runs it (tests/conftest.py).
+    a his newest line has no turn at work above it, and the turn it began under it while one works
+    b one live card per action, and no reply draft above his newest line still pressable (an action that waits for his press keeps its card
+      lit where it stands until pressed, replaced or withdrawn - the owner's rule of 2026-11-11 for held steps)
+    c nothing on the canvas goes: every item and every card of the list before is in this one
+    d nothing is drawn empty
+    e "working" is one fact: one turn at work, the last one, exactly when the list says working
+    f nothing is drawn above what was there, and nothing that was there changes place; a past turn's words never change
+    g a turn at work draws no card (its card comes when it has ended, as its last thing); a step it is stopped at is its permission"""
+    xs, out = got.get('items') or [], []
+    say, ids = out.append, [x['id'] for x in xs]
+    live = lambda x: x['kind'] == 'turn' and x.get('state') in LIVE
+    his = max((i for i, x in enumerate(xs) if x['kind'] == 'line'), default=-1)
+    # a
+    for x in xs[:max(his, 0)]:
+        if live(x): say(f"a: the turn at work {x['id']} stands above his newest line {ids[his]}")
+    if his >= 0 and got.get('working') and not any(live(x) for x in xs[his + 1:]): say(f"a: his newest line {ids[his]} has no turn at work under it")
+    # b
+    cards = [(i, c) for i, x in enumerate(xs) for c in ([x] if x['kind'] == 'card' else x.get('cards') or [] if x['kind'] == 'turn' else [])]
+    lit = [(i, c) for i, c in cards if c.get('status') == 'pending']
+    for r in {c['review'] for _, c in lit if [d['review'] for _, d in lit].count(c['review']) > 1}: say(f'b: review {r} stands as two live cards')
+    for i, c in lit:
+        if i < his and c.get('what') in DRAFTS: say(f"b: the live card {c['id']} stands above his newer line {ids[his]}")
+    # d
+    for x in xs:
+        k = x['kind']
+        if (k == 'turn' and not live(x) and not (x.get('text') or x.get('steps') or x.get('cards') or x.get('fail') or x.get('summary'))
+                or k == 'line' and not (str(x.get('text') or '').strip() or x.get('files'))
+                or k == 'arrival' and not (str(x.get('words') or '').strip() or x.get('files'))
+                or k in ('note', 'press') and not str(x.get('text') or '').strip()): say(f'd: {x["id"]} is drawn empty')
+    # e
+    at = [x for x in xs if live(x)]
+    if len(at) > 1: say(f"e: {len(at)} turns at work: {', '.join(x['id'] for x in at)}")
+    if at and not got.get('working'): say(f"e: {at[0]['id']} reads at work and the list says nothing works")
+    turns = [x for x in xs if x['kind'] == 'turn']
+    if got.get('working') and turns and not live(turns[-1]) and at: say(f"e: the turn at work {at[-1]['id']} is not the last turn")
+    # g
+    for x in at:
+        for c in x.get('cards') or []: say(f"g: the turn at work {x['id']} draws its card {c['id']}")
+    if was is None: return out
+    # c, f
+    old = [x for x in was.get('items') or []]
+    now, by = {x['id']: i for i, x in enumerate(xs)}, {x['id']: x for x in xs}
+    for x in old:
+        if x['id'] not in now and not (live(x) and not (x.get('text') or x.get('steps'))): say(f"c: {x['id']} was on the canvas and is gone")
+    had = {c['id'] for x in old for c in ([x] if x['kind'] == 'card' else x.get('cards') or [] if x['kind'] == 'turn' else [])}
+    for c in had - {c['id'] for _, c in cards}: say(f'c: the card {c} was on the canvas and is gone')
+    kept = [x['id'] for x in old if x['id'] in now]
+    if [i for i in ids if i in set(kept)] != kept: say('f: items already drawn changed their order')
+    top = max((now[i] for i in kept), default=-1)
+    for x in xs[:max(top, 0)]:
+        if x['id'] not in {y['id'] for y in old}: say(f"f: {x['id']} is drawn above {ids[top]}, which was already there")
+    for x in old:
+        y = by.get(x['id'])
+        if y and x['kind'] == 'turn' and not live(x) and str(x.get('text') or '') != str(y.get('text') or ''): say(f"f: the words of the past turn {x['id']} changed")
+    return out
 
 
 # WHAT CODE CAN SEE OF THE AGENT'S WORDS (the owner's rule 8, 2026-11-12: "agent wording should be fixed everywhere"): structure only, never

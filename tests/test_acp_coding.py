@@ -573,8 +573,8 @@ def test_a_line_typed_into_a_turn_he_then_stops_is_answered_by_one_turn_under_th
 def test_a_waiting_card_never_moves_under_a_turn_that_only_stopped_at_his_allow(world, monkeypatch):
     """Recorded on the real CLI, 2026-11-12: a reply waited for his Send under the first answer; the next turn stopped at a step for his
     Allow once and the reply card moved down under it, went back up when he pressed (the turn at work again), down again as the turn went
-    on under his press, and down once more at its end - four places in twenty seconds. A waiting card moves only under an ANSWER: a turn
-    stopped at his Allow has not ended, and the part of it above his press is the same turn going on."""
+    on under his press, and down once more at its end - four places in twenty seconds. A card never moves (the owner, 2026-11-12: "nothing
+    ever goes backwards"): where it was first drawn it stays, greyed from the moment his line moved past it."""
     from taskuary import conversation
     s, tid, repo = world
     monkeypatch.setenv('FAKE_ACP_ASK', 'git push origin main'); monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
@@ -582,12 +582,12 @@ def test_a_waiting_card_never_moves_under_a_turn_that_only_stopped_at_his_allow(
     t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
     rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Gail - the totals are commented.', 'Reason': 'reply'})
     assert until(lambda: time.time() >= conversation.ep(s.get_review(rid)['CreatedAt']) + 1)        # (a stamp is a whole second)
-    live = lambda: [x.get('id', '') if x['kind'] == 'turn' else 'own' for x in conversation.items(s, tid)['items']
-                    for c in ([x] if x['kind'] == 'card' else x.get('cards') or []) if c['review'] == rid and c['status'] == 'pending']
-    assert live() == ['own']
+    live = lambda: [(x.get('id', '') if x['kind'] == 'turn' else 'own', c['status']) for x in conversation.items(s, tid)['items']
+                    for c in ([x] if x['kind'] == 'card' else x.get('cards') or []) if c['review'] == rid]
+    assert live() == [('own', 'pending')]
     general.take_line(s, tid, 'Push it.', line_id='l-one')
     assert until(lambda: permissions.pending(tid, s) and any(x['kind'] == 'turn' and x['steps'] for x in conversation.items(s, tid)['items'])), t.history
-    assert live() == ['own'], conversation.items(s, tid)['items']                                # stopped at his Allow: nothing ended
+    assert live() == [('own', 'passed')], conversation.items(s, tid)['items']                    # his line moved past it: greyed where it stood
     permissions.answer(s, tid, permissions.pending(tid, s)[0]['id'], 'allow_once')
     assert idle(t, 1)
     # ...waited on as state: the turn's last updates are kept by the session's reader a beat after its prompt returns (a CI runner read the
@@ -596,8 +596,8 @@ def test_a_waiting_card_never_moves_under_a_turn_that_only_stopped_at_his_allow(
     assert until(lambda: tail() == ['turn', 'press', 'turn']), json.dumps([conversation.items(s, tid)['items'], s._rows('SELECT * FROM heard WHERE TaskId=?', (tid,)),
                                                                          codingchat.acp_updates(tid, t.sid)], default=str)[:8000]
     got = conversation.items(s, tid)['items']; turns = [x for x in got if x['kind'] == 'turn']
-    assert live() == [turns[-1]['id']], got
-    assert not turns[-2]['cards']                                                                    # ...and it never stood above his press
+    assert live() == [('own', 'passed')], got                                                        # ...and it never moved
+    assert not turns[-2]['cards'] and not turns[-1]['cards']
 
 
 def test_a_coding_chat_reads_in_the_same_order_once_its_session_has_closed(world, monkeypatch):
@@ -634,8 +634,8 @@ def test_a_line_is_never_the_answer_to_a_step_whose_buttons_are_a_beat_away(worl
 
 def test_a_held_step_stays_the_one_lit_card_when_he_asks_the_coding_agent_a_question(world, monkeypatch):
     """The owner's live coding task, 2026-11-11 ("the question has 2 approve buttons?"): his question set the held step aside and the agent
-    raised it again beside the greyed one. It stays lit, his line stands with the turn at work under it, and the same step run again by
-    that session is the card that waits (tests/test_conversation_list.py has the chat's)."""
+    raised it again beside the greyed one. It stays lit IN ITS TURN (2026-11-12: nothing moves), his line stands with the turn at work under
+    it, and the same step run again by that session is the card that waits (tests/test_conversation_list.py has the chat's)."""
     from taskuary import conversation, shellgate
     s, tid, repo = world
     monkeypatch.setenv('FAKE_ACP_THINK', '0.6'); monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
@@ -652,7 +652,7 @@ def test_a_held_step_stays_the_one_lit_card_when_he_asks_the_coding_agent_a_ques
     assert idle(t, 2); hold()
     assert [(r['ReviewId'], r['Status']) for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))] == [(rv['ReviewId'], 'pending')]
     turns = [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn']
-    assert [c['status'] for c in turns[-1]['cards']] == ['pending'] and [c['status'] for c in turns[0]['cards']] == ['kept']
+    assert [c['status'] for c in turns[0]['cards']] == ['pending'] and not any(t['cards'] for t in turns[1:])
 
 
 def _restart(s, tid, t):

@@ -529,12 +529,26 @@ def move_on(store, tid, before: str = None) -> list:
     return out
 
 
+def set_aside_drafts(store, tid: int, before: float) -> list:
+    """A REPLY DRAFT HE WROTE PAST IS SET ASIDE THE MOMENT HIS LINE IS HEARD (the owner, 2026-11-12: "I thought we keep it but grey out buttons
+    right away"): it stays where it stood, greyed, and its agent is told it is old news (passed_since / passed_note) - it drafts again in the
+    turn that answers him if a reply is still owed. Every road hears a line through conversation.hear, which calls this. -> the review ids."""
+    from .conversation import ep
+    rows = store._rows("SELECT ReviewId, CreatedAt, DraftText FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') "
+                       "AND DeliveryClaim IS NULL", (int(tid),))
+    out = [r['ReviewId'] for r in rows if str(r.get('DraftText') or '').strip() and ep(r['CreatedAt']) < before
+           and store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', note=SET_ASIDE)]
+    if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out})
+    return out
+
+
 # what its agent is told of a card it raised that the conversation moved past - ONE sentence for every kind and both agent kinds
 AGAIN = ('If a step is still needed, raise it again as a new card (a step held for their press: run it again - Taskuary holds it anew); never '
          'say it still waits on them, and never ask them in words to press it.')
 PASSED_TOLD = ('THE OWNER MOVED ON PAST THESE CARDS OF YOURS WITHOUT PRESSING THEM - they are old news and nothing waits on the owner for '
                f'them now. {AGAIN}')
 def _passed_line(r: dict) -> str:
+    if r.get('Kind') in ('draft_reply', 'draft'): return f"- rv{r['ReviewId']}: your reply draft, which began: " + ' '.join(str(r.get('DraftText') or '').split())[:160]
     try: p = json.loads(r.get('DraftText') or '{}') or {}
     except (TypeError, ValueError): p = {}
     return f"- rv{r['ReviewId']}: " + ' '.join(str(p.get('what') or p.get('command') or r.get('Reason') or p.get('action') or 'a card').split())[:200]
@@ -544,7 +558,8 @@ def passed_since(store, tid: int, since: str) -> list:
     "The cards of task `tid` passed since `since` (its agent's last answer), as lines for its prompt: '- rv<n>: <what>'."
     from . import landing
     p = (landing.record(store, int(tid)).get('proposal') or {})
-    return [_passed_line(r) for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='superseded' AND DecideNote=? AND DecidedAt>? "
+    # ...from the answer's own second on: a stamp is no finer, and a draft he wrote past in the second of that answer was never told
+    return [_passed_line(r) for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='superseded' AND DecideNote=? AND DecidedAt>=? "
                                                  "ORDER BY ReviewId", (int(tid), SET_ASIDE, since or ''))] + ([LAND_LINE] if str(p.get('passed') or '') > (since or '') else [])
 
 

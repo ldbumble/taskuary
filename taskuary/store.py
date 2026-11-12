@@ -582,6 +582,10 @@ CREATE TABLE IF NOT EXISTS waitroom (WId INTEGER PRIMARY KEY, TaskId INTEGER, No
 -- message that came in, a press - and one per turn begun. An input is in it once: that is the chat's "told once", kept by the key.
 CREATE TABLE IF NOT EXISTS heard (HId INTEGER PRIMARY KEY, TaskId INTEGER, Kind TEXT, Ref TEXT, At REAL, Grp INTEGER, Seq INTEGER, Sid TEXT,
   UNIQUE(TaskId, Kind, Ref));
+-- WHERE EACH ITEM OF A TASK'S CHAT FIRST STOOD (conversation.items): its place, once served, for good - a reload, a reopen and a restart
+-- draw the same order, and what is new only ever goes under it
+-- ...and a card, the turn it was first drawn in (`Host`): it goes down to a later turn that left it again, never back up
+CREATE TABLE IF NOT EXISTS shown (TaskId INTEGER, Key TEXT, Seq INTEGER, Host TEXT, UNIQUE(TaskId, Key));
 -- The agent wall (blackboard.py): what one agent leaves for the next one in the same
 -- checkout. Derived facts (who holds which file) are read off git and the run trace and are
 -- never stored; this is the part only the agent knows - what it is doing, what it found, what
@@ -1240,7 +1244,8 @@ class SQLiteStore:
             # reply-needed, the reason is shown beside it with a retry, never mistaken for a draft
             # the name the page gave a line it sent (general.wait_line): the page knows its own line by it, never by its words
             if 'LineId' not in {r[1] for r in self.cx.execute('PRAGMA table_info(comment)')}: self.cx.execute('ALTER TABLE comment ADD COLUMN LineId TEXT')
-            rvcols = {r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
+            if 'Host' not in {r[1] for r in self.cx.execute('PRAGMA table_info(shown)')}: self.cx.execute('ALTER TABLE shown ADD COLUMN Host TEXT')
+            rvcols ={r[1] for r in self.cx.execute('PRAGMA table_info(review)')}
             if 'DraftError' not in rvcols:
                 self.cx.execute('ALTER TABLE review ADD COLUMN DraftError TEXT')
             # ...and why the writer would not draft it at all (responder.NotDrafted - its own NEEDS): work for an agent, not a failure

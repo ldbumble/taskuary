@@ -746,3 +746,35 @@ def fx():
     running, filed_fyi, ...) are the regression fixtures for Timeline/Board chips."""
     from taskuary.testing import Factory
     return Factory()
+
+
+@pytest.fixture(autouse=True)
+def the_basic_flow(request):
+    """EVERY LIST A TEST BUILDS KEEPS THE BASIC FLOW (the owner, 2026-11-12: "nothing ever goes backwards" - the shape of dots over his line came
+    back after weeks because each placement fix changed the list's rules and nothing checked the flow as a whole): each conversation.items a
+    test reads is held to conversation.flow_breaks, against the one it read before of the same task. A break fails the test that made it."""
+    import weakref
+    from taskuary import conversation
+    real, prev, bad = conversation.items, weakref.WeakKeyDictionary(), []
+    def items(store, tid, *a, **k):
+        got = real(store, tid, *a, **k)
+        prev.setdefault(store, {})
+        key = int(tid)
+        bad.extend(f'task {tid}: {b}' for b in conversation.flow_breaks(got, prev[store].get(key)) if f'task {tid}: {b}' not in bad)
+        if os.environ.get('FLOW_DUMP'): print('LIST', tid, [(x['id'], x.get('state', ''), [(c['id'], c['status']) for c in x.get('cards') or []]) for x in got['items']], got.get('working'))
+        prev[store][key] = got
+        return got
+    conversation.items = items
+    yield
+    conversation.items = real
+    # ...FLOW_REPORT=<file>: every break of a run written down, none failing - the survey of what the rule finds
+    if bad and (rep := os.environ.get('FLOW_REPORT')):
+        with open(rep, 'a', encoding='utf-8') as f: f.write(''.join(f'{request.node.nodeid}\t{b}\n' for b in bad))
+        return
+    # ...and what it found and is not fixed yet, by test and class, each with its reason (FLOW_OPEN): any other break fails the test
+    left = [b for b in bad if not any(request.node.nodeid.split('::')[-1].startswith(t) and c in b for t, c in FLOW_OPEN)]
+    if left: pytest.fail('the basic flow broke:\n' + '\n'.join(left[:20]), pytrace=False)
+
+
+# WHAT THE BASIC FLOW FOUND AND IS NOT FIXED YET (2026-11-12): (test name prefix, the break's words) - each an open finding, named in the report
+FLOW_OPEN = []

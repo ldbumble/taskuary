@@ -522,7 +522,9 @@ NO_NEW_LINE = ('NO NEW MESSAGE STARTED THIS TURN: the last message on the task i
 # turn of a chat's agent, beside the same duty in its startup lines (REPLY_LINE, WHERE YOUR DRAFTS ARE, the summary's), and an agent says
 # back what it is told more than once - "ready for your Send below", then "Nothing has been sent", then "the new draft takes the place of
 # the old one". A chat's agent is told them once (DRAFTS_ONCE, general.prompt_parts) and a turn carries only its facts under a short head
-LATEST_HEAD, NO_NEW_HEAD = 'A NEW MESSAGE STARTED THIS TURN.', 'NO NEW MESSAGE STARTED THIS TURN: the last message on the task is one you have answered.'
+# ...and never said back (the real-CLI walks, 2026-11-12: "Nothing new has come in since my last answer" opened a turn a peer's note woke)
+LATEST_HEAD, NO_NEW_HEAD = 'A NEW MESSAGE STARTED THIS TURN.', ('NO NEW MESSAGE STARTED THIS TURN: the last message on the task is one you have '
+                                                                 'answered. Say only what this turn changed, in a line - never that nothing came in.')
 WITHDRAW_MARK = '[[TASKUARY-WITHDRAW: <why, one line>]]'
 # ...and any unsent thing it set up, as withdraw_draft takes it (verdicts.withdraw): an agent with no shell took back only the reply draft,
 # so an email to the wrong person stood beside the right one with its Send (agent-flow audit, 2026-11-07)

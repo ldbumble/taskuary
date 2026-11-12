@@ -169,3 +169,19 @@ test("the chat is pinned to its end before its first paint: the watch is a layou
 });
 
 
+
+// WHAT WAITS BY THE BOX, WHEN MANY DO (decided 2026-11-12): the newest lines and the count - the strip scrolled from the oldest, the line he had
+// just typed out of sight under a dozen older ones; a line that failed to go in stays wherever it stands
+test("the waiting strip shows the newest lines with the count, and a failed line wherever it stands", async () => {
+  const { waitingShown, WAIT_SHOWN } = await import("../src/chatStream.js");
+  const lines = Array.from({ length: 12 }, (_, i) => ({ id: `l${i}`, text: `line ${i}` }));
+  assert.deepEqual(waitingShown(lines.slice(0, 3)).map((x) => x.id), ["l0", "l1", "l2"], "a few are all shown");
+  assert.deepEqual(waitingShown(lines).map((x) => x.id), ["l8", "l9", "l10", "l11"]);
+  assert.equal(WAIT_SHOWN, 4);
+  lines[2].err = "the agent could not take it";
+  assert.deepEqual(waitingShown(lines).map((x) => x.id), ["l2", "l8", "l9", "l10", "l11"]);
+  const view = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(view, /const shown = waitingShown\(items\);/);
+  assert.match(view, /\{shown\.length < items\.length \? ` · the newest \$\{shown\.length\} below` : ""\}/);
+  assert.match(view, /\{shown\.map\(\(x\) =>/);
+});

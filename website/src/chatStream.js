@@ -112,6 +112,10 @@ export const partsMessage = (parts) => (parts.length ? [{ type: "data", name: PA
 // WHICH SOURCE a task's chat reads: a coding task, or any task with a coding CLI live on it, is its sessions (codingchat.py); every other is
 // the general agent's conversation (general.py). The one component draws either - this picks, nothing in the page does
 export const chatSource = (task, term) => (task?.Kind === "coding" || liveTerminal(term) ? "coding" : "general");
+// WHAT WAITS BY THE BOX, WHEN MANY DO (decided 2026-11-12): the NEWEST lines and the count - the strip scrolled from the oldest, so the line he
+// had just typed stood out of sight under a dozen older ones. A line that failed to go in is kept where it is wherever it stands
+export const WAIT_SHOWN = 4;
+export const waitingShown = (items, k = WAIT_SHOWN) => (items.length <= k ? items : items.filter((x, i) => i >= items.length - k || x.err));
 
 // ── WHAT MAY DRAW AS AN INPUT (the owner, 2026-11-09: "inputs are messages in the prompt box or from the input channel - either the user
 // themselves or someone else responds on the thread"): a bubble is what the owner TYPED, or what came in on the task's THREAD (a mail, a

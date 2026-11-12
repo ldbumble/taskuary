@@ -17,7 +17,7 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue,  eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount } from "./chatStream.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
@@ -485,12 +485,12 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
    ...A ROW IS NOT MARKED [data-tq-held] (seen 2026-11-11: with lines waiting, the task's card stood 8 px under the canvas's head): that name
    is the place a link asked the canvas to hold in the middle of its view (appLinks.focusPlace, AssistantView keepTable) - one waiting line
    and the canvas scrolled the whole task to centre it, as far as it would go */
-const PendingStrip = ({ items }) => (!items.length ? null : <div className="tq-conv-pending" data-tq-pending="" role="status">
-  <div className="tq-conv-pending-head">Waiting for the agent{items.length > 1 ? ` · ${items.length}` : ""}</div>
-  {items.map((x) => <div key={x.id} className={`tq-conv-pending-row${x.err ? " tq-conv-pending-err" : ""}`} data-tq-pending-item={x.id} dir="auto" title={x.text || x.words || ""}>
+const PendingStrip = ({ items }) => { const shown = waitingShown(items); return !items.length ? null : <div className="tq-conv-pending" data-tq-pending="" role="status">
+  <div className="tq-conv-pending-head">Waiting for the agent{items.length > 1 ? ` · ${items.length}` : ""}{shown.length < items.length ? ` · the newest ${shown.length} below` : ""}</div>
+  {shown.map((x) => <div key={x.id} className={`tq-conv-pending-row${x.err ? " tq-conv-pending-err" : ""}`} data-tq-pending-item={x.id} dir="auto" title={x.text || x.words || ""}>
     <span className="tq-conv-pending-who">{x.kind === "line" ? "You" : x.kind === "arrival" ? (x.own ? "You, outside" : x.who || "Someone") : ""}</span>
     <span className="tq-conv-pending-words">{x.err ? `${x.text} - ${x.err}` : x.text || x.words || ""}</span></div>)}
-</div>);
+</div>; };
 /* this page's own lines and the server's list as one: a line it sent is drawn at once - in the conversation when the agent was at rest (it is
    heard as it is sent, its turn under it), by the box when a turn was at work - and the server's copy takes over by the same name */
 const withMine = (list, mine) => {

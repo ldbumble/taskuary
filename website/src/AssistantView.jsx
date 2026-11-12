@@ -415,6 +415,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // ...but never the row on the table: Put it on my list settles the report and brings it back a read later as the task it now is, and it
   // fell in from above the pipe across the rows of Tasks while the canvas already showed it (the dead-end walk's SWAP, 2026-10-25). Like an
   // entering row, the ring lands with its card, in its slot
+  // ...AND IT COMES IN AT ITS OWN SLOT (the rail walk, 2026-11-12): rows are in arrival order, so a new one belongs at the foot of its band,
+  // and falling from above the band it slid down across every row over it, drawn on each for ~0.5 s. Now it stands unseen in its slot
+  // (`landing`) and comes in once the rows under it have glided clear (`entering`), as a row joining a band does
   const falls = (k) => k !== curKey && (landing.has(k) || arriving.has(k));
   // The NEXT ring has to be what the Next button will actually bring up. The server skips what an
   // agent has in hand and what this walk already showed (funnel.next_item); the marker did not, so a
@@ -576,7 +579,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   useLayoutEffect(() => {
     const now = placedNow.current, was = placedBefore.current, inPile = prev.current;
     placedBefore.current = new Set(now);
-    const fresh = was ? now.filter((lk) => !was.has(lk)).map((lk) => lk.slice(lk.indexOf(" ") + 1)).filter((k) => k !== curKey && (inPile?.has(k) || ever.current.has(k))) : [];
+    const fresh = was ? now.filter((lk) => !was.has(lk)).map((lk) => lk.slice(lk.indexOf(" ") + 1)).filter((k) => k !== curKey && (inPile?.has(k) || ever.current.has(k) || falls(k))) : [];
     if (!fresh.length) return;
     setEntering(new Set(fresh));
     clearTimeout(enterTimer.current); enterTimer.current = setTimeout(() => setEntering(new Set()), 700);
@@ -766,7 +769,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 // ...and IMPORTANT a quieter mark of its own, in its place too - never a move (the owner, 2026-10-25: "show it as a mark
                 // in its row's place"); urgent outranks it, so an urgent row wears urgent's shade alone
                 const imp = isImportant(i, hot);
-                const cls = ["tq-pile-row", falls(i.key) ? "landing" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "", i.moved ? "moved" : "", urgentDot ? "urgent" : imp ? "important" : "",
+                const cls = ["tq-pile-row", falls(i.key) ? "landing entering" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "", i.moved ? "moved" : "", urgentDot ? "urgent" : imp ? "important" : "",
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
                 // NO PILLS ON A ROW (the owner, 2026-09-28: "nothing else has pill"): a row's state is its mark and word, the same
                 // for every lane - "ready to send" and "agent waiting on you" included
@@ -795,7 +798,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                     : goal ? (i.kind === "goal_slipped" ? [meta.word, dueWord(i.slipped_at || i.due)].filter(Boolean).join(" ") : "") : "";
                 return (
                   <div key={i.key} className={cls} data-tq-key={i.key} data-tq-urgent={urgentDot ? "" : undefined} data-tq-important={imp ? "" : undefined}
-                    style={{ top: falls(i.key) ? -ROW_H : top }}>
+                    style={{ top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     {/* ...every other row says its ARRIVAL, never a new age for a reply - and no "+N" for one either: what came in since is
                         read inside the task (the owner, 2026-10-26: "if it's in the task it's fine no?") */}

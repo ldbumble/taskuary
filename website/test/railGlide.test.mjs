@@ -18,8 +18,12 @@ test("rail rows move on one curve: height, top and the stack's height together",
 
 test("a row joining a band waits for the glide, a reordered row starts from where it stood, an arrival falls from its first frame", () => {
   const view = src("AssistantView.jsx");
-  assert.match(view, /falls\(i\.key\) \? "landing" : entering\.has\(i\.key\) \? "entering" : ""/);
-  assert.match(view, /style=\{\{ top: falls\(i\.key\) \? -ROW_H : top \}\}/);
+  // ...an arrival stands unseen in its own slot and comes in with the rows that join a band (the rail walk, 2026-11-12: falling from above
+  // the band it slid across every row over it - rows are in arrival order, so a new one lands at the foot)
+  assert.match(view, /falls\(i\.key\) \? "landing entering" : entering\.has\(i\.key\) \? "entering" : ""/);
+  assert.match(view, /style=\{\{ top \}\}>/);
+  assert.doesNotMatch(view, /-ROW_H/, "nothing is drawn above its band to fall into it");
+  assert.match(view, /\.filter\(\(k\) => k !== curKey && \(inPile\?\.has\(k\) \|\| ever\.current\.has\(k\) \|\| falls\(k\)\)\)/, "an arrival is an entering row");
   assert.match(view, /const d = was\.has\(k\) && drawn\?\.get\(k\);\n\s+if \(d\) return \[el, \.\.\.d\];/, "a moved node is sent back to where it was drawn");
   assert.match(view, /const arrivalsOf = \(was\) => \(was\?\.size \? new Set\(\[\.\.\.arrivals\(was, items\)\]\.filter\(\(k\) => !ever\.current\.has\(k\)\)\) : new Set\(\)\);/, "after an empty rail nothing falls at once");
 });

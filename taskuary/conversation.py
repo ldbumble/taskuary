@@ -229,6 +229,7 @@ def acp_steps(updates: list) -> list:
         if out and out[-1]['k'] == k and out[-1].get('open') and not x.get('line') and not out[-1].get('line') and out[-1].get('mid') == x.get('mid'): out[-1]['text'] += t
         else: out.append({'k': k, 'text': t, 'open': True, 'at': at, **x})
     for u in updates or []:
+        n0 = len(out)
         kind, at = u.get('sessionUpdate'), u.get('_at') or ''
         said = {'mid': u['messageId']} if u.get('messageId') else {}
         if kind == 'user_message_chunk':
@@ -258,6 +259,9 @@ def acp_steps(updates: list) -> list:
             if loc and not any(s['args'].get(k) for k in _PATHS): s['args']['file_path'] = loc
             if (diffs := [c for c in u.get('content') or [] if isinstance(c, dict) and c.get('type') == 'diff']):
                 s['edit'] = {'whole': True, 'parts': [{'old': d.get('oldText') or '', 'new': d.get('newText') or ''} for d in diffs]}; s['file'] = diffs[0].get('path') or loc
+        # ...each new step keeps its update's exact clock (`_t`, record_update): a stamp to the millisecond put the words said right after his
+        # press, in the press's own millisecond, ABOVE it - the ledger's hand-over time is finer (a CI runner, 2026-11-12)
+        if u.get('_t'): [x.setdefault('_t', u['_t']) for x in out[n0:]]
     for s in out: s.pop('open', None); s.pop('mid', None)
     return out
 
@@ -273,7 +277,7 @@ def _session_steps(store, tid: int) -> list:
         # step of a closed session stood at its close - his lines first, then all its turns (recorded 2026-11-12, a coding task opened
         # again after Send and close). Never later than its own first dated step
         t = min(t, min((ep(x['at']) for x in steps if x.get('at')), default=t))
-        for x in steps: t = x['T'] = max(t, ep(x.get('at')))          # a record reads in its own order: a step with no time is at the one before it
+        for x in steps: t = x['T'] = max(t, x.pop('_t', None) or ep(x.get('at')))          # a record reads in its own order: a step with no time is at the one before it
         out.append((s['sid'], bool(s.get('live')), steps))
     return out
 

@@ -11,7 +11,7 @@ THE ACP SEAM. A coding session run over ACP (step 1: acp.py) has no CLI log to r
 `record_update` keeps each one beside the task as it arrives; `chat` hands a session's kept updates to the page as `updates`, and
 chatStream.stepsFromAcp maps them into the very step shape a log gives, so both roads draw one row shape. A coding session over ACP
 (acpcoding.ACPCoding) calls `record_update(tid, sid, update)` for every update it gets, and for every prompt it sends."""
-import json, re
+import json, re, time
 from datetime import datetime
 from pathlib import Path
 
@@ -35,7 +35,10 @@ def record_update(tid: int, sid: str, update: dict) -> None:
     Taskuary's own seed or brief rather than the owner's words (the chat never draws a brief; it draws the mail that caused it)."""
     if not isinstance(update, dict) or not sid: return
     # ...stamped as it arrives (`_at`, the server's own zone): ACP updates carry no time, and a turn read as one stamp under every mail
-    update = {**update, '_at': update.get('_at') or datetime.now().isoformat(sep=' ', timespec='milliseconds')}
+    # ...and `_t`, the same moment to the clock's full grain: the ledger's hand-overs are time.time(), and a step and a press in one millisecond
+    # must read in the order they happened (conversation.acp_steps)
+    now = time.time()
+    update = {**update, '_at': update.get('_at') or datetime.fromtimestamp(now).isoformat(sep=' ', timespec='milliseconds'), '_t': update.get('_t') or now}
     try:
         with _acp_path(tid, sid).open('a', encoding='utf-8') as f: f.write(json.dumps(update, ensure_ascii=False) + '\n')
     except (OSError, TypeError, ValueError) as e: logger.debug(f'coding chat: ACP update for task {tid} not kept - {e}')

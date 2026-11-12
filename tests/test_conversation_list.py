@@ -227,6 +227,24 @@ class TheList(unittest.TestCase):
         self.say('And now?', 'l-two'); self.rest()
         self.assertTrue(conversation.heard(self.s, self.tid, 'mail', late)); self.assertIn('Harbour Room', self.brain.calls[1])
 
+    def test_a_step_said_in_the_millisecond_of_his_press_reads_after_it(self):
+        """A Windows CI runner, 2026-11-12: his Allow once was heard at .715833 and the words the turn said right after it were kept at
+        ".715" - the update's stamp is to the millisecond, the ledger's to the clock's grain - so they read ABOVE his press, and the card
+        that waited stayed over his line. Each update keeps its exact clock, and a step reads at it."""
+        from taskuary import codingchat
+        at = '2026-11-12 13:21:56.715'
+        ups = [{'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'Looking.'}, '_at': at, '_t': conversation.ep(at) + 0.0001},
+               {'sessionUpdate': 'agent_message_chunk', 'messageId': 'b', 'content': {'type': 'text', 'text': 'Pushed.'}, '_at': at, '_t': conversation.ep(at) + 0.0009}]
+        with mock.patch.object(codingchat, 'owned', return_value=[{'sid': 's1', 'source': 'acp', 'updates': ups, 'at': at}]), \
+             mock.patch.object(codingchat, 'sessions', return_value=[]):
+            (_, _, steps), = conversation._session_steps(self.s, self.tid)
+        self.assertEqual([round(x['T'] - conversation.ep(at), 4) for x in steps], [0.0001, 0.0009])
+        self.assertTrue(all('_t' not in x for x in steps))
+        import json, tempfile; from pathlib import Path
+        f = Path(tempfile.mkdtemp()) / 'u.jsonl'
+        with mock.patch.object(codingchat, '_acp_path', return_value=f): t0 = time.time(); codingchat.record_update(self.tid, 's1', {'sessionUpdate': 'plan'})
+        self.assertGreaterEqual(json.loads(f.read_text(encoding='utf-8'))['_t'], t0)          # ...and it is kept as it arrives
+
     def test_two_messages_said_in_one_turn_over_acp_are_two_steps(self):
         said = lambda mid, t: {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': t}, **({'messageId': mid} if mid else {})}
         steps = conversation.acp_steps([said('m1', 'It returns the sum '), said('m1', 'plus tax.'), said('m2', 'The reply to Gail went out.')])

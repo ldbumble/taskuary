@@ -40,6 +40,6 @@ export function headUnderLine(said) {
   const turn = [...stream.querySelectorAll("[data-tq-run-clock], [data-tq-pending-turn], .tq-aui-thinking, [data-tq-working]")];
   const above = turn.find((e) => e.getBoundingClientRect().top < bottom - 1);
   if (above) return `above his line: ${above.outerHTML.slice(0, 160)}`;
-  return turn.some((e) => e.matches("[data-tq-run-clock]") && /ran \d/.test(e.innerText) && e.getBoundingClientRect().top >= bottom - 1) ? ""
+  return turn.some((e) => e.matches("[data-tq-run-clock]") && /working \d/.test(e.innerText) && e.getBoundingClientRect().top >= bottom - 1) ? ""
     : `no running head: ${turn.map((e) => e.outerHTML.slice(0, 80)).join(" | ") || "nothing"}`;
 }

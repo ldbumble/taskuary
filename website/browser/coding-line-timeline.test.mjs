@@ -73,7 +73,7 @@ const look = (page, said) => page.evaluate((said) => {
   // ...DIRECTLY under it: nothing drawn between his bubble and the head
   const between = [...stream.querySelectorAll(".tq-aui-message")].find((m) => { const r = m.getBoundingClientRect(); return r.height > 0 && r.top >= b.bottom - 1 && r.bottom <= h.top + 1 && !m.contains(head); });
   if (between) return { why: `between his line and the head: ${between.innerText.slice(0, 120)}` };
-  const spin = stream.querySelector(".tq-aui-thinking"), ran = /ran (\d+)s|ran (\d+)m/.exec(clock.innerText);
+  const spin = stream.querySelector(".tq-aui-thinking"), ran = /working (\d+)s|working (\d+)m/.exec(clock.innerText);
   const gap = spin ? spin.getBoundingClientRect().top - h.bottom : null;
   const body = head.closest(".tq-aui-message")?.querySelector(".tq-aui-agent-body, .tq-aui-markdown");
   return { why: "", head: Math.round(h.top - b.bottom), gap: gap == null ? null : Math.round(gap), spinAbove: spin ? spin.getBoundingClientRect().top < h.top : false,

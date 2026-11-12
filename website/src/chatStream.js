@@ -157,7 +157,9 @@ export const withMine = (list, mine) => {
   // ...A LINE WHOSE SEND FAILED STAYS WHERE IT STANDS, in its own words (the owner's live task, 2026-11-12: it went down by the box, red, the
   // app's error glued to his words): the failure is one line under it with Try again (ConvLine), and no turn starts under it
   const rest = own.filter((l) => l.rest), wait = own.filter((l) => !l.rest);
-  const tail = rest.some((l) => !l.err) && !list?.working ? [{ id: `t:${rest.at(-1).id}:0`, kind: "turn", state: "starting", steps: [], text: "", cards: [], started: +rest.at(-1).at / 1000 }] : [];
+  // ...and the turn it begins under it while the server's read has none yet - at rest, or at work in the beat before his line is filed there
+  const live = (x) => x?.kind === "turn" && ["starting", "working"].includes(x.state);
+  const tail = rest.some((l) => !l.err) && (!list?.working || !live(items.at(-1))) ? [{ id: `t:${rest.at(-1).id}:0`, kind: "turn", state: "starting", steps: [], text: "", cards: [], started: +rest.at(-1).at / 1000 }] : [];
   const at = items.length && rest.length && ((x) => x.kind === "turn" && ["starting", "working"].includes(x.state) && !x.text && !(x.steps || []).length)(items.at(-1)) ? items.length - 1 : items.length;
   // ...AND A REPLY DRAFT ABOVE IT GREYS IN ITS PLACE FROM THE SAME FRAME (the owner, 2026-11-12: "grey out buttons right away"): what the
   // server does as it hears the line (proposals.set_aside_drafts), drawn before its read comes back - its buttons stood lit ~300 ms
@@ -178,4 +180,19 @@ export const flowBreaks = (now, was = null) => {
   ids.slice(0, Math.max(top, 0)).forEach((i) => { if (!set.has(i)) out.push(`f: ${i} is drawn above ${ids[top]}, which was already there`); });
   old.forEach((i) => { const x = was.items.find((y) => y.id === i); if (!ids.includes(i) && !(live(x) && !x.text && !(x.steps || []).length)) out.push(`c: ${i} was on the canvas and is gone`); });
   return out;
+};
+// THE WAITING ROOM'S MESSAGES ARE COUNTS ON THEIR SENDER'S CHIP (the owner, 2026-11-12: "From Cat Priem · 2 new"): what came in and the agent
+// has not heard yet, one chip per sender - his own replies on another channel one per channel ("You on WhatsApp · 1") - each naming the
+// items it stands for (`ids`), so one item is in one place. `came`: the label of the chip the box already wears for where the task came
+// from - a sender's count joins it rather than stand beside it
+const CHANNELS = { email: "email", whatsapp: "WhatsApp", teams: "Teams", telegram: "Telegram", slack: "Slack", sms: "SMS" };
+export const waitingChips = (pending, came = "") => {
+  const by = new Map();
+  for (const x of pending || []) {
+    if (x.kind !== "arrival") continue;
+    const base = x.own ? `You on ${CHANNELS[String(x.channel || "").toLowerCase()] || x.channel || "another channel"}` : `From ${x.who || "someone"}`;
+    by.set(base, [...(by.get(base) || []), x.id]);
+  }
+  return [...by].map(([base, ids]) => ({ key: base, came: !!came && base === came, ids,
+    label: `${base} · ${ids.length}${base.startsWith("You on") ? "" : " new"}` }));
 };

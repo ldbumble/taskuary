@@ -180,8 +180,10 @@ test("the waiting strip shows the newest lines with the count, and a failed line
   assert.equal(WAIT_SHOWN, 4);
   lines[2].err = "the agent could not take it";
   assert.deepEqual(waitingShown(lines).map((x) => x.id), ["l2", "l8", "l9", "l10", "l11"]);
+  // ...over the box his lines show the newest TWO, "+N more" over them (the owner, 2026-11-12; basicFlow.test.mjs)
+  assert.deepEqual(waitingShown(lines.slice(3), 2).map((x) => x.id), ["l10", "l11"]);
   const view = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(view, /const shown = waitingShown\(items\);/);
-  assert.match(view, /\{shown\.length < items\.length \? ` · the newest \$\{shown\.length\} below` : ""\}/);
+  assert.match(view, /shown = waitingShown\(rows, 2\), more = rows\.length - shown\.length;/);
+  assert.match(view, /\{more > 0 && <div className="tq-conv-pending-more" data-tq-pending-more="" data-tq-pending-ids=\{rows\.filter\(\(x\) => !shown\.includes\(x\)\)\.map\(\(x\) => x\.id\)\.join\(" "\)\}>\+\{more\} more<\/div>\}/);
   assert.match(view, /\{shown\.map\(\(x\) =>/);
 });

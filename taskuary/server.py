@@ -2556,6 +2556,20 @@ def assistant_message(task_id: int, body: AssistantMessageBody):
     session, reply = out
     return {'reply': reply, **_assistant_payload(task_id, session)}
 
+@app.post('/api/tasks/{task_id}/waiting/{line_id}/drop')
+def waiting_drop(task_id: int, line_id: str):
+    "HE TAKES BACK A LINE THAT WAITS (the owner, 2026-11-12, as Codex does): it never reaches the agent and leaves no trace in the chat."
+    from . import general
+    return general.drop_line(store, task_id, line_id)
+
+@app.post('/api/tasks/{task_id}/waiting/now')
+def waiting_now(task_id: int):
+    """SEND NOW: what waits goes into the turn at work at once, where its session takes words mid-turn (the list's `now`); else it goes in
+    when the turn ends, as it would have - said so, never a press that did nothing."""
+    from . import conversation, waitroom
+    if not conversation.items(store, task_id).get('now'): return {'ok': False, 'why': 'this agent takes it when its turn ends'}
+    return {'ok': True, **waitroom.deliver(store, task_id)}
+
 def _say(task_id: int, body, **kw):
     "A typed line on the one road (general.take_line), as the chat's doors send it - the chat synced first, behind the kept line."
     from . import general

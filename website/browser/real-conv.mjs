@@ -42,9 +42,11 @@ export const sampler = (names, owner = "Alex") => {
     if (!window.__away && (!vp && document.querySelector("[data-tq-task-page] [data-tq-agent-room]")) || faded) window.__bare ||= performance.now();
     if (vp && !faded) {
       const items = [...vp.querySelectorAll("[data-tq-item]")].map((e) => [e.getAttribute("data-tq-item"), e.getAttribute("data-tq-turn") || "", Math.round(e.getBoundingClientRect().top - vp.getBoundingClientRect().top + vp.scrollTop)]);
-      const pend = [...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].map((e) => e.getAttribute("data-tq-pending-item"));
+      // ...what waits: his lines' rows, and the messages a sender's chip counts (data-tq-pending-ids)
+      const pend = [...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].map((e) => e.getAttribute("data-tq-pending-item"))
+        .concat([...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-ids]")].flatMap((e) => e.getAttribute("data-tq-pending-ids").split(" ").filter(Boolean)));
       watch(vp);
-      const f = { items, pend, top: Math.round(vp.scrollTop), h: vp.scrollHeight, ch: vp.clientHeight, ...(under == null ? {} : { under }), working: !!vp.querySelector("[data-tq-working]"), cards: vp.querySelectorAll("[data-tq-turn-cards] button:not([disabled])").length };
+      const f = { items, pend, ...(window.__dropped?.length ? { dropped: [...window.__dropped] } : {}), top: Math.round(vp.scrollTop), h: vp.scrollHeight, ch: vp.clientHeight, ...(under == null ? {} : { under }), working: !!vp.querySelector("[data-tq-working]"), cards: vp.querySelectorAll("[data-tq-turn-cards] button:not([disabled])").length };
       // WORDS THAT NAME A BUTTON, AND THE BUTTON (the owner: never "press X" with nothing to press): the newest thing in the chat, where it is
       // the agent's answer - an older one named a button he has pressed since
       const shown = [...document.querySelectorAll("[data-tq-task-page] button")].filter((b) => b.getBoundingClientRect().width > 0).map((b) => [b.innerText.trim().replace(/\s+/g, " "), !b.disabled]);
@@ -140,6 +142,8 @@ export function check(frames) {
     const ids = f.items.map((x) => x[0]), seen = new Set();
     for (const id of ids) { if (seen.has(id)) say(f.t, `${id} drawn twice`); seen.add(id); }
     for (const id of f.pend) if (seen.has(id)) say(f.t, `${id} is by the box AND in the conversation`);
+    // ...ONE PLACE, NEVER NEITHER (the owner, 2026-11-12): what left the waiting room is in the chat in the same frame - unless he took it back
+    if (prev) for (const id of prev.pend) if (!f.pend.includes(id) && !seen.has(id) && !(f.dropped || []).includes(id)) say(f.t, `${id} left the waiting room and is nowhere`);
     for (const id of heard) if (!seen.has(id)) say(f.t, `${id} was in the conversation and is gone`);
     if (prev) {
       const was = new Set(prev.items.map((x) => x[0])), lastOld = Math.max(-1, ...ids.map((id, i) => (was.has(id) ? i : -1)));
@@ -276,6 +280,11 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
         else api(`/api/tasks/${tid}/assistant/messages`, { text: w, line_id: `lflood${name}${i}` }).catch(() => {});      // not waited for: typed as fast as he can
         await sleep(150); } }
     else if (k === "snap") await snap(arg || "snap");
+    // ...the waiting room's own presses: the newest row's trash (noted, so its leaving is his), Send now
+    else if (k === "drop") console.log("drop", await page.evaluate(() => { const r = [...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].filter((e) => e.querySelector("[data-tq-drop-line]")).pop();
+      if (!r) return "no row"; (window.__dropped ||= []).push(r.getAttribute("data-tq-pending-item")); r.querySelector("[data-tq-drop-line]").click(); return r.getAttribute("data-tq-pending-item"); }));
+    else if (k === "now") console.log("now", await page.evaluate(() => { const b = document.querySelector("[data-tq-task-page] [data-tq-send-now]"); b?.click(); return !!b; }));
+    else if (k === "sayq") { await page.evaluate(() => document.querySelector("[data-tq-task-page] .tq-aui-input").focus()); await page.keyboard.type(arg); await page.keyboard.press("Enter"); await sleep(150); }
     // ...he goes to another task and comes back: a task of his own with no agent, opened as a rail row opens one; the sampler reads nothing meanwhile
     else if (k === "leave") { const other = (leave.tid ||= (await api("/api/tasks", { Title: "Book the team lunch for Friday", Kind: "general" })).taskId);
       await page.evaluate(() => { window.__away = true; }); await open(page, other); await sleep(Number(arg) || 4000); }

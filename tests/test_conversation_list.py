@@ -376,6 +376,28 @@ class TheList(unittest.TestCase):
         self.assertEqual([(c['review'], c['status']) for c in got[-1]['cards']], [(rid2, 'pending')])
         self.assertEqual([x['kind'] for x in got][-4:], ['turn', 'arrival', 'line', 'turn'])
 
+    def test_what_waits_is_in_one_place_and_a_line_he_takes_back_never_reaches_the_agent(self):
+        """The waiting room (the owner, 2026-11-12: "make sure ... it comes off the waiting room correctly. it does not show in 2 places"):
+        mid-turn his lines, a sender's mail and his own outside reply all wait by the box - never on the canvas too - and land on it once,
+        where the next turn heard them. One he takes back (the row's trash) leaves no trace and is never told."""
+        self.brain.delay = 1.0
+        self.say('Suggest two.', 'l-one', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.say('Near a station.', 'l-two', wait=False); self.say('Forget the budget.', 'l-three', wait=False)
+        self.mail('Also - 40 people, not 30.'); self.mail('I asked the Quay for a quote.', own=True)
+        got = self.list()
+        self.assertEqual(sorted(x['kind'] for x in got['pending']), ['arrival', 'arrival', 'line', 'line'])
+        self.assertFalse({x['id'] for x in got['pending']} & {x['id'] for x in got['items']})
+        self.assertEqual(general.drop_line(self.s, self.tid, 'l-three'), {'ok': True})
+        got = self.list()
+        self.assertNotIn('l-three', [x['id'] for x in got['pending']]); self.assertEqual(got['dropped'], ['l-three'])
+        self.assertEqual(general.drop_line(self.s, self.tid, 'l-one')['ok'], False)                    # ...one the agent has stays its
+        self.rest()
+        got = self.list(); ids = [x['id'] for x in got['items']]
+        self.assertEqual((got['pending'], 'l-three' in ids, ids.count('l-two')), ([], False, 1))
+        self.assertEqual(sum(x['kind'] == 'arrival' for x in got['items']), 3)                          # the first mail and both that waited
+        self.assertNotIn('Forget the budget.', '\n'.join(self.brain.calls))
+
     def test_the_basic_flow_names_each_shape_the_owner_saw(self):
         "conversation.flow_breaks over the owner's frames of 2026-11-12, as lists: each breaks one rule, and the list he expects breaks none."
         card = lambda st, what='draft_reply', rid=1: {'id': f'r:{rid}', 'kind': 'card', 'review': rid, 'what': what, 'status': st}
@@ -395,6 +417,11 @@ class TheList(unittest.TestCase):
         self.assertTrue(any(b.startswith('f:') for b in conversation.flow_breaks(above, was)))           # a press's line above the card pressed
         said = {'items': [mail, turn('t:m:1:0', text='Done. Verified all four rates.', cards=[card('pending')])], 'working': False}
         self.assertTrue(any(b.startswith('f:') for b in conversation.flow_breaks(said, was)))            # a past turn's words changed
+        two = {'items': [mail, line], 'pending': [line], 'working': True}
+        self.assertTrue(any(b.startswith('h:') for b in conversation.flow_breaks(two)))                  # by the box AND on the canvas
+        held = {'items': [mail], 'pending': [line], 'working': True}
+        self.assertTrue(any(b.startswith('h:') for b in conversation.flow_breaks({'items': [mail], 'pending': []}, held)))   # ...and then nowhere
+        self.assertFalse(any(b.startswith('h:') for b in conversation.flow_breaks({'items': [mail], 'pending': [], 'dropped': ['l-2']}, held)))
 
     def test_a_message_drawn_never_goes_back_by_the_box_when_a_turn_begins_in_its_second(self):
         """The release run on macOS, 2026-11-12 (the basic flow's check, on seven coding scenarios): the first mail was drawn, a turn began in

@@ -17,7 +17,7 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, newerList, withMine } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, newerList, withMine, waitingChips } from "./chatStream.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
@@ -64,6 +64,7 @@ import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import TelegramIcon from "@mui/icons-material/Telegram";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -503,11 +504,19 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
    ...A ROW IS NOT MARKED [data-tq-held] (seen 2026-11-11: with lines waiting, the task's card stood 8 px under the canvas's head): that name
    is the place a link asked the canvas to hold in the middle of its view (appLinks.focusPlace, AssistantView keepTable) - one waiting line
    and the canvas scrolled the whole task to centre it, as far as it would go */
-const PendingStrip = ({ items, onRetry = null }) => { const shown = waitingShown(items); return !items.length ? null : <div className="tq-conv-pending" data-tq-pending="" role="status">
-  <div className="tq-conv-pending-head">Waiting for the agent{items.length > 1 ? ` · ${items.length}` : ""}{shown.length < items.length ? ` · the newest ${shown.length} below` : ""}</div>
+/* WHAT WAITS FOR THE AGENT, OVER THE BOX (the owner, 2026-11-12, as Codex shows a queued message): HIS lines typed while a turn works, one
+   slim row each on his side - the newest two, "+N more" over them - with Send now where the turn takes words mid-turn (the list's `now`) and a
+   trash that takes it back. What came in waits as a count on its sender's chip (waitingChips), never a row here. Each in one place: here
+   until the agent hears it, then in the chat where it heard it. */
+const PendingStrip = ({ items, now = false, onRetry = null, onDrop = null, onNow = null }) => {
+  const rows = items.filter((x) => x.kind !== "arrival"), shown = waitingShown(rows, 2), more = rows.length - shown.length;
+  return !rows.length ? null : <div className="tq-conv-pending" data-tq-pending="" role="status" aria-label="Waiting for the agent">
+  {more > 0 && <div className="tq-conv-pending-more" data-tq-pending-more="" data-tq-pending-ids={rows.filter((x) => !shown.includes(x)).map((x) => x.id).join(" ")}>+{more} more</div>}
   {shown.map((x) => <div key={x.id} className="tq-conv-pending-row" data-tq-pending-item={x.id} dir="auto" title={x.text || x.words || ""}>
-    <span className="tq-conv-pending-who">{x.kind === "line" ? "You" : x.kind === "arrival" ? (x.own ? "You, outside" : x.who || "Someone") : ""}</span>
-    <span className="tq-conv-pending-words">{x.text || x.words || ""}</span></div>)}
+    <span className="tq-conv-pending-words">{x.text || x.words || ""}</span>
+    {x.kind === "line" && now && onNow && <button type="button" className="tq-conv-pending-act" data-tq-send-now="" onClick={() => onNow(x)}>Send now</button>}
+    {x.kind === "line" && onDrop && <button type="button" className="tq-conv-pending-act" aria-label="Take it back" title="Take it back - it never reaches the agent"
+      data-tq-drop-line="" onClick={() => onDrop(x)}><DeleteOutlineIcon sx={{ fontSize: 15 }} /></button>}</div>)}
   {/* ...a send that failed says so in its own plain line, never inside his words (the owner's live task, 2026-11-12) */}
   {shown.filter((x) => x.err).map((x) => <div key={`e-${x.id}`} className="tq-aui-hint" role="alert" data-tq-line-failed="">{x.err}{onRetry && <> · <button type="button"
     className="tq-aui-arrived-more-btn" data-tq-try-again="" onClick={() => onRetry(x)}>Try again</button></>}</div>)}
@@ -543,6 +552,10 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
   }, [runtime, attachmentsRef, selectionRef, onClearAttachments, onAttachBack, onSent, road, reloadList, task.TaskId]);
   // ...and a line whose send failed is sent again as it was typed, the failed one taken off the screen
   const retry = useCallback((l) => { setMine((m) => m.filter((x) => x.id !== l.id)); sendLine(String(l.text || "")); }, [sendLine]);
+  // ...and what waits, taken back or sent in now - the server's word, read again at once (the list moves it, never the page)
+  const dropLine = useCallback((l) => { setMine((m) => m.filter((x) => x.id !== l.id)); api.post(`/api/tasks/${task.TaskId}/waiting/${encodeURIComponent(l.id)}/drop`).catch(() => {}).finally(() => reloadList?.()); }, [task.TaskId, reloadList]);
+  const sendNow = useCallback(() => { api.post(`/api/tasks/${task.TaskId}/waiting/now`).catch(() => {}).finally(() => reloadList?.()); }, [task.TaskId, reloadList]);
+  const chipsWaiting = waitingChips(merged.pending, came?.label || "");
   // ...at its end, and held there while he has not moved away from it: what is new draws under what he was reading, never over it.
   // BEFORE THE FIRST PAINT (a layout effect): the lines of a long chat measure themselves as they are drawn and each grows a "Show all" - after
   // this component's own pin. Watched only from after the paint, the first frame of an opened task stood ~900px short of its end
@@ -641,7 +654,7 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
           </div>
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">
-            <PendingStrip items={merged.pending} onRetry={retry} />
+            <PendingStrip items={merged.pending} now={!!list?.now} onRetry={retry} onDrop={dropLine} onNow={sendNow} />
             {/* NO AI: one small line over the box, its Connect an AI beside it (the owner, 2026-11-06) - the box stays the box */}
             {noAi}
             {/* ONE DOOR: while the conversation is open the box is how it goes on, but once a coding run has ENDED on a closed task the bar
@@ -654,9 +667,10 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
                 composer its root and input. Its files inside it, the one attachment look in one line (the owner, 2026-11-05), and WHERE IT CAME
                 FROM a chip at its left (2026-11-06) - a press opens it. A turn at work stops on the x of its own head, never in the box */}
             <OneBox root={ComposerPrimitive.Root} rootProps={{ onSubmit: (e) => { e.preventDefault(); sendLine(); } }} onFiles={onAttach}
-              chips={attachmentsRef.current.length || came ? <>
-                {came && <AttachChip data-tq-came-chip="" name={came.label} title={came.title || came.label} icon={came.icon || false} onClick={came.onOpen}
-                  sx={{ cursor: came.onOpen ? "pointer" : "default" }} />}
+              chips={attachmentsRef.current.length || came || chipsWaiting.length ? <>
+                {came && ((w) => <AttachChip data-tq-came-chip="" {...(w ? { "data-tq-pending-ids": w.ids.join(" ") } : {})} name={w ? w.label : came.label}
+                  title={came.title || came.label} icon={came.icon || false} onClick={came.onOpen} sx={{ cursor: came.onOpen ? "pointer" : "default" }} />)(chipsWaiting.find((c) => c.came))}
+                {chipsWaiting.filter((c) => !c.came).map((c) => <AttachChip key={c.key} data-tq-waiting-chip="" data-tq-pending-ids={c.ids.join(" ")} name={c.label} title={c.label} icon={false} />)}
                 {attachmentsRef.current.map((a) => <AttachChip key={a.path} data-tq-file-chip={a.name} name={a.name} onRemove={() => onClearAttachments(a.path)} />)}</> : null}
               input={<ComposerPrimitive.Input className="tq-aui-input" onKeyDown={onKey} placeholder={askWords || placeholder || MESSAGE} />}
               onMic={(t) => { const c = runtime.thread.composer, was = c.getState().text; c.setText(was.trim() ? `${was.trimEnd()} ${t}` : t); }}

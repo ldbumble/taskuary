@@ -696,7 +696,13 @@ def items(store, tid: int) -> dict:
     flat = lambda v: ' '.join(re.sub(r'[*_`]', '', str(v or '')).split())
     last = next((x for x in reversed(out) if x['kind'] == 'turn'), None)
     if ask and last and flat(ask.get('text')) and flat(ask['text']) in flat(last.get('text')): ask = {**ask, 'said': True}
-    body = {'items': out, 'pending': pend, 'working': at_work, 'started': t0 if at_work else None, 'asking': ask,
+    # THE WAITING ROOM (the owner, 2026-11-12): what waits for the agent is drawn in ONE place until it is heard - his lines as rows over the
+    # box, messages as counts on their sender's chip - and `now` says whether a waiting line can be handed into the turn at work at once (a
+    # session that takes words mid-turn, not stopped at his Allow); `dropped`: the lines he took back, which leave no trace
+    live_ = codingchat._live(tid)
+    now = bool(at_work and pend and not perms and live_ is not None and getattr(live_, 'steerable', lambda: False)())
+    dropped = [json.loads(r['Detail'] or '{}').get('line') for r in store._rows("SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='line_dropped'", (tid,))]
+    body = {'items': out, 'pending': pend, 'now': now, 'dropped': [d for d in dropped if d], 'working': at_work, 'started': t0 if at_work else None, 'asking': ask,
             'permissions': perms, 'live': codingchat.live_of(codingchat._live(tid)),
             'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
                               **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if any(x['kind'] == 'turn' for x in out) else {})}, 'published': published, 'ran': bool(turn_of) or any(x['kind'] == 'turn' for x in out)}
@@ -715,7 +721,9 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     d nothing is drawn empty
     e "working" is one fact: one turn at work, the last one, exactly when the list says working
     f nothing is drawn above what was there, and nothing that was there changes place; a past turn's words never change
-    g a turn at work draws no card (its card comes when it has ended, as its last thing); a step it is stopped at is its permission"""
+    g a turn at work draws no card (its card comes when it has ended, as its last thing); a step it is stopped at is its permission
+    h an input is in exactly one place: waiting (`pending`) or on the canvas, never both, and one that leaves the waiting room is on the
+      canvas in the same read - unless he took it back (`dropped`)"""
     xs, out = got.get('items') or [], []
     say, ids = out.append, [x['id'] for x in xs]
     live = lambda x: x['kind'] == 'turn' and x.get('state') in LIVE
@@ -747,7 +755,12 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     # g
     for x in at:
         for c in x.get('cards') or []: say(f"g: the turn at work {x['id']} draws its card {c['id']}")
+    # h: ONE PLACE AT A TIME (the owner, 2026-11-12: "it does not show in 2 places"): waiting by the box or on the canvas, never both...
+    for i in {p['id'] for p in got.get('pending') or []} & set(ids): say(f'h: {i} waits by the box AND stands on the canvas')
     if was is None: return out
+    # ...and never neither: what left the waiting room is on the canvas in the same read, unless he took it back
+    gone = {p['id'] for p in was.get('pending') or []} - {p['id'] for p in got.get('pending') or []} - set(ids) - set(got.get('dropped') or [])
+    for i in sorted(gone): say(f'h: {i} left the waiting room and is nowhere')
     # c, f
     old = [x for x in was.get('items') or []]
     now, by = {x['id']: i for i, x in enumerate(xs)}, {x['id']: x for x in xs}

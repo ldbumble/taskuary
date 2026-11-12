@@ -212,16 +212,17 @@
 .tq-aui-chat .tq-aui-agent-more { margin-top: -8px; }
 
 /* THE CONVERSATION'S PENDING STRIP (Conversation.PendingStrip): what was accepted and waits for the agent, by the box - never in the chat until heard */
-.tq-conv-pending { margin: 0 auto 8px; max-width: 760px; padding: 6px 10px; border: 1px dashed var(--tq-border, #d9d4cb); border-radius: 10px; background: var(--tq-inset, #f4f1ea); max-height: 132px; overflow-y: auto; }
+/* the waiting room over the box (GeneralWorkspace PendingStrip): his queued lines on his side, slim, no box - as a chat app queues a message */
+.tq-conv-pending { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin: 0 0 6px; padding: 0 2px; }
 .tq-aui-viewport:has(> .tq-conv) { overflow-anchor: none; }      /* the chat pins its own end (GeneralWorkspace): the browser's anchoring moved it back as a turn's steps folded */
 .tq-conv-past { margin: 8px 0 2px; padding: 6px 10px; border: 1px dashed var(--tq-border, #d9d4cb); border-radius: 8px; color: var(--tq-muted, #8b877e); font-size: 12.5px; }
 .tq-conv-past-head { font-weight: 600; }
 .tq-conv-past-words { margin-top: 4px; white-space: pre-wrap; max-height: 4.5em; overflow: hidden; }
-.tq-conv-pending-head { font-size: 11px; font-weight: 600; color: var(--tq-muted, #8b877e); margin-bottom: 2px; }
-.tq-conv-pending-row { display: flex; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--tq-text, #292824); }
-.tq-conv-pending-who { flex: 0 0 auto; color: var(--tq-muted, #8b877e); }
+.tq-conv-pending-more { font-size: 11.5px; color: var(--tq-muted, #8b877e); }
+.tq-conv-pending-row { display: flex; align-items: center; gap: 6px; max-width: min(78%, 560px); padding: 3px 4px 3px 12px; border-radius: 14px; background: var(--tq-inset, #f4f1ea); font-size: 13px; line-height: 1.5; color: var(--tq-text, #292824); }
+.tq-conv-pending-act { flex: 0 0 auto; display: inline-flex; align-items: center; padding: 1px 6px; border: 0; border-radius: 10px; background: none; color: var(--tq-muted, #8b877e); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.tq-conv-pending-act:hover { color: var(--tq-text, #292824); background: var(--tq-panel, #fff); }
 .tq-conv-pending-words { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-conv-pending-err .tq-conv-pending-words { color: var(--tq-danger, #b3261e); white-space: normal; }
 .tq-aui-arrived-words.tq-aui-arrived-open { display: block; -webkit-line-clamp: unset; overflow: visible; }
 .tq-aui-arrived-more-btn { align-self: flex-start; margin-top: 2px; padding: 0; border: 0; background: none; color: var(--tq-muted, #8b877e); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .tq-aui-arrived-more-btn:hover { color: var(--tq-text, #292824); text-decoration: underline; }

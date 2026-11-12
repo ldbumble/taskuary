@@ -135,6 +135,20 @@ def run_kept(store, tid: int) -> bool:
     threading.Thread(target=go, daemon=True, name=f'line-{tid}').start()
     return True
 def new_line_id() -> str: return 's' + uuid.uuid4().hex[:14]
+def drop_line(store, tid: int, line_id: str) -> dict:
+    """A line of his that waits, taken back before any turn heard it (the waiting room's trash): its kept row goes, and the list names it
+    `dropped` so its leaving is his, never a line gone missing. One already heard is the agent's - it stays. -> {ok, why?}"""
+    from . import conversation
+    with store.lock:
+        r = next((c for c in store.list_comments(int(tid), internal=True) if c.get('ActorType') == WAITING_TYPE and (c.get('LineId') or '') == str(line_id)), None)
+        if not r or conversation.heard(store, tid, 'line', [line_id]): return {'ok': False, 'why': 'the agent has it already'}
+        store.drop_comment(r['CommentId'])
+    store.audit('task', int(tid), 'line_dropped', 'owner', 'owner', {'line': str(line_id)})
+    answered(int(tid))
+    store._poke('task-changed', task_id=int(tid))
+    return {'ok': True}
+
+
 def waiting_lines(store, tid: int) -> list:
     "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
     return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body']), **({'line': r['LineId']} if r.get('LineId') else {})}

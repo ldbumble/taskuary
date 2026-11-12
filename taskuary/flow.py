@@ -368,14 +368,15 @@ def _ai(store, step, ctx, llm, tid, dry, warns, title):
              'text': 'Answer in plain text.'}[out]
     prompt = render(str(step.get('prompt') or ''), ctx, warns, AI_CHARS, fence=True)
     # A SCHEDULED RUN THAT READS WHAT ITS LAST RUN READ ASKS NOTHING (the owner, 2026-11-11: "if nothing changed in raw stuff ... just
-    # run it on changes"): the step keeps its last answer under the routine and the step (llm.remembered), and the steps after it act on
-    # that. Run now, a dry run and a changed input ask as before
-    from .llm import remembered
-    run, asked, text = ctx.get('run') or {}, [], f'{prompt[:AI_CHARS * 2]}\n\n{shape}'
-    def ask(): asked.append(1); return str(use(FLOW_AI_SYSTEM, text, max_tokens=SUMMARY_TOKENS) or '').strip() or None
+    # run it on changes"): the step keeps its last answer under the routine and the step (llm.standing) - a few changed facts are one short
+    # call - and the steps after it act on that. Run now, a dry run and a changed input ask as before
+    from .llm import standing
+    run, text = ctx.get('run') or {}, f'{prompt[:AI_CHARS * 2]}\n\n{shape}'
+    def ask(u): return str(use(FLOW_AI_SYSTEM, u, max_tokens=SUMMARY_TOKENS) or '').strip() or None
     memo = run.get('trigger') == 'schedule' and run.get('source_id') and not dry and f"flow_ai_mark:{run['source_id']}:{step.get('id') or step.get('label') or ''}"
-    raw = (remembered(store, memo, (FLOW_AI_SYSTEM, text), ask) if memo else ask()) or ''
-    if not asked: logger.info(f'{title}: the AI step read what its last run read - its answer was kept, nothing was asked')
+    raw, look = standing(store, memo, FLOW_AI_SYSTEM, text, ask) if memo else (ask(text), 'asked')
+    raw = raw or ''
+    if look != 'asked': logger.info(f'{title}: the AI step - {look}')
     # an answer that did not happen is a failed step, never an empty one the next step reads as "no" (reports.render_report)
     if not raw: raise RuntimeError('the model returned an empty answer - it may have spent its budget thinking')
     if out == 'text': return {'head': next((l.strip() for l in raw.splitlines() if l.strip()), '')[:160], 'body': raw}

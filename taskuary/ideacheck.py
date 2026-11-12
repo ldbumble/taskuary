@@ -68,8 +68,9 @@ def _workstream(store, act: dict) -> str:
 
 
 @aiusage.named('advisor.idea')
-def check(store, say: list, llm=None) -> tuple:
-    """(the lines to raise, [(key, why it was held)]). The model's own lines only; everything else passes."""
+def check(store, say: list, llm=None, memo: str = None) -> tuple:
+    """(the lines to raise, [(key, why it was held)]). The model's own lines only; everything else passes. `memo`: where a clocked look
+    keeps its last verdict - never on Run now."""
     held, keep, ask = [], [], []
     if not store.get_setting(ideagrade.SINCE_KEY):           # the kinds' record starts with the second look (ideagrade.quiet_kinds)
         store.set_setting(ideagrade.SINCE_KEY, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'advisor')
@@ -96,8 +97,12 @@ def check(store, say: list, llm=None) -> tuple:
             bring = [raw for raw, _k in lc.lines(store.doc('learned') or '', lc.BRING)]
             user = ('WHAT THE OWNER ASKED TO BE BROUGHT UP:\n' + '\n'.join(bring) + '\n\n' if bring else '') + '\n\n'.join(f"NOTE {n}: {s['text']}\nwhy: {s.get('why') or '-'}\nworkstream: {_workstream(store, s.get('action') or {})}\n"
                                f"the owner last did on it: {_last_acts(store, s.get('action') or {})}" for n, s in enumerate(ask, 1))
-            got = ask_json(llm, SYSTEM, user, want=WANT, need=('known',))
-            known = {int(x) for x in ((got.data or {}).get('known') or []) if str(x).lstrip('-').isdigit()} if got.data is not None else set()
+            # THE SAME NOTES, THE SAME LOOK (`memo`, a clocked run's - llm.standing): a line held here is never posted, so the clock's next
+            # look raised it again and the second look was asked about it again, every half hour all night (2026-11-12)
+            from .llm import standing
+            def look(u): return ask_json(llm, SYSTEM, u, want=WANT, need=('known',)).data
+            got = standing(store, memo, SYSTEM, user, look, small=False)[0] if memo else look(user)
+            known = {int(x) for x in ((got or {}).get('known') or []) if str(x).lstrip('-').isdigit()} if got is not None else set()
             for n, s in enumerate(ask, 1):
                 if n in known: held.append((s['key'], 'the owner would already know it'))
                 else: keep.append(s)

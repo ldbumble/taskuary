@@ -55,6 +55,19 @@ def test_the_second_look_holds_a_quiet_kind_work_touched_today_and_what_the_owne
     assert [x['key'] for x in kept] == ['idea:x']
 
 
+def test_a_line_held_on_the_clocks_look_is_not_asked_about_again_until_something_about_it_changes():
+    """The live shape (2026-11-12): a line the second look held is never posted, so every half-hour look raised it again and the second
+    look was asked about the same note all night - the 'advisor' job, 3-4K tokens a call, an empty answer each time."""
+    s, asked = MemoryStore(), []
+    u = Factory(s).task(title='Board pack')
+    def llm(system, user, **k): asked.append(user); return json.dumps({'known': [1]})
+    look = lambda key, memo='advisor_idea_check_mark:7': ideacheck.check(s, [_say(key, tid=u)], llm, memo=memo)[1]
+    for _ in range(3): assert look('idea:obvious') == [('idea:obvious', 'the owner would already know it')]
+    assert len(asked) == 1, 'the same note: the verdict stands'
+    look('idea:other'); assert len(asked) == 2, 'another note is asked'
+    look('idea:other', None); assert len(asked) == 3, 'Run now asks'
+
+
 def test_the_model_names_the_kind_of_its_own_line():
     s = MemoryStore()
     say = [{'key': 'idea:clash-thursday', 'text': 'The Ledger demo overlaps the Northwind board prep on Thursday', 'type': 'clash', 'why': 'calendar'},

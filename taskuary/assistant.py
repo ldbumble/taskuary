@@ -1466,14 +1466,14 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
     if not systems_only:
         from .llm import readable_images
         images = readable_images(store, _people_context(store)[1])
-    ask = lambda: llm(system, user, max_tokens=POST_TOKENS, **({'images': images} if images else {})) or None
-    # THE SAME PAYLOAD GETS THE SAME ANSWER (`memo`: where a clocked look keeps its last one - llm.remembered): the look's own guard
-    # reads what MOVED, and a report with a candidate still standing or a source of its own never passed it - so one install sent
-    # the whole payload, ~49K tokens, every half hour round the clock. Read without its clock line (build_sections' NOW); a new day asks again
-    from .llm import remembered
-    words = (system, re.sub(r'(?m)^NOW: .*$', '', user, count=1), datetime.now().strftime('%Y-%m-%d'), len(images))
-    text = (remembered(store, memo, words, ask) if memo else ask()) or ''
-    return parse(store, text, cands, max_lines, report_id, connect=ev), _notes(text), user, mids
+    ask = lambda u: llm(system, u, max_tokens=POST_TOKENS, **({'images': images} if images and u is user else {})) or None
+    # A CLOCKED LOOK ASKS ON ITS FACTS (`memo`: where it keeps its last answer - llm.standing): the look's own guard reads what MOVED, and
+    # a report with a candidate still standing or a source of its own never passed it - one install sent the whole payload, ~50K tokens,
+    # every half hour all night, its bytes a few tokens apart each time ("5h since" for "4h since"). Same facts: the last answer stands;
+    # a few changed: one short call with only those; else the whole payload again
+    from .llm import standing
+    text, look = standing(store, memo, system, user, ask, now=datetime.now()) if memo else (ask(user), 'asked')
+    return parse(store, text or '', cands, max_lines, report_id, connect=ev), _notes(text or ''), user, mids, look
 
 
 def _connect_evidence_for(store, blocks) -> dict | None:
@@ -1821,7 +1821,7 @@ def _judged(judge, say: list) -> dict | None:
 
 def run(store, llm=None, force: bool = False, instruction: str = None, *,
         watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None,
-        report_id=None, report_title: str = None, always_post: bool = False, judge=None) -> dict:
+        report_id=None, report_title: str = None, always_post: bool = False, judge=None, asked: bool = None) -> dict:
     """One post. The Reports tab's scheduler calls this when the 'Assistant' report is due
     (reports.run_report_source) and its "Run now" calls it forced; the instruction is the report's
     editable prompt. Deleting or switching off that report is the off switch - a forced run still
@@ -1829,7 +1829,10 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
 
     `judge(lines, n) -> {'timeline': bool, ...}` is the report's routing card, asked BEFORE anything
     posts (reports.decide). Every idea is triaged whatever it says (the owner, 2026-09-28: whether it is
-    work is triage's call); timeline=no puts down at once each idea triage made no task of."""
+    work is triage's call); timeline=no puts down at once each idea triage made no task of.
+
+    `asked`: the owner asked for this look (Run now) - it reads everything afresh. Defaults to `force`; the scheduler forces a run past the
+    switch but did not ask, and passing its force on as "asked" switched off every guard on the clock's own look (2026-11-12)."""
     src = source(store)
     if not force and not (src and src.get('Active')): return {'ran': False, 'said': 0}
     # ...and past the day's ceiling for what nobody asked for, the clock's look waits for tomorrow (brainroute.auto_held); Run now still runs
@@ -1846,7 +1849,7 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
     with _LOCK, (store.reads_off_writer() if hasattr(store, 'reads_off_writer') else contextlib.nullcontext()):
         retry_stuck_ideas(store, report_id, report_title)
         return _run(store, llm, instruction, watch_source_ids or [], watch_sources or [],
-                    systems_only, report_id, report_title, always_post, blocks, judge, asked=force)
+                    systems_only, report_id, report_title, always_post, blocks, judge, asked=force if asked is None else asked)
 
 
 def clock(store):
@@ -1950,18 +1953,18 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # Selecting system views is itself an explicit request for model judgement. It must keep
     # working even if the owner turns off the free-form "idea" producer in Settings.
     configured = bool(_ids(watch_source_ids) or _inline(watch_sources))
-    used, note, read, mids = bool(llm and (configured if systems_only else ('idea' in c['producers'] or configured))), '', '', {}
+    used, note, read, mids, look = bool(llm and (configured if systems_only else ('idea' in c['producers'] or configured))), '', '', {}, ''
     # A CALL ONLY WHERE SOMETHING MOVED (the owner, 2026-11-10: "client claims he barely used it. are we leaking tokens?"): every thirty
     # minutes the whole payload went to the model on an install where nothing had arrived, changed or been decided since the last look -
     # "posts nothing when nothing is new" posted nothing, and paid for the call. No new candidate and an unmoved mark: no call - but Run now
     mark = read_mark(store)
     if used and not asked and not cands and not configured and store.get_setting(mark_key(report_id)) == mark:
-        logger.info(f"assistant: {report_title or 'Advisor'} - nothing moved since its last look, no model call"); used = False
+        logger.info(f"assistant: {report_title or 'Advisor'} - nothing moved since its last look, no model call"); used, look = False, 'nothing changed'
     # A SYSTEM WORTH CONNECTING is no candidate: the model reads the `connectors` block in think() and raises it itself,
     # or not (connect_line). No model, no line - there is nothing to judge it with, and no word match stands in.
     if used:
         try:
-            say, note, read, mids = think(store, cands, llm, instruction, c['max'],
+            say, note, read, mids, look = think(store, cands, llm, instruction, c['max'],
                                           watch_source_ids, watch_sources, systems_only, blocks, report_id,
                                           memo=None if asked else f'advisor_think_mark:{report_id or ""}')
             store.set_setting(mark_key(report_id), mark, 'assistant')
@@ -1982,8 +1985,9 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # the note outlives the post: a quiet check leaves one too, so the next check starts where this
     # one stopped. Each report writes and reads its OWN note (notes_key) - one global note meant a
     # second Assistant report reading the first's private memory, and overwriting it.
-    if note and not systems_only:
-        k = notes_key(store, report_id)
+    # ...stamped when its words were written: a kept answer re-stamping the same note put a new time in the next look's payload, and a
+    # look that changed nothing read as one that had (2026-11-12)
+    if note and not systems_only and note != store.get_setting(k := notes_key(store, report_id)):
         store.set_setting(k, note, 'assistant'); store.set_setting(f'{k}_at', now.strftime('%Y-%m-%d %H:%M:%S'), 'assistant')
     # Namespace monitor findings so two SQL checks can use the same natural idea key without one
     # report suppressing the other report's finding. Keyed on the REPORT, never on its data scope
@@ -2011,6 +2015,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     else:
         rv = reviewed(cands, say, _recent(store), _open(store), _said(store, report_id=report_id), used, _week(store), _people(store)) | {
             'notes': note, 'blocks': read_blocks(blocks)}
+    if look: rv['look'] = look            # which of the three a clocked look was (llm.standing), on the run where the owner reads it
     # ...and what the REPORT proposes on its own: the app's health. Read, not thought; fresh() keeps a declined one
     # from coming back, and a raised one from repeating. A system worth connecting is NOT here: the model raises it
     # in its own pass (connect_line), because a name match raised Monday.com off three holiday notices.
@@ -2037,7 +2042,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     # they would already know are held - said in the post's own record of what it read, never raised
     if say and not systems_only:
         from . import ideacheck
-        say, held = ideacheck.check(store, say)        # its own brain call (job='advisor'), never the post's own answer
+        # its own brain call (job='advisor'), never the post's own answer
+        say, held = ideacheck.check(store, say, memo=None if asked else f'advisor_idea_check_mark:{report_id or ""}')
         if held: rv['held'] = [{'key': k, 'why': w} for k, w in held]
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     # the report's routing card reads the lines BEFORE they post; a judge that fails leaves the run

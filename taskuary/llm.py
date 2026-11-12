@@ -778,17 +778,59 @@ def ask_json(brain, system: str, user: str, want: dict = None, need=(), **kw) ->
     return _stepped(brain, system, user, want, need, kw, out)
 
 
-def remembered(store, key: str, words, ask):
-    """SAME WORDS, SAME ANSWER: `ask()`'s answer, or the one kept under the setting `key` when `words` are what it was last asked with -
-    then nothing is asked. One answer per key, the last one, so nothing grows; an answer of None (the model did not answer) is never
-    kept, and is asked again. For a question a clock asks - never one the owner asks again on purpose (a redraft)."""
-    h = hashlib.sha1('\0'.join(map(str, words)).encode('utf-8', 'replace')).hexdigest()
+# lines new + gone that one short call weighs against the last answer. One new mail shows on 3-4 lines of an Advisor payload (its arrival,
+# its thread, the threads list, a capped list's last line falling off): 12 is two or three mails - past that the picture itself has moved
+SMALL_FACTS = 12
+MAX_RECHECKS = 3    # small checks stacked on one full answer before it is asked again whole, however small each was - so it never drifts
+NO_CHANGE = 'NO CHANGE'
+RECHECK_ASK = (f"Would anything in your last answer change because of these? If nothing would, answer exactly {NO_CHANGE}. If something "
+               'would, answer again in the same format as your last answer, as it should now stand.')
+# the app's own clock words in a payload (timewords.span's '5m' / '3 hours' / '1h05m' and 'just now', and the clock line a payload opens
+# with): a fact is what it is, not how long ago it was looked at - half an hour later "4h since" reads "5h since" and nothing happened.
+# And a list's own position number (assistant.connect_text's [T3], newest first): one new mail renumbers every line under it
+_CLOCK = re.compile(r'^NOW: .*$|^\[[TN]\d+\]|-?\b\d+h\d\dm\b|-?\b\d+[mhd]\b|\b\d+ (?:minute|hour|day)s?\b|\bjust now\b')
+
+
+def fact(line) -> str: return _CLOCK.sub('~', str(line)).strip()
+def facts(text) -> list: return [l.strip() for l in str(text or '').splitlines() if fact(l).strip('~ ')]
+
+
+def standing(store, key: str, system: str, user: str, ask, small: bool = True, now=None) -> tuple:
+    """(answer, what this run was) for a question a clock asks, decided on its facts (the owner, 2026-11-12: "if it only changes a little
+    take the past result and say would anything change based off of this small change"). `ask(user)` asks the model; `key` is the setting
+    the last answer stands under. Three cases, by plain code:
+      - the same facts, only clocks moved: nothing is asked, the last answer stands ('nothing changed');
+      - a few facts new or gone (SMALL_FACTS, at most MAX_RECHECKS times): one short call - the last answer and only those facts
+        (`small=False`: a question that cannot be asked that way, asked whole instead);
+      - many, a changed instruction, nothing kept or a new day: asked whole ('rebuilt').
+    An answer of None (the model did not answer) is never kept. Never for what the owner asks again on purpose (Run now, a redraft)."""
+    from collections import Counter
+    from datetime import datetime
+    day, sh, now_f = (now or datetime.now()).strftime('%Y-%m-%d'), hashlib.sha1(str(system).encode('utf-8', 'replace')).hexdigest(), facts(user)
     try: had = json.loads(store.get_setting(key) or '{}')
     except ValueError: had = {}
-    if isinstance(had, dict) and had.get('h') == h and 'out' in had: return had['out']
-    out = ask()
-    if out is not None: store.set_setting(key, json.dumps({'h': h, 'out': out}), 'router')
-    return out
+    def keep(out, n, said):
+        if out is not None: store.set_setting(key, json.dumps({'sys': sh, 'facts': now_f, 'out': out, 'day': day, 'n': n}), 'router')
+        return out, said
+    ok = isinstance(had, dict) and had.get('sys') == sh and had.get('day') == day and 'out' in had
+    if not ok: return keep(ask(user), 0, 'asked' if not had else 'rebuilt: a new day' if had.get('day') != day else 'rebuilt: its instruction changed')
+    was = had.get('facts') or []
+    old, new = Counter(map(fact, was)), Counter(map(fact, now_f))
+    plus, minus = new - old, old - new
+    def pick(ls, c):                                    # the lines as they were written, each one as often as it changed
+        out = []
+        for l in ls:
+            if c[fact(l)] > 0: c[fact(l)] -= 1; out.append(l)
+        return out
+    added, gone = pick(now_f, plus), pick(was, minus)
+    n = len(added) + len(gone)
+    if not n: return had['out'], 'nothing changed'
+    if not small or n > SMALL_FACTS or int(had.get('n') or 0) >= MAX_RECHECKS: return keep(ask(user), 0, f'rebuilt: {n} facts changed')
+    said = '\n'.join([f'new: {l[:600]}' for l in added] + [f'gone: {l[:600]}' for l in gone])
+    got = ask(f"YOUR LAST ANSWER:\n{had['out']}\n\nSINCE IT, ONLY THESE FACTS CHANGED (everything else you were shown is the same):\n{said}\n\n{RECHECK_ASK}")
+    if got is None: return keep(ask(user), 0, f'rebuilt: {n} facts changed')
+    same = str(got).strip().strip('.').upper() == NO_CHANGE
+    return keep(had['out'] if same else got, int(had.get('n') or 0) + 1, f"checked {n} changed facts - {'no change' if same else 'updated'}")
 
 
 _FENCE = re.compile(r'```[a-zA-Z]*\s*\n?(.*?)```', re.S)

@@ -1549,14 +1549,16 @@ def with_judge(chosen, default_llm, learned: str = '') -> dict:
 
 def decide_for(store, cfg: dict, res: dict, default_llm, memo: str = None) -> dict:
     """`decide` with this install's judge already resolved. `memo` names where a scheduled report keeps its judge's last answer: a run
-    that came back saying what the last one said, under the same questions and the same memory, is not judged again (llm.remembered) -
+    that came back saying what the last one said, under the same questions and the same memory, is not judged again (llm.standing) -
     an unchanged run skipped its summary and was still read by the judge, the owner's whole memory with it, every time it was due."""
     mem = judge_memory(store, cfg) if asks_ai(cfg) else ''
     kw = with_judge(judge_for(store, cfg, default_llm, mem), default_llm, mem)
     j = kw.get('judge') or (chat_judge(kw['llm'], mem) if kw.get('llm') else None)
     if memo and j:
-        from .llm import remembered
-        kw = {'judge': lambda state, ask, c: remembered(store, memo, (judge_prompt(c), mem, state, *ask), lambda: j(state, ask, c))}
+        from .llm import standing
+        # a judge's answer is a verdict on the whole run, never re-weighed on a few lines: small=False
+        kw = {'judge': lambda state, ask, c: standing(store, memo, f'{judge_prompt(c)}\0{mem}', '\n'.join(map(str, (state, *ask))),
+                                                       lambda u: j(state, ask, c), small=False)[0]}
     return decide(cfg, res, **kw)
 
 
@@ -2087,12 +2089,14 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         out = assistant.run(store, report_llm(store, cfg, llm), force=True, instruction=cfg.get('ai_prompt'),
                             watch_source_ids=cfg.get('watch_source_ids') or [], watch_sources=cfg.get('watch_sources') or [],
                             systems_only=not blk.reads_taskuary(chosen), blocks=chosen,
-                            report_id=src.get('SourceId'), report_title=title,
+                            report_id=src.get('SourceId'), report_title=title, asked=trigger != 'schedule',
                             always_post=route_of(cfg, 'timeline')[0] == 'always',
                             # the judge reads the lines BEFORE they post: a post the card would have
                             # held back is not quiet once it is on the Timeline (2026-09-20)
                             judge=lambda lines, n: decide_for(store, cfg, read_result(title, lines, False, n), report_llm(store, cfg, llm)))
         said = int(out.get('said') or 0)
+        # ...and which of the three the look was - "nothing changed", "checked 2 changed facts - no change", "rebuilt" - where the run is read
+        if (look := (out.get('reviewed') or {}).get('look')): out = {'summary': f'Model: {look}.', **out}
         # a model pass that failed is a FAILED run, filed below like any report's (R2)
         if out.get('failed'): failed_model = out.get('error') or 'the model pass failed'
     if cfg.get('type') == 'assistant' and not failed_model:

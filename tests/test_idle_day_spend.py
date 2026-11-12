@@ -121,20 +121,65 @@ class Worst(Model):
         return {'role': 'assistant', 'content': '', 'tool_calls': [{'id': f'c{len(msgs)}', 'function': {'name': 'search_mail', 'arguments': '{}'}}]}
 
 
-def test_a_clocked_look_with_the_payload_of_the_last_one_asks_nothing():
-    """A report with a candidate still standing, or a source of its own, never passed the nothing-moved guard: one install sent the
-    whole payload (~49K tokens) every half hour round the clock. The same payload, the clock's own line aside, keeps its answer."""
-    s, seen = store(), []
-    def brain(system, user, **k): seen.append(user); return '{"say": []}'
-    cand = [{'key': 'cold:1', 'facts': 'Gail Moreno asked for the accrual and nothing has moved'}]
+def _clock(at):
     import datetime as dt
-    def look(c=cand, memo='advisor_think_mark:7', at='10:00'):
-        class Clock(dt.datetime): now = classmethod(lambda cls, tz=None: cls.fromisoformat(f'2026-11-02T{at}:00'))
-        with mock.patch.object(assistant, 'datetime', Clock): assistant.think(s, c, brain, memo=memo)
-    look(); look(at='10:30'); assert len(seen) == 1, 'half an hour on, the same words: nothing asked'
-    assert 'NOW: Monday 02 November 2026 10:00' in seen[0]
-    look([{**cand[0], 'facts': 'Gail Moreno wrote again'}], at='11:00'); assert len(seen) == 2          # what it reads changed
-    look(memo=None, at='11:00'); look(memo=None, at='11:00'); assert len(seen) == 4                    # Run now is the owner asking
+    class Clock(dt.datetime): now = classmethod(lambda cls, tz=None: cls.fromisoformat(f'2026-11-12T{at}:00'))
+    return Clock
+
+
+def test_the_advisor_on_its_half_hour_clock_asks_on_its_facts_not_its_clock():
+    """The live shape (2026-11-12): the Advisor report on its half-hour schedule, a candidate standing, nothing arriving all night - the
+    whole payload, ~50K tokens, went to the model at 00:15, 00:45 ... 07:15, each payload a few tokens off the last ("4h since anything
+    happened" read "5h since"), and the scheduler's own force switched every guard off. Ages moving: no call. One new mail: one short
+    call with only what changed, the last answer standing on its NO CHANGE. Run now: the whole payload, asked."""
+    from taskuary import reports
+    from taskuary.testing import Factory
+    s, seen = store(), []
+    f = Factory(s); f.task('Reconcile the August accruals', status='in_progress', UpdatedAt='2026-11-11 20:10:00')
+    def brain(system, user, **k):
+        if 'YOUR INSTRUCTION' not in system: return '{"verdicts": []}'           # the sent-words judge, not the look
+        seen.append(user); return 'NO CHANGE' if user.startswith('YOUR LAST ANSWER') else '{"lines": [], "notes": "watching the accruals"}'
+    src = assistant.source(s)
+    cand = [{'key': 'cold:1', 'kind': 'cold', 'facts': 'Gail Moreno asked for the accruals and nothing has moved'}]
+    def run(at, trigger='schedule'):
+        with mock.patch.object(assistant, 'datetime', _clock(at)), mock.patch.object(assistant, 'candidates', return_value=cand):
+            reports.run_one(s, s.get_source(src['SourceId']), brain, trigger)
+        return json.loads(s.get_setting(reports.LAST_RUN + str(src['SourceId'])))['summary']
+    with mock.patch.object(assistant, 'datetime', _clock('00:15')): before = assistant.inputs(s, cand)
+    with mock.patch.object(assistant, 'datetime', _clock('00:45')): assert assistant.inputs(s, cand) != before, 'the bytes move with the clock'
+    assert run('00:15') == 'Model: asked.' and len(seen) == 1 and ' since anything happened' in seen[0]
+    # the first look's own note, and the weekly counts it read once, are the next look's only news: a short check, not the whole payload
+    assert run('00:45') == 'Model: checked 10 changed facts - no change.' and 'watching the accruals' in seen[1] and len(seen) == 2
+    assert [run(f'0{h}:{m}') for h, m in ((1, 15), (1, 45), (2, '05'))] == ['Model: nothing changed.'] * 3 and len(seen) == 2
+    f.message(subject='Accruals - the August file', from_email='gail@northwind.example', from_name='Gail Moreno', body='Here it is, sorry for the wait.',
+              sent_at='2026-11-12 02:05:00')
+    assert run('02:15').endswith('changed facts - no change.') and len(seen) == 3
+    assert seen[2].startswith('YOUR LAST ANSWER') and 'Accruals - the August file' in seen[2] and len(seen[2]) < len(seen[0]) / 4, seen[2]
+    assert run('02:45') == 'Model: nothing changed.' and len(seen) == 3
+    assert run('02:45', 'manual') == 'Model: asked.' and len(seen) == 4 and not seen[3].startswith('YOUR LAST ANSWER'), 'Run now asks whole'
+
+
+def test_a_clocked_question_is_asked_whole_only_when_much_changed_and_never_drifts():
+    "llm.standing's three cases on one key: same facts, a few, many - and small checks stacked, a new day, a changed instruction, no answer."
+    s, asked = store(), []
+    def ask(u): asked.append(u); return 'NO CHANGE' if u.startswith('YOUR LAST ANSWER') else f'answer {len(asked)}'
+    rows = [f'- TQ-{i:04d} [open] item {i} - {i}h since anything happened' for i in range(40)]
+    from datetime import datetime
+    go = lambda rs, at='2026-11-12 01:00', sys='S': llm.standing(s, 'k', sys, 'NOW: x\n' + '\n'.join(rs), ask, now=datetime.fromisoformat(at))
+    assert go(rows) == ('answer 1', 'asked')
+    assert go([r.replace(f' {i}h', f' {i + 1}h') for i, r in enumerate(rows)]) == ('answer 1', 'nothing changed')
+    assert go(rows + ['- TQ-0099 [open] a new one']) == ('answer 1', 'checked 1 changed facts - no change') and len(asked) == 2
+    assert 'new: - TQ-0099 [open] a new one' in asked[-1] and 'item 3 ' not in asked[-1], 'only what changed is sent'
+    assert go(rows + ['- TQ-0099 [open] a new one'])[1] == 'nothing changed' and len(asked) == 2
+    new = ['- TQ-0099 [open] a new one']
+    assert go(rows + new + ['b'])[1].startswith('checked 1') and go(rows + new + ['b', 'c'])[1].startswith('checked 1')
+    assert go(rows + ['- TQ-0099 [open] a new one', 'b', 'c', 'd']) == ('answer 5', 'rebuilt: 1 facts changed'), 'three small checks stacked: whole'
+    assert go(rows[13:])[1] == 'rebuilt: 17 facts changed', 'many changed: whole'
+    assert go(rows[13:], at='2026-11-13 00:15')[1] == 'rebuilt: a new day'
+    assert go(rows[13:], at='2026-11-13 00:15', sys='T')[1] == 'rebuilt: its instruction changed'
+    n = len(asked); none = lambda u: asked.append(u)
+    assert llm.standing(s, 'k', 'T', 'other', none, now=datetime.fromisoformat('2026-11-13 00:45')) == (None, 'rebuilt: 28 facts changed')
+    assert go(rows[13:], at='2026-11-13 00:15', sys='T')[1] == 'nothing changed' and len(asked) == n + 1, 'no answer is never kept'
 
 
 def test_follow_ups_that_wake_an_agent_end_however_badly_it_answers():

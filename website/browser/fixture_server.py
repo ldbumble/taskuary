@@ -15,7 +15,7 @@ from pathlib import Path
 
 HOST = "127.0.0.1"
 PORT = int(os.environ["TASKUARY_PORT"])
-if PORT in (7787, 7790):
+if PORT in (7787, 7790, 7796, 7797):
     raise RuntimeError("the browser fixture may not use Taskuary's live ports")
 # FRESH: a first start on a machine with nothing set up - not the demo world, still a disposable home and no outbound sockets
 FRESH = os.environ.get("TASKUARY_FIXTURE_FRESH") == "1"

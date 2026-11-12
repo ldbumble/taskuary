@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
@@ -12,7 +12,9 @@ import puppeteer from "puppeteer-core";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const website = path.resolve(here, "..");
 const repository = path.resolve(website, "..");
-const forbiddenPorts = new Set([7787, 7790]);
+// the owner's running Taskuary and its hook listeners: a fixture never takes them, and a real-CLI walk's hooks are refused there
+export const liveHookPorts = [7787, 7796, 7797];
+const forbiddenPorts = new Set([...liveHookPorts, 7790]);
 
 // THE ASK BAR'S ONE WIDTH on a desk (assistantView.css --tq-ask-w): a third of the window, 360-520px, at rest and open alike
 export const askWidth = (vw) => Math.min(520, Math.max(360, 0.34 * vw));
@@ -215,10 +217,10 @@ export async function startHarness({ fresh = false, bin = "", tour = false } = {
       for (const k of ["HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY"]) {
         if (process.env[k] === undefined) delete backendEnv[k]; else backendEnv[k] = process.env[k];
       }
-      // ...and the person's own user-level Claude hooks post every CLI event to THEIR running Taskuary (their settings.json: curl to its port),
-      // a scratch session's among them. curl reads CURL_HOME/.curlrc: every such port is sent to a closed one, so nothing of a walk reaches it.
-      let theirs = ""; try { theirs = readFileSync(path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "settings.json"), "utf8"); } catch {}
-      const ports = [...new Set(["7787", ...[...theirs.matchAll(/127\.0\.0\.1:(\d+)\/api\/hooks/g)].map((m) => m[1])])].filter((p) => p !== String(backendPort));
+      // ...and the person's own user-level Claude hooks post every CLI event to THEIR running Taskuary, a scratch session's among them. curl
+      // reads CURL_HOME/.curlrc: each of their live ports is sent to a closed one, so nothing of a walk reaches it. The ports are a fixed list,
+      // never read out of their settings file - a walk reads nothing of the person's own profile but what the CLI itself signs in with.
+      const ports = [...liveHookPorts].map(String).filter((p) => p !== String(backendPort));
       mkdirSync(xdgConfig, { recursive: true });
       writeFileSync(path.join(xdgConfig, ".curlrc"), ports.map((p) => `connect-to = "127.0.0.1:${p}:127.0.0.1:9"`).join("\n") + "\n");
       backendEnv.CURL_HOME = xdgConfig;

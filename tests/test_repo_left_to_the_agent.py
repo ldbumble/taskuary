@@ -101,6 +101,13 @@ class StructureStillPlacesItTests(unittest.TestCase):
         self.assertIn('northwind/ledger (C:/code/ledger): invoicing and the ledger export', seen['seed'])
         self.assertNotIn('REPO: ', seen['seed'])
 
+    def test_with_no_repository_known_the_agent_is_told_it_may_start_one(self):
+        """The owner, 2026-11-12: "even if you don't have repos you can start coding session and it will figure out what to do either
+        start a new repo or whatever is needed" - with none known, the block said only that, and left the agent nowhere to go."""
+        tid = self.fx.task(kind='coding', title='A small tool for the rota')
+        said = repochoice.block(self.s, tid, 'C:/tasks/1')
+        self.assertIn('No repository is known yet', said); self.assertIn('git init', said); self.assertIn('use_repo', said)
+
     def test_an_unplaced_task_shares_a_checkout_with_nobody(self):
         from taskuary import blackboard as bb
         a, b = self.fx.task(kind='coding'), self.fx.task(kind='coding')

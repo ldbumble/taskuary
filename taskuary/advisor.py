@@ -1254,8 +1254,9 @@ def for_key(store, key: str) -> dict: return decide(store, key)
 # button is rulebook.recommended - the agent's own turn and the task's facts, no model, no finish check (right 7% of the time on 14
 # decisions) - and decide() only hands that on in the shape the phone and the Assistant's turn already read.
 # AN IDEA ROW is the Advisor's own: the model read it and its verb is lit - unless the check after it (checked) finds a button the owner
-# cannot press; then nothing is. The idea on the table earns the bigger read, once (B5); the next two on the walk are read ahead.
-PREREAD = 2
+# cannot press; then nothing is. The idea on the table earns the bigger read, once (B5) - AND NOTHING IS READ AHEAD (the owner,
+# 2026-11-11: "advisor should not be looking ahead ever"): the next two rows on the walk were judged on every look, tasks and reports
+# among them whose answer no row reads - a day of calls that all said "nothing". Only what is on the table is judged, when it changes.
 
 
 
@@ -1270,7 +1271,7 @@ def _label(verbs: list, verb: str, item: dict) -> str:
     return next((v['label'] for v in verbs if v['verb'] == verb), None) or buttons.label(verb) or verb
 
 
-def decide(store, key: str, preread: bool = True, off: bool = True) -> dict:
+def decide(store, key: str, off: bool = True) -> dict:
     """The one decision for the item keyed `key`: {key, state, verb, label, line, by, revision, ...}; `verb` None lights nothing, `line` ''
     says nothing. {} for a key with nothing to decide on. A TASK OR A MESSAGE: the task's own recommended move (rulebook.recommended,
     `by` 'agent') - no model reads it. AN IDEA: the model's light at this revision, checked; {"none": "no_ai"} with no AI to read it.
@@ -1316,7 +1317,6 @@ def decide(store, key: str, preread: bool = True, off: bool = True) -> dict:
     if not (m and m.get('Verb')) and not judged(m, 2): notice(store, m['Event'] if m else SHOWN, tgt[0], tgt[1], tier=2, key=key)
     if not verb and rs and rs[0].get('Dropped') == 'no brain':
         return {'key': key, 'none': 'no_ai', 'state': r['state'], 'revision': rev, 'line': ''}
-    if preread: _preread(store, key)
     d = checked(store, item, verbs, {'key': key, 'state': r['state'], 'verb': verb, 'line': line, 'by': by, 'evidence': ev, 'kind': kind}) if verb else \
         {'key': key, 'state': r['state'], 'verb': None, 'line': '', 'by': by, 'evidence': [], 'kind': kind}
     return _out(store, key, item, verbs, r, rev, d)
@@ -1495,22 +1495,6 @@ def rests(store, d: dict) -> list:
     return out
 
 
-def _preread(store, key: str):
-    """THE NEXT TWO, READ AHEAD (the design, 1.1): the model is asked about them now, in the background, so the line is
-    there when Next brings them - never a button that changes under the owner's hand a moment after the item opens."""
-    if not BACKGROUND: return
-    def go():
-        try:
-            from . import funnel
-            items = (funnel.known(store) or {}).get('items') or []         # the rail as it stands: a read ahead never builds it
-            at = next((n for n, i in enumerate(items) if key in keys_of(i)), None)
-            for it in (items[at + 1:at + 1 + PREREAD] if at is not None else []):
-                tgt = target_of(store, it.get('key'))
-                if tgt: notice(store, SHOWN, tgt[0], tgt[1], tier=1, key=it['key'])
-        except Exception as e: logger.debug(f'advisor: no read ahead of {key} - {e}')
-    threading.Thread(target=go, daemon=True, name='advise-ahead').start()
-
-
 # WHY NOTHING IS LIT, in one word the page reads - only no AI is said, with its way out (words.json advice_none): "Thinking...", "No
 # suggestion...", "Nothing to decide..." went (the owner, 2026-10-23); every other state is the rule's lit button, or silence
 REASONS = tuple(words.ADVICE_NONE)
@@ -1570,7 +1554,7 @@ def press(store, key: str, advised: str, pressed: str, rev: str = None, surface:
 def block(store, item: dict, d: dict | None = None) -> str:
     """The Advisor's line for the chat's system prompt, so 'why?' is answered from its evidence - a lookup, not a think. `d`: the
     decision already read for the item (the chat's CANVAS reads it once for its lit button and this line)."""
-    if d is None: d = decide(store, (item or {}).get('key') or '', preread=False, off=False) if item else {}
+    if d is None: d = decide(store, (item or {}).get('key') or '', off=False) if item else {}
     if not d.get('verb'): return ''
     # ...a task's filled button is its own recommended move (rulebook.recommended), nobody's judgement - said as that, never as the Advisor's
     if d.get('by') == 'agent':

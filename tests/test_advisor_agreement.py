@@ -122,7 +122,7 @@ def test_an_unchanged_item_is_replayed_exactly_by_todays_decide(home, monkeypatc
     home.press(1, 'continue', 'close', '09:00:00', live=['continue'], rev='r1')
     home.press(2, 'continue', 'close', '09:00:00', live=['continue'], rev='r1')
     monkeypatch.setattr(advisor, 'revision', lambda store, k, i: 'r1' if i == 1 else 'r9')
-    monkeypatch.setattr(advisor, 'decide', lambda store, key, preread=True: {'state': 'stopped_done', 'verb': 'close'})
+    monkeypatch.setattr(advisor, 'decide', lambda store, key:{'state': 'stopped_done', 'verb': 'close'})
     ds = {d['target'][1]: d for d in A.replay(A.connect(home.dir), home.ds(), store=object())}
     assert (ds[1]['today'], ds[1]['how']) == ('close', 'exact') and ds[2]['how'] != 'exact', 'a moved item is never replayed against today\'s store'
 

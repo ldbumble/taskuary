@@ -88,16 +88,16 @@ def test_the_advisor_never_reads_the_rail_through_its_lock(world):
     assert rid, 'the press is kept'
 
 
-def test_the_advisor_read_ahead_never_builds(world):
+def test_a_look_at_one_row_asks_about_no_other(world):
+    """The owner, 2026-11-11: "advisor should not be looking ahead ever" - a look judged the next two rows too, answers no row read."""
     from taskuary import advisor, funnel
     s, src = world
     funnel.pile(s)
-    seen = []
+    items, seen = funnel.known(s)['items'], []
+    assert len(items) > 1, 'a rail with rows after the one on the table'
     with mock.patch.object(advisor, 'BACKGROUND', True), mock.patch.object(advisor, 'notice', side_effect=lambda *a, **k: seen.append(k.get('key'))), \
-         mock.patch.object(funnel, 'pile', side_effect=AssertionError('the read ahead built the rail')), \
          mock.patch.object(advisor.threading, 'Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
-        advisor._preread(s, funnel.known(s)['items'][0]['key'])
-    assert seen, 'the next rows were read ahead off the known rail'
+        for it in items[:3]: advisor.decide(s, it['key']); assert set(seen) <= {it['key']}, (it['key'], seen)
 
 
 def test_readers_queued_behind_one_build_share_the_next_one():

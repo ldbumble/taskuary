@@ -1356,8 +1356,8 @@ def install_processing_changes(app, store):
     # ...and it passes the SAME check a real answer does (advisor.checked, the judge's fix 3, 2026-10-26): a scripted Send under a draft
     # caution, a Try again nobody can press - refused and nothing lit, exactly as the app would (it never swaps in a verb since 2026-11-02).
     # An agent at work keeps the real decision (the model's read of it)
-    def scripted_decide(st, key, preread=True, **kw):
-        out = real_decide(st, key, preread, **kw)
+    def scripted_decide(st, key, **kw):
+        out = real_decide(st, key, **kw)
         tgt = advisor.target_of(st, key)
         o = said.get(int(tgt[1])) if tgt and tgt[0] == 'task' else None
         if o is None or out.get('state') == 'working': return out

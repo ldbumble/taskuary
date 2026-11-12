@@ -34,7 +34,7 @@ def test_no_line_when_nothing_is_checkable(w):
     fresh = ask(s, 'erin', 'Quick check on the offsite', 'Is the offsite still on Thursday?', hours=0.3)      # inside her usual
     stranger = ask(s, 'omar', 'Expense policy wording', 'Per diem or daily allowance?')                         # nobody's usual yet
     for t in (fresh, stranger):
-        d = advisor.decide(s, f'task:{t}', preread=False)
+        d = advisor.decide(s, f'task:{t}')
         assert (d['state'], d['verb'], d['line']) == ('asked', 'regular_agent', ''), d     # no fact said; the ask is handed to an agent (2026-11-10)
 
 

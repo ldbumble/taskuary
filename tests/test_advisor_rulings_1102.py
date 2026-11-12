@@ -34,7 +34,7 @@ def _decide(s, item, llm):
          mock.patch.object(advisor, 'offered', lambda store, it: _verbs('close', 'stop_agent', 'answer_agent')):
         tgt = advisor.target_of(s, item['key'])
         advisor.notice(s, advisor.SHOWN, tgt[0], tgt[1], tier=2, wait=True, llm=llm, key=item['key'])
-        with mock.patch.object(advisor, 'notice'): return advisor.decide(s, item['key'], preread=False)
+        with mock.patch.object(advisor, 'notice'): return advisor.decide(s, item['key'])
 
 
 def saying(verb):

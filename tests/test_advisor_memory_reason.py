@@ -42,7 +42,7 @@ def judged(s, t, answer: dict) -> tuple:
     seen = []
     def brain(system, user, **kw): seen.append(user); return json.dumps(answer)
     advisor.judge(s, advisor.SHOWN, 'task', t, advisor.revision(s, 'task', t), tier=2, llm=brain, key=f'task:{t}')
-    return advisor.decide(s, f'task:{t}', preread=False), (seen[-1] if seen else '')
+    return advisor.decide(s, f'task:{t}'), (seen[-1] if seen else '')
 
 
 def test_a_forgotten_line_rests_on_nothing(w):
@@ -51,7 +51,7 @@ def test_a_forgotten_line_rests_on_nothing(w):
     t = ask(s, 'erin', 'Offsite agenda', 'Can you check the offsite agenda before Thursday?')
     judged(s, t, {'verb': 'reply', 'line': 'You answer Erin the same morning.', 'memory_says': 'You answer Erin, your manager, the same morning', 'evidence': [lc.cite_of('erin blake manager answer')]})
     s.save_doc('learned', s.get_doc('learned').replace(ERIN + '\n', ''), 'owner')
-    assert advisor.decide(s, f'task:{t}', preread=False)['line'] == '', 'the line it rested on is gone, so the reason goes with it'
+    assert advisor.decide(s, f'task:{t}')['line'] == '', 'the line it rested on is gone, so the reason goes with it'
 
 
 def test_the_prompt_says_a_memory_line_counts_only_for_what_is_current(w):

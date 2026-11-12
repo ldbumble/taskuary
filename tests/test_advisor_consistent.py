@@ -38,7 +38,7 @@ def ask(s, title, who, hours, cid=None):
 def test_a_duplicate_pair_has_one_survivor_and_only_the_other_is_folded_into_it(s):
     first, _ = ask(s, 'Spendly cards for the new site', MARCUS, 7, cid='email:spendly')
     second, _ = ask(s, 'RE: Spendly cards', MARCUS, 2, cid='email:spendly')
-    a, b = (advisor.decide(s, f'task:{t}', preread=False) for t in (first, second))
+    a, b = (advisor.decide(s, f'task:{t}') for t in (first, second))
     assert [d['state'] for d in (a, b)].count('duplicate') == 1, (a, b)
     assert a['state'] != 'duplicate' and a['verb'] not in ('remove', 'split'), 'the one asked first keeps its own move'
     fb = rulebook.facts(s, {'key': f'task:{second}', 'tid': second, 'kind': 'asked', 'lane': 'asked'}, V('reply', 'remove'))
@@ -52,7 +52,7 @@ def test_a_duplicate_pair_has_one_survivor_and_only_the_other_is_folded_into_it(
     # ...and every surface reads the same kept decision
     for t, d in ((first, a), (second, b)):
         kept = json.loads(s._one("SELECT Json FROM advice_decision WHERE Key=?", (f'task:{t}',))['Json'])
-        assert (kept['verb'], kept['state']) == (advisor.decide(s, f'task:{t}', preread=False)['verb'], d['state'])
+        assert (kept['verb'], kept['state']) == (advisor.decide(s, f'task:{t}')['verb'], d['state'])
 
 
 def test_a_model_folding_the_survivor_into_its_twin_is_refused(s):
@@ -97,7 +97,7 @@ def test_the_owners_own_words_about_the_person_are_the_usual(s):
     doc = s.get_doc('learned')
     s.save_doc('learned', learn._under(doc, lc.SECTIONS['people'], '- You answer Erin Blake (erin@northwind.example) the same day'), 'owner')
     assert usual.answer_line(s, ERIN[1])['text'].endswith('the same day')
-    assert advisor.decide(s, f'task:{t}', preread=False)['state'] == 'asked', 'by the line she is answered the same day: 5h is not late'
+    assert advisor.decide(s, f'task:{t}')['state'] == 'asked', 'by the line she is answered the same day: 5h is not late'
 
 
 def test_a_model_answer_resting_on_a_forgotten_memory_line_stands_no_more(s):

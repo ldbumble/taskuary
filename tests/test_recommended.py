@@ -253,7 +253,7 @@ def test_a_row_with_nothing_lit_carries_the_line_the_phone_says(s):
     line = 'Stopped mid-work: the test database was not reachable.'
     with mock.patch.object(rulebook, 'facts', return_value={'state': 'stopped', 'line': line}), \
          mock.patch.object(advisor, 'offered', return_value=verbs('close', 'reply')):
-        phone = advisor.decide(s, f'task:{tid}', preread=False, off=False)
+        phone = advisor.decide(s, f'task:{tid}', off=False)
         assert (phone['verb'], phone['line']) == (None, line)
         assert rulebook.recommended(s, item(tid)) is None, 'the plain read still fills nothing'
         desk = rulebook.recommended(s, item(tid), unlit=True)

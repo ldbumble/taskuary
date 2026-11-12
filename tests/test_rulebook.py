@@ -43,7 +43,7 @@ def _decide(s, syn, item, key=None):
     def no_model(*a, **kw): raise AssertionError('no model reads a task or a message')
     with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))), \
          mock.patch.object(advisor, 'build_llm', no_model):
-        return advisor.decide(s, key or item['key'], preread=False)
+        return advisor.decide(s, key or item['key'])
 
 
 # (case, the state the facts name, the one move its row fills, whether a line is said beside it). NO MODEL DECIDES ANY OF IT (the owner,
@@ -244,21 +244,6 @@ def test_unsorted_mail_a_batch_a_closed_task_and_a_failed_report(s):
         {'state': 'report_failed', 'line': 'Report failed: mailbox signed out'}
 
 
-def test_the_next_two_are_read_ahead_whatever_their_state(s, monkeypatch):
-    items = [{'key': f'k{n}', 'kind': 'asked' if n % 2 else 'report', 'lane': 'asked', 'tid': n} for n in range(5)]
-    monkeypatch.setattr(funnel, 'known', lambda store: {'items': items})       # the read ahead reads the rail as it stands, never builds it
-    monkeypatch.setattr(advisor, 'target_of', lambda store, key: ('task', int(key[1:])))
-    got = []
-    monkeypatch.setattr(advisor, 'notice', lambda store, ev, tk, ti, **kw: got.append((ti, kw.get('tier'), kw.get('key'))))
-    class T:
-        def __init__(self, target, **kw): self.f = target
-        def start(self): self.f()
-    monkeypatch.setattr(advisor.threading, 'Thread', T)
-    monkeypatch.setattr(advisor, 'BACKGROUND', True)
-    advisor._preread(s, 'k0')
-    assert got == [(1, 1, 'k1'), (2, 1, 'k2')], 'the next two, a report as much as an ask'
-
-
 # ── one census for every count ──────────────────────────────────────────────────────────────────────────────────────────────────
 def test_one_census_for_on_you_the_walks_end_and_the_rails_tasks():
     items = [{'key': 'a', 'lane': 'asked', 'kind': 'asked'}, {'key': 'b', 'lane': 'theirs', 'kind': 'todo'},
@@ -316,7 +301,7 @@ def test_what_leaves_stands_beside_the_drafts_send(s):
     t, m, it = _asked(s, 'Q3 accruals')
     Factory(s).review(t, m, draft='Here are the Q3 accruals.', Deliver=json.dumps({'kind': 'reply', 'to': ['erin@northwind.example'], 'cc': ['dana@vendor.example']}))
     s.reconcile_processing_membership(); s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[]); funnel.invalidate()
-    d = advisor.decide(s, f'task:{t}', preread=False)
+    d = advisor.decide(s, f'task:{t}')
     assert (d['state'], d['verb'], d['line']) == ('draft_ready', 'send_close', 'Goes to dana@vendor.example - new to this thread.'), d
 
 

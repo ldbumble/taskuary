@@ -206,7 +206,7 @@ class Advisor(unittest.TestCase):
              (mock.patch.object(advisor, 'offered', lambda _s, _it: [buttons.chip(v) for v in offered]) if offered else nullcontext()):
             tgt = advisor.target_of(s, item['key'])
             advisor.notice(s, advisor.SHOWN, tgt[0], tgt[1], tier=2, wait=True, llm=llm, key=item['key'])
-            with mock.patch.object(advisor, 'notice'): return advisor.decide(s, item['key'], preread=False)
+            with mock.patch.object(advisor, 'notice'): return advisor.decide(s, item['key'])
 
     def test_a_draft_on_a_task_lights_send_and_close(self):
         s = desk.store(); tid, rid, item = drafted(s)

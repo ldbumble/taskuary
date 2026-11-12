@@ -196,7 +196,7 @@ def replay(cx, ds, store=None) -> list:
         if store is None or not d['rev']: continue
         try:
             if advisor.revision(store, *d['target']) != d['rev']: continue
-            got = advisor.decide(store, d['key'], preread=False)
+            got = advisor.decide(store, d['key'])
             if got.get('state'): d['today'], d['how'] = got.get('verb') or '', 'exact'
         except Exception as e: print(f"  (no exact replay for {d['key']}: {e})", file=sys.stderr)
     return ds

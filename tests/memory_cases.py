@@ -283,7 +283,7 @@ def same_domain() -> dict:
                 k = ask(s, f'Remittance {i}', 'Remittance advice attached.', who)
                 it = advisor._item(s, *advisor.target_of(s, k), key=k)
                 advisor.press(s, k, None, 'done', surface='desk', lit='', live=[v['verb'] for v in advisor.offered(s, it)] + ['next'])
-        ds = [advisor.decide(s, ask(s, *c), preread=False) for c in SAME_DOMAIN]
+        ds = [advisor.decide(s, ask(s, *c)) for c in SAME_DOMAIN]
         funnel.invalidate()
         return [d.get('verb') for d in ds], [d.get('by') for d in ds]
     with mock.patch.object(terminal, 'live_sessions', lambda tail=0: []), mock.patch.object(funnel, '_agenda', lambda _s, **kw: []), \

@@ -2315,7 +2315,7 @@ def decision(store, item: dict | None) -> dict:
     key = (item or {}).get('key')
     if store is None or not key: return {}
     from . import advisor
-    try: return advisor.decide(store, key, preread=False) or {}
+    try: return advisor.decide(store, key) or {}
     except Exception as e:
         logger.debug(f'the phone could not read the Advisor for {key}: {e}'); return {}
 

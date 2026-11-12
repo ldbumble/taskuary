@@ -1959,7 +1959,7 @@ def _decision(store, item: dict | None) -> dict:
     if not item or not item.get('key'): return {}
     try:
         from . import advisor
-        return advisor.decide(store, item['key'], preread=False, off=False) or {}
+        return advisor.decide(store, item['key'], off=False) or {}
     except Exception as e:
         logger.debug(f'concierge: no advisor decision - {e}'); return {}
 

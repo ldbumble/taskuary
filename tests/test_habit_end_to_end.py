@@ -31,13 +31,13 @@ def _press(s, key, verb):
     """One desk press as the page sends it: what was pressed, what was lit, and what else the row had live."""
     it = advisor._item(s, *advisor.target_of(s, key), key=key)
     live = [v['verb'] for v in advisor.offered(s, it)] + ['next']
-    d = advisor.decide(s, key, preread=False)
+    d = advisor.decide(s, key)
     return advisor.press(s, key, None, verb, surface='desk', lit=d.get('verb') or '', live=live)
 
 
 def test_presses_are_kept_and_never_become_a_line_or_a_lit_button(s):
     nxt = _ask(s, 'Statement question 4', PEOPLE[1])
-    before = advisor.decide(s, nxt, preread=False)
+    before = advisor.decide(s, nxt)
     it = advisor._item(s, *advisor.target_of(s, nxt), key=nxt)
     phone = remote_assistant.primary({'chips': concierge.chips_for(s, it), 'item': it}, remote_assistant.decision(s, it))['verb']
     doc = s.doc('learned')
@@ -45,7 +45,7 @@ def test_presses_are_kept_and_never_become_a_line_or_a_lit_button(s):
         for i, who in enumerate(PEOPLE): assert _press(s, _ask(s, f'Statement question {n}-{i}', who), 'done')
     assert s._one('SELECT COUNT(*) n FROM advice_press')['n'] == 18, 'every press is kept, as a record'
     assert s.doc('learned') == doc and 'presses' not in s.doc('learned'), 'no line from any number of presses'
-    d = advisor.decide(s, nxt, preread=False)
+    d = advisor.decide(s, nxt)
     assert (d['verb'], d['by'], d['line']) == (before['verb'], before['by'], before['line']) and d['by'] != 'habit', d
     assert 'says' not in d and d['pill'] == d['label'], 'no "Your own habit..." line and no "n of m times" mark'
     # ...the same on the phone: its card leads with the button the desk lit

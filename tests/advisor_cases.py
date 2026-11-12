@@ -190,7 +190,7 @@ def judge(s, item, syn, llm=None):
     orig = advisor._item
     with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))):
         advisor.judge(s, advisor.SHOWN, tgt[0], tgt[1], advisor.revision(s, *tgt), tier=2, llm=rec, key=item.get('key'))
-        with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, item.get('key'), preread=False)
+        with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, item.get('key'))
     return d.get('verb'), d.get('line') or d.get('state') or d.get('none') or '', calls[-1] if calls else ''
 
 

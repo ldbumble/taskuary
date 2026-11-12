@@ -40,7 +40,11 @@ test("the routing card says each fact once: no line of levels the rows repeat, a
   const now = ["quick", "normal", "hard"].map((level) => ({ level, pick: claude.pick, brain: claude.brain, model: claude[level], why: "" }));
   assert.deepEqual(levelLines({ levels: [claude], now }), [], "the rows already say it");
   const moved = now.map((n) => (n.level === "hard" ? { ...n, pick: "cli:codex", brain: "OpenAI Codex CLI", model: "gpt-5.4", why: "set for hard work" } : n));
-  assert.deepEqual(levelLines({ levels: [claude], now: moved }), [claude], "a level that runs elsewhere right now: what the AI itself is set to is news");
+  // ...a level that runs elsewhere right now (decided 2026-11-12): the card AI's own line read "Claude Code · quick: OpenAI Codex CLI, ..." -
+  // the rows say which AI and model each level is on, so the line goes; another AI's line, with no row of its own, stays
+  assert.deepEqual(levelLines({ levels: [claude], now: moved }), [], "the card AI's line goes where a level runs elsewhere");
+  const gem = { pick: "cli:gemini", brain: "Gemini CLI", quick: "flash", normal: "pro", hard: "pro" };
+  assert.deepEqual(levelLines({ levels: [claude, gem], now: moved }), [gem], "an AI no row is on keeps its line");
   assert.deepEqual(levelLines({ levels: [claude], now: [] }), [claude], "and with no rows the line is all there is");
   assert.deepEqual(nowRows(moved).map((n) => n.why), ["", "", "set for hard work"], "a row's own reason stays under it");
   const rest = now.map((n) => ({ ...n, why: "Claude Code is limited until 14:05" }));

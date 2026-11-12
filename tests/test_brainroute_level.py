@@ -125,10 +125,13 @@ def test_settings_says_what_each_level_runs_on_right_now_and_why_in_the_router_s
     _set(s, hard=('cli:codex', 'gpt-5.5@high'))                               # an AI set for the level: said, with the router's reason
     hard = rows()['hard']
     assert (hard['pick'], hard['brain'], hard['model']) == ('cli:codex', 'OpenAI Codex CLI', 'gpt-5.5, high effort')
-    assert hard['why'] == brainroute.choose(s, 'general', task=_task(s)).why, 'the line on a hard task says the same'
-    assert 'as set in AI routing' in hard['why'] and not rows()['normal']['why']
+    # ...THE PLAIN PART ONLY (decided 2026-11-12): the row names the level, the AI and the model - its reason never repeats them in the
+    # router's log sentence, and never names a rule by its id
+    assert hard['why'] == 'as set in AI routing' and not rows()['normal']['why']
+    assert '->' in brainroute.choose(s, 'general', task=_task(s)).why, "a task's own AI line keeps the router's sentence"
     brainroute.cool(s, 'cli:codex', datetime.now() + timedelta(hours=1))        # ...resting on its limit: back on the card, until when
     hard = rows()['hard']
     assert hard['pick'] == s.a and 'but it is limited until' in hard['why']
+    assert hard['why'].startswith('Hard work is set to OpenAI Codex CLI in AI routing, but it is limited until') and '(rule' not in hard['why'] and '->' not in hard['why']
     s.set_setting('ai_route_mode', 'fixed', 'owner')                            # Fixed: every level is the card, and nothing to explain
     assert {(r['pick'], r['model'], r['why']) for r in rows().values()} == {(s.a, 'claude-sonnet-5', '')}

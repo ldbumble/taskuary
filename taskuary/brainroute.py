@@ -17,7 +17,7 @@ agents.resolve_brain, concierge.pick), so a fixed install behaves as it always d
 All router state lives in the store - settings and the `brainroute` log - never in module globals: the
 poller and the server are separate processes (dirty triggers are cross-process).
 """
-import threading, weakref
+import re, threading, weakref
 from datetime import datetime, timedelta
 from typing import NamedTuple
 from loguru import logger
@@ -760,8 +760,19 @@ def now(store, cfg=None) -> list:
         x = runs(store, 'general', cfg, ASKED_AS[tier]); r = x.pop('route')
         # ...moved off the card's AI or off the level asked - or an AI set for this level that could not take it
         moved = not r.pick or r.pick != card or (r.tier in LEVEL_OF and r.tier != tier) or (LEVEL_OF[tier] in sets and not r.level)
-        out.append({**x, 'level': LEVEL_OF[tier], 'why': r.why if moved else resting(store, r.pick)})
+        out.append({**x, 'level': LEVEL_OF[tier], 'why': plain(r) if moved else resting(store, r.pick)})
     return out
+
+
+def plain(r: 'Route') -> str:
+    """THE PLAIN PART OF A ROUTE'S REASON, for a Settings row that already names the level, the AI and the model (decided 2026-11-12: never
+    the router's log sentence - "General work judged hard -> strong on Claude Code (rule hard-work); ..."): only what moved it, each clause
+    of `why` after its head with the rule ids dropped - or, with none, that the level is set so in AI routing."""
+    said = [re.sub(r'\s*\(rule [^)]*\)', '', c).strip() for c in r.why.split('; ')[1:]]
+    said = [c for c in said if c]
+    if not said: return 'as set in AI routing' if r.level else ''
+    s = '; '.join(said)
+    return s[0].upper() + s[1:]
 
 
 def resting(store, pick: str) -> str:

@@ -19,6 +19,10 @@ const oneRow = (now) => now.every((n) => n.pick === now[0].pick && n.model === n
 export const nowRows = (now) => (!now?.length ? [] : oneRow(now) ? [{ ...now[0], level: "every level" }] : sharedWhy(now) ? now.map((n) => ({ ...n, why: "" })) : now);
 // ...and an AI's own line of levels ("Claude Code · quick: haiku · normal: ...") is drawn only where it says more than those rows do:
 // with every level of agent work on that AI at that very model, it was the same three facts twice, one over the other
-export const levelLines = (p) => (p?.levels || []).filter((l) => !((p.now || []).length && p.now.every((n) => n.pick === l.pick && n.model === l[n.level])));
+// ...nor where a level runs elsewhere (decided 2026-11-12): the card AI's own line then read "Claude Code · quick: OpenAI Codex CLI, ..." - the
+// rows under it already say which AI and model each level is on
+const elsewhere = (now, l) => now.some((n) => n.pick === l.pick) && now.some((n) => n.pick && n.pick !== l.pick);
+export const levelLines = (p) => (p?.levels || []).filter((l) => { const now = p.now || [];
+  return !(now.length && (now.every((n) => n.pick === l.pick && n.model === l[n.level]) || elsewhere(now, l))); });
 // choosing the AI a card already shows IS a choice while nobody made one (a Select fires no change for the value it holds)
 export const repick = (slot, value) => !slot.chosen && value === slot.value;

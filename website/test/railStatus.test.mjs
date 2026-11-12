@@ -2,7 +2,7 @@
 // word for one task, read from lanes.json through the rail's own rowMeta - so they cannot disagree.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ANIM, BADGE, agentGone, railStatus, rowWhy, stateStatus, statusLabel, taskStatus } from "../src/railStatus.js";
+import { ANIM, BADGE, agentGone, chatOf, railStatus, rowWhy, stateStatus, statusLabel, taskStatus } from "../src/railStatus.js";
 import { LANE_META, rowMeta } from "../src/funnelPile.js";
 
 test("the header's status is exactly the rail row's mark and word, for every lane", () => {
@@ -159,4 +159,13 @@ test("a chat agent the owner answered is agent done on the rail and the chip, ne
   assert.equal(taskStatus({ live: parked, state: "blocked" }).word, LANE_META.blocked.word, "one that asked, or waits on its Push, still waits on you");
   assert.equal(taskStatus({ state: "queued", queued: { state: "failed" } }).word, "couldn't start");
   assert.equal(taskStatus({ state: "queued", queued: { state: "waiting" } }).word, LANE_META.queued.word);
+});
+
+// THE RAIL WALK (2026-11-12): a general task with a reply drafted read "ready to send" on its rail row and "agent waiting on you" in its
+// header - the header passed `chat` for any general task, the rail only where the server marked the row a chat. One reading: the row's.
+test("a general task's header reads its rail row's own words, chat or not", () => {
+  for (const item of [{ lane: "approve", kind: "review" }, { lane: "approve", kind: "review", chat: true }, { lane: "yours", kind: "task", chat_done: true }, { lane: "blocked", kind: "agent" }])
+    assert.deepEqual(taskStatus({ chat: chatOf(item, true), rail: item }), railStatus(item), JSON.stringify(item));
+  assert.equal(taskStatus({ chat: chatOf({ lane: "approve", kind: "review" }, true), rail: { lane: "approve", kind: "review" } }).word, "ready to send");
+  assert.equal(chatOf(null, true), true, "off the rail its kind says it");
 });

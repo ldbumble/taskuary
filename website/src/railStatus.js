@@ -41,6 +41,10 @@ const chatDone = (st) => ({ ...st, key: "chat_done", word: KIND_META.chat_done.w
   role: KIND_META.chat_done.role, badge: "", anim: null, spins: false });
 export const chatReady = (st, chat) => (!chat || !st ? st : CHAT_READY.has(st.key) ? { ...st, word: KIND_META.chat_ready.word, hint: KIND_META.chat_ready.hint }
   : CHAT_DONE.has(st.key) ? chatDone(st) : st);
+// ...and WHETHER A TASK READS AS A CHAT is its rail row's word where it has one (the rail walk, 2026-11-12: a general task with a reply
+// drafted read "ready to send" on its row and "agent waiting on you" in its header - the header took any general task as a chat); a task
+// off the rail falls back to its kind
+export const chatOf = (rail, general = false) => (rail ? !!(rail.chat || rail.chat_done) : !!general);
 export const railStatus = (item, cantSend = false, page = null) => chatReady(railStatus_(item, cantSend, page), !!item?.chat || !!item?.chat_done);
 const railStatus_ = (item, cantSend = false, page = null) => {
   if (agentGone(item, page)) return taskStatus({ state: page.state, cantSend });

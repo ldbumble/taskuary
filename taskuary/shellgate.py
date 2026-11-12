@@ -42,8 +42,8 @@ HELD = 'Taskuary held this for the owner'
 # ...said to the agent the hold covers, as the browser's hold is (browserview.HOLD_LINE): told nothing, a general agent asked "Should I delete
 # it?" in words, the owner said yes, and the delete was held for a second yes on the task (the overnight run, 2026-11-03)
 HOLD_LINE = ("A DELETE ON THE OWNER'S COMPUTER outside your working folder, and a step that leaves the machine (a push, a merge, a publish, "
-             "a mail from a script, data sent to a web address), is HELD for the owner's press: Taskuary refuses it with \"held for the owner\", "
-             "puts it on the task, runs it once they approve and tells you what happened. So never ask the owner in words whether to delete - "
+             "a mail from a script, data sent to a web address), is HELD for the owner's press: the call comes back refused - as \"held for the owner\" or as a permission that was declined, "
+             "which is Taskuary's hold and never the owner's no - and Taskuary puts it on the task, runs it once they approve and tells you what happened. So never ask the owner in words whether to delete - "
              "run the command, end your turn when it is held, and say in one line what waits for their Approve. The held step IS the owner's "
              "button: never ask \"will you run these\", never print the commands for them to copy. Draft no reply that says it is done while it waits: the reply is "
              "written once Taskuary tells you the step ran.")
@@ -395,7 +395,10 @@ def git_bash() -> str:
 def _argv(shell: str, cmd: str) -> list:
     "The held command in the shell it was written in: the agent's PowerShell tool in PowerShell, its Bash tool in Git Bash (the system bash off Windows)."
     if str(shell).lower() == 'powershell':
-        return [shutil.which('pwsh') or shutil.which('powershell') or 'powershell', '-NoProfile', '-NonInteractive', '-Command', cmd]
+        # ...Windows' own, where it always is, when the PATH this app was started with names neither (the recorded walk, 2026-11-11: the
+        # approved step answered "[WinError 2] The system cannot find the file specified" - the shell, not the file it was to delete)
+        own = ntpath.join(os.environ.get('SystemRoot') or r'C:\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+        return [shutil.which('pwsh') or shutil.which('powershell') or (own if os.path.isfile(own) else 'powershell'), '-NoProfile', '-NonInteractive', '-Command', cmd]
     b = git_bash()
     if not b: raise RuntimeError('The held step was not run: ' + ('no Git Bash (the bash beside git.exe)' if os.name == 'nt' else 'no bash or sh')
                                  + ' was found to run it in - nothing was done')

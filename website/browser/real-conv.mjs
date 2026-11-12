@@ -43,6 +43,8 @@ export const sampler = (names) => {
       const cardsOf = [...vp.querySelectorAll("[data-tq-turn-cards] > *, [data-tq-row-cards] .tq-aui-agent-body > *")];
       const dead = cardsOf.filter((c) => c.matches("[data-tq-passed], [data-tq-past-card]") || c.querySelector("[data-tq-passed]"));
       if (dead.some((c) => c.querySelector("button[disabled]"))) f.deadButton = true;
+      // ...and where each card stands, by its own first line and the item it is under: one that goes back UP the chat is a finding (check)
+      f.at = cardsOf.filter((c) => !c.matches("[data-tq-past-card]")).map((c) => [c.innerText.trim().split("\n")[0].slice(0, 60), c.closest("[data-tq-item]")?.getAttribute("data-tq-item") || ""]);
       const lastLive = cardsOf.map((c, i) => (c.querySelector("button:not([disabled])") ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
       if (lastLive >= 0 && dead.some((c) => cardsOf.indexOf(c) > lastLive && c.matches("[data-tq-passed]"))) f.staleUnder = true;
       const named = said ? namedIn(said) : [];
@@ -84,6 +86,12 @@ export function check(frames) {
     for (const id of f.empty || []) if (!(prev?.empty || []).includes(id)) say(f.t, `${id} is drawn empty`);
     if (f.deadButton && !prev?.deadButton) say(f.t, "a card nobody can press draws a button");
     if (f.staleUnder && !prev?.staleUnder) say(f.t, "a settled card stands under the live one");
+    // A CARD NEVER GOES BACK UP THE CHAT (the recorded held step, 2026-11-11: approved under the newest answer, it failed and was drawn again
+    // under the turn that first raised it - where he had pressed stood nothing): the lowest place a card stood is where it stays, or lower
+    if (prev) for (const [title, host] of prev.at || []) {
+      const was = ids.indexOf(host), now = Math.max(-1, ...(f.at || []).filter(([t]) => t === title).map(([, h]) => ids.indexOf(h)));
+      if (title && was >= 0 && now >= 0 && now < was && !(f.at || []).some(([t, h]) => t === title && ids.indexOf(h) >= was)) say(f.t, `the card "${title}" went back up the chat: from under ${host} to under ${ids[now]}`);
+    }
     // THE CHAT OPENS WITH AN INPUT, NEVER WITH THE AGENT (the owner, 2026-11-11: "it did not show the prompt i asked it to do"): the first
     // thing drawn is what the first turn heard - his ask, a message that came in - and a turn at work has his newest line above it
     if (f.items.length && f.items[0][1] && !(prev?.items.length && prev.items[0][1])) say(f.t, `the chat begins with the agent's turn ${f.items[0][0]} - no ask above it`);
@@ -116,7 +124,9 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     console.log("push", JSON.stringify(got).slice(0, 200)); tid = got.task_id;
   // ...`new`: a task he made himself with New - no mail, no typed line: its ask is the task's own words, and its agent is started as the page starts it
   } else if (road === "new") { const got = await api("/api/tasks", { Title: process.env.TOPIC_BODY || "Suggest two venues for a 40-person offsite in March and tell me which one you would pick.", Kind: "general" });
-    tid = got.taskId; console.log("new", JSON.stringify(got), JSON.stringify(await api(`/api/tasks/${tid}/continue-work`, {})).slice(0, 160));
+    // ...by the page's own road (NewSheet: the task, then /dispatch) - Continue's road told a task that had never run "the owner chose Resume",
+    // and its agent opened on "Nothing had been done before this resume" (the recorded walk, 2026-11-11)
+    tid = got.taskId; console.log("new", JSON.stringify(got), JSON.stringify(await api(`/api/tasks/${tid}/dispatch`, { kind: "general" })).slice(0, 160));
   } else { const got = await api("/api/fixture/coding", { git: info.git, real: true, pty: road === "pty", conversation: `conv-${name}` }); tid = got.taskId; }
   const subject = road === "general" || road === "stranger" ? `Re: ${process.env.TOPIC_SUBJECT || "Offsite venue"}` : "Re: Ledger totals";
   const { browser, page } = await connect();

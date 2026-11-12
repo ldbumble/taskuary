@@ -302,6 +302,20 @@ class TheList(unittest.TestCase):
         self.assertIn((f'r:{old}', 'passed'), [(c['id'], c['status']) for c in turns[0]['cards']])
         self.assertEqual([(c['id'], c['status']) for c in turns[-1]['cards']], [(f'r:{rid}', 'pending')])
 
+    def test_a_step_he_approved_that_failed_stays_under_the_answer_he_pressed_it_under(self):
+        """The recorded held step, 2026-11-11: he asked about a held delete, pressed Approve under the answer, and the step failed - the card
+        went back up to the turn that first raised it, and where he had pressed stood nothing: no press, no failure, only the agent's next
+        turn. A card he pressed stays where it stood at the press, whatever came of it."""
+        from taskuary import proposals, shellgate
+        self.say('Remove the old export.', 'l-one'); self.rest()
+        rid = proposals.queue(self.s, self.tid, {'action': 'shell_act', 'sid': general.session_for(self.tid).sid, 'command': 'rm old-export.csv', 'what': 'delete old-export.csv'})['reviewId']
+        self.say('What does it remove?', 'l-two'); self.rest()
+        self.s.decide_review(rid, 'superseded', None, 'taskuary', shellgate.FAILED)
+        self.brain.delay = 1.1                      # ...the turn the failure wakes ends in a later second than the press: a stamp is no finer
+        self.say('Try it again.', 'l-three'); self.rest()
+        turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
+        self.assertEqual([[(c['id'], c['status']) for c in t['cards']] for t in turns], [[(f'r:{rid}:k', 'kept')], [(f'r:{rid}', 'failed')], []])
+
     def test_a_reply_waiting_for_his_send_stands_with_its_send_through_a_restart_and_the_session_after_it(self):
         """The recorded restart, 2026-11-11, and the owner's ruling on it ("reply cards should survive untouched"): the agent's reply waited
         for his Send, Taskuary restarted with a line of his by the box, the new session held the card as "an earlier session's" and told

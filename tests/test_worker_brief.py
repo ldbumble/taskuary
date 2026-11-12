@@ -51,8 +51,8 @@ class RulesDocumentsTests(unittest.TestCase):
         and the agent said "declined at the permission prompt ... or run this yourself: Remove-Item ..." over its own lit Approve. Every
         worker is told once what that refusal is and what to say - and to take back a step it no longer needs."""
         agent = ' '.join((TEMPLATES / 'agent.md').read_text(encoding='utf-8').split())
-        for needle in ('"refused permission". Nobody said no', 'Never retry it, work around it, or give them the command to run themselves',
-                       'what you will do once they approve', 'no longer needed is yours to withdraw'): self.assertIn(needle, agent, needle)
+        for needle in ('"refused permission"): nobody said no', 'Never retry it or hand them the command',
+                       'what you will do once they approve', 'Withdraw a waiting step or draft you no longer need'): self.assertIn(needle, agent, needle)
         self.assertNotIn('Taskuary held is his Approve already', (TEMPLATES / 'coding.md').read_text(encoding='utf-8'))      # once: not again per kind
         from taskuary import shellgate
         self.assertNotIn('what waits for their Approve', shellgate.HOLD_LINE)              # never the card's own words said back

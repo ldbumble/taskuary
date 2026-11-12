@@ -506,7 +506,11 @@ def items(store, tid: int) -> dict:
     # task he made and has not started says nothing yet - shown there, the title stood as his line and went when the line he typed began it
     # ...and once drawn it stays, whatever starts or stops after (the basic flow's check, 2026-11-12: it went when the turn it began ended)
     once = bool(store._one("SELECT 1 AS x FROM shown WHERE TaskId=? AND Key=?", (tid, f'a:{tid}')))
-    if (asked or once or not any_mail and at_work and not pend) and (once or first is None or first['kind'] == 'turn') and (said := ownwork.ask(store, store.get_task(tid) or {}, asked)):
+    # ...and never in the beat a line of his is heard and not yet filed: that line is the ask (CI parity, 2026-11-12: the task's title stood
+    # as his line over the line he typed on one backend, from a read in that beat)
+    drawn0 = {x.get('id') for x in out} | {p['id'] for p in pend}
+    typed = any(k == 'line' and ref not in drawn0 for (k, ref) in led)
+    if (asked or once or not any_mail and at_work and not pend and not typed) and (once or first is None or first['kind'] == 'turn') and (said := ownwork.ask(store, store.get_task(tid) or {}, asked)):
         at = asked['T'] if asked else ep((store.get_task(tid) or {}).get('CreatedAt'))
         out.insert(0, {'id': f'a:{tid}', 'kind': 'line', 'at': stamp(at), 'text': said, 'files': [], '_h': at})
     # ONE TURN AT WORK, AND IT IS THE LAST (the owner's live task, 2026-11-11: a second head spun under a later, finished answer while the task

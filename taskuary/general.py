@@ -3068,7 +3068,10 @@ class GeneralSession:
                 elif out.get('to_missing'): logger.info(f"task {self.task_id}: {out['to_missing']} - its next turn hears it (latest_block)")
         reply, ticks = selfclose.tick_markers(reply)          # the to-dos it finished, on the road `taskuary --tick` takes
         # ...and where the owner stands, taken out of the answer - with no line of a letter waiting on them in it (selfclose.without_letters)
-        letters = [drafted, *(r['DraftText'] for r in self.store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Status='pending'", (self.task_id,)))]
+        # ...any letter of the task, not only one still pending: his line sets a waiting draft aside as it is heard (conversation.hear), and its
+        # words leaked into the summary of the very turn that heard it (CI, 2026-11-12)
+        letters = [drafted, *(r['DraftText'] for r in self.store._rows("SELECT DraftText FROM review WHERE TaskId=? AND (Status='pending' OR Kind IN ('draft_reply','draft','slot'))",
+                                                                       (self.task_id,)))]
         reply, summ = selfclose.summary_marker(reply, [x for x in letters if x])
         if summ: reply = reply or summ['did']
         if ticks:

@@ -22,10 +22,12 @@ def task(s):
     return s.create_task({'Title': 'Pay date', 'Kind': 'general', 'Status': 'in_progress'}, 't')
 
 
-def turn(s, tid, answer, sess=None):
+def turn(s, tid, answer, sess=None, draft=None):
+    "One turn answering `answer`; `draft`: the reply it writes as it works (after his line - a draft older than his line is one he moved past)."
     if sess is None:
         with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')): sess = general.GeneralSession(s, tid)
-    with mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: answer), mock.patch('taskuary.hooks.judge_ended'):
+    brain = lambda system, user, **kw: (draft and s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': draft}), answer)[1]
+    with mock.patch.object(general.llm_mod, 'build_llm', return_value=brain), mock.patch('taskuary.hooks.judge_ended'):
         return sess.send_prompt('when is payday?'), sess
 
 
@@ -251,20 +253,19 @@ def _redraft(s, tid, rid, text): s._exec('UPDATE review SET DraftText=? WHERE Re
 
 def test_a_turns_draft_keeps_its_own_words_after_a_later_redraft():
     s = MemoryStore(); tid = task(s)
-    rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Gail, the run is Friday.'})
-    _, sess = turn(s, tid, f'Drafted it.\n{block()}')
-    _redraft(s, tid, rid, 'Hi Gail, the run moved to Thursday.')
-    turn(s, tid, f'Redrafted it.\n{block()}', sess)
+    # ...each turn's draft as it left it: the turn after his next line writes its own (his line set the first aside, greyed where it stood)
+    _, sess = turn(s, tid, f'Drafted it.\n{block()}', draft='Hi Gail, the run is Friday.')
+    turn(s, tid, f'Redrafted it.\n{block()}', sess, draft='Hi Gail, the run moved to Thursday.')
     turn(s, tid, f'Nothing new on the draft.\n{block()}', sess)
+    rid, rid2 = [r['ReviewId'] for r in s._rows('SELECT ReviewId FROM review WHERE TaskId=? ORDER BY ReviewId', (tid,))]
     answers = [m for m in general.shown_history(s, tid) if m.get('summary')]
     assert [[d['text'] for d in m.get('drafts_then', [])] for m in answers] == [['Hi Gail, the run is Friday.'], ['Hi Gail, the run moved to Thursday.'], []]
-    assert [m['summary']['drafted'] for m in answers] == [[{'review': rid}], [{'review': rid}], []]
+    assert [m['summary'].get('drafted', []) for m in answers] == [[{'review': rid}], [{'review': rid2}], []]
 
 
 def test_the_kept_draft_never_puts_its_words_in_the_summary():
     s = MemoryStore(); tid = task(s)
-    s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Gail,\nThe code is Tern-Vault-9081.\nAlex'})
-    turn(s, tid, f'Drafted it.\n{block()}')
+    turn(s, tid, f'Drafted it.\n{block()}', draft='Hi Gail,\nThe code is Tern-Vault-9081.\nAlex')
     (row,) = summaries(s, tid)
     assert 'Tern-Vault-9081' not in row['Body']
     assert 'Tern-Vault-9081' in general.shown_history(s, tid)[-1]['drafts_then'][0]['text']

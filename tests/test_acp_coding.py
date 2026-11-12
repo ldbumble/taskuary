@@ -570,8 +570,13 @@ def test_a_waiting_card_never_moves_under_a_turn_that_only_stopped_at_his_allow(
     assert live() == ['own'], conversation.items(s, tid)['items']                                # stopped at his Allow: nothing ended
     permissions.answer(s, tid, permissions.pending(tid, s)[0]['id'], 'allow_once')
     assert idle(t, 1)
+    # ...waited on as state: the turn's last updates are kept by the session's reader a beat after its prompt returns (a CI runner read the
+    # list at `idle` while it still ended on his press, the words under it not yet kept)
+    tail = lambda: [x['kind'] for x in conversation.items(s, tid)['items']][-3:]
+    assert until(lambda: tail() == ['turn', 'press', 'turn']), json.dumps([conversation.items(s, tid)['items'], s._rows('SELECT * FROM heard WHERE TaskId=?', (tid,)),
+                                                                         codingchat.acp_updates(tid, t.sid)], default=str)[:8000]
     got = conversation.items(s, tid)['items']; turns = [x for x in got if x['kind'] == 'turn']
-    assert [x['kind'] for x in got][-3:] == ['turn', 'press', 'turn'] and live() == [turns[-1]['id']], got
+    assert live() == [turns[-1]['id']], got
     assert not turns[-2]['cards']                                                                    # ...and it never stood above his press
 
 
@@ -589,7 +594,8 @@ def test_a_coding_chat_reads_in_the_same_order_once_its_session_has_closed(world
     end = max(x['ended'] for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn')
     assert until(lambda: time.time() >= end + 1.1)                                         # (a stamp is a whole second: it closes in a later one)
     t.close(); assert until(lambda: not codingchat._live(tid) and s._rows('SELECT 1 FROM transcript WHERE TaskId=?', (tid,)))
-    assert shape() == was, shape()
+    # ...in the same order - under it only the task's own line that its run is over (conversation.items `n:left`)
+    assert shape() == [*was, ('note', 'n:left')], shape()
 
 
 def test_a_line_is_never_the_answer_to_a_step_whose_buttons_are_a_beat_away(world, monkeypatch):

@@ -17,7 +17,7 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, newerList, withMine } from "./chatStream.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
 import { useChatDefaults } from "./DetailSlider.jsx";
@@ -382,7 +382,8 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 // ...and one never read here draws the list that was asked for ahead with its task (taskDetail.prefetchTask: the row Next brings, a rail row
 // under the pointer) on its first frame - the read on mount still follows, so what is held is only ever the first paint
 const LISTS = new Map();
-const listOf = (tid) => { if (!LISTS.has(tid)) { const h = heldConversation(tid); if (h) LISTS.set(tid, h); } return LISTS.get(tid) || null; };
+// ...WHICHEVER WAS ASKED LAST (chatStream.newerList): the list this view last read, or the one read ahead as he came back
+const listOf = (tid) => { const l = newerList(LISTS.get(tid), heldConversation(tid)); if (l) LISTS.set(tid, l); return l; };
 // ...and what the chat stands on beside its list - the agent's state, its picks, what it holds (`/assistant`) - by the same rule: as last
 // read here, else as asked ahead with the task; the read on mount follows and is the newest word
 const CHATS = new Map();
@@ -392,10 +393,14 @@ export function useConversation(tid, on) {
   // ...READS LAND IN THE ORDER THEY WERE ASKED (the recorded walk, 2026-11-11: on a loaded machine an older read came back after a newer one -
   // his line vanished, the chat read "at rest" over a turn at work, and his next line was drawn as heard): one that a later read overtook is dropped
   const asked = useRef(0), shown = useRef(0);
-  const load = useCallback(() => { const n = ++asked.current; return (on ? api.get(`/api/tasks/${tid}/conversation`, { params: { rev: rev.current } }).then(({ data: d }) => {
+  const load = useCallback(() => { const n = ++asked.current, at = Date.now(); return (on ? api.get(`/api/tasks/${tid}/conversation`, { params: { rev: rev.current } }).then(({ data: d }) => {
     if (n < shown.current) return false;
     shown.current = n;
+    if (d?.same && LISTS.get(tid)) LISTS.get(tid)._at = at;
     if (!d || d.same) return false;
+    // ...nor a read asked before the one this view holds (one read ahead as he came back, landed first)
+    if ((LISTS.get(tid)?._at || 0) > at) return false;
+    d._at = at;
     // ...AND A CHAT THAT HAS DRAWN NEVER DRAWS EMPTY (recorded 2026-11-12 on the ACP sign-in walk: two seconds after the hand-back the whole chat
     // stood empty for a second, his ask and his press gone, then came back): a read with nothing in it over a list that has something is no
     // newer word on the conversation - nothing he typed or was told is ever taken back - and is not drawn
@@ -448,19 +453,21 @@ const ConvLine = ({ x, more }) => {
     <div className="tq-aui-user-bubble" dir="auto">{x.text}</div>
     {!!x.err && <div className="tq-aui-hint" role="alert">{x.err}</div>}</div>;
 };
-/* AN ACTION WHERE IT STOOD, once it is no longer the one to press there: a draft a later turn rewrote, or one the agent's latest turn kept -
-   which stands under that turn, right above the box. Greyed, nothing to press */
-const PAST = { kept: (c) => `${/draft/.test(c.what || "") ? "This draft" : "This action"} stands below, under a later answer`, superseded: () => "Earlier draft - rewritten below" };
+/* A DRAFT WHERE IT STOOD, once it is no longer the one to press: rewritten by a later turn, set aside as he wrote again (the owner, 2026-11-12:
+   "I thought we keep it but grey out buttons right away"), or taken back by its agent - greyed in its own place with its words, nothing to press.
+   It never goes from the chat and never moves */
+const PAST = { superseded: () => "Earlier draft - rewritten below", passed: () => "Earlier draft - not sent; you wrote again", withdrawn: () => "Earlier draft - not sent; the agent took it back" };
 const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.status} role="note">
   <div className="tq-conv-past-head">{PAST[c.status](c)}</div>
   {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
-function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, name, tid, onChanged }) {
-  const used = new Set();
+function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, name, tid, onChanged, working = false }) {
+  // ...every review the list places, in whatever state: a card is drawn where the list has it and nowhere else
+  const used = new Set(), listed = new Set(items.flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : [])).map((c) => c.review));
   const draw = (cs) => (cs || []).flatMap((c) => {
-    // ...a draft a later turn rewrote carries what it said (`was`); any other card the server settled is its own node, in its place
-    if (PAST[c.status] && (c.status !== "superseded" || c.was)) return [<PastCard key={c.id} c={c} />];
+    // ...a draft no longer to press carries what it said (`was`); any other card the server settled is its own node, in its place
+    if (PAST[c.status] && c.was) { nodes.forEach((n) => { if (n.rid === c.review) used.add(n.key); }); return [<PastCard key={c.id} c={c} />]; }
     const got = nodes.filter((n) => n.rid === c.review && !used.has(n.key)), post = posts.find((p) => p.ReviewId === c.review);
     got.forEach((n) => used.add(n.key));
     // ...ONE REVIEW IS ONE CARD: a post or a tracker comment an earlier build set aside has its settled card among the nodes, and was drawn
@@ -479,10 +486,14 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
       <div className="tq-aui-press-line">{pressLine(x.text, x.at ? when(String(x.at)) : "")}</div></div>;
   });
   // ...a card the list places nowhere (made this instant, the list a read behind) is never lost: under everything, until the list names its turn
-  const loose = nodes.filter((n) => !used.has(n.key));
+  // ...BUT NEVER UNDER A TURN AT WORK, nor one the list holds in another state (the owner, 2026-11-12: "it should finish thinking and last thing
+  // should be show action box" - drawn at the foot while the turn worked, its words landed above the card; and greyed in its turn, the same
+  // reply stood live again at the foot): a turn's card comes when the list has it, as the turn's last thing
+  const loose = working ? [] : nodes.filter((n) => !used.has(n.key) && !listed.has(n.rid));
+  const nextLoose = next && !used.has("next") && !working && !listed.has(nextRid);
   return <>{rows}
     {!!loose.length && <div className="tq-aui-message tq-aui-agent" data-tq-row-cards="loose"><div className="tq-aui-agent-body">{loose.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>)}</div></div>}
-    {next && !used.has("next") && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
+    {nextLoose && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
     {landing}</>;
 }
 /* WHAT WAITS FOR THE AGENT, BY THE BOX: accepted, not yet handed over - never in the conversation until it is (the heard rule).
@@ -495,16 +506,6 @@ const PendingStrip = ({ items }) => { const shown = waitingShown(items); return 
     <span className="tq-conv-pending-who">{x.kind === "line" ? "You" : x.kind === "arrival" ? (x.own ? "You, outside" : x.who || "Someone") : ""}</span>
     <span className="tq-conv-pending-words">{x.err ? `${x.text} - ${x.err}` : x.text || x.words || ""}</span></div>)}
 </div>; };
-/* this page's own lines and the server's list as one: a line it sent is drawn at once - in the conversation when the agent was at rest (it is
-   heard as it is sent, its turn under it), by the box when a turn was at work - and the server's copy takes over by the same name */
-const withMine = (list, mine) => {
-  const items = list?.items || [], pending = list?.pending || [], known = new Set([...items, ...pending].map((x) => x.id));
-  const own = mine.filter((l) => !known.has(l.id));
-  const rest = own.filter((l) => l.rest && !l.err), wait = own.filter((l) => !l.rest || l.err);
-  const tail = rest.length && !list?.working ? [{ id: `t:${rest.at(-1).id}:0`, kind: "turn", state: "starting", steps: [], text: "", cards: [], started: +rest.at(-1).at / 1000 }] : [];
-  return { items: [...items, ...rest, ...tail], pending: [...pending, ...wait] };
-};
-
 
 function AssistantThread({ task, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack,
   prompt, onPromptUsed, name = "Taskuary", asking, onAnswer, drafts = [], acts = [], onDraftDecided, noComposer = false,
@@ -612,7 +613,7 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
             <Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
-              landing={landNode} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} />
+              landing={landNode} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} />
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
             {asking && <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} />}
@@ -954,9 +955,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat ? came : null} closedLine={chat ? closedLine : ""} queued={chat ? queued : null} hold={conv.list?.hold || null} onTrusted={() => { conv.load(); onAnswered?.(); onChanged?.(); }}
         road={road} cards={codingCards} landing={chat ? landing : null} turnCards={chat ? turnCards : null}
-        placeholder={coding ? (closedTask ? "Write to pick it back up…" : cli || !conv.list?.ran ? MESSAGE : "Write to pick the session back up…") : ""}
-        hint={!coding ? "" : acp ? (cli.working ? "Enter sends it when this turn ends · Shift+Enter adds a line" : "Enter sends it to the agent · Shift+Enter adds a line")
-          : cli ? "Enter types it into the running agent · Shift+Enter adds a line" : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}
+        // ...THE BOX SAYS WHAT THE HEADER SAYS (the owner's live task, 2026-11-12: "Write to pick the session back up" under a turn at work - its
+        // session was being opened again for his line): "working" is the list's one fact, whatever process is up yet
+        placeholder={coding ? (closedTask && !convWorks ? "Write to pick it back up…" : cli || convWorks || !conv.list?.ran ? MESSAGE : "Write to pick the session back up…") : ""}
+        hint={!coding ? "" : acp ? (cli.working || convWorks ? "Enter sends it when this turn ends · Shift+Enter adds a line" : "Enter sends it to the agent · Shift+Enter adds a line")
+          : cli ? "Enter types it into the running agent · Shift+Enter adds a line" : convWorks ? "Enter sends it when this turn ends · Shift+Enter adds a line"
+          : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}
         empty={coding && conv.list ? (cli ? "The agent is starting - its turns show here as it works." : "No session has run on this task yet - write below to start one.") : ""}
         noAi={!coding && chat && !data?.providers?.length && !noAiSaid && !data?.demo
           ? <div className="tq-aui-noai" data-tq-no-ai="">No AI is connected yet - what you type waits for one. <ConnectAi size="small" variant="text" /></div> : null} />

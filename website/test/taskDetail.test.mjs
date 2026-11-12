@@ -45,7 +45,8 @@ test("a task read ahead brings its chat's list, and the chat draws it on its fir
   assert.equal(heldConversation(4).rev, "r1", "the view's own read of the task keeps it");
   forgetTasks(4); assert.equal(heldConversation(4), null, "a write to the task lets it go");
   const view = src("GeneralWorkspace.jsx");
-  assert.match(view, /const listOf = \(tid\) => \{ if \(!LISTS\.has\(tid\)\) \{ const h = heldConversation\(tid\); if \(h\) LISTS\.set\(tid, h\); \} return LISTS\.get\(tid\) \|\| null; \};/);
+  // ...whichever was asked last of the two, the view's own last read or the read-ahead (chatStream.newerList; basicFlow.test.mjs)
+  assert.match(view, /const listOf = \(tid\) => \{ const l = newerList\(LISTS\.get\(tid\), heldConversation\(tid\)\); if \(l\) LISTS\.set\(tid, l\); return l; \};/);
   assert.match(view, /const \[list, setList\] = useState\(\(\) => listOf\(tid\)\)/);
 });
 

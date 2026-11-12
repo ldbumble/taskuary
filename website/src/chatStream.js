@@ -142,3 +142,38 @@ export const continues = (messages, i) => { for (let j = i - 1; j >= 0; j--) { c
    short of its end, never to follow again. */
 export const AT_END = 56;
 export const heldAtEnd = (held, { top, was, gap, own }) => gap < AT_END || (held && !(own && top < was - 1));
+
+// THE CHAT'S OWN LIST ON THE PAGE (GeneralWorkspace): what is drawn is the server's list (conversation.items), with two things of the page's -
+// THE LIST ASKED LAST: the one this view last read, or one read ahead with its task as he came back to it (taskDetail.prefetchTask) - an older
+// read is never drawn over a newer one (the owner's live task, 2026-11-12: he left a task and came back); `_at` is when each was ASKED
+export const newerList = (a, b) => (!a ? b || null : !b ? a : (b._at || 0) > (a._at || 0) ? b : a);
+/* ...AND HIS OWN LINES: a line it sent is drawn at once - in the conversation when the agent was at rest (it is heard as it is sent, its turn
+   under it), by the box when a turn was at work - and the server's copy takes over by the same name.
+   ...ABOVE THE TURN HIS LINE BEGAN (the owner's live task, 2026-11-12: back on a task, he typed - the dots stood above "try now"): a read that
+   already has that turn starting, with nothing in it, and not yet his line - the line goes over it, never under */
+export const withMine = (list, mine) => {
+  const items = list?.items || [], pending = list?.pending || [], known = new Set([...items, ...pending].map((x) => x.id));
+  const own = mine.filter((l) => !known.has(l.id));
+  const rest = own.filter((l) => l.rest && !l.err), wait = own.filter((l) => !l.rest || l.err);
+  const tail = rest.length && !list?.working ? [{ id: `t:${rest.at(-1).id}:0`, kind: "turn", state: "starting", steps: [], text: "", cards: [], started: +rest.at(-1).at / 1000 }] : [];
+  const at = items.length && rest.length && ((x) => x.kind === "turn" && ["starting", "working"].includes(x.state) && !x.text && !(x.steps || []).length)(items.at(-1)) ? items.length - 1 : items.length;
+  // ...AND A REPLY DRAFT ABOVE IT GREYS IN ITS PLACE FROM THE SAME FRAME (the owner, 2026-11-12: "grey out buttons right away"): what the
+  // server does as it hears the line (proposals.set_aside_drafts), drawn before its read comes back - its buttons stood lit ~300 ms
+  const aside = (c) => (rest.length && c.status === "pending" && /draft/.test(c.what || "") && c.was ? { ...c, status: "passed" } : c);
+  const greyed = items.map((x) => (x.kind === "card" ? aside(x) : x.kind === "turn" && (x.cards || []).length ? { ...x, cards: x.cards.map(aside) } : x));
+  return { items: [...greyed.slice(0, at), ...rest, ...greyed.slice(at), ...tail], pending: [...pending, ...wait] };
+};
+// THE BASIC FLOW OF WHAT THE PAGE DRAWS (conversation.flow_breaks, the page's half): his newest line has no turn at work above it, and
+// nothing already drawn changes place or has anything new drawn above it (`was`: the list drawn before). [] when it reads like a chat
+export const flowBreaks = (now, was = null) => {
+  const xs = now?.items || [], out = [], ids = xs.map((x) => x.id), live = (x) => x.kind === "turn" && ["starting", "working"].includes(x.state);
+  const his = xs.map((x) => x.kind === "line").lastIndexOf(true);
+  xs.slice(0, Math.max(his, 0)).forEach((x) => { if (live(x)) out.push(`a: the turn at work ${x.id} stands above his newest line ${ids[his]}`); });
+  if (!was) return out;
+  const old = (was.items || []).map((x) => x.id), set = new Set(old), kept = old.filter((i) => ids.includes(i));
+  if (JSON.stringify(ids.filter((i) => kept.includes(i))) !== JSON.stringify(kept)) out.push("f: items already drawn changed their order");
+  const top = Math.max(-1, ...kept.map((i) => ids.indexOf(i)));
+  ids.slice(0, Math.max(top, 0)).forEach((i) => { if (!set.has(i)) out.push(`f: ${i} is drawn above ${ids[top]}, which was already there`); });
+  old.forEach((i) => { const x = was.items.find((y) => y.id === i); if (!ids.includes(i) && !(live(x) && !x.text && !(x.steps || []).length)) out.push(`c: ${i} was on the canvas and is gone`); });
+  return out;
+};

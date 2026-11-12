@@ -27,7 +27,8 @@ export const prefetchTask = (api, tid) => {
   }).catch(() => { if (held.get(id) === rec) held.delete(id); return null; });
   // ...AND ITS CHAT WITH IT (the owner's rule: never a blank beat - seen 2026-11-11: a task opened for the first time drew its header and its
   // box over an empty chat for a quarter of a second, while the list was read only once the view had mounted)
-  api.get(`/api/tasks/${id}/conversation`).then(({ data }) => { if (Array.isArray(data?.items)) rec.conv = data; }).catch(() => {});
+  // ...stamped with when it was ASKED: the chat draws whichever list was asked last, this or its own (GeneralWorkspace newerList)
+  api.get(`/api/tasks/${id}/conversation`).then(({ data }) => { if (Array.isArray(data?.items)) rec.conv = Object.assign(data, { _at: asked }); }).catch(() => {});
   // ...AND WHAT ITS CHAT STANDS ON (recorded 2026-11-12 on every rail click, Next and Back: the task's header over a spinner for up to a
   // second - list in hand, the chat drew nothing until its own read of the agent's state had landed)
   // ...and a view mounted before it landed waits for it rather than its own read beside it (aheadChat; recorded 2026-11-12 on the built

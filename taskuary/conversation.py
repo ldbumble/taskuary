@@ -269,6 +269,10 @@ def _session_steps(store, tid: int) -> list:
     out = []
     for s in codingchat.owned(store, tid, codingchat.sessions(store, tid, local=False)):
         steps, t = acp_steps(s['updates']) if s.get('source') == 'acp' else [dict(x) for x in s.get('steps') or []], ep(s.get('at'))
+        # ...A SESSION'S `at` IS ITS START WHILE IT LIVES AND ITS END ONCE IT CLOSED (the filing of its transcript): read from there, every
+        # step of a closed session stood at its close - his lines first, then all its turns (recorded 2026-11-12, a coding task opened
+        # again after Send and close). Never later than its own first dated step
+        t = min(t, min((ep(x['at']) for x in steps if x.get('at')), default=t))
         for x in steps: t = x['T'] = max(t, ep(x.get('at')))          # a record reads in its own order: a step with no time is at the one before it
         out.append((s['sid'], bool(s.get('live')), steps))
     return out
@@ -494,7 +498,7 @@ def items(store, tid: int) -> dict:
     for x in out:
         if x['kind'] == 'turn':
             x['id'] = f't:{anchor}:{n}'; n += 1
-            for k in ('seg',): x.pop(k, None)
+            x['_seg'] = x.pop('seg', None)
         else:
             if x['kind'] in ('line', 'arrival', 'press'): anchor, n = x['id'], 0
         if x['id'] in seen: x['id'] += f":{len(seen)}"
@@ -522,7 +526,14 @@ def items(store, tid: int) -> dict:
     # card a screen above its words): an action still live after a later turn ended is one that turn KEPT - each turn is told what waits and
     # takes back what it undoes - so it stands last in the newest turn that said something, and where it stood says so, greyed
     # ...and one he pressed stays where it stood when he pressed it: under the newest answer of that moment, never back where it was first made
-    said = [(i, x) for i, x in enumerate(out) if x['kind'] == 'turn' and x['state'] in ('done', 'stopped') and (x['text'] or x['steps'])]
+    # ...UNDER AN ANSWER, NEVER UNDER A TURN THAT HAS NOT ENDED (recorded 2026-11-12: a reply card went down under a coding turn stopped at
+    # his Allow once, back up as he pressed, down again as the turn went on under the press, and down once more at its end): a session's
+    # turn that waits on his answer to a step is at rest and not over, and the part of a turn above an input it went on under is no answer
+    from . import permissions
+    perms, turns_ = permissions.pending(tid, store), [x for x in out if x['kind'] == 'turn']
+    on = {id(a) for a, b in zip(turns_, turns_[1:]) if a.get('sid') and a.get('sid') == b.get('sid') and a.get('_seg') == b.get('_seg')}
+    if perms and turns_ and turns_[-1].get('sid') and turns_[-1].get('sid') == live_sid: on.add(id(turns_[-1]))
+    said = [(i, x) for i, x in enumerate(out) if x['kind'] == 'turn' and x['state'] in ('done', 'stopped') and (x['text'] or x['steps']) and id(x) not in on]
     def under(i, card):
         "The newest answer after place `i` that had ended by the time the card was decided (now, while it waits) - None: it stands where it is."
         lim = INF if card['status'] == 'pending' else ep(card.get('decided')) if card.get('decided') else -1
@@ -537,9 +548,9 @@ def items(store, tid: int) -> dict:
         if x['kind'] == 'card': out[i] = {**x, 'status': 'kept'}; t['cards'].append({**card, 'id': card['id'] + ':live'})
         else: x['cards'] = [{**c, 'id': c['id'] + ':k', 'status': 'kept'} if c is card else c for c in x['cards']]; t['cards'].append(card)
 
-    for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None)
+    for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None); x.pop('_seg', None)
     # ...and what the agent waits on him for, and the CLI that runs: read by the page off this one list (the chat's own payloads are gone)
-    from . import permissions, taskstate
+    from . import taskstate
     live = general._live_of(tid)
     ask = taskstate.asking(store, store.get_task(tid) or {'TaskId': tid}, general.session_for(tid) or (live if codingchat._live(tid) else None))
     # A QUESTION IS SAID ONCE, IN ITS TURN'S OWN WORDS, ABOVE ITS CARD (the owner, 2026-11-11; the recorded walk drew it a second time under
@@ -547,7 +558,6 @@ def items(store, tid: int) -> dict:
     # A STEP THAT WAITS ON HIS ALLOW IS ONE CARD (the owner, 2026-11-11: "the question has 2 approve buttons?" - recorded on a coding agent: the
     # permission's card with Allow once / Reject, and under it the same request again as the agent's question, with the same two buttons):
     # the request a permission made is `permissions`' to draw, never the agent's question beside it
-    perms = permissions.pending(tid, store)
     if ask and ask.get('source') == 'permission' and perms: ask = None
     flat = lambda v: ' '.join(re.sub(r'[*_`]', '', str(v or '')).split())
     last = next((x for x in reversed(out) if x['kind'] == 'turn'), None)

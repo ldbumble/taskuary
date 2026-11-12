@@ -284,7 +284,10 @@ def _deliver(store, tid: int, new: int = None) -> dict:
         # 2026-11-11): its turn is still on, stopped at that call, so a line typed then can be heard by nobody until he presses. It was
         # written down as the answer, steered at the stopped turn - dots under it for as long as he did not press - and handed over a second
         # time once the turn moved: told twice, drawn twice. It keeps its place by the box and goes in when the buttons were pressed
-        if permissions.pending(tid, store): return {'delivered': 0, 'state': 'held_ask', 'left': len(pending)}
+        # ...from the moment the step is on the rail - a beat before its buttons exist (permissions.ask writes the request down first): a
+        # line handed over in that beat was written down as the step's answer, which refused it
+        if permissions.pending(tid, store) or ((req := ws.asking_of(store, t)) or {}).get('source') == 'permission':
+            return {'delivered': 0, 'state': 'held_ask', 'left': len(pending)}
         if (req := ws.asking_of(store, t)):
             who = 'owner' if any((x.get('CreatedBy') or 'owner') == 'owner' for x in notes) else 'router'
             ws.record(store, tid, t.sid, 'answered', request_id=req['request_id'], text=parts(notes[0]['Note'])[0][:500], source=ws.said_by(who))

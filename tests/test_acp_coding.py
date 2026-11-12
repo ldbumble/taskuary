@@ -545,6 +545,62 @@ def test_a_line_typed_into_a_turn_he_then_stops_is_answered_by_one_turn_under_th
     assert until(lambda: not conversation.items(s, tid)['working']) and t.turns == 2 and not t._q
 
 
+def test_a_waiting_card_never_moves_under_a_turn_that_only_stopped_at_his_allow(world, monkeypatch):
+    """Recorded on the real CLI, 2026-11-12: a reply waited for his Send under the first answer; the next turn stopped at a step for his
+    Allow once and the reply card moved down under it, went back up when he pressed (the turn at work again), down again as the turn went
+    on under his press, and down once more at its end - four places in twenty seconds. A waiting card moves only under an ANSWER: a turn
+    stopped at his Allow has not ended, and the part of it above his press is the same turn going on."""
+    from taskuary import conversation
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_ASK', 'git push origin main'); monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
+    monkeypatch.setenv('FAKE_ACP_THINK', '0.6')              # the step comes once the line's hand-over has settled, as a real model's does
+    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
+    rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Gail - the totals are commented.', 'Reason': 'reply'})
+    assert until(lambda: time.time() >= conversation.ep(s.get_review(rid)['CreatedAt']) + 1)        # (a stamp is a whole second)
+    live = lambda: [x.get('id', '') if x['kind'] == 'turn' else 'own' for x in conversation.items(s, tid)['items']
+                    for c in ([x] if x['kind'] == 'card' else x.get('cards') or []) if c['review'] == rid and c['status'] == 'pending']
+    assert live() == ['own']
+    general.take_line(s, tid, 'Push it.', line_id='l-one')
+    assert until(lambda: permissions.pending(tid, s) and any(x['kind'] == 'turn' and x['steps'] for x in conversation.items(s, tid)['items'])), t.history
+    assert live() == ['own'], conversation.items(s, tid)['items']                                # stopped at his Allow: nothing ended
+    permissions.answer(s, tid, permissions.pending(tid, s)[0]['id'], 'allow_once')
+    assert idle(t, 1)
+    got = conversation.items(s, tid)['items']; turns = [x for x in got if x['kind'] == 'turn']
+    assert [x['kind'] for x in got][-3:] == ['turn', 'press', 'turn'] and live() == [turns[-1]['id']], got
+    assert not turns[-2]['cards']                                                                    # ...and it never stood above his press
+
+
+def test_a_coding_chat_reads_in_the_same_order_once_its_session_has_closed(world, monkeypatch):
+    """Recorded on the real CLI, 2026-11-12 (Send and close on a coding task, then the task opened again): his two lines stood first, then
+    the reply card by itself, then both turns - every step of the closed session stamped at the moment its transcript was filed, which is
+    its END. A session's record reads at its steps' own times, live or closed."""
+    from taskuary import conversation
+    s, tid, repo = world
+    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
+    general.take_line(s, tid, 'Comment the totals function.', line_id='l-one'); assert idle(t, 1)
+    general.take_line(s, tid, 'And mention rounding.', line_id='l-two'); assert idle(t, 2)
+    shape = lambda: [(x['kind'], x.get('id', '')) for x in conversation.items(s, tid)['items']]
+    was = shape(); assert [k for k, _ in was] == ['line', 'turn', 'line', 'turn'], was
+    end = max(x['ended'] for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn')
+    assert until(lambda: time.time() >= end + 1.1)                                         # (a stamp is a whole second: it closes in a later one)
+    t.close(); assert until(lambda: not codingchat._live(tid) and s._rows('SELECT 1 FROM transcript WHERE TaskId=?', (tid,)))
+    assert shape() == was, shape()
+
+
+def test_a_line_is_never_the_answer_to_a_step_whose_buttons_are_a_beat_away(world, monkeypatch):
+    """A step that waits on his Allow is on the rail a beat before its buttons exist (permissions.ask writes the request down first). A
+    line handed over in that beat was written down as the step's answer - which refused the step and filed its Approve card instead.
+    It waits by the box, as a line under the buttons does."""
+    from taskuary import workerstate as ws
+    s, tid, repo = world
+    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
+    ws.record(s, tid, t.sid, 'approval_needed', request_id='q:0123456789:1', text='The agent wants to run `git push origin main`',
+              choices=['Allow once', 'Reject'], source='permission')                              # ...the request, its PENDING row not yet made
+    assert waitroom.state(s, tid)[0] == 'asking' and not permissions.pending(tid, s)
+    assert waitroom.add(s, tid, 'What does that push carry?', 'owner')['state'] == 'held_ask'
+    assert [e['Kind'] for e in s.worker_events(tid)][-1] == 'approval_needed' and len(s.waiting_notes(tid)) == 1
+
+
 def test_a_held_step_stays_the_one_lit_card_when_he_asks_the_coding_agent_a_question(world, monkeypatch):
     """The owner's live coding task, 2026-11-11 ("the question has 2 approve buttons?"): his question set the held step aside and the agent
     raised it again beside the greyed one. It stays lit, his line stands with the turn at work under it, and the same step run again by

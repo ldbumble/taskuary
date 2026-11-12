@@ -251,4 +251,9 @@ test("the chat keeps one width at rest and at work, and the browser pane arrives
   assert.match(term, /new ResizeObserver\(\(\[e\]\) => flushSync\(\(\) => setWidth\(e\.contentRect\.width\)\)\);/, "the pane's own width is the frame's");
   assert.match(page, /bodyRO\.current = new ResizeObserver\(\(\[e\]\) => flushSync\(\(\) => setBodyW\(Math\.round\(e\.contentRect\.width\)\)\)\);/, "and the task's sections are sized for the width the frame has");
   assert.match(page, /SECTION\(isOpen\("agent"\), openW\("agent"\), sessionView, liveSession\), \.\.\.\(chatPane \? \{ pb: 0\.25, px: 1, pt: 0\.65 \} : \{\}\)/, "a chat's section keeps the live room at rest too");
+  // ...AND IN THE COMMIT THAT MOVES THE LIST (recorded 2026-11-12 as a pane closed: the list back, the chat still 1145 px and its box 197 px past
+  // the window for frames, until the observer spoke): the view hears the fold as it is asked and measures its body before that commit is painted
+  assert.match(page, /useEffect\(\(\) => onRoom\(\(\) => setRoomTick\(\(n\) => n \+ 1\)\), \[\]\);/);
+  assert.match(page, /React\.useLayoutEffect\(\(\) => \{ const el = bodyEl\.current; if \(!roomTick \|\| !el\) return;/);
+  assert.match(page, /if \(w > 0\) setBodyW\(\(b\) => \(b === w \? b : w\)\); \}, \[roomTick\]\);/);
 });

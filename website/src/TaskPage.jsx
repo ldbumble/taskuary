@@ -44,6 +44,7 @@ import { writeupView } from "./writeupState.js";
 import { agentName } from "./agentWork.js";
 import { loadGeneral } from "./lazyGeneral.js";
 import { lazyView } from "./lazyView.jsx";
+import { onRoom } from "./browserSplit.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
 import { noteKey, noteOf, onYouLine, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
@@ -1125,9 +1126,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   useEffect(() => { setHistOpen(false); setCameInFull(false); setDoneOpen(false); }, [selected]);
   // the task's body measured: under STACK_BELOW it is a phone's stacked page, not a main view and drawers
   const [bodyW, setBodyW] = useState(() => (typeof window === "undefined" ? 1440 : window.innerWidth));
-  const bodyRO = useRef(null);
+  const bodyRO = useRef(null), bodyEl = useRef(null);
+  // ...AND IN THE SAME COMMIT AS THE TASK LIST FOLDING OR COMING BACK (browserSplit.wantRoom, recorded 2026-11-12): the observer's word came a
+  // frame or two after the list was back, and for those frames the chat stood at the list-less width - 1145 px, its box 197 px past the
+  // window - as a browser pane closed. The list's fold is heard here as it is asked, so this view draws again in the commit that moves the
+  // list, and measures its body before that commit is painted
+  const [roomTick, setRoomTick] = useState(0);
+  useEffect(() => onRoom(() => setRoomTick((n) => n + 1)), []);
+  React.useLayoutEffect(() => { const el = bodyEl.current; if (!roomTick || !el) return;
+    const s = getComputedStyle(el), w = Math.round(el.clientWidth - parseFloat(s.paddingLeft || 0) - parseFloat(s.paddingRight || 0));
+    if (w > 0) setBodyW((b) => (b === w ? b : w)); }, [roomTick]);
   const bodyBox = useCallback((el) => {
-    bodyRO.current?.disconnect(); bodyRO.current = null;
+    bodyRO.current?.disconnect(); bodyRO.current = null; bodyEl.current = el;
     if (!el || typeof ResizeObserver === "undefined") return;
     // ...and laid out for it in the frame that has it (flushSync: the observer runs before that frame's paint): its sections are sized in
     // pixels off this width, and set a beat later they drew one frame at the old one - the chat 479px wide, then 655, as the task list folded

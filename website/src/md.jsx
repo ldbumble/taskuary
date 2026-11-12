@@ -154,7 +154,7 @@ export const MdLine = ({ text }) => (
 export const Md = ({ text, onTask = null }) => {
   const at = React.useContext(LocalFiles), words = at ? codeLocalPaths(plainCitations(text || ""), at.tid) : plainCitations(text || "");
   return (
-  <Box sx={sx}>
+  <Box sx={sx} className="tq-md">
     <ReactMarkdown remarkPlugins={[remarkGfm]}
       components={{ a: onTask ? (p) => <A {...p} onTask={onTask} /> : A, img: Img, td: Td, pre: Pre, code: Code, table: ({ children }) => <div className="tbl"><table>{children}</table></div> }}>
       {/* a Codex citation marker reads as the file's name wherever an answer is shown; the chat makes it a file (taskOutputs.js) */}

@@ -43,6 +43,9 @@ export const sampler = (names) => {
       const cardsOf = [...vp.querySelectorAll("[data-tq-turn-cards] > *, [data-tq-row-cards] .tq-aui-agent-body > *")];
       const dead = cardsOf.filter((c) => c.matches("[data-tq-passed], [data-tq-past-card]") || c.querySelector("[data-tq-passed]"));
       if (dead.some((c) => c.querySelector("button[disabled]"))) f.deadButton = true;
+      // EACH MESSAGE OF A TURN IS A PARAGRAPH (the owner, 2026-11-11: three messages of one turn stacked as consecutive lines): two blocks of a
+      // turn's words with no room between them
+      if ([...vp.querySelectorAll(".tq-aui-agent-body > .tq-md + .tq-md")].some((e) => e.getBoundingClientRect().top - e.previousElementSibling.getBoundingClientRect().bottom < 4)) f.tight = true;
       // ...and where each card stands, by its own first line and the item it is under: one that goes back UP the chat is a finding (check)
       f.at = cardsOf.filter((c) => !c.matches("[data-tq-past-card]")).map((c) => [c.innerText.trim().split("\n")[0].slice(0, 60), c.closest("[data-tq-item]")?.getAttribute("data-tq-item") || ""]);
       const lastLive = cardsOf.map((c, i) => (c.querySelector("button:not([disabled])") ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
@@ -85,6 +88,9 @@ export function check(frames) {
     if (f.unlit?.length && JSON.stringify(f.unlit) !== JSON.stringify(prev?.unlit || [])) say(f.t, `the agent's words name ${f.unlit.map((n) => `"${n}"`).join(", ")} and no such button is lit`);
     for (const id of f.empty || []) if (!(prev?.empty || []).includes(id)) say(f.t, `${id} is drawn empty`);
     if (f.deadButton && !prev?.deadButton) say(f.t, "a card nobody can press draws a button");
+    if (f.tight && !prev?.tight) say(f.t, "two messages of one turn stand as consecutive lines, no paragraph's room between");
+    // A CHAT IS FIRST SEEN AT ITS END (the owner, 2026-11-11: "task should open on last thing not randomly in middle"): the first painted frame too
+    if (!prev && f.h - f.top - f.ch > 2) say(f.t, `first seen ${f.h - f.top - f.ch} px short of its end`);
     if (f.staleUnder && !prev?.staleUnder) say(f.t, "a settled card stands under the live one");
     // A CARD NEVER GOES BACK UP THE CHAT (the recorded held step, 2026-11-11: approved under the newest answer, it failed and was drawn again
     // under the turn that first raised it - where he had pressed stood nothing): the lowest place a card stood is where it stays, or lower

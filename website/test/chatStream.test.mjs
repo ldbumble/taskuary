@@ -141,4 +141,24 @@ test("the working dots keep room over them wherever something of the turn stands
   assert.match(css, /\.tq-aui-agent-body > \* \+ \.tq-aui-thinking \{ margin-top: 10px; \}/);
 });
 
+// three messages of one working turn stood as consecutive lines, 0px between (the owner, 2026-11-11): each is its own block of words
+// (TurnWorkView draws a `said` part as one Md), and a block's last paragraph carries no room under it
+test("each message of a turn is a paragraph: a block of its words keeps room under it, at work and at rest, in a fold too", () => {
+  const css = fs.readFileSync(new URL("../src/generalWorkspace.css", import.meta.url), "utf8"), md = fs.readFileSync(new URL("../src/md.jsx", import.meta.url), "utf8");
+  const view = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(md, /<Box sx=\{sx\} className="tq-md">/, "every block of words is named");
+  assert.match(view, /p\.type === "said" \? <Md key=\{p\.id\} text=\{p\.text\} \/>/, "and a message of a turn is one, a direct child of the turn's body");
+  assert.match(css, /\.tq-aui-agent-body > \.tq-md:not\(:last-child\), \.tq-aui-working-fold > \.tq-md:not\(:last-child\) \{ margin-bottom: 6px; \}/);
+  assert.match(md, /"& p": \{ m: 0, mb: 0\.75 \}/, "the room a paragraph has inside one message: 6px");
+});
+
+// A LONG CHAT'S FIRST PAINTED FRAME IS ITS END. Its lines measure themselves in the draw that mounts them and each grows a "Show all" - after
+// the pane's own pin. The end was watched from an effect that ran after the paint, so a task opened by a rail click painted one frame 896px
+// short (sampled after each paint, 2026-11-11)
+test("the chat is pinned to its end before its first paint: the watch is a layout effect, and the pin runs again once the draw is whole", () => {
+  const view = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(view, /React\.useLayoutEffect\(\(\) => \{\r?\n    const v = viewport\.current, el = inner\.current;/, "the resize watch is set before the paint");
+  assert.match(view, /React\.useLayoutEffect\(\(\) => \{ const pin = \(\) => \{[^\n]*v\.scrollTop = v\.scrollHeight; \};\r?\n    pin\(\); queueMicrotask\(pin\); \}\);/);
+});
+
 

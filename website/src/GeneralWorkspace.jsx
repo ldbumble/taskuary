@@ -517,8 +517,10 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
       .catch((x) => { setMine((m) => m.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))); if (files.length) onAttachBack(files); reloadList?.(); });
     setTimeout(() => reloadList?.(), 120);
   }, [runtime, attachmentsRef, selectionRef, onClearAttachments, onAttachBack, onSent, road, reloadList, task.TaskId]);
-  // ...at its end, and held there while he has not moved away from it: what is new draws under what he was reading, never over it
-  useEffect(() => {
+  // ...at its end, and held there while he has not moved away from it: what is new draws under what he was reading, never over it.
+  // BEFORE THE FIRST PAINT (a layout effect): the lines of a long chat measure themselves as they are drawn and each grows a "Show all" - after
+  // this component's own pin. Watched only from after the paint, the first frame of an opened task stood ~900px short of its end
+  React.useLayoutEffect(() => {
     const v = viewport.current, el = inner.current;
     if (!v || !el) return undefined;
     // ...HIS scroll, not the chat's own growth (chatStream.heldAtEnd): a wheel, a finger, a key, or a press still down (the scrollbar's drag)
@@ -533,8 +535,10 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
     off.forEach(([t, n, f]) => t.addEventListener(n, f, { passive: true, capture: true }));
     return () => { v.removeEventListener("scroll", on); ro.disconnect(); off.forEach(([t, n, f]) => t.removeEventListener(n, f, { capture: true })); };
   }, [!!list]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // ...after EVERY draw, not only the list's: a card's own words (the page's node) grow the chat too
-  React.useLayoutEffect(() => { const v = viewport.current; if (v && stick.current && v.scrollTop + v.clientHeight < v.scrollHeight) v.scrollTop = v.scrollHeight; });
+  // ...after EVERY draw, not only the list's: a card's own words (the page's node) grow the chat too - and once more when the draw is whole
+  // (a microtask: after the rows that measured themselves in this same draw have grown), still before anything is painted
+  React.useLayoutEffect(() => { const pin = () => { const v = viewport.current; if (v && stick.current && v.scrollTop + v.clientHeight < v.scrollHeight) v.scrollTop = v.scrollHeight; };
+    pin(); queueMicrotask(pin); });
   // WORDS ANOTHER DOOR HANDS THIS CHAT (`prompt`: an answer picked on the question's card): his next line, once
   const prompted = useRef(null);
   useEffect(() => {

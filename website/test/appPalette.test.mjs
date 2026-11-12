@@ -25,3 +25,14 @@ test("changing the theme does not remount work and custom styles use shared toke
     assert.ok(/var\(--tq-(?:text|secondary|muted),/.test(css), `${file}: reading text token`);
   }
 });
+
+// rendered in the dark theme (2026-11-11): the strip of lines waiting by the box stood as a light box - its ground was a token no
+// palette declares, so its light fallback was all it ever had. A colour the chat's styles take from a token is one the night palette names
+test("every colour token the chat's own styles use is one the dark palette declares", async () => {
+  const { darkVariables } = await import("../src/appPalette.js");
+  for (const file of ["generalWorkspace.css", "agentStepRows.css", "publishedPages.css"]) {
+    const css = readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
+    const used = [...new Set([...css.matchAll(/var\((--tq-[a-z0-9-]+),\s*#/g)].map((m) => m[1]))];
+    assert.deepEqual(used.filter((v) => !(v in darkVariables)), [], `${file}: a colour with a light fallback and no dark value`);
+  }
+});

@@ -131,6 +131,8 @@ export default function UpdateCard({ asked = false, at = 0 }) {
             <Box component="a" href={info.notes} target="_blank" rel="noopener" sx={{ color: "var(--tq-link, #55697a)" }}>release notes</Box>
           </Typography>
         )}
+        {/* the last Update reopened the old version (update.last_failure): said here, with the button still lit to try again */}
+        {info?.failed && info.newer && !busy && <Alert severity="warning" sx={{ mt: 1.25, fontSize: 12.5 }}>{info.failed}</Alert>}
         {note && <Alert severity="info" sx={{ mt: 1.25, fontSize: 12.5 }}>{note}</Alert>}
         {(err || info?.error) && <Alert severity={err ? "error" : "warning"} sx={{ mt: 1.25, fontSize: 12.5 }}>{err || info.error}</Alert>}
       </Box>

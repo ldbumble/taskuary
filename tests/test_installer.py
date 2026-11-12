@@ -53,6 +53,34 @@ class TheSetupRoad(unittest.TestCase):
         self.assertIn('PYINSTALLER_RESET_ENVIRONMENT=1', s)
         self.assertIn('/ALLUSERS', update.setup_script(P(r'C:\x\S.exe'), P(r'C:\Program Files\Taskuary\Taskuary.exe'), 1, [], all_users=True))
 
+    def test_what_still_runs_from_the_install_folder_is_ended_before_the_installer(self):
+        """TQ-1397: a view of the app (a second Taskuary.exe) outlived our PID by seconds; the installer found it holding the files and
+        aborted (code 5), so every Update reopened the old version. The helper now clears the install folder - and only that folder."""
+        s = update.setup_script(P(r'C:\h\update\S.exe'), P(r'C:\Users\a\AppData\Local\Programs\Taskuary\Taskuary.exe'), 4242, [])
+        free = next(l for l in s.splitlines() if 'Stop-Process' in l)
+        self.assertTrue(s.find('PID eq 4242') < s.find(free) < s.find('/VERYSILENT'), 'our PID gone, then the folder freed, then install')
+        self.assertIn(r"StartsWith('C:\Users\a\AppData\Local\Programs\Taskuary\'", free); self.assertIn('Wait-Process', free)
+        self.assertNotIn('%', free.split('>>')[0], 'a % in the PowerShell would be eaten by cmd')
+        # the one-file road: its exe sits in Downloads, which is never swept - the install it moves into is
+        mv = update.setup_script(P(r'C:\h\S.exe'), P(r'C:\Users\a\Downloads\Taskuary.exe'), 1, [], into=P(r'C:\P\Taskuary'))
+        free = next(l for l in mv.splitlines() if 'Stop-Process' in l)
+        self.assertIn(r"'C:\P\Taskuary\'", free); self.assertNotIn('Downloads', free)
+
+    def test_a_failed_install_is_said_on_the_card_while_the_old_version_runs(self):
+        log = update.staging() / 'taskuary-update.log'
+        log.write_text('update helper (installer) started\nERROR: the install did not finish (installer code 5) - x\n'
+                       'FAILED: the installer stopped with code 5\n', encoding='utf-8')
+        r = mock.Mock(); r.json.return_value = {'tag_name': 'v9.9.9', 'assets': []}; r.raise_for_status = mock.Mock()
+        try:
+            with mock.patch.object(update.requests, 'get', return_value=r), mock.patch.object(update, 'how', return_value='setup'):
+                out = update.check(force=True)
+                self.assertIn('stopped with code 5', out['failed']); self.assertTrue(out['newer'] and not out['error'], 'the button stays lit')
+                r.json.return_value = {'tag_name': 'v0.0.1', 'assets': []}
+                self.assertEqual(update.check(force=True)['failed'], '', 'on the new version an old failure is history')
+            log.write_text('update helper (installer) started\nstarting the app\n', encoding='utf-8')
+            self.assertEqual(update.last_failure(), '')
+        finally: log.unlink(missing_ok=True)
+
     def test_program_files_is_an_all_users_install(self):
         with mock.patch.dict(os.environ, {'ProgramFiles': r'C:\Program Files', 'ProgramFiles(x86)': r'C:\Program Files (x86)'}):
             if os.name == 'nt':

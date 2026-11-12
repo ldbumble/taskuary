@@ -67,7 +67,7 @@ def check(force: bool = False) -> dict:
     """What is out there vs what is running. Cached ten minutes; a failure to reach GitHub is a
     fact in the answer, not an exception - the card says 'could not check' and stays useful."""
     if not force and _cache['result'] and time.time() - _cache['at'] < CACHE_S: return _cache['result']
-    out = {'current': __version__, 'how': how(), 'latest': None, 'newer': False, 'url': None, 'notes': None, 'error': None}
+    out = {'current': __version__, 'how': how(), 'latest': None, 'newer': False, 'url': None, 'notes': None, 'error': None, 'failed': ''}
     try:
         r = requests.get(LATEST_API, timeout=TIMEOUT, headers={'Accept': 'application/vnd.github+json'})
         r.raise_for_status()
@@ -76,6 +76,8 @@ def check(force: bool = False) -> dict:
         out.update({'latest': tag or None, 'newer': newer(tag, __version__), 'notes': j.get('html_url'),
                     'url': next((a.get('browser_download_url') for a in j.get('assets') or []
                                  if str(a.get('name') or '').lower() == SETUP.lower()), SETUP_URL)})
+        # a failed install reopens the old version with the same button lit: the card says why it failed (TQ-1397)
+        if out['newer'] and out['how'] in ('setup', 'exe'): out['failed'] = last_failure()
     except Exception as e:
         # the reason is for the log; the card says what it means and what to do about it
         logger.warning(f'update check failed: {e}')
@@ -240,6 +242,31 @@ def install_dir() -> Path:
     return Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData' / 'Local') / 'Programs' / 'Taskuary'
 
 
+LEFT_S = 15                     # what the install folder's other processes get to close by themselves before they are ended
+
+
+# NOTHING ELSE MAY HOLD THE INSTALL FOLDER WHEN THE INSTALLER RUNS (TQ-1397): a view of the app - Taskuary started a second time
+# (desktop.follow_server) - is its own Taskuary.exe and closes only seconds after the server stops answering. The installer ran the
+# moment our PID went, found "Taskuary" still holding its files, could not close it, and in /SUPPRESSMSGBOXES aborted with code 5:
+# the old version came back on every press. So whatever still runs from the folder gets LEFT_S to go, then is ended.
+def free_folder_line(folder) -> str:
+    "One batch line: wait for every process whose program is inside `folder` to exit, then end what is left."
+    d = str(folder).rstrip('\\/').replace("'", "''") + '\\'
+    sel = f"Get-Process | ? {{ $_.Path -and $_.Path.StartsWith('{d}', [StringComparison]::OrdinalIgnoreCase) }}"
+    return (f'powershell -NoProfile -NonInteractive -Command "$p = @({sel}); if ($p) {{ \'still running: \' + ($p.Name -join \', \'); '
+            f'$p | Wait-Process -Timeout {LEFT_S} -ErrorAction SilentlyContinue; {sel} | Stop-Process -Force -PassThru -ErrorAction SilentlyContinue '
+            f'| ForEach-Object {{ \'ended \' + $_.Name + \' \' + $_.Id }}; Start-Sleep -Milliseconds 500 }}" >> "%update_log%" 2>&1')
+
+
+def last_failure() -> str:
+    "Why the last update did not install, from the helper's own FAILED line in its log, with what to do - or ''."
+    try: lines = (staging() / 'taskuary-update.log').read_text(encoding='utf-8', errors='replace').splitlines()
+    except OSError: return ''
+    why = next((l.split('FAILED:', 1)[1].strip() for l in reversed(lines) if l.startswith('FAILED:')), '')
+    return (f'The last update did not install - {why} - so this is still the old version. Close every Taskuary window and press Update '
+            f'again; the installer\'s own log is {staging() / "taskuary-setup.log"}.') if why else ''
+
+
 def setup_script(setup, exe, pid: int, args: list, all_users: bool = False, also=(), into=None) -> str:
     """The batch that runs the new installer once this process has gone, then starts the app again. Quiet (/VERYSILENT): the
     owner already pressed Update. /ALLUSERS keeps an all-users install where it is - Windows asks for the admin yes then, as for
@@ -260,7 +287,9 @@ def setup_script(setup, exe, pid: int, args: list, all_users: bool = False, also
         '> "%update_log%" echo update helper (installer) started %date% %time%',
         'set /a waited=0',
         *wait_lines([pid, *also], 'stuck'),
-        '>> "%update_log%" echo old process exited; running the installer %date% %time%',
+        '>> "%update_log%" echo old process exited %date% %time%',
+        free_folder_line(to.parent),
+        '>> "%update_log%" echo running the installer %date% %time%',
         f'start "" /wait {q(setup)} /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS '
         f'{"/ALLUSERS" if all_users else "/CURRENTUSER"}{f" /DIR={q(into)}" if into is not None else ""} /LOG={q(slog)}',
         'set "code=%errorlevel%"',
@@ -273,10 +302,12 @@ def setup_script(setup, exe, pid: int, args: list, all_users: bool = False, also
         'del "%~f0"', 'exit /b 0',
         ':failed',
         '>> "%update_log%" echo ERROR: the install did not finish ^(installer code %code%^) - starting the app as it was %date% %time%',
+        '>> "%update_log%" echo FAILED: the installer stopped with code %code%',
         go(exe),
         'del "%~f0"', 'exit /b 1',
         ':stuck',
         '>> "%update_log%" echo ERROR: the old process never exited; nothing installed %date% %time%',
+        '>> "%update_log%" echo FAILED: the old Taskuary never closed',
         go(exe),
         'del "%~f0"', 'exit /b 3',
     ]) + '\r\n'

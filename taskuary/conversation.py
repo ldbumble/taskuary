@@ -308,10 +308,15 @@ def _card(r) -> dict:
     # withdrew its reply in the turn that answered him, and the card went from the chat - no page draws a draft "closed unsent")
     # ...and one set aside as he wrote past it (proposals.set_aside_drafts) the same way: a draft is its words, which the page draws greyed
     words = str(r.get('DraftText') or '').strip() if r['Kind'] in DRAFTS else ''
+    # ...and an action's is what it would do (its proposal's own words) - so one he wrote past is drawn greyed with them, in the frame he wrote
+    if r['Kind'] == 'action':
+        try: d = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): d = {}
+        words = ' '.join(str((d.get('what') or d.get('command') or r.get('Reason') or '') if isinstance(d, dict) else r.get('Reason') or '').split())[:300]
     gone = r['Status'] == 'closed_unsent' and str(r.get('DecideNote') or '').startswith(WITHDRAWN) and words
     st = 'passed' if passed(r) else 'failed' if failed else 'withdrawn' if gone else r['Status']
     return {'id': f"r:{r['ReviewId']}", 'kind': 'card', 'review': r['ReviewId'], 'what': r['Kind'], 'status': st,
-            'at': r['CreatedAt'], 'decided': r.get('DecidedAt'), **({'was': {'text': r['DraftText']}} if words and st in ('passed', 'withdrawn', 'pending') else {})}
+            'at': r['CreatedAt'], 'decided': r.get('DecidedAt'), **({'was': {'text': words if r['Kind'] == 'action' else r['DraftText']}} if words and st in ('passed', 'withdrawn', 'pending') else {})}
 DRAFTS = ('draft_reply', 'draft')
 
 
@@ -681,10 +686,12 @@ def items(store, tid: int) -> dict:
     for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None); x.pop('_seg', None)
     out = served(store, tid, served_back(store, tid, out, was_shown, {p['id'] for p in pend})); keep_shown(store, tid, out, was_shown)
     # (the reply draft above a newer input, greyed - read in the order drawn)
+    # (and any card of the agent's above his newer line - every kind, 2026-11-12 - `hear` settles it as his line is heard)
     last_in = max((i for i, x in enumerate(out) if x['kind'] in ('line', 'arrival')), default=-1)
-    for x in out[:max(last_in, 0)]:
+    last_his = max((i for i, x in enumerate(out) if x['kind'] == 'line'), default=-1)
+    for i, x in enumerate(out):
         for c in [x] if x['kind'] == 'card' else x['cards'] if x['kind'] == 'turn' else []:
-            if c['what'] in DRAFTS and c['status'] == 'pending' and c.get('was'): c['status'] = 'passed'
+            if c['status'] == 'pending' and c.get('was') and (c['what'] in DRAFTS and i < last_in or i < last_his): c['status'] = 'passed'
     if (said_ :=next((x['text'] for x in out if x['id'] == 'n:left'), None)) and not (was_left and was_left['Host'] == said_):
         store._exec("UPDATE shown SET Host=? WHERE TaskId=? AND Key='n:left'", (said_, tid))
     # ...and what the agent waits on him for, and the CLI that runs: read by the page off this one list (the chat's own payloads are gone)

@@ -460,7 +460,7 @@ const ConvLine = ({ x, more }) => {
 /* A DRAFT WHERE IT STOOD, once it is no longer the one to press: rewritten by a later turn, set aside as he wrote again (the owner, 2026-11-12:
    "I thought we keep it but grey out buttons right away"), or taken back by its agent - greyed in its own place with its words, nothing to press.
    It never goes from the chat and never moves */
-const PAST = { superseded: () => "Earlier draft - rewritten below", passed: () => "Earlier draft - not sent; you wrote again", withdrawn: () => "Earlier draft - not sent; the agent took it back" };
+const PAST = { superseded: () => "Earlier draft - rewritten below", passed: (c) => (/draft/.test(c.what || "") ? "Earlier draft - not sent; you wrote again" : "Set aside when you wrote again - the agent raises it again if it is still needed"), withdrawn: () => "Earlier draft - not sent; the agent took it back" };
 const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.status} role="note">
   <div className="tq-conv-past-head">{PAST[c.status](c)}</div>
   {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;

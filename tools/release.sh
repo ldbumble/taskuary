@@ -64,7 +64,11 @@ for p in ('README.md', 'README.zh-CN.md'):
     t = open(p, encoding='utf8', newline='').read(); open(p, 'w', encoding='utf8', newline='').write(re.sub(r'asof=[0-9a-z.-]+', f'asof={sys.argv[1]}-live', t))
 PY
   # only the two READMEs: `commit -a` swept an agent's uncommitted edits in the owner's checkout into this commit (2026-11-09)
-  git commit -q -m "Refresh the README's PyPI pill for $V" -- README.md README.zh-CN.md && git push -q origin HEAD:master || say "pill push skipped (master moved) - bump asof= by hand"
+  # ...and a master that moved during the release is caught up, not given up on: workers push all through a release (2026-11-12: the
+  # pill read the old number after .47 to .52 because this push was skipped every time)
+  git commit -q -m "Refresh the README's PyPI pill for $V" -- README.md README.zh-CN.md && for i in 1 2 3; do
+    git push -q origin HEAD:master && break; git fetch -q origin && git rebase -q origin/master || { git rebase --abort; break; }; done \
+    || say "pill push failed - bump asof= by hand"
 
   # THE NUMBER THAT MATTERS (the owner, 2026-10-28: measure the agreement rate after each release): how often the lit button was the
   # one pressed, over the release this one replaces and the last week - read-only on the owner's home, never fatal

@@ -268,7 +268,10 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
 # Short on purpose. Every character here rides on a command line that a canonical tty caps at
 # 1024 bytes, so the WHOLE rule lives in CODING.md (which rides in as RULES) and this is only the
 # part that must survive a blanked document: the command, and what pressing it does.
-SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --reply "<text>"` (a file it promises: add `--attach <path>`) - the owner approves it. '
+# ...FOR WHOEVER WROTE IN, never the owner (the real-CLI walk, 2026-11-12: asked a question in the chat, a coding agent saved its answer as a
+# reply to him, was refused, and told him so): what he asks here is answered in the session's own words
+SEED_LINE = ('REPLY: save the answer for whoever wrote in with `taskuary --reply "<text>"` (a file it promises: add `--attach <path>`) - the owner approves it; '
+             'what the owner asks you here, answer in your own words, never as a reply. '
              'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it files your ending, and a reply owed that you did not save is asked of you; the owner closes the task; '
              'add `--no-reply` when nobody should hear back. '
              'ONLY SOMEONE ELSE CAN ANSWER: ask them, then `taskuary --waiting-on "<who>"` - their reply brings the task back.')
@@ -309,6 +312,14 @@ CARD_SAID = ('A reply, an email or an act you set up is its card under your answ
              'file it carries, that it waits for the press and that nothing went. Say none of that, nor what it replaced. Add only what the '
              'card cannot say, in one short line - what you will do once it is pressed, an assumption you made in it (an address you guessed, '
              'a date you picked), or the one question you need answered - and nothing where there is none.')
+# ...AND A STEP TASKUARY HELD IS A CARD TOO (the real-CLI walks, 2026-11-12: "The delete of old-export.csv is waiting for your approval",
+# over the card that says so; "still waiting for your Approve" the turn after): every hold's answer to its agent ends on this one tail
+CARD_TAIL = ('It is a card in this task now: the card says what it is and that it waits for their press - never say either. Add only what '
+             'you will do once it is pressed, in one short line, or nothing.')
+# ...and WHAT A TURN IS HANDED IS CONTEXT, NOT NEWS (same walks): each turn is told what waits, what went and what he pressed, and said it
+# back to him - so the block says once, at its head, that it is his page's own news (general.latest_block)
+FACTS_HEAD = ('WHAT TASKUARY TELLS YOU FOR THIS TURN - context for you alone: the owner sees each of these on the task already. Act on them; '
+              'never say them back - no "still waiting on your approval", no card or draft quoted, no id.')
 HANDLES_LINE = ('An id Taskuary gives a draft or a card (rv4, the review number a tool returned) is its handle for your tools and your '
                 'withdraw line - the owner never sees it: to them, name a thing by what it is and whom it is to.')
 # ...and WHERE THE OWNER CLOSES IT (no CHAT_LINE: nobody wrote in, or the owner keeps the task to finish): the agent said "I couldn't

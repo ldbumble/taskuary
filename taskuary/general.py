@@ -889,7 +889,7 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
     passed = proposals.passed_since(store, tid, last) if last else []
     if not (rv or sent or answered or others or handed or did or own or asked or nowhere or refused or passed): return ''
     # `rules` False: an agent whose startup context says the rules once (selfclose.DRAFTS_ONCE) - the turn carries the facts alone
-    out = [(selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE) if rules else selfclose.NO_NEW_HEAD if heard else selfclose.LATEST_HEAD]
+    out = [selfclose.FACTS_HEAD, (selfclose.NO_NEW_LINE if heard else selfclose.LATEST_LINE) if rules else selfclose.NO_NEW_HEAD if heard else selfclose.LATEST_HEAD]
     wd = f'\n{selfclose.WITHDRAW_LINE}' if rules else ''
     if new: out.append(f"{'THE LAST MESSAGE, WHICH YOU ANSWERED' if heard else 'THE NEWEST MESSAGE'} - from {new['who']}, at {clock(new['at'])}: "
                        f"{_quote(new['words'], 600)}")

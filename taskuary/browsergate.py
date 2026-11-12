@@ -320,9 +320,10 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),
                                          'url': pg['url'], 'site': site, 'what': v['what'], 'why': v['why']}, 'agent')
             store.audit('task', tid, 'browser_act_held', 'taskuary', 'system', {'verb': a['verb'], 'site': site, 'why': v['why']})
-        return _deny(f"{HELD}: {v['what']} ({v['why']}). It is now a card in this task for the owner's press; once they approve it, Taskuary "
-                     "runs this exact command in your browser and tells you what happened. Never ask them in words to approve or click it, and "
-                     "do not try it another way. End your turn now, or go on with work that does not need it.")
+        from .selfclose import CARD_TAIL
+        return _deny(f"{HELD}: {v['what']} ({v['why']}). Once they approve it, Taskuary runs this exact command in your browser and tells you "
+                     f"what happened. Never ask them in words to approve or click it, and do not try it another way. {CARD_TAIL} End your turn "
+                     "now, or go on with work that does not need it.")
     if (browserview.ENDED_ON.get(str(sid)) or ('',))[0] == 'failed': browserview.ended_on(sid)     # it went on past the failure
     return {}
 

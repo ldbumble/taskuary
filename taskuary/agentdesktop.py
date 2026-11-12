@@ -301,9 +301,9 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
             proposals.queue(store, tid, {'action': 'desktop_act', 'sid': str(sid), 'args': a['args'], 'command': ' '.join([EXE, *a['args']]),
                                          'what': v['what'], 'why': v['why']}, 'agent')
             store.audit('task', tid, 'desktop_act_held', 'taskuary', 'system', {'verb': a['verb'], 'why': v['why']})
-        return _deny(f"{HELD}: {v['what']} ({v['why']}). It is on the task for the owner to approve; once they do, Taskuary runs this "
-                     "exact command and tells you what happened. Do not try it another way. End your turn now, or go on with work that "
-                     "does not need it.")
+        from .selfclose import CARD_TAIL
+        return _deny(f"{HELD}: {v['what']} ({v['why']}). Once they approve it, Taskuary runs this exact command and tells you what happened. "
+                     f"Do not try it another way. {CARD_TAIL} End your turn now, or go on with work that does not need it.")
     return {}
 
 

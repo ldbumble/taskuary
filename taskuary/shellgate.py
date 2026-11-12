@@ -43,8 +43,8 @@ HELD = 'Taskuary held this for the owner'
 # it?" in words, the owner said yes, and the delete was held for a second yes on the task (the overnight run, 2026-11-03)
 HOLD_LINE = ("A DELETE ON THE OWNER'S COMPUTER outside your working folder, and a step that leaves the machine (a push, a merge, a publish, "
              "a mail from a script, data sent to a web address), is HELD for the owner's press: the call comes back refused - as \"held for the owner\" or as a permission that was declined, "
-             "which is Taskuary's hold and never the owner's no - and Taskuary puts it on the task, runs it once they approve and tells you what happened. So never ask the owner in words whether to delete - "
-             "run the command, end your turn when it is held, and say in one line what you will do once they approve. The held step IS the owner's "
+             "which is Taskuary's hold and never the owner's no - and Taskuary puts it on the task as a card, runs it once they approve and tells you what happened. So never ask the owner in words whether to delete - "
+             "run the command and end your turn when it is held. The held step IS the owner's "
              "button: never ask \"will you run these\", never retry it, never print the commands for them to copy. Draft no reply that says it is done while it waits: the reply is "
              "written once Taskuary tells you the step ran.")
 ASKS = {'claude'}       # the CLIs whose PreToolUse hook can answer `ask` with their own prompt (measured: Claude 2.1.312 honours it)
@@ -362,9 +362,9 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
                                      'what': what, 'why': why, 'where': next((a['where'] for a in todo if a.get('where')), ''),
                                      **({'about': ' '.join(str(about).split())[:300]} if str(about or '').strip() else {})}, 'agent')
         store.audit('task', tid, 'shell_act_held', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
-    return _deny(f"{HELD}: {what} ({why}). It is on the task as the owner's Approve button; once they press it, Taskuary runs this "
-                 "exact command in the same folder and tells you what happened. Do not try it another way. The button is the ask: say in one "
-                 "line what you will do once they approve - never ask them to run it, never print the command for them to copy. End your turn now, or go on "
+    from .selfclose import CARD_TAIL
+    return _deny(f"{HELD}: {what} ({why}). Once they press it, Taskuary runs this exact command in the same folder and tells you what happened. "
+                 f"Do not try it another way, never ask them to run it or print it for them to copy. {CARD_TAIL} End your turn now, or go on "
                  "with work that does not need it.")
 
 

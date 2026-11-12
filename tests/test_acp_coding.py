@@ -620,7 +620,10 @@ def test_a_held_step_stays_the_one_lit_card_when_he_asks_the_coding_agent_a_ques
     s, tid, repo = world
     monkeypatch.setenv('FAKE_ACP_THINK', '0.6'); monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
     t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
-    general.take_line(s, tid, 'Fix the tax rows.', line_id='l-one'); assert idle(t, 1)
+    general.take_line(s, tid, 'Fix the tax rows.', line_id='l-one')
+    # ...a failure says what the session was doing (red twice on Windows runners, never here): its state, its record, what it was handed
+    assert idle(t, 1), json.dumps({'busy': t.busy, 'turns': t.turns, 'in_turn': t.in_turn, 'q': len(t._q), 'stop': t.stop_reason, 'history': t.history[-8:],
+                                   'updates': codingchat.acp_updates(tid, t.sid)[-8:]}, default=str)[:6000]
     hold = lambda: shellgate.check(s, tid, t.sid, 'git push origin main', 'Bash', str(repo))
     hold(); [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
     general.take_line(s, tid, 'What does that step change?', line_id='l-two', wait=False)

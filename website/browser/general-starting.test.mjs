@@ -58,9 +58,9 @@ test("a general agent that has said nothing yet is one line in its chat, the box
              welcome: !!document.querySelector(".tq-aui-welcome"),
              foot: box ? pane.bottom - box.getBoundingClientRect().bottom : null, onScreen: !!box && box.getBoundingClientRect().bottom <= innerHeight };
   });
-  // ...the turn's own head - who, when, how long - with the spin under it, and no line of words (the owner, 2026-11-10: "don't want the
-  // working... thing. we should never see that ever. it should show agent and time and how long it's running rightg away")
-  assert.equal(quiet.line.trim(), "", "the spin says no words"); assert.equal(quiet.words, false, "no Starting / Working words anywhere");
+  // ...the turn's own head - who, when, how long - with the spin under it, never a bare "Working..." (the owner, 2026-11-10), and the spin says
+  // what we are waiting for (the owner, 2026-11-12: "the ... should say whats it's doing and what are we waiting for")
+  assert.equal(quiet.line.trim(), "Waiting for the agent to start", "the spin says what it waits for"); assert.equal(quiet.words, false, "no Starting / Working words anywhere");
   assert.match(quiet.head, /working \d/, "the head and its running clock, from the start"); assert.ok(quiet.under, "the spin under the head");
   assert.equal(quiet.welcome, false, "no welcome copy over an agent already started");
   // ...A GENERAL TASK IS A CHAT TASK, whose box stays at the pane's foot from the first second (the owner, 2026-11-05, aaef3db35: "where is

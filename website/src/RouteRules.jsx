@@ -121,7 +121,9 @@ export function RouteRules() {
       {!!(p.now || []).length && (
         <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }} data-tq-route-now="">
           <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.25 }}>RIGHT NOW, AGENT WORK RUNS ON</Typography>
-          {p.now.map((n) => (
+          {/* three levels on one AI and model for one reason are one line, not the same line three times */}
+          {(p.now.every((n) => n.pick === p.now[0].pick && n.model === p.now[0].model && n.why === p.now[0].why)
+            ? [{ ...p.now[0], level: "every level" }] : p.now).map((n) => (
             <Box key={n.level} data-tq-route-now-level={n.level} sx={{ mb: 0.25 }}>
               <Typography sx={{ fontSize: 12.5, color: DIM }}>
                 {`${n.level}: `}

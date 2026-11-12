@@ -768,10 +768,10 @@ def default_level(store, cfg=None) -> dict:
     """What a level left on Default runs: {general: {pick, brain, quick, normal, hard}, coding: {...}} - the General agent and Coding
     agent cards' AIs by name with the model each level gets, so a level's picker never says "the card's AI" (the owner, 2026-11-11:
     "what is the cards ai on top?")."""
-    from . import config
+    from . import config, kinds
     cfg = config.load() if cfg is None else cfg
     one = lambda p: {'pick': p, 'brain': _said(store, p), **(_words(store, p, cfg) if p and p != 'demo' else {})}
-    return {j: one(_fixed(store, j)[0]) for j in ('general', 'coding')}
+    return {j: one(_fixed(store, j)[0]) for j in kinds.AGENT}
 
 
 def panel(store) -> dict:

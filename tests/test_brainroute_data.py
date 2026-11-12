@@ -68,7 +68,7 @@ def test_with_no_marked_ai_it_waits_and_says_why_and_nothing_is_built(s):
     s.save_connector({'ConnectorId': int(s.o[10:]), 'ConfigJson': json.dumps({'model': 'gpt-5'})}, 'owner')
     r = brainroute.choose(s, 'draft', task=tid)
     assert (r.pick, r.chain, r.tier, r.rule) == ('', [], 'held', 'sensitive')
-    assert r.why == 'No AI here may read sensitive data; mark one on its card in Settings, so a draft waits'
+    assert r.why == 'No AI here may read sensitive data; mark one on its card in Settings, so a redraft waits'
     with mock.patch.object(llm, 'make_llm', side_effect=AssertionError('built a brain the rule keeps out')):
         assert llm.build_llm(s, job='draft', task_id=tid) is None
     assert s.brain_routes(tid, limit=1)[0]['Outcome'] == 'refused:sensitive'

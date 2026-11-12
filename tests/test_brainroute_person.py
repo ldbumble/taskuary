@@ -37,7 +37,7 @@ def test_with_the_people_model_it_matches_the_people_named():
         assert (r.rule, r.tier) == ('gail-drafts', 'strong')
     with mock.patch.object(people, 'keys_of_task', lambda store, task: ['ray@northwind.example'], create=True):
         assert brainroute.choose(s, 'draft', task=tid).rule == 'work'
-    assert brainroute.sentence(brainroute.rules(s)[0]) == f'Drafts with {GAIL} -> the strong model'
+    assert brainroute.sentence(brainroute.rules(s)[0]) == f'Redrafts with {GAIL} -> the strong model'
 
 
 def test_a_people_model_that_fails_matches_nothing():

@@ -67,3 +67,13 @@ test("a stale reply draft offers a refresh in place of the send", () => {
   assert.match(reviews, /r\.Stale \? \([\s\S]{0,800}btn\("redraft"\)/);
   assert.doesNotMatch(reviews, /r\.Stale \|\| !\(edits/);
 });
+
+// A SHARED DASHBOARD IS DRAWN AS LAST READ (recorded 2026-11-12: each open of the task drew its reply card at "Loading…", then the dashboard
+// landed and everything above it moved up by ~370 px): what was read of it is its first frame the next time, and the read that follows
+// never empties it
+test("a reply card's dashboard is drawn from its last read on its first frame", () => {
+  const s = fs.readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
+  assert.match(s, /const \[got, setGot\] = useState\(\(\) => DASHBOARDS\.get\(report\) \|\| null\);/);
+  assert.match(s, /\.then\(\(\{ data \}\) => \{ DASHBOARDS\.set\(report, data\); if \(live\) setGot\(data\); \}\)/);
+  assert.match(s, /\.catch\(\(\) => live && setGot\(\(g\) => g \|\| \{\}\)\)/, "a read that fails leaves what was drawn");
+});

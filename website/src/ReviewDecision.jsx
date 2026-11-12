@@ -110,9 +110,13 @@ export const CalendarLine = ({ meta }) => (
 // WHAT A SHARE SHARES, OVER ITS PRESS (the owner, 2026-11-08: "the agent shows the dashboard inline in the chat"): the dashboard as Reports
 // draws it, from its last run - lazy, so a card with none never loads the charts
 const Dashboard = React.lazy(() => import("./dashboard/Dashboard.jsx"));
+// ...AS LAST READ, ON ITS FIRST FRAME (recorded 2026-11-12: each time the task was opened its card stood at "Loading…" and then grew by the
+// dashboard's ~370 px, the chat above it moving up by as much): the read still follows, and what it brings is the newest word
+const DASHBOARDS = new Map();
 export function SharedDashboard({ report, title }) {
-  const [got, setGot] = useState(null);
-  useEffect(() => { let live = true; api.get(`/api/dashboards/${report}`).then(({ data }) => live && setGot(data)).catch(() => live && setGot({}));
+  const [got, setGot] = useState(() => DASHBOARDS.get(report) || null);
+  useEffect(() => { let live = true; setGot(DASHBOARDS.get(report) || null);
+    api.get(`/api/dashboards/${report}`).then(({ data }) => { DASHBOARDS.set(report, data); if (live) setGot(data); }).catch(() => live && setGot((g) => g || {}));
     return () => { live = false; }; }, [report]);
   return <Box data-tq-shared-dashboard={report} sx={{ mb: 1, border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden", maxHeight: 420, overflowY: "auto" }}>
     <Typography variant="caption" sx={{ display: "block", px: 1.25, pt: 0.75, color: INK, fontWeight: 600 }}>{title || "Dashboard"}

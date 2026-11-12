@@ -1829,6 +1829,7 @@ def _split_note(store, old, msg: dict, res: dict) -> dict:
 ECHO_HOURS = 12
 ECHO_MIN = 20           # a line this short ("ok", "thanks!") is said too often to identify one message
 ECHO_KEY = 160          # a notification quotes the start of a long line, so the start is what is matched
+ECHO_PART = 80          # ...and may cut it shorter than that (a long line quoted to its first hundred-odd characters and "…")
 _INVISIBLE = re.compile('[­​-‏⁠﻿]')
 
 def _plain(t) -> str: return ' '.join(_INVISIBLE.sub(' ', str(t or '')).lower().split())
@@ -1854,8 +1855,8 @@ def echo_route(store, msg: dict) -> dict | None:
         if _secs(m.get('SentAt'), msg.get('sent_at')) > ECHO_HOURS * 3600: continue
         line, mail = ((msg.get('body'), (store.get_message(m['MessageId']) or {}).get('BodyText')) if chat
                       else (m.get('BodyText'), msg.get('body')))
-        key = _plain(line).rstrip('.… ')[:ECHO_KEY]
-        if len(key) >= ECHO_MIN and key in _plain(mail):
+        key, quoted = _plain(line).rstrip('.… ')[:ECHO_KEY], _plain(mail)
+        if len(key) >= ECHO_MIN and (key in quoted or key[:ECHO_PART] in quoted):
             return {'decision': 'attach', 'task_id': tid, 'score': 1.0, 'candidates': [], 'echo': True,
                     'reason': f"the same words from {m.get('FromName')} already came by {m.get('Channel')} on {task_ref(tid)} - one message, two ways"}
     return None

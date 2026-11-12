@@ -54,6 +54,19 @@ class EchoTests(unittest.TestCase):
         self.assertEqual(a['task_id'], b['task_id'])
         self.assertEqual(len(s.list_tasks()), 1)
 
+    def test_a_chat_line_that_lags_its_notification_still_joins_the_task_the_mail_made(self):
+        """The owner, 2026-11-12: the notification of a direct ask is Ray's real ask - a task - and the chat line, when it comes, is that
+        same task. The chat sync lags by hours, and a long line is quoted only by its start in the mail: nothing may be lost or doubled."""
+        long = LINE + ' Payroll closes Thursday and I would rather fix it now than chase a correction next month, so let me know either way.'
+        for name, body, quoted, lag in (('a long line quoted by its start', long, long[:110] + '…', '06:10:00'),
+                                         ('a short line, hours late', LINE, LINE, '11:30:00')):
+            with self.subTest(name):
+                s = MemoryStore()
+                b = notice(s, body=NOTICE.replace(LINE, quoted), at='2026-09-23 00:40:00')
+                a = chat(s, body=body, at=f'2026-09-23 {lag}')
+                self.assertEqual((b['status'], a['task_id']), ('created', b['task_id']))
+                self.assertEqual(len(s.list_tasks()), 1)
+
     def test_nothing_joins_without_all_three(self):
         cases = {'another person': dict(who='Gail Moreno in Teams', body=NOTICE.replace('Erin Blake', 'Gail Moreno')),
                  'other words': dict(body=NOTICE.replace(LINE, 'Can you send me last month\'s invoice list when you have a minute?')),

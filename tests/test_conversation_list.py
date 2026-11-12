@@ -674,7 +674,7 @@ class TheList(unittest.TestCase):
         s.add_message({'TaskId': self.tid, 'ExternalId': 'o1', 'ConversationId': 'conv-1', 'Channel': 'email', 'Subject': 'Re: Offsite venue', 'Status': 'routed',
                        'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
                        'BodyText': 'See below.\n\n> The Harbour Room is free on March 12 for 40 people, and the deposit of 500 is due by Friday noon.'})
-        self.assertTrue(self.list()['hold'])
+        self.assertIn('not trusted this sender yet', self.list()['hold']['line'])        # ...a name it has not, said mid-sentence as one
         n = len(self.brain.calls); start = general.start_session
         with mock.patch.object(server, 'store', s), mock.patch.object(general, 'start_session', lambda st, t, *a, **k: start(st, t)), \
              mock.patch('taskuary.ingest._spawn', lambda f, *a, **k: f(*a, **k)):

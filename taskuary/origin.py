@@ -333,7 +333,7 @@ def _hold(store, tid: int, t: dict) -> dict | None:
             and (r := of_message(store, m, memo, seen)) and r[0] == 'stranger']
     if not mids or not (offer := senders.trust_offer(store, int(tid), msgs)): return None      # Taskuary's own words, a teammate chat: no sender to trust
     m = senders.whom(store, msgs, through) or {}
-    who = ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'This sender').split())
+    who = ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'this sender').split())        # ...mid-sentence: "You have not trusted this sender yet"
     return {'line': HELD_LINE.format(who=who), 'person': offer['person'], 'org': offer.get('org'), 'who': who, 'mids': mids}
 
 

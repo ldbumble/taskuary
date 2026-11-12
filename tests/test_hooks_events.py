@@ -100,6 +100,16 @@ class QuestionAndPermissionTests(Base):
         self.fire('Notification', notification_type='idle_prompt', message='Claude is waiting for your input')
         self.assertEqual([r['text'] for r in self.state()['requests']], ['Sign in to payworth.example to continue'])
 
+    def test_a_turn_s_end_lets_go_of_the_start_in_flight(self):
+        """The recorded walk, 2026-11-12: a coding task's first turn in its terminal began before its session existed, nothing took the start's
+        mark off, and the chat read "working 15m" over his sign-in."""
+        from taskuary import general
+        self.session(); general.OPENING.add(self.tid); general._IN_FLIGHT[self.tid] = 1
+        try:
+            self.fire('Stop', last_assistant_message='Payworth is on its sign-in page.')
+            self.assertNotIn(self.tid, general.OPENING)
+        finally: general.OPENING.discard(self.tid); general._IN_FLIGHT.pop(self.tid, None)
+
     def test_the_idle_notice_after_a_turn_that_ended_is_no_question(self):
         """The same walk: every coding turn's answer was followed a minute later by "Agent asked you: Claude is waiting for your input"."""
         self.session()

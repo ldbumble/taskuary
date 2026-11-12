@@ -493,6 +493,12 @@ def _events(t, p: dict) -> None:
             said, turn = selfclose.turn_marker(said)
             said, asks = selfclose.ask_markers(said)
             ws.record(st, tid, sid, 'turn_end', text=said[:4000], source='hook')
+            # ...AND THE START IN FLIGHT IS OVER, as an ACP turn's end says (acpcoding._idle): a coding task's first turn in its terminal began
+            # before its session existed, nothing took the mark off, and the chat read "working 15m" over his sign-in (the recorded walk, 2026-11-12)
+            try:
+                from . import general
+                general.answered(tid, 0)
+            except Exception as e: logger.debug(f'task {tid}: the start in flight was not let go of - {e}')
             if signing is not None:                     # a sign-in it needs: Taskuary's to do, never the agent's (signin.py)
                 from . import signin
                 try: signin.needs(st, tid, sid, signing)

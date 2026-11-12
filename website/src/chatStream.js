@@ -154,8 +154,10 @@ export const newerList = (a, b) => (!a ? b || null : !b ? a : (b._at || 0) > (a.
 export const withMine = (list, mine) => {
   const items = list?.items || [], pending = list?.pending || [], known = new Set([...items, ...pending].map((x) => x.id));
   const own = mine.filter((l) => !known.has(l.id));
-  const rest = own.filter((l) => l.rest && !l.err), wait = own.filter((l) => !l.rest || l.err);
-  const tail = rest.length && !list?.working ? [{ id: `t:${rest.at(-1).id}:0`, kind: "turn", state: "starting", steps: [], text: "", cards: [], started: +rest.at(-1).at / 1000 }] : [];
+  // ...A LINE WHOSE SEND FAILED STAYS WHERE IT STANDS, in its own words (the owner's live task, 2026-11-12: it went down by the box, red, the
+  // app's error glued to his words): the failure is one line under it with Try again (ConvLine), and no turn starts under it
+  const rest = own.filter((l) => l.rest), wait = own.filter((l) => !l.rest);
+  const tail = rest.some((l) => !l.err) && !list?.working ? [{ id: `t:${rest.at(-1).id}:0`, kind: "turn", state: "starting", steps: [], text: "", cards: [], started: +rest.at(-1).at / 1000 }] : [];
   const at = items.length && rest.length && ((x) => x.kind === "turn" && ["starting", "working"].includes(x.state) && !x.text && !(x.steps || []).length)(items.at(-1)) ? items.length - 1 : items.length;
   // ...AND A REPLY DRAFT ABOVE IT GREYS IN ITS PLACE FROM THE SAME FRAME (the owner, 2026-11-12: "grey out buttons right away"): what the
   // server does as it hears the line (proposals.set_aside_drafts), drawn before its read comes back - its buttons stood lit ~300 ms

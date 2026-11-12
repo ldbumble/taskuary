@@ -35,6 +35,16 @@ test("his line greys the reply card above it in the same frame, before the serve
   assert.deepEqual(withMine(read, []).items[1].cards.map((c) => c.status), ["pending"]);     // ...and only then
 });
 
+test("a line whose send failed stays where it stands in his own words; the failure is one line under it with Try again", async () => {
+  const read = { items: [mail, answer], pending: [], working: false };
+  const got = withMine(read, [{ id: "l-2", kind: "line", text: "try now", at: new Date(), rest: true, err: "The agent did not start" }]);
+  assert.deepEqual(got.items.map((x) => x.id), ["m:1", "t:m:1:0", "l-2"]);          // in place, no turn under it, never by the box
+  assert.deepEqual(got.pending, []);
+  const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /\$\{x\.text\} - \$\{x\.err\}/, "an error is never glued into his words");
+  assert.match(src, /data-tq-line-failed="">\{x\.err\}\{retry && <> · <button type="button" className="tq-aui-arrived-more-btn"\n\s+data-tq-try-again=""/);
+});
+
 test("nothing drawn goes or moves, and nothing new is drawn above it", () => {
   const was = { items: [mail, answer] };
   assert.deepEqual(flowBreaks({ items: [mail, answer, { id: "l-2", kind: "line", text: "x" }] }, was), []);

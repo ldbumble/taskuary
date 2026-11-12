@@ -2516,12 +2516,14 @@ def _refresh_for_turn(task_id: int) -> tuple[dict, str]:
     talking to work under way, as Continue is - and Continue never waits on a sync: a mail poll still running, or a mailbox's
     old error, refused every typed word to an agent waiting on you, and the box showed nothing (the owner, 2026-11-02: "the text
     goes no where"). It goes on and says so. Starting an agent still reads the chat first (_refresh_chat_context)."""
-    from . import general
-    try: return _refresh_chat_context(task_id=task_id), ''
+    # ...AND A START NEITHER (the owner's live task, 2026-11-12: an agent at rest with no process left - its start waited 45 s on a chat poll's
+    # lock, was refused, and his line came back red with the refusal glued to it): a poll that holds the lock is waited on a few seconds
+    # (SYNC_PATIENCE), then the turn goes on from what is stored and says so once (general.SYNC_STALE); a mailbox's own error the same
+    try: return _refresh_chat_context(task_id=task_id, patience=SYNC_PATIENCE), ''
     except RuntimeError as e:
-        if not general.session_for(task_id): raise
-        logger.info(f'task {task_id}: follow-up sent without a fresh sync - {e}')
+        logger.info(f'task {task_id}: a line goes in without a fresh sync - {e}')
         return {}, FOLLOW_UP_STALE
+SYNC_PATIENCE = 5               # seconds a typed line's start waits on a chat poll another reader holds
 
 def _demo_turn(task_id: int, text: str, line_id=None):
     """THE DEMO HAS NO AI (the owner, 2026-11-05: "of course no prompts work since there is no AI"): what is typed into a task's chat is
@@ -10522,7 +10524,7 @@ def _refresh_for_finish(_store, task_id: int, message_id: int) -> dict:
     return _refresh_chat_context(task_id=task_id, message_id=message_id)
 
 
-def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bool = False, on_fetched=None) -> dict:
+def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bool = False, on_fetched=None, patience: float = None) -> dict:
     """Synchronize a live chat before its stored text is used to answer or act.
 
     The background clock keeps the screen lively; this is the correctness gate.  If an Assistant
@@ -10550,7 +10552,8 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bo
     if grace and _recently_fetched(types, store):
         return {'polled': False, 'newer': False, 'before': before, 'after': before,
                 'added': 0, 'channel': channel, 'fresh': True}
-    added = _poll_reports(0, what=f'refreshing {channel} context', only=types, wait=True, on_fetched=on_fetched)
+    # `patience`: how long a poll another reader holds is waited on (a number of seconds; else the gate's own DRAIN_WAIT)
+    added = _poll_reports(0, what=f'refreshing {channel} context', only=types, wait=patience or True, on_fetched=on_fetched)
     if added is False:
         raise RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment')
     failed = [store.get_connector(c['ConnectorId']) for c in connectors]
@@ -10980,9 +10983,10 @@ def _poll_quick(only, what: str = 'syncing', wait: bool = False, timer: bool = F
     A full lane owns the visible banner while both are active; either lane remains truthful when
     the other finishes first."""
     target_store = store                 # every asynchronous drain keeps this exact store
-    deadline = time.monotonic() + DRAIN_WAIT if wait else None
+    lim = DRAIN_WAIT if wait is True else float(wait or 0)          # `wait`: True (the gate's own patience) or seconds
+    deadline = time.monotonic() + lim if wait else None
     held = [t for t in dict.fromkeys(only)
-            if (_quick_lock(t).acquire(timeout=DRAIN_WAIT) if wait else _quick_lock(t).acquire(blocking=False))]
+            if (_quick_lock(t).acquire(timeout=lim) if wait else _quick_lock(t).acquire(blocking=False))]
     if not held:
         # named, and only when the wait is long enough to be the reason a chat answer is late: the
         # live log had 161 anonymous "skipped" lines and nothing to say which lane or how long

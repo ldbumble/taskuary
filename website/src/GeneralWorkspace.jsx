@@ -446,12 +446,15 @@ const ConvTurn = ({ t, more, cards, name }) => {
       {!!cards?.length && <div data-tq-turn-cards="">{cards}</div>}
     </div></div>;
 };
+const RetryCtx = React.createContext(null);
 const ConvLine = ({ x, more }) => {
-  const stamp = x.at ? when(x.at instanceof Date ? x.at : String(x.at)) : "";
+  const stamp = x.at ? when(x.at instanceof Date ? x.at : String(x.at)) : "", retry = React.useContext(RetryCtx);
   return <div className={`tq-aui-message tq-aui-user${more ? " tq-aui-user-more" : ""}`} data-tq-item={x.id} data-tq-chat-line={x.id}>
     {!more && <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{stamp ? ` · ${stamp}` : ""}</div>}
     <div className="tq-aui-user-bubble" dir="auto">{x.text}</div>
-    {!!x.err && <div className="tq-aui-hint" role="alert">{x.err}</div>}</div>;
+    {/* ...a send that failed: ONE plain line under his words, with the way past it - never glued into them */}
+    {!!x.err && <div className="tq-aui-hint" role="alert" data-tq-line-failed="">{x.err}{retry && <> · <button type="button" className="tq-aui-arrived-more-btn"
+      data-tq-try-again="" onClick={() => retry(x)}>Try again</button></>}</div>}</div>;
 };
 /* A DRAFT WHERE IT STOOD, once it is no longer the one to press: rewritten by a later turn, set aside as he wrote again (the owner, 2026-11-12:
    "I thought we keep it but grey out buttons right away"), or taken back by its agent - greyed in its own place with its words, nothing to press.
@@ -500,11 +503,14 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
    ...A ROW IS NOT MARKED [data-tq-held] (seen 2026-11-11: with lines waiting, the task's card stood 8 px under the canvas's head): that name
    is the place a link asked the canvas to hold in the middle of its view (appLinks.focusPlace, AssistantView keepTable) - one waiting line
    and the canvas scrolled the whole task to centre it, as far as it would go */
-const PendingStrip = ({ items }) => { const shown = waitingShown(items); return !items.length ? null : <div className="tq-conv-pending" data-tq-pending="" role="status">
+const PendingStrip = ({ items, onRetry = null }) => { const shown = waitingShown(items); return !items.length ? null : <div className="tq-conv-pending" data-tq-pending="" role="status">
   <div className="tq-conv-pending-head">Waiting for the agent{items.length > 1 ? ` · ${items.length}` : ""}{shown.length < items.length ? ` · the newest ${shown.length} below` : ""}</div>
-  {shown.map((x) => <div key={x.id} className={`tq-conv-pending-row${x.err ? " tq-conv-pending-err" : ""}`} data-tq-pending-item={x.id} dir="auto" title={x.text || x.words || ""}>
+  {shown.map((x) => <div key={x.id} className="tq-conv-pending-row" data-tq-pending-item={x.id} dir="auto" title={x.text || x.words || ""}>
     <span className="tq-conv-pending-who">{x.kind === "line" ? "You" : x.kind === "arrival" ? (x.own ? "You, outside" : x.who || "Someone") : ""}</span>
-    <span className="tq-conv-pending-words">{x.err ? `${x.text} - ${x.err}` : x.text || x.words || ""}</span></div>)}
+    <span className="tq-conv-pending-words">{x.text || x.words || ""}</span></div>)}
+  {/* ...a send that failed says so in its own plain line, never inside his words (the owner's live task, 2026-11-12) */}
+  {shown.filter((x) => x.err).map((x) => <div key={`e-${x.id}`} className="tq-aui-hint" role="alert" data-tq-line-failed="">{x.err}{onRetry && <> · <button type="button"
+    className="tq-aui-arrived-more-btn" data-tq-try-again="" onClick={() => onRetry(x)}>Try again</button></>}</div>)}
 </div>; };
 
 function AssistantThread({ task, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack,
@@ -535,6 +541,8 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
       .catch((x) => { setMine((m) => m.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))); if (files.length) onAttachBack(files); reloadList?.(); });
     setTimeout(() => reloadList?.(), 120);
   }, [runtime, attachmentsRef, selectionRef, onClearAttachments, onAttachBack, onSent, road, reloadList, task.TaskId]);
+  // ...and a line whose send failed is sent again as it was typed, the failed one taken off the screen
+  const retry = useCallback((l) => { setMine((m) => m.filter((x) => x.id !== l.id)); sendLine(String(l.text || "")); }, [sendLine]);
   // ...at its end, and held there while he has not moved away from it: what is new draws under what he was reading, never over it.
   // BEFORE THE FIRST PAINT (a layout effect): the lines of a long chat measure themselves as they are drawn and each grows a "Show all" - after
   // this component's own pin. Watched only from after the paint, the first frame of an opened task stood ~900px short of its end
@@ -612,8 +620,8 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
             {!!list && !merged.items.length && !empty && !(chat && reading) && <div className="tq-aui-welcome"><TaskuaryMark size={22} /><div>
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
-            <Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
-              landing={landNode} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} />
+            <RetryCtx.Provider value={retry}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
+              landing={landNode} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} /></RetryCtx.Provider>
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
             {asking && <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} />}
@@ -633,7 +641,7 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
           </div>
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">
-            <PendingStrip items={merged.pending} />
+            <PendingStrip items={merged.pending} onRetry={retry} />
             {/* NO AI: one small line over the box, its Connect an AI beside it (the owner, 2026-11-06) - the box stays the box */}
             {noAi}
             {/* ONE DOOR: while the conversation is open the box is how it goes on, but once a coding run has ENDED on a closed task the bar

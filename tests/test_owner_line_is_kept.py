@@ -14,6 +14,8 @@ from fastapi.testclient import TestClient
 from taskuary import general, server
 from taskuary.store import MemoryStore
 
+REAL_REFRESH = server._refresh_for_turn            # the door's own sync before a turn (each test stubs it, but the one about it)
+
 
 class Brain:
     "The model: answers after `delay`, fails the turns named in `fail`, keeps what each turn was handed."
@@ -130,6 +132,24 @@ class OwnerLineIsKept(unittest.TestCase):
         for t in [first, *held]: t.join(15)
         mine = [(m['content'][0]['text'], m.get('line')) for m in server._assistant_payload(self.tid)['messages'] if m['role'] == 'user']
         self.assertEqual(mine, [('Compare three tools.', 'held-1'), ('ok', 'held-2'), ('ok', made), ('ok', 'held-3')])
+
+    def test_a_line_typed_while_a_chat_poll_holds_its_lock_is_kept_and_answered_never_refused(self):
+        """The owner's live task, 2026-11-12: his agent at rest with no process left, a chat poll holding its lock - the start waited 45 s on
+        it, was refused ("messages are still syncing; I did not use stale chat context - try again in a moment"), and his line came back red
+        with that glued to it. His line is kept and heard at once; the start waits a few seconds for the poll, then goes on from what is
+        stored and says so once; the door never answers him with a refusal."""
+        from taskuary import conversation
+        self.brain.delay = 0
+        refused = mock.patch.object(server, '_refresh_chat_context', side_effect=RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment'))
+        with refused, mock.patch.object(server, '_refresh_for_turn', new=REAL_REFRESH):
+            self.assertIsNone(general.session_for(self.tid))
+            r = TestClient(server.app).post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Compare three tools.', 'line_id': 'l-sync'})
+        self.assertEqual(r.status_code, 200, r.text)
+        got = conversation.items(self.s, self.tid)['items']
+        self.assertEqual([x['id'] for x in got if x['kind'] == 'line'], ['l-sync'])
+        self.assertEqual([x['text'] for x in got if x['kind'] == 'note'], [general.SYNC_STALE])
+        self.assertEqual([x['text'] for x in got if x['kind'] == 'turn'], ['Answer 1.'])
+        self.assertNotIn('syncing', json.dumps(got))
 
     def test_the_chats_door_takes_the_name_and_a_long_one_is_cut(self):
         self.brain.delay = 0

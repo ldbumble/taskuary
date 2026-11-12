@@ -3494,14 +3494,9 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     line_id = line_id or new_line_id()
     rest = not working(store, tid)
     if rest: PRESSED[tid] = time.time()       # the turn's clock: the press
-    if prepare is not None and _live_of(tid) is None:
-        held = tid in OPENING
-        OPENING.add(tid)
-        try: prepare()
-        except Exception:
-            if not held and not _IN_FLIGHT.get(tid): OPENING.discard(tid); PRESSED.pop(tid, None)
-            raise
-        prepare = None
+    # ...AND HIS LINE NEVER WAITS ON IT (the owner's live task, 2026-11-12: a chat poll held its lock, the start waited 45 s on it and was
+    # refused, and his line came back red with "messages are still syncing ... try again" glued to it): the line is kept and heard first,
+    # the sync runs in the start (_start_line), and a sync that cannot be done goes on from what is stored, said in one plain line
     # ...AT WORK BEFORE THE LINE IS KEPT: keeping it tells every screen to read, and a read between the two drew his line with nothing at work
     # under it, so the next line he typed was taken as one sent to an agent at rest (the recorded walk, 2026-11-11)
     _IN_FLIGHT[tid] = _IN_FLIGHT.get(tid, 0) + 1
@@ -3520,15 +3515,17 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     return _start_line(store, tid, t, text, files, actor, line_id, wid, prepare, kw)
 
 
+SYNC_STALE = 'The newest mail could not be read first, so the agent goes on from what it already has.'
 def _start_line(store, tid, t, text, files, actor, line_id, wid, prepare, kw):
     "take_line's last step: the kind's own starter, the line already kept and at work."
     try:
         if prepare:
-            # ...a sync that failed refuses a START as it always did (the chat is read first), the line given back with the reason; a live
-            # agent goes on from what it has (server._refresh_for_turn)
-            try: prepare()
-            except RuntimeError:
-                store.drop_comment(wid); raise
+            # ...a sync that could not be done never refuses his line: the agent goes on from what is stored, and the chat says so once
+            try: got = prepare()
+            except Exception as e: logger.info(f'task {tid}: the chat was not read first - {e}'); got = ({}, str(e))
+            if isinstance(got, tuple) and len(got) > 1 and got[1]:
+                from . import sessionrecord
+                store.add_comment(tid, sessionrecord.NOTE_ACTOR, ASSISTANT_TYPE, SYNC_STALE)
         if handles(t): return say_line(store, tid, text, files, actor=actor, waiting=wid, line_id=line_id, **kw)
         from . import waitroom
         out = waitroom.deliver(store, tid)

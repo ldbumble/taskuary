@@ -401,16 +401,21 @@ class GeneralApiTests(unittest.TestCase):
         self.assertEqual([m['role'] for m in events[-1]['payload']['messages']], ['user', 'assistant', 'user', 'assistant'])
 
     def test_starting_an_agent_still_reads_the_chat_first(self):
-        "No agent live: a typed message STARTS one, and that still waits on a sync it can trust - said, not swallowed."
+        """No agent live: a typed message STARTS one, and that still reads the chat first - but a sync it cannot do never refuses his line
+        (the owner's live task, 2026-11-12: refused after 45 s, his line came back red with the refusal glued to it): the turn goes on from
+        what is stored and says so once."""
         store = MemoryStore(); tid = general_task(store)
         connect_cli(self, claude={'cmd': 'claude'})
         busy = RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment')
         with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
-             mock.patch.object(server, '_refresh_chat_context', side_effect=busy), \
-             mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'never asked'):
+             mock.patch.object(server, '_refresh_chat_context', side_effect=busy) as read, \
+             mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'The chart is made.'):
             r = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/stream', json={'text': 'Make the chart', 'pick': 'cli:claude'})
         events = [json.loads(line) for line in r.text.splitlines()]
-        self.assertEqual(events, [{'type': 'error', 'error': str(busy)}])
+        self.assertTrue(read.called)                                                                  # ...read first
+        self.assertFalse([e for e in events if e['type'] == 'error'], events)                         # ...never a refusal
+        self.assertIn({'type': 'progress', 'name': 'sync_messages', 'detail': server.FOLLOW_UP_STALE}, events)
+        self.assertEqual(next(e for e in events if e['type'] == 'done')['reply'], 'The chart is made.')
 
     def test_a_turn_that_dies_mid_way_is_said_once_its_session_is_down(self):
         """The page reads the conversation again on the stream's error: said before the session's close (0.1 s after the raise), it

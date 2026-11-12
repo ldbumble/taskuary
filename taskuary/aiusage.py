@@ -10,11 +10,55 @@ and the other CLIs' one-shots) leaves the tokens blank - never a guess. An agent
 
 Tokens follow sessionrecord's convention: `in` is every input token, cached ones included; `cached` is how many of them were.
 """
-import contextvars, time
+import contextvars, functools, time
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from loguru import logger
 
 _METER = contextvars.ContextVar('tq_ai_meter', default=None)
+# WHO ASKED, AND ABOUT WHICH MESSAGE (2026-11-11). A row said what its brain was BUILT for (Job), and one brain serves many askers: the
+# poll's triage brain judges every mail of the poll and titles a hand-made task, a report's brain triages its own run - so "triage"
+# on the usage page was neither all of triage nor only triage, and no triage row could be matched to its mail. The asker pins a note
+# to its own piece of work (a context variable, like the meter); the one road that writes a route row reads it (brainroute.log), and
+# a brain asked under a different note writes a row of its own (brainroute.Lazy). A call nobody named is recorded blank, never guessed.
+_ASKED = contextvars.ContextVar('tq_ai_asked', default=None)
+# the fixed names, one per asker - a new one is added here, so the breakdown's lines are a closed list
+CALLERS = ('triage.classify', 'triage.report', 'triage.idea', 'triage.title', 'triage.proof', 'triage.eval', 'advisor.judge', 'advisor.idea',
+           'reports.judge', 'sent.judge', 'draft.reply', 'summary.report', 'summary.pause', 'memory.learn', 'memory.reflect', 'rank.rerank')
+
+
+class Asked:
+    "One asker's note: its fixed name, the message it asks about (None until one is saved), and the route rows written under it."
+    def __init__(self, caller: str, message_id=None): self.caller, self.message_id, self.rids = caller, message_id, []
+
+
+@contextmanager
+def asking(caller: str, message_id=None):
+    "Every AI call made inside this, on this thread of work, is `caller`'s - and about `message_id` when it has one. The inner one wins."
+    a = Asked(caller, int(message_id) if str(message_id or '').isdigit() else None)
+    tok = _ASKED.set(a)
+    try: yield a
+    finally: _ASKED.reset(tok)
+
+
+def named(caller: str):
+    "A function whose AI calls are `caller`'s (asking, as a decorator)."
+    def deco(f):
+        @functools.wraps(f)
+        def g(*a, **kw):
+            with asking(caller): return f(*a, **kw)
+        return g
+    return deco
+
+
+def asked(): return _ASKED.get()
+
+
+def for_message(store, rids, mid) -> None:
+    "The message a judged mail was SAVED as, onto the rows (an Asked's `rids`) of the calls that judged it: a new mail has no row until its verdict is in."
+    for rid in (rids or ()) if mid else ():
+        try: store.set_brain_route(rid, MessageId=int(mid))
+        except Exception as e: logger.debug(f'aiusage: route {rid} not given its message - {e}')
 TIER_WORDS = {'light': 'quick', 'standard': 'normal', 'strong': 'hard', 'fixed': 'as set', 'held': 'held'}
 RUN_JOBS = ('general', 'coding', 'quick_work')       # an agent's work: one row is a run, not one message's answer
 
@@ -151,6 +195,19 @@ def today(store, day: str = None) -> dict:
     for r in store.brain_routes_since(f'{day} 00:00:00'):
         if str(r.get('At') or '')[:10] != day: continue
         g = out.setdefault(r.get('Job') or 'triage', {'calls': 0, 'in': 0, 'cached': 0, 'out': 0})
+        g['calls'] += int(r.get('Calls') or 0)
+        for k, c in (('in', 'TokensIn'), ('cached', 'Cached'), ('out', 'TokensOut')): g[k] += int(r.get(c) or 0)
+    return out
+
+
+def by_caller(store, day: str = None) -> dict:
+    """{job: {caller: {'calls', 'in', 'cached', 'out'}}} for one day - `today`'s totals split by who asked. A row written before the
+    column, or by a call nobody named, is under ''."""
+    day = day or datetime.now().strftime('%Y-%m-%d')
+    out = {}
+    for r in store.brain_routes_since(f'{day} 00:00:00'):
+        if str(r.get('At') or '')[:10] != day: continue
+        g = out.setdefault(r.get('Job') or 'triage', {}).setdefault(r.get('Caller') or '', {'calls': 0, 'in': 0, 'cached': 0, 'out': 0})
         g['calls'] += int(r.get('Calls') or 0)
         for k, c in (('in', 'TokensIn'), ('cached', 'Cached'), ('out', 'TokensOut')): g[k] += int(r.get(c) or 0)
     return out

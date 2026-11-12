@@ -14,6 +14,7 @@ No brain is not a verdict: nothing is guessed, and the summaries say promises an
 import threading
 from datetime import datetime, timedelta
 from loguru import logger
+from . import aiusage
 from .timewords import plural
 from .store import task_ref
 
@@ -135,6 +136,7 @@ def _ask(llm, items: list) -> list:
     return [v for v in got if isinstance(v, dict)]
 
 
+@aiusage.named('sent.judge')
 def judge(store, llm=None, days: int = DAYS) -> int:
     """Read the owner's sent messages in the window that have no verdict yet - ONE call, at most BATCH of them, newest
     first - and keep each answer. Nothing unjudged costs nothing (no model is even built). Returns how many were judged."""
@@ -185,6 +187,7 @@ def judge(store, llm=None, days: int = DAYS) -> int:
         return n
 
 
+@aiusage.named('sent.judge')
 def judge_text(store, body: str, subject: str = '', to: str = '', llm=None) -> dict | None:
     """One message about to leave or just sent (asks.watch_reply), judged on its words alone: {'asks_them', 'promise',
     'what', 'due'} or None when there is no brain or it did not answer. Never on a button's thread - callers background it."""

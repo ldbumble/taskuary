@@ -30,7 +30,7 @@ from loguru import logger
 
 from .store import task_ref
 from .llm import json_of            # a fence anywhere, prose before it: how the gateway's models answer
-from . import kinds as task_kinds
+from . import aiusage, kinds as task_kinds
 
 BASE = 0.5
 HEAD = 40                 # how many of the queue the rerank call sees
@@ -170,6 +170,7 @@ _last = {'at': 0.0}
 _lock = threading.Lock()
 
 
+@aiusage.named('rank.rerank')
 def rerank(store, force: bool = False) -> int:
     """One listwise call over the head of the ranked queue; the model's position is blended
     half-and-half with the floor. Returns how many rows were updated. Debounced - a burst of

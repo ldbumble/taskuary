@@ -17,7 +17,7 @@ agents.resolve_brain, concierge.pick), so a fixed install behaves as it always d
 All router state lives in the store - settings and the `brainroute` log - never in module globals: the
 poller and the server are separate processes (dirty triggers are cross-process).
 """
-import threading
+import threading, weakref
 from datetime import datetime, timedelta
 from typing import NamedTuple
 from loguru import logger
@@ -57,11 +57,16 @@ def log(store, r: 'Route', task_id=None, outcome: str = 'ok', pick: str = None, 
     """One row per brain CALLED (Lazy) or refused: the job, what runs it and why - never the prompt or the answer. A log that cannot be
     written is never the reason a call fails, so a failure here is a debug line and None."""
     escalated_from = rid_of(escalated_from)
+    from .aiusage import asked
+    a = asked()            # who is asking, and about which message - the asker's own note, blank when nobody named the call
     try:
-        return store.add_brain_route({'At': datetime.now().isoformat(sep=' ', timespec='seconds'), 'Job': r.job,
-                                      'TaskId': int(task_id) if str(task_id or '').isdigit() else None, 'Pick': r.pick if pick is None else pick,
-                                      'Model': r.model, 'Tier': r.tier, 'Rule': r.rule, 'Why': r.why, 'Difficulty': r.difficulty or None,
-                                      'DataClass': r.data_class or None, 'EscalatedFrom': escalated_from, 'Outcome': outcome})
+        rid = store.add_brain_route({'At': datetime.now().isoformat(sep=' ', timespec='seconds'), 'Job': r.job,
+                                     'TaskId': int(task_id) if str(task_id or '').isdigit() else None, 'Pick': r.pick if pick is None else pick,
+                                     'Model': r.model, 'Tier': r.tier, 'Rule': r.rule, 'Why': r.why, 'Difficulty': r.difficulty or None,
+                                     'DataClass': r.data_class or None, 'EscalatedFrom': escalated_from, 'Outcome': outcome,
+                                     'Caller': a.caller if a else None, 'MessageId': a.message_id if a else None})
+        if a and rid: a.rids.append(rid)
+        return rid
     except Exception as e:
         logger.debug(f'brainroute: could not log a {r.job} route - {e}'); return None
 
@@ -70,21 +75,37 @@ def log(store, r: 'Route', task_id=None, outcome: str = 'ok', pick: str = None, 
 # built triage's once a second and never called it - 234 rows in four minutes, every one without a task, a time or a token, counted on
 # the AI-use dashboard and the task's AI-used list as calls. build_llm hands out a Lazy instead: the row is written on the brain's first
 # call (aiusage.Metered), or when the build itself ends in a refusal or an error (outcome) - so the reason is kept whenever it mattered.
+# ...AND A ROW PER ASKER (2026-11-11): one triage brain is built for a poll and judges every mail in it, so its one row said "3 calls"
+# and one sum for three mails. Asked under another note (aiusage.asking - another mail, another function), the brain writes a new row.
 class Lazy:
-    "A route row written on first use: called, it is the row's id (written then, once); a brain built and never called writes nothing."
+    """A route row written on first use: called, it is the row's id (written then, once per asker - aiusage.Asked, the calls nobody
+    named sharing one of their own); a brain built and never called writes nothing. `last` is the row to MARK (outcome): the one last
+    written, so a mark made once the asker has left never opens a new, empty row."""
     def __init__(self, store, r: 'Route', task_id=None, pick: str = None):
-        self.store, self.r, self.task_id, self.pick, self._id, self._lock = store, r, task_id, pick, None, threading.Lock()
+        self.store, self.r, self.task_id, self.pick, self._lock = store, r, task_id, pick, threading.Lock()
+        self._ids, self._own, self._last = weakref.WeakKeyDictionary(), None, None
+    def _new(self):
+        self._last = log(self.store, self.r, self.task_id, pick=self.pick) or 0; return self._last
     def __call__(self) -> int | None:
+        from .aiusage import asked
+        a = asked()
         with self._lock:
-            if self._id is None: self._id = log(self.store, self.r, self.task_id, pick=self.pick) or 0
-        return self._id or None
+            if a is None:
+                if self._own is None: self._own = self._new()
+                return self._own or None
+            if a not in self._ids: self._ids[a] = self._new()
+            return self._ids[a] or None
+    def last(self) -> int | None:
+        with self._lock:
+            if self._last is None: self._own = self._new()
+            return self._last or None
 
 def rid_of(rid): return rid() if isinstance(rid, Lazy) else rid
 
 
 def outcome(store, rid, said: str, why: str = None) -> None:
     "How the call ended when it was not as built: 'fallback:<pick>', 'refused:<why>', 'error'."
-    rid = rid_of(rid)
+    rid = rid.last() if isinstance(rid, Lazy) else rid
     if not rid: return
     try: store.set_brain_route(rid, Outcome=said, **({'Why': why} if why else {}))
     except Exception as e: logger.debug(f'brainroute: could not mark route {rid} {said} - {e}')

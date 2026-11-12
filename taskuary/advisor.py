@@ -17,7 +17,7 @@ a per-hour cap, the standard model (advisor_model: light to save), the bigger re
 import contextlib, contextvars, hashlib, json, re, threading
 from datetime import datetime, timedelta
 from loguru import logger
-from . import buttons, calibrate, concierge, words
+from . import aiusage, buttons, calibrate, concierge, words
 from .llm import build_llm, ask_json
 L = buttons.label        # the prompt names a button by its one label (buttons.json)
 
@@ -967,6 +967,7 @@ def _offered(verbs: list, said: str):
                  or bare == v['verb'].lower()), None)
 
 
+@aiusage.named('advisor.judge')
 def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1, llm=None, key: str = None) -> int:
     """Judge one item at one revision - the item keyed `key` when the strip asked for it, else the target's first card - and
     write the row under that item's own key (keys_of), so it is never read back over another item of the same task."""

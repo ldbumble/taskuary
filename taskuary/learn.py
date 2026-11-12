@@ -33,6 +33,7 @@ import json, re
 from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
+from . import aiusage
 
 DOC = 'learned'
 # ONE SECTION PER SUBJECT (the owner, 2026-10-25: the memory "holds press statistics like 'On asks from X, presses Next (1 of 1)'" -
@@ -357,6 +358,7 @@ def _without_verdicts(doc: str) -> tuple:
     return head.rstrip('\n') + '\n' + tail.lstrip('\n'), section_head + VERD_START + body + VERD_END + '\n'
 
 
+@aiusage.named('memory.learn')
 def learn_from(store, event: str, llm=None):
     """One explicit owner verdict -> the Hypotheses section, updated now. Never raises: a lost
     lesson costs one observation, a broken decide endpoint costs trust in the whole funnel."""
@@ -491,6 +493,7 @@ def _failed(store, why) -> bool:
     return False
 
 
+@aiusage.named('memory.reflect')
 def reflect(store, llm=None) -> bool:
     """The consolidation: whole-doc rewrite against the event window. Modeled on digest.py's
     gather -> synthesize -> save_doc, but with NO no-AI fallback - a mechanical rewrite of a

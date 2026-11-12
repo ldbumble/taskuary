@@ -285,7 +285,8 @@ def _prove(store) -> str:
     said = {}
     def go():
         try:
-            v = triage.classify_intent(dict(PROOF), llm=llm_mod.build_llm(store, job='triage'), system=store.doc('triage'))
+            from . import aiusage
+            with aiusage.asking('triage.proof'): v = triage.classify_intent(dict(PROOF), llm=llm_mod.build_llm(store, job='triage'), system=store.doc('triage'))
             if v.get('degraded') or v.get('intent') not in triage.INTENTS:
                 said['e'] = f"it couldn't sort a test email - {v.get('parse_error') or v.get('error') or 'its answer was not a verdict'}"
         except Exception as e: said['e'] = f"it couldn't sort a test email - {str(e)[:300]}"

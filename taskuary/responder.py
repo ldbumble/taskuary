@@ -14,6 +14,7 @@ written here either way, so the sender always hears one voice.
 """
 import re
 from loguru import logger
+from . import aiusage
 from .triage import SOUL_CHARS
 
 STYLE_CHARS = 2500      # STYLE.md as a draft reads it (style_doc); the Docs editor shows this number (doclimits)
@@ -554,6 +555,7 @@ def known_block(store, t: dict) -> str:
             f"leave a question put to you unanswered, write {NEEDS} and what is missing - never invent to fill the gap.\n" + '\n'.join(lines))
 
 
+@aiusage.named('draft.reply')
 def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: str = None, seen: dict = None, pressed: bool = False,
                 answers: int = None) -> str:
     """The reply this task needs, as text. Uses the owner's own brain (the AI connector, or
@@ -768,6 +770,7 @@ def write_draft(store, task_id: int, review_id: int, actor: str = 'system', llm=
     return draft_for_review(store, task_id, review_id, llm, None, nudge, pressed)
 
 
+@aiusage.named('draft.reply')
 def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str = None) -> str:
     """A reply for a message with NO task behind it - chatter that just deserves an answer.
     Same voice, same rules, same channel-awareness; the context is the message itself."""

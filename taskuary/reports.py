@@ -10,7 +10,7 @@ taking it out of PLANNED - PRs welcome.
 import contextlib, contextvars, hashlib, io, json, os, re, sqlite3, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
-from . import apireads, spawn
+from . import aiusage, apireads, spawn
 from .timewords import ago_m, plural, span
 
 PLANNED = [
@@ -2477,6 +2477,7 @@ def judge_state(res: dict) -> str:
 def chat_judge(llm, learned: str = ''):
     """An ordinary brain, wearing the judge's contract: `judge(state, ask, cfg) -> {line: bool}`,
     or None for "this judge did not answer"."""
+    @aiusage.named('reports.judge')
     def judge(state: str, ask: list, cfg: dict):
         try: out = llm(JUDGE_SYSTEM + judge_prompt(cfg) + memory_rule(learned), f'What the run came back with:\n\n{state}',
                        max_tokens=JUDGE_TOKENS) or ''

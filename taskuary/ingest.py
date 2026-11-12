@@ -14,7 +14,7 @@ from .routing import first_line, draft_task_fields, norm_subject
 from .policy import evaluate
 from .triage import agent_words, classify_intent, person_name, sender_called, wrapper_of
 from .store import task_ref, auto_code_enabled, _now
-from . import brainroute, buttons, remind, senders, textsim, watch, wrapup, words, workstreams
+from . import aiusage, brainroute, buttons, remind, senders, textsim, watch, wrapup, words, workstreams
 from .categories import agent_word, route_head
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
@@ -123,6 +123,8 @@ def _land(store, msg: dict, task_id, status: str) -> int:
         store.place_message(msg['_mid'], task_id, status, title=msg.get('_title'))
         mid = msg['_mid']
     else: mid = store.add_message({**_fields(msg, task_id), 'Status': status})
+    # ...and the calls that judged it are this message's, now that it has a row (judge; aiusage.for_message)
+    if msg.get('_route_rows'): aiusage.for_message(store, msg.pop('_route_rows'), mid)
     _place(store, mid, task_id, msg.get('_workstream'))
     return mid
 
@@ -747,15 +749,28 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     from .assistant import said_about
     said = said_about(store, msg.get('conversation_id'))
     if said: thread = {**thread, 'assistant_said': said}
-    from . import capabilities
-    from .triage import job_doc
     # THE WHOLE MEMORY, every time (the owner, 2026-10-27: "triage needs the entire thing to make a decision every time, so load the
     # whole thing") - not the care and people lines cut to 1500 characters.
     # ...and THE SAME BYTES ON EVERY MAIL: the lines this mail's EVIDENCE also carries were taken out of it here, so the memory - a cached
     # block of the prompt (triage's stable()) - was a different one for every sender with a note, and was billed whole again each time
     # (5 memories over 40 mails, measured 2026-11-11). A line may now be read twice, once there under its id; what is cached is paid once
     lrn = learned_cut.whole(store, 'triage', target=f"mail:{msg.get('external_id') or ''}")
-    intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), job=job_doc(store), thread=thread, seen=carried,
+    # WHO IS ASKING, for the usage row (aiusage.asking, 2026-11-11): triage of a mail, of a report's own run or of an Advisor idea - whichever
+    # brain it rides - and about which message. A new mail has no row yet, so the rows written ride the msg until it lands (_land)
+    who = 'triage.report' if msg.get('watch_for') else 'triage.idea' if msg.get('idea_context') else 'triage.classify'
+    with aiusage.asking(who, msg.get('_mid')) as a: intent = _classify(store, msg, _guarded, thread, carried, lrn, notes, notes_left, me, candidates)
+    msg['_route_rows'] = a.rids
+    intent['notes'], intent['notes_left'] = notes, notes_left
+    if intent.get('workstream'): msg['_workstream'] = intent['workstream']
+    personal_fyi(store, msg, intent)
+    return intent, fail
+
+
+def _classify(store, msg, llm, thread, carried, lrn, notes, notes_left, me, candidates) -> dict:
+    "judge's one call to triage, with what the store holds beside the message: the documents, the menus, what this install can do."
+    from . import capabilities
+    from .triage import job_doc
+    return classify_intent(msg, llm=llm, soul=store.doc('soul'), job=job_doc(store), thread=thread, seen=carried,
                              learned=lrn,
                              notes=notes, notes_left=notes_left, images=msg.get('images'),
                              system=store.doc('triage'), mine=me,
@@ -774,10 +789,6 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
                              connected=connected_systems(store),
                              # ...and the owner's workstreams, so the sort knows which hat this is under (workstreams.py, 2026-11-01)
                              workstreams=workstreams.menu(store) or None)
-    intent['notes'], intent['notes_left'] = notes, notes_left
-    if intent.get('workstream'): msg['_workstream'] = intent['workstream']
-    personal_fyi(store, msg, intent)
-    return intent, fail
 
 
 QUIET = ('fyi', 'watch')     # the verdicts that ask nothing of the owner now: a line that joins existing work on either is kept for the chain
@@ -1274,8 +1285,8 @@ NOTE_BUDGET = 2000       # ...and how many characters, whichever runs out first
 #
 # 'subject' scope keys on the subject the verdict was given on. Whether a message is ABOUT that topic is
 # never a share of shared words (the owner, 2026-10-28): every topic note is in scope for every message,
-# ranked by how alike in meaning it is (textsim, embeddings), and triage says which ones it applied
-# (its verdict's notes_applied) - "Resident Refund Request - Doe" and "a refund for a resident" are the
+# ranked by how alike in meaning it is (textsim, embeddings), and which ones bear on it is triage's to weigh
+# (it is no longer asked to name them: nothing read the answer, 2026-11-11) - "Resident Refund Request - Doe" and "a refund for a resident" are the
 # same standing decision, and "Refund the vendor's overpayment" is not, whatever words they share.
 SCOPE_PRIOR = {'sender': 3.0, 'sender_domain': 1.5, 'source': 1.5, 'subject': 1.5}     # how narrowly a note was scoped
 # ...and how much what it MEANS adds: less than the step from one scope to the next, so a note about the person in front of you
@@ -1321,8 +1332,8 @@ def relevant_notes(store, senders, text: str, cap: int = NOTE_CAP, budget: int =
 
     Ranked by how alike in MEANING each note is to the message (textsim, embeddings) on top of how narrowly it was scoped; with no
     embedder, by the scope alone. `senders` is every address on the thread - one message's sender, or a whole chain's. `keep`, when
-    given, says which note rows may be used at all. `ids` puts each note's own id in front of it ("[lrn123] ...") - triage names the
-    ones it applied by it (notes_applied)."""
+    given, says which note rows may be used at all. `ids` puts each note's own id in front of it ("[lrn123] ...", learned_cut.cite_of):
+    triage's old answer shape named the ones it applied by it (notes_applied); the lean one is not asked to (2026-11-11)."""
     from .learned_cut import cite_of
     hits = [n for n in applicable_notes(store, senders, subject, text, source) if keep is None or keep(n)]
     key = lambda n: f"note:{cite_of(n.get('Key'))}"
@@ -3172,6 +3183,7 @@ def _fill(store, tid: int, plain: str, ask: dict):
     if ask.get('checklist') and not store.task_checklist(tid): store.set_task_checklist(tid, ask['checklist'], 'triage')
 
 
+@aiusage.named('triage.title')       # the triage brain titling a task the owner made by hand: not a mail's triage (aiusage.asking)
 def _enrich(store, tid: int, m: dict, plain: str, llm, earlier: dict = None):
     from . import triage as _triage
     try: _fill(store, tid, plain, _triage.extract_ask(m, llm, earlier=earlier))

@@ -4,6 +4,7 @@ this closes the loop: the transcript becomes the report, the reply the sender ge
 """
 import json, re, threading
 from loguru import logger
+from . import aiusage
 
 FIELDS = ('determination', 'actions', 'summary')
 
@@ -28,6 +29,7 @@ OUTCOME_ASK = ('\nAlso give "outcome": "did_work|elsewhere" and "elsewhere": "..
                'session said the work is likely in, as it wrote it, or "" when it could not tell; for did_work it is "".')
 
 
+@aiusage.named('summary.report')
 def report_from_transcript(store, task_id: int, transcript: str, agent: str = '', final_message: str = '', said: bool = False) -> dict:
     """The report, written from what is already on screen. The agent is never asked for prose:
     by the time you click Done you are done talking to it, and a transcript cannot argue. No AI
@@ -76,6 +78,7 @@ PAUSE_SYSTEM = (
     'yet" in a field rather than inventing.')
 
 
+@aiusage.named('summary.pause')
 def pause_note(store, task_id: int, transcript: str) -> str:
     """What a paused session knew, in the words the next session needs. A pty has no resumable
     id (no --resume for a TUI), so the note IS the continuity - it gets typed into the next

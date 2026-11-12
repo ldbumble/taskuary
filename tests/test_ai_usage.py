@@ -293,3 +293,97 @@ def test_the_settings_page_reads_what_the_ai_did_today_and_the_ceiling():
     assert got['jobs']['triage'] == {'calls': 1, 'in': 16000, 'cached': 15000, 'out': 200}
     assert (got['calls'], got['ceiling'], got['held']) == (1, brainroute.AUTO_CAP, '')
 
+
+# ── who asked, and about which message (2026-11-11) ───────────────────────────────
+# One triage brain is built for a poll and judges every mail in it: its one row said "2 calls" and one sum, for no message and for
+# whatever the brain was built for. A row now carries the function that asked and the message it asked about.
+def _poll_brain(s, job='triage', answer=None):
+    said = json.dumps(answer or {'intent': 'fyi', 'why': 'a notice', 'title': 'A notice', 'summary': 'A notice.', 'sender_class': 'person',
+                                 'asks_owner': False, 'difficulty': 'quick', 'sure': True})
+    def brain(system, user, **kw):
+        aiusage.note('m-1', 1000, 400, 50); return said
+    return aiusage.metered(s, brainroute.Lazy(s, brainroute.Route(job, 'light', 'connector:1', '', 'light', [], 'fixed', 'test')), brain)
+
+
+def _mail(i, **kw):
+    return {'external_id': f'u{i}', 'channel': 'email', 'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake',
+            'subject': f'Ledger note {i}', 'body': f'The ledger closed for week {i}.', **kw}
+
+
+def test_two_mails_judged_by_one_brain_are_two_rows_each_with_its_message_and_its_caller():
+    from taskuary import ingest
+    s = MemoryStore()
+    for k in ('calendar_enabled', 'coding_auto_enabled'): s.set_setting(k, '0', 't')
+    brain = _poll_brain(s)
+    mids = [ingest.ingest_message(s, _mail(i), llm=brain)['message_id'] for i in (1, 2)]
+    rows = sorted(s.brain_routes(None, limit=50), key=lambda r: r['Id'])
+    assert [(r['Caller'], r['MessageId'], r['Calls'], r['TokensIn']) for r in rows] == [('triage.classify', m, 1, 1000) for m in mids], rows
+    assert len(set(mids)) == 2
+
+
+def test_a_report_run_triaged_on_the_reports_brain_is_triages_cost():
+    from taskuary import ingest
+    s = MemoryStore()
+    for k in ('calendar_enabled', 'coding_auto_enabled'): s.set_setting(k, '0', 't')
+    out = ingest.ingest_message(s, _mail(3, watch_for='Anything over budget.'), llm=_poll_brain(s, 'report'))
+    r, = s.brain_routes(None, limit=50)
+    assert (r['Job'], r['Caller'], r['MessageId']) == ('report', 'triage.report', out['message_id'])
+    assert aiusage.by_caller(s) == {'report': {'triage.report': {'calls': 1, 'in': 1000, 'cached': 400, 'out': 50}}}
+
+
+def test_a_call_nobody_named_is_blank_and_never_put_on_another_callers_row():
+    s = MemoryStore(); brain = _poll_brain(s)
+    brain('sys', 'one'); brain('sys', 'two')                                     # nobody named these: one row, as before
+    with aiusage.asking('triage.title'): brain('sys', 'three')
+    brain('sys', 'four')                                                         # ...and after a named one, still the unnamed row
+    rows = {r['Caller']: r for r in s.brain_routes(None, limit=50)}
+    assert {k: r['Calls'] for k, r in rows.items()} == {None: 3, 'triage.title': 1}
+    assert rows[None]['MessageId'] is None and rows['triage.title']['MessageId'] is None
+    assert aiusage.by_caller(s)['triage'] == {'': {'calls': 3, 'in': 3000, 'cached': 1200, 'out': 150},
+                                              'triage.title': {'calls': 1, 'in': 1000, 'cached': 400, 'out': 50}}
+    assert aiusage.today(s)['triage']['calls'] == 4                              # the job's own total is the sum of its callers
+
+
+def test_a_mark_made_after_the_asker_left_lands_on_its_row_and_opens_no_new_one():
+    s = MemoryStore()
+    rid = brainroute.Lazy(s, brainroute.Route('triage', 'light', 'connector:1', '', 'light', [], 'fixed', 'test'))
+    with aiusage.asking('triage.classify', 41) as a: named = rid()
+    brainroute.outcome(s, rid, 'fallback:cli:claude')
+    r, = s.brain_routes(None, limit=50)
+    assert (r['Id'], r['Caller'], r['MessageId'], r['Outcome']) == (named, 'triage.classify', 41, 'fallback:cli:claude') and a.rids == [named]
+    never = brainroute.Lazy(s, brainroute.Route('draft', 'light', 'connector:1', '', 'light', [], 'fixed', 'test'))
+    brainroute.outcome(s, never, 'refused:no AI')                                # a build that ends refused still writes its one row
+    assert [x['Outcome'] for x in s.brain_routes(None, limit=50) if x['Job'] == 'draft'] == ['refused:no AI'] and never() == never.last()
+
+
+def test_the_inner_asker_names_the_call_and_a_named_function_names_its_own():
+    s = MemoryStore(); brain = _poll_brain(s)
+    @aiusage.named('advisor.judge')
+    def judge(): return brain('sys', 'is this worth raising?')
+    with aiusage.asking('reports.judge'): judge(); brain('sys', 'what came back')
+    assert sorted(r['Caller'] for r in s.brain_routes(None, limit=50)) == ['advisor.judge', 'reports.judge']
+    assert aiusage.asked() is None and {'advisor.judge', 'reports.judge', 'triage.classify'} <= set(aiusage.CALLERS)
+
+
+def test_every_name_a_call_site_gives_is_on_the_one_list():
+    import re
+    from pathlib import Path
+    src = {p.name: p.read_text(encoding='utf-8') for p in (Path(aiusage.__file__).parent).glob('*.py')}
+    used = {m for t in src.values() for m in re.findall(r"aiusage\.(?:asking|named)\('([^']+)'", t)}
+    used |= set(re.findall(r"'(triage\.[a-z]+)'", src['ingest.py'].split('def judge(')[1].split('def _classify(')[0]))   # judge's three, by the arrival
+    assert used == set(aiusage.CALLERS), used ^ set(aiusage.CALLERS)
+
+
+def test_a_row_written_before_the_column_still_reads(tmp_path):
+    from taskuary.store import SQLiteStore
+    p = str(tmp_path / 'old.db')
+    s = SQLiteStore(p); rid = _route(s); aiusage.record(s, rid, 300, {'in': 700, 'out': 20})
+    s.cx.execute('ALTER TABLE brainroute DROP COLUMN Caller'); s.cx.commit(); s.close()      # the table as it was before 2026-11-11
+    s = SQLiteStore(p)
+    old = _row(s, rid)
+    assert old['Caller'] is None and old['MessageId'] is None and old['TokensIn'] == 700
+    assert aiusage.by_caller(s, str(old['At'])[:10]) == {'triage': {'': {'calls': 1, 'in': 700, 'cached': 0, 'out': 20}}}
+    assert aiusage.row(s, old)['tokens'] == 720
+    with aiusage.asking('triage.classify', 7): new = _route(s)
+    assert (_row(s, new)['Caller'], _row(s, new)['MessageId']) == ('triage.classify', 7)
+

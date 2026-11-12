@@ -12,7 +12,7 @@ no AI, a failed call - holds nothing back: the post is what it was before this c
 import json
 from datetime import datetime, timedelta
 from loguru import logger
-from . import ideagrade
+from . import aiusage, ideagrade
 
 TOUCHED_H = 24
 # ...asked as JOIN OR RESTATE (a live replay over the 32 graded ideas, 2026-11-01): "would the owner already know this?" held half the
@@ -67,6 +67,7 @@ def _workstream(store, act: dict) -> str:
     return f"{w['name']}: {(W.section(store, ws) or w['about'])[:600]}" if w else ws
 
 
+@aiusage.named('advisor.idea')
 def check(store, say: list, llm=None) -> tuple:
     """(the lines to raise, [(key, why it was held)]). The model's own lines only; everything else passes."""
     held, keep, ask = [], [], []

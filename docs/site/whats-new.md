@@ -2,6 +2,18 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.53 - 2026-11-12
+
+- Teams and Telegram replies go as a reply to the line they answer
+- A chat line that lags its notification mail joins the task the mail made, even when the mail quoted it cut short
+- The joining set carries the owner's own answers, and the guide follows them by the combine level
+- The Advisor reads twice a day, whole, after the day's job ideas - not every half hour
+- Send and Send and close say what is happening on the card itself: a spinner while it goes, then "Closingâ€¦" under it
+- A line he types is never refused by a sync: kept and heard at once, the start goes on from what is stored, an error never glued to his words
+- Triage is told what a mail's own headers say sent it, and the message keeps it past the verdict
+- What waits for the agent is in one place: his lines as slim rows over the box with a trash, messages as counts on their sender's chip
+- One rule for every card: a held step or proposal he writes past greys in its place too, and its agent raises it again if still needed
+
 ## 0.3.11.52 - 2026-11-12
 
 - An Advisor idea the app put down as it was raised is left out of the owner's record

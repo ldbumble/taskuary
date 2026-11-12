@@ -2,6 +2,22 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.47 - 2026-11-11
+
+- A one-shot on a Claude CLI reads its instructions from the provider's cache
+- Triage's memory is the same bytes on every mail
+- A scheduled report that says what it said last time is not judged again
+- A clocked Advisor look with the payload of the last one asks nothing
+- A scheduled run that reads what its last run read asks no model
+- Mail is read every 4 minutes, so each poll finds the triage prompt still cached
+- The Advisor judges the row on the table and never the rows after it
+- A saved model applies only to the brain it was saved for
+- With several CLIs connected, the default AI is asked for once, never picked for you
+- Settings says which AI and model each level of agent work runs on right now, and why
+- The routing card says it once where every level runs the same
+- A scheduled report with a few changed rows keeps its last summary and lists what changed
+- The Advisor's no-look-ahead test puts an idea on the table, and the comment says what the look-ahead read
+
 ## 0.3.11.46 - 2026-11-11
 
 - One hand-over is written once and stands in the order it came, a turn names only what it heard, and a coding agent is told its duties once

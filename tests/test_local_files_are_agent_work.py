@@ -7,14 +7,14 @@ and coding is for changes inside the owner's systems, so file work on the comput
 word list."""
 from taskuary import triage
 
-LINE = "**Files and folders on the owner's own computer are general too**"
+LINE = "files and folders on the owner's own computer"
 
 
 def test_the_guide_says_local_file_work_is_the_general_agents():
     g = ' '.join(triage.SHIPPED.split())
     assert LINE in g
     said = g.split(LINE, 1)[1].split('- **', 1)[0]
-    assert 'unzip' in said and 'a delete waits for the owner\'s yes' in said and 'not a reason for **task**' in said
+    assert 'a delete waits for the owner\'s yes' in said and 'no connected system reaches is not a reason for **task**' in g
     assert g.index('## 4. Who does it') < g.index(LINE) < g.index('## 5. Describing it')     # where who does it is decided
 
 
@@ -24,4 +24,4 @@ def test_a_folder_named_in_an_ordinary_ask_is_no_danger():
     ordinary ask is where the work is - judged by the model, no word list."""
     g = ' '.join(triage.SHIPPED.split())
     said = g.split('- **danger** -', 1)[1].split('- **danger_aim**', 1)[0]
-    assert "So is a person's ordinary ask about files on the owner's computer" in said and 'the path is where the work is' in said
+    assert "so is a person's ordinary ask about files in a folder they name on the owner's computer" in said and 'the path is where the work is' in said

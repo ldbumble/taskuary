@@ -24,10 +24,10 @@ def test_the_schema_names_them_and_both_prompts_explain_them():
     assert set(verdict_schema()['schema']['required']) >= {'difficulty', 'sure'}
     # the schema names only what the prompt explains (TQ-0665): a bullet in section 5, and the answer's line in section 7
     for text, name in ((DOC, 'triage.md'), (INTENT_SYSTEM, 'INTENT_SYSTEM')):
-        assert '- **difficulty** - for every verdict' in text and '- **sure** - for every verdict' in text, name
+        assert '- **difficulty** - how much thought the WORK takes' in text and '- **sure** - false only when' in text, name
         assert '"difficulty": "quick|standard|hard"' in triage.shipped_section('## 7.'), name
     # its own verdict: the bullet says so, and it is not the urgency or the priority
-    assert 'says nothing about how soon it is due or how much it matters' in triage.DIFFICULTY
+    assert 'Not how soon it is due or how much it matters' in triage.DIFFICULTY
 
 
 def test_the_verdict_carries_them_and_drops_what_is_not_one():

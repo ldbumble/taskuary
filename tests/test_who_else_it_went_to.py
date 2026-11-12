@@ -83,7 +83,7 @@ def test_the_classifier_and_the_guide_carry_it(s):
     assert triage.FIELDS['answered_before'] in seen['sys']                                 # a doc that never names it is told what it is
     guide = (ingest.__file__.rsplit('ingest.py', 1)[0] + 'templates/triage.md')
     text = open(guide, encoding='utf-8').read()
-    assert '`answered_before`' in text and 'Sharing the To line is not owning the ask' in text
+    assert '`answered_before`' in text and 'When the owner shares the To line and nothing turns to them, ask who takes this' in text
 
 
 def test_came_from_gets_the_lines_by_name_and_nothing_for_the_owner_alone(s):

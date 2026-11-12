@@ -177,14 +177,16 @@ def test_triage_reads_the_invoice_total():
     assert 'USD 4,812.50' in files[0] and files[0].startswith('invoice.pdf: ⟦')
     assert files[1] == 'contract.pdf (not read: encrypted)'
     assert KEY not in seen['user'] and '[redacted:aws-key]' in files[2]
-    assert 'attached_files is the text read out of the documents' in seen['system']   # the field is explained, marks included
+    # the field is explained by the GUIDE, marks included - code used to add its own paragraph for every mail with a file, inside the part
+    # of the prompt that is cached, so such a mail could never read the cached copy past the guide (2026-11-11)
+    assert '`attached_files` - the text of attached or linked documents' in seen['system'] and 'THE PAYLOAD ALSO CARRIES' not in str(seen['system'])
 
 
 def test_a_mail_with_no_files_reaches_triage_unchanged():
     s, seen = MemoryStore(), {}
     ingest.ingest_message(s, {'external_id': 'graph:plain', 'channel': 'email', 'subject': 'Hi', 'body': 'Lunch?',
                               'from_email': 'erin@northwind.example', 'source_name': 'alex@northwind.example'}, llm=_brain(seen))
-    assert 'attached_files' not in json.loads(seen['user']) and 'attached_files' not in seen['system']
+    assert 'attached_files' not in json.loads(seen['user']) and 'THE PAYLOAD ALSO CARRIES' not in str(seen['system'])
 
 
 def test_a_held_message_read_back_later_brings_its_file_text():

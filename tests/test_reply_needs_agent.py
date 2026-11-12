@@ -65,12 +65,12 @@ def lines(s, tid): return [c['Body'] for c in s.list_comments(tid)]
 # ── the guide says what an agent is for (no model call: the words the model reads) ──────────────────────────────────────────
 def test_the_guide_sends_thinking_reviewing_and_opinions_to_the_general_agent():
     g = ' '.join(triage.SHIPPED.split())
-    assert 'here\'s my draft, let me know your thoughts' in g.lower() and 'what do you think of this plan' in g
+    assert 'giving the owner a view on something there is to read' in g
     general_rule = g.split('- **general** -')[1].split('- **task** -')[0]
-    assert 'thinking, reading, reviewing, research, judgement or an opinion' in general_rule
-    assert 'Here\'s my draft update, let me know your thoughts' in general_rule and 'are general' in general_rule
+    assert 'look up, read, review, research' in general_rule
+    assert 'giving the owner a view on something there is to read' in general_rule
     reply_rule = g.split('- **reply_only** -')[1].split('- **fyi** -')[0]
-    assert 'a yes or no, a time, a confirmation, a quick fact' in reply_rule and 'is not this: it is a task' in reply_rule
+    assert 'a yes or no, a time, a quick fact' in reply_rule and 'judgement or an opinion is a task' in reply_rule
     assert 'their own opinion or decision that someone asked them for' not in g         # an opinion is no longer the owner's own list
     assert 'lean general' in g
 
@@ -79,7 +79,7 @@ def test_the_guide_keeps_banter_off_the_title_and_asks_for_an_offer():
     g = ' '.join(triage.SHIPPED.split())
     assert 'banter or small talk about it' in triage.REFINES and 'keeps its title' in triage.REFINES
     assert 'Banter about the ask' in g and 'adds nothing to do' in g
-    assert triage.OFFER.startswith('- **offer**') and 'I can register you for the webinar' in triage.OFFER
+    assert triage.OFFER.startswith('- **offer**') and 'never as done' in triage.OFFER
     assert '"offer": null' in triage.SHIPPED and 'offer' in triage.verdict_schema()['schema']['properties']['more']['properties']
 
 

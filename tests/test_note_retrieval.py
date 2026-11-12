@@ -148,7 +148,7 @@ class ItSaysSoTests(unittest.TestCase):
                             playbooks='- rota: when a rota changes', workflows='- invoices: when an invoice arrives', learned='Alex cares about the rota.')
         shared = commonprefix(seen)
         self.assertIn('WORKFLOWS A MAIL STARTS', shared); self.assertIn('when an invoice arrives', shared)
-        self.assertNotIn('ledgers are fyi', shared); self.assertGreater(len(shared), 50_000)
+        self.assertNotIn('ledgers are fyi', shared); self.assertGreater(len(shared), 30_000)      # the guide and everything every mail shares (the guide alone is 31,000 since 2026-11-11)
 
     def test_the_agent_block_ranks_the_thread_and_stops_growing_forever(self):
         """It had no cap at all - every matching note, however many the owner had given."""

@@ -81,11 +81,11 @@ def test_the_classifier_reads_the_names_beside_the_opening_line_and_never_an_add
 
 def test_the_guide_says_a_question_to_a_named_other_is_theirs_and_one_to_everyone_can_be_the_owners():
     for doc in (triage.INTENT_SYSTEM, triage.SHIPPED):
-        assert 'Being on the To line is not being asked either' in doc
-        assert 'asks THAT person, even with the owner on the To line beside them' in doc and 'unless the owner is asked too' in doc
+        assert 'puts its question to another person by name' in doc
+        assert 'That holds with the owner on the To line beside them' in doc and 'names them or asks them directly' in doc
         assert 'A question put to everyone on the mail' in doc and 'can be the owner\'s' in doc
-        assert 'Read who a line is turned to from THIS message' in doc and 'never whose the question is' in doc
-        assert '`copied` - the Cc line the same way' in doc
+        assert 'Read who THIS message turns to' in doc and 'never whose the question is' in doc
+        assert '`addressed_to`, `copied` - where the owner stands on the mail and who it is put to, by name' in doc
 
 
 def test_the_writer_sees_the_to_line_by_name_and_is_told_a_named_question_is_not_yours(s):
@@ -134,9 +134,9 @@ def test_the_owner_last_with_nobody_else_on_the_thread_is_said_too(s):
 
 def test_the_guide_says_a_name_nudge_is_that_persons_and_an_answered_follow_up_is_not_the_owners():
     for doc in (triage.INTENT_SYSTEM, triage.SHIPPED):
-        assert 'A nudge that is only a name' in doc and 'It never asks the owner to add, include or invite them' in doc
-        assert 'When the owner has already answered' in doc and "is not the owner's to answer: fyi, `asks_owner` false" in doc
-        assert "`last_on_thread_is_you` - true when that was the owner's own reply" in doc
+        assert 'A nudge that is only a name' in doc and 'it never asks the owner to add, include or invite them' in doc
+        assert "When the owner's own reply was the last word (`last_on_thread_is_you`)" in doc and 'is not theirs again (fyi, `asks_owner` false)' in doc
+        assert '`last_on_thread_is_you` - who else has sent on it and who spoke last' in doc
     assert 'last_on_thread_is_you' in triage.FIELDS
 
 

@@ -112,7 +112,7 @@ def test_the_evalset_scores_priority_against_the_owners_own_hand():
 def test_the_guide_asks_for_the_three_and_binds_them():
     assert 'priority' in triage.verdict_schema()['schema']['required'] and 'urgent' not in triage.verdict_schema()['schema']['properties']
     assert triage.verdict_schema()['schema']['properties']['priority']['enum'] == ['regular', 'important', 'urgent']
-    for w in ('"urgent"', '"important"', '"regular"', 'priority_why', 'what a sender says about themselves'): assert w in triage.SHIPPED
+    for w in ('"urgent"', '"important"', '"regular"', 'priority_why', 'What a sender says about themselves'): assert w in triage.SHIPPED
 
 
 # ── the owner's rulings on the three, 2026-10-25 ───────────────────────────────────────────────────────────────────────────

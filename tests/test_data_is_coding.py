@@ -18,19 +18,19 @@ def kind_rule():
 class DataIsCodingTests(unittest.TestCase):
     def test_a_data_change_in_the_owners_systems_is_coding(self):
         rule = kind_rule()
-        self.assertIn('data changed', rule)
-        self.assertIn('a record corrected', rule)
+        self.assertIn('data or a setting changed', rule)
+        self.assertIn('an account or a role created', rule)
 
     def test_reading_and_checking_stay_off_the_coding_agent(self):
         rule = kind_rule()
-        self.assertIn('**general** - no change, but anything that needs thinking, reading, reviewing, research, judgement or an opinion', rule)
-        self.assertIn('the work only reads from a system (a query, a report, a look-up)', rule)
+        self.assertIn('**general** - no change, but work an assistant can do and hand back: look up, read, review, research', rule)
+        self.assertIn('Reading from a system', rule)
         self.assertIn('a repository whose topic matches the message, without a change to make there', rule)
 
     def test_an_ask_of_the_owner_as_themselves_is_theirs(self):
         # "send the invite" went to the assistant while triage's own why said "asks you" (2026-10-16) - the owner's own ACT stays theirs.
         # ...but "what do you think" is an agent's now (the owner, 2026-10-28): it reads and weighs, the owner approves the reply
         rule = kind_rule()
-        self.assertIn('the ask is the owner\'s own act in the world ("send the invite"', rule)
-        self.assertIn('An ask for the owner\'s view on something there is to read or weigh is general, not task', rule)
-        self.assertIn('Your `why` and your `kind` must agree', rule)
+        self.assertIn('a person has to do it in the world', rule)
+        self.assertIn('giving the owner a view on something there is to read', rule)
+        self.assertIn('Your `why` and `kind` must agree', rule)

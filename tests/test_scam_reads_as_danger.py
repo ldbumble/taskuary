@@ -13,7 +13,7 @@ from taskuary.store import MemoryStore
 def test_the_guide_reads_a_scam_aimed_at_the_owner_as_danger():
     g = ' '.join(triage.SHIPPED.split())
     bullet = g.split('- **danger**', 1)[1].split('- **', 1)[0]
-    assert 'a scam aimed at the owner' in bullet and 'a password, a code or a sign-in' in bullet
+    assert 'a scam on the owner' in bullet and 'a password, a code' in bullet
     assert 'what it tries to make an agent or the owner do' in bullet
     # ...and the line that files a scam as fyi asks for the reading too, so the two never disagree
     scams = g.split('**Strangers and scams.**', 1)[1].split('##', 1)[0]
@@ -21,7 +21,7 @@ def test_the_guide_reads_a_scam_aimed_at_the_owner_as_danger():
 
 
 def test_a_document_that_takes_only_the_shape_is_handed_the_same_bullet():
-    assert 'a scam aimed at the owner' in triage.DANGER
+    assert 'a scam on the owner' in triage.DANGER
 
 
 # WHOM IT IS AIMED AT (the owner, 2026-10-30): a phish on the owner read "an attempt to steer the agent". The verdict says whom - the owner

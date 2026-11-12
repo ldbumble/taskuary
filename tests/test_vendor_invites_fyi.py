@@ -44,16 +44,16 @@ class TheGuideSaysHowToReadOne(unittest.TestCase):
         self.assertEqual((out['status'], out['task_id']), ('filed', None))
         said = llm.seen[0]
         self.assertIn('An invitation from a vendor or a list', said)
-        self.assertIn('stays fyi unanswered', said)
-        self.assertIn('actually need to respond', said)
+        self.assertIn('nothing lapses', said)
+        self.assertIn('theirs to answer only when they asked for it', said)
         self.assertIn('An invitation from a vendor or a list', triage.SHIPPED)
 
     def test_a_reminder_that_the_owners_own_event_starts_soon_is_not_an_invitation(self):
         # a registrant's "your webinar will begin in 1 hour" was filed fyi under the invitation rule and never reached them
         said = triage.SHIPPED
-        self.assertIn('already registered for is about to start', said)
-        self.assertIn('is not an invitation', said)
-        self.assertIn('on-demand course "waiting for you" lapses nothing and stays fyi', said)
+        self.assertIn('A reminder that an event they registered for starts today', said)
+        self.assertIn('their own event coming due', said)
+        self.assertIn('on-demand course lapses nothing and stays fyi', said)
 
 
 class TheBriefReadsAsksOwner(unittest.TestCase):

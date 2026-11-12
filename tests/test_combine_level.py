@@ -135,10 +135,10 @@ class TheLevelIsTheMeasure(unittest.TestCase):
     def test_the_chat_paragraph_hands_the_measure_to_the_level(self):
         g = triage.SHIPPED
         chat = g[g.index('**A chat line.**'):g.index('\n', g.index('**A chat line.**'))]
-        self.assertIn('it is THE measure: at 1 a different error', chat)
-        self.assertIn('at 4 and 5 a line about the same product or feature', chat)
+        self.assertIn("true when the line belongs to that task at this connection's `combine` level (section 3)", chat)
+        self.assertIn('**4** - the same project or product, and most work close to its subject', g)
         self.assertIn('Despite its name, `same_problem`', chat)
-        self.assertLess(chat.index('at 1 a different'), chat.index('two problems are two jobs'))
+        self.assertIn("Following a sender's earlier lines is not being the same job", chat)
 
     def test_the_level_paragraph_says_what_four_joins_and_that_unrelated_never_does(self):
         para = triage.FIELDS['combine']
@@ -195,7 +195,7 @@ class AJoinWidensTheTitle(unittest.TestCase):
         return say(self.s, 'w2', body, '2026-10-28 10:00:00', brain({body: verdict}, self.seen))[0]
 
     def test_the_guide_and_the_schema_ask_for_it(self):
-        self.assertIn('**task_title**', triage.SHIPPED); self.assertIn("never this line's own part", triage.TASK_TITLE)
+        self.assertIn('**task_title**', triage.SHIPPED); self.assertIn('the title naming everything on it together', triage.TASK_TITLE)
         self.assertIn('task_title', triage.verdict_schema(candidates=[])['schema']['properties'])
         self.assertNotIn('task_title', triage.verdict_schema()['schema']['properties'])
 

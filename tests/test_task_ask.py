@@ -90,7 +90,7 @@ class AutomaticRoadTests(unittest.TestCase):
 
         The shape is asked for on EVERY verdict now (2026-09-16), which is strictly stronger: an fyi
         and a report are rows the owner reads too, and a mail header is not a sentence."""
-        self.assertIn('for every verdict (an fyi and a report are rows the owner reads too)', triage.TASK_FIELDS)
+        self.assertIn('- **summary** - two sentences, for every verdict', triage.TASK_FIELDS)
         self.assertIn('"title"', triage.TASK_FIELDS)
         self.assertIn('"summary"', triage.TASK_FIELDS)
         s = MemoryStore()

@@ -16,7 +16,7 @@ ME = 'alex@northwind.example'
 
 def test_the_guide_ties_an_offer_to_the_connected_systems():
     g = ' '.join(triage.SHIPPED.split())
-    assert 'reach the systems `connected_systems` names' in g and 'is not named there is no offer' in g
+    assert 'using only reading, searching, drafting and the systems `connected_systems` names' in g
     assert '`connected_systems` - what this install can reach' in g
     assert '"offer_is_reply": false' in g and '**offer_is_reply**' in triage.OFFER     # rides with the offer bullet an older doc is given
     assert 'offer_is_reply' in triage.verdict_schema()['schema']['properties']['more']['properties']

@@ -42,7 +42,7 @@ def test_triage_judges_it_and_the_most_restricted_reading_wins(s):
     v = triage.classify_intent(MSG, llm=lambda sy, u, **k: json.dumps({'intent': 'task', 'why': 'w', 'title': 't', 'summary': 's',
                                                                          'data_class': 'sensitive'}))
     assert v['data_class'] == 'sensitive' and triage.verdict_schema()['schema']['properties']['data_class']['enum'] == ['ordinary', 'sensitive', None]
-    assert '- **data_class** - for every verdict' in triage.INTENT_SYSTEM
+    assert '- **data_class** - "sensitive" when' in triage.INTENT_SYSTEM
     tid = _task(s)
     s.add_route(None, tid, 'attach', None, 'triage: more', [], 'triage', verdict={'intent': 'task', 'data_class': 'ordinary'})
     assert brainroute.judged(s, tid)['data_class'] == 'sensitive'            # a later ordinary message does not lower it

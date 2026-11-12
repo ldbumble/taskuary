@@ -95,20 +95,20 @@ def test_the_model_reads_the_facts_and_what_they_mean(s):
 def test_the_guide_says_banners_are_no_evidence_and_a_verified_service_s_link_is_no_scam():
     g = ' '.join(triage.SHIPPED.split())
     scams = g.split('**Strangers and scams.**', 1)[1].split('##', 1)[0]
-    assert "You don't often get email from" in scams and 'This email was sent from outside of' in scams and 'no evidence' in scams
-    assert '`from_verified` pass' in scams
-    assert 'fyi with no `danger`' in scams and '`owner_started_a_sign_in`' in scams
+    assert 'never on the banner a mail system puts on every outside sender' in scams
+    assert '`from_verified`' in scams
+    assert 'fyi, no `danger`' in scams and '`owner_started_a_sign_in`' in scams
     # ...and real phishing is still named, so the exception never swallows it
-    for sign in ('look-alike', 'failed verification', 'display name the domain does not belong to', 'on a page of another domain'):
+    for sign in ('look-alike', 'failed verification', 'display name the domain does not belong to', 'on another domain'):
         assert sign in scams, sign
     # the danger bullet itself - the one a document that takes only the shape is handed - carries the same two sentences
-    assert "You don't often get email from" in triage.DANGER and 'is not a scam' in triage.DANGER
-    assert 'a scam aimed at the owner' in triage.DANGER, 'the 2026-10-30 reading of a phish on the owner stays'
+    assert "A mail system's banner is no sign" in triage.DANGER
+    assert 'a scam on the owner' in triage.DANGER, 'the 2026-10-30 reading of a phish on the owner stays'
 
 
 def test_a_scam_on_the_owner_says_what_to_do():
     # a scam filed FYI with its warning told the owner nothing to do (the owner, 2026-11-09): the model writes it, in the danger sentence
-    assert 'what they should do about it' in triage.DANGER and 'number or address already known' in triage.DANGER
+    assert 'what the owner should do about it' in triage.DANGER and 'number or address already known' in triage.DANGER
     s = MemoryStore(); mid = s.add_message({'ExternalId': 'x1', 'Channel': 'email', 'BodyText': 'pay today', 'Status': 'filed'})
     said = 'Asks to pay invoice #4471 to new bank details. Warn accounts payable and check with Payworth on a number you already have.'
     s.set_message_danger(mid, said, 'owner')

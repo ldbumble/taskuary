@@ -126,11 +126,11 @@ class AddressingTests(unittest.TestCase):
         from pathlib import Path
         doc = (Path(__file__).parent.parent / 'taskuary' / 'templates' / 'triage.md').read_text(encoding='utf-8')
         self.assertIn('Everything below is signs to weigh, not rules to obey', doc)
-        self.assertIn('the owner is only copied (`addressed_to_you` "cc")', doc)        # a sign it is someone else's...
-        self.assertIn('A cc that names the owner or asks them something is theirs', doc)  # ...that the words can overrule
-        self.assertIn('Read the words, then the lines', doc)
+        self.assertIn('the owner is only copied ("cc")', doc)        # a sign it is someone else's...
+        self.assertIn('names them or asks them directly', doc)  # ...that the words can overrule
+        self.assertIn('its words first, its To and Cc lines second', doc)
         # the fallback for a blanked document IS the same text
-        self.assertIn('A cc that names the owner or asks them something is theirs', triage.INTENT_SYSTEM)
+        self.assertIn('names them or asks them directly', triage.INTENT_SYSTEM)
 
 
 class RecipientsOffTheWireTests(unittest.TestCase):

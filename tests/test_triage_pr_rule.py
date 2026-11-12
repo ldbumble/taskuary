@@ -48,9 +48,8 @@ class PrRuleTests(unittest.TestCase):
         for sentence in ('A PULL REQUEST is a task, and its kind is coding - whoever opened it.',
                          "A stranger's ISSUE is a different thing and keeps the skepticism"):
             self.assertIn(sentence, store_mod._PR_RULE_NOW)
-        self.assertIn("A pull request from a person is a request for a review and a merge on the owner's repository - a task of kind coding "
-                      'whoever opened it', TEMPLATE)
-        self.assertIn("A stranger's issue deserves skepticism", TEMPLATE)
+        self.assertIn("A person's pull request is a task of kind coding whoever opened it", TEMPLATE)
+        self.assertIn("a stranger's issue is fyi, or reply_only for a real question, unless it plainly needs doing", TEMPLATE)
         self.assertNotIn(store_mod._PR_RULE_WAS, TEMPLATE)
 
     def test_a_doc_that_stopped_tracking_the_template_still_gets_the_fix(self):

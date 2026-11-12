@@ -10,7 +10,7 @@ from pathlib import Path
 from taskuary import histgen, triage
 from taskuary.store import SQLiteStore
 
-LINE = '**Booking, buying or signing up is two jobs.**'
+LINE = 'the finding and weighing behind a booking or a purchase'
 sha = lambda t: hashlib.sha256(t.strip().encode()).hexdigest()
 
 
@@ -18,7 +18,7 @@ def test_the_guide_says_research_is_general_and_only_the_booking_waits():
     g = ' '.join(triage.SHIPPED.split())
     assert LINE in g
     said = g.split(LINE, 1)[1].split('- **', 1)[0]
-    assert 'is **general**' in said and 'Only paying or booking itself waits for the owner' in said
+    assert LINE in g.split('- **general** -')[1].split('- **task** -')[0] and 'only the paying or submitting waits for the owner' in said
     # ...in the section that decides who does it, so a document that only takes the shape still reads it there
     assert g.index(LINE) > g.index('## 4. Who does it') and g.index(LINE) < g.index('## 5. Describing it')
 
@@ -28,7 +28,8 @@ def test_an_ask_to_book_is_done_in_the_browser():
     overnight QA, 2026-10-30): the booking is work on a web page, so the agent gets Taskuary's browser and the submit waits for Approve."""
     g = ' '.join(triage.SHIPPED.split())
     said = g.split(LINE, 1)[1].split('- **', 1)[0]
-    assert 'book or buy it' in said and '`needs_browser` is true too' in said and "the submit waits for the owner's Approve" in said
+    said = g.split('- **needs_browser** -', 1)[1].split('- **', 1)[0]
+    assert 'a booking' in said and "Anything that submits or pays waits for the owner's Approve" in said
 
 
 def test_a_live_triage_doc_on_the_last_guide_takes_the_line():

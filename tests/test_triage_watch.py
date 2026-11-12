@@ -49,7 +49,7 @@ class VerdictTests(unittest.TestCase):
     def test_the_guide_explains_watch_and_an_older_document_is_given_it(self):
         self.assertIn('- **watch** -', triage.SHIPPED)
         self.assertIn('"intent": "task|reply_only|watch|fyi"', triage.SHIPPED)
-        self.assertIn('watch for the owner when they would still want to know how it ends', triage.SHIPPED)
+        self.assertIn('something important is asked, and the owner is not the one responsible for it: they are only copied, or someone else is named', triage.SHIPPED)
         seen = []
         triage.classify_intent({'subject': 'Portal access', 'body': 'x'}, llm=brain('fyi', seen=seen), system='Judge mail. Answer task or fyi.')
         self.assertIn(triage.WATCH, seen[-1]['sys'], 'a document written before watch never names it, so its bullet rides along')

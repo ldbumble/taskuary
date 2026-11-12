@@ -21,7 +21,7 @@ import { ACCENT, ACCENT2, BORDER, DIM, FAINT, INK, PANEL, ROLES, mono } from "./
 import { ChannelIcon, MicButton, useAgents, usePeopleSearch } from "./ui.jsx";
 import { withFound } from "./peopleSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
-import { NO_REPO, firstPressOf, planTask, withDesktop } from "./newTask.js";
+import { NO_REPO, firstPressOf, hasWords, planTask, withDesktop } from "./newTask.js";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, sendPrefill, validEmail } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -364,7 +364,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
   // ...and no live session without a coding tool the owner chose (owner-approved, 2026-10-21): Send to coding agent stays disabled
   const noCodingTool = kind === "agent" && how === "terminal" && (!agentsRead || !codingReady);
-  const canGo = hasAbout && !noCodingTool && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
+  const canGo = hasWords({ agentBox, words, field: hasAbout }) && !noCodingTool && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
   // a hand-off is the one Send to agent / Send to coding agent (buttons.json); the others are this form's own words
   const verb = kind === "send" ? (mode === "task" ? btn("regular_agent") : "Draft it")
     : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it")

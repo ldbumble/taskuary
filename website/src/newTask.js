@@ -48,6 +48,10 @@ export const planTask = (pick, how, browser = false, stayOpen = false) => {
     tags: tags.join(",") || null, start: how === "live" || how === "terminal" };
 };
 
+// WORDS TO GO: a job typed into the chat's own box (PromptBox - a general agent's, New's one box) is ready on its words; any other card on its
+// plain field's (AboutField onReady). Read off the field alone, the Assistant's general job never pressed its own Send to agent
+export const hasWords = ({ agentBox, words, field }) => (agentBox ? !!String(words || "").trim() : !!field);
+
 // THE ASSISTANT'S PRESS IS MADE ONCE PER LINE, not once per card drawn (NewSheet `start`): the card is drawn again - put down and brought
 // back, re-keyed - and a fresh card would press Send to agent again on a job already started (2026-11-02). `line` is the Assistant's line
 // that wrote the job (concierge._new); a card with none keeps only its own once.

@@ -32,3 +32,14 @@ test("Send to agent and Send to coding agent are presses the page may make; a Se
   for (const l of ["Send to agent", "Send to coding agent", "Send to a general agent"]) assert.ok(!words.test(l), l);
   for (const l of ["Send", "Send test message", "Approve", "Forward"]) assert.ok(words.test(l), l);
 });
+
+test("a general agent's job written into New has words to go: its own box holds them, not the field it no longer draws", async () => {
+  // New → "have an agent write a welcome note" came back start:true, the card said "pressed Send to agent" and nothing started: the job's
+  // words sit in the chat's box (PromptBox), the readiness was the plain field's (AboutField onReady), never drawn for that card
+  const { hasWords } = await import("../src/newTask.js");
+  assert.equal(hasWords({ agentBox: true, words: "write a welcome note for Gail", field: false }), true);
+  assert.equal(hasWords({ agentBox: true, words: "   ", field: true }), false);
+  assert.equal(hasWords({ agentBox: false, words: "", field: true }), true);
+  assert.equal(hasWords({ agentBox: false, words: "typed", field: false }), false);
+  assert.match(read("NewSheet.jsx"), /const canGo = hasWords\(\{ agentBox, words, field: hasAbout \}\) &&/);
+});

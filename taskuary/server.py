@@ -3270,6 +3270,11 @@ def accept_offer(task_id: int, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     offer = ingest.offer_of(store, task_id)
     if not offer: raise HTTPException(409, 'there is no offer on this task to accept')
+    # ...AN UNTRUSTED SENDER'S TASK IS REFUSED HERE with the hold's own line, as a changed Who does it is (_start_chosen): dispatched, the
+    # session's first turn was refused inside it and the task read "agent done" with Mark done lit, no agent having worked it (the bug
+    # hunt, 2026-11-12) - the offer stays for after Trust
+    from . import origin
+    if h := origin.hold(store, task_id): _start_refused(task_id, None, origin.RefusedForStranger(h['line']))
     # ...the job is Taskuary's words about the press, and the press is the owner's line in the chat ("You accepted the offer: ...",
     # general.PRESSES): sent as typed, the whole of OFFER_JOB stood in their bubble (the agent walk, 2026-11-09)
     out = dispatch_task(task_id, DispatchBody(kind='general', instruction=ingest.OFFER_JOB.format(offer=offer), app_words=True), background)

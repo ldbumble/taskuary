@@ -346,6 +346,7 @@ def test_accepting_the_offer_starts_the_assistant_with_that_job():
     from taskuary import server
     s = store(); tid = webinar(s)
     ses = mock.Mock(provider='claude', model=None); ses.info.return_value = {}
+    s._exec('UPDATE task SET TrustedThrough=? WHERE TaskId=?', (10 ** 9, tid))      # a thread he trusts: a stranger's is refused (the test below)
     with mock.patch.object(server, 'store', s), mock.patch.object(general, 'start_session', return_value=ses), \
          mock.patch.object(general, 'history', return_value=[]):
         c = TestClient(server.app)
@@ -421,3 +422,23 @@ def test_a_start_that_fails_before_it_opens_lets_the_hold_go(where):
          mock.patch.object(ingest, where, side_effect=RuntimeError('the queue is unreadable')), pytest.raises(RuntimeError):
         ingest._auto_general(s, tid)
     assert tid not in general.OPENING
+
+
+def test_the_offer_on_a_strangers_held_task_starts_no_agent_and_says_why():
+    """The bug hunt, 2026-11-12: an outsider's payroll notice, never trusted, offered "I could open the approval page"; Yes, do it started
+    a session the hold refused at once, and the task read "agent done" with Mark done lit - no agent had worked it. The press is refused
+    with the hold's own line, nothing is said as accepted, and the offer stays for after Trust."""
+    from fastapi.testclient import TestClient
+    from taskuary import origin, server
+    s = store()
+    out, _ = ingested(s, mail(**INVITE), says(intent='reply_only', kind='task', title='Join the ledger automation webinar tomorrow?',
+                                              summary='Omar Keller invites you to a webinar tomorrow at 11.', offer=OFFER), wrote=False)
+    tid = out['task_id']; assert origin.hold(s, tid), 'the shape needs an untrusted sender'
+    ses = mock.Mock(provider='claude', model=None); ses.info.return_value = {}
+    with mock.patch.object(server, 'store', s), mock.patch.object(general, 'start_session', return_value=ses) as started, \
+         mock.patch.object(general, 'history', return_value=[]):
+        r = TestClient(server.app).post(f'/api/tasks/{tid}/offer')
+    assert r.status_code == 422 and 'not trusted Omar Keller' in r.json()['detail'], r.text
+    assert not started.called and not ses.send_prompt.called
+    assert not [m for m in general.press_lines(s, tid) if 'accepted the offer' in m['content'][0]['text']]
+    assert s.get_task(tid)['Kind'] != 'general' and ingest.offer_of(s, tid) == OFFER

@@ -77,7 +77,12 @@ def mark(store, key: str, how: str) -> dict:
     raw, l, own = find(doc, key)
     r = _row(store, key)
     if not raw and not r: raise LookupError(GONE)
-    if own and how == 'wrong': raise ValueError(YOURS)
+    # ...a line a VERDICT taught is the model's words, not the owner's: "That line is yours - you wrote it" was untrue of it, and Wrong was
+    # refused on the one kind of line he most needs it for (2026-11-12). Marked Wrong it goes, a tombstone of its words that teach never
+    # writes back (memorylines.wronged), and what it fed is withdrawn as for Forget
+    from .memorylines import taught
+    by_verdict = own and bool(raw) and taught(store, raw)
+    if own and how == 'wrong' and not by_verdict: raise ValueError(YOURS)
     if own and how == 'keep': raise ValueError(KEPT)
     text = (l or {}).get('text') or r.get('OwnerText') or r.get('Text') or ''
     if how == 'keep':
@@ -93,7 +98,11 @@ def mark(store, key: str, how: str) -> dict:
         if how == 'wrong' and r: store._exec("UPDATE learned_line SET Status='wrong', UpdatedAt=? WHERE Key=?", (_now(), key))
         if raw: _save(store, doc, _without(doc, raw))
         if own:
-            store.add_learned_event(key, text, 'live', 0, '', 'forgotten', 'owner')
+            if by_verdict and how == 'wrong':
+                store._exec("INSERT INTO learned_line (Key,Reader,Text,Status,InDoc,Source,UpdatedAt) VALUES (?,?,?,'wrong',0,'owner',?) ON CONFLICT(Key) "
+                            "DO UPDATE SET Text=excluded.Text, Status='wrong', InDoc=0, UpdatedAt=excluded.UpdatedAt",
+                            (key, lc.slug_of(l.get('section')) or 'care', raw.strip(), _now()))
+            store.add_learned_event(key, text, 'live', 0, '', 'wrong' if how == 'wrong' else 'forgotten', 'owner')
             # ...and a verdict's line Forgotten no longer counts as the owner having said it (memorylines.lessons reads the document), and
             # what it fed is withdrawn: the id of what the verdict was given on leaves every learned line's evidence (learn.withdraw)
             from .learn import withdraw

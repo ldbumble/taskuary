@@ -1653,8 +1653,12 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'task.watching':
         from . import watch
         if p.get('off'): return {'taskId': tid, 'watching': False, 'stopped': watch.stop(store, tid, ACTOR)}
-        try: return watch.watch(store, tid, ACTOR)
+        try: done = watch.watch(store, tid, ACTOR)
         except ValueError as e: raise HTTPException(404 if 'not found' in str(e) else 409, str(e))
+        # ...and what it teaches, when it overturns triage: someone else's to handle, kept in sight - one line, or none (2026-11-12)
+        if (was := operations.verdict_of_task(store, tid)[0]) and was != 'watch':
+            _teach_line(tid, 'watch', f'triage called it {was}; the owner put it under Watching - someone else is handling it', background)
+        return done
     # the assistant's proposals (concierge.PROPOSALS): each runs the same code the page's own button runs
     if kind == 'task.create_from_text':
         from . import concierge
@@ -2769,6 +2773,9 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
         fields['Priority'] = level(fields['Priority'])
     if fields.get('Priority') and fields['Priority'] != level(t.get('Priority')):
         store.audit('task', task_id, 'priority', ACTOR, detail={'from': level(t.get('Priority')), 'to': fields['Priority']})
+        # ...and what it teaches about which topics come first and which wait: one line, or none (memorylines.teach - 2026-11-12: a changed
+        # priority taught nothing at all, only a count the Advisor's rule question reads at five)
+        _teach_line(task_id, 'priority', f"triage made it {level(t.get('Priority'))}; the owner made it {fields['Priority']}", background)
     if closing:
         from . import concierge
         try: concierge.close_task(store, task_id, ACTOR)
@@ -3536,11 +3543,13 @@ def _teach_line(task_id: int, field: str, said: str, background=None):
     mail it came from - the line, or nothing when it says nothing general about the owner. Never raises."""
     try:
         m = next(iter(store.list_messages(task_id)), None) or {}
+        # ...a priority or a watch on work the owner wrote down himself overturns no reading of anyone's mail
+        if field in ('priority', 'watch') and not m: return
         em, topic = (m.get('FromEmail') or '').lower(), _topic_key(m) if m else ''
-        kind = 'judged' if field in ('difficulty', 'data_class') else 'routing'
+        kind = 'judged' if field in ('difficulty', 'data_class') else field if field in ('priority', 'watch') else 'routing'
         memorylines.teach_soon(store, kind, f'task{task_id}', _verdict_facts(m, store.get_task(task_id), said),
                                'subject' if topic else 'sender' if em else 'global', topic or em or None,
-                               section='care' if field in ('kind', 'system') else 'work', background=background)
+                               section='care' if field in ('kind', 'system', 'priority', 'watch') else 'work', background=background)
     except Exception as e:
         logger.debug(f'routing lesson not taught: {e}')
 

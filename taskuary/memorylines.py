@@ -126,6 +126,7 @@ WORDS = {'not_ours': "Not ours - the owner said it is other people's work: no ta
          'road_coding': 'Agent work - an agent should work it', 'road_general': 'A conversation with the Assistant, not a project',
          'road_task': "The owner's own task - real work, not an agent's",
          'routing': 'The owner corrected how a task was routed', 'judged': 'The owner corrected how a task was judged',
+         'priority': 'The owner changed how urgent it is', 'watch': "Watch it - someone else's to handle; the owner keeps it in sight",
          'idea_task': 'Took up an Advisor idea - made it a task', 'idea_agent': 'Took up an Advisor idea - sent it to an agent',
          'idea_done': 'Handled an Advisor idea some other way', 'idea_dismiss': 'Turned down an Advisor idea',
          'idea_dismiss_kind': 'Turned down an Advisor idea - and no more ideas like it'}
@@ -207,7 +208,13 @@ def teach(store, kind: str, src: str, facts: str, scope: str = 'global', key: st
         new, gone = (memoryedit._without(doc, hit), [hit.strip()]) if hit else (doc, [])
         only = a.get('only_this') is True and scope != 'global'
         new, raw, more = _put(new, said, scope if only else 'global', key if only else None, slug, True)
-        if not raw or raw in doc.splitlines(): return ''
+        # ...SAID ONCE: a line already there in other spacing or case is not a second line, nor one the owner marked Wrong (memoryedit.mark)
+        if not raw or any(alike(r, raw) for r in doc.splitlines()) or wronged(store, raw): return ''
+        # ...and THE NEWER WORD ON ONE TOPIC OR MAILBOX STANDS: an older verdict's line about the very same thing goes, whatever the model
+        # copied into `replaces` - "not a task" and then "made a task" on one topic left both lines, each contradicting the other (2026-11-12)
+        if scope_of(raw)[0] in ('subject', 'source'):
+            for r, _k in lc.lines(new, lc.SECTIONS[slug]):
+                if r.strip() != raw and scope_of(r) == scope_of(raw) and taught(store, r): new = memoryedit._without(new, r); more.append(r.strip())
         memoryedit._save(store, doc, new)
         k = next((k for r, k in lc.lines(new, lc.SECTIONS[slug]) if r.strip() == raw), _key(raw))
         store.add_learned_event(k, raw, 'live', 0, src or '', 'said', f'{VERDICT}:{kind}')
@@ -216,6 +223,22 @@ def teach(store, kind: str, src: str, facts: str, scope: str = 'global', key: st
     except Exception as e:
         from loguru import logger
         logger.warning(f'the verdict taught no line: {e}'); return ''
+
+
+def alike(a: str, b: str) -> bool:
+    """The same line in other case or spacing: the same words about the same thing (a bullet's text, its `about` apart)."""
+    from .memoryedit import _same
+    return scope_of(a) == scope_of(b) and _same(ABOUT.sub('', text_of(a)), ABOUT.sub('', text_of(b)))
+
+
+def taught(store, raw: str) -> bool:
+    """Whether a line is one a verdict taught - written by the model from the owner's verdict, not typed by the owner."""
+    return bool(store._one("SELECT 1 x FROM learned_history WHERE Action='said' AND Actor LIKE ? AND Text=? LIMIT 1", (f'{VERDICT}:%', str(raw or '').strip())))
+
+
+def wronged(store, raw: str) -> bool:
+    """Whether the owner marked these very words Wrong - a verdict's line taught again is not written back (memoryedit.mark)."""
+    return any(alike(r['Text'], raw) for r in store._rows("SELECT Text FROM learned_line WHERE Status='wrong'"))
 
 
 def teach_soon(store, *a, background=None, **kw):

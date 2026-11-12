@@ -110,6 +110,37 @@ def test_a_lesson_already_said_is_not_said_twice_and_a_sharper_one_replaces_it()
     assert f'- {old}' in lines(s) and raw not in lines(s)
 
 
+def test_one_topic_keeps_the_newest_word_and_a_lesson_in_other_spacing_is_said_once():
+    """The memory audit, 2026-11-12: the model named no `replaces`, so "not a task" and then "made a task" on one topic left two lines
+    contradicting each other in front of triage; and the same lesson in other case or spacing was written as a second line."""
+    s = MemoryStore()
+    a = memorylines.teach(s, 'not_a_task', 'msg1', 'Subject: Ledger export', 'subject', 'ledger export', llm=teacher('Ledger export mail is reading only'))
+    b = memorylines.teach(s, 'made_task', 'msg2', 'Subject: Ledger export', 'subject', 'ledger export',
+                          llm=teacher('Ledger export failures are yours to fix - real work'))
+    assert a not in lines(s) and lines(s).count(b) == 1, 'the newer verdict on the same topic stands, the older retires'
+    assert s._one("SELECT 1 x FROM learned_history WHERE Action='replaced' AND Text=?", (a,)), 'and the retiring is in the history'
+    other = memorylines.teach(s, 'not_a_task', 'msg3', 'Subject: Room booking', 'subject', 'room booking', llm=teacher('Room bookings are reading only'))
+    assert other in lines(s) and b in lines(s), 'another topic is another line'
+    assert memorylines.teach(s, 'made_task', 'msg4', 'Subject: Ledger export', 'subject', 'ledger export',
+                             llm=teacher('ledger  export failures are yours to fix -  real work.')) == '', 'said once'
+
+
+def test_wrong_takes_a_verdicts_line_out_and_it_is_not_taught_back():
+    """A line a verdict taught has no tag, so Wrong answered "That line is yours - you wrote it" - untrue, and the owner could only Forget the
+    model's words (2026-11-12). Wrong now takes it out for good; a line he typed himself still is his to Forget, not Wrong."""
+    from taskuary import memoryedit
+    s = MemoryStore()
+    raw = memorylines.teach(s, 'not_ours', 'msg1', 'Subject: Payroll run', 'subject', 'payroll run', llm=teacher('Payroll runs are not yours'))
+    key = next(k for r, k in lc.lines(s.get_doc('learned'), lc.CARE) if r.strip() == raw)
+    assert memoryedit.mark(s, key, 'wrong')['ok'] and raw not in lines(s)
+    assert memorylines.teach(s, 'not_ours', 'msg2', 'Subject: Payroll run', 'subject', 'payroll run', llm=teacher('Payroll runs are not yours')) == ''
+    assert raw not in lines(s) and not memorylines.said(s), 'what it fed no longer counts as the owner having said it'
+    memorylines.keep(s, 'Payroll questions go to Ray Colton', verdict=False)
+    mine = next(k for r, k in lc.lines(s.get_doc('learned'), lc.CARE) if 'Ray Colton' in r)
+    try: memoryedit.mark(s, mine, 'wrong'); assert False, 'his own words are not Wrong'
+    except ValueError as e: assert 'you wrote it' in str(e)
+
+
 def test_not_for_the_agent_is_one_line_that_says_why():
     s = MemoryStore()
     tid = s.create_task({'Title': 'Invoice dispute with vendor', 'Kind': 'coding', 'Status': 'open'}, 'router')
@@ -225,3 +256,47 @@ def test_learning_has_no_off_switch(tmp_path):
     # ...and a verdict teaches whatever an old install had said
     s = MemoryStore(); s.set_setting('learn_enabled', '0', 'owner')
     assert memorylines.teach(s, 'not_ours', 'msg1', 'Subject: Payroll run', llm=teacher('Payroll runs are not yours', only_this=False))
+
+
+def test_each_correction_is_one_line_the_next_mail_and_the_next_agent_read():
+    """THE SCRATCH TIMELINE (the memory audit, 2026-11-12): the owner re-routes a kind, changes a priority, says Not ours, edits a draft's tone
+    and puts a thread under Watching - each is one line, said once, in its section; then the next mail like each one is triaged with that
+    line in the CACHED memory block (the same bytes for every sender), and the next agent on such a task starts with it. A changed priority
+    and a Watch taught nothing before."""
+    from fastapi import BackgroundTasks
+    from taskuary import general, responder
+    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 'o')
+    said = {'routing': 'Timesheet fixes are a talk with the Assistant, not code', 'priority': 'Headcount sheets come first - urgent the day they come',
+            'not_ours': "Facilities bookings are the site managers' work, not yours", 'watch': "Audit follow-ups are the controller's - you keep them in sight"}
+    def model(system, user, **k):
+        kind = next(k for k, w in memorylines.WORDS.items() if f'THE VERDICT: {w}\n' in user)
+        return json.dumps({'line': said[kind], 'replaces': '', 'only_this': True})
+    def task(xid, who, subj, kind='general'):
+        tid = s.create_task({'Title': subj, 'Kind': kind, 'Status': 'open'}, 'router')
+        return tid, s.add_message({'TaskId': tid, 'ExternalId': xid, 'Channel': 'email', 'Subject': subj, 'FromEmail': who, 'BodyText': subj, 'Status': 'routed'})
+    a, b, (_, c), e = (task('t1', 'marcus@northwind.example', 'Timesheet hours wrong for October', 'coding')[0],
+                       task('t2', 'gail@northwind.example', 'Headcount sheet for Monday')[0], task('t3', 'rooms@facilities.example', 'Boardroom booking request'),
+                       task('t5', 'omar@northwind.example', 'Audit follow-up on accruals')[0])
+    with mock.patch.object(server, 'store', s), mock.patch.object(memorylines, '_llm', lambda st: model):
+        c_ = TestClient(server.app)
+        assert c_.patch(f'/api/tasks/{a}', json={'Kind': 'general'}).status_code == 200                                  # (a) re-routed
+        assert c_.patch(f'/api/tasks/{b}', json={'Priority': 'urgent'}).status_code == 200                               # (b) priority
+        assert c_.post(f'/api/messages/{c}/not-mine', json={}).status_code == 200                                         # (c) not ours
+        responder.style_feedback(s, 'Keep replies to two lines, no greeting')                     # (d) the note an edited draft carries
+        bg = BackgroundTasks(); server._run_operation({'kind': 'task.watching', 'target': e, 'targetKind': 'task', 'params': {}}, bg)  # (e)
+        for t in bg.tasks: t.func(*t.args, **t.kwargs)
+    care = _section(s, 'care')
+    for w in said.values(): assert sum(w in r for r in care) == 1, w
+    assert len(care) == 4 and 'two lines, no greeting' in s.get_doc('style'), 'one line each, in its place'
+    seen = []
+    def triage(system, user, **k): seen.append(system); return '{"intent":"fyi","why":"x"}'
+    for i, (who, subj) in enumerate((('marcus@northwind.example', 'Timesheet hours wrong for November'), ('gail@northwind.example', 'Headcount sheet again'),
+                                     ('rooms@facilities.example', 'Boardroom booking for Friday'), ('omar@northwind.example', 'Audit follow-up: one more'))):
+        ingest.ingest_message(s, {'external_id': f'n{i}', 'channel': 'email', 'from_email': who, 'subject': subj, 'body': subj}, llm=triage)
+    memory = {x.blocks[-1] for x in seen}
+    assert len(seen) == 4 and len(memory) == 1, 'one memory block, the same bytes for every sender: cached once'
+    for w in said.values(): assert w in next(iter(memory)), w
+    nxt, _ = task('t9', 'marcus@northwind.example', 'Timesheet hours missing for November')
+    system = general._prompt(s, nxt)[0]
+    assert said['routing'] in system and 'two lines, no greeting' in system, 'the next agent starts with the lesson and the voice'
+    assert said['not_ours'] not in system, 'and not the lesson about another sender'

@@ -1725,6 +1725,28 @@ def learned_block(store, tid: int, budget: int = LEARNED_CHARS) -> str:
             + '\n'.join(out))
 
 
+# HOW HE WANTS IT WRITTEN REACHES THE ONE WHO WRITES (the memory audit, 2026-11-12): what the owner said after editing a draft (STYLE.md's
+# Owner notes) and how he writes to each person (By recipient) were read only by the press drafter (responder) - while the agent on the
+# task writes the replies (propose_reply). The newest notes first, within a budget; the people on this task's lines, theirs only
+VOICE_CHARS = 1_200
+def voice_block(store, tid: int, budget: int = VOICE_CHARS) -> str:
+    from . import byrecipient, learned_cut
+    from .responder import OWNER_NOTES
+    try:
+        to = {str(m.get('FromEmail') or '').lower() for m in store.list_messages(tid) if m.get('FromEmail') and str(m.get('Direction') or 'in') != 'out'}
+        doc = store.get_doc('style') or ''
+        notes = [l.strip() for l in learned_cut.section(doc, OWNER_NOTES).splitlines() if l.strip().startswith('- ')][::-1]
+        out, used = [], 0
+        for l in notes:
+            if used + len(l) > budget // 2: break
+            out.append(l); used += len(l) + 1
+        per = byrecipient.block(store, to - {''}, budget - used) if to - {''} else ''
+    except Exception as e: logger.debug(f'voice block: {e}'); return ''
+    if not (out or per): return ''
+    return ('HOW THE OWNER WANTS REPLIES WRITTEN - what he said after editing your drafts, newest first, and how he writes to the people '
+            'here (STYLE.md). Write every reply and email this way:\n' + '\n'.join(out + ([per] if per else [])))
+
+
 # ...worth keeping, never a log (the owner, 2026-11-05: "it should be things that make sense like general rules about user, or things
 # learnt not just random clicking buttons"): it lands in LEARNED.md's Hypotheses, which keeps only what the evidence holds up
 LESSON_LINE = ('A LESSON FOR NEXT TIME: when this turn found its way only after a dead end, was corrected by the owner, or had to find an '
@@ -1889,7 +1911,7 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     from .workstreams import of_task as _ws_of           # ...JOB.md as this task's workstream reads it (2026-11-01)
     owner_bg = '' if outsider else _brief.background(store, workstream=_ws_of(store, tid) or None, drop=_brief.GENERAL_HAS)
     known = '' if outsider else learned_block(store, tid)
-    late = [known]
+    late = [known, '' if outsider else voice_block(store, tid)]
     system = (
         (f'{owner_bg}\n\n' if owner_bg else '') +
         # ...and said once (2026-11-09): "never claim a tool did what it did not" is AGENT.md's Honest reporting, and "ask when a fact is

@@ -2507,7 +2507,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     return () => { window.removeEventListener(pageView.HELP, help); window.removeEventListener(pageView.EARLIER, earlier); };
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const on = () => { const t = takeAsk(); if (t) askRef.current(t); };
+    const on = () => { const t = takeAsk(); if (!t) return; setPopOpen(true); askRef.current(t); };   // ...open, as the doors do: the bell asked into a closed window
     on(); window.addEventListener("tq-ask", on);
     return () => window.removeEventListener("tq-ask", on);
   }, []);

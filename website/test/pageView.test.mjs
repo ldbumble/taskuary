@@ -90,3 +90,9 @@ test("a page opened for the owner is named in the step without the model's note 
   assert.equal(shownTitle("Badge swipes by site 9"), "Badge swipes by site 9");
   assert.equal(shownTitle(undefined), "");
 });
+
+test("the bell's Ask the assistant opens the chat window and asks in it - not into a closed one (2026-11-12: pressed, nothing happened)", () => {
+  const view = read("AssistantView.jsx");
+  // askAssistant's road (tq-ask) asked into the chat pop-up without opening it; the doors (openHelp) open it first - so does this one
+  assert.match(view, /const on = \(\) => \{ const t = takeAsk\(\); if \(!t\) return; setPopOpen\(true\); askRef\.current\(t\); \};/);
+});

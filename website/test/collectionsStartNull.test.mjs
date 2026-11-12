@@ -16,7 +16,7 @@ const KNOWN = new Set([
   "GeneralWorkspace.jsx reviews", "GeneralWorkspace.jsx tasks", "NewPlaybookDialog.jsx rows", "ReportsView.jsx types", "ReportsView.jsx connectors",
   "SettingsView.jsx settings", "SettingsView.jsx memory", "SkillImport.jsx rows", "ui.jsx agents",
   // ...and lists the page builds itself, which the scan cannot tell from a fetch: no loading state to draw
-  "AssistantView.jsx msgs", "promptImages.jsx imgs", "SoulInterview.jsx answers",
+  "AssistantView.jsx msgs", "promptImages.jsx imgs", "SoulInterview.jsx answers", "GeneralWorkspace.jsx mine",
 ]);
 const dir = fileURLToPath(new URL("../src/", import.meta.url));
 // a list state whose setter is handed an answer from the server in the same file

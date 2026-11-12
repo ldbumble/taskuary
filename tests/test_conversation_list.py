@@ -358,6 +358,24 @@ class TheList(unittest.TestCase):
         got = self.list()
         self.assertEqual([(c['review'], c['status'], c['was']['text'][:25]) for c in got['items'][-1]['cards']], [(rid2, 'withdrawn', 'Hi Gail, Leeds it is. Alex'[:25])])
 
+    def test_a_reply_draft_the_sender_writes_past_greys_in_its_place_and_the_turn_that_hears_her_drafts_under_her_mail(self):
+        """The rail walk, 2026-11-12: the sender wrote again, and the draft to refresh stood ABOVE her new mail, live. From the frame her mail
+        is drawn the old draft is greyed where it stood; the turn that hears her settles it and its new draft is its last thing, under her."""
+        from taskuary import proposals, wrapup
+        self.say('Draft it.', 'l-one'); self.rest()
+        rid = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, which city? Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
+        t = time.time(); self.assertTrue(until(lambda: time.time() >= t + 1.1))          # (a stamp is a whole second: she writes in a later one)
+        self.mail('Actually - can we make it Leeds?')
+        got = self.list()
+        self.assertEqual([(x['kind'], [(c['review'], c['status']) for c in x.get('cards') or []]) for x in got['items']][-2:],
+                         [('turn', [(rid, 'passed')]), ('arrival', [])])
+        self.say('Answer her.', 'l-two'); self.rest()
+        self.assertTrue(proposals.passed(self.s.get_review(rid)))
+        rid2 = wrapup.agent_reply(self.s, self.tid, 'Hi Gail, Leeds is fine. Alex', 'assistant', sid=general.session_for(self.tid).sid)['review_id']
+        got = self.list()['items']
+        self.assertEqual([(c['review'], c['status']) for c in got[-1]['cards']], [(rid2, 'pending')])
+        self.assertEqual([x['kind'] for x in got][-4:], ['turn', 'arrival', 'line', 'turn'])
+
     def test_the_basic_flow_names_each_shape_the_owner_saw(self):
         "conversation.flow_breaks over the owner's frames of 2026-11-12, as lists: each breaks one rule, and the list he expects breaks none."
         card = lambda st, what='draft_reply', rid=1: {'id': f'r:{rid}', 'kind': 'card', 'review': rid, 'what': what, 'status': st}

@@ -120,13 +120,19 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
     with store.lock:
         seq = (store.cx.execute('SELECT MAX(CommentId) AS m FROM comment WHERE TaskId=?', (tid,)).fetchone()['m'] or 0)
         grp = (store.cx.execute('SELECT MAX(HId) AS m FROM heard').fetchone()['m'] or 0) + 1
+        new = []
         for k, r in refs:
-            n += store.cx.execute('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (tid, k, r, now, grp, seq, sid or '')).rowcount
+            if (c := store.cx.execute('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (tid, k, r, now, grp, seq, sid or '')).rowcount): new.append((k, r))
+            n += c
         store.cx.commit()
-    # ...a line of his heard is the conversation moving past any reply draft that waited above it (proposals.set_aside_drafts)
-    if n and any(k == 'line' for k, _ in refs):
+    # ...a line of his, or a message, heard is the conversation moving past any reply draft that waited above it (proposals.set_aside_drafts):
+    # the turn that hears it drafts again under it where a reply is still owed (the rail walk, 2026-11-12: the sender wrote again, and the
+    # draft to refresh stood above her new mail)
+    # ...a draft written after that message is its answer, never set aside by it: older than the input, by the input's own time
+    joined = {str(x['MessageId']): x['T'] for x in _mail(store, tid)} if any(k == 'mail' for k, _ in new) else {}
+    if (at := max([now for k, _ in new if k == 'line'] + [joined.get(r, 0) for k, r in new if k == 'mail'], default=0)):
         from . import proposals
-        proposals.set_aside_drafts(store, tid, now)
+        proposals.set_aside_drafts(store, tid, at)
     if n: store._poke('task-changed', task_id=tid)
     return n
 
@@ -609,6 +615,12 @@ def items(store, tid: int) -> dict:
     perms = permissions.pending(tid, store)
     for x in out:
         if x['kind'] == 'turn' and x['state'] in ('working', 'starting'): x['cards'] = []
+    # ...A REPLY DRAFT ABOVE A NEWER INPUT IS NOT THE ONE TO PRESS, from the frame that input is drawn (`hear` settles it as the turn takes the
+    # input): greyed where it stood - its turn drafts again under the input where a reply is still owed
+    last_in = max((i for i, x in enumerate(out) if x['kind'] in ('line', 'arrival')), default=-1)
+    for i, x in enumerate(out[:max(last_in, 0)]):
+        for c in [x] if x['kind'] == 'card' else x['cards'] if x['kind'] == 'turn' else []:
+            if c['what'] in DRAFTS and c['status'] == 'pending' and c.get('was'): c['status'] = 'passed'
     # ...and a turn that ended having said, done and left nothing (a CLI turn that only took a line in) is no item: the page drew nothing for it
     out = [x for x in out if not (x['kind'] == 'turn' and x['state'] == 'done' and not (x['text'] or x['steps'] or x['cards'] or x.get('summary')))]
 
@@ -648,7 +660,7 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     backwards") - pure structure, no meaning judged. `got`: a list `items` served; `was`: the one served before it, for what may never change
     between two. Each break is one sentence; [] is a list a person would expect. Every corpus that builds lists runs it (tests/conftest.py).
     a his newest line has no turn at work above it, and the turn it began under it while one works
-    b one live card per action, and no reply draft above his newest line still pressable (an action that waits for his press keeps its card
+    b one live card per action, and no reply draft above a newer input (his line, a message) still pressable (an action that waits for his press keeps its card
       lit where it stands until pressed, replaced or withdrawn - the owner's rule of 2026-11-11 for held steps)
     c nothing on the canvas goes: every item and every card of the list before is in this one
     d nothing is drawn empty
@@ -667,8 +679,9 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     cards = [(i, c) for i, x in enumerate(xs) for c in ([x] if x['kind'] == 'card' else x.get('cards') or [] if x['kind'] == 'turn' else [])]
     lit = [(i, c) for i, c in cards if c.get('status') == 'pending']
     for r in {c['review'] for _, c in lit if [d['review'] for _, d in lit].count(c['review']) > 1}: say(f'b: review {r} stands as two live cards')
+    came = max((i for i, x in enumerate(xs) if x['kind'] in ('line', 'arrival')), default=-1)
     for i, c in lit:
-        if i < his and c.get('what') in DRAFTS: say(f"b: the live card {c['id']} stands above his newer line {ids[his]}")
+        if i < came and c.get('what') in DRAFTS: say(f"b: the live card {c['id']} stands above a newer input {ids[came]}")
     # d
     for x in xs:
         k = x['kind']

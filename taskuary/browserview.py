@@ -695,8 +695,13 @@ SAY_WHY = ('IF A STEP FAILS OR IS REFUSED, your answer says which step, what the
            'message to open the browser again) - never only that you could not. ')
 OFFER_HEAD = ('NO BROWSER IS OPEN for this task yet, but Taskuary keeps one for you: if the work needs a web page - a link in a message to '
               'follow, a form to fill, a site to sign in to - run `agent-browser open <url>` and it opens for you; the owner sees it only '
-              'when Taskuary shows it to them. Searching and reading the web needs no browser: use your own web search and fetch for that, and open this one '
-              'only for a page you must see or act on. NEVER use --session, --headed, profile listing, or launch Chrome separately. ')
+              'when Taskuary shows it to them. Searching and reading PUBLIC pages needs no browser: use your own web search and fetch for that. '
+              # WHAT IS BEHIND A SIGN-IN IS OPENED HERE FROM THE START (ten recorded walks, 2026-11-11: sent to a portal, the agent fetched it
+              # from its shell eight times, met the sign-in form there, and asked for the password or reported "nobody is signed in" - the rule
+              # for it stood at the far end of the offer, under how to drive a browser it had not chosen to open)
+              'A site the owner has an account on - a portal, anything that answers with a sign-in - is never fetched from your shell: open '
+              'it here from the start, with no password - Taskuary signs it in. '
+              'NEVER use --session, --headed, profile listing, or launch Chrome separately. ')
 NOT_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET (agent-browser is not installed). Do not use a browser tool of your own CLI '
               'or of another app instead - Taskuary cannot show those to the owner or hold their presses, and they fail here. If the work needs a web page, do what you can without it (read the message, find the link), then tell the owner in one line: '
               '"The browser is not set up - install agent-browser under {where}, then ask me again." ')

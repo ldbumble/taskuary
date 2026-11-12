@@ -385,6 +385,12 @@ class TheOwnerSignsInOnThePage(Asking):
         self.assertFalse(ws.status(self.s, self.tid)['requests'])
         # ...the ask was over BEFORE the agent's turn ran (a chat agent's turn runs inside the telling): nothing read "sign in" over it at work
         self.assertFalse(sess.open_then)
+        # ...and the site asking AGAIN on this session (it signed the session out, it wants a code) is a new ask: the first one's answer
+        # closed every later ask of the same site, so nothing was shown and nothing lit
+        with on_page('https://login.bank.example/signin'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+            signin._TRIED[(self.tid, 'bank.example')] = signin._now(); signin.needs(self.s, self.tid, 'sess1', watch=None)
+        self.assertEqual((signin.pending(self.s, self.tid) or {}).get('request_id'), 'signin:bank.example')
+        ws.record(self.s, self.tid, 'sess1', 'answered', request_id='signin:bank.example', text='Signed in', source='owner')
         # ...and his sign-in is one line of the chat in his voice, saying it is kept and where to remove it
         from taskuary import general
         self.assertEqual([m['content'][0]['text'] for m in general.press_lines(self.s, self.tid)],

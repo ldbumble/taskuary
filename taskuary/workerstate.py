@@ -167,10 +167,13 @@ def open_requests(evs: list) -> list:
     does not pick up its coding again"). A request raised DURING the current turn still stands -
     it comes after that turn's own prompt.
     """
-    answered = {e['RequestId'] for e in evs if e['Kind'] == 'answered'}
+    # AN ANSWER ANSWERS WHAT WAS ASKED BEFORE IT: a request named by what it asks for (`signin:<site>`) is asked again when the site signs the
+    # session out or wants a code - and the first sign-in's answer closed every later one before it was drawn (the recorded walk, 2026-11-11:
+    # "I'm still waiting on the sign-in, which you're doing on the browser page", with no page shown and nothing lit)
+    answered = {e['RequestId']: i for i, e in enumerate(evs) if e['Kind'] == 'answered'}
     spoke = max((i for i, e in enumerate(evs) if e['Kind'] == 'working' and e.get('Text') != WAKE), default=-1)
     return [e for i, e in enumerate(evs)
-            if i > spoke and e['Kind'] in REQUESTS and e['RequestId'] not in answered and e.get('Source') != READ_OFF_PROSE]
+            if i > spoke and e['Kind'] in REQUESTS and answered.get(e['RequestId'], -1) < i and e.get('Source') != READ_OFF_PROSE]
 
 
 def _public_request(e: dict) -> dict:

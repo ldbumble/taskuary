@@ -37,7 +37,7 @@ async function walk(tag, tid, page, ask, typed = []) {
   const shown = () => { let calm = 0; return until(async () => (await layout(page)).pane || ((await api(`/api/tasks/${tid}/conversation`)).working ? (calm = 0) : ++calm >= 15 && "rest"), 400000, 2000); };
   let pane = await shown();
   // ...an agent that came to rest asking him for the password is a FINDING; the walk goes on as he would - one line - so the rest is still seen
-  if (pane === "rest" && signs) { console.log(`[${tag}] FINDING: at rest with no page shown - he says to use the browser`); await snap("2norpane"); await type(page, "Use the browser - I will sign in on the page."); await sleep(1500); pane = await shown(); }
+  if (pane === "rest" && signs) { console.log(`[${tag}] FINDING: at rest with no page shown - he says to use the browser`); await snap("2norpane"); await type(page, "Use the browser for it."); await sleep(1500); pane = await shown(); }
   console.log(`[${tag}] pane`, JSON.stringify(pane)); await sleep(4000); await snap("2pane");
   if (signs && pane && pane !== "rest") {
     await rest(page, tid, 240000); await snap("3asked-to-sign-in");

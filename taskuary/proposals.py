@@ -502,8 +502,6 @@ SET_ASIDE = 'set aside when you moved on'
 LAND = 'land'                  # move_on's mark for the landing question (landing.pass_over) among the review ids
 LAND_LINE = '- the push/landing question you raised'
 PASSED_SAID = 'This was set aside when you moved on - ask the agent to bring it back.'
-# ...never the one being run on the owner's press right now: Approve tells the agent, and its told turn can begin before the yes is kept
-_PRESSED, PRESS_HOLD = {}, 300
 
 
 def passed(rv: dict | None) -> bool:
@@ -512,14 +510,13 @@ def passed(rv: dict | None) -> bool:
 
 
 def move_on(store, tid, before: str = None) -> list:
-    """THE CONVERSATION ON TASK `tid` MOVED ON: every action card still waiting, raised before `before` (now), is passed - and so is a
-    permission the agent waits on (permissions.set_aside). The ids passed."""
+    """THE CONVERSATION ON TASK `tid` MOVED ON: a permission the agent waits on is passed (permissions.set_aside), and the landing question.
+    AN ACTION CARD IS NOT (the owner, 2026-11-11, of a held step with a long query he asked a question about: "the question has 2 approve
+    buttons? i thought we got rid of those??" - his line set the card aside, greyed, and the agent raised the step again beside it): a card
+    that waits for his press stays lit until he presses it, a newer one takes its place or its agent withdraws it - as a reply does. A row an
+    earlier build set aside keeps its record (passed). The marks passed."""
     if not tid: return []
-    from .store import _now
-    before, out = before or _now(), []
-    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' AND CreatedAt<=?", (int(tid), before)):
-        if _action(r) in (*PLAYBOOKS, *CLOSEOUT) or time.time() - _PRESSED.get(r['ReviewId'], 0) < PRESS_HOLD: continue
-        if store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', SET_ASIDE): out.append(r['ReviewId'])
+    out = []
     try:
         from . import permissions
         permissions.set_aside(store, int(tid))
@@ -719,7 +716,6 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']
-    if rv.get('ReviewId'): _PRESSED[rv['ReviewId']] = time.time()     # move_on leaves it to this press
     before = (store._one('SELECT MAX(Id) AS n FROM audit') or {}).get('n') or 0
     out = _run(store, rv, p, tid, a, actor, edited, skip_checks)
     # ONE PRESS, SAID ONCE (the stress round, 2026-11-10): the code an act runs writes its own rows on the task in the presser's name - a split,

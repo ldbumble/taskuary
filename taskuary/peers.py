@@ -125,6 +125,10 @@ def deliver(store, tid: int) -> dict:
     if not store.peer_notes(tid): return {'delivered': 0, 'state': 'none'}
     st, t = waitroom.state(store, tid)
     if st != 'parked' or not getattr(t, 'argv', None): return {'delivered': 0, 'state': st}
+    # ...and never into an agent the owner STOPPED (the recorded stop, 2026-11-11: a peer's note began a turn under "You stopped the agent"
+    # that said again what stood above it): his stop holds until he speaks, and the note rides the turn his words begin (waitroom._deliver)
+    from . import workerstate as ws
+    if (store.last_worker_event(tid, skip=ws.NOTES) or {}).get('Kind') == 'stopped': return {'delivered': 0, 'state': 'stopped'}
     if term.owner_drafting(t): return {'delivered': 0, 'state': 'owner_typing'}
     if waitroom.full_on_stranger(store, tid, t): return {'delivered': 0, 'state': 'held_stranger'}
     n = len(store.peer_notes(tid))

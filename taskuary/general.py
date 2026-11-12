@@ -93,6 +93,14 @@ def wait_line(store, tid: int, text: str, files=None, line_id=None) -> int:
 # the chat said the turn was cut. Filed at start-up as the turn's answer so far, its steps under it, with one quiet line under its words
 CUT = f'_Cut short when Taskuary restarted - {CARRY_ON}._'
 CUT_ON = '_Cut short when Taskuary restarted._'
+def cut_line(store, tid: int) -> str:
+    "The sentence a cut turn ends on: where his lines wait by the box they carry on by themselves (run_kept, waitroom.deliver), so nothing is asked of him."
+    return CUT_ON if waiting_lines(store, tid) else CUT
+def say_cut(store, tid: int) -> int:
+    """A CODING turn the restart cut (terminal.release_task): what it had got to is its session's own record, so the sentence is one quiet
+    line of the chat under it - a chat's turn carries it in its own words (keep_cut_turns)."""
+    from .sessionrecord import NOTE_ACTOR
+    return store.add_comment(tid, NOTE_ACTOR, ASSISTANT_TYPE, cut_line(store, tid).strip('_'))
 def keep_cut_turns(store) -> list:
     "Every turn a restart cut, filed on its open task: [task ids]."
     from . import sessionrecord
@@ -100,8 +108,7 @@ def keep_cut_turns(store) -> list:
     for tid, trace in sessionrecord.cut_turns():
         if (store.get_task(tid) or {}).get('Status') in (None, 'done', 'dropped'): continue
         words = sessionrecord.said(trace)
-        # ...where his lines wait by the box they carry on by themselves (run_kept): nothing for him to type, so it is not asked of him
-        cut = CUT_ON if waiting_lines(store, tid) else CUT
+        cut = cut_line(store, tid)
         rid = store.add_comment(tid, 'assistant', ASSISTANT_TYPE, f'{words}\n\n{cut}' if words else cut)
         sessionrecord.keep_turn(tid, rid, trace)
         if (t0 := next((e.get('at') for e in trace[:1] if e.get('type') == 'start'), None)):
@@ -3449,13 +3456,14 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     # under it, so the next line he typed was taken as one sent to an agent at rest (the recorded walk, 2026-11-11)
     _IN_FLIGHT[tid] = _IN_FLIGHT.get(tid, 0) + 1
     OPENING.add(tid)
-    try: wid = wait_line(store, tid, text, files, line_id)
-    except Exception: answered(tid, every=True); raise
     # ...AN AGENT AT REST HEARS IT NOW (the owner, 2026-11-11: "where the agent listens to it is where it shows"): the line begins its turn, so it
     # stands in the chat from the press with the turn under it; one sent while a turn works waits by the box until a road takes it (take_kept)
-    if rest:
-        from . import conversation
-        conversation.hear(store, tid, [line_id], standing=True)
+    # ...HEARD BEFORE IT IS KEPT (the owner, 2026-11-11: "dots above the prompt starting going"): keeping it tells every screen to read, and a
+    # read between the two had his line by the box, unheard, with the answer above it marked at work
+    from . import conversation
+    if rest: conversation.hear(store, tid, [line_id], standing=True)
+    try: wid = wait_line(store, tid, text, files, line_id)
+    except Exception: answered(tid, every=True); conversation.unhear(store, tid, [line_id]); raise
     if not wait:
         threading.Thread(target=lambda: _start_line(store, tid, t, text, files, actor, line_id, wid, prepare, kw), daemon=True, name=f'line-{tid}').start()
         return {'kept': wid}
@@ -3625,9 +3633,6 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     # (ingest.agent_load) then held back the quick calls and agent starts that read it in that instant
     session.quick = quick
     terminal.SESSIONS[session.sid] = session
-    # ...and a reply an EARLIER session drafted is out of sight while this one works - this session's own takes its place (wrapup.stale_draft,
-    # the owner 2026-11-03). Not on a restart's resume of the agent that was asking: that is the same conversation brought back
-    if actor not in terminal.INTERRUPTING: wrapup.hold_stale(store, tid, session.sid)
     # ...and a saved session is live again, as every terminal door says (terminal.open_session, A22): Continue on a general task kept
     # "You stopped it and its report is written" over the new run, so a turn that then died read as stopped, not failed (2026-10-26)
     store.tag_task(tid, terminal.SAVED, False, actor)

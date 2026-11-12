@@ -259,7 +259,11 @@ def _session_steps(store, tid: int) -> list:
 
 
 def _card(r) -> dict:
-    return {'id': f"r:{r['ReviewId']}", 'kind': 'card', 'review': r['ReviewId'], 'what': r['Kind'], 'status': r['Status'], 'at': r['CreatedAt'], 'decided': r.get('DecidedAt')}
+    # ...one an earlier build set aside on his next line (proposals.passed) says so by its own name: read as `superseded` - a draft a later
+    # turn rewrote - the page drew "Earlier draft" where it stood and the card itself again under everything, below the live one
+    from .proposals import passed
+    return {'id': f"r:{r['ReviewId']}", 'kind': 'card', 'review': r['ReviewId'], 'what': r['Kind'], 'status': 'passed' if passed(r) else r['Status'],
+            'at': r['CreatedAt'], 'decided': r.get('DecidedAt')}
 
 
 def items(store, tid: int) -> dict:
@@ -272,15 +276,18 @@ def items(store, tid: int) -> dict:
     from . import origin
     hold_ = origin.hold(store, tid)
     at_work, t0 = (general.working(store, tid), general.turn_started(tid)) if not hold_ else (bool(getattr(general._live_of(tid), 'busy', False)), general.turn_started(tid))
+    # ...the lines BEFORE the ledger: a line at rest is heard and then kept (general.take_line), so one read here has its hand-over in the
+    # ledger read after it - never by the box for a frame, with the answer above it marked at work
+    rows, kept = store.list_comments(tid, internal=True), {c['CommentId']: c for c in general.chat_rows(store, tid)}
     led = {(r['Kind'], r['Ref']): r for r in store._rows('SELECT * FROM heard WHERE TaskId=? ORDER BY HId', (tid,))}
     era = min((r['At'] for r in led.values()), default=INF)
     marks = [r for (k, _), r in led.items() if k == 'turn']
     backs = [int(r[1:]) for k, r in led if k == 'back' and r[:1] == '>']      # an answer taken back before its row was filed (take_back)
+    asked = None                                   # the task's own row: the ask that opened it, where no message did
     pend, ev = [], []                              # ev: (when, rank - an input before the work it began, order, entry)
     put = lambda t, rank, e, hid=0: ev.append((t, rank, hid, len(ev), e))        # ...and what one hand-over took, in the order it took it
 
     # the comments are one chain, in the order they were filed: his lines, Taskuary's briefs (never drawn - a turn begins there), the answers
-    rows, kept = store.list_comments(tid, internal=True), {c['CommentId']: c for c in general.chat_rows(store, tid)}
     summ, steps_of, last, lines, texts = general.turn_summaries(store, tid), {}, 0., [], set()
     p = sessionrecord._gen_path(tid)
     if p.is_file():
@@ -311,7 +318,9 @@ def items(store, tid: int) -> dict:
         elif ty == ASSISTANT_TYPE:
             body = clean(str((kept.get(cid) or c).get('Body') or ''))
             if c.get('Actor') == sessionrecord.NOTE_ACTOR:
-                last = max(last + 1e-7, ep(c['CreatedAt'])); put(last, 0, {'id': f'n:c{cid}', 'kind': 'note', 'at': c['CreatedAt'], 'text': body}); continue
+                # ...after ALL of its own second, as a press is - its stamp is no finer: said in the second of the turn's last step (a turn cut
+                # as Taskuary closed), it stood above the work it was said of
+                last = max(last + 1e-7, ep(c['CreatedAt']) + 0.999); put(last, 0, {'id': f'n:c{cid}', 'kind': 'note', 'at': c['CreatedAt'], 'text': body}); continue
             began = max((m['At'] for m in marks if m['Seq'] < cid), default=0.)
             last = max(last + 1e-7, began)
             st = _said(steps_of.get(cid, []), body)
@@ -361,9 +370,11 @@ def items(store, tid: int) -> dict:
     # what came in, and what he pressed: at the moment the agent heard it, else at its own time
     waits = min((x.pop('_after') for x in pend), default=INF)
     began = (t0 or max((r['At'] for r in led.values()), default=0.) or INF) if at_work else INF
+    any_mail = False
     for x in _mail(store, tid):
-        # ...the task's OWN row (ownwork.ensure: his ask, filed as the task was made) never "came in": it is drawn only where the chat has nothing else
-        if (x.get('Channel') or '') == ownwork.CHANNEL and ev: continue
+        any_mail = True
+        # ...the task's OWN row (ownwork.ensure: his ask, filed as its first session opens) never "came in": it is what opened the chat (below)
+        if (x.get('Channel') or '') == ownwork.CHANNEL: asked = x; continue
         h, it = led.get(('mail', str(x['MessageId']))), None
         row = general.mail_row(store, x)
         it = {'id': f"m:{x['MessageId']}", 'kind': 'arrival', **row, 'joined': stamp(x['T']), **({'_hm': h['At']} if h else {})}
@@ -396,6 +407,15 @@ def items(store, tid: int) -> dict:
         elif rank == -1 and run is not None: held.append(e)
         else: close(); out.append(e)
     close()
+    # THE ASK THAT OPENED THE TASK IS THE FIRST THING IN ITS CHAT, AS HIS WORDS (the owner, 2026-11-11, of a task he made with New: "i create
+    # new agent it did not show the prompt i asked it to do???" - the chat held only the agent's turn at work): a task he started himself has
+    # no message and, opened by its page, no typed line - its ask is the task's own (ownwork). It is the input the first turn heard, so it
+    # stands above that turn, a line of his; where a line or a message already opens the chat, that is the ask
+    first = next((x for x in out if x['kind'] in ('turn', 'line', 'arrival')), None)
+    # ...from the moment the task is made: its own row is filed only as the first session opens, a beat after the turn is at work
+    if (asked or not any_mail) and (first is None or first['kind'] == 'turn') and (said := ownwork.ask(store, store.get_task(tid) or {}, asked)):
+        at = asked['T'] if asked else ep((store.get_task(tid) or {}).get('CreatedAt'))
+        out.insert(0, {'id': f'a:{tid}', 'kind': 'line', 'at': stamp(at), 'text': said, 'files': [], '_h': at})
     # ONE TURN AT WORK, AND IT IS THE LAST (the owner's live task, 2026-11-11: a second head spun under a later, finished answer while the task
     # read done): a turn stands where it began, so one that reads at work with a turn after it has ended - whatever its session still says
     turns_ = [x for x in out if x['kind'] == 'turn']
@@ -481,7 +501,7 @@ def items(store, tid: int) -> dict:
     moves = []
     for i, x in enumerate(out):
         for card in ([x] if x['kind'] == 'card' else x['cards'] if x['kind'] == 'turn' else []):
-            if card['status'] not in ('superseded',) and (t := under(i, card)): moves.append((i, x, card, t))
+            if card['status'] not in ('superseded', 'passed') and (t := under(i, card)): moves.append((i, x, card, t))
     for i, x, card, t in moves:
         # ...where it stood says so, greyed, under the same name: nothing drawn goes away
         if x['kind'] == 'card': out[i] = {**x, 'status': 'kept'}; t['cards'].append({**card, 'id': card['id'] + ':live'})

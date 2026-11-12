@@ -38,6 +38,13 @@ export const sampler = (names) => {
         ...[...vp.querySelectorAll("[data-tq-turn-cards] > *")].filter(bare).map((e) => `a card of ${e.closest("[data-tq-item]")?.getAttribute("data-tq-item")}`),
         ...[...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].filter(bare).map((e) => `waiting ${e.getAttribute("data-tq-pending-item")}`)];
       if (empty.length) f.empty = empty;
+      // A CARD THAT CANNOT BE PRESSED SHOWS NO BUTTON, AND ONE ACTION IS ONE CARD (the owner, 2026-11-11: "the question has 2 approve buttons?"):
+      // a disabled button on a card at rest, and a settled card standing under a live one
+      const cardsOf = [...vp.querySelectorAll("[data-tq-turn-cards] > *, [data-tq-row-cards] .tq-aui-agent-body > *")];
+      const dead = cardsOf.filter((c) => c.matches("[data-tq-passed], [data-tq-past-card]") || c.querySelector("[data-tq-passed]"));
+      if (dead.some((c) => c.querySelector("button[disabled]"))) f.deadButton = true;
+      const lastLive = cardsOf.map((c, i) => (c.querySelector("button:not([disabled])") ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+      if (lastLive >= 0 && dead.some((c) => cardsOf.indexOf(c) > lastLive && c.matches("[data-tq-passed]"))) f.staleUnder = true;
       const named = said ? namedIn(said) : [];
       // ...read once its turn is at rest (its card lands when its words have), and never for a button that WAS lit under this answer and
       // has been pressed since: "it waits for your Send" was true when said
@@ -75,6 +82,11 @@ export function check(frames) {
     // words that name a button, with no such button to press in that frame (said once per run of frames that lack it)
     if (f.unlit?.length && JSON.stringify(f.unlit) !== JSON.stringify(prev?.unlit || [])) say(f.t, `the agent's words name ${f.unlit.map((n) => `"${n}"`).join(", ")} and no such button is lit`);
     for (const id of f.empty || []) if (!(prev?.empty || []).includes(id)) say(f.t, `${id} is drawn empty`);
+    if (f.deadButton && !prev?.deadButton) say(f.t, "a card nobody can press draws a button");
+    if (f.staleUnder && !prev?.staleUnder) say(f.t, "a settled card stands under the live one");
+    // THE CHAT OPENS WITH AN INPUT, NEVER WITH THE AGENT (the owner, 2026-11-11: "it did not show the prompt i asked it to do"): the first
+    // thing drawn is what the first turn heard - his ask, a message that came in - and a turn at work has his newest line above it
+    if (f.items.length && f.items[0][1] && !(prev?.items.length && prev.items[0][1])) say(f.t, `the chat begins with the agent's turn ${f.items[0][0]} - no ask above it`);
     ids.filter((id) => !id.startsWith("t:")).forEach((id) => heard.add(id)); prev = f;
   }
   return bad;
@@ -102,6 +114,9 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     const got = await api("/api/ingest/push", { channel: "email", subject: process.env.TOPIC_SUBJECT || "Offsite venue", ...who, conversation_id: `conv-${name}`,
       body: (process.env.TOPIC_BODY || "Hi Alex,\n\nCan you suggest two venues for the March offsite, about 40 people, and tell me which one you would pick? A short answer is fine.\n\nThanks,\nGail").replace(/\\n/g, "\n") });
     console.log("push", JSON.stringify(got).slice(0, 200)); tid = got.task_id;
+  // ...`new`: a task he made himself with New - no mail, no typed line: its ask is the task's own words, and its agent is started as the page starts it
+  } else if (road === "new") { const got = await api("/api/tasks", { Title: process.env.TOPIC_BODY || "Suggest two venues for a 40-person offsite in March and tell me which one you would pick.", Kind: "general" });
+    tid = got.taskId; console.log("new", JSON.stringify(got), JSON.stringify(await api(`/api/tasks/${tid}/continue-work`, {})).slice(0, 160));
   } else { const got = await api("/api/fixture/coding", { git: info.git, real: true, pty: road === "pty", conversation: `conv-${name}` }); tid = got.taskId; }
   const subject = road === "general" || road === "stranger" ? `Re: ${process.env.TOPIC_SUBJECT || "Offsite venue"}` : "Re: Ledger totals";
   const { browser, page } = await connect();

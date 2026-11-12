@@ -6,7 +6,6 @@
 import React from "react";
 import { Box, Button, Typography } from "@mui/material";
 import { proposalPresentation, heldLead, proposalFrom, resultOf } from "./reviewProposal.js";
-import { label as btn } from "./buttons.js";
 import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 export const PASSED_NOTE = "set aside when you moved on";
@@ -34,8 +33,8 @@ export default function PassedCard({ reviews }) {
       <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: "anywhere" }}>
         {rs.length > 1 ? `${title} - ${rs.length} steps` : title}</Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.6, flexWrap: "wrap" }}>
-        {passed ? <Button size="small" variant="outlined" disabled data-tq-pressed="passed" sx={{ "&.Mui-disabled": { color: FAINT } }}>{btn("approve", "action")}</Button>
-          : <PressedButton pressed={pressed} />}
+        {/* ...one nobody can press draws no button (the owner, 2026-11-11: "2 approve buttons?"): what became of it, in words */}
+        {!passed && <PressedButton pressed={pressed} />}
         {!!(line || done?.url) && <Typography role="status" data-tq-passed-line="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{line}
           {done?.url && <>{line ? " · " : ""}<a href={done.url} target="_blank" rel="noreferrer">{done.url.replace(/^https?:\/\//, "").slice(0, 70)}</a></>}</Typography>}
       </Box>

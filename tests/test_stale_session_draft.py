@@ -1,9 +1,11 @@
-"""A reply an EARLIER agent session drafted is not the task's reply once a newer session is on it.
+"""A reply an EARLIER agent session drafted stands, with its Send, until a newer draft takes its place.
 
 The owner (2026-11-03): "when you continue on general agent it shows the prior reply on bottom that the agent generated. Don't show
 that reply if it was based off another general session not the latest one". A draft remembers the session that wrote it (DraftSid);
-a newer session holds it out of sight while it works, takes its place when it drafts, and closes it as superseded when it ends - kept,
-never overwritten, so it can still be read and brought back. A draft the owner edited or readdressed is theirs and stays. Invented people only.
+a newer session's own draft takes its place - the old one closed as superseded, kept, never overwritten, so it can still be read and
+brought back. A draft the owner edited or readdressed is theirs and stays.
+...AND UNTIL THEN IT WAITS, UNTOUCHED (the owner, 2026-11-11: "reply cards should survive untouched"): a new session held it out of sight from
+its start and closed it at its end, so after a restart the card he was about to send had no Send. Invented people only.
 """
 import unittest
 from unittest import mock
@@ -40,36 +42,23 @@ class StaleSessionDraftTests(Base):
         rid = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-old')['review_id']
         self.assertEqual(s.get_review(rid)['DraftSid'], 's-old')
 
-    def test_a_newer_session_holds_the_earlier_sessions_draft(self):
-        s = MemoryStore(); tid, _ = task_with(s)
-        rid = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-old')['review_id']
-        self.assertEqual(wrapup.hold_stale(s, tid, 's-new'), 1)
-        self.assertEqual(s.get_review(rid)['Status'], 'held')
-        self.assertIsNone(s.pending_review(tid), 'nothing pending: Close out and Send have no stale draft to show or send')
-        # ...and its own session's draft is never held by it
-        rid2 = wrapup.agent_reply(s, tid, NEW, 'assistant', sid='s-new')['review_id']
-        self.assertEqual(wrapup.hold_stale(s, tid, 's-new'), 0)
-        self.assertEqual(s.get_review(rid2)['Status'], 'pending')
-
     def test_a_draft_the_owner_edited_stays(self):
         s = MemoryStore(); tid, _ = task_with(s)
         rid = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-old')['review_id']
         with mock.patch.object(server, 'store', s):
             TestClient(server.app).patch(f'/api/reviews/{rid}', json={'body': OLD + ' Thanks.'})
         self.assertEqual(s.get_review(rid)['DraftSid'], wrapup.OWNER_SID)
-        self.assertEqual(wrapup.hold_stale(s, tid, 's-new'), 0)
-        self.assertEqual(s.get_review(rid)['Status'], 'pending')
+        self.assertFalse(wrapup.stale_draft(s, s.get_review(rid), 's-new'))
 
     def test_taskuarys_own_draft_is_not_an_agent_sessions(self):
         s = MemoryStore(); tid, mid = task_with(s)
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': 'r'})
         s.update_review_draft(rid, 'Yes, done.', None)
-        self.assertEqual(wrapup.hold_stale(s, tid, 's-new'), 0)
+        self.assertFalse(wrapup.stale_draft(s, s.get_review(rid), 's-new'))
 
     def test_the_new_sessions_draft_takes_its_place_and_the_old_one_is_kept(self):
         s = MemoryStore(); tid, _ = task_with(s)
         old = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-old')['review_id']
-        wrapup.hold_stale(s, tid, 's-new')
         new = wrapup.agent_reply(s, tid, NEW, 'assistant', sid='s-new')['review_id']
         self.assertNotEqual(old, new, 'a new review - the earlier words are never written over')
         o, n = s.get_review(old), s.get_review(new)
@@ -77,17 +66,6 @@ class StaleSessionDraftTests(Base):
         self.assertIn('superseded', o['DecideNote'])
         self.assertEqual((n['Status'], n['DraftText'], n['DraftSid']), ('pending', NEW, 's-new'))
         self.assertEqual(s.pending_review(tid)['ReviewId'], new)
-
-    def test_a_held_stale_draft_left_over_is_closed_when_the_session_ends(self):
-        s = MemoryStore(); tid, _ = task_with(s)
-        old = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-old')['review_id']
-        wrapup.hold_stale(s, tid, 's-new')
-        with mock.patch('taskuary.workerstate.current_sid', return_value='s-new'): terminal.release_held(s, tid, 'owner')
-        self.assertEqual(s.get_review(old)['Status'], 'closed_unsent')
-        # ...and it can still be brought back to send (T11)
-        with mock.patch.object(server, 'store', s):
-            self.assertEqual(TestClient(server.app).post(f'/api/reviews/{old}/reopen').status_code, 200)
-        self.assertEqual(s.get_review(old)['Status'], 'pending')
 
     def test_a_triage_draft_held_by_a_session_still_comes_back(self):
         s = MemoryStore(); tid, mid = task_with(s)
@@ -97,29 +75,23 @@ class StaleSessionDraftTests(Base):
         with mock.patch('taskuary.workerstate.current_sid', return_value='s-new'): terminal.release_held(s, tid, 'owner')
         self.assertEqual(s.get_review(rid)['Status'], 'pending', 'A6 stands for drafts no agent session wrote')
 
-    def test_the_wrap_up_raises_a_fresh_reply_instead_of_bringing_the_stale_draft_back(self):
+    def test_a_session_that_ends_without_a_reply_leaves_the_earlier_sessions_draft_waiting(self):
+        "It was closed as superseded at the newer session's end, and a fresh empty reply raised in its place."
         s = MemoryStore(); tid, mid = task_with(s)
         old = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-old')['review_id']
-        wrapup.hold_stale(s, tid, 's-new')
-        with mock.patch('taskuary.workerstate.current_sid', return_value='s-new'), \
-             mock.patch('taskuary.responder.write_draft', return_value=NEW) as redraft:
-            owed = wrapup.raise_reply(s, tid, mid, None)
-        redraft.assert_not_called()                          # ...the reply owed, the new session's agent's to write (2026-11-10)
-        self.assertEqual(s.get_review(old)['Status'], 'closed_unsent')
-        self.assertEqual(s.pending_review(tid)['ReviewId'], owed); self.assertNotEqual(owed, old)
+        with mock.patch('taskuary.workerstate.current_sid', return_value='s-new'):
+            terminal.release_held(s, tid, 'owner'); wrapup.raise_reply(s, tid, mid, None)
+        self.assertEqual((s.get_review(old)['Status'], s.get_review(old)['DraftText']), ('pending', OLD))
+        self.assertEqual([r['ReviewId'] for r in reply_rows(s, tid)], [old])
 
-    def test_send_refuses_a_held_stale_draft(self):
+    def test_a_reply_an_earlier_build_held_as_an_earlier_sessions_is_back_at_start_up(self):
         s = MemoryStore(); tid, _ = task_with(s)
         old = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-old')['review_id']
-        wrapup.hold_stale(s, tid, 's-new')
-        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_refresh_chat_context', return_value=None), \
-             mock.patch('taskuary.outbound.send_out') as send:
-            r = TestClient(server.app).post(f'/api/reviews/{old}/decide', json={'verb': 'approve', 'final_text': OLD})
-        self.assertEqual(r.status_code, 409, r.text)
-        send.assert_not_called()
-        self.assertEqual(s.get_review(old)['Status'], 'held')
+        s._exec("UPDATE review SET Status='held', Reason=? WHERE ReviewId=?", (wrapup.STALE_HOLD, old))
+        terminal.recover_after_restart(s)
+        self.assertEqual((s.get_review(old)['Status'], s.pending_review(tid)['ReviewId']), ('pending', old))
 
-    def test_continue_holds_the_earlier_draft_before_it_answers(self):
+    def test_continue_leaves_the_earlier_draft_waiting(self):
         s = MemoryStore(); tid, _ = task_with(s)
         old = wrapup.agent_reply(s, tid, OLD, 'assistant', sid='s-old')['review_id']
         s.update_task(tid, {'Status': 'waiting'}, 't')
@@ -127,7 +99,7 @@ class StaleSessionDraftTests(Base):
              mock.patch('taskuary.general.provider_options', return_value=['x']), mock.patch('taskuary.general.session_for', return_value=None), \
              mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=lambda: None)):
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={})
-        self.assertEqual(s.get_review(old)['Status'], 'held')
+        self.assertEqual(s.get_review(old)['Status'], 'pending')
 
     def test_continuing_a_live_session_keeps_its_own_draft(self):
         s = MemoryStore(); tid, _ = task_with(s)

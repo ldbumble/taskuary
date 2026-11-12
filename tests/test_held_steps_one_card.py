@@ -14,7 +14,7 @@ HELD = r'C:\work\portal'
 
 class HeldStepsOneCard(unittest.TestCase):
     def setUp(self):
-        self.s = MemoryStore(); self.tid = Factory(self.s).task('Ship the portal fix to deploy'); proposals._PRESSED.clear()
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Ship the portal fix to deploy')
 
     def hold(self, cmd):
         sg.check(self.s, self.tid, 'run1', cmd, 'Bash', HELD)

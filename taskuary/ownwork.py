@@ -52,6 +52,14 @@ def yours(store, t: dict) -> str:
     return str((said or {}).get('Body') or t.get('Title') or '').strip()
 
 
+def ask(store, t: dict, row: dict = None) -> str:
+    """HIS OWN WORDS THAT OPENED TASK `t` - what its chat begins with (conversation.items) - '' where something else opened it: a workflow's
+    run, the dock's conversation, a task with no owner's words at all. `row`: its own row, where one is filed already (ensure)."""
+    if not t or t.get('SourceRef') == 'assistant:dock' or t.get('Source') == 'workflow': return ''
+    if not row and t.get('OriginBase') != 'owner': return ''          # ...no row yet: only a task he made himself is known to be his words
+    return str((row or {}).get('BodyText') or '').strip() or yours(store, t) or str(t.get('Title') or '').strip()
+
+
 def ensure(store, tid: int, when=None, why: str = '', actor: str = 'owner'):
     """Give a task a timeline row if nothing else already speaks for it. Returns the message id,
     or None when the task already has one (from mail, chat, a report, or an earlier session).

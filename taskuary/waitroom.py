@@ -411,6 +411,7 @@ def watch(store):
             try: tick(store)
             except Exception as e: logger.warning(f'waiting room tick failed: {e}')
     threading.Thread(target=loop, daemon=True).start()
+    later(store, 2.0)        # ...and once at start-up: lines a restart left by the box go in now, not a full period on with nothing at work
 
 
 def later(store, delay: float = 3.0):

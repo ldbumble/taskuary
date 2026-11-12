@@ -125,7 +125,7 @@ const RunClock = ({ start }) => {
   const [now, setNow] = useState(() => Date.now()), stop = React.useContext(StopCtx);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   return <span data-tq-ran="" data-tq-run-clock="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
-    · {when(new Date(start))} · ran {elapsedText(Math.max(0, now - start))}
+    · {when(new Date(start))} · working {elapsedText(Math.max(0, now - start))}
     {stop && <IconButton size="small" data-tq-stop-run="" aria-label="Stop the agent" title="Stops this turn - the chat stays, and what you type next carries on"
       onClick={stop} sx={{ ml: 0.5, p: 0.25, verticalAlign: "-3px" }}><CloseIcon sx={{ fontSize: 13 }} /></IconButton>}</span>;
 };
@@ -447,7 +447,8 @@ const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.s
 function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, name, tid, onChanged }) {
   const used = new Set();
   const draw = (cs) => (cs || []).flatMap((c) => {
-    if (PAST[c.status]) return [<PastCard key={c.id} c={c} />];
+    // ...a draft a later turn rewrote carries what it said (`was`); any other card the server settled is its own node, in its place
+    if (PAST[c.status] && (c.status !== "superseded" || c.was)) return [<PastCard key={c.id} c={c} />];
     const got = nodes.filter((n) => n.rid === c.review && !used.has(n.key)), post = posts.find((p) => p.ReviewId === c.review);
     got.forEach((n) => used.add(n.key));
     return [...got.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>),

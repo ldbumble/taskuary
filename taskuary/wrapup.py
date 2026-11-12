@@ -230,12 +230,15 @@ def agent_drafted(rv) -> bool:
 
 # AN EARLIER SESSION'S DRAFT IS NOT THE REPLY (the owner, 2026-11-03: "when you continue on general agent it shows the prior reply on bottom
 # that the agent generated. Don't show that reply if it was based off another general session not the latest one"). A draft keeps the sid of
-# the session that wrote it (DraftSid); a newer session holds it out of sight while it works (hold_stale), takes its place when it drafts
-# (agent_reply), and closes it as superseded when it ends without one (terminal.release_held, raise_reply) - closed, never written over, so it
-# reads under Close out's "Not sent" and Earlier rounds and comes back with Bring it back. The owner's own hand on it (an edit, a readdress, a
-# file) makes it theirs: OWNER_SID, never held.
+# the session that wrote it (DraftSid); a newer session's own draft takes its place (agent_reply) - closed as superseded, never written over,
+# so it reads under Close out's "Not sent" and Earlier rounds and comes back with Bring it back. The owner's own hand on it (an edit, a
+# readdress, a file) makes it theirs: OWNER_SID.
+# ...AND UNTIL THEN IT STANDS, WITH ITS SEND (the owner, 2026-11-11: "reply cards should survive untouched"): a new session used to hold it out of
+# sight from its start and close it at its end - after a restart, or a line typed to an agent that had idled out, the card he was about to
+# send lost its Send while the agent said it still waited for it. A waiting reply goes only as it goes while the app is up: a newer draft,
+# the agent's withdrawal, his own answer outside.
 OWNER_SID = 'owner'
-STALE_HOLD = "held - an earlier agent session drafted it; the newer session's reply takes its place"
+STALE_HOLD = "held - an earlier agent session drafted it; the newer session's reply takes its place"      # what a build before that wrote: let go at start-up (terminal.recover_after_restart)
 SUPERSEDED = "superseded - an earlier agent session's draft; a newer session took over"
 _OWNER_HANDS = ('edit_draft', 'envelope', 'attached', 'detached', 'release', 'reopen')
 
@@ -248,18 +251,6 @@ def stale_draft(store, rv, sid=None) -> bool:
     if have: return True
     q = f"SELECT 1 FROM audit WHERE EntityType='review' AND EntityId=? AND Actor=? AND Action IN ({','.join('?' * len(_OWNER_HANDS))}) LIMIT 1"
     return not store._one(q, (rv['ReviewId'], OWNER_SID, *_OWNER_HANDS))
-
-def hold_stale(store, task_id: int, sid=None) -> int:
-    "Every pending reply an earlier agent session drafted, held while the session `sid` works - the count held."
-    rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND DeliveryClaim IS NULL "
-                       "AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (task_id,))
-    n = 0
-    for rv in rows:
-        if not stale_draft(store, rv, sid): continue
-        store._exec("UPDATE review SET Status='held', Reason=? WHERE ReviewId=? AND Status='pending'", (STALE_HOLD, rv['ReviewId']))
-        store._review_changed(rv['ReviewId']); n += 1
-    if n: store._poke('feed-changed', 'task-changed', task_id=task_id)
-    return n
 
 def supersede(store, rv, actor='agent'):
     "An earlier session's draft closed unsent, its words kept - a newer session's reply is the task's now."
@@ -1181,10 +1172,6 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, fresh: dict = None, 
     why = f"{did} without writing the reply {owed_to(store, mid, store.held_review(task_id))} is owed - it is the agent's to write"
     if fresh.get('state') == 'changed': why += ' (the thread moved on after the work began - it answers the newest message)'
     if fresh.get('state') == 'unresolved': why += f" (the conversation could not be refreshed: {fresh.get('error')})"
-    # an EARLIER SESSION'S draft is not this session's answer: closed as superseded (its words kept)
-    if (sid := _sid_now(store, task_id)):
-        for rv in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('held','pending')", (task_id,)):
-            if stale_draft(store, rv, sid): supersede(store, rv)
     held = store.held_review(task_id, mid) or store.held_review(task_id)
     # one review per answer (PW-236): the held triage draft, else the pending one an earlier completion
     # event already raised - a repeated completion takes it again, never duplicates it

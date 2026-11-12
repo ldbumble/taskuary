@@ -3010,9 +3010,6 @@ def continue_work(task_id: int, body: ContinueBody = None):
         # A NOTE IS A LINE THE OWNER TYPED, and takes the one road every typed line takes (general.take_line): kept as his, the turn at work
         # from the press, then whatever agent works the task reopened, woken or started by its own starter - a coding session that ended
         # (its own conversation, else a fresh one with the handover), one that idled out, one at rest. What came in since rides as Taskuary's
-        if general.handles(task) and not general.session_for(task_id):
-            from . import wrapup
-            wrapup.hold_stale(store, task_id)         # a reply an earlier session drafted is out of sight from this answer on (as below)
         extra = general.relayed(note, (body.context if body else '') or '')
         told = '\n\n'.join(x for x in [continuity.news_block(store, task_id), f'{general.RELAY} {extra}' if extra else ''] if x) if general.handles(task) else ''
         try: out = general.take_line(store, task_id, note, imgs or None, ACTOR, wait=False,      # ...and Continue never waits on a sync (_refresh_for_turn)
@@ -3047,11 +3044,6 @@ def continue_work(task_id: int, body: ContinueBody = None):
         # a session, read "nothing running" and never looked again - Continue and Try again left the new turn unseen (the agents walk,
         # 2026-10-26)
         general.OPENING.add(task_id)
-        # ...and a reply an earlier session drafted is out of sight from this answer on, not from the new session's start a beat later - the
-        # page reloads at once (wrapup.stale_draft, the owner 2026-11-03). A live session carries on: its own draft is still the latest
-        if not general.session_for(task_id):
-            from . import wrapup
-            wrapup.hold_stale(store, task_id)
         threading.Thread(target=go, daemon=True, name=f'continue-{task_id}').start()
         store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'general', 'note': False})
         from . import outcomes
@@ -5046,10 +5038,6 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     from .verdicts import VERB2STATUS, context_moved, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
     if body.verb == 'close_unsent' and rv.get('Kind') == 'action': raise HTTPException(422, 'a proposal is rejected, not closed without sending')
-    # ...and an earlier agent session's draft, held out of sight while a newer one works, never goes out on a press made before it was held
-    from .wrapup import STALE_HOLD
-    if body.verb in ('approve', 'edit') and rv.get('Status') == 'held' and rv.get('Reason') == STALE_HOLD:
-        raise HTTPException(409, "That draft is from an earlier session of the agent - the session working now writes the reply.")
     # An uncertain attempt must be reconciled using its saved payload first. Refreshing
     # the draft here would prevent that check (or replace text that may already be sent).
     if (body.verb in ('approve', 'edit') and rv.get('Kind') != 'action'

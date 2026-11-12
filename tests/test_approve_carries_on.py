@@ -16,7 +16,7 @@ SAID = 'https://github.com/northwind/ledger/pull/12#issuecomment-1'
 class HeldStep(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.tid = Factory(self.s).task('Answer the review on the ledger fix')
-        proposals._PRESSED.clear(); general._WOKEN.clear()
+        general._WOKEN.clear()
         sg.check(self.s, self.tid, 'run1', "gh pr comment 12 --body 'Thanks - merged after the fix'", 'Bash', HELD)
         [self.rv] = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
 
@@ -297,22 +297,22 @@ def _line(s, tid, agent, said):
 
 @pytest.mark.parametrize('agent', ['general', 'acp', 'pty'])
 @pytest.mark.parametrize('kind', list(CARDS))
-def test_a_card_the_owner_moved_past_stays_greyed_in_its_place_and_its_agent_raises_it_again(kind, agent):
-    s = MemoryStore(); tid = Factory(s).task('Fix the August export'); proposals._PRESSED.clear()
+def test_a_card_that_waits_for_his_press_stays_lit_through_his_next_line_on_every_agents_road(kind, agent):
+    """REVISED 2026-11-11 (the owner, of a held step he asked a question about: "the question has 2 approve buttons? i thought we got rid of
+    those??"): his line set the waiting card aside - greyed, with a dead Approve - and the agent raised the step again beside it. A card
+    that waits stays lit until he presses it, a newer one takes its place or its agent withdraws it; nothing tells the agent it is old news."""
+    s = MemoryStore(); tid = Factory(s).task('Fix the August export')
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I set it up - it waits for your press.')
     s._exec("UPDATE comment SET CreatedAt='2026-01-01 09:00:00' WHERE TaskId=?", (tid,))
     rid = _raised(s, tid, CARDS[kind])
-    heard = _line(s, tid, agent, 'Leave that - first tell me what the export failed on.')
+    heard = _line(s, tid, agent, 'What does that step change?')
     rv = s.get_review(rid)
-    assert proposals.passed(rv), rv
-    assert rv['CreatedAt'] == '2026-01-01 09:00:01', 'it stays where its turn raised it'
-    out = verdicts.decide(s, rv, 'approve')
+    assert rv['Status'] == 'pending' and not proposals.passed(rv), rv
+    assert proposals.PASSED_TOLD not in heard, heard
+    # ...and one an earlier build set aside keeps its record: never pressable, said so
+    s.decide_review(rid, 'superseded', None, 'taskuary', proposals.SET_ASIDE)
+    out = verdicts.decide(s, s.get_review(rid), 'approve')
     assert (out['ok'], out['send_error']) == (False, proposals.PASSED_SAID), out
-    assert proposals.PASSED_TOLD in heard and f'rv{rid}' in heard, heard
-    assert s.get_review(rid)['Status'] == 'superseded', 'the refused press ran nothing'
-    # ...and "bring it back": the agent raises it again - a new live card after the old one, which stays passed
-    again = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(CARDS[kind]), 'Reason': CARDS[kind]['what']})
-    assert again > rid and s.get_review(again)['Status'] == 'pending' and proposals.passed(s.get_review(rid))
 
 
 def test_a_reply_draft_is_the_agents_to_redecide_never_passed_by_the_line_itself():

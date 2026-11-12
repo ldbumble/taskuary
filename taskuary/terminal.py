@@ -158,7 +158,32 @@ def session_env(agent: str = '', task_id=None, cwd: str = '', sid: str = None, s
     if tok: out[guard.AGENT_ENV] = tok
     # the token is shared by every session; this says which task is THIS one's (guard.owns_task)
     if tok and str(task_id or '').isdigit(): out[guard.TASK_ENV] = guard.task_proof(srv, task_id)
+    if task_id and (d := own_command()): out['PATH'] = d + os.pathsep + os.environ.get('PATH', '')
     return stranger_env(out, task_id, srv) if stranger else out
+
+
+_OWN: dict = {}
+def own_command() -> str:
+    """THE `taskuary` COMMAND IS IN EVERY SESSION'S REACH (the recorded walk, 2026-11-11: a coding agent told the owner "the taskuary command
+    is not installed in this shell, so I could not read the board" - its rules send it to `taskuary --board`, `--note`, `--tick`, and an app
+    started by its interpreter has no script of that name on PATH). '' where PATH finds it already; else the folder to put in front of a
+    session's PATH: the one that holds the script of this interpreter, else one in the app's home with a script that runs this interpreter's."""
+    if 'd' in _OWN: return _OWN['d']
+    import sys
+    from . import config
+    d = ''
+    if not shutil.which('taskuary'):
+        here = os.path.dirname(sys.executable)
+        d = next((x for x in (here, os.path.join(here, 'Scripts'), os.path.join(here, 'bin')) if shutil.which('taskuary', path=x)), '')
+        if not d:
+            try:
+                b = config.home() / 'bin'; b.mkdir(parents=True, exist_ok=True); py = sys.executable.replace('\\', '/')
+                (b / 'taskuary.cmd').write_text(f'@"{sys.executable}" -m taskuary.cli %*\n', encoding='utf-8')
+                (b / 'taskuary').write_text(f'#!/bin/sh\nexec "{py}" -m taskuary.cli "$@"\n', encoding='utf-8', newline='\n'); os.chmod(b / 'taskuary', 0o755)
+                d = str(b)
+            except OSError as e: logger.debug(f'no taskuary command could be put in reach of a session - {e}')
+    _OWN['d'] = d
+    return d
 
 
 def stranger_env(env: dict, task_id, srv: dict = None) -> dict:
@@ -1300,11 +1325,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         # task is no longer queued - the task page's own terminal door skipped all three and left them stale
         resume_task(store, task_id, actor); store.tag_task(task_id, SAVED, False, actor); store.clear_dispatch(task_id)
         store.tag_task(task_id, 'held:repo', False, actor)    # funnel.HELD_REPO: the repository it waited for is found
-    # ...and a reply an EARLIER session drafted is out of sight while this one works, as a chat's start does (general.start_session): the
-    # arrival draft stays where it stands, greyed once the owner prompts past it - holding it emptied a coding chat of its card (2026-11-11)
-    if task_id and actor not in INTERRUPTING:
-        from . import wrapup
-        wrapup.hold_stale(store, task_id, t.sid)
+    # ...and every reply that waits for his Send stands as it stood, whoever drafted it (wrapup.OWNER_SID's note; the owner, 2026-11-11)
     store.audit('terminal', 0, 'open', actor, detail={'sid': t.sid, 'agent': agent, 'cwd': cwd, 'task': task_id})
     return t
 
@@ -3040,12 +3061,6 @@ def release_held(store, task_id, actor='terminal') -> int:
     held = [r for r in rows if r.get('Status') == 'held']
     if not held: return 0
     n = len(held)
-    # ...but an EARLIER agent session's draft, held while a newer one worked, is not brought back over it: closed as superseded, its words
-    # kept to read and bring back (wrapup.stale_draft, the owner 2026-11-03)
-    from . import wrapup, workerstate as ws
-    if (sid := ws.current_sid(store, task_id)):
-        for h in [h for h in held if wrapup.stale_draft(store, h, sid)]: wrapup.supersede(store, h, actor); held.remove(h)
-    if not held: return n
     newer = [r for r in rows if r.get('Status') == 'pending' and r['ReviewId'] > max(h['ReviewId'] for h in held)]
     for h in held:
         if newer: store.decide_review(h['ReviewId'], 'closed_unsent', None, actor, note="superseded by the agent's newer reply")
@@ -3106,9 +3121,12 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
     # ...and on the WORKER record too. A pty that died with a question open kept reading as
     # `input_needed` for ever, because nothing ever wrote the run's ending there: only the owner's
     # stop button, a headless failure and a self-close did (audit 2026-09-18, item 2).
+    cut = False
     try:
         from . import workerstate as ws
         sid = ws.current_sid(store, task_id)
+        # ...its last word `working`: a turn was under way when Taskuary went (said in its chat below)
+        cut = actor in INTERRUPTING and (store.last_worker_event(task_id, skip=ws.NOTES) or {}).get('Kind') == 'working'
         # ...read off the run's own LAST WORD, not its derived status: with no session live after a restart, status() reads any unfinished run
         # as `disconnected` already, so nothing was written - the run's last word stayed `working`, and a general agent cut off by the restart
         # offered no Continue (the overnight run, 2026-11-03)
@@ -3120,6 +3138,12 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
     except Exception as e: logger.debug(f'release_task: the held reply on {task_id} stayed held: {e}')
     # not Working, not Done: interrupted, visibly - and nothing restarts by itself (PW-262)
     if actor in INTERRUPTING: store.tag_task(task_id, INTERRUPTED, True, actor)
+    # A CODING TURN THE RESTART CUT SAYS SO WHERE IT WAS CUT, as a chat's does (general.keep_cut_turns; the recorded restart, 2026-11-11: his
+    # lines stood heard with nothing under them and nothing said why). One quiet line of the chat, under what the turn had got to
+    try:
+        from . import general
+        if cut and not general.handles(task): general.say_cut(store, task_id)
+    except Exception as e: logger.debug(f'release_task: the cut turn of {task_id} was not said - {e}')
     store.add_comment(task_id, actor, 'agent', note or
                       'The agent session ended. The task is open again - nobody is working it.')
     return True
@@ -3136,6 +3160,10 @@ def recover_after_restart(store) -> int:
     except Exception as e: logger.warning(f'permission requests left open by the last run not closed: {e}')
     for run in store.running_runs():
         store.update_run(run['RunId'], {'Status': 'stopped'}, finished=True)
+    # ...and a reply an earlier build held out of sight as "an earlier session's" is back with its Send (wrapup.STALE_HOLD)
+    from . import wrapup
+    for r in store._rows("SELECT ReviewId FROM review WHERE Status='held' AND Reason=?", (wrapup.STALE_HOLD,)):
+        store.unhold_review(r['ReviewId'], 'the reply the agent drafted - back for your yes')
     released = 0
     for task in store.list_tasks(status='in_progress'):
         released += int(release_task(store, task['TaskId'], 'startup',

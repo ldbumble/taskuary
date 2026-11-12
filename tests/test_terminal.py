@@ -1218,9 +1218,10 @@ class DurableWrapTests(unittest.TestCase):
         self.assertIn("the agent's to write", server.store.get_review(rid)['Reason'])
         self.assertEqual(server.store.get_review(rid)['Stale'], 1)       # ...its words from before the work never go as the answer
 
-    def test_a_coding_start_leaves_the_arrival_draft_where_it_stands_as_a_chat_start_does(self):
+    def test_a_coding_start_leaves_every_waiting_reply_where_it_stands_as_a_chat_start_does(self):
         """One road for both chats (2026-11-11): a coding start held the arrival draft, so the owner's card left his coding chat for the
-        turn's first second; a chat start holds only what an EARLIER session drafted (wrapup.hold_stale). Now the coding start does the same."""
+        turn's first second. And a reply an EARLIER session drafted waits on too (the owner, 2026-11-11: "reply cards should survive
+        untouched") - held at the new session's start, the card he was about to send had no Send."""
         server.store.upsert_agent('Atlas', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': os.getcwd()}))
         tid = self._task('arrival draft stays')
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:STAY1', 'Channel': 'email', 'FromEmail': 'erin@northwind.example',
@@ -1232,7 +1233,7 @@ class DurableWrapTests(unittest.TestCase):
             T.return_value = mock.Mock(sid='stay1', cwd=os.getcwd())
             try: terminal.open_session(server.store, 'Atlas', tid)
             finally: terminal.SESSIONS.pop('stay1', None)
-        self.assertEqual((server.store.get_review(arrival)['Status'], server.store.get_review(earlier)['Status']), ('pending', 'held'))
+        self.assertEqual((server.store.get_review(arrival)['Status'], server.store.get_review(earlier)['Status']), ('pending', 'pending'))
 
     def test_a_held_reply_can_be_released_without_waiting(self):
         tid = self._task('released reply task')

@@ -84,7 +84,6 @@ import { Divider, ListItemText } from "@mui/material";
 import { NoAgentChat } from "./AgentSummary.jsx";
 import { chatReplyShown } from "./agentSummary.js";
 import ThreadReading from "./ThreadReading.jsx";
-import { latestDrafts } from "./agentDraftAsk.js";
 import { LastView } from "./BrowserPane.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
@@ -1444,8 +1443,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const sentOutsideAll = sentElsewhere(detail?.messages || [], detail?.reviews || []);
   const rounds = replyRounds({ messages: (detail?.messages || []).filter((m) => !isIdeaLine(m)), reviews: allReviews, outside: sentOutsideAll,
     closeouts: detail?.closeouts || [], open: !["done", "dropped"].includes(t?.Status), ms: tsMs });
-  // ...and a draft an earlier agent session wrote is not this one's while a newer session is live (agentDraftAsk.latestDrafts, 2026-11-03)
-  const round = rounds.at(-1), reviews = latestDrafts(roundReviews(allReviews, rounds), liveSession ? term?.sid || "" : "");
+  // ...and a reply that waits for his Send is the page's whichever agent session drafted it (the owner, 2026-11-11: "reply cards should
+  // survive untouched" - left out while a newer session was live, the card he was about to send had no Send after a restart)
+  const round = rounds.at(-1), reviews = roundReviews(allReviews, rounds);
   const pendingReview = pendingReplyReview(reviews);
   // ...and any other reply waiting, to someone else on the task - each drawn under it with its own To and Send (MoreDrafts)
   const moreDrafts = otherPendingReplies(reviews, pendingReview);

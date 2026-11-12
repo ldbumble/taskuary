@@ -480,3 +480,88 @@ def test_a_coding_agent_is_told_its_duties_about_drafts_once_and_each_turn_after
     assert len(told) == 3 and all('THE DRAFT WAITING NOW' in x for x in told[1:]), told
     assert [x.count(selfclose.WITHDRAW_LINE) for x in told] == [0, 1, 0] and [x.count(selfclose.LATEST_LINE) for x in told] == [0, 1, 0]
     assert not any(selfclose.NO_NEW_LINE in x for x in told)
+
+
+def test_the_taskuary_command_is_in_reach_of_every_session_however_the_app_was_started(tmp_path, monkeypatch):
+    """The recorded walk, 2026-11-11: a coding agent told the owner "the taskuary command is not installed in this shell, so I could not read
+    the board" - its rules send it to `taskuary --board`, and the app had been started by its interpreter with no such script on PATH."""
+    import shutil
+    from taskuary import config
+    monkeypatch.setattr(config, 'home', lambda: tmp_path); monkeypatch.setattr(terminal, '_OWN', {})
+    monkeypatch.setattr(shutil, 'which', lambda name, path=None, **k: None)
+    path = terminal.session_env('coding', 7, str(tmp_path), sid='s1')['PATH'].split(terminal.os.pathsep)
+    assert path[0] == str(tmp_path / 'bin') and sys.executable in (tmp_path / 'bin' / 'taskuary.cmd').read_text(encoding='utf-8')
+    assert '-m taskuary.cli "$@"' in (tmp_path / 'bin' / 'taskuary').read_text(encoding='utf-8')
+    # ...and where PATH finds it already, a session's PATH is the app's own
+    monkeypatch.setattr(terminal, '_OWN', {}); monkeypatch.setattr(shutil, 'which', lambda name, path=None, **k: 'taskuary')
+    assert 'PATH' not in terminal.session_env('coding', 7, str(tmp_path), sid='s1')
+
+
+def test_a_peers_note_never_begins_a_turn_on_an_agent_he_stopped_and_rides_the_turn_his_next_line_begins(world, monkeypatch):
+    """The recorded stop, 2026-11-11: he stopped the agent, and half a minute on a note from another task's agent began a turn under "You
+    stopped the agent" that only said again what stood above it. His stop holds until he speaks; the note goes in with his words."""
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_HANG', '1')
+    t = open_(s, tid, repo, seed='look at the totals'); assert until(lambda: t.in_turn)
+    assert general.stop_turn(s, tid) and idle(t)
+    other = s.create_task({'Title': 'Add a subtotal', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
+    s.add_peer_note(other, tid, 'task', '', 'totals.py is free again')
+    assert peers.deliver(s, tid) == {'delivered': 0, 'state': 'stopped'} and peers.tick(s) == 0 and t.turns == 1 and not t.busy
+    general.take_line(s, tid, 'Carry on.', line_id='l-on')
+    assert idle(t, 2) and not s.peer_notes(tid)
+    told = next(x for k, x in reversed(t.history) if k == 'brief')
+    assert 'totals.py is free again' in told and 'Carry on.' in told, told
+
+
+def test_a_held_step_stays_the_one_lit_card_when_he_asks_the_coding_agent_a_question(world, monkeypatch):
+    """The owner's live coding task, 2026-11-11 ("the question has 2 approve buttons?"): his question set the held step aside and the agent
+    raised it again beside the greyed one. It stays lit, his line stands with the turn at work under it, and the same step run again by
+    that session is the card that waits (tests/test_conversation_list.py has the chat's)."""
+    from taskuary import conversation, shellgate
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_THINK', '0.6'); monkeypatch.setattr(shellgate, 'trusted', lambda *a, **k: '')
+    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
+    general.take_line(s, tid, 'Fix the tax rows.', line_id='l-one'); assert idle(t, 1)
+    hold = lambda: shellgate.check(s, tid, t.sid, 'git push origin main', 'Bash', str(repo))
+    hold(); [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
+    general.take_line(s, tid, 'What does that step change?', line_id='l-two', wait=False)
+    got = conversation.items(s, tid)
+    assert [(x['kind'], x.get('state', '')) for x in got['items']][-2:] == [('line', ''), ('turn', 'starting')] and not got['pending'], got['items']
+    assert idle(t, 2); hold()
+    assert [(r['ReviewId'], r['Status']) for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))] == [(rv['ReviewId'], 'pending')]
+    turns = [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn']
+    assert [c['status'] for c in turns[-1]['cards']] == ['pending'] and [c['status'] for c in turns[0]['cards']] == ['kept']
+
+
+def _restart(s, tid, t):
+    "Taskuary goes away under a session and comes back: nothing of the session's own endings runs, and start-up repairs what it left."
+    t.alive, t.closing = False, True; t.client.close(); terminal.SESSIONS.clear(); general.answered(tid, every=True)
+    terminal.recover_after_restart(s); general.keep_cut_turns(s)
+
+
+def test_a_coding_turn_a_restart_cut_says_so_under_his_line_and_the_line_that_waited_goes_in_by_itself(world, monkeypatch):
+    """The recorded restart, 2026-11-11 (a coding task over ACP): his lines stood in the chat as heard with nothing under them - no turn, no
+    word that it was cut, nothing at work. As a chat's: the cut turn stays where it was cut and says so, the line that waited by the box
+    stays there, and the session comes back for it without him typing again."""
+    from taskuary import conversation, taskstate
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_HANG', '1')
+    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
+    general.take_line(s, tid, 'Comment the totals function.', line_id='l-one')
+    assert until(lambda: t.in_turn and any(u.get('sessionUpdate') == 'agent_message_chunk' for u in codingchat.acp_updates(tid, t.sid)))
+    general.take_line(s, tid, 'And mention rounding.', line_id='l-two')                     # ...mid-turn, to an adapter that does not steer: by the box
+    _restart(s, tid, t)
+    got = conversation.items(s, tid); shape = [(x['kind'], x.get('id', '')[:5], x.get('text') or '') for x in got['items']]
+    assert [k for k, *_ in shape] == ['line', 'turn', 'note'] and shape[2][2] == general.CUT_ON.strip('_'), shape
+    assert not got['working'] and [x['id'] for x in got['pending']] == ['l-two'] and taskstate.state(s, s.get_task(tid)) != 'working'
+    # ...the waiting room's next look brings the session back for the line that waited: heard under the cut, a turn at work under it
+    cut_at = conversation.ep(next(x['at'] for x in got['items'] if x['kind'] == 'note'))
+    assert until(lambda: time.time() >= cut_at + 1)                                         # (a stamp is a whole second, and no restart is inside one)
+    waitroom.tick(s)
+    assert until(lambda: (g := conversation.items(s, tid))['working'] and not g['pending'] and [x['kind'] for x in g['items']][-2:] == ['line', 'turn']), conversation.items(s, tid)
+    assert [x['id'] for x in conversation.items(s, tid)['items'] if x['kind'] == 'line'] == ['l-one', 'l-two']
+    # ...and with nothing waiting, the cut says how he carries on - once (a restart with no turn under way says nothing)
+    t2 = terminal.session_for(tid); assert until(lambda: t2.in_turn)
+    _restart(s, tid, t2); _restart(s, tid, t2)
+    notes = [x['text'] for x in conversation.items(s, tid)['items'] if x['kind'] == 'note']
+    assert notes == [general.CUT_ON.strip('_'), general.CUT.strip('_')] and general.CARRY_ON in notes[-1], notes

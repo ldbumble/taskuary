@@ -42,7 +42,7 @@ class WhatAnAgentMayAsk(unittest.TestCase):
 
 class Acts(unittest.TestCase):
     def setUp(self):
-        self.s = MemoryStore(); self.tid = Factory(self.s).task('Answer the review on the ledger fix'); general._WOKEN.clear(); proposals._PRESSED.clear()
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Answer the review on the ledger fix'); general._WOKEN.clear()
 
     def action(self, p):
         rid = Factory(self.s).review(self.tid, kind='action', reason='The agent asks', draft=json.dumps(p))

@@ -38,7 +38,6 @@ class Holding(unittest.TestCase):
         self.s = MemoryStore(); self.tid = Factory(self.s).task('Fix the ledger export')
         self.told = []
         self.sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: self.told.append(text))
-        proposals._PRESSED.clear()       # a store's ids start at 1 again: an earlier test's press is not this one's
 
     def held(self, cmd='git push origin fix-export'):
         return sg.check(self.s, self.tid, 'run1', cmd, 'Bash', r'C:\work\ledger')
@@ -87,7 +86,6 @@ class Holding(unittest.TestCase):
         self.assertTrue(out['ok'], out)
         self.assertEqual(len(calls), 1); self.assertEqual((calls[0][0][-1], calls[0][1]), ('git push origin fix-export', r'C:\work\ledger'))
         self.assertIn('The owner approved it', self.heard()[0]); self.assertEqual(self.pending(), [])
-        self.assertIn(rv['ReviewId'], proposals._PRESSED, 'its told turn will not supersede it under the press')
 
     def test_a_step_that_fails_says_so_and_runs_nowhere_else(self):
         self.held(); [rv] = self.pending()
@@ -102,23 +100,21 @@ class Holding(unittest.TestCase):
     # the owner, 2026-11-09: a held run declined in the agent's chat stood on as "Approve runs: ..." after the agent had asked something else
     # ...and the owner, 2026-11-10: "once youa re passed it, it should stay where it is with buttons grayed out" - the conversation moving on
     # passes every card of the task (proposals.move_on), whichever session held it
-    def test_the_owner_speaking_to_that_session_again_settles_its_held_step(self):
-        self.held(); sg.check(self.s, self.tid, 'other', 'git push origin other', 'Bash', r'C:\work\ledger')
-        self.assertEqual(len(proposals.move_on(self.s, self.tid)), 2)
-        self.assertEqual(self.pending(), [])
-        gone = self.s._one("SELECT * FROM review WHERE TaskId=? AND Status='superseded'", (self.tid,))
-        self.assertEqual(gone['DecideNote'], proposals.SET_ASIDE); self.assertTrue(proposals.passed(gone))
+    # ...REVISED 2026-11-11 (the owner: "the question has 2 approve buttons?"): his next line leaves a held step lit, and the same step run
+    # again is the card that waits - one card, never a second beside it
+    def test_the_owner_speaking_to_that_session_again_leaves_its_held_step_lit_and_the_step_run_again_is_that_card(self):
+        self.held(); n = len(self.pending())
+        self.assertEqual(proposals.move_on(self.s, self.tid), [])
+        self.held()
+        self.assertEqual(len(self.pending()), n)
+        self.assertIsNone(self.s._one("SELECT * FROM review WHERE TaskId=? AND Status='superseded'", (self.tid,)))
 
-    def test_the_prompt_hook_moves_past_it_and_a_step_being_approved_is_not_touched(self):
+    def test_the_prompt_hook_leaves_a_held_step_lit_whatever_the_prompt(self):
         self.held(); [rv] = self.pending()
         t = SimpleNamespace(store=self.s, task_id=self.tid, sid='run1', bg={})
-        with mock.patch.object(proposals, '_PRESSED', {rv['ReviewId']: time.time()}):
-            hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': 'carry on'})
-            self.assertEqual(len(self.pending()), 1, 'its own Approve is telling the agent - never superseded under the press')
-        hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': '<task-notification>done</task-notification>'})
-        self.assertEqual(len(self.pending()), 1, 'a background wake is not the owner moving on')
-        hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': 'no, leave the checkout - is it ready to push?'})
-        self.assertEqual(self.pending(), [])
+        for said in ('carry on', '<task-notification>done</task-notification>', 'no, leave the checkout - is it ready to push?'):
+            hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': said})
+            self.assertEqual([r['ReviewId'] for r in self.pending()], [rv['ReviewId']], said)
 
     def test_the_agents_own_words_for_the_call_ride_on_the_card(self):
         sg.check(self.s, self.tid, 'run1', 'git push origin fix-export', 'Bash', r'C:\work\ledger', about='  ship the export fix  ')

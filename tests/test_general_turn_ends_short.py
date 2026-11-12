@@ -89,7 +89,9 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
         from taskuary import browserview
         s = MemoryStore(); a_claude(self); tid = researcher(s)
         asked = 'I have no Payworth login. Send me the email and password, or name a file that holds them.'
-        seen = turn(s, tid, [asked, 'There is no connection for Payworth, so I am using the browser.'],
+        # ...ending on its summary, as every turn does - "Gail asked Alex ..." is the summary of the words taken back, and goes with them
+        summ = ' [[TASKUARY-SUMMARY]]{"about": "Gail asked Alex for the payroll date.", "did": "Nothing read yet."}[[/TASKUARY-SUMMARY]]'
+        seen = turn(s, tid, [asked + summ, 'There is no connection for Payworth, so I am using the browser.'],
                     judge=lambda *a, **k: json.dumps({'unfinished': False, 'why': '', 'asks_secret': True}))
         self.assertEqual(len(seen['prompts']), 2)                     # told once, by the one wake
         for want in ('asked the owner for a password', 'you do not need the password', '[[TASKUARY-SIGNIN:'): self.assertIn(want, seen['prompts'][1])
@@ -103,6 +105,8 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
         self.assertEqual([x['text'] for x in turns], ['', 'There is no connection for Payworth, so I am using the browser.'])
         self.assertEqual([st.get('text') for st in turns[0]['steps'] if st.get('k') == 'note'], [conversation.TOOK_BACK])
         self.assertNotIn(asked, str(turns))
+        self.assertNotIn('summary', turns[0], "the taken-back answer's summary goes with its words (the recorded walk, 2026-11-12)")
+        self.assertNotIn('Gail asked Alex', str(turns))
         self.assertIn('do not mention it', seen['prompts'][1])
 
     def test_a_woken_turn_that_ends_short_again_is_not_woken_again(self):

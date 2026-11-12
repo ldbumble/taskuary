@@ -352,10 +352,13 @@ def items(store, tid: int) -> dict:
             last = max(last + 1e-7, began or ep(c['CreatedAt']))
             st = _said(steps_of.get(cid, []), body)
             # ...one it was made to take back (take_back): its words are a step of the work that goes on under it
-            if (('back', str(cid)) in led or any(n < cid for n in backs)) and body:
+            # ...and its summary goes with its words (the recorded walk, 2026-11-12: the saved sign-in's folded turn still drew its summary - "Erin
+            # asked Alex ...; no reference number has been read yet" - under the note that it had signed in, the owner in the third person)
+            took = (('back', str(cid)) in led or any(n < cid for n in backs)) and body
+            if took:
                 st, body, backs = [*st, {'k': 'note', 'text': (led.get(('back', str(cid))) or {}).get('Sid') or TOOK_BACK}], '', [n for n in backs if n >= cid]
             t = {'kind': 'turn', 'at': stamp(began) or c['CreatedAt'], 'state': 'done', 'steps': st, 'text': body, 'cards': [], 'started': began or None,
-                 'ended': ep(c['CreatedAt']), 'answer': f'comment-{cid}', **({'summary': summ[cid]} if cid in summ else {})}
+                 'ended': ep(c['CreatedAt']), 'answer': f'comment-{cid}', **({'summary': summ[cid]} if cid in summ and not took else {})}
             # ...and each draft this turn left that a later turn rewrote: greyed where it stood, never moved
             newest = {s['review']: k for k, ss in snaps.items() for s in ss}
             t['cards'] = [{'id': f"r:{s['review']}:c{cid}", 'kind': 'card', 'review': s['review'], 'what': 'draft_reply', 'status': 'superseded', 'at': s['at'], 'was': s}

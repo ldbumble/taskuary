@@ -1812,8 +1812,11 @@ def reading_block(store, tid: int) -> str:
     done = '; '.join(f"{s(o.get('who'))} - {s(o.get('did'))}" for o in ls('others') if isinstance(o, dict) and s(o.get('who')))
     aside = '; '.join(f'[#{int(m)}] {w}' for m, w in objs('aside', 'why') if str(m).isdigit())   # an int, or one written as text
     on = '; '.join(x for x in map(s, ls('on_you')) if x)
+    # A MAIL'S NUMBER IS HANDED WHERE THERE IS ONE TO CHOOSE (the recorded walks, 2026-11-11: "mail #3", "(#4)" said to the owner): a task
+    # of one mail names it by its sender and day - a reply answers it without being told which
+    many = len(mails) > 1
     rows = [('Asking', s(t.get('asking'))), ('Your part', s(t.get('your_part'))), ('Who did what', done),
-            ('The mail the reply answers', f'[#{tgt}] {who.get(tgt, "someone")} · {_md(at.get(tgt))}'.rstrip(' ·') if tgt else ''),
+            ('The mail the reply answers', f'{f"[#{tgt}] " if many else ""}{who.get(tgt, "someone")} · {_md(at.get(tgt))}'.rstrip(' ·') if tgt else ''),
             ('Aside', aside), ('On you', on)]
     if not any(v for k, v in rows if k != 'The mail the reply answers'): return ''
     head = 'THE ASK, AS TRIAGE READ IT (check it against the mail):\n' + '\n'.join(f'{k}: {v}' for k, v in rows if v)
@@ -1825,7 +1828,7 @@ def reading_block(store, tid: int) -> str:
         lines.insert(0, l); room -= len(l) + 1
     gone = len(mails) - len(lines)
     tail = ('\n\nTHE MAIL ON THIS TASK: (a reply that answers one other than the newest names it with `--answers N`)\n'
-            + (f'({gone} older not listed)\n' if gone else '') + '\n'.join(lines)) if mails else ''
+            + (f'({gone} older not listed)\n' if gone else '') + '\n'.join(lines)) if many else ''
     return _cut(head + tail, READING_CHARS)
 
 

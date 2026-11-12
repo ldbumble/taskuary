@@ -537,13 +537,17 @@ def _events(t, p: dict) -> None:
 # already answer" (2026-11-10); only where it cannot tell does a light model read it - never a phrase list. It used to file such a turn as the run FAILING and end the session; the owner, 2026-11-05: "failure
 # means nothing to the user". Now it only says what the turn still waits on, to `then(why)` - the general agent wakes itself once to do it
 # (general.GeneralSession.wake). Nothing is recorded: the session stays open and the turn's answer stands.
-ENDED_SYSTEM = ('You read the last message an agent wrote before its turn ended. Nothing will wake the agent again until its owner '
-                'writes to it. Decide one thing: did it END WITHOUT DELIVERING what it was asked for, because it says it is still waiting '
-                'on work of its own - something it started in the background, a sub-agent, a job still running - or promises to come '
-                'back with the result later? An answer that delivers the work, a question to the owner, or a plain statement that '
-                'something cannot be done is not that - and neither is waiting on a PERSON: the owner, the sender, or someone a reply '
-                'it drafted asks for more (their output, their notes, their answer). That turn delivered its step; the next one comes '
-                'when they write back. Waiting for the owner\'s Send or decision is finished, not unfinished. Reply with JSON only: '
+# ...asked as WHO MOVES NEXT (the recorded walk, 2026-11-11: "the reply went out; next I need her answers before I can research" was read
+# as unfinished, and the agent was woken to say "I can't finish this in this turn" under its own answer; the light model read a wait on a
+# third person as unfinished 4 times of 4 with the rule as an exception at the end, 0 of 5 with the question put this way)
+ENDED_SYSTEM = ('You read the last message an agent wrote before its turn ended. Nothing will wake the agent again until a person writes '
+                'to it - its owner, or someone answering on the task. Decide one thing: WHO MOVES NEXT? `unfinished` is true only where '
+                'the next move is the agent\'s own and it stopped anyway: it says it is still waiting on work it started itself - something '
+                'in the background, a sub-agent, a job still running - or promises to come back later with a result that nobody else has '
+                'to supply. It is false wherever a PERSON moves next - the owner, the sender, a colleague, anyone it wrote to or drafted '
+                'a reply for has to answer, decide, send or press first - even when it says what it will do once they have: that turn '
+                'delivered its step, and their answer starts the next one. An answer that delivers the work, a question to the owner, or '
+                'a plain statement that something cannot be done is false too. Reply with JSON only: '
                 '{"unfinished": true or false, "why": "what it is still '
                 'waiting on, in a few plain words; empty when unfinished is false", "asks_secret": true when the message asks the owner to '
                 'give it a password, a sign-in code or other credentials, or to say where they are kept - else false}')

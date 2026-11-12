@@ -301,6 +301,15 @@ class TheList(unittest.TestCase):
         self.assertTrue(self.say('And then?', 'l-after').get('held')); time.sleep(0.4)
         self.assertEqual(len(self.brain.calls), n)
 
+    def test_a_question_its_answer_already_ends_in_is_said_once(self):
+        "The agent's recorded ask was the last sentence of its own answer, and the page drew it a second time under the reply card."
+        self.brain.said[1] = 'I would pick Tuesday, it starts sooner.\n\nShould the draft say **Tuesday** or Thursday?'
+        self.say('Which day?'); self.rest()
+        ask = {'request_id': 'q1', 'kind': 'input_needed', 'text': 'Should the draft say Tuesday or Thursday?', 'choices': []}
+        with mock.patch('taskuary.taskstate.asking', return_value=dict(ask)): self.assertTrue(self.list()['asking'].get('said'))
+        # ...one the turn did not say - a sign-in it waits on, a step handed over - is the page's own line still
+        with mock.patch('taskuary.taskstate.asking', return_value={**ask, 'text': 'Sign in to the portal to continue'}): self.assertNotIn('said', self.list()['asking'])
+
     def test_the_agents_markers_never_reach_the_list(self):
         block = f'{selfclose.SUMMARY_OPEN}{{"about": "", "did": "Looked at both.", "on_you": []}}'
         self.assertEqual(conversation.clean(f'Both are free in March.\n\n{block}{selfclose.SUMMARY_CLOSE}'), 'Both are free in March.')

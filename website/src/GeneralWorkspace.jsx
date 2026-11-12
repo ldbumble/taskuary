@@ -357,9 +357,12 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
   // just ask" - "only actions should have boxes"): a request for leave or a stuck turn used to keep a boxed lead ("Agent needs your
   // approval") over its words; it is a line of the chat as a question is, its buttons under it where it has any
   const plain = String(asking.text || "").trim() || says(subState({ request: asking }), name);
+  // ...AND SAID ONCE: a question its turn's own answer ends in (the list's `said`, conversation.items) stands there, above its card - it was
+  // drawn a second time under the card. Only its buttons, where it has any, are drawn here
+  if (asking.said && !choices.length && !err) return null;
   return (
     <div className="tq-aui-asked" data-tq-asking={asking.request_id}>
-      <p className="tq-aui-asked-q">{plain}</p>
+      {!asking.said && <p className="tq-aui-asked-q">{plain}</p>}
       {!!choices.length && <div className="tq-aui-asking-choices">
         {choices.map((c) => <Button key={c} size="small" variant="outlined" disabled={going} onClick={() => send(c)}>{c}</Button>)}
       </div>}

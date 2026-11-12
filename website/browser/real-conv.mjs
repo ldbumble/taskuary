@@ -7,7 +7,7 @@ import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { api, connect, open, shot, save, sleep, type, press, buttons, out, info } from "./real-lib.mjs";
+import { api, connect, open, chat, shot, save, sleep, type, press, buttons, out, info } from "./real-lib.mjs";
 import { record } from "./recorder.mjs";
 
 // THE BUTTONS' OWN NAMES (taskuary/buttons.json, one name per button) and the ones a card draws: what "names a button" is read against
@@ -90,14 +90,16 @@ async function untilWorking(page, timeout = 60000) { const end = Date.now() + ti
 if (process.argv[1]?.endsWith("real-conv.mjs")) {
   const [name, road = "general", ...steps] = process.argv.slice(2);
   let tid;
+  await api("/api/fixture/outbox", {});          // ...the mailbox that sends nowhere lives in the server's process: set again after a restart of it
   // ...`stranger`: a general task whose first mail is from someone the owner never trusted (no agent starts: the hold and its Trust action)
   const who = road === "stranger" ? { from_name: "Paula Vance", from_email: "paula@vendor.example" } : { from_name: "Gail Moreno", from_email: "gail@northwind.example" };
   if (road === "general" || road === "stranger") {
-    const got = await api("/api/ingest/push", { channel: "email", subject: "Offsite venue", ...who, conversation_id: `conv-${name}`,
-      body: "Hi Alex,\n\nCan you suggest two venues for the March offsite, about 40 people, and tell me which one you would pick? A short answer is fine.\n\nThanks,\nGail" });
+    // ...TOPIC_SUBJECT / TOPIC_BODY: another ask than the venue one - a second walk of one instance with the same words is read as the same mail again
+    const got = await api("/api/ingest/push", { channel: "email", subject: process.env.TOPIC_SUBJECT || "Offsite venue", ...who, conversation_id: `conv-${name}`,
+      body: (process.env.TOPIC_BODY || "Hi Alex,\n\nCan you suggest two venues for the March offsite, about 40 people, and tell me which one you would pick? A short answer is fine.\n\nThanks,\nGail").replace(/\\n/g, "\n") });
     console.log("push", JSON.stringify(got).slice(0, 200)); tid = got.task_id;
   } else { const got = await api("/api/fixture/coding", { git: info.git, real: true, pty: road === "pty", conversation: `conv-${name}` }); tid = got.taskId; }
-  const subject = road === "general" || road === "stranger" ? "Re: Offsite venue" : "Re: Ledger totals";
+  const subject = road === "general" || road === "stranger" ? `Re: ${process.env.TOPIC_SUBJECT || "Offsite venue"}` : "Re: Ledger totals";
   const { browser, page } = await connect();
   await page.reload({ waitUntil: "domcontentloaded" }); await sleep(3000);
   await open(page, tid);
@@ -117,6 +119,12 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     else if (k === "strangermail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: "email", subject, from_name: "Omar Keller", from_email: "omar@other.example", conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
     else if (k === "mail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: "email", subject, from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
     else if (k === "press") console.log(await press(page, new RegExp(arg), "[data-tq-task-page]"));
+    // ...pressed twice in one breath (one send, one line), his own answer on the channel outside the app, a card's words changed before its press
+    else if (k === "press2") console.log(await press(page, new RegExp(arg), "[data-tq-task-page]"), "|", await press(page, new RegExp(arg), "[data-tq-task-page]"));
+    else if (k === "own") console.log("own", JSON.stringify(await api("/api/fixture/own-reply", { id: `own-${name}-${Date.now()}`, conversation: `conv-${name}`, subject, body: arg })));
+    else if (k === "edit") { const ok = await page.evaluate(() => { const t = [...document.querySelectorAll("[data-tq-task-page] [data-tq-turn-cards] textarea")].filter((x) => !x.disabled && !x.readOnly).pop(); t?.focus(); return !!t; });
+      if (ok) { await page.keyboard.down("Control"); await page.keyboard.press("End"); await page.keyboard.up("Control"); await page.keyboard.type(arg); } console.log("edit", ok); }
+    else if (k === "chat") { const t = await chat(page); await save(`${name}-chat-${arg || "end"}.txt`, t); console.log(`--- chat (${arg || "end"})\n${t.slice(-(Number(process.env.CHAT_TAIL) || 900))}`); }
     else if (k === "flood") { const n = Number(arg) || 50;
       // ...three voices, mixed: the sender on the channel, his own replies on that channel, lines typed here
       for (let i = 0; i < n; i++) { const w = `flood line ${i + 1} of ${n}: note ${i + 1}`;
@@ -130,7 +138,7 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     else if (k === "kill") console.log("kill", JSON.stringify(await api("/api/fixture/session", { taskId: tid, state: "killed" })));
     else if (k === "restart") { await writeFile(path.join(out, "restart"), ""); const end = Date.now() + 120000;
       while (existsSync(path.join(out, "restart")) && Date.now() < end) await sleep(500);
-      console.log("restart", existsSync(path.join(out, "restart")) ? "NOT DONE" : "done"); await sleep(3000); }
+      console.log("restart", existsSync(path.join(out, "restart")) ? "NOT DONE" : "done"); await sleep(3000); await api("/api/fixture/outbox", {}).catch(() => {}); }
     else if (k === "count") { const c = await api(`/api/tasks/${tid}/conversation`); const w = (x) => String(x.text || x.words || "");
       const on = c.items.filter((x) => ["line", "arrival"].includes(x.kind)).map((x) => (w(x).match(/flood line (\d+) of/) || [])[1]).filter(Boolean).map(Number);
       const pe = c.pending.map((x) => (w(x).match(/flood line (\d+) of/) || [])[1]).filter(Boolean).map(Number);

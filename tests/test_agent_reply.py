@@ -350,5 +350,14 @@ class SaidOnceTests(NoHook):
         self.assertEqual(len(self.notes(s, tid, 'Closed out the assistant conversation')), 1)
 
 
+def test_the_agent_is_told_where_the_card_ends_otherwise_than_it_wrote():
+    "Asked to sign a reply with the first name only, it wrote that, the card kept the saved signature - and it told the owner 'it is signed Alex'."
+    s = MemoryStore(); s.set_setting('owner_name', 'Alex Doyle', 't')
+    tid, _ = task_with(s)
+    out = wrapup.agent_reply(s, tid, 'Hi Dana, it is fixed.\n\nAlex', 'assistant')
+    assert s.get_review(out['review_id'])['DraftText'].endswith('Alex Doyle') and 'Alex Doyle' in out['ends_with']
+    assert 'ends_with' not in wrapup.agent_reply(s, tid, 'Hi Dana, it is fixed now.\n\nAlex Doyle', 'assistant')      # ...as it wrote it: nothing to say
+
+
 if __name__ == '__main__':
     unittest.main()

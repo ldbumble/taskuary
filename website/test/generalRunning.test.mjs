@@ -35,6 +35,15 @@ test("a request for leave is a line of the chat, and words under its buttons are
   assert.doesNotMatch(read("ui.jsx"), /not_a_choice/, "no state code is ever read out to him");
 });
 
+// A QUESTION IS SAID ONCE (the recorded walk, 2026-11-11): the agent's ask was the last sentence of its answer, above the reply card, and
+// the page drew it again under the card - where the list says the turn said it (conversation.items `said`) only its buttons are drawn
+test("a question its turn already said is not drawn a second time under the card", () => {
+  const view = read("GeneralWorkspace.jsx");
+  const card = view.slice(view.indexOf("export function AgentAsks"), view.indexOf("function AssistantThread("));
+  assert.match(card, /if \(asking\.said && !choices\.length && !err\) return null;/);
+  assert.match(card, /\{!asking\.said && <p className="tq-aui-asked-q">\{plain\}<\/p>\}/);
+});
+
 // A SIGN-IN THE AGENT WAITS ON (signin.py) offers the one-time fill page beside its answers: minted by the owner's press, opened in a
 // tab - or, in the desktop app with no browser of its own, by the server - and never for any other question
 test("a sign-in ask offers the fill page, and no other ask does", () => {

@@ -156,7 +156,7 @@ def test_a_turn_its_summary_calls_finished_is_not_judged():
     assert not hooks.finished({'on_you': ['Press Send on the reply to Ray']}) and not hooks.finished(None)
     brain = mock.Mock(side_effect=AssertionError('never read'))
     hooks.judge_ended(MemoryStore(), 1, 's1', 'Ready for your Mark done.', brain=brain, wait=True, then=brain, summ={'nothing_left': True})
-    assert 'Send or decision is finished, not unfinished' in hooks.ENDED_SYSTEM
+    assert 'has to answer, decide, send or press first' in hooks.ENDED_SYSTEM
 
 
 # ── F13: the calendar's Connect link, the chat file in the task folder ─────────────────────────────────────────────────────────────

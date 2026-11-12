@@ -63,7 +63,9 @@ class TheCliFinishesInItsTurnTests(unittest.TestCase):
         s = MemoryStore(); a_claude(self)
         seen = turn(s, researcher(s), 'Here is the brief: Gail wants a three-year term.')
         self.assertEqual(seen['env'].get('CLAUDE_CODE_DISABLE_BACKGROUND_TASKS'), '1')
-        self.assertEqual(clis.HEADLESS_ENV, {'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS': '1'})
+        # ...and the CLI's own memory folder is off: what a chat agent learns goes through Taskuary's tools, for one press
+        self.assertEqual(seen['env'].get('CLAUDE_CODE_DISABLE_AUTO_MEMORY'), '1')
+        self.assertEqual(clis.HEADLESS_ENV, {'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS': '1', 'CLAUDE_CODE_DISABLE_AUTO_MEMORY': '1'})
         self.assertIn(general.FINISH_LINE, seen['prompt'])
 
 

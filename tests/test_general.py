@@ -686,6 +686,11 @@ class OneGoalTests(unittest.TestCase):
         self.assertLess(user.index('TASK '), user.index('THE ASK, AS TRIAGE READ IT'))
         self.assertLess(user.index('THE ASK, AS TRIAGE READ IT'), user.index('FROM Ray Colton'))
         self.assertLessEqual(len(general.reading_block(s, tid)), 1500)
+        # ...and a task of ONE mail hands no number: there is none to choose, and the agent said "mail #3" to the owner
+        one = general_task(s); gail = self._mail(s, one)
+        self._read(s, one, on_you=['confirm Gail has it'])
+        got = general.reading_block(s, one)
+        self.assertIn('The mail the reply answers: Ray Colton', got); self.assertNotIn(f'[#{gail}]', got); self.assertNotIn('THE MAIL ON THIS TASK', got)
         # ...never on a stranger's task: the reading is of their words
         s.cx.execute("UPDATE task SET OriginBase='stranger' WHERE TaskId=?", (tid,)); s.cx.commit()
         self.assertNotIn('THE ASK, AS TRIAGE READ IT', general._prompt(s, tid)[1])

@@ -521,8 +521,13 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         if (env := reply_envelope(store, m, 'reply_to' if only else 'reply_all')):
             if ccs is not None: env = {**env, 'cc': [a for a in ccs if a not in env['to']]}
             store.set_review_envelope(rid, env)
-    from .signatures import agent_signed
+    from .signatures import agent_signed, for_review
+    wrote = str(text or '').strip()
     text = agent_signed(store, store.get_review(rid) or rv, text, m) or text
+    # ...and where the card ends otherwise than the agent wrote it, the answer says how (the recorded walk, 2026-11-11: asked to "sign it
+    # Alex" it wrote that, the card kept the saved block, and it told the owner "it's signed Alex")
+    sig = for_review(store, store.get_review(rid) or rv, m).strip()
+    ends = {'ends_with': f'the owner\'s saved signature ("{" / ".join(sig.split(chr(10)))[:200]}"), in place of any sign-off you wrote'} if sig and not wrote.endswith(sig) else {}
     # ...said once per letter: the same reply saved twice - its marker and its `--reply` in one turn - wrote "agent drafted the reply
     # itself" and "assistant drafted the reply itself" one under the other (the email walk, 2026-10-29)
     same = agent_drafted(rv) and ' '.join(str(rv.get('DraftText') or '').split()) == ' '.join(text.split())
@@ -538,7 +543,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     from .general import own_replies, USER_TYPE
     turn = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (task_id, USER_TYPE)) or {}).get('at')
     meanwhile = [' '.join(str(x.get('OwnText') or x.get('BodyText') or '').split())[:300] for x in own_replies(store, task_id, turn)] if turn else []
-    return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '',
+    return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '', **ends,
             **({'owner_wrote_on_the_thread_while_you_worked': meanwhile} if meanwhile else {}),
             **({'recipients': {'to': env.get('to') or [], 'cc': env.get('cc') or []}} if env else {}),
             **({'new_on_thread': new} if new else {}),

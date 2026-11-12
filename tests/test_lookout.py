@@ -275,6 +275,30 @@ def test_an_asked_pass_still_keeps_max_open_waiting_at_most_and_needs_an_ai(monk
     assert later == 'The pass for ideas for your job got no answer from the AI - nothing raised. Ask again in a while.'
 
 
+def test_four_ideas_the_owner_read_leave_room_for_the_next_days_pass():
+    """The live shape (2026-11-12): four ideas raised on one morning, each opened and read - off the rail, still open - and the daily pass
+    never ran again: six days with no idea for the owner's job. Waiting means on the rail; one put away till a later day still waits."""
+    from taskuary import funnel
+    s, ids = world()
+    a, b = ids['dup']
+    n = ago(); s.reconcile_processing_membership(fixed_now=n); s.activate_processing_reads(fixed_now=n, live_state=[])
+    def rail():
+        s.reconcile_processing_membership(fixed_now=ago()); funnel.invalidate()
+        return [x for x in funnel.pile(s, force=True, quiet=True)['items'] if x.get('kind') == 'idea']
+    for t in ('Invoice 4471 billed twice', 'Trainly seats unused for 60 days', 'Payworth late fee on the 14th', 'Spendly renewal at a higher tier'):
+        lookout.tick(s, brain({'ideas': [idea('money', t, [f'msg{a}', f'msg{b}'])]}, {'keep': [1]}), force=True)
+    assert len(rail()) == 4 and len(lookout.waiting(s)) == 4 and lookout.tick(s, brain(), force=True)['ran'] is False, 'four on the rail: no pass'
+    first = rail()[0]
+    s.set_idea_status(first['idea'], 'snoozed', 'owner'); s._exec('UPDATE idea SET SnoozeUntil=? WHERE IdeaId=?', (ago(days=-2), first['idea']))
+    for x in rail(): funnel.settle(s, x['key'], 'surfaced', read=True)                    # the owner opens each and reads it
+    assert rail() == [] and len(lookout.open_ideas(s)) == 4, 'read: off the rail, still open'
+    assert [i['IdeaId'] for i in lookout.waiting(s)] == [first['idea']], 'the one put away till Saturday still waits'
+    s.set_setting(lookout.LAST_KEY, ago(days=2), 't'); s.set_setting(lookout.TRIED_KEY, ago(days=2), 't')
+    assert lookout.due(s) is True
+    out = lookout.tick(s, brain({'ideas': [idea('money', 'Vendor billing charged $900 twice in October', [f'msg{a}', f'msg{b}'])]}, {'keep': [1]}))
+    assert len(out['raised']) == 1 and [x['title'] for x in rail()] == ['Vendor billing charged $900 twice in October']
+
+
 def test_the_days_pass_runs_from_the_morning_not_a_day_after_the_last(monkeypatch):
     """It drifted to 5:53 PM: the pass ran 24 hours after the one before (2026-11-05). Once a calendar day, from MORNING_H."""
     from datetime import datetime

@@ -105,10 +105,23 @@ def _every(store) -> float:
 def open_ideas(store) -> list: return store._rows("SELECT * FROM idea WHERE Key LIKE ? AND Status IN ('open','snoozed')", (KEY + '%',))
 
 
+def waiting(store) -> list:
+    """The open ones the rail still draws - unread, or put away till a later day. WAITING IS ON THE RAIL: an idea the owner opened and
+    read leaves the rail but stays open, and four such ideas read on one morning stopped every pass after it - six days without an
+    idea for the owner's job (2026-11-12). A rail that cannot be read counts every open one, as before."""
+    ids = open_ideas(store)
+    if not ids: return []
+    try:
+        from . import funnel
+        on = {x.get('idea') for x in funnel.pile(store, quiet=True)['items']}
+    except Exception as e: logger.debug(f'lookout: the rail was not read - {e}'); return ids
+    return [i for i in ids if i['IdeaId'] in on or i.get('Status') == 'snoozed']
+
+
 def due(store) -> bool:
     """A day (lookout_every_days) since the last pass that got an answer, RETRY_H since one that did not, and room on the rail: never more
     than MAX_OPEN of these waiting at once."""
-    if len(open_ideas(store)) >= MAX_OPEN: return False
+    if len(waiting(store)) >= MAX_OPEN: return False
     last, tried = store.get_setting(LAST_KEY) or '', store.get_setting(TRIED_KEY) or ''
     if tried and tried > _ago(hours=RETRY_H): return False
     if not last: return True
@@ -366,7 +379,7 @@ def tick(store, llm=None, force: bool = False) -> dict:
         store.set_setting(LAST_KEY, _ts(_now()), 'advisor')
         kept, held_ = check(store, counted, ideas)
         _hold(store, held_)
-        rows = [r for r in (land(store, x) for x in kept[:max(0, MAX_OPEN - len(open_ideas(store)))]) if r]
+        rows = [r for r in (land(store, x) for x in kept[:max(0, MAX_OPEN - len(waiting(store)))]) if r]
         if rows:
             from .habits import _woke
             _woke(store)
@@ -385,7 +398,7 @@ def start(store, said) -> tuple:
     from .words import name
     from . import demo
     if demo.enabled(): return False, "Nothing started: the demo world runs no Advisor passes - in your own Taskuary this starts one."
-    n = len(open_ideas(store))
+    n = len(waiting(store))
     if n >= MAX_OPEN:
         return False, (f"Nothing started: {n} ideas for your job already wait under Advisor, and it keeps at most {MAX_OPEN} at once. "
                        "Answer one of them and ask again.")

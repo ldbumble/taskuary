@@ -1255,8 +1255,8 @@ def for_key(store, key: str) -> dict: return decide(store, key)
 # decisions) - and decide() only hands that on in the shape the phone and the Assistant's turn already read.
 # AN IDEA ROW is the Advisor's own: the model read it and its verb is lit - unless the check after it (checked) finds a button the owner
 # cannot press; then nothing is. The idea on the table earns the bigger read, once (B5) - AND NOTHING IS READ AHEAD (the owner,
-# 2026-11-11: "advisor should not be looking ahead ever"): the next two rows on the walk were judged on every look, tasks and reports
-# among them whose answer no row reads - a day of calls that all said "nothing". Only what is on the table is judged, when it changes.
+# 2026-11-11: "advisor should not be looking ahead ever"): a look at one idea also asked the model about each idea among the next two
+# rows of the walk, rows nobody had opened. Only the idea on the table is judged, once per revision of it.
 
 
 

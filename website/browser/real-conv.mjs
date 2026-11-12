@@ -147,7 +147,11 @@ const frames =(page) => page.evaluate(() => window.__frames);
 const working = (page) => page.evaluate(() => !!document.querySelector("[data-tq-task-page] .tq-aui-viewport [data-tq-working]"));
 // at rest by the SERVER's word and the page's both - the two disagreeing for long is a finding (said when it ends)
 export async function rest(page, tid, timeout = 300000, settle = 4000) { const end = Date.now() + timeout; let calm = 0, split = 0, how = "";
-  while (Date.now() < end) { const dom = await working(page), srv = (await api(`/api/tasks/${tid}/conversation`)).working;
+  while (Date.now() < end) { const dom = await working(page), list = await api(`/api/tasks/${tid}/conversation`), srv = list.working;
+    // A STEP THAT WAITS ON HIS ANSWER HAS ITS BUTTONS ON THE PAGE (recorded 2026-11-12: a chat agent's delete waited on Allow once / Reject
+    // that no page drew - "working" for ten minutes): the server holds a permission and nothing lit answers it
+    if (list.permissions?.length && !(await page.evaluate(() => [...document.querySelectorAll("[data-tq-task-page] button:not([disabled])")].some((b) => b.getBoundingClientRect().width > 0 && b.innerText.trim() === "Allow once")))) {
+      if ((rest.unasked = (rest.unasked || 0) + 400) === 4000) console.log("FINDING: the server waits on his Allow once and the page shows no such button"); } else rest.unasked = 0;
     if (dom !== srv) { split += 400; how = `page ${dom ? "working" : "at rest"}, server ${srv ? "working" : "at rest"}`; }
     // ...and where the server says nothing works, nothing on the page spins: a turn left at work under a finished one is a finding at once
     if (!srv && dom && (split += 0) >= 0 && (rest.ghost = (rest.ghost || 0) + 400) === 3200) console.log("FINDING: the server says at rest and a working indicator still stands on the page");

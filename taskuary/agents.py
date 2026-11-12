@@ -1392,8 +1392,10 @@ def _read(path) -> str:
 
 def claude_acp_options(args: list) -> dict:
     """claude's -p argv -> the SDK options the claude-agent-acp adapter spreads into its query (_meta.claudeCode.options)."""
-    opt, extra, it = {}, {}, iter(list(args or []))
-    for a in it:
+    opt, extra, it, back = {}, {}, iter(list(args or [])), []
+    # ...`back`: an argument read ahead and handed back. A flag with no value read the next one to see - and then rebound `it`, which the
+    # loop no longer read: every option after `--strict-mcp-config` was dropped, a chat agent's --settings (its hooks) among them
+    while (a := back.pop() if back else next(it, None)) is not None:
         a = str(a)
         if a in _CLAUDE_DROP: continue
         if a in _CLAUDE_DROP_VALUED: next(it, None); continue
@@ -1412,7 +1414,7 @@ def claude_acp_options(args: list) -> dict:
             if nxt is not None and not str(nxt).startswith('-'): extra[a.lstrip('-')] = str(nxt)
             else:
                 extra[a.lstrip('-')] = None
-                if nxt is not None: it = iter([nxt, *it])
+                if nxt is not None: back.append(nxt)
     if extra: opt['extraArgs'] = extra
     return opt
 

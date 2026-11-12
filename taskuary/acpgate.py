@@ -84,9 +84,14 @@ def decide(tc: dict, ctx: dict) -> tuple:
 
 
 def owner_asks(ctx: dict) -> bool:
-    "A held call goes to the owner's buttons: a task to show it on, and Developer mode on (with it off the Approve card stays the road)."
-    from . import agents
-    return ctx.get('store') is not None and str(ctx.get('task_id') or '').isdigit() and agents.developer_mode(ctx['store'])
+    """A held call goes to the owner's buttons: a coding task to show it on, and Developer mode on (with it off the Approve card stays the
+    road). A CHAT AGENT'S TASK DRAWS NO SUCH BUTTONS (recorded 2026-11-12: Developer mode on, a chat agent's delete waited on Allow once /
+    Reject that only a coding chat draws - "working" for ten minutes with nothing to press): its held step is the Approve card at once."""
+    from . import agents, general, terminal
+    st, tid = ctx.get('store'), str(ctx.get('task_id') or '')
+    if st is None or not tid.isdigit() or not agents.developer_mode(st): return False
+    # ...a coding session's own chat (acpcoding), or a run on a task that is no chat agent's
+    return terminal.is_acp(terminal.SESSIONS.get(str(ctx.get('sid') or ''))) or not general.handles(st.get_task(int(tid)) or {})
 
 
 # THE OWNER'S OWN NO ON THE STEP, in their voice (the owner, 2026-11-10): it read "Taskuary refused it: the owner said no" - the app

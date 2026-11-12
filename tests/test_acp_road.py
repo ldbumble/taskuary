@@ -62,6 +62,19 @@ def _answering(option):
 STORE = [None]
 
 
+def test_a_chat_agents_held_step_is_its_approve_card_at_once_never_buttons_no_page_draws():
+    """Recorded on the real CLI, 2026-11-12: with Developer mode on, a chat agent's delete was put to the owner as Allow once / Reject -
+    buttons only a coding task's chat draws. Its turn read "working" for ten minutes with nothing to press; only then the Approve card
+    came. A chat agent's held step is that card from the start, whatever Developer mode says."""
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Tidy the exports folder', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    with mock.patch.object(shellgate, 'trusted', return_value=''), mock.patch.object(permissions, 'ask', side_effect=AssertionError('buttons were asked')):
+        out, ev = run(profile(), env={'FAKE_ACP_ASK': 'git push origin main'}, store=s, task_id=tid)
+    assert next(d for k, _n, d in ev if k == 'permission')['answer'] == acpgate.HELD and not permissions.pending(tid, s)
+    [rv] = s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
+    assert rv['Status'] == 'pending' and 'git push origin main' in rv['DraftText']
+
+
 @pytest.mark.parametrize('option,granted', [('allow_once', True), ('reject_once', False)])
 def test_a_held_push_is_the_owners_buttons_and_their_answer_is_the_answer(option, granted):
     s = STORE[0] = MemoryStore()
@@ -310,6 +323,12 @@ def test_claude_s_argv_reaches_the_adapter_as_sdk_options(tmp_path):
     assert o['extraArgs'] == {'mcp-config': '/h/agent-tools/TQ-7.mcp.json'} and o['settings'] == '/h/hold.json'
     assert o['additionalDirectories'] == ['/h/out']
     assert not any(k in json.dumps(o) for k in ('dangerously', 'stream-json', '"-p"'))      # the protocol's own, never passed on
+    # ...and WHAT STANDS AFTER A FLAG WITH NO VALUE STILL REACHES IT (found on the real CLI, 2026-11-12): a chat agent's argv ends
+    # `--setting-sources project,local --strict-mcp-config --settings <its file>` (llm.make_cli_llm), and everything after the bare flag was
+    # dropped - its session ran with no hook of Taskuary's (a held step reached the model only as "User refused permission") and read the
+    # owner's own CLAUDE.md, which that file excludes
+    o = agents.claude_acp_options(['-p', '--setting-sources', 'project,local', '--strict-mcp-config', '--settings', '/h/general-7.json', '--add-dir', '/h/out'])
+    assert o == {'settingSources': ['project', 'local'], 'extraArgs': {'strict-mcp-config': None}, 'settings': '/h/general-7.json', 'additionalDirectories': ['/h/out']}
 
 
 def test_codex_s_config_flags_become_its_session_config():

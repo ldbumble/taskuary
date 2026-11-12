@@ -278,9 +278,8 @@ export const proposalPresentation = (review) => {
     kind: "action",
     title: review.Subject || review.Title || upFirst(says) || "Proposed action",
     context: "Proposed action · nothing will be sent to the conversation",
-    ...(says ? { lead: upFirst(says), leadWhy: "Nothing is done until you approve." } : {}),
-    destinationLabel: "Action",
-    destination: act,
+    // ...and where its lead says it, no "Action · open pr" row under that - the proposal's own key is not a place
+    ...(says ? { lead: upFirst(says), leadWhy: "Nothing is done until you approve.", destinationLabel: "On", destination: "this task" } : { destinationLabel: "Action", destination: act }),
     approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",

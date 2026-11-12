@@ -207,5 +207,7 @@ export const workingLine = (parts, label, { starting = false, ask = "" } = {}) =
   return last.status === "running" ? String(label(last) || "").split(/\r?\n/)[0].trim() || "Working…" : "Thinking…";
 };
 // ...what a turn at work waits on HIM for, in words: the step its session is stopped at, a sign-in, a question
+// ...(a question the agent asked before is no wait while it works: the recorded walk, 2026-11-12, read "Waiting for your answer" over a turn
+// already at work on his answer - only a step it is stopped at, or a sign-in on the page, holds a turn at work)
 export const waitingOn = (list) => (list?.permissions?.length ? "Waiting for your Allow once"
-  : !list?.asking ? "" : String(list.asking.request_id || "").startsWith("signin:") ? "Waiting for you to sign in" : "Waiting for your answer");
+  : String(list?.asking?.request_id || "").startsWith("signin:") ? "Waiting for you to sign in" : "");

@@ -104,7 +104,7 @@ test("a turn at work says what is happening, or what we wait for, beside its dot
   const { waitingOn } = await import("../src/chatStream.js");
   assert.equal(waitingOn({ permissions: [{}] }), "Waiting for your Allow once");
   assert.equal(waitingOn({ asking: { request_id: "signin:bank.example" } }), "Waiting for you to sign in");
-  assert.equal(waitingOn({ asking: { request_id: "q1" } }), "Waiting for your answer");
+  assert.equal(waitingOn({ asking: { request_id: "q1" } }), "", "a question asked before is no wait while it works");
   assert.equal(waitingOn({}), "");
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /: doing \? <span className="tq-aui-working-line" data-tq-working-line="" title=\{doing\}>\{doing\}<\/span> : null/);

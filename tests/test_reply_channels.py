@@ -20,6 +20,18 @@ def task_with(s, channel, status='routed'):
 
 
 class CanReplyTests(unittest.TestCase):
+    def test_a_draft_its_channel_cannot_send_reads_the_same_on_the_row_as_on_the_task(self):
+        """Decided 2026-11-12: a Teams reply's task said "draft to copy" while its rail row said "a reply is drafted for you to send". The
+        row's line is the same state's own sentence (lanes.json `unsendable`), the one the task's chip shows."""
+        from taskuary import funnel, lanes
+        s = MemoryStore()
+        for ch in ('teams', 'email'):
+            tid, mid = task_with(s, ch)
+            s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'Channel': ch, 'DraftText': 'Yes, Thursday works.'})
+            row = next(r for r in s.feed(limit=50, days=3650, ids=[mid]) if r.get('ReviewId'))
+            why = next(i['why'] for i in funnel.from_feed(s, [row], canonical=True) if i.get('rid'))
+            self.assertEqual(why, lanes.hint('unsendable') if ch == 'teams' else 'a reply is drafted for you to send', ch)
+
     def test_defaults(self):
         s = MemoryStore()
         for ch in ('email', 'telegram', 'whatsapp', 'discord'):

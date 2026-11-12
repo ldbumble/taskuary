@@ -556,6 +556,14 @@ def items(store, tid: int) -> dict:
         if x['kind'] == 'card': out[i] = {**x, 'status': 'kept'}; t['cards'].append({**card, 'id': card['id'] + ':live'})
         else: x['cards'] = [{**c, 'id': c['id'] + ':k', 'status': 'kept'} if c is card else c for c in x['cards']]; t['cards'].append(card)
 
+    # A CODING RUN THAT LEFT WITHOUT FINISHING SAYS SO IN ITS CHAT (decided 2026-11-12): the header chip read "agent stopped", the rail row the
+    # sentence cut by its width, and the chat nothing. The task's own idle sentence (funnel.idle_state - the one the row reads) is its last line
+    task_ = store.get_task(tid) or {}
+    if out and not at_work and not live_sid and not general.handles(task_) and task_.get('Status') not in ('done', 'dropped'):
+        from . import funnel, taskstate
+        st_ = taskstate.task_state(store, tid=tid)
+        if not st_.finished and (idle := funnel.idle_state(store, tid, st_))['kind'] == 'left' and idle['line']:
+            out.append({'id': 'n:left', 'kind': 'note', 'at': out[-1].get('at'), 'text': idle['line']})
     for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None); x.pop('_seg', None)
     # ...and what the agent waits on him for, and the CLI that runs: read by the page off this one list (the chat's own payloads are gone)
     from . import taskstate

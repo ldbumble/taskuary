@@ -246,6 +246,33 @@ class TheList(unittest.TestCase):
         self.say('And that?', 'l-two'); self.rest()
         self.assertEqual([x['id'] for x in self.list()['items'][-3:-1]], [f'm:{mid}', 'l-two'])        # heard with his line, before it: it did not move
 
+    def test_a_coding_run_that_left_without_finishing_says_so_last_in_its_chat(self):
+        """Decided 2026-11-12: a stopped coding task said it on its header chip ("agent stopped") and its rail row (cut by the row's width),
+        and its chat said nothing of the run. The task's own sentence - the one the row reads - is the chat's last line."""
+        from taskuary import funnel
+        s = self.s
+        tid = s.create_task({'Title': 'Comment the totals', 'Kind': 'coding', 'Assignee': 'agent:coding', 'Status': 'open'}, 'o')
+        s.add_message({'TaskId': tid, 'ExternalId': 'c1', 'ConversationId': 'conv-c', 'Channel': 'email', 'Subject': 'Ledger totals',
+                       'BodyText': 'Could someone comment the totals function?', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example', 'Status': 'routed'})
+        self.assertNotIn('note', [x['kind'] for x in conversation.items(s, tid)['items']])           # nothing ran: nothing to say
+        s.add_transcript(tid, 'sess-1', 'the agent said things', agent='coding')
+        last = conversation.items(s, tid)['items'][-1]
+        self.assertEqual((last['kind'], last['text']), ('note', funnel.idle_state(s, tid)['line']))
+        self.assertIn('left without finishing', last['text'])
+
+    def test_redraft_on_a_task_its_agent_works_wakes_that_agent(self):
+        """Decided 2026-11-12 (rule 1: no second voice drafts): Redraft / Draft with AI on a task an agent works went to a one-shot writer that
+        rewrote the agent's card in a voice of its own. The press is his line in the chat and wakes the task's agent, which writes it again."""
+        from taskuary import responder
+        self.say('Draft it.', 'l-one'); self.rest()
+        rid = self.s.add_review({'TaskId': self.tid, 'MessageId': self.s.list_messages(self.tid)[0]['MessageId'], 'Kind': 'draft_reply', 'Status': 'pending',
+                                 'Channel': 'email', 'DraftText': 'Hi Gail, the Mill or the Quay. Alex'})
+        with mock.patch.object(responder, 'draft_for_review', side_effect=AssertionError('the one-shot writer drafted')):
+            with self.assertRaises(responder.Handed): responder.write_draft(self.s, self.tid, rid, actor='owner', nudge='THE OWNER SAYS: shorter', pressed=True)
+        self.assertTrue(until(lambda: len(self.brain.calls) == 2)); self.rest()
+        self.assertIn('write that reply again', self.brain.calls[-1].lower()); self.assertIn('"shorter"', self.brain.calls[-1])
+        self.assertIn('You asked the agent to write the reply again: "shorter".', [x.get('text') for x in self.list()['items'] if x['kind'] == 'press'])
+
     def test_the_agents_words_are_read_for_what_code_can_see(self):
         """The real-CLI walks, 2026-11-12 (rule 8: the agent talks like a person helping): "Overlap with TQ-0004", "set up for Alex to
         approve", and the reply quoted whole above its own card. Structure only - an id this app mints, the owner's own name, a card's words

@@ -333,9 +333,12 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                             preview=latest.get('BodyText') or base.get('preview'),
                             channel=latest.get('Channel') or base.get('channel'))
                 subj = says(latest) or subj
+            from . import capabilities
             out.append(_item(f"review:{r['ReviewId']}", 'action' if action else 'review', 'approve', subj, rid=r['ReviewId'],
                              why='an agent proposed an action - it runs only if you say so' if action
-                                 else ('a reply is drafted for you to send' if r.get('HasDraft') else 'a reply is owed - draft it with AI or write it'),
+                                 # ...a draft its channel cannot send says what the task's chip says (lanes.json `unsendable`, decided 2026-11-12)
+                                 else (('a reply is drafted for you to send' if capabilities.can_send_draft(store, r['ReviewId']) else lanes.hint('unsendable'))
+                                       if r.get('HasDraft') else 'a reply is owed - draft it with AI or write it'),
                              draft=bool(r.get('HasDraft')), summary=agent_found(store, r.get('TaskId')),
                              stale=stale,
                              sig=hashlib.sha1(str(rv.get('DraftText') or '').encode()).hexdigest()[:10],   # the draft's fingerprint: a rewrite is news

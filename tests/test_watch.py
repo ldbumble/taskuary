@@ -236,6 +236,28 @@ class HandedToAnAgentTests(Watched):
                 self.assertEqual(self.level(), 'task', 'the row stayed under Watching')
                 self.assertEqual(self.lines(), [f'You handed it to {who}.', 'You stopped watching it - it is back under Tasks.'])
 
+    def test_the_kind_it_already_has_picked_again_starts_that_agent(self):
+        """THE RAIL WALK (2026-11-12): triage left a watched task general with no agent on it; "agent · general" was drawn chosen and
+        pressing it did nothing - no line, no agent, the row still under Watching. Picked again, it starts that agent, as a change does."""
+        self.s.update_task(self.t, {'Kind': 'general'}, 'triage')
+        out = self.press('task.set_kind', {'kind': 'general'})
+        self.assertEqual(self.started, [(self.t, 'general', False)], 'the kind it had, picked again, started nobody')
+        self.assertTrue(out.get('started'))
+        self.assertFalse(watch.watching(self.s.get_task(self.t)))
+        self.assertEqual(self.level(), 'task')
+
+    def test_a_line_he_types_to_its_agent_ends_the_watch(self):
+        """...and A LINE TYPED IN ITS BOX is a move like any press (the rail walk, 2026-11-12: the agent set to work while the row stayed
+        under Watching, "on you"): ended on the line's own road, before the turn starts - the page's request waits for the turn's answer,
+        so a watch ended on that answer stood under Watching the whole turn."""
+        from taskuary import general
+        started = []
+        with mock.patch.object(general, '_start_line', lambda *a, **k: started.append(watch.watching(self.s.get_task(self.t)))), \
+                mock.patch('taskuary.origin.hold', return_value=None):
+            general.take_line(self.s, self.t, 'Please send Erin the signed form.', line_id='l-watch', wait=True)
+        self.assertEqual(started, [False], 'the turn started with the task still under Watching')
+        self.assertEqual(self.level(), 'task')
+
     def test_a_start_that_cannot_happen_says_why_in_one_line_and_the_change_still_lands(self):
         from fastapi import HTTPException
         def no(tid, body, background): raise HTTPException(422, 'Connect an AI under Settings to start it.')

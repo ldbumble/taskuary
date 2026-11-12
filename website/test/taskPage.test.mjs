@@ -149,3 +149,9 @@ test("a chat reply that promises a file leads with replying by email, and sendin
   assert.match(rd, /`\$\{sendWord\} without the file`/);
   assert.match(page, /onEmailInstead=\{\(\) => setEmailOpen\(true\)\}/);
 });
+// THE RAIL WALK (2026-11-12): "agent · general" drawn chosen over a task no agent worked, and pressing it did nothing - an agent kind picked
+// again is still sent, and the server starts that agent where none works (server._start_chosen, tests/test_watch.py)
+test("who does it: an agent kind picked again is sent, so its agent starts", () => {
+  const page = src("TaskPage.jsx");
+  assert.match(page, /if \(o\.key !== \(t\.Kind \|\| "task"\) \|\| AGENT_KINDS\.includes\(o\.key\)\) change\("task\.set_kind", \{ kind: o\.key \}\);/);
+});

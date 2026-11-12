@@ -132,7 +132,7 @@ import { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 import { useShareParts } from "./Share.jsx";
 import { ago, filesLine, plural } from "./timeWords.js";
-import { KIND_OPTIONS, KINDS, kindLabel, shortKind, shownAgent, instructionsHint } from "./kinds.js";
+import { AGENT_KINDS, KIND_OPTIONS, KINDS, kindLabel, shortKind, shownAgent, instructionsHint } from "./kinds.js";
 import { PICK_REPO, openAppLink, takeRepoPick } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
@@ -3649,6 +3649,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           )}
         </Box>
       </Box>
+      {/* ...an AGENT kind picked again - the one it already has - is still a pick: it starts that agent where none works on it (server._start_chosen;
+          the rail walk, 2026-11-12: "agent · general" drawn chosen over a task nobody worked, and pressing it did nothing) */}
       {/* THE MENUS THE PILLS WERE: the dropdowns' changes, now the task tools (change above), reached from the row (canvas) or Change (Tasks tab) */}
       {t && <Menu open={!!pick} anchorEl={pick?.at || null} onClose={() => setPick(null)}>
         {pick?.what === "menu" && [
@@ -3658,7 +3660,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ]}
         {pick?.what === "kind" && (KINDS.includes(t.Kind || "task") ? KIND_OPTIONS : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS])
           .filter((o) => o.key !== "coding" || canCode || t.Kind === "coding").map((o) =>
-          <MenuItem key={o.key} selected={o.key === (t.Kind || "task")} sx={{ py: 0.6 }} onClick={() => { setPick(null); if (o.key !== (t.Kind || "task")) change("task.set_kind", { kind: o.key }); }}>
+          <MenuItem key={o.key} selected={o.key === (t.Kind || "task")} sx={{ py: 0.6 }} onClick={() => { setPick(null); if (o.key !== (t.Kind || "task") || AGENT_KINDS.includes(o.key)) change("task.set_kind", { kind: o.key }); }}>
             <ListItemText primary={o.label} secondary={o.hint} primaryTypographyProps={{ fontSize: 12 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
           </MenuItem>)}
         {/* no Status here: status is DERIVED - Start, Mark done, Remind me and Reopen set it (T12) */}

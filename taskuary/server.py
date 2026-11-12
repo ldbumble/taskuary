@@ -337,6 +337,7 @@ async def owner_presence(request: Request, call_next):
 
 # ANY MOVE ENDS A WATCH (watch.py, the owner, 2026-11-01: "un-watch it by opening it and pressing any move"): a press on the task's own
 # moves, its draft's or its mail's reply - never a read, a note, a picture for the agent or Watch it itself. Mark done ends it by closing.
+# ...and a line he types to its agent ends it on the line's own road (general.take_line), before the turn it waits on
 WATCH_ENDS = re.compile(r'^/api/(?:tasks/(?P<tid>\d+)(?:/(?:remind|dispatch|code|continue|continue-session|continue-work|resume|not-coding|'
                         r'not-a-task|split|merge|handoff|emails|offer|clarify|answer|wrap|repo|strong-again|agent/stop|pause))?'
                         r'|reviews/(?P<rid>\d+)/(?:decide|closeout/[a-z_]+|draft)|messages/(?P<mid>\d+)/(?:reply|calendar|dispatch))$')
@@ -3146,8 +3147,10 @@ def _start_chosen(tid: int, kind: str, was: str, background) -> dict:
     by the one dispatch door, so a start that cannot happen is kept on the task as any other (_start_failed) - and said in this press's
     answer (`why`), never the change's failure: who does it is changed whatever became of the start. {} where nothing is to start.
     An untrusted sender's task waits behind its Trust as every start does (origin.hold): its line is the why, and Trust starts it (_trusted_starts)."""
+    # ...and the kind it ALREADY has, picked again, starts that agent too (the rail walk, 2026-11-12: a watched task triage had left general
+    # with no agent on it - "agent · general" was drawn chosen and pressing it did nothing). One at work already is the dispatch's 409: nothing new
     from . import origin
-    if kind not in task_kinds.AGENT or kind == was or (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {}
+    if kind not in task_kinds.AGENT or (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {}
     if (h := origin.hold(store, tid)): return {'started': False, 'why': h['line']}
     try: out = dispatch_task(tid, DispatchBody(kind=kind, handed=was not in task_kinds.AGENT), background)
     except HTTPException as e: return {} if e.status_code == 409 else {'started': False, 'why': str(e.detail or 'the agent did not start')}   # 409: one is at work on it already

@@ -3475,6 +3475,10 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     # ...AN UNTRUSTED SENDER'S TASK HANDS NOTHING TO AN AGENT (origin.hold): his line is kept and waits by the box, behind the Trust action
     from . import origin
     if (h := origin.hold(store, tid)): return {'kept': wait_line(store, tid, text, files, line_id), 'held': h['line']}
+    # ...A WATCHED TASK HE HANDS A LINE TO IS HIS AGAIN (the rail walk, 2026-11-12: its agent set to work while the row stood under Watching,
+    # "on you"): back under Tasks before the turn starts, as every other move he makes on it (server.WATCH_ENDS) - from any door
+    from . import watch
+    watch.stop(store, tid, actor)
     # ...A TASK HE TYPES INTO IS HIS TO END (selfclose.claim, as a session he opened): its agent answers and waits - told to close the task when
     # finished, a coding agent spent a plain question's answer on wrapping up (the recorded walk, 2026-11-11)
     if not handles(t):

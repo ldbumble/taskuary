@@ -461,7 +461,11 @@ def _events(t, p: dict) -> None:
                 # reports, so it is waiting on its own work, not on you - and it flipped a working agent to "on you"
                 # every turn (TQ-1059, 2026-10-13). A real ask (agent_needs_input) still counts.
                 evs = ws.events(st, tid, sid)
-                if not (kind == 'idle_prompt' and evs and ws.background_jobs(evs[-1])):
+                # ...nor the idle notice over an ask that already stands (the recorded coding walk, 2026-11-12: a minute after the agent asked to
+                # be signed in, "Claude is waiting for your input" took the sign-in's place - no page shown, nothing to press), as the
+                # permission notice already gives way to the request it follows
+                if kind == 'idle_prompt' and ws.open_requests(evs): pass
+                elif not (kind == 'idle_prompt' and evs and ws.background_jobs(evs[-1])):
                     text = msg or 'Claude is waiting for your input'
                     ws.record(st, tid, sid, 'input_needed', request_id=ws.request_id_for(text), text=text, source='hook')
             elif kind == 'quota_auto_resume_fired': close(('stalled',), 'resumed after the limit lifted')

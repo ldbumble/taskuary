@@ -92,6 +92,14 @@ class QuestionAndPermissionTests(Base):
         self.fire('Notification', notification_type='idle_prompt')
         self.assertEqual(self.state()['state'], 'input_needed'); self.assertTrue(self.state()['requests'][0]['text'])
 
+    def test_the_idle_notice_never_takes_the_place_of_an_ask_that_stands(self):
+        """The recorded coding walk, 2026-11-12: the agent asked to be signed in, and a minute later "Claude is waiting for your input" took
+        the sign-in's place - no page shown, nothing to press."""
+        self.session()
+        self.fire('Notification', notification_type='agent_needs_input', message='Sign in to payworth.example to continue')
+        self.fire('Notification', notification_type='idle_prompt', message='Claude is waiting for your input')
+        self.assertEqual([r['text'] for r in self.state()['requests']], ['Sign in to payworth.example to continue'])
+
     def test_a_permission_request_names_the_tool_and_its_arguments(self):
         self.session()
         self.fire('PermissionRequest', tool_name='Bash', tool_input={'command': 'rm -rf build'}, tool_use_id='tu1')

@@ -58,7 +58,9 @@ TOOLS = {
                          _S({'text': _STR}, ('text',)), ('GET', '/api/knowledge/search')),
     'owner_memory': ('read', "What Taskuary has learned about the owner (LEARNED.md): their people, what they care about, how they "
                              "work, their promises, what to bring up. Read it when the work turns on what they would want; `section` "
-                             "(people, care, work, promises, bring) narrows it. Read-only.",
+                             "(people, care, work, promises, bring) narrows it. Read-only: a way of working the owner asks you "
+                             "to keep (a playbook, a standing rule) is set up with `propose` write_playbook for their Approve, "
+                             "never written to a file of your own.",
                      _S({'section': _STR}), ('GET', '/api/agent/memory')),
     'calendar': ('read', "The owner's busy times for the next N days (default 14), from every connected calendar. Read-only.",
                  _S({'days': _INT}), ('GET', '/api/calendar/upcoming')),

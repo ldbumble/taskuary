@@ -12,7 +12,7 @@ from typing import NamedTuple
 from loguru import logger
 from . import brainroute, browserview, general, ingest, llm, origin, selfclose, slots, workerstate
 
-DEEP_WHY = ('kind', 'routine', 'hard', 'browser', 'stranger', 'emails', 'ran deep')
+DEEP_WHY = ('kind', 'routine', 'hard', 'browser', 'stranger', 'emails', 'ran deep', 'lines')
 SETUP_REFS = (general.SETUP_REF, 'connector:setup')
 NOT_RUNS = ('answered',)          # an answer is the owner's reply landing, not a run; the owner's events carry their own Source
 
@@ -39,6 +39,9 @@ def why_deep(store, tid, first: bool = False) -> str:
     if origin.of_task(store, tid)[0] == 'stranger': return 'stranger'
     if slots.all_(store, tid): return 'emails'
     if ran_deep(store, tid): return 'ran deep'
+    # ...and one his own lines wait on (typed while its sender was held, or while it started): one call takes no line - it answered the mail
+    # without his words, asked what he had already said, and his line's turn came after it (the recorded Trust, 2026-11-11)
+    if general.waiting_lines(store, tid): return 'lines'
     return ''
 
 def takes(store, tid) -> bool: return not why_deep(store, tid)

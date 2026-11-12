@@ -34,6 +34,12 @@ def test_only_hard_work_takes_the_agent_by_difficulty():
         s = home(); t, _ = arrived(s, d); assert quickwork.why_deep(s, t) == '' and quickwork.takes(s, t), d
     s = home(); t, _ = arrived(s, 'hard'); assert quickwork.why_deep(s, t) == 'hard'
 
+def test_a_task_his_own_line_waits_on_takes_the_agent():
+    "He typed on a held task, then trusted its sender: the quick look answered the mail without his line and asked what he had just said."
+    s = home(); tid, _ = arrived(s); assert quickwork.takes(s, tid)
+    general.wait_line(s, tid, 'Tell her yes, send the form.')
+    assert quickwork.why_deep(s, tid) == 'lines' and not quickwork.takes(s, tid) and not quickwork.looks_first(s, tid)
+
 def test_a_routine_stays_deep():
     s = home(); tid, _ = arrived(s); s.update_task(tid, {'Source': 'workflow'}, 't')
     assert quickwork.why_deep(s, tid) == 'routine'

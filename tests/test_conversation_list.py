@@ -146,8 +146,12 @@ class TheList(unittest.TestCase):
         # ...stopped from the press: nothing spins above it, and what is at work - his waiting line's turn - stands under it
         self.assertFalse([x for x in got['items'][:at] if x.get('state') in ('working', 'starting')], self.kinds(got))
         self.assertTrue(got['working'] and got['items'][-1].get('state') in ('working', 'starting') and len(got['items']) - 1 > at, self.kinds(got))
+        # ...and the turn that said nothing is no item: it was drawn empty over the press, and was gone when the next turn ended
+        self.assertFalse([x for x in got['items'] if x.get('state') == 'stopped' and not (x['text'] or x['steps'])], self.kinds(got))
+        was = [x['id'] for x in got['items'][:at + 1]]
         self.rest()
         got = self.list(); ids = [x['id'] for x in got['items'] if not x['id'].startswith('t:')]
+        self.assertFalse([i for i in was if i not in [x['id'] for x in got['items']]], 'what stood at the press still stands')
         self.assertEqual(ids[-3:], ['l-two', *drawn, 'l-three'])
         self.assertEqual([x['state'] for x in got['items'] if x['kind'] == 'turn'][0], 'done')                 # the answer above was never stopped
 

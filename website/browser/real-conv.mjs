@@ -39,7 +39,11 @@ export const sampler = (names) => {
         ...[...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].filter(bare).map((e) => `waiting ${e.getAttribute("data-tq-pending-item")}`)];
       if (empty.length) f.empty = empty;
       const named = said ? namedIn(said) : [];
-      if (named.length) { f.named = named; f.unlit = named.filter((n) => !shown.some(([b, on]) => on && b === n)); if (!f.unlit.length) delete f.unlit; }
+      // ...read once its turn is at rest (its card lands when its words have), and never for a button that WAS lit under this answer and
+      // has been pressed since: "it waits for your Send" was true when said
+      const lit = (window.__lit ||= {}), key = tail?.getAttribute("data-tq-item"), had = (lit[key] ||= []);
+      named.filter((n) => shown.some(([b, on]) => on && b === n) && !had.includes(n)).forEach((n) => had.push(n));
+      if (named.length && !f.working) { f.named = named; f.unlit = named.filter((n) => !had.includes(n)); if (!f.unlit.length) delete f.unlit; }
       const sig = JSON.stringify(f);
       if (sig !== last) { last = sig; window.__frames.push({ t: Math.round(performance.now()), ...f }); }
     }

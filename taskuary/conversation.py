@@ -428,6 +428,9 @@ def items(store, tid: int) -> dict:
         # ...the turn right above his stop - one stopped before it said or did anything left nothing, and the mark fell on the finished answer
         # above the line it never got to answer (the recorded stop, 2026-11-11)
         if x.get('stop') and (t := next((y for y in reversed(out[:i]) if y['kind'] in ('turn', 'line', 'arrival')), None)) and t['kind'] == 'turn' and t['state'] == 'done': t['state'] = 'stopped'
+    # ...and one stopped before it said or did anything is no item: his stop's own line says it. It was drawn empty between his line and
+    # the press while its session still held it, and was gone once the next turn ended (the recorded stop, 2026-11-11)
+    out = [x for x in out if not (x['kind'] == 'turn' and x['state'] == 'stopped' and not (x['text'] or x['steps'] or x['cards']))]
     if not at_work and (f := funnel.run_failed(store, tid)):
         evf = store.last_worker_event(tid, kinds=('failed',)) or {}
         t = next((y for y in reversed(out) if y['kind'] in ('turn', 'line', 'arrival')), None)

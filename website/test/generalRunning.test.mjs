@@ -44,6 +44,12 @@ test("a question its turn already said is not drawn a second time under the card
   assert.match(card, /\{!asking\.said && <p className="tq-aui-asked-q">\{plain\}<\/p>\}/);
 });
 
+// THE CHAT STAYS AT ITS END WHEN THE BOX GROWS (the recorded walks, 2026-11-11): a long line typed made the box a line taller, the view a
+// line shorter, and the chat stood 14 px behind its end - the pin watched only the list's own size
+test("the chat is pinned to its end when its view gets shorter, as when its list gets longer", () => {
+  assert.match(read("GeneralWorkspace.jsx"), /ro\.observe\(el\); ro\.observe\(v\);/);
+});
+
 // A SIGN-IN THE AGENT WAITS ON (signin.py) offers the one-time fill page beside its answers: minted by the owner's press, opened in a
 // tab - or, in the desktop app with no browser of its own, by the server - and never for any other question
 test("a sign-in ask offers the fill page, and no other ask does", () => {

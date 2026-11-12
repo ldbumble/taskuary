@@ -522,7 +522,9 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
     if (!v || !el) return undefined;
     const on = () => { stick.current = v.scrollHeight - v.scrollTop - v.clientHeight < 56; };
     const ro = new ResizeObserver(() => { if (stick.current) v.scrollTop = v.scrollHeight; });
-    v.addEventListener("scroll", on, { passive: true }); ro.observe(el);
+    // ...and when the VIEW itself gets shorter - the box under it grew a line as he typed - as when the chat gets longer (the recorded walks,
+    // 2026-11-11: 14 px behind its end for a beat each time)
+    v.addEventListener("scroll", on, { passive: true }); ro.observe(el); ro.observe(v);
     return () => { v.removeEventListener("scroll", on); ro.disconnect(); };
   }, [!!list]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...after EVERY draw, not only the list's: a card's own words (the page's node) grow the chat too

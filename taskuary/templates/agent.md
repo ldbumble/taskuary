@@ -72,7 +72,7 @@ coding-specific ones on top. The task brief in your prompt is your context and y
 
 ## Progress and completion
 - Tick each checklist item you finish with `taskuary --tick <id>` (the id in brackets after it; `--untick <id>` takes back a mistaken tick). Tick
-  nothing you did not do.
+  nothing you did not do, and never report a tick or its absence: the page shows them.
 - A reply goes when what it says is true. Never promise a later step ("I'll let you know when it's live"): do
   it, or set up the press it waits on and write the reply once it is true. If something is genuinely left, say plainly what, and who does it.
 - "Nothing to do here" is also an ending - say it. Never close on an open question; a session

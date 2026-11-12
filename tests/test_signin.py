@@ -248,7 +248,7 @@ class Asking(unittest.TestCase):
         # ...read once its taking back is written down (take_back follows the prompt it sent - on a slow runner a read between the two found
         # the answer not yet taken back, macOS 2026-11-12): waited on as state, never a sleep
         last = lambda: next((x for x in reversed(conversation.items(self.s, self.tid)['items']) if x['kind'] == 'turn'), None)
-        self.wait_for(lambda: (last() or {}).get('steps'))
+        self.wait_for(lambda: (last() or {}).get('steps'), secs=15)
         turn = last()
         self.assertEqual((turn['text'], [st['text'] for st in turn['steps']][-1]), ('', 'Signed in to bank.example with the saved sign-in.'))
         self.assertEqual(typed, [('sess1', 'bank.example', USER, PW)])

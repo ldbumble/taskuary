@@ -57,12 +57,12 @@ test("a report, dashboard or routine the Assistant wrote up goes straight into i
   for (const k of REPEATS) assert.equal(goesStraight(k, 31), true, k);
   assert.equal(goesStraight("workflow", null), false, "a card nobody wrote up stays the card");
   assert.equal(goesStraight("agent", 31), false);
-  const sheet = read("NewSheet.jsx"), door = read("SetupWithAi.jsx");
+  const sheet = read("NewSheet.jsx"), door = read("SetupWithAi.jsx"), chat = read("AssistantView.jsx");
   assert.match(door, /export const startSetup = \(kind, words, onOpen\) => \{ onOpen\?\.\(\); openHelp\(helpAsk\(kind, words\), \{ wait: 700 \}\); \};/);
   assert.match(door, /onClick=\{\(\) => startSetup\(kind, words, onOpen\)\}/);
-  assert.match(sheet, /const straight = goesStraight\(kind, line\) && kind === initialKind;/);
-  assert.match(sheet, /if \(!straight \|\| straightGone\.current\) return;\s*\n\s*straightGone\.current = true; if \(firstPressOf\(line\)\) startSetup\(kind, initialText, toBuilder\);/);
-  // ...and no card is drawn on its way there: the New card never flashes before the builder
-  assert.ok(sheet.indexOf("straightGone.current = true") < sheet.indexOf("if (inline && !open) return null;"));
-  assert.match(sheet, /if \(straight\) return null;/);
+  assert.match(door, /if \(!goesStraight\(made\?\.kind, made\?\.line\)\) return false;\s*\n\s*if \(firstPressOf\(made\.line\)\) startSetup\(made\.kind, made\.text \|\| "", \(\) => \{ onOpen\?\.\(\); openAppLink\(NEW_HASH\[made\.kind\]\); \}\);\s*\n\s*return true;/);
+  // ...one road from New's box and from the chat: the card is drawn only where it did not go (pressed at the card's mount, the chat's
+  // road raced the canvas opening its New card, and the setup ask was typed into New's own box instead)
+  assert.match(sheet, /if \(data\?\.new\) \{ if \(!goStraight\(data\.new, onClose\)\) setMade\(/);
+  assert.match(chat, /if \(data\.new && !goStraight\(data\.new\)\) browseRef\.current\?\.\("new", \{ \.\.\.data\.new, aid \}\);/);
 });

@@ -87,6 +87,7 @@ import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js"
 import * as pageView from "./pageView.js";
 import DigestText from "./DigestText.jsx";
 import { canGoBack, firstAppLink, linkName, onStep, openAppLink, recordPlace } from "./appLinks.js";
+import { goStraight } from "./SetupWithAi.jsx";
 import { BOARD, hashFor, opensTask } from "./canvasLinks.js";
 import { canSend, cannotStart, useCapabilities } from "./capabilities.js";
 import { place } from "./words.js";
@@ -2437,7 +2438,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           if (name && !String(data.say || "").trim().startsWith("Opened ")) receipt(`Opened ${name}.`);
         }
         // ...its line rides with it (`aid`): the card's Send to agent says it again as what it started (concierge.said_started)
-        if (data.new) browseRef.current?.("new", { ...data.new, aid });
+        // ...and a report, dashboard or routine goes straight into its builder, the setup asked there - the same road New's box takes
+        if (data.new && !goStraight(data.new)) browseRef.current?.("new", { ...data.new, aid });
         const l = lightOf(data.light);
         if (l) {
           setLit(l);

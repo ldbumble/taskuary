@@ -16,6 +16,15 @@ export const NAMES = [...new Set([...Object.values(JSON.parse(await readFile(pat
 
 export const sampler = (names, owner = "Alex") => {
   window.__frames = []; let last = "";
+  // WHAT WAS PAINTED, NOT WHAT WAS READ (2026-11-12: a preview landing in a card read as "fell 482 px behind" on a chat that never left its
+  // end - a draw had landed between the paint and this read, and reading it laid it out before the chat's own pin had run): how much of
+  // the chat stands under the view's foot is taken from an IntersectionObserver, whose word is the frame's own rendering step
+  // ...and a frame painted short of its end between two reads is kept (`peak`) for the next one to say
+  let ioOf = null, io = null, under = null, peak = 0;
+  const watch = (vp) => { const c = vp.querySelector(".tq-conv"); if (!c || c === ioOf) return; ioOf = c; under = null; peak = 0; io?.disconnect();
+    io = new IntersectionObserver((es) => { const e = es.at(-1), was = under; under = e.rootBounds ? Math.max(0, Math.round(e.boundingClientRect.bottom - e.rootBounds.bottom)) : null;
+      if (was != null && was <= 2 && under > 2) peak = Math.max(peak, under); }, { root: vp, threshold: Array.from({ length: 1001 }, (_, i) => i / 1000) });
+    io.observe(c); };
   const seen = new Set(names), esc = (s) => s.replace(/[^A-Za-z0-9 ]/g, "\\$&");
   // ...named: a name of several words anywhere; a single word only as a name in the middle of a sentence or marked ("your Send", `Send`) -
   // "Send me the list" names nothing
@@ -28,7 +37,8 @@ export const sampler = (names, owner = "Alex") => {
     if (vp) {
       const items = [...vp.querySelectorAll("[data-tq-item]")].map((e) => [e.getAttribute("data-tq-item"), e.getAttribute("data-tq-turn") || "", Math.round(e.getBoundingClientRect().top - vp.getBoundingClientRect().top + vp.scrollTop)]);
       const pend = [...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].map((e) => e.getAttribute("data-tq-pending-item"));
-      const f = { items, pend, top: Math.round(vp.scrollTop), h: vp.scrollHeight, ch: vp.clientHeight, working: !!vp.querySelector("[data-tq-working]"), cards: vp.querySelectorAll("[data-tq-turn-cards] button:not([disabled])").length };
+      watch(vp);
+      const f = { items, pend, top: Math.round(vp.scrollTop), h: vp.scrollHeight, ch: vp.clientHeight, ...(under == null ? {} : { under }), working: !!vp.querySelector("[data-tq-working]"), cards: vp.querySelectorAll("[data-tq-turn-cards] button:not([disabled])").length };
       // WORDS THAT NAME A BUTTON, AND THE BUTTON (the owner: never "press X" with nothing to press): the newest thing in the chat, where it is
       // the agent's answer - an older one named a button he has pressed since
       const shown = [...document.querySelectorAll("[data-tq-task-page] button")].filter((b) => b.getBoundingClientRect().width > 0).map((b) => [b.innerText.trim().replace(/\s+/g, " "), !b.disabled]);
@@ -41,6 +51,7 @@ export const sampler = (names, owner = "Alex") => {
         ...[...vp.querySelectorAll("[data-tq-turn-cards] > *")].filter(bare).map((e) => `a card of ${e.closest("[data-tq-item]")?.getAttribute("data-tq-item")}`),
         ...[...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].filter(bare).map((e) => `waiting ${e.getAttribute("data-tq-pending-item")}`)];
       if (empty.length) f.empty = empty;
+      if (peak) { f.peak = peak; peak = 0; }
       if (window.__bare) { f.bare = Math.round(performance.now() - window.__bare); window.__bare = 0; }
       // A CARD THAT CANNOT BE PRESSED SHOWS NO BUTTON, AND ONE ACTION IS ONE CARD (the owner, 2026-11-11: "the question has 2 approve buttons?"):
       // a disabled button on a card at rest, and a settled card standing under a live one
@@ -112,7 +123,8 @@ export function check(frames) {
       if (f.top < prev.top - 2 && f.h - f.top - f.ch > 2 && (f.h - f.top - f.ch > 60 || f.h >= prev.h)) say(f.t, `scrolled back ${prev.top} -> ${f.top} (height ${prev.h} -> ${f.h})`);
       // THE CHAT FOLLOWS ITS END (the owner, 2026-11-11): at the bottom it stays at the bottom through every draw; scrolled up to read, it is
       // not moved (this driver never scrolls, so any move there is the page's own)
-      const gap = (x) => x.h - x.top - x.ch;
+      // ...by the painted word where there is one (`under`, the sampler's IntersectionObserver): never further off than the layout read says
+      const gap = (x) => Math.min(x.h - x.top - x.ch, x.under ?? Infinity);
       if (gap(prev) <= 2 && gap(f) > 2) say(f.t, `was at its end and fell ${gap(f)} px behind (height ${prev.h} -> ${f.h})`);
       if (gap(prev) > 60 && f.top !== prev.top) say(f.t, `moved by itself while he read above: ${prev.top} -> ${f.top}`);
       // his line, the frame it enters the conversation: a turn at work right under it
@@ -121,6 +133,7 @@ export function check(frames) {
     // words that name a button, with no such button to press in that frame (said once per run of frames that lack it)
     if (f.unlit?.length && JSON.stringify(f.unlit) !== JSON.stringify(prev?.unlit || [])) say(f.t, `the agent's words name ${f.unlit.map((n) => `"${n}"`).join(", ")} and no such button is lit`);
     for (const id of f.empty || []) if (!(prev?.empty || []).includes(id)) say(f.t, `${id} is drawn empty`);
+    if (f.peak) say(f.t, `a painted frame stood ${f.peak} px short of the chat's end, which it had been at`);
     if (f.bare > 120) say(f.t, `the task stood ${f.bare} ms with its head drawn and no chat under it`);
     if (f.deadButton && !prev?.deadButton) say(f.t, "a card nobody can press draws a button");
     if (f.cut && !prev?.cut) say(f.t, `the task's card stands ${f.cut} px under the canvas's head`);

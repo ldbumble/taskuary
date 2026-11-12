@@ -49,7 +49,7 @@ const look = (page, oldId, said) => page.evaluate((oldId, said) => {
   const words = (el) => [(/To\s+([^<\n]*<[^>]+>)/.exec(el.innerText) || [])[1], (/[\w.-]+\.(csv|pdf|xlsx|docx|png)\b/.exec(el.innerText) || [])[0], ...[...el.querySelectorAll("textarea, input")].map((x) => x.value)].join("|").replace(/\s+/g, " ").trim();
   // ...where the letter stands: its text box, what the eye follows (the card's own box starts at a heading in one place, under it in another)
   const card = (el) => { const r = (el.querySelector("textarea") || el).getBoundingClientRect(), send = [...el.querySelectorAll("button")].filter((b) => b.matches("[data-tq-send]") || /^(Send|Connect email)/.test(b.innerText.trim()));
-    return { id: el.getAttribute("data-tq-review") || el.getAttribute("data-tq-replaced"), record: el.matches("[data-tq-replaced]"), top: y(r), bottom: y({ top: r.bottom }), words: words(el), grey: grey(el),
+    return { id: el.getAttribute("data-tq-review") || el.getAttribute("data-tq-replaced"), record: el.matches("[data-tq-replaced]"), top: y(r), bottom: y({ top: r.bottom }), box: y(el.getBoundingClientRect()), words: words(el), grey: grey(el),
       live: send.some((b) => !b.disabled) && !grey(el), sends: send.length }; };
   // ...a replaced draft's record is the old card too, where it stood (PassedCard.ReplacedDraft)
   const cards = [...(pane?.querySelectorAll("[data-tq-review], [data-tq-replaced]") || [])].filter((e) => e.getBoundingClientRect().height > 0).map(card);
@@ -90,8 +90,13 @@ async function rewrite(t, w, page, { tid, rid, name }) {
       return { dom: [...document.querySelectorAll("[data-tq-replaced], [data-tq-row-cards]")].map((e) => [e.outerHTML.slice(0, 80), e.getBoundingClientRect().height]), turns: a.turns, ids: a.messages.map((m) => [m.id, m.role, m.createdAt]), reviews: (d.reviews || []).map((r) => [r.ReviewId, r.Status, r.DecideNote, r.CreatedAt]) };
     }, tid)));
     if (o && !o.record && o.words !== before.old[0].words) why.push(`the old card's words changed: ${o.words.slice(0, 120)}`);
-    if (o && Math.abs(o.top - before.old[0].top) > 2) why.push(`the old card moved ${before.old[0].top} -> ${o.top}`);
-    if (s.bubble && o && !o.record && !(o.grey && !o.live)) why.push("his line is drawn and the old card is not grey");
+    // ...where it stands: the letter's own words while it waits; once it is the grey note of a replaced draft, the note's box where the card's was
+    if (o && !o.record && Math.abs(o.top - before.old[0].top) > 2) why.push(`the old card moved ${before.old[0].top} -> ${o.top}`);
+    if (o?.record && Math.abs(o.box - before.old[0].box) > 16) why.push(`the old draft's note stands away from where its card was: ${before.old[0].box} -> ${o.box}`);
+    // A WAITING CARD STAYS LIT UNTIL A NEWER ONE REPLACES IT (the owner, 2026-11-11: "typing a question never sets it aside") - it went grey
+    // at his press before; once replaced it is one grey note in its place, nothing on it to press
+    if (o && !o.record && !o.live) why.push("the old card is set aside before a newer one has replaced it");
+    if (o?.record && (o.live || o.sends)) why.push("the replaced draft's note can be pressed");
     if (s.bubble && o && o.top > s.bubble.top) why.push("the old card is under his line");
     const others = s.cards.filter((c) => c.id !== String(rid));
     if (s.cards.filter((c) => c.live).length > 1) why.push("two live cards");
@@ -127,7 +132,7 @@ async function rewrite(t, w, page, { tid, rid, name }) {
   await writeFile(path.join(dir, "server.log"), w.backend.output());
   const ok = done != null && !bad.length;
   await note(dir, { done: `A reply drafted on arrival waits on the task (${name}); the owner types "${said}" into the task's box and presses Enter; the stand-in agent files a new letter with a file, as taskuary --reply does.`,
-    expect: "At the press: his line, and the old card greyed in place - its words frozen, Send disabled. Under his line: the agent's head and spin, then the NEW card with the new letter, To, the file, Send - live. Never: the old card rewritten, moved, or under his line; two live cards; a file preview; a 'Files are in' line.",
+    expect: "At the press: his line, the old card still lit where it stood (typing never sets a waiting card aside). Once the new letter is filed the old one is one grey note in its place, its words under it, nothing to press. Under his line: the agent's head and spin, then the NEW card with the new letter, To, the file, Send - live. Never: the old card rewritten, moved, or under his line; two live cards; a file preview; a 'Files are in' line.",
     saw: done == null ? `no live new card within 90 s. Last: ${JSON.stringify(end.cards).slice(0, 600)}` : bad.length ? bad.slice(0, 6).join("\n") : `as expected; the new card live ${done} ms after the press`,
     verdict: ok ? "PASS" : "FAIL" });
   assert.ok(done != null, `${name}: no new live card under his line within 90 s: ${JSON.stringify(end.cards).slice(0, 800)}\n${end.text.slice(-1200)}`);
@@ -137,7 +142,7 @@ async function rewrite(t, w, page, { tid, rid, name }) {
   assert.ok(after[0].words.includes("flaws.csv"), `the new card names its file: ${after[0].words.slice(0, 300)}`);
 }
 
-test("a reply rewritten after the owner prompts: the old card greys in place at the press, the new one stands live under his line", { timeout: 600000 }, async (t) => {
+test("a reply rewritten after the owner prompts: the old card waits lit until the new one replaces it, then is a grey note in its place", { timeout: 600000 }, async (t) => {
   const w = await world(t);
   const page = await w.newPage();
   await page.setViewport({ width: 1600, height: 900 });
@@ -154,7 +159,7 @@ test("a reply rewritten after the owner prompts: the old card greys in place at 
 // letter as the real one's shell does (FAKE_ACP_SCRIPT -> `taskuary --reply`)
 // ...a coding start held the arrival draft, so for the turn's first second the old card was gone from the chat (2026-11-11): it holds only an
 // earlier session's now, as a chat's start does
-test("a reply rewritten in a coding chat: the old card greys in place at the press, the new one stands live under his line", { timeout: 600000 }, async (t) => {
+test("a reply rewritten in a coding chat: the old card waits lit until the new one replaces it, then is a grey note in its place", { timeout: 600000 }, async (t) => {
   const w = await world(t);
   const page = await w.newPage();
   await page.setViewport({ width: 1600, height: 900 });

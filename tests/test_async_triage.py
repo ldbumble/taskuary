@@ -159,5 +159,42 @@ class DeferredIngestTests(unittest.TestCase):
         self.assertEqual(seen, {'parent': True, 'self': False})
 
 
+class DayCountTests(unittest.TestCase):
+    """EVERY ARRIVAL IS ACCOUNTED FOR (2026-11-12): a day's inbound messages, each down the road it really takes, come back judged or
+    kept by a road that wrote why - and one that slipped in with no reason is counted as unaccounted, by its id."""
+    DAY = '2026-11-10'
+
+    def test_every_road_of_a_scratch_day_is_judged_or_says_why(self):
+        s = MemoryStore()
+        s.save_source({'Channel': 'email', 'Address': OWNER, 'Owner': 'me', 'Active': 1}, 'test')
+        s.save_policy({'Name': 'flood', 'Kind': 'sender', 'Pattern': 'news@vendor.example', 'Action': 'skip', 'Reason': 'a list nobody reads',
+                       'SortOrder': 10, 'Active': 1}, 'test')
+        ingest._PENDING.clear(); self.addCleanup(ingest._PENDING.clear)
+        ingest.ingest_message(s, mail(1), llm=oracle('task'))                                   # judged: work
+        ingest.ingest_message(s, mail(2), llm=oracle('fyi'))                                    # judged: nothing to do
+        ingest.ingest_message(s, mail(3, from_email='news@vendor.example'), llm=oracle('task')) # a policy skips it
+        ingest.ingest_message(s, mail(4), file_only=True)                                       # a feed connection
+        ingest.ingest_message(s, mail(5, auto_reply=True), llm=oracle('task'))                  # an out-of-office
+        ingest.ingest_message(s, mail(6), llm=None)                                             # no AI: waits for triage
+        with ingest.deferred(): ingest.ingest_message(s, mail(7), llm=oracle('task'))           # queued: triage owes it
+        s.add_message({'ExternalId': 'h8', 'ConversationId': 'conv-1', 'Channel': 'email', 'Subject': 'Re: Question 1',
+                       'FromEmail': 'p1@client.example', 'Status': 'history'})                  # earlier mail fetched as a thread's history
+        cid = s.add_agent_channel({'Kind': 'slack', 'Chat': 'C1', 'TaskId': None, 'MembersJson': '[]', 'StateJson': '{}'})
+        s.agent_channel_log(cid, 'x1', 'in', 'Erin Blake', 'teammate', None, 'try the staging build')   # a bound chat: to its agent
+        s.agent_channel_log(cid, 'x2', 'in', '', 'ignored', None, '')                                   # ...from nobody in it
+        s._exec('UPDATE message SET CreatedAt=?', (f'{self.DAY} 09:00:00',))      # one day, whatever the clock did meanwhile
+        s._exec('UPDATE agentchannel_msg SET At=?', (f'{self.DAY} 09:00:00',))
+        n = ingest.day_count(s, self.DAY)
+        self.assertEqual((n['judged'], n['report_feed'], n['waiting'], n['joined_live'], n['unaccounted']), (2, 1, 2, 1, 0), n)
+        self.assertEqual(n['skipped_by_rule'], {"policy 'flood': a list nobody reads": 1, 'an automatic reply': 1,
+                                                ingest.SEEN_ELSEWHERE['history']: 1, ingest.BOUND_IGNORED: 1}, n)
+        # ...and a message that lands with no road's reason is the drop the count exists to show
+        mid = s.add_message({'ExternalId': 'lost', 'ConversationId': 'conv-9', 'Channel': 'email', 'Subject': 'lost', 'Status': 'filed'})
+        s._exec('UPDATE message SET CreatedAt=? WHERE MessageId=?', (f'{self.DAY} 10:00:00', mid))
+        n = ingest.day_count(s, self.DAY)
+        self.assertEqual((n['unaccounted'], n['unaccounted_ids']), (1, [mid]))
+        self.assertEqual(ingest.day_count(s, '2026-11-11')['judged'], 0)
+
+
 if __name__ == '__main__':
     unittest.main()

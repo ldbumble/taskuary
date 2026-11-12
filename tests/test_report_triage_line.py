@@ -41,6 +41,10 @@ class TriageLineTests(unittest.TestCase):
         door.assert_not_called()
         self.assertEqual([(m['Status'], m['TaskId']) for m in _reports(s)], [('feed', None)] * 2)
         self.assertEqual([t['TaskId'] for t in s.list_tasks()], [tid])
+        # ...and each run says why it was not triaged, on its route row like every arrival (ingest.day_count: none unaccounted)
+        self.assertEqual([r['Reason'] for r in s._rows("SELECT Reason FROM route WHERE RoutedBy='report' ORDER BY RouteId")],
+                         ['its triage line did not send it to triage'] * 2)
+        self.assertEqual(ingest.day_count(s, _reports(s)[0]['CreatedAt'][:10])['unaccounted'], 0)
 
     def test_a_monitor_is_triaged_only_when_its_condition_fires(self):
         s = MemoryStore(); _brain(s)

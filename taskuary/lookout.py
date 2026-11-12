@@ -27,6 +27,7 @@ import json, re, threading
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from loguru import logger
+from . import aiusage
 
 FAMILIES = {
     'credit': "work the owner did that leadership likely does not see, with the numbers from the window, and a concrete way to show it",
@@ -266,6 +267,7 @@ def ref_line(store, ref: str) -> str:
     return f"task {t.get('Status') or ''}: {_one(t.get('Title'), 90)}"
 
 
+@aiusage.named('advisor.propose')
 def propose(store, llm, user: str, shown: set) -> list | None:
     """The first call. None when it gave no answer at all (the pass is tried again in a day), else the ideas the code could check."""
     from .llm import ask_json
@@ -275,6 +277,7 @@ def propose(store, llm, user: str, shown: set) -> list | None:
     return [x for x in (_clean(store, d, shown, fams) for d in (got.data.get('ideas') or [])[:MAX_IDEAS * 2]) if x][:MAX_IDEAS]
 
 
+@aiusage.named('advisor.check')
 def check(store, llm, ideas: list) -> tuple:
     """The second call: (kept, [(idea, why held)]). A check that cannot run holds everything - an unchecked idea is never raised."""
     from .llm import ask_json

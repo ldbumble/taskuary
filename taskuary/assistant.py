@@ -39,7 +39,7 @@ import contextlib, json, math, re, threading
 from datetime import datetime, timedelta
 from loguru import logger
 
-from . import kinds as task_kinds
+from . import aiusage, kinds as task_kinds
 from .store import is_model_idea, task_ref, auto_code_enabled
 from .timewords import ago_m, plural, span
 from .assistantblocks import said_number   # the payload's own English for a window: 'the last two days'
@@ -1435,6 +1435,7 @@ def systems_inputs(store, watch_source_ids=None, watch_sources=None) -> str:
             f"{system_checks(store, watch_source_ids or [], watch_sources or [])}")
 
 
+@aiusage.named('advisor.think')
 def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX_LINES,
           watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None, report_id=None, memo: str = None) -> list:
     """One call: the owner's instruction (the Reports tab), the candidates, the day, what was already said."""
@@ -1819,6 +1820,7 @@ def _judged(judge, say: list) -> dict | None:
         logger.warning(f'assistant: the routing judge failed, so the post reaches you - {e}'); return None
 
 
+@aiusage.named('advisor.run')       # every call of a check run not named closer in (think, propose, check, the idea triage)
 def run(store, llm=None, force: bool = False, instruction: str = None, *,
         watch_source_ids=None, watch_sources=None, systems_only: bool = False, blocks=None,
         report_id=None, report_title: str = None, always_post: bool = False, judge=None, asked: bool = None) -> dict:

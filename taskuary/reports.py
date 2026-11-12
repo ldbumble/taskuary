@@ -340,7 +340,7 @@ def run_agent(cfg):
     if shape: ask += ('\n\nSTRUCTURE: keep the sections, their order and the table columns of the previous run of this '
                       'report so runs stay comparable - change only the content - except that the result always comes first '
                       f'and how you got it last. Previous outline: {shape}')
-    out = str(llm(AGENT_SYSTEM, ask) or '').strip()
+    with aiusage.asking('reports.agent'): out = str(llm(AGENT_SYSTEM, ask) or '').strip()
     if not out: raise RuntimeError(f'{name} answered nothing')
     why, out = agent_failed(out)
     # an answer ABOUT a failed run is not a report - file it as FAILED, the way the timeout and the
@@ -1716,10 +1716,11 @@ def render_report(store, cfg: dict, llm=None, notes: list = None, files: list = 
             data = rest[:cap]
             if len(rest) > cap: data +='\n…(data truncated here - later rows were NOT shown to you)'
             charts = str(store.get_setting('report_images_enabled') or '1') == '1'
-            ai = (llm(report_system(store, cfg, charts),
-                      f"Instruction: {instr[:AI_CHARS]}\n\nData ({head}):\n"
-                      + (data if rest.strip() else '(every source is placed in the instruction above)'),
-                      max_tokens=SUMMARY_TOKENS) or '').strip()
+            with aiusage.asking('reports.summary'):
+                ai = (llm(report_system(store, cfg, charts),
+                          f"Instruction: {instr[:AI_CHARS]}\n\nData ({head}):\n"
+                          + (data if rest.strip() else '(every source is placed in the instruction above)'),
+                          max_tokens=SUMMARY_TOKENS) or '').strip()
         except Exception as e:
             raise RuntimeError(f'the AI summary failed: {str(e)[:300]}') from e
         # A SUMMARY THAT DID NOT HAPPEN IS A FAILED RUN, not a success with raw rows under a note: the
@@ -2161,11 +2162,16 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
                                      'watch_for': work_brief(cfg) or None}, llm=llm,
                          # no brain to triage with is a plain row under Reports, never "triage failed" on every run
                          file_only=llm is None)
-    mid = out.get('message_id') or store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}:feed',
-                                                      'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report',
-                                                      'SourceName': title, 'Subject': subject, 'FromName': title, 'SentAt': stamp,
-                                                      'BodyText': text, 'SourceLink': cfg.get('link'), 'Status': 'feed',
-                                                      'MailMetaJson': json.dumps({'built_from': built_from(cfg)})})
+    mid = out.get('message_id')
+    if not mid:
+        mid = store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}:feed',
+                                 'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report',
+                                 'SourceName': title, 'Subject': subject, 'FromName': title, 'SentAt': stamp,
+                                 'BodyText': text, 'SourceLink': cfg.get('link'), 'Status': 'feed',
+                                 'MailMetaJson': json.dumps({'built_from': built_from(cfg)})})
+        # ...and why it was not triaged, on its route row like every other arrival's (ingest.day_count)
+        store.add_route(mid, None, 'feed', None, 'the morning digest - never triaged' if is_digest else
+                        'the same words as its last run - not triaged again' if same else "its triage line did not send it to triage", [], 'report')
     # the rows are the report: hand back the spreadsheet to open and the chart to look at
     try:
         from .artifacts import attach_report_output, attach_files

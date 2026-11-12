@@ -791,6 +791,7 @@ def _classify(store, msg, llm, thread, carried, lrn, notes, notes_left, me, cand
                              workstreams=workstreams.menu(store) or None)
 
 
+INVITE_FYI = {'intent': 'fyi', 'why': 'a calendar invite - a meeting to be ready for, not work'}    # the one verdict made without a model
 QUIET = ('fyi', 'watch')     # the verdicts that ask nothing of the owner now: a line that joins existing work on either is kept for the chain
 
 
@@ -956,7 +957,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # a calendar invite is a meeting to be ready for on BOTH roads - an updated invite joins its meeting's thread
         # as the newest word on it, never work and never a reopening (the owner, 2026-09-25)
         # ...unless it MOVED a meeting the owner had accepted: then it is theirs to answer again, on the same task (invite_verdict)
-        elif msg.get('invite'): follow = invite_verdict(store, msg) or {'intent': 'fyi', 'why': 'a calendar invite - a meeting to be ready for, not work'}
+        elif msg.get('invite'): follow = invite_verdict(store, msg) or dict(INVITE_FYI)
         # no keyword fyi before the model any more (the owner, 2026-09-25): triage reads every follow-up
         elif cfg.get('intent_classify_enabled', '1') == '1' and llm is not None and not is_chat(msg):
             try: follow, _fail = judge(store, msg, llm, mine, me, home=tid)
@@ -1006,7 +1007,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # ...unless it is a REQUEST nobody has answered (calwrite.needs_answer, by the mail system's own type): then the answer is
             # the owner's move - its row offers Accept, Decline and Propose a new time, each drafted for their yes (the owner, 2026-10-20).
             # An answer, an update or a cancellation is still a meeting to be ready for.
-            pre = (invite_verdict(store, msg) or {'intent': 'fyi', 'why': 'a calendar invite - a meeting to be ready for, not work'}) if msg.get('invite') else None
+            pre = (invite_verdict(store, msg) or dict(INVITE_FYI)) if msg.get('invite') else None
             if pre:
                 intent = pre
             elif llm is None:
@@ -2951,6 +2952,8 @@ def _reopen(store, tid, msg: dict, actor: str, intent: dict = None) -> bool:
     return True
 
 
+LIVE_JOIN = 'an agent is working this and asked on this chat'      # the one join made unread: a running agent's own conversation (day_count)
+
 def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     """Where a chat line goes: (route dict, (verdict, fail) or None).
 
@@ -2974,7 +2977,7 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
     # live task among the room's lines it may name: it joins if the verdict says it belongs, else it is its own work.
     if live and from_opener(store, live, msg):
         return ({'decision': 'attach', 'task_id': live, 'score': 1.0, 'candidates': [],
-                 'reason': 'an agent is working this and asked on this chat'}, None)
+                 'reason': LIVE_JOIN}, None)
     room = next((c['task_id'] for c in reversed(cands) if joinable(store, c['task_id'], shut=False)), None)
     apart = f", so it did not join {task_ref(room)}" if room else ''
     if cfg.get('intent_classify_enabled', '1') != '1' or llm is None:
@@ -3289,6 +3292,7 @@ def _is_raw_body(summary: str, body: str) -> bool:
     return b.startswith(s[:400]) if len(s) >= 400 else b.startswith(s)
 
 
+@aiusage.named('triage.reread')
 def backfill_asks(store, llm=None, actor: str = 'owner', dry_run: bool = True,
                   include_closed: bool = False, limit: int = 0) -> list:
     """Re-derive the ask and the todos for tasks that were filed with the raw email as their ask.
@@ -3562,3 +3566,45 @@ def _sweep(store, llm, limit, hours, tries) -> int:
         done += 1
     if done: logger.info(f'retry sweep: {done} stranded row(s) judged')
     return done
+
+
+# EVERY ARRIVAL IS ACCOUNTED FOR (2026-11-12): each inbound message is either judged by triage or kept by a road that wrote down why on
+# its route row - a policy, a feed, an auto-reply, a chat app's copy, a report run its triage line did not send - and the day's count
+# says how many went each way. A message no road gave a reason is UNACCOUNTED: the count is how a silent drop gets seen.
+SEEN_ELSEWHERE = {'context': 'your own line in the conversation', 'history': 'earlier mail on a thread, kept as its history'}
+BOUND_IGNORED = "a line in an agent's chat from someone not in it"
+
+
+def _why_key(reason: str) -> str:
+    "A route's reason as a line of the count: its head, before the detail, with a task's ref said as 'a task'."
+    return re.sub(r'TQ-\d+', 'a task', str(reason or 'no reason written').split(' - ')[0]).strip()[:120]
+
+
+def day_count(store, day: str = None) -> dict:
+    """What became of `day`'s inbound messages (YYYY-MM-DD, local; today by default): {judged, skipped_by_rule {why: n}, joined_live,
+    report_feed, waiting, unaccounted, unaccounted_ids}. Judged = a model's verdict is on file for it; skipped_by_rule counts the rest
+    under the reason their road wrote (a calendar invite and a reused verdict are rules too); joined_live = a line that reached an agent's
+    own chat unread (chat_route's LIVE_JOIN, and a bound chat's lines - agentchannels); waiting = an error or a queue triage still owes."""
+    day = day or datetime.now().strftime('%Y-%m-%d')
+    out = {'judged': 0, 'skipped_by_rule': {}, 'joined_live': 0, 'report_feed': 0, 'waiting': 0, 'unaccounted': 0, 'unaccounted_ids': []}
+    def skip(why): out['skipped_by_rule'][why] = out['skipped_by_rule'].get(why, 0) + 1
+    routes = {}
+    for r in store._rows('SELECT r.MessageId, r.Decision, r.Reason, r.RoutedBy, r.VerdictJson FROM route r JOIN message m ON m.MessageId=r.MessageId '
+                         'WHERE substr(m.CreatedAt, 1, 10)=? ORDER BY r.RouteId', (day,)): routes.setdefault(r['MessageId'], []).append(r)
+    for m in store._rows("SELECT MessageId, Status FROM message WHERE substr(CreatedAt, 1, 10)=? AND IFNULL(Direction, 'in')='in'", (day,)):
+        rs = routes.get(m['MessageId']) or []
+        v = next((json.loads(r['VerdictJson']) for r in rs if r['VerdictJson'] and r['RoutedBy'] != 'owner'), None)
+        first = next((r for r in rs if r['Decision'] not in ('queued', store.HELD) and r['RoutedBy'] != 'owner'), None)
+        if m['Status'] in SEEN_ELSEWHERE: skip(SEEN_ELSEWHERE[m['Status']])
+        elif v and (v.get('invite') or v.get('why') == INVITE_FYI['why']): skip('a calendar invite')
+        elif v and v.get('reused'): skip('filed as the last ones like it from this sender were')
+        elif v: out['judged'] += 1
+        elif m['Status'] in ('error', 'triaging'): out['waiting'] += 1
+        elif not first: out['unaccounted'] += 1; out['unaccounted_ids'].append(m['MessageId'])
+        elif first['Decision'] == 'feed': out['report_feed'] += 1
+        elif first['Reason'] == LIVE_JOIN: out['joined_live'] += 1
+        else: skip(_why_key(first['Reason']))
+    for r in store._rows("SELECT Role FROM agentchannel_msg WHERE Dir='in' AND substr(At, 1, 10)=?", (day,)):
+        if r['Role'] == 'ignored': skip(BOUND_IGNORED)
+        else: out['joined_live'] += 1
+    return out

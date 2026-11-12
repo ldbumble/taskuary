@@ -617,6 +617,7 @@ def file_run(store, src: dict, cfg: dict, trigger: str = 'schedule') -> dict:
                              'Channel': 'report', 'SourceName': title, 'Subject': f'{title} — {head}', 'FromName': title, 'SentAt': stamp,
                              'BodyText': text, 'SourceLink': f"#report={src['SourceId']}", 'Status': 'feed',
                              'MailMetaJson': json.dumps({'built_from': built_from(cfg)})})
+    store.add_route(mid, None, 'feed', None, "a dashboard's run - shown, never triaged", [], 'report')   # its reason, as every arrival's (ingest.day_count)
     expire_previous_runs(store, src, cfg, mid)
     store.audit('message', mid, 'report', 'report', 'agent', title)
     logger.info(f'dashboard {title}: {head} ({trigger})')

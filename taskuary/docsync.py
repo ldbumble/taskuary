@@ -18,6 +18,7 @@ BLURB_CHARS = 600       # one routing-table entry, whole (triage.REPO_ABOUT is t
 # sentry, pagerduty, aws, azure, and now clickup/todoist) was invisible to the agents: their
 # sources never made it into the SOUL.md 'Connected systems' block.
 from .channels import CH2SRC
+from . import aiusage
 
 
 # The tool blurb used to say "create/update things in it as the work needs" - and an agent
@@ -259,6 +260,7 @@ def _readme_blurb(tok, repo, llm) -> str:
     return lines[0][:160] if lines else ''
 
 
+@aiusage.named('triage.repomap')     # the triage brain writing a repository's one line from its README
 def update_repo_map(store, repos: list, actor='github', tok=None, llm=None):
     """repos: [{full_name, description, archived}] - append unknown repos under the map
     header in SOUL.md so EVERY agent knows which repo owns what. Repos without a GitHub

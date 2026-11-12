@@ -41,8 +41,7 @@ test("whose calendars the times were read against is said", () => {
   assert.match(seenLine({ read: [], unread: ["a@x.example", "b@x.example"] }), /^Free on your calendar - a@x\.example, b@x\.example do not share/);
 });
 
-test("New has a Meeting tab, and the Assistant's meeting opens it filled in", () => {
-  assert.match(read("NewSheet.jsx"), /key: "meeting", mark: "📅", label: "Meeting"/);
+test("the Assistant's meeting opens New's meeting form filled in", () => {
   assert.match(read("NewSheet.jsx"), /<NewMeeting renderTo=\{\(p\) => <EmailRecipients \{\.\.\.p\} \/>\}/);
   assert.match(read("CanvasBrowse.jsx"), /initialMeeting=\{state\?\.meeting \|\| null\}/);
   // the pick is the only press, and it drafts: nothing in the form posts a send

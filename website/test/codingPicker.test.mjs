@@ -38,16 +38,12 @@ test("the hook carries what each worker is for", () => {
 });
 
 test("the new-task dialog asks the question it means, and passes the kinds", () => {
-  // the Board's new task IS New's "Give an agent a job" (2026-10-15) - one form, so it is checked once, below
+  // the Board's New is New's one box (TQ-1397): nothing to pick there; the task page keeps its picker for a run started from a task
   const board = read("BoardView.jsx");
-  assert.match(board, /<NewSheet open=\{newOpen\} onClose=\{\(\) => setNewOpen\(false\)\} initialKind="agent"/);
+  assert.match(board, /<NewSheet open=\{newOpen\} onClose=\{\(\) => setNewOpen\(false\)\}\s/);
   assert.doesNotMatch(board, /Which CLI works it — and which model that CLI runs/);
-  for (const name of ["NewSheet.jsx", "TaskPage.jsx"]) {   // the task view is TaskPage.jsx since the canvas redesign
-    const src = read(name);
-    assert.match(src, /<AgentPicker agents=\{agents\} models=\{models\} kinds=\{kinds\} coding/);
-  }
-  const sheet = read("NewSheet.jsx");
-  assert.match(sheet, /onAgent=\{\(a\) => \{ setAgent\(a\); setModel\(""\); \}\}/);
+  assert.match(read("TaskPage.jsx"), /<AgentPicker agents=\{agents\} models=\{models\} kinds=\{kinds\} coding/);
+  assert.doesNotMatch(read("NewSheet.jsx"), /<AgentPicker/);
 });
 
 test("a general worker is chosen by name alone - the brain is its own picker", () => {

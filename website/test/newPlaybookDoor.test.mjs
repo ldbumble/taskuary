@@ -9,9 +9,8 @@ import { NEW_PB, askPlaybook, takePlaybookAsk } from "../src/playbookOpen.js";
 
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
-test("New has a Playbook tab after Report and Workflow, its press handing the words to the shelf's New playbook", () => {
+test("a playbook the Assistant wrote up on New hands its words to the shelf's New playbook", () => {
   const src = read("NewSheet.jsx");
-  assert.ok(src.indexOf('key: "workflow"') < src.indexOf('key: "playbook", mark: "📖", label: "Playbook"'));
   assert.match(src, /askPlaybook\(about, true\); onClose\?\.\(\); openAppLink\(`report=\$\{NEW_PB\}`\);/);
   assert.match(src, /kind === "playbook" \? "Set up with AI"/);
 });

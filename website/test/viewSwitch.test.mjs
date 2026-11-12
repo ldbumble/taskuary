@@ -20,8 +20,8 @@ test("Board opens the Board; Chat and Game are the Assistant, walked or not", ()
   assert.match(page, /onView=\{\(v\) => \{ if \(v === "board"\) \{ go\("Board"\); return; \} pickAsstGame\(v === "game"\); go\("Assistant"\); \}\}/);
 });
 
-test("the Board's New task opens on New's agent tab", () => {
+test("the Board's New opens on New's one box", () => {
   const sheet = read("NewSheet.jsx");
-  assert.match(sheet, /initialKind = "send", initialHow = "", initialText = "", line = null, onSaid, start = false,\n  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null, chat = true \}\) \{\n  const \[kind, setKind\] = useState\(initialKind\);/);
+  assert.match(sheet, /initialKind = "chat", initialHow = "", initialText = "", line = null, onSaid, start = false,\n  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null \}\) \{\n  const \[kind, setKind\] = useState\(initialKind\);/);
   assert.match(sheet, /setKind\(initialKind\); \}, \[open, initialKind\]\);/);
 });

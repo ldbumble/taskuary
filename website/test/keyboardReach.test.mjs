@@ -20,7 +20,7 @@ test("pressable is a button for the keyboard: Tab reaches it, Enter and Space pr
 
 test("each mouse-only control the audit named is pressable now", () => {
   assert.match(src("ConnectorsView.jsx"), /<Box \{\.\.\.pressable\(c\.go, !c\.planned\)\} data-tq-card=\{c\.key\}/);
-  assert.match(src("NewSheet.jsx"), /<Box key=\{k\.key\} \{\.\.\.pressable\(\(\) => \{ setKind\(k\.key\);/);
+  assert.doesNotMatch(src("NewSheet.jsx"), /setKind\(k\.key\)/);         // New has no kind tabs to reach (TQ-1397)
   const rail = src("AssistantView.jsx");
   assert.match(rail, /data-tq-section-head=\{level\}[\s\S]{0,200}\{\.\.\.pressable\(\(\) => onSection\(level\)\)\}>/);
   assert.match(rail, /<i className="fold" [^>]*\{\.\.\.pressable\(\(e\) => \{ e\.stopPropagation\(\);/);

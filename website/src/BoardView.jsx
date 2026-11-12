@@ -499,7 +499,7 @@ export default function BoardView({ onOpenTask, active = true }) {
 
       {/* ── start a task for the agent: New's own "Give an agent a job" (the owner, 2026-10-15: "look like a coding or general
           agent - same as in new button") - a live session in a checkout, or a general agent, one form app-wide ── */}
-      <NewSheet open={newOpen} onClose={() => setNewOpen(false)} initialKind="agent" chat={false}
+      <NewSheet open={newOpen} onClose={() => setNewOpen(false)}
         onDone={() => { setBoardTick((n) => n + 1); load(); }} />
 
       <NoteDialog open={!!noteFor} task={noteFor} onClose={() => setNoteFor(null)} />

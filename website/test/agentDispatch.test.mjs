@@ -71,7 +71,7 @@ test("the New sheet reports what the dispatch answered, not what it hoped", () =
   assert.doesNotMatch(sheet, /setOk\(`\$\{data\.ref\} — \$\{agent\}/);   // never the hoped-for sentence
 });
 
-test("the brain picked in the New sheet and on the task page travels with the role", () => {
-  assert.match(src("NewSheet.jsx"), /brain: brain \|\| null/);
+test("the brain picked on the task page travels with the role; New picks none - Settings names it (TQ-1397)", () => {
+  assert.doesNotMatch(src("NewSheet.jsx"), /brain: brain/);
   assert.match(taskSource(), /brain: run\.brain \|\| null/);
 });

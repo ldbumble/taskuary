@@ -9,10 +9,8 @@ import { DRAFT_HASH, handDraft, onDraftHanded, takeDraft } from "../src/draftHan
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
 // THE DESCRIBE BOX IS THE CHAT'S NOW (the owner, 2026-10-30): each tab brings its builder up and opens the Assistant on it - or by hand
-test("Report and Workflow are tabs on New, each a door to its builder and the chat", () => {
+test("a report or routine the Assistant wrote up on New is a door to its builder and the chat", () => {
   const src = read("NewSheet.jsx");
-  assert.match(src, /key: "report", +mark: "📊", label: "Report"/);
-  assert.match(src, /key: "workflow", mark: "🔁", label: "Routine"/);
   assert.match(src, /<SetupWithAi kind=\{kind\} words=\{kind === initialKind \? initialText : ""\} onOpen=\{\(\) => \{ onClose\?\.\(\); openAppLink\(NEW_HASH\[kind\]\); \}\} \/>/);
   assert.match(src, />Set it up by hand<\/Button>/);
   assert.doesNotMatch(src, /<Composer/);
@@ -46,6 +44,6 @@ test("a routine the Assistant wrote up opens New → Routine with its words, car
   assert.match(canvas, /initialText=\{state\?\.text \|\| ""\}/);
   assert.match(canvas, /initialRoutine=\{state\?\.routine \|\| null\}/);
   assert.match(canvas, /JSON\.stringify\(state\?\.routine \|\| ""\)/, "a new prefill remounts the sheet, so its fields are the new ones");
-  assert.match(sheet, /initialRoutine = null, chat = true \}\) \{/);
+  assert.match(sheet, /initialRoutine = null \}\) \{/);
   assert.match(read("SetupWithAi.jsx"), /`Help me set up \$\{WHAT\[kind\] \|\| WHAT\.report\}\$\{String\(words \|\| ""\)\.trim\(\) \? `: \$\{String\(words\)\.trim\(\)\}` : ""\}`/);
 });

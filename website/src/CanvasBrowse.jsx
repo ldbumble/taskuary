@@ -143,7 +143,7 @@ export default function CanvasBrowse({ area, state, onState, live, onOpenCard, o
   if (area === "new") return (
     // ...written up by the Assistant when a typed ask was new work (concierge._new): its tab and its words, its own button to press
     <Box data-tq-browse="new"><NoSubject onOpenCard={onOpenCard} /><NewSheet key={`${state?.kind || ""}|${state?.text || ""}|${state?.channel || ""}|${state?.to || ""}|${JSON.stringify(state?.meeting || "")}|${JSON.stringify(state?.routine || "")}`} inline open onClose={onClose}
-      onOpenTask={onOpenTask} initialKind={state?.kind || "send"} initialHow={state?.how || ""} initialText={state?.text || ""}
+      onOpenTask={onOpenTask} initialKind={state?.kind || "chat"} initialHow={state?.how || ""} initialText={state?.text || ""}
       initialChannel={state?.channel || ""} initialTo={state?.to || ""} initialMeeting={state?.meeting || null} initialRoutine={state?.routine || null}
       line={state?.line} start={!!state?.start} onSaid={(text) => onSaid?.(state?.aid, text)} /></Box>
   );

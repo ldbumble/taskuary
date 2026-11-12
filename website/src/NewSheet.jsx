@@ -5,9 +5,9 @@
 // meant the Board; and a reminder had nowhere to go at all, so it went in a notebook and the
 // screen they watch all day knew nothing about it.
 //
-// Three doors, one sheet - and the agent door forks again, into a CLI session or the
-// assistant's own chat. All of them land on the Timeline at the minute the button was
-// pressed. Nothing here sends: "Send something" produces a DRAFT the owner approves, which is
+// One box (TQ-1397): what you need, in your words. The Assistant makes it what it is - an agent's
+// job, a routine, a report, a message, a meeting, a goal, a note - and brings up that card with only
+// its own fields. All of them land on the Timeline at the minute the button was pressed. Nothing here sends: "Send something" produces a DRAFT the owner approves, which is
 // the one send path the app has and the only one that respects the per-channel reply switches.
 import React, { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 import {
@@ -18,11 +18,10 @@ import { ButtonBar } from "./ButtonBar.jsx";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
 import { ACCENT, ACCENT2, BORDER, DIM, FAINT, INK, PANEL, ROLES, mono } from "./theme.jsx";
-import { ChannelIcon, AgentPicker, MicButton, useAgents, codingProfile, TaskuaryMark, usePeopleSearch } from "./ui.jsx";
+import { ChannelIcon, MicButton, useAgents, usePeopleSearch } from "./ui.jsx";
 import { withFound } from "./peopleSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { NO_REPO, firstPressOf, planTask, withDesktop } from "./newTask.js";
-import NewRepo from "./NewRepo.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, sendPrefill, validEmail } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -38,33 +37,16 @@ const NO_AI_PLAN = "No AI is connected to plan the steps - connect one, or choos
 import { connectorNamed } from "./connectorCatalog.js";
 import { openAppLink } from "./appLinks.js";
 import { NEW_PB, askPlaybook } from "./playbookOpen.js";
-import { DASH, place } from "./words.js";
+import { place } from "./words.js";
 import { label as btn } from "./buttons.js";
 import { capabilities, useCapabilities } from "./capabilities.js";
 import { PromptBox } from "./AgentSummary.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
-import { askAssistant } from "./askAssistant.js";
 
-const KINDS = [
-  { key: "send",   mark: "✉️", label: "Send something", hint: "a message you start, drafted in your voice and approved by you" },
-  { key: "agent",  mark: <TaskuaryMark size={14} />, label: "Give an agent a job", hint: "an agent works on it for you and reports back" },
-  { key: "note",   mark: "💡", label: "Note to self", hint: "a reminder or an idea — nothing works it, it just sits on the day you pick" },
-  // ...and a meeting (the owner, 2026-10-28: "probably new meeting screen is better"): free times off your calendar and theirs, the invite drafted for your Send
-  { key: "meeting", mark: "📅", label: "Meeting", hint: "a time with people, found on your calendar and theirs — the invite is drafted for your Send" },
-  { key: "goal",   mark: "🎯", label: "Set a goal", hint: "an outcome with a date and steps — the steps are tasks, and it stays on your rail until it is done" },
-  // A JOB THAT REPEATS, one tab each (the owner, 2026-10-15: "we need 2, one for reports and one for workflows"): say it in
-  // your words and Build it - the draft opens on Reports, filled in, to check and save. The same box Reports has (Composer)
-  { key: "report",   mark: "📊", label: "Report", hint: "reads your systems on a schedule and summarises what it finds — it changes nothing" },
-  // ...and beside it, a dashboard (the owner, 2026-10-23: "similar to reports but more visual"): described here, drafted by the same
-  // box, and opened on Reports → Dashboards drawn over real rows to save
-  { key: "dashboard", mark: "📈", label: DASH.tab, hint: DASH.tab_hint },
-  { key: "workflow", mark: "🔁", label: "Routine", hint: "does the work on a schedule — checks, opens tasks, prepares drafts — and asks before what you said it must not" },
-  // ...and the third thing Reports keeps (the owner, 2026-10-22: "this is not playbook ui?" - asked for one, the Assistant handed it to a
-  // general agent as its job). Its words go to the shelf's own New playbook, which sets it up with AI there (playbookOpen.askPlaybook)
-  { key: "playbook", mark: "📖", label: "Playbook", hint: "how one kind of request is handled from now on — triage matches new mail to it, and its steps are followed your way" },
-  // no "Chat with Taskuary" tab (the owner, 2026-11-09: "remove it. it looks crazy") - what fits none of these is typed to the Assistant's own box
-];
 const REPEATS = ["report", "dashboard", "workflow"];
+// what the card IS, as its title: New's own box asks, and a card the Assistant wrote from it says what it made of the words
+const TITLE = { chat: "What do you need?", agent: "An agent's job", workflow: "A routine", report: "A report", dashboard: "A dashboard",
+  playbook: "A playbook", send: "A message", meeting: "A meeting", goal: "A goal", note: "A note" };
 
 const Label = ({ children }) => (
   <Typography sx={{ ...mono, fontSize: 9.5, fontWeight: 600, letterSpacing: ".11em",
@@ -201,12 +183,10 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 // `line`: the Assistant's line that wrote this card (concierge._new) - its press says that line again as what it started (`onSaid`)
 // `initialChannel` / `initialTo`: Send something already addressed - a People hit's Message them (SearchEverything, trust audit F6)
 // `start`: the Assistant pressed the agent's Send to agent for the owner - the card presses it once it can go (concierge._new)
-// `chat`: offer Chat with Taskuary - off where the Assistant is not on screen to take it (the Board)
-export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send", initialHow = "", initialText = "", line = null, onSaid, start = false,
-  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null, chat = true }) {
+export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "chat", initialHow = "", initialText = "", line = null, onSaid, start = false,
+  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null, madeOf = "" }) {
   const [kind, setKind] = useState(initialKind);
-  const said = useRef(null);      // the words, for the repository picker (see NewRepo)
-  const repoPick = useRef(null);  // what the picker says to use, read on submit
+  const said = useRef(null);      // the words, as the field debounces them
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [errAi, setErrAi] = useState(false);      // the error is "no AI is connected": it carries Connect an AI
@@ -224,17 +204,16 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [mode, setMode] = useState("draft");
   const pics = usePromptImages();
   // agent
-  const { agents, models, kinds, brainList, brainModels, generalBrains, agentsRead, codingReady, devMode } = useAgents();
-  const [agent, setAgent] = useState("");   // the coding profile, by kind; blank = the server finds it
-  const [brain, setBrain] = useState("");   // WHICH CLI runs it; blank = the brain settings name
-  const [model, setModel] = useState("");
+  // NOTHING TO PICK (the owner, TQ-1397: "you ask the agent what you need and it should do it ... never, ever be stuck on a repo thing"): no
+  // agent, AI, model or repository picker - Settings names the AI, and a live session opens in its task's own folder and picks its repository
+  // itself (repochoice.block). A list that never loaded held a tester's Start for five minutes
+  const { agents, kinds, agentsRead, codingReady, devMode } = useAgents();
   const [role, setRole] = useState("");     // a general agent: which profile (researcher, analyst...)
-  const [pick, setPick] = useState("");     // ...and which brain runs it; blank = the General agent setting
   // "terminal" = a CLI on a keyboard, "general" = a general agent with no repository. Held here rather
   // than inferred from the words: a question landing in a terminal by ACCIDENT is exactly what
   // newTask.planTask exists to stop, and it will not guess for us.
   // ...and with Developer mode off there is no terminal to pick: every job is a general agent's (the owner, 2026-11-02 and 2026-11-03)
-  const [howPick, setHow] = useState(initialHow || "terminal"), how = devMode ? howPick : "general";
+  const how = devMode ? initialHow || "terminal" : "general";
   // A session you open here is usually one you mean to sit in, so it does not end itself: the
   // judge that closes a router's task on a quiet screen would close this one while you read it.
   // note
@@ -245,6 +224,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // capability lands after the first draw, so it is followed until the owner picks a side
   const [by, setBy] = useState(""); const [who, setWho] = useState(""); const [plan, setPlan] = useState(!noAi), planPicked = useRef(false);
   useEffect(() => { if (!planPicked.current) setPlan(!noAi); }, [noAi]);
+  const [made, setMade] = useState(null);   // the card the Assistant wrote from New's one box - drawn in New's place
+  const [saidBack, setSaid] = useState(madeOf);  // ...or its answer, said under the box (and on the card it wrote, what it made of the words)
   const filed = useRef(null);      // a task this sheet filed whose start was refused: {taskId, ref, about, how}
 
   useEffect(() => { if (!open) return; setErr(""); setOk(""); setKind(initialKind); }, [open, initialKind]);
@@ -252,9 +233,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [deskOn, setDeskOn] = useState(false);
   const [desk, setDesk] = useState(false);
   useEffect(() => { if (open) api.get("/api/desktop").then(({ data }) => setDeskOn(!!data?.active)).catch(() => setDeskOn(false)); }, [open]);
-  useEffect(() => {
-    if (!agents.includes(agent)) { setAgent(codingProfile(agents, kinds)); setModel(""); }
-  }, [agents, kinds, agent]);
   // a new general task has no profile to keep, so the first general role is chosen rather than "the profile it has"
   const roles = agents.filter((a) => !["coding", "cli"].includes(String(kinds[a] || "").toLowerCase()));
   useEffect(() => { if (!role && roles.length) setRole(roles.includes("researcher") ? "researcher" : roles[0]); }, [roles, role]);
@@ -275,7 +253,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // to linkedin" was only ever an agent job, with no way to Connections (a tester, 2026-10-20). The words still go to an agent if pressed.
   const [words, setText] = useState(initialText);
   // ...a general agent's job is typed into the agent chat's own box (PromptBox) - its words are read at the press from here
-  const agentBox = kind === "agent" && how === "general", wordsRef = useRef(words), agentBoxRef = useRef(agentBox);
+  const agentBox = (kind === "agent" && how === "general") || kind === "chat", wordsRef = useRef(words), agentBoxRef = useRef(agentBox);
   wordsRef.current = words; agentBoxRef.current = agentBox;
   const named = kind === "agent" ? connectorNamed(words) : null;
   // each sheet registers as ITSELF: the Feed's closed dialog and the chat's open card both said "new-send", one cleared what the
@@ -293,7 +271,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const close = () => { if (!busy) onClose?.(); };
 
   const submit = useCallback(async () => {
-    setBusy(true); setErr(""); setErrAi(false); setOk("");
+    setBusy(true); setErr(""); setErrAi(false); setOk(""); setSaid("");
     const about = String((agentBoxRef.current ? wordsRef.current : aboutRef.current?.value) || "").trim();
     // THE BUTTON SPINS UNTIL WHAT IT MADE IS UP (the owner, 2026-11-09: "it should open new task right away or if it needs a second the create
     // new agent button should spin"): the card in the conversation is put down by the task landing on the table (AssistantView pull, holdsNew),
@@ -320,10 +298,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         if (general && (await capabilities()).ai === false) { setErr(NO_AI_LINE); setBusy(false); return; }
         // a session opens where the picker says (auto = the repository the words name, else the server guesses as ever);
         // the choice is the task's `repo:` tag, the override that always wins
-        const pickd = general ? null : repoPick.current?.(about) || null;
+
         // a general agent: kind general with no repository, started below like the task page's hand-off - never the
         // assistant's thread, which does nothing itself (2026-10-15)
-        const plan = planTask(general ? NO_REPO : pickd?.repo || null, general ? "file" : "terminal", false, true);
+        const plan = planTask(general ? NO_REPO : null, general ? "file" : "terminal", false, true);
         // A START REFUSED FILES ONE TASK, NOT ONE PER PRESS (the UI audit, 2026-10-21): the task was made before the start was asked
         // for, so each retry of a refused start filed another copy nobody worked on. The same words pressed again start the one filed.
         const again = filed.current?.about === about && filed.current.how === how ? filed.current : null;
@@ -334,17 +312,14 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           // it skipped triage, so nothing gave it a checklist: read the words behind the answer (server._read_hand_task)
           api.post(`/api/tasks/${data.taskId}/read-ask`).catch(() => null);
         }
-        // a folder typed for a repository the agent had none for is saved on the agent first - the session refuses to open without one
-        if (pickd?.repo && pickd.path) await api.put(`/api/tasks/${data.taskId}/repo`, { repo: pickd.repo, path: pickd.path, ...(agent ? { agent } : {}) });
         let out;
         try {
           // WHAT THE ANSWER SAID, not what the button hoped. A task with no checkout comes back
           // `needs_repo` with started: false, and this announced "is on it in a live session" over
           // the top of it (the owner, 2026-09-22: "hit the new button with coding agent but it did
           // not start"). One reading of a dispatch answer, the same one every other surface uses.
-          ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, { ...(general
-            ? { kind: "general", agent: role || null, pick: pick || null, model: model || null }
-            : { agent: agent || null, brain: brain || null, pick: brain ? null : pick || null, model: model || null }), ...(line ? { said: line } : {}) }));
+          ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, { ...(general ? { kind: "general", agent: role || null } : {}),
+            ...(line ? { said: line } : {}) }));
         } catch (e) {
           // ...and the line says the task is there: "nothing started" over a task already filed sent the owner to press again
           throw { response: { data: { detail: `${data.ref} is filed but did not start - ${String(e?.response?.data?.detail || "the start was refused").replace(/\.$/, "")}. Press ${verb} to try it again.` } } };
@@ -354,8 +329,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         setOk(`${data.ref} — ${outcomeOf({ ...out, ref: "" }).text}.`);      // the line leads with the ref: said once, not twice
         aboutRef.current?.clear(); setText(""); setHasAbout(false); pics.clear(); onDone?.(); openIt(data.taskId);
       } else if (kind === "chat") {
-        // said in the chat as if typed there: the Assistant answers, or files it as whatever it turns out to be
-        askAssistant(about); aboutRef.current?.clear(); setHasAbout(false); onClose?.();
+        // THE ASSISTANT'S OWN ROAD, NEW'S OWN PAGE (the owner, TQ-1397: "the back end should be the same code ... but the UI should look normal"):
+        // the words are one Assistant turn (concierge.say), and what it made comes up HERE - the card it wrote, filled in (an agent's job
+        // pressed), or its answer as a line under the box - never a jump into the chat
+        const { data } = await api.post("/api/concierge/say", { text: about, images: pics.paths || [] });
+        setText(""); pics.clear();
+        if (data?.new) { setMade({ ...data.new, said: data.say || "" }); setBusy(false); return; }
+        setSaid(String(data?.say || "").trim() || "Done.");
       } else if (kind === "playbook") {
         // the one road to a playbook is the shelf's New playbook: this press is its Set up with AI, made there once with these words
         askPlaybook(about, true); onClose?.(); openAppLink(`report=${NEW_PB}`);
@@ -380,7 +360,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     if (!(inline && opened)) setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, noAi, onDone, onOpenTask, onClose, pics, line, onSaid, inline]);
+  }, [kind, channel, to, emailTo, cc, mode, how, role, when, by, who, plan, noAi, onDone, onOpenTask, onClose, pics, line, onSaid, inline]);
 
   // ...and no live session without a coding tool the owner chose (owner-approved, 2026-10-21): Send to coding agent stays disabled
   const noCodingTool = kind === "agent" && how === "terminal" && (!agentsRead || !codingReady);
@@ -388,7 +368,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // a hand-off is the one Send to agent / Send to coding agent (buttons.json); the others are this form's own words
   const verb = kind === "send" ? (mode === "task" ? btn("regular_agent") : "Draft it")
     : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it")
-    : kind === "playbook" ? "Set up with AI" : kind === "chat" ? "Ask Taskuary" : "Note it";
+    : kind === "playbook" ? "Set up with AI" : kind === "chat" ? "Go" : "Note it";
   // THE ASSISTANT PRESSED IT (`start`, concierge._new - the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that"):
   // an agent's job it wrote here is started by this card's own button, once, the moment the card can go - the same press the owner's is
   const autoPressed = useRef(false);
@@ -399,7 +379,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
   const aboutLabel = kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
     : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
-    : kind === "playbook" ? "What should this playbook do" : kind === "chat" ? "What's on your mind" : "What do you want to remember";
+    : kind === "playbook" ? "What should this playbook do" : kind === "chat" ? "What do you need" : "What do you want to remember";
 
   // the card: a bordered block in the conversation's width, Esc closes it, nothing floats over the page
   const Shell = inline ? Box : Dialog;
@@ -408,31 +388,19 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         sx: { border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, overflow: "hidden", scrollMarginTop: "8px" } }
     : { open: !!open, onClose: close, fullWidth: true, maxWidth: "md", "data-tq-keep": true };   // md: the tabs fit on one line, and scroll sideways when they do not
   if (inline && !open) return null;
+  if (made) return <NewSheet key={made.line || made.text} open={open} onClose={onClose} onDone={onDone} onOpenTask={onOpenTask} inline={inline} onSaid={onSaid}
+    initialKind={made.kind} initialHow={made.how || ""} initialText={made.text || ""} initialChannel={made.channel || ""} initialTo={made.to || ""}
+    initialMeeting={made.meeting || null} initialRoutine={made.routine || null} line={made.line} start={!!made.start} madeOf={made.said} />;
   return (
     <Shell {...shell}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0.5 }}>
-        <Box sx={{ flex: 1 }}>What are we starting?</Box>
+        <Box sx={{ flex: 1 }}>{TITLE[kind] || "What are we starting?"}</Box>
         <IconButton aria-label="Close new task" size="small" onClick={close}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
       </DialogTitle>
 
-      {/* the kinds are tabs, not a select: three doors that all exist is the point of the sheet,
-          and a closed dropdown hides two of them behind a click */}
-      {/* ...every one in sight: a row that scrolled with no scrollbar cut the last at 1440px ("Playbo...") and hid four on a phone, with nothing
-          to say there were more (the product audit, 2026-11-08) - the row wraps instead */}
-      <Box data-tq-new-kinds="" sx={{ display: "flex", flexWrap: "wrap", gap: 0.25, px: { xs: 1, sm: 3 }, borderBottom: `1px solid ${BORDER}` }}>
-        {KINDS.filter((k) => chat || k.key !== "chat").map((k) => (
-          <Box key={k.key} {...pressable(() => { setKind(k.key); setErr(""); setOk(""); })} role="tab"
-            aria-selected={kind === k.key} title={k.hint}
-            sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 0.75, px: { xs: 1, sm: 1.25 }, py: 1, cursor: "pointer", flexShrink: 0,
-              fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", mb: "-1px",
-              color: kind === k.key ? INK : FAINT,
-              borderBottom: `2px solid ${kind === k.key ? ACCENT : "transparent"}`,
-              transition: "color .15s" }}>
-            <Box component="span" aria-hidden sx={{ fontSize: 13, lineHeight: 1 }}>{k.mark}</Box>{k.label}
-          </Box>
-        ))}
-      </Box>
-
+      {/* NEW IS ONE BOX (the owner, TQ-1397: "we could have new as you just ask ... you ask the agent what you need and it should do it"): no
+          tabs. The words go to the Assistant, which makes them what they are - an agent's job it starts, a routine, a report, a dashboard,
+          a playbook, a message, a meeting, a goal or a note (concierge._new) - and that card comes up in the chat with only its own fields */}
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 2.5 }}>
         {kind === "send" && (
           <>
@@ -479,38 +447,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
         {kind === "agent" && (
           <>
-            {/* Not every job wants a keyboard. This sheet only ever opened a terminal, so a
-                question you just wanted TALKED THROUGH had to be filed as a coding task and then
-                walked back - the exact mistake newTask.js was written to prevent. Both doors,
-                stated, and the choice made before anything is created. */}
-            {devMode && <Box>
-              <Label>Who works it</Label>
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Fork on={how === "terminal"} onClick={() => { setHow("terminal"); setModel(""); }} title="A live session"
-                  hint="a CLI agent on a keyboard, in a checkout — it edits, runs and reports back." />
-                <Fork on={how === "general"} onClick={() => { setHow("general"); setModel(""); }} title="A general agent"
-                  hint="a researcher, analyst or writer on its own. It looks things up, drafts and reports back." />
-              </Box>
-            </Box>}
-            {/* A GENERAL AGENT'S JOB IS TYPED INTO THE AGENT CHAT'S OWN BOX (the owner, 2026-11-08): no AI picker, no model picker, no Connect an AI -
-                Settings decides the AI. Its box is below, where the words go (AgentBox) */}
-            {how === "terminal" && (
-              <Box>
-                <Label>Agent</Label>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
-                  <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={agent} model={model}
-                    brains={brainList} brainModels={brainModels} brain={brain} brainsRead={agentsRead} codingReady={codingReady}
-                    generalBrains={generalBrains} pick={pick} onPick={setPick}
-                    onBrain={(b) => { setBrain(b); setModel(""); }}
-                    onAgent={(a) => { setAgent(a); setModel(""); }} onModel={setModel} size={30} />
-                </Box>
-                {/* the checkout: AUTO by default (what guess_repo always did), or chosen here - the owner, 2026-09-30:
-                    "can't choose repo to create coding session in" */}
-                <Box sx={{ mt: 1.25 }}><NewRepo agent={agent} bus={said} out={repoPick} first={aboutRef.current?.value || ""} /></Box>
-                {/* A session you start is yours to end: the server marks the task the moment you open
-                    one (selfclose.claim), whichever door you came through - no checkbox to forget. */}
-              </Box>
-            )}
             {deskOn && (
               <FormControlLabel sx={{ ml: 0 }} control={<Checkbox size="small" checked={desk} onChange={(e) => setDesk(e.target.checked)} />}
                 label={<Typography variant="body2">Needs desktop - its agent may operate the desktop apps on this computer</Typography>} />
@@ -533,11 +469,12 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         )}
 
         {agentBox ? <Box data-tq-new-agent-box="">
-          <Label>{aboutLabel}</Label>
+          {kind !== "chat" && <Label>{aboutLabel}</Label>}{/* ...New's own box: its title already asks it */}
           {/* ...THE CHAT'S OWN BOX (AgentSummary.PromptBox): paperclip, words, mic, Send - typing and Send make the task, start its agent and open
               its chat. With no AI connected it says so, with the way to connect one */}
           <PromptBox text={words} setText={setText} pics={pics} busy={busy} onSend={submit} label={aboutLabel} title={verb} autoFocus
-            placeholder="why did Site 3's census move four points in July?" sendOff={noAi} />
+            placeholder={kind === "chat" ? "build me a website · a report on overdue invoices every Monday · draft a reply to Erin" : "why did Site 3's census move four points in July?"}
+            sendOff={noAi} />
           {noAi && <Typography data-tq-new-no-ai="" variant="caption" sx={{ color: DIM, display: "block", mt: 0.75 }}>
             No AI is connected, so an agent can't run this yet - <Box component="a" href={place("ai").href}
               onClick={(e) => { e.preventDefault(); onClose?.(); openAppLink(place("ai").href); }} sx={{ color: "inherit", fontWeight: 600 }}>connect one</Box>.</Typography>}
@@ -552,11 +489,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           {kind === "playbook" && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               It opens under Reports → Playbooks, where your assistant drafts the steps with you — Approve there saves it.
-            </Typography>
-          )}
-          {kind === "chat" && (
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-              It goes to your Assistant's chat. It answers, or turns it into whatever it really is — a task, a draft, a reminder — and asks before anything goes out.
             </Typography>
           )}
         </Box>}
@@ -618,6 +550,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         {err && <Alert severity="error" sx={{ py: 0.25, fontSize: 12.5, alignItems: "center" }}
           action={errAi ? <ConnectAi onGo={() => onClose?.()} /> : null}>{err}</Alert>}
         {ok && <Alert severity="success" sx={{ py: 0.25, fontSize: 12.5 }}>{ok}</Alert>}
+        {saidBack && <Alert data-tq-new-said="" severity="info" icon={false} sx={{ py: 0.25, fontSize: 12.5, whiteSpace: "pre-wrap" }}>{saidBack}</Alert>}
       </DialogContent>
 
       <ButtonBar>

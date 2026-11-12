@@ -521,7 +521,8 @@ def test_a_line_typed_into_a_turn_he_then_stops_is_answered_by_one_turn_under_th
     before the stop begins nothing; and a second Stop ends that turn too, with no third."""
     from taskuary import conversation
     s, tid, repo = world
-    rules = tmp_path / 'rules.json'; rules.write_text(json.dumps([{'when': 'stopped your turn', 'wait': 60, 'first': 'Rounded.'}]), encoding='utf-8')
+    rules = tmp_path / 'rules.json'; rules.write_text(json.dumps([{'when': '(?s)mention rounding.*came in since.*Thanks', 'first': 'Both answered.'},
+                                                                 {'when': 'stopped your turn', 'wait': 60, 'first': 'Rounded.'}]), encoding='utf-8')
     for k, v in {'FAKE_ACP_HANG': '1', 'FAKE_ACP_STEER': '1', 'FAKE_ACP_STEER_ECHO': '1', 'FAKE_ACP_STEER_HOLD': hold, 'FAKE_ACP_SCRIPT': str(rules)}.items(): monkeypatch.setenv(k, v)
     t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
     general.take_line(s, tid, 'Comment the totals function.', line_id='l-one'); assert until(lambda: t.in_turn and t.steerable())
@@ -543,6 +544,10 @@ def test_a_line_typed_into_a_turn_he_then_stops_is_answered_by_one_turn_under_th
     # ...and stopped again, it stays stopped: the lines were handed over, and his stop is his
     assert general.stop_turn(s, tid) and idle(t, 2)
     assert until(lambda: not conversation.items(s, tid)['working']) and t.turns == 2 and not t._q
+    # ...and NOT DROPPED (decided 2026-11-12: a line stopped twice is still answered): it rides on the next turn he starts
+    general.take_line(s, tid, 'Thanks.', line_id='l-three')
+    assert until(lambda: any(u['content']['text'] == 'Both answered.' for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'agent_message_chunk'))
+    assert idle(t, 3) and not t._owed
 
 
 def test_a_waiting_card_never_moves_under_a_turn_that_only_stopped_at_his_allow(world, monkeypatch):

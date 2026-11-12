@@ -108,6 +108,7 @@ class ACPCoding:
         self.held, self.steps, self.gate, self.turns = {}, None, None, 0
         self._carried = False                    # his lines were carried onto the turn now running, after it left the queue (carries)
         self._again = False                      # the turn about to begin answers what his stop left unanswered (_unanswered)
+        self._owed = []                          # ...and what a SECOND stop left unanswered: it rides on his next prompt (_turn)
         self.owned = self.woke = self.silent = self.stop_next = False   # his turn; woken once (wake); woken for saying nothing; stop the turn as it goes
         self.duties = False                                              # told its duties about drafts (selfclose.DRAFTS_ONCE) - once, in _begins
 
@@ -393,7 +394,11 @@ class ACPCoding:
         self.busy, self.seeding, self.accepted, self.stop_reason, self.turn_at = True, False, True, None, time.time()
         self.seeded = self.seeded or text
         self.witness.note({'k': 'turn'})
-        text, lines = self._begins(items, text)
+        # ...A LINE STOPPED TWICE IS STILL ANSWERED (decided 2026-11-12, "nothing he typed is dropped"): the turn his first stop began for it
+        # was stopped too, before a word - his second stop stands, and the line rides on the next turn he starts
+        again = text.startswith(STOPPED_ON)
+        if self._owed and not again: text, self._owed = STOPPED_ON + '\n\n' + '\n\n'.join(self._owed) + '\n\nAnd what came in since:\n\n' + text, []
+        asked, (text, lines) = text, self._begins(items, text)
         self._event('UserPromptSubmit', prompt=text)
         # ...a turn that takes the owner's typed lines runs from his press, its clock never restarting (general.take_line, the owner 2026-11-10) - after the
         # turn's own start record, which stamps its clock now (hooks._events)
@@ -438,6 +443,7 @@ class ACPCoding:
         if stop == 'cancelled' and self.store and self.task_id:
             from . import workerstate as ws
             ws.record(self.store, self.task_id, self.sid, 'stopped', text=said[:4000], source='acp')
+            if again and not str(said or '').strip(): self._owed = [asked[len(STOPPED_ON):].strip()]
             return self._unanswered() or self._idle(said, turn=False)
         # ...and a turn that said nothing takes the chat's road (general.could_not, woke_for_silence): woken once, then its one question
         if ok and (asked := general.could_not(self, said)) != said:

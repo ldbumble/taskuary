@@ -1042,7 +1042,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
             change the tree around the thread, or the answer streaming into it is remounted away
             ...and no sid on a card whose session is not live (`noTools`): its browser was asked for every 3 s under a stopped, saved
             or failed agent's Result, for as long as it stayed open (the agents walk, 2026-10-26) */}
-        <SessionPane sid={(!noTools && session?.sid) || null} height="100%" yourTurn={waitsOnPage(asking)} idle={!busy}
+        {/* ...a coding agent's browser is its session's too, shown only while he is needed on its page (the recorded coding walk, 2026-11-12:
+            the agent asked to be signed in, and with no chat session to name, no page was ever shown him) */}
+        <SessionPane sid={(!noTools && session?.sid) || (coding && needNow && cli?.sid) || null} height="100%" yourTurn={waitsOnPage(asking)} idle={!busy}
           stack taskId={task.TaskId} held={viewActs} turn={turn} onHandBack={handBack} onDecided={decidedOnView}
           onView={viewShownIs} quiet={chat} need={needNow}>{thread}</SessionPane>
       </Box>

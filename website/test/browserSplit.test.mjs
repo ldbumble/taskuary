@@ -256,4 +256,8 @@ test("the chat keeps one width at rest and at work, and the browser pane arrives
   assert.match(page, /useEffect\(\(\) => onRoom\(\(\) => setRoomTick\(\(n\) => n \+ 1\)\), \[\]\);/);
   assert.match(page, /React\.useLayoutEffect\(\(\) => \{ const el = bodyEl\.current; if \(!roomTick \|\| !el\) return;/);
   assert.match(page, /if \(w > 0\) setBodyW\(\(b\) => \(b === w \? b : w\)\); \}, \[roomTick\]\);/);
+  // ...and a CODING agent's page is shown him too, while he is needed on it (the recorded coding walk, 2026-11-12: it asked to be signed in, and
+  // with no chat session to name, no page was ever shown) - its session's own browser
+  const chat = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(chat, /<SessionPane sid=\{\(!noTools && session\?\.sid\) \|\| \(coding && needNow && cli\?\.sid\) \|\| null\}/);
 });

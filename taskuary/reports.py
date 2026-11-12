@@ -1609,6 +1609,46 @@ def headline_from(summary: str, fallback: str) -> str:
 
 UNCHANGED = 'Nothing new since the last run: its sources returned the same rows, so the AI summary was not asked for again.'
 
+# A SMALL CHANGE KEEPS THE LAST REPORT (the owner, 2026-11-11: "if it's only a small thing can we use the same report and say only
+# these things were updated"). Beside the data's hash a scheduled report keeps the summary it last WROTE and the rows it wrote it
+# from (`<mark>:kept`). A run whose rows differ from those by a few lines lands as that summary under an "Updated since HH:MM"
+# list of the changed rows, built here by plain code - no model. It is written again in full when the change is not small, when
+# updates have stacked up on one summary, when a day has passed, or when its instruction changed - and says which it was.
+SMALL_ROWS = 6        # rows new + gone since the summary was written: past ~3 changed rows its sentences describe data that has moved
+MAX_UPDATES = 3       # small updates stacked on one summary before it is written again, however small each was
+KEEP_CHARS = AI_CHARS  # rows are kept for comparing only up to what the model was shown: past that the summary never saw the rest
+
+
+def _prompt_key(cfg) -> str: return hashlib.sha256(str(cfg.get('ai_prompt') or '').encode('utf-8', 'replace')).hexdigest()[:16]
+def _rows(text) -> list: return [l.strip() for l in str(text or '').splitlines() if l.strip()]
+
+
+def kept_report(store, mark: str) -> dict:
+    "The summary a scheduled report last wrote, with what it was written from - {} when there is none to stand."
+    try: k = json.loads(store.get_setting(f'{mark}:kept') or '{}')
+    except ValueError: k = {}
+    return k if isinstance(k, dict) and k.get('ai') and k.get('at') else {}
+
+
+def since_kept(kept: dict, cfg: dict, summary: str, now: datetime = None) -> tuple:
+    """(small, words) for this run's rows against the kept summary's: small True -> `words` is the "Updated since" block that
+    stands above the kept summary; False -> `words` is why it is written again ('' with nothing kept to compare)."""
+    from collections import Counter
+    if not kept: return False, ''
+    at, was = str(kept['at']), kept.get('rows')
+    day, clock = at[:10], at[11:16]
+    if kept.get('prompt') != _prompt_key(cfg): return False, 'Rebuilt: its instruction changed.'
+    if was is None or len(summary) > KEEP_CHARS: return False, ''                      # too long to compare row by row: written each time
+    if day != (now or datetime.now()).strftime('%Y-%m-%d'): return False, f'Rebuilt: the last full report was from {day}.'
+    old, new = Counter(_rows(was)), Counter(_rows(summary))
+    added, gone = list((new - old).elements()), list((old - new).elements())
+    n = len(added) + len(gone)
+    if n > SMALL_ROWS: return False, f'Rebuilt: {n} rows changed since {clock}.'
+    if int(kept.get('updates') or 0) >= MAX_UPDATES: return False, f'Rebuilt: {MAX_UPDATES} small updates had stacked up on the report from {clock}.'
+    lines = [f'new: {l[:300]}' for l in added] + [f'gone: {l[:300]}' for l in gone] or ['the same rows, in another order']
+    return True, (f"Updated since {clock}: {plural(n, 'row')} changed. The report below is the one written at {clock}; "
+                  f"the AI was not asked again.\n" + '\n'.join(lines))
+
 
 def render_report(store, cfg: dict, llm=None, notes: list = None, files: list = None, mark: str = None):
     """Run the executor(s), then (optionally) the AI pass: cfg['ai_prompt'] + a configured
@@ -1656,6 +1696,13 @@ def render_report(store, cfg: dict, llm=None, notes: list = None, files: list = 
     from .brainroute import auto_held
     if mark and cfg.get('ai_prompt') and llm and (held := auto_held(store)):
         return head, f'No AI summary this run: {held}.{RAW_MARK}{summary[:4000]}'
+    # ...and a few rows' difference from what the last summary was written from: that summary stands, under the rows that changed
+    kept = kept_report(store, mark) if seen and cfg.get('ai_prompt') and llm else {}
+    small, says = since_kept(kept, cfg, summary)
+    if small:
+        store.set_setting(mark, seen, 'report')
+        store.set_setting(f'{mark}:kept', json.dumps({**kept, 'updates': int(kept.get('updates') or 0) + 1}), 'report')
+        return headline_from(kept['ai'], head), f"{says}\n\n{kept['ai']}{RAW_MARK}{summary[:4000]}"
     if cfg.get('ai_prompt') and llm:
         try:
             # a prompt that names a source gets that source's rows in its place; the rest, and a
@@ -1677,8 +1724,12 @@ def render_report(store, cfg: dict, llm=None, notes: list = None, files: list = 
         # report exists for the summary (the owner, 2026-09-27)
         if not ai: raise RuntimeError('the model returned an empty summary - it may have spent its budget thinking. '
                                       'Try a shorter prompt, or a non-reasoning model for report summaries.')
-        if seen: store.set_setting(mark, seen, 'report')
-        return headline_from(ai, head), f"{ai}{RAW_MARK}{summary[:4000]}"
+        if seen:
+            store.set_setting(mark, seen, 'report')
+            store.set_setting(f'{mark}:kept', json.dumps({'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'ai': ai, 'updates': 0,
+                'prompt': _prompt_key(cfg), 'rows': summary if len(summary) <= KEEP_CHARS else None}), 'report')
+        # ...written again over a kept one says why, under the summary (the first line stays the summary's own: headline_from)
+        return headline_from(ai, head), f"{ai}{f'{chr(10) * 2}{says}' if says else ''}{RAW_MARK}{summary[:4000]}"
     if cfg.get('ai_prompt') and not llm:
         return head, f'{NO_BRAIN} - raw data below)\n\n{summary}'
     return head, summary

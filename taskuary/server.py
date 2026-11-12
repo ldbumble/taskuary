@@ -11963,7 +11963,8 @@ def settings():
     # `assistant_notes*` is a check's private memory of its own last run, one key per report
     # (assistant.notes_key) - bookkeeping, not a knob, however many reports there are
     rows = [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'pane_geometry', 'pane_theme')
-            and not s['Name'].startswith('report_last_run:') and not s['Name'].startswith('assistant_notes')]
+            # ...nor is what a scheduled report last read and wrote (reports.kept_report: its summary and rows, up to 12K a report)
+            and not s['Name'].startswith(('report_last_run:', 'report_read_mark:', 'assistant_notes'))]
     from .repochoice import FOLDERS_KEY, default_folders
     # ...a blank folder list means the usual homes for code that exist on THIS machine, so that is what it shipped as here
     shipped = lambda k: '\n'.join(default_folders()) if k == FOLDERS_KEY else DEFAULT_SETTINGS.get(k)

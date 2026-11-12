@@ -295,9 +295,44 @@ class DigestReportTests(unittest.TestCase):
         with mock.patch.object(reports, 'executor_for', return_value=lambda c: ('1 row', rows[0])), mock.patch.object(reports, 'gate'),              mock.patch.object(reports, 'resolve_cfg', side_effect=lambda st, c: c), mock.patch.object(reports, 'report_llm', side_effect=lambda st, c, l: l):
             run = lambda: reports.render_report(s, cfg, asked, notes=[], mark='report_read_mark:7')[1]
             assert run().startswith('Two invoices') and run().startswith(reports.UNCHANGED) and asked.call_count == 1
-            rows[0] += chr(10) + '8,2026-11-03'
+            rows[0] += chr(10) + chr(10).join(f'{n},2026-11-03' for n in range(8, 8 + reports.SMALL_ROWS + 1))       # more than a few rows
             assert run().startswith('Two invoices') and asked.call_count == 2
             assert reports.render_report(s, cfg, asked, notes=[])[1].startswith('Two invoices') and asked.call_count == 3     # Run now
+
+    def test_a_small_change_keeps_the_last_report_and_lists_what_changed_and_a_big_one_a_stack_or_a_new_day_writes_it_again(self):
+        """The owner, 2026-11-11: "if it's only a small thing can we use the same report and say only these things were updated". The
+        list is built by code from the changed rows; the report says which it was - updated since when, or rebuilt and why."""
+        import json
+        from datetime import datetime, timedelta
+        from taskuary.store import MemoryStore
+        from taskuary import reports
+        s, asked, rows = MemoryStore(), mock.Mock(side_effect=lambda *a, **k: f'Summary {asked.call_count}.'), ['invoice,due', '7,2026-11-01']
+        cfg, mark, NL = {'type': 'rest', 'ai_prompt': 'Say what is overdue.'}, 'report_read_mark:7', chr(10)
+        with mock.patch.object(reports, 'executor_for', return_value=lambda c: (f'{len(rows) - 1} rows', NL.join(rows))), mock.patch.object(reports, 'gate'), \
+             mock.patch.object(reports, 'resolve_cfg', side_effect=lambda st, c: c), mock.patch.object(reports, 'report_llm', side_effect=lambda st, c, l: l):
+            run = lambda: reports.render_report(s, cfg, asked, notes=[], mark=mark)[1].split(reports.RAW_MARK)[0]
+            assert run() == 'Summary 1.' and asked.call_count == 1                         # the first run writes it, and says nothing more
+            at = reports.kept_report(s, mark)['at'][11:16]
+            rows.append('8,2026-11-03'); rows.remove('7,2026-11-01')                       # one row in, one out: the report stands
+            got = run()
+            assert asked.call_count == 1 and got.startswith(f'Updated since {at}: 2 rows changed.') and got.endswith('Summary 1.')
+            assert 'new: 8,2026-11-03' in got and 'gone: 7,2026-11-01' in got
+            assert run().startswith(reports.UNCHANGED) and asked.call_count == 1            # the same rows again: still no call
+            rows += [f'{n},2026-11-05' for n in range(20, 20 + reports.SMALL_ROWS)]         # a big change: written again, saying so
+            got = run()
+            assert asked.call_count == 2 and got.startswith('Summary 2.') and f'Rebuilt: {reports.SMALL_ROWS + 2} rows changed since {at}.' in got
+            for n in range(reports.MAX_UPDATES):                                             # small updates stack on one summary...
+                rows.append(f'{40 + n},2026-11-06'); assert run().startswith('Updated since') and asked.call_count == 2
+            rows.append('50,2026-11-07')                                                     # ...and past the stack it is written again
+            got = run()
+            assert asked.call_count == 3 and f'Rebuilt: {reports.MAX_UPDATES} small updates had stacked up' in got
+            k = reports.kept_report(s, mark)                                                 # a day later, however small the change
+            s.set_setting(f'{mark}:kept', json.dumps({**k, 'at': (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')}), 't')
+            rows.append('51,2026-11-08')
+            got = run()
+            assert asked.call_count == 4 and 'Rebuilt: the last full report was from' in got
+            cfg['ai_prompt'] = 'Say what is overdue, shortest first.'; rows.append('52,2026-11-08')
+            assert 'Rebuilt: its instruction changed.' in run() and asked.call_count == 5
 
 
 class LocalAndOpenRouterTests(unittest.TestCase):

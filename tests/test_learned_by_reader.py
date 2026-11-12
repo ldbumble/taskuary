@@ -152,10 +152,26 @@ def test_the_whole_memory_keeps_whole_sections_and_logs_what_did_not_fit():
     s = full()
     got = learned_cut.whole(s, 'triage')
     assert [h for h in learned_cut.SECTIONS.values() if h in got] == list(learned_cut.SECTIONS.values()), 'every section, in order'
-    cut = learned_cut.whole(s, 'triage', cap=len(learned_cut.PEOPLE) + len(learned_cut.said(ERIN_LINE)) + len(learned_cut.said(GAIL_LINE)) + 4)
-    assert cut.startswith(learned_cut.PEOPLE) and learned_cut.said(GAIL_LINE) in cut and learned_cut.CARE not in cut, 'a whole section, never half of one'
-    assert learned_cut.over_budget(s).get('vendor statements') == ['triage'], 'what did not fit is noted, not silently dropped'
     assert learned_cut.whole(MemoryStore(), 'triage') == '', "a fresh memory is placeholders"
+
+
+def test_past_its_cap_the_whole_memory_lets_the_lines_about_one_sender_go_first_never_a_section():
+    """Six hundred verdict lines made What you care about 67,671 characters, past the 60,000 cap - and triage read NONE of it, the owner's
+    own general lines with them (the memory audit, 2026-11-12). Past the cap the lines about one sender or topic go, the oldest first: each
+    still reaches the mail it is about as evidence (ingest.relevant_notes). Whole lines, and the same bytes for every mail."""
+    from taskuary import memorylines
+    s = full()
+    scoped = [memorylines.line(f'Weekly digests from this sender are reading only, number {i}', 'sender', f'digest{i}@vendor.example') for i in range(60)]
+    s.save_doc('learned', put(s.get_doc('learned'), learned_cut.CARE, *scoped), 'owner')
+    every = learned_cut.whole(s, 'triage', cap=10**6)
+    got = learned_cut.whole(s, 'triage', cap=len(every) // 2)
+    assert all(learned_cut.said(l) in got for l in (CARE_LINE, ERIN_LINE, GAIL_LINE, WORK_LINE, PROMISE_LINE, BRING_LINE)), 'every general line stays'
+    assert scoped[-1] in got and scoped[0] not in got and len(got) <= len(every) // 2, 'the newest about one sender stay, the oldest go'
+    assert all(l in every.splitlines() for l in got.splitlines()), 'whole lines, never a cut through one'
+    keys = [k for _, k in learned_cut.lines(s.get_doc('learned'), learned_cut.CARE)]
+    assert len(set(keys)) == len(keys), 'a line about each sender is a line of its own'
+    assert learned_cut.over_budget(s).get(keys[1]) == ['triage'] and keys[-1] not in learned_cut.over_budget(s), 'what did not fit is noted'
+    assert learned_cut.whole(s, 'triage', cap=len(every) // 2) == got, 'the same bytes, read after read'
 
 
 def test_the_drafter_reads_the_people_lines_about_whoever_it_writes_to():

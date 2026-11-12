@@ -76,12 +76,16 @@ def lines(doc: str, head: str) -> list:
     """[(raw line, key)] - every line of the section a reader would read: tagged and untagged alike (an untagged line is the owner's
     own, in use from the moment they wrote it). Sub-headings are the owner's filing, not content."""
     from .learnedgraph import TAG, _key
+    from .memorylines import scope_of
     out = []
     for raw in section(doc, head).splitlines():
         t = raw.strip()
         if not t or t.startswith('#') or t.startswith('<!--'): continue
         m = TAG.match(raw)
-        out.append((raw.rstrip(), ((m.group('k') or '').strip() or _key(m.group('text'))) if m else _key(t)))
+        # ...an untagged line's key is its first eight words AND whom it is about: "Weekly digests from this sender are reading only" about
+        # sixty senders was sixty lines under one key, and Forget on one took out whichever came first (the memory audit, 2026-11-12)
+        sk = '' if m else scope_of(t)[1]
+        out.append((raw.rstrip(), ((m.group('k') or '').strip() or _key(m.group('text'))) if m else _key(t) + (f' · {sk}' if sk else '')))
     return out
 
 
@@ -244,20 +248,28 @@ def whole(store, reader: str = 'triage', target: str = '', doc: str = None, cap:
     """Every line of every section, in the document's order - the whole memory, for a reader that decides on all of it (triage, the
     routing judge) or asked for it (an agent's owner_memory). Lines about one sender or topic come too: triage weighs them for mail
     about that. Only past `cap` does anything go - a whole section at a time, said in the log and noted as over budget, never a line
-    cut off midway. `sections` (slugs) narrows it. '' when there is nothing in use."""
+    cut off midway. `sections` (slugs) narrows it. '' when there is nothing in use.
+    ...PAST THE CAP, THE LINES ABOUT ONE SENDER OR TOPIC GO FIRST, the oldest of them first (the memory audit, 2026-11-12): a whole section
+    went, and the one that outgrew it was What you care about - six hundred verdict lines, and triage read none of it, the owner's own
+    general lines with them. Each line about one sender or topic still reaches the mail it is about, as its evidence (ingest.relevant_notes).
+    What is kept depends on the document alone, so the block is the same bytes for every mail."""
+    from .memorylines import ABOUT
     doc = store.doc('learned') if doc is None else doc
-    out, keys, over, used = [], [], [], 0
-    for s, head in SECTIONS.items():
-        if sections and s not in sections: continue
-        ls = lines(doc or '', head)
-        if not ls: continue
-        b = head + '\n' + '\n'.join(said(raw) for raw, _ in ls)
-        if used + len(b) + 2 > cap:
-            over += [k for _, k in ls]
-            from loguru import logger
-            logger.warning(f'{reader} read LEARNED.md without "{TITLE[s]}" ({len(b):,} characters) - past its {cap:,}-character cap')
-            continue
-        out.append(b); keys += [k for _, k in ls]; used += len(b) + 2
+    every = [(head, raw, k) for s, head in SECTIONS.items() if not sections or s in sections for raw, k in lines(doc or '', head)]
+    used = sum(len(h) + 3 for h in {h for h, _, _ in every})
+    scoped = lambda i: bool(ABOUT.search(every[i][1]))
+    keep, over = set(), []
+    for i in sorted(range(len(every)), key=lambda i: (scoped(i), -i if scoped(i) else i)):
+        n = len(said(every[i][1])) + 1
+        if used + n > cap: over.append(every[i][2]); continue
+        keep.add(i); used += n
+    if over:
+        from loguru import logger
+        logger.warning(f'{reader} read LEARNED.md without {len(over)} line(s) about one sender or topic - past its {cap:,}-character cap; '
+                       'each still reaches the mail it is about')
+    out = ['\n'.join([head] + [said(raw) for i, (h, raw, _) in enumerate(every) if h == head and i in keep]) for head in SECTIONS.values()
+           if any(h == head and i in keep for i, (h, _, _) in enumerate(every))]
+    keys = [k for i, (_, _, k) in enumerate(every) if i in keep]
     try: _note_over(store, reader, over)
     except Exception: pass
     receipt(store, reader, target, keys)

@@ -80,8 +80,10 @@ def live_of(t) -> dict | None:
     # ...and WHEN THE TURN AT WORK BEGAN, its clock (the owner's live coding task, 2026-11-08: "Working on this… 2947m 55s"): the chat counted from
     # the owner's last line it draws, two days back - a resumed session's first turn is Taskuary's brief, drawn as no line. Never before this run
     began = getattr(t, 'turn_at', 0) or getattr(t, 'started_ts', 0) or _epoch(t.started)
+    # ...at work by the one function that says so (general._at_work): a turn that waits on his press or his sign-in is not
+    from .general import _at_work
     return {'sid': t.sid, 'cli': getattr(t, 'cli', '') or term.cli_of(getattr(t, 'argv', None) or []), 'started': t.started,
-            'asking': asking, 'working': phase == 'working', 'promptPending': bool(term.prompt_pending(t)),
+            'asking': asking, 'working': phase == 'working' and _at_work(t), 'promptPending': bool(term.prompt_pending(t)),
             'turnStarted': max(began, _epoch(t.started)) if began else None,
             'transport': 'acp' if acp else 'pty', 'terminal': bool(getattr(t, 'has_output', False)) if acp else True}
 

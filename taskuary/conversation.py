@@ -39,8 +39,10 @@ def clean(text) -> str:
     session's words, the turn at work): the summary block it is asked to end on (selfclose.SUMMARY_OPEN), closed or not - an opening marker
     with no close goes to the end of the text - and the marker of a question. A turn that said nothing but the block says the block's own
     sentence, once."""
-    from .selfclose import asked_inline, without_summary
-    t = str(text or ''); out = asked_inline(without_summary(t))[0].strip()
+    from .selfclose import asked_inline, signin_marker, turn_marker, without_summary
+    # ...and the sign-in's and the hand-over's markers, which the app acts on and never draws (the recorded coding walk, 2026-11-12: a coding
+    # turn's words over ACP and in the terminal drew "[[TASKUARY-SIGNIN: localhost:18451]]" in the chat)
+    t = str(text or ''); out = asked_inline(turn_marker(signin_marker(without_summary(t))[0])[0])[0].strip()
     if out or not t.strip(): return out
     try: j = json.loads(t[t.index('{'):t.rindex('}') + 1])
     except ValueError: return ''

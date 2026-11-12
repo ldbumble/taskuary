@@ -542,5 +542,29 @@ class TheList(unittest.TestCase):
         self.assertIn('THE DRAFT WAITING NOW (to Gail Moreno', turn); self.assertNotIn('rv', turn.split('THE DRAFT WAITING NOW')[1][:40])    # no id for it to say back
 
 
+
+class TheCodingRoadsSignInTests(unittest.TestCase):
+    """The recorded coding walk, 2026-11-12 (invented people): a coding agent ended its turn asking to be signed in. Its words drew the bare
+    "[[TASKUARY-SIGNIN: ...]]" marker in the chat, and its CLI kept the turn open behind the browser it had started, so the chat read "working
+    15m" over the sign-in ask."""
+    def test_no_app_marker_reaches_the_chat(self):
+        said = "Payworth is on its sign-in page.\n[[TASKUARY-SIGNIN: payworth.example]]"
+        self.assertEqual(conversation.clean(said), 'Payworth is on its sign-in page.')
+        self.assertEqual(conversation.clean("Your turn on the page.\n[[TASKUARY-YOURTURN: pick the date]]"), 'Your turn on the page.')
+
+    def test_a_turn_that_waits_on_his_sign_in_is_not_at_work(self):
+        from taskuary import workerstate as ws
+        s = MemoryStore(); tid = s.create_task({'Title': 'Payroll date', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
+        sess = mock.Mock(spec=['phase', 'store', 'task_id', 'sid', 'busy']); sess.phase.return_value = 'working'
+        sess.store, sess.task_id, sess.sid = s, tid, 'acp-1'
+        ws.record(s, tid, 'acp-1', 'working', source='hook')
+        self.assertTrue(general._at_work(sess), 'at work while nothing waits on him')
+        ws.record(s, tid, 'acp-1', 'turn_end', text='Payworth is on its sign-in page.', source='hook')
+        ws.record(s, tid, 'acp-1', 'input_needed', request_id='signin:payworth.example', text='Sign in to payworth.example to continue', source='api')
+        self.assertFalse(general._at_work(sess), 'his sign-in is the turn now, whatever the process says')
+        ws.record(s, tid, 'acp-1', 'answered', request_id='signin:payworth.example', text='Signed in', source='owner')
+        self.assertTrue(general._at_work(sess))
+
+
 if __name__ == '__main__':
     unittest.main()

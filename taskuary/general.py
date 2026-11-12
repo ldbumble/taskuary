@@ -3390,8 +3390,17 @@ def _live_of(tid: int):
 
 def _at_work(s) -> bool:
     if s is None: return False
-    try: return s.phase() == 'working'
-    except Exception: return bool(getattr(s, 'busy', False))
+    try: busy = s.phase() == 'working'
+    except Exception: busy = bool(getattr(s, 'busy', False))
+    # ...AND A TURN THAT WAITS ON HIM IS NOT AT WORK (the recorded coding walk, 2026-11-12: the agent ended its turn asking to be signed in, its
+    # CLI kept the turn open behind the browser it had started, and the chat read "working 15m" over the sign-in ask): a request its agent
+    # raised that stands - a sign-in, a question, a press it is stopped at - is the turn's state, whatever its process says
+    if busy and not isinstance(s, GeneralSession) and getattr(s, 'store', None) is not None:
+        try:
+            from . import workerstate as ws
+            if ws.open_requests(ws.events(s.store, s.task_id, s.sid)): return False
+        except Exception as e: logger.debug(f'task {getattr(s, "task_id", "?")}: its requests were not read - {e}')
+    return busy
 
 
 def at_work(tid: int) -> bool: return tid in OPENING or _at_work(_live_of(tid))

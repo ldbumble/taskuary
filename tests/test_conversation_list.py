@@ -562,6 +562,8 @@ class TheCodingRoadsSignInTests(unittest.TestCase):
         ws.record(s, tid, 'acp-1', 'turn_end', text='Payworth is on its sign-in page.', source='hook')
         ws.record(s, tid, 'acp-1', 'input_needed', request_id='signin:payworth.example', text='Sign in to payworth.example to continue', source='api')
         self.assertFalse(general._at_work(sess), 'his sign-in is the turn now, whatever the process says')
+        with mock.patch.object(general, '_live_of', return_value=sess):
+            self.assertTrue(general.waits(s, sess)); self.assertFalse(general.working(s, tid), "the task's one word on it says the same")
         ws.record(s, tid, 'acp-1', 'answered', request_id='signin:payworth.example', text='Signed in', source='owner')
         self.assertTrue(general._at_work(sess))
 

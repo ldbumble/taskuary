@@ -22,6 +22,9 @@ export const sampler = (names, owner = "Alex") => {
   const namedIn = (text) => [...seen].filter((n) => new RegExp(n.includes(" ") ? `(^|[^A-Za-z])${esc(n)}($|[^A-Za-z])` : `([a-z,] |["'\`*(])${esc(n)}($|[^A-Za-z])`).test(text));
   const tick = () => {
     const vp = document.querySelector("[data-tq-task-page] .tq-aui-viewport");
+    // A TASK IS NEVER ITS HEAD OVER NOTHING (recorded 2026-11-12: on every rail click, Next and Back the chat's room stood with a spinner in
+    // it for up to a second): how long the room was drawn with no chat in it, said on the first frame that has one
+    if (!vp && document.querySelector("[data-tq-task-page] [data-tq-agent-room]")) window.__bare ||= performance.now();
     if (vp) {
       const items = [...vp.querySelectorAll("[data-tq-item]")].map((e) => [e.getAttribute("data-tq-item"), e.getAttribute("data-tq-turn") || "", Math.round(e.getBoundingClientRect().top - vp.getBoundingClientRect().top + vp.scrollTop)]);
       const pend = [...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].map((e) => e.getAttribute("data-tq-pending-item"));
@@ -38,6 +41,7 @@ export const sampler = (names, owner = "Alex") => {
         ...[...vp.querySelectorAll("[data-tq-turn-cards] > *")].filter(bare).map((e) => `a card of ${e.closest("[data-tq-item]")?.getAttribute("data-tq-item")}`),
         ...[...document.querySelectorAll("[data-tq-task-page] [data-tq-pending-item]")].filter(bare).map((e) => `waiting ${e.getAttribute("data-tq-pending-item")}`)];
       if (empty.length) f.empty = empty;
+      if (window.__bare) { f.bare = Math.round(performance.now() - window.__bare); window.__bare = 0; }
       // A CARD THAT CANNOT BE PRESSED SHOWS NO BUTTON, AND ONE ACTION IS ONE CARD (the owner, 2026-11-11: "the question has 2 approve buttons?"):
       // a disabled button on a card at rest, and a settled card standing under a live one
       const cardsOf = [...vp.querySelectorAll("[data-tq-turn-cards] > *, [data-tq-row-cards] .tq-aui-agent-body > *")];
@@ -117,6 +121,7 @@ export function check(frames) {
     // words that name a button, with no such button to press in that frame (said once per run of frames that lack it)
     if (f.unlit?.length && JSON.stringify(f.unlit) !== JSON.stringify(prev?.unlit || [])) say(f.t, `the agent's words name ${f.unlit.map((n) => `"${n}"`).join(", ")} and no such button is lit`);
     for (const id of f.empty || []) if (!(prev?.empty || []).includes(id)) say(f.t, `${id} is drawn empty`);
+    if (f.bare > 120) say(f.t, `the task stood ${f.bare} ms with its head drawn and no chat under it`);
     if (f.deadButton && !prev?.deadButton) say(f.t, "a card nobody can press draws a button");
     if (f.cut && !prev?.cut) say(f.t, `the task's card stands ${f.cut} px under the canvas's head`);
     if (f.cardTwice && !prev?.cardTwice) say(f.t, "one action stands in the chat as two cards");

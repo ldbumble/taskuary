@@ -28,10 +28,14 @@ export const prefetchTask = (api, tid) => {
   // ...AND ITS CHAT WITH IT (the owner's rule: never a blank beat - seen 2026-11-11: a task opened for the first time drew its header and its
   // box over an empty chat for a quarter of a second, while the list was read only once the view had mounted)
   api.get(`/api/tasks/${id}/conversation`).then(({ data }) => { if (Array.isArray(data?.items)) rec.conv = data; }).catch(() => {});
+  // ...AND WHAT ITS CHAT STANDS ON (recorded 2026-11-12 on every rail click, Next and Back: the task's header over a spinner for up to a
+  // second - list in hand, the chat drew nothing until its own read of the agent's state had landed)
+  api.get(`/api/tasks/${id}/assistant`).then(({ data }) => { if (data && typeof data === "object") rec.chat = data; }).catch(() => {});
   held.set(id, rec);
   return rec.p;
 };
 export const heldConversation = (tid) => { const e = held.get(Number(tid)); return fresh(e) && e.conv ? e.conv : null; };
+export const heldChat = (tid) => { const e = held.get(Number(tid)); return fresh(e) && e.chat ? e.chat : null; };
 // ...and the agents' sessions: whether the task has one decides half its row (Answer it, Review changes, Stop and save), and a view that
 // waited to look put a session-less row up first - Reply and Send out results for ~100ms over a task whose agent was waiting on the
 // owner (G8, verified 2026-10-20). One list for every task, read with any task ahead
@@ -56,7 +60,7 @@ export const heldSteps = (tid) => { const e = held.get(Number(tid)); return fres
 // ...a view's own read is the newest word on its task; an act on any task makes every held read old. `asked`: when that read was asked
 // (noteRead), never when it landed - a read that waited behind the rail's build reflects the moment it was sent
 export const keepTask = (tid, data, _wait = undefined, asked = now()) => { const id = Number(tid), e = held.get(id);
-  if (id && data?.task?.TaskId === id) held.set(id, { at: now(), data, p: Promise.resolve(data), steps: e?.steps, conv: e?.conv });
+  if (id && data?.task?.TaskId === id) held.set(id, { at: now(), data, p: Promise.resolve(data), steps: e?.steps, conv: e?.conv, chat: e?.chat });
   noteRead(id, data, asked); };
 // ...one task's write leaves every other task's session as it was: only that task's is unknown again
 export const forgetTasks = (tid = null) => {

@@ -11,7 +11,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
-import { heldConversation } from "./taskDetail.js";
+import { heldChat, heldConversation } from "./taskDetail.js";
 import { AttachChip, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
 import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
@@ -383,6 +383,10 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 // under the pointer) on its first frame - the read on mount still follows, so what is held is only ever the first paint
 const LISTS = new Map();
 const listOf = (tid) => { if (!LISTS.has(tid)) { const h = heldConversation(tid); if (h) LISTS.set(tid, h); } return LISTS.get(tid) || null; };
+// ...and what the chat stands on beside its list - the agent's state, its picks, what it holds (`/assistant`) - by the same rule: as last
+// read here, else as asked ahead with the task; the read on mount follows and is the newest word
+const CHATS = new Map();
+const chatOf = (tid) => { if (!CHATS.has(tid)) { const h = heldChat(tid); if (h) CHATS.set(tid, h); } return CHATS.get(tid) || null; };
 export function useConversation(tid, on) {
   const [list, setList] = useState(() => listOf(tid)), rev = useRef(LISTS.get(tid)?.rev || "");
   // ...READS LAND IN THE ORDER THEY WERE ASKED (the recorded walk, 2026-11-11: on a loaded machine an older read came back after a newer one -
@@ -654,9 +658,11 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, toolsAt = null,
   prompt, onPromptUsed, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, mails = [], reviews = [],
   checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, turnCards = null, queued = null, onChanged, seed = null }) {
-  const [data, setData] = useState(null);
-  const [connectorId, setConnectorId] = useState("");
-  const [model, setModel] = useState("");
+  // ...drawn on its first frame from what is held of it (chatOf); a coding task's chat stands on its list alone
+  const first = () => (chatSource(task, term) === "coding" ? { messages: [] } : chatOf(task.TaskId));
+  const [data, setData] = useState(first);
+  const [connectorId, setConnectorId] = useState(() => String(pickFor(first())?.id || ""));
+  const [model, setModel] = useState(() => { const d = first(), p = pickFor(d); return p ? d?.session?.model || p.model || "" : ""; });
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -690,7 +696,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   }, [task.TaskId, task.Tags]);
 
   const accept = useCallback((payload) => {
-    setData(payload);
+    setData(payload); if (payload) CHATS.set(task.TaskId, payload);
     const provider = pickFor(payload);
     // A LIVE session's own pick outranks whatever the picker opened on. A walk's brain is chosen by
     // the server (general.walk_pick), so a strip frozen on the mount-time default both misnamed the
@@ -702,14 +708,14 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       setModel((old) => (live || !old ? (payload?.session?.model || provider.model || "") : old));
     }
     onSession?.(payload?.session || null);
-  }, [onSession]);
+  }, [onSession, task.TaskId]);
 
   useEffect(() => {
     let live = true;
-    setData(null); setError(""); setAttachments([]);
+    setData(first()); setError(""); setAttachments([]);
     // Looking at a general task is not sending it to an agent. Load saved state only; the first
     // actual message (or an explicit Send to agent action) starts the regular agent.
-    if (coding) { setData({ messages: [] }); return () => { live = false; }; }
+    if (coding) return () => { live = false; };
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => live && accept(r.data)).catch((e) => live && setError(errText(e)));
     return () => { live = false; };
   }, [accept, task.TaskId, coding]);

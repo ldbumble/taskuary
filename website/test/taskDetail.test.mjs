@@ -49,6 +49,27 @@ test("a task read ahead brings its chat's list, and the chat draws it on its fir
   assert.match(view, /const \[list, setList\] = useState\(\(\) => listOf\(tid\)\)/);
 });
 
+// ...AND THE CHAT DREW NOTHING UNTIL ITS OWN READ OF THE AGENT'S STATE LANDED (recorded 2026-11-12: on a rail click, Next and Back the task's
+// header stood over a spinner for up to a second, its list already in hand): that read is asked ahead and held with the task too, and
+// the chat's first frame is drawn from it
+test("a task read ahead brings what its chat stands on, and the chat is drawn from it on its first frame", async () => {
+  forgetTasks();
+  const { heldChat } = await import("../src/taskDetail.js");
+  const calls = [], chat = { messages: [], providers: [{ id: 3 }] };
+  const api = { get: async (url) => { calls.push(url); return url.endsWith("/assistant") ? { data: chat } : url.endsWith("/conversation") ? { data: { items: [] } } : { data: { task: { TaskId: 6 } } }; } };
+  assert.equal(heldChat(6), null);
+  await prefetchTask(api, 6); await new Promise((r) => setTimeout(r, 0));
+  assert.ok(calls.includes("/api/tasks/6/assistant"));
+  assert.equal(heldChat(6), chat);
+  keepTask(6, { task: { TaskId: 6, Title: "newer" } });
+  assert.equal(heldChat(6), chat, "the view's own read of the task keeps it");
+  forgetTasks(6); assert.equal(heldChat(6), null, "a write to the task lets it go");
+  const view = src("GeneralWorkspace.jsx");
+  assert.match(view, /const chatOf = \(tid\) => \{ if \(!CHATS\.has\(tid\)\) \{ const h = heldChat\(tid\); if \(h\) CHATS\.set\(tid, h\); \} return CHATS\.get\(tid\) \|\| null; \};/);
+  assert.match(view, /const \[data, setData\] = useState\(first\);/);
+  assert.doesNotMatch(view, /setData\(null\)/, "a chat drawn again never empties itself to read");
+});
+
 test("a failed read ahead holds nothing, so the view reads it itself", async () => {
   forgetTasks();
   await prefetchTask({ get: async () => { throw new Error("down"); } }, 5);

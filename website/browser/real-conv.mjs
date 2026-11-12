@@ -79,6 +79,14 @@ export const sampler = (names, owner = "Alex") => {
       // THE CORNER'S "BACK TO" IS FOR A PAGE OVER THE TASK, NEVER OVER A TASK ITSELF (the rail walk, 2026-11-12: it flashed the task just left
       // on every Next) - the task in view is the one worked on, from the frame it is drawn
       if (document.querySelector("[data-tq-back-work]")) f.backOver = true;
+      // THE RAIL'S ROWS NEVER STAND ON EACH OTHER (the rail walk, 2026-11-12: a new task fell from above its band across five rows), and a
+      // rail under the pointer never scrolls by itself (a clicked row slid out from under it)
+      for (const st of document.querySelectorAll("[data-tq-rail] .tq-pile-stack")) {
+        const rs = [...st.querySelectorAll(".tq-pile-row[data-tq-key]")].filter((e) => +getComputedStyle(e).opacity > 0.5).map((e) => e.getBoundingClientRect()).sort((a, b) => a.top - b.top);
+        if (rs.some((r, i) => i && rs[i - 1].bottom - r.top > 6)) f.railOver = true;
+      }
+      const rail = document.querySelector("[data-tq-rail]");
+      if (rail?.matches(":hover")) { if (window.__railTop != null && rail.scrollTop !== window.__railTop) f.railScrolled = true; window.__railTop = rail.scrollTop; } else window.__railTop = null;
       if (box && (box.right > innerWidth + 1 || box.bottom > innerHeight + 1)) f.boxOff = [Math.max(0, Math.round(box.right - innerWidth)), Math.max(0, Math.round(box.bottom - innerHeight))];
       if ([...vp.querySelectorAll(".tq-aui-agent-body > .tq-md + .tq-md")].some((e) => e.getBoundingClientRect().top - e.previousElementSibling.getBoundingClientRect().bottom < 4)) f.tight = true;
       // ...and where each card stands, by its own first line and the item it is under: one that goes back UP the chat is a finding (check)
@@ -141,6 +149,8 @@ export function check(frames) {
     for (const id of f.empty || []) if (!(prev?.empty || []).includes(id)) say(f.t, `${id} is drawn empty`);
     if (f.peak) say(f.t, `a painted frame stood ${f.peak} px short of the chat's end, which it had been at`);
     if (f.bare > 120) say(f.t, `the task stood ${f.bare} ms with its head drawn and no chat under it`);
+    if (f.railOver && !prev?.railOver) say(f.t, "two rail rows drawn over each other");
+    if (f.railScrolled) say(f.t, "the rail scrolled by itself under the pointer");
     if (f.backOver && !prev?.backOver) say(f.t, "the corner offers \"Back to\" another task while a task is in view");
     if (f.deadButton && !prev?.deadButton) say(f.t, "a card nobody can press draws a button");
     if (f.cut && !prev?.cut) say(f.t, `the task's card stands ${f.cut} px under the canvas's head`);

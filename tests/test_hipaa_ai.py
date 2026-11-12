@@ -73,7 +73,10 @@ class ModelsByJobTests(unittest.TestCase):
         cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.llm.list_models', return_value=self.MODELS):
             r = TestClient(server.app).post('/api/connectors', json={'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1}).json()
-        self.assertEqual(r['discovery'], {'fast': 'gemini-3.8-flash', 'agent': 'claude-sonnet-5-5'})
+        # ...and the save says what THIS card found, in its own words - never GitHub's sentence with nothing in it (the owner's screen,
+        # 2026-11-11: "authenticated as undefined · undefined repos discovered · undefined sources added")
+        self.assertEqual(r['discovery'], {'fast': 'gemini-3.8-flash', 'agent': 'claude-sonnet-5-5',
+                                          'said': 'connected · its models: gemini-3.8-flash, claude-sonnet-5-5'})
         self.assertEqual((s.get_setting('triage_ai'), s.get_setting('assistant_ai')), ('cli:claude', f'connector:{cid}'))
 
     def test_switching_it_on_never_takes_a_job_a_brain_already_runs(self):

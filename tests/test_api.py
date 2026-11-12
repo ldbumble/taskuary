@@ -813,7 +813,8 @@ class ApiTests(unittest.TestCase):
         cid = next(x['ConnectorId'] for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'github')
         with mock.patch('taskuary.channels.github_discover', return_value={'login': 'u', 'repos': 2, 'added': 2}):
             r = c.post('/api/connectors', json={'ConnectorId': cid, 'Secret': 'ghp_x'}).json()
-        self.assertEqual(r['discovery'], {'login': 'u', 'repos': 2, 'added': 2})
+        self.assertEqual(r['discovery'], {'login': 'u', 'repos': 2, 'added': 2,
+                                          'said': 'authenticated as u · 2 repos discovered · 2 sources added · repo map written to SOUL.md'})
 
     def test_mssql_endpoints(self):
         with mock.patch('taskuary.mssql.drivers', return_value=['ODBC Driver 18 for SQL Server']):

@@ -2800,7 +2800,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
     writeOnly: conn.WriteOnlyKeys || [], onSaved: (data, keys) => {
       const d = data?.discovery;
       setTest(null); setFresh(!d?.error); setSaveSaid(d?.error ? { ok: false, detail: d.error } : null); reload();
-      if (d && !d.error) setTest({ ok: true, detail: `authenticated as ${d.login} · ${d.repos} repos discovered · ${d.added} sources added · repo map written to SOUL.md` });
+      if (d && !d.error && d.said) setTest({ ok: true, detail: d.said });   // the server's own sentence for this kind of card, never one spelled here
       if (keys.includes("Secret") && !d?.error) setStep(1);
     } });
   const [fresh, setFresh] = useState(false);     // saved since the last Test: its old failure is not said under the new save

@@ -7694,6 +7694,8 @@ def save_connector(body: ConnectorBody):
         try:
             from .channels import github_discover
             discovery = github_discover(store, c, ACTOR)
+            discovery['said'] = (f"authenticated as {discovery.get('login')} · {discovery.get('repos')} repos discovered · "
+                                 f"{discovery.get('added')} sources added · repo map written to SOUL.md")
         except Exception as e:
             from .channels import plain_failure
             discovery = {'error': plain_failure(e)}      # shown under Save: "401 Client Error ... api.github.com" helped nobody
@@ -7706,6 +7708,10 @@ def save_connector(body: ConnectorBody):
     if c.get('Type') == 'hipaa_ai' and c.get('Active') and c.get('Secret') and ('Secret' in fields or fields.get('Active')):
         from . import firstrun
         discovery = firstrun.models_by_job(store, cfg, cid, only_blank=True)
+        # ...and what a save found is SAID HERE, per kind of card (the owner's screen, 2026-11-11: this card's save read "authenticated as
+        # undefined · undefined repos discovered" - the page had spelled GitHub's sentence over whatever a save returned)
+        ms = [m for m in (discovery.get('fast'), discovery.get('agent')) if m]
+        discovery['said'] = ('connected · its models: ' + ', '.join(dict.fromkeys(ms))) if ms else 'saved · its gateway listed no models yet - press Test'
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
     return {'ok': True, 'connectorId': cid, 'discovery': discovery}

@@ -2,6 +2,12 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.0 - 2026-11-12
+
+- A card finds the turn its ledger names by the turn's name, never by its old place in the list
+- New is one box: what you need, in your words - the Assistant makes it what it is, and it comes up in New
+- A coding session with no repository to pick is told it may start one
+
 ## 0.3.11.54 - 2026-11-12
 
 - Teams and Telegram replies go as a reply to the line they answer

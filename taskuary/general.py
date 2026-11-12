@@ -3628,6 +3628,13 @@ def stop_turn(store, tid: int) -> bool:
     s = session_for(tid)
     if not (s.stop() if s else terminal.cancel_turn(tid)): return False
     store.audit('task', tid, 'stopped_turn', 'owner')
+    # ...AND WHAT WAITED IS HANDED OVER IN THE SAME STEP (2026-11-12: a read between his stop and the next turn's take drew that turn under the
+    # stop before the lines it answers, and they landed above it): his waiting lines are heard now, under the stop, the turn that answers
+    # them at work from this moment - it takes them as it begins (send_prompt), already heard
+    if isinstance(s, GeneralSession) and (rows := [r for r in store.list_comments(int(tid), internal=True) if r.get('ActorType') == WAITING_TYPE]):
+        from . import conversation
+        PRESSED[tid] = time.time(); OPENING.add(tid)
+        conversation.hear(store, tid, rows, standing=True)
     return True
 
 

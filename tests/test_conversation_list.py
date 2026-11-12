@@ -167,9 +167,11 @@ class TheList(unittest.TestCase):
         self.brain.delay = 0
         self.assertTrue(general.stop_turn(self.s, self.tid))
         got = self.list(); drawn = [x['id'] for x in got['items'] if x['kind'] == 'press']; at = [x['id'] for x in got['items']].index(drawn[0])
-        # ...stopped from the press: nothing spins above it, and what is at work - his waiting line's turn - stands under it
+        # ...stopped from the press, and what waited handed over in the same step (2026-11-12): from the first read the stop, his line, and
+        # the turn at work that answers it - nothing spins above them, nothing waits by the box
         self.assertFalse([x for x in got['items'][:at] if x.get('state') in ('working', 'starting')], self.kinds(got))
-        self.assertTrue(got['working'] and got['items'][-1].get('state') in ('working', 'starting') and len(got['items']) - 1 > at, self.kinds(got))
+        self.assertEqual([(x['kind'], x['id']) for x in got['items'][at:at + 2]], [('press', drawn[0]), ('line', 'l-three')])
+        self.assertTrue(got['working'] and got['items'][-1].get('state') in ('working', 'starting') and len(got['items']) - 1 > at + 1 and not got['pending'], self.kinds(got))
         # ...and the turn that said nothing is no item: it was drawn empty over the press, and was gone when the next turn ended
         self.assertFalse([x for x in got['items'] if x.get('state') == 'stopped' and not (x['text'] or x['steps'])], self.kinds(got))
         was = [x['id'] for x in got['items'][:at + 1]]

@@ -4,6 +4,7 @@
 // on the Board). No terminal tab, no dock at the bottom of the screen. The pty lives
 // server-side, so leaving the page (or reloading) never kills it - coming back re-attaches.
 import React, { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -783,7 +784,9 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   const wasIdle = useRef(idle);
   useEffect(() => { if (wasIdle.current && !idle) kick.current?.(); wasIdle.current = idle; }, [idle]);
   useEffect(() => {
-    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
+    // ...drawn for the new width in the frame that has it (flushSync: the observer runs before that frame's paint) - set a beat later, the
+    // pane that had just been given the task list's room drew one frame with the chat at its old share of it (479px, then 655)
+    const ro = new ResizeObserver(([e]) => flushSync(() => setWidth(e.contentRect.width)));
     ro.observe(slot.current);
     return () => ro.disconnect();
   }, []);
@@ -797,8 +800,11 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   const onScreen = showingBrowser && viewOnScreen(layout);
   useEffect(() => { onView?.(onScreen); }, [onScreen]);  // eslint-disable-line react-hooks/exhaustive-deps
   // ...and while it shows the page the owner has a part on, the task list folds away to give it the room (browserSplit.wantRoom)
-  const roomFor = quiet && showingBrowser;
-  useEffect(() => { if (!roomFor) return undefined; const who = {}; wantRoom(who, true); return () => wantRoom(who, false); }, [roomFor]);
+  // ...ONLY WHILE THE PAGE IS ON SCREEN: folded away to its chip it needs no room, and the chat ran the window's whole width (1465px,
+  // recorded 2026-11-11) with the task list still gone. ASKED BEFORE THE PAINT (a layout effect): asked after it, the pane first drew
+  // squeezed into the chat's own column, then the list folded and everything moved left, then the widths settled - three layouts in 300 ms
+  const roomFor = quiet && onScreen;
+  React.useLayoutEffect(() => { if (!roomFor) return undefined; const who = {}; wantRoom(who, true); return () => wantRoom(who, false); }, [roomFor]);
   const fold = (f) => { setFolded(f); rememberFold(f, sid); if (!f) setLocalOk(true); };
   // the handle: the pointer's place across the slot IS the split, remembered on release
   const startDrag = (e) => {

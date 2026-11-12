@@ -238,3 +238,17 @@ test("a chat task's browser shows only when the owner is needed, side by side", 
   assert.equal(quietLayout(900, true, true), "folded");                                    // the owner's own Fold
   for (const r of [0.3, 0.58, 0.8, NaN]) assert.ok(1 - quietRatio(r) >= CHAT_SHARE - 1e-9 && quietRatio(r) >= 0.3);
 });
+
+// THE CHAT'S WIDTH, SAMPLED EVERY PAINTED FRAME while a browser opened, folded, came back and closed beside it (2026-11-11, a 1600px window):
+// at rest 1049px, at work 1073 (the section's room changed with the session); the pane opening drew 479px in the chat's own column, then 479
+// at the window's left, then 655 - three layouts in 300 ms; folded to its chip, the chat ran 1465px with the task list still gone.
+test("the chat keeps one width at rest and at work, and the browser pane arrives and leaves in one step", async () => {
+  const { readFileSync } = await import("node:fs");
+  const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
+  const term = read("TerminalView.jsx"), page = read("TaskPage.jsx");
+  assert.match(term, /const roomFor = quiet && onScreen;/, "the task list gives its room only while the page is on screen - not to a folded chip");
+  assert.match(term, /React\.useLayoutEffect\(\(\) => \{ if \(!roomFor\) return undefined; const who = \{\}; wantRoom\(who, true\); return \(\) => wantRoom\(who, false\); \}, \[roomFor\]\);/, "asked before the paint");
+  assert.match(term, /new ResizeObserver\(\(\[e\]\) => flushSync\(\(\) => setWidth\(e\.contentRect\.width\)\)\);/, "the pane's own width is the frame's");
+  assert.match(page, /bodyRO\.current = new ResizeObserver\(\(\[e\]\) => flushSync\(\(\) => setBodyW\(Math\.round\(e\.contentRect\.width\)\)\)\);/, "and the task's sections are sized for the width the frame has");
+  assert.match(page, /SECTION\(isOpen\("agent"\), openW\("agent"\), sessionView, liveSession\), \.\.\.\(chatPane \? \{ pb: 0\.25, px: 1, pt: 0\.65 \} : \{\}\)/, "a chat's section keeps the live room at rest too");
+});

@@ -45,6 +45,9 @@ export const sampler = (names) => {
       if (dead.some((c) => c.querySelector("button[disabled]"))) f.deadButton = true;
       // EACH MESSAGE OF A TURN IS A PARAGRAPH (the owner, 2026-11-11: three messages of one turn stacked as consecutive lines): two blocks of a
       // turn's words with no room between them
+      const box = document.querySelector("[data-tq-task-page] .tq-aui-footer")?.getBoundingClientRect();
+      f.w = Math.round(vp.getBoundingClientRect().width);
+      if (box && (box.right > innerWidth + 1 || box.bottom > innerHeight + 1)) f.boxOff = [Math.max(0, Math.round(box.right - innerWidth)), Math.max(0, Math.round(box.bottom - innerHeight))];
       if ([...vp.querySelectorAll(".tq-aui-agent-body > .tq-md + .tq-md")].some((e) => e.getBoundingClientRect().top - e.previousElementSibling.getBoundingClientRect().bottom < 4)) f.tight = true;
       // ...and where each card stands, by its own first line and the item it is under: one that goes back UP the chat is a finding (check)
       f.at = cardsOf.filter((c) => !c.matches("[data-tq-past-card]")).map((c) => [c.innerText.trim().split("\n")[0].slice(0, 60), c.closest("[data-tq-item]")?.getAttribute("data-tq-item") || ""]);
@@ -71,7 +74,7 @@ export const sampler = (names) => {
 };
 export function check(frames) {
   const bad = [], say = (t, m) => bad.push(`${t} ms: ${m}`);
-  let prev = null; const heard = new Set();
+  let prev = null, before = null; const heard = new Set();
   for (const f of frames) {
     const ids = f.items.map((x) => x[0]), seen = new Set();
     for (const id of ids) { if (seen.has(id)) say(f.t, `${id} drawn twice`); seen.add(id); }
@@ -97,6 +100,11 @@ export function check(frames) {
     if (f.tight && !prev?.tight) say(f.t, "two messages of one turn stand as consecutive lines, no paragraph's room between");
     // A CHAT IS FIRST SEEN AT ITS END (the owner, 2026-11-11: "task should open on last thing not randomly in middle"): the first painted frame too
     if (!prev && f.h - f.top - f.ch > 2) say(f.t, `first seen ${f.h - f.top - f.ch} px short of its end`);
+    // NOTHING JUMPS OR RESIZES (the owner, 2026-11-11): a chat whose width changes and is back within 600 ms drew a layout nobody meant - the
+    // pane beside it arriving in three steps, the section's room changing as its agent started - and the box never stands past the window
+    if (prev && before && f.w && f.w === before.w && prev.w !== f.w && f.t - before.t < 600) say(f.t, `the chat's width jumped ${before.w} -> ${prev.w} -> ${f.w} px within ${f.t - before.t} ms`);
+    if (f.boxOff && !prev?.boxOff) say(f.t, `the box stands past the window's edge (${f.boxOff[0]} px right, ${f.boxOff[1]} px down)`);
+    before = prev;
     if (f.staleUnder && !prev?.staleUnder) say(f.t, "a settled card stands under the live one");
     // A CARD NEVER GOES BACK UP THE CHAT (the recorded held step, 2026-11-11: approved under the newest answer, it failed and was drawn again
     // under the turn that first raised it - where he had pressed stood nothing): the lowest place a card stood is where it stays, or lower

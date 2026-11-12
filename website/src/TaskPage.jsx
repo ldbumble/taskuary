@@ -12,6 +12,7 @@ import CheckBackChip from "./CheckBackChip.jsx";
 import QueuedStart from "./QueuedStart.jsx";
 import { dangerAimOf, dangerLine, dangerOf, strangerLine, trustInBox } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { canSend, cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress,
@@ -1125,7 +1126,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const bodyBox = useCallback((el) => {
     bodyRO.current?.disconnect(); bodyRO.current = null;
     if (!el || typeof ResizeObserver === "undefined") return;
-    bodyRO.current = new ResizeObserver(([e]) => setBodyW(Math.round(e.contentRect.width)));
+    // ...and laid out for it in the frame that has it (flushSync: the observer runs before that frame's paint): its sections are sized in
+    // pixels off this width, and set a beat later they drew one frame at the old one - the chat 479px wide, then 655, as the task list folded
+    bodyRO.current = new ResizeObserver(([e]) => flushSync(() => setBodyW(Math.round(e.contentRect.width))));
     bodyRO.current.observe(el);
   }, []);
   useEffect(() => { setFromOpen(false); }, [selected]);
@@ -3222,7 +3225,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   sx={sessionView || twoUp ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size",
                     ...(main === "work" ? MAIN : settled ? { flex: "0 1 auto", minHeight: 0 } : {}) }}>
                 {!solo && slot("agent", <Box data-tq-work={twoUp ? "" : undefined} data-tq-agent-section="" role={twoUp ? "region" : undefined} aria-label={twoUp ? "Agent" : undefined}
-                  sx={twoUp ? { ...SECTION(isOpen("agent"), openW("agent"), sessionView, liveSession), ...(chatPane ? { pb: 0.25 } : {}) } : { display: "contents" }}>
+                  // ...A CHAT IS ONE WIDTH, AT REST AND AT WORK: the section's own room (20px at rest, 8px round a live session) moved the chat 12px
+                  // and widened it 24px the moment its agent started, and back when it stopped (sampled every frame, 2026-11-11) - the live room, always
+                  sx={twoUp ? { ...SECTION(isOpen("agent"), openW("agent"), sessionView, liveSession), ...(chatPane ? { pb: 0.25, px: 1, pt: 0.65 } : {}) } : { display: "contents" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}

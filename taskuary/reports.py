@@ -1839,6 +1839,16 @@ def _ran_this_week(last_polled) -> bool:
     except (TypeError, ValueError): return False
 
 
+def times_a_day(cron: str) -> str:
+    """A cron at a few set times of every day, said as the owner would - "twice a day: 7:30 and 16:30" (the Advisor's TWICE_A_DAY) - else ''."""
+    m, h, *rest = (str(cron or '').split() + [''] * 5)[:5]
+    if rest != ['*'] * 3 or not m.isdigit() or not all(x.isdigit() for x in h.split(',')): return ''
+    hs = sorted({int(x) for x in h.split(',')})
+    if len(hs) < 2: return ''
+    at = [f'{x}:{int(m):02d}' for x in hs]
+    return f"{'twice' if len(hs) == 2 else f'{len(hs)} times'} a day: {', '.join(at[:-1])} and {at[-1]}"
+
+
 def schedule_words(cfg: dict) -> str:
     """A report's WHOLE clock in one phrase, guard included. Every surface that printed half of it
     invited the same misreading: "on startup" alone hid the Monday cron behind it, and "on every app
@@ -1846,7 +1856,7 @@ def schedule_words(cfg: dict) -> str:
     greeting one evening launch read as a scheduler fault, or as an unexplained restart (TQ-0010)."""
     cap = (' (at most once a day)' if cfg.get('once_per_day') else
            ' (at most once a week)' if cfg.get('once_per_week') else '')
-    parts = [f"cron {cfg['cron']}" if cfg.get('cron') else '', f"daily at {cfg['daily_at']}" if cfg.get('daily_at') else '',
+    parts = [times_a_day(cfg['cron']) or f"cron {cfg['cron']}" if cfg.get('cron') else '', f"daily at {cfg['daily_at']}" if cfg.get('daily_at') else '',
              f"every {cfg['every_minutes']} minutes" if cfg.get('every_minutes') else '',
              f'on app start{cap}' if cfg.get('on_startup') else '']
     return ' + '.join(p for p in parts if p) or 'no schedule - run it by hand'
@@ -1895,6 +1905,16 @@ def runs_per_day(cfg: dict) -> float:
     if cfg.get('once_per_week'): n = min(n, 1 / 7)
     elif cfg.get('once_per_day'): n = min(n, 1)
     return round(n, 3)
+
+
+WHOLE_UP_TO = 4     # runs a day: a look booked at a few times of day reads whole; one on a short interval asks on what moved (llm.standing)
+
+
+def reads_whole(cfg: dict, trigger: str = 'schedule') -> bool:
+    """Does this Advisor look read everything afresh? Run now always (the owner asked); a clock's look when its report runs at most WHOLE_UP_TO
+    times a day - the twice-a-day Advisor's two looks are the full run the owner asked for (2026-11-12: "make sure the full advisor run
+    happens"), never cut to "nothing changed" or a short check. A half-hourly one keeps its guards: most of its looks find nothing moved."""
+    return trigger != 'schedule' or runs_per_day(cfg) <= WHOLE_UP_TO
 
 
 def _daily_slot(cfg: dict, now: datetime):
@@ -2087,10 +2107,12 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         from . import assistant
         from . import assistantblocks as blk
         chosen = blk.resolve(store, cfg)
+        # the day's job ideas land BEFORE the clock's look, which carries them (assistant.job_ideas: once a day, by its own rule)
+        if trigger == 'schedule': assistant.job_ideas(store, wait=True)
         out = assistant.run(store, report_llm(store, cfg, llm), force=True, instruction=cfg.get('ai_prompt'),
                             watch_source_ids=cfg.get('watch_source_ids') or [], watch_sources=cfg.get('watch_sources') or [],
                             systems_only=not blk.reads_taskuary(chosen), blocks=chosen,
-                            report_id=src.get('SourceId'), report_title=title, asked=trigger != 'schedule',
+                            report_id=src.get('SourceId'), report_title=title, asked=reads_whole(cfg, trigger),
                             always_post=route_of(cfg, 'timeline')[0] == 'always',
                             # the judge reads the lines BEFORE they post: a post the card would have
                             # held back is not quiet once it is on the Timeline (2026-09-20)

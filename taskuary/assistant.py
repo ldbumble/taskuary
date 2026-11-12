@@ -1,4 +1,4 @@
-"""The assistant on the Timeline: a check every 30 minutes, a post only when it has something to say.
+"""The assistant on the Timeline: a check twice a day (TWICE_A_DAY), a post only when it has something to say.
 
 Triage judges each message as it arrives and then nothing ever spoke up later - the reply the
 owner sent on Monday and never heard back on, the meeting in two hours with five mails of
@@ -65,7 +65,7 @@ _LOCK = threading.Lock()   # one check at a time: two clocks firing in the same 
 # placed right there when the check runs, so the prompt IS the payload's shape - the owner reads
 # which data feeds which instruction, and can move or drop a card by editing the words.
 PROMPT = (
-    'You are my assistant; every 30 minutes you read the sources below and check in. Tell me only what a sharp human assistant who had READ everything '
+    'You are my assistant; twice a day, at the start and the end of my working day, you read the sources below and check in. Tell me only what a sharp human assistant who had READ everything '
     'would lean over and say - never a summary of my inbox, never a count I can see myself. A good line connects two things I '
     'have not connected, or names the one thing I am about to miss. Read, in this order of worth:\n'
     '0. CONFIGURED SYSTEM CHECKS - current views from finance, operations, CRM, infrastructure, or any other connected system (they follow '
@@ -130,7 +130,14 @@ OLD_PROMPT_SHA = ('06a4ec48fcec9d8bbc9fc6f423f52360aa1b0a2e7f5affe31582e7da56d1e
                   # 2026-10-09, before the finding and the suggestion were said apart ("what I would do")
                   'e37ca9e1a91e6880a304306482a0a682b5260bc402639cc94a9cc6e0f8a6ef3c',
                   # 2026-10-25, before the automation line stopped recommending an auto-answer (policy.py removed it)
-                  '1470c920581d783f70e98193ff6d6998fb7ec5f126b1ce4fb855979b8a21a138')
+                  '1470c920581d783f70e98193ff6d6998fb7ec5f126b1ce4fb855979b8a21a138',
+                  # 2026-11-12, while it still said "every 30 minutes" - the Advisor reads twice a day now (TWICE_A_DAY)
+                  '4d13664387d65994e3407d7ca5f0f8d599aebbd313e3362850d0941b88bdc908')
+# TWICE A DAY, BOTH WHOLE (the owner, 2026-11-12: "run the advisor twice a day in AM and PM ... make sure the full advisor run happens"): every
+# half hour cost ~50K a look on a live install, nearly all of them whole as the day's mail moved past the short check. 07:30 is half an hour
+# after the day's job-ideas pass may start (lookout.MORNING_H), so the morning look follows it; 16:30 is before the day ends and ahead of the
+# 18:00 End of day checkup. OLD_EVERY: the half-hourly (once 20-minute, once hourly) clock this row shipped with, moved here once (store.py)
+TWICE_A_DAY, OLD_EVERY = '30 7,16 * * *', (30, 20, 60)
 OLD_PROMPT_HEADS = ('You are my assistant. Once an hour,', 'You are my assistant. Every 20 minutes you check in;',
                     'You are my assistant. Every 30 minutes you check in;',
                     'You are my assistant; every 30 minutes you check in.',
@@ -1861,14 +1868,22 @@ def clock(store):
     this on the reports' clock, off any request; each tick is cheap until it is due. Switching the Advisor report off stops both."""
     src = source(store)
     if not (src and src.get('Active')): return
-    from . import brainroute, wsboot, lookout
+    from . import brainroute, wsboot
     if brainroute.auto_held(store): return
     # ...THE ADVISOR NOTICES A NEW HAT (the owner, 2026-11-01): a connector or GitHub project whose traffic no workstream places is judged,
     # added when sure, else an Advisor card - and each section kept current once a week (cheap when nothing is new)
     wsboot.tick(store)
-    # ...and LOOKING OUT FOR THE OWNER'S JOB, once a day (the owner, 2026-11-02/03): credit they are owed, a pain of others they could
-    # fix, money left on the table, a problem developing - at most two ideas, each past a second look (lookout.py)
-    if lookout.CLOCK: lookout.tick(store)
+    job_ideas(store)
+
+
+def job_ideas(store, wait: bool = False) -> dict:
+    """LOOKING OUT FOR THE OWNER'S JOB, once a day (the owner, 2026-11-02/03): credit they are owed, a pain of others they could fix, money
+    left on the table, a problem developing - each past a second look (lookout.py). The clock's tick, and the scheduled Advisor look's first
+    step (reports._run_report_source, `wait`): an app opened at 09:00 fires the missed 07:30 look before the clock's first tick, and the
+    morning look is the one that carries the day's ideas. Its own once-a-day rule decides; past the day's ceiling it waits like the clock."""
+    from . import brainroute, lookout
+    if not lookout.CLOCK or brainroute.auto_held(store): return {}
+    return lookout.tick(store, wait=wait)
 
 
 def seeded_source(store) -> dict | None:

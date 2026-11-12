@@ -140,6 +140,8 @@ def test_the_advisor_on_its_half_hour_clock_asks_on_its_facts_not_its_clock():
         if 'YOUR INSTRUCTION' not in system: return '{"verdicts": []}'           # the sent-words judge, not the look
         seen.append(user); return 'NO CHANGE' if user.startswith('YOUR LAST ANSWER') else '{"lines": [], "notes": "watching the accruals"}'
     src = assistant.source(s)
+    half_hour = src['cfg'] | {'every_minutes': 30, 'cron': None}       # a half-hour clock the owner set: its guards stay
+    s._exec('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(half_hour), src['SourceId']))
     cand = [{'key': 'cold:1', 'kind': 'cold', 'facts': 'Gail Moreno asked for the accruals and nothing has moved'}]
     def run(at, trigger='schedule'):
         with mock.patch.object(assistant, 'datetime', _clock(at)), mock.patch.object(assistant, 'candidates', return_value=cand):
@@ -157,6 +159,58 @@ def test_the_advisor_on_its_half_hour_clock_asks_on_its_facts_not_its_clock():
     assert seen[2].startswith('YOUR LAST ANSWER') and 'Accruals - the August file' in seen[2] and len(seen[2]) < len(seen[0]) / 4, seen[2]
     assert run('02:45') == 'Model: nothing changed.' and len(seen) == 3
     assert run('02:45', 'manual') == 'Model: asked.' and len(seen) == 4 and not seen[3].startswith('YOUR LAST ANSWER'), 'Run now asks whole'
+
+
+def _at(stamp):
+    import datetime as dt
+    class Clock(dt.datetime): now = classmethod(lambda cls, tz=None: cls.fromisoformat(stamp))
+    return Clock
+
+
+def test_the_advisor_runs_twice_a_day_at_the_start_and_the_end_of_the_working_day_and_nothing_in_between():
+    """The owner, 2026-11-12: "let's run the advisor twice a day in AM and PM ... that will save a bunch of tokens". Measured on his install
+    that morning: six looks in under four hours at ~50K each. A day of the report clock's minute ticks, 07:00 to 20:00, last run the evening
+    before: the seeded Advisor is due at 07:30 and 16:30 and at no other minute - and its card says so."""
+    from datetime import datetime, timedelta
+    from taskuary import reports
+    s = store(); cfg = assistant.source(s)['cfg']
+    last, ran, t = '2026-11-11 16:30:00', [], datetime(2026, 11, 12, 7, 0)
+    while t <= datetime(2026, 11, 12, 20, 0):
+        with mock.patch.object(reports, 'datetime', _at(t.isoformat())):
+            if reports.is_due(cfg, last): ran.append(f'{t:%H:%M}'); last = f'{t:%Y-%m-%d %H:%M:%S}'
+        t += timedelta(minutes=1)
+    assert ran == ['07:30', '16:30'], ran
+    assert reports.schedule_words(cfg) == 'twice a day: 7:30 and 16:30' and reports.runs_per_day(cfg) == 2
+    # a morning the app was shut through: the 07:30 look runs once when it opens, never twice
+    with mock.patch.object(reports, 'datetime', _at('2026-11-12T09:10:00')): assert reports.is_due(cfg, '2026-11-11 16:30:00')
+    with mock.patch.object(reports, 'datetime', _at('2026-11-12T09:11:00')): assert not reports.is_due(cfg, '2026-11-12 09:10:00')
+
+
+def test_both_looks_read_whole_even_when_nothing_changed_and_the_days_job_ideas_land_before_the_morning_one(monkeypatch):
+    """"make sure the full advisor run happens though with the pain points etc." - the two booked looks are the full run: never "nothing
+    changed", never a short check (llm.standing), whatever moved. The day's job-ideas pass (lookout: pain points, money, early warnings,
+    credit) runs before the morning look - an app opened at 09:00 fires the missed 07:30 look before the Advisor's own clock ticks - and
+    still once a calendar day: the afternoon look does not run it again, the next morning does."""
+    from taskuary import lookout, reports
+    s, order = store(), []
+    src = assistant.source(s)
+    def brain(system, user, **k):
+        if 'YOUR INSTRUCTION' not in system: return '{"verdicts": []}'
+        order.append('look'); return '{"lines": [], "notes": "watching the accruals"}'
+    monkeypatch.setattr(lookout, 'CLOCK', True)
+    monkeypatch.setattr(lookout, 'brain', lambda st: brain)
+    monkeypatch.setattr(lookout, 'window', lambda st: ('', set()))
+    monkeypatch.setattr(lookout, 'propose', lambda st, llm, user, shown: order.append('job ideas') or [])
+    cand = [{'key': 'cold:1', 'kind': 'cold', 'facts': 'Gail Moreno asked for the accruals and nothing has moved'}]
+    def run(stamp):
+        clock = _at(stamp)
+        with mock.patch.object(assistant, 'datetime', clock), mock.patch.object(lookout, '_now', clock.now), \
+             mock.patch.object(assistant, 'candidates', return_value=cand):
+            reports.run_one(s, s.get_source(src['SourceId']), brain, 'schedule')
+        return json.loads(s.get_setting(reports.LAST_RUN + str(src['SourceId'])))['summary']
+    assert run('2026-11-12T09:00:00') == 'Model: asked.' and order == ['job ideas', 'look']
+    assert run('2026-11-12T16:30:00') == 'Model: asked.' and order == ['job ideas', 'look', 'look'], 'nothing moved, and it read whole'
+    assert run('2026-11-13T07:30:00') == 'Model: asked.' and order[3:] == ['job ideas', 'look']
 
 
 def test_a_clocked_question_is_asked_whole_only_when_much_changed_and_never_drifts():

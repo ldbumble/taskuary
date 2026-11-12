@@ -289,7 +289,7 @@ class PostTests(unittest.TestCase):
         editable instruction. Deleting it (or switching it off) turns the post off - except for 'ask now'."""
         s = self._seed()
         src = assistant.source(s)
-        self.assertEqual((src['Address'], src['cfg']['type'], src['cfg']['every_minutes'], src['Active']), ('Advisor', 'assistant', 30, 1))
+        self.assertEqual((src['Address'], src['cfg']['type'], src['cfg']['cron'], src['Active']), ('Advisor', 'assistant', assistant.TWICE_A_DAY, 1))
         self.assertIn('What I promised', src['cfg']['ai_prompt'])
         seen = []
         def llm(system, user, **k): seen.append(system); return '{"say": []}'

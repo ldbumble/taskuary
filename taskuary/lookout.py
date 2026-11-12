@@ -356,10 +356,11 @@ def brain(store):
         logger.info(f'lookout: no brain - {e}'); return None
 
 
-def tick(store, llm=None, force: bool = False) -> dict:
-    """One pass when due (or `force`): {ran, raised: [idea ids], held: [titles], calls}. At most CALLS model calls. Never raises."""
+def tick(store, llm=None, force: bool = False, wait: bool = False) -> dict:
+    """One pass when due (or `force`): {ran, raised: [idea ids], held: [titles], calls}. At most CALLS model calls. Never raises.
+    `wait`: a pass already running is waited for rather than skipped - the morning Advisor look reads what it raised (assistant.job_ideas)."""
     out = {'ran': False, 'raised': [], 'held': [], 'calls': 0}
-    if not _BUSY.acquire(blocking=False): return out
+    if not _BUSY.acquire(blocking=wait): return out
     try:
         if not force and not due(store): return out
         if llm is None: llm = brain(store)

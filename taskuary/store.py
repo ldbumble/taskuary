@@ -1960,15 +1960,14 @@ class SQLiteStore:
             # digest keeps it until its owner deletes it; its Automation ideas is removed (just above). Both report types
             # still exist to make one by hand.
             # ...and the Assistant (assistant.py): its post on the Timeline is scheduled and worded HERE
-            # too - every 30 minutes and on startup by default (a quiet check posts nothing), the
-            # instruction editable, deleting the row is the off switch. These two are the working demo of
-            # both kinds of report: the digest is an AI pass over the hub's own data, the assistant a voice.
+            # too - twice a day, at the start and the end of the working day (assistant.TWICE_A_DAY; a look missed while the app was
+            # shut runs once when it opens, reports.is_due), the instruction editable, deleting the row is the off switch. These two are
+            # the working demo of both kinds of report: the digest is an AI pass over the hub's own data, the assistant a voice.
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='assistant_report_seeded'").fetchone():
-                from .assistant import PROMPT as ASSISTANT_PROMPT
+                from .assistant import PROMPT as ASSISTANT_PROMPT, TWICE_A_DAY
                 self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',
                                 ('report', 'Advisor', 'template', 1,
-                                 json.dumps({'type': 'assistant', 'title': 'Advisor', 'every_minutes': 30, 'on_startup': True,
-                                             'ai_prompt': ASSISTANT_PROMPT})))
+                                 json.dumps({'type': 'assistant', 'title': 'Advisor', 'cron': TWICE_A_DAY, 'ai_prompt': ASSISTANT_PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('assistant_report_seeded', '1', 'template')")
             # The close of the day deserves a different lens from the Morning digest: eight
             # rolling hours of whatever is connected and the owner's own work (evening.py),
@@ -2002,13 +2001,11 @@ class SQLiteStore:
             for sid_, cj in self.cx.execute("SELECT SourceId, ConfigJson FROM source WHERE Channel='report'").fetchall():
                 try: c = json.loads(cj or '{}')
                 except ValueError: continue
-                # the stock Assistant was seeded hourly (then 20-minutely) with a stock prompt; unedited, it
-                # becomes the 30-minute check with the current prompt (an owner-edited prompt or cadence is kept)
+                # the stock Advisor on a shipped prompt, unedited, takes the current one (an owner-edited prompt is kept); its clock is
+                # the move below's, once - healing it here on every launch put back a cadence the owner had changed
                 if c.get('type') == 'assistant' and (str(c.get('ai_prompt') or '').startswith(OLD_PROMPT_HEADS)
                                                      or hashlib.sha256(str(c.get('ai_prompt') or '').encode()).hexdigest() in OLD_PROMPT_SHA):
                     c['ai_prompt'] = ASSISTANT_PROMPT
-                    if c.get('every_minutes') in (60, 20): c['every_minutes'] = 30
-                    c.setdefault('on_startup', True)
                     self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
                 # the stock Automation ideas on a shipped prompt that still advised an auto-answer takes today's (2026-10-25)
                 if c.get('type') == 'automate' and c.get('ai_prompt') in AUTOMATE_OLD:
@@ -2035,6 +2032,22 @@ class SQLiteStore:
                     # ...and a brief is once a day: on_startup alone re-filed it on every launch
                     if c.get('on_startup'): c['once_per_day'] = True
                     self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
+            # THE ADVISOR TWICE A DAY, once (the owner, 2026-11-12: "run the advisor twice a day in AM and PM"): the seeded row still on the
+            # clock it shipped with - every 30 (once 20, once 60) minutes, with or without app start - moves to assistant.TWICE_A_DAY. Any
+            # other clock is one the owner set, and is kept and named in the log.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='advisor_twice_a_day'").fetchone():
+                from .assistant import OLD_EVERY, TWICE_A_DAY
+                for r in self.cx.execute("SELECT SourceId, Owner, ConfigJson FROM source WHERE Channel='report'").fetchall():
+                    try: c = json.loads(r['ConfigJson'] or '{}')
+                    except ValueError: continue
+                    if c.get('type') != 'assistant': continue
+                    if r['Owner'] == 'template' and not (c.get('cron') or c.get('daily_at')) and str(c.get('every_minutes')) in map(str, OLD_EVERY):
+                        for k in ('every_minutes', 'on_startup', 'once_per_day'): c.pop(k, None)
+                        self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c | {'cron': TWICE_A_DAY}), r['SourceId']))
+                        logger.info(f"reports: the Advisor (SourceId {r['SourceId']}) runs twice a day now - {TWICE_A_DAY}")
+                    elif c.get('cron') != TWICE_A_DAY: logger.info(f"reports: {c.get('title') or 'an Advisor report'} (SourceId {r['SourceId']}) keeps the clock it was given - "
+                                      f"{ {k: c[k] for k in ('cron', 'daily_at', 'every_minutes', 'on_startup') if c.get(k)} or 'none'}")
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('advisor_twice_a_day', '1', 'migration')")
             # THE TRIAGE LINE, once (the owner, 2026-10-16: "most reports should not go through triage"): every report triaged
             # every run before it existed, so each is given the line its own behaviour already says - a monitor keeps its condition,
             # a digest never (reports.triage_from). BEFORE the card pass below, which would write the default `never` into all of them

@@ -11,6 +11,11 @@ export const cronText = (expr) => {
   const hhmm = /^\d+$/.test(mi) && /^\d+$/.test(h) ? `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}` : null;
   const every = (x, unit) => { const m = /^\*\/(\d+)$/.exec(x); return m ? `every ${m[1]}${unit}` : null; };
   if (h === "*" && dom === "*" && mon === "*" && dow === "*") return every(mi, "m") || (mi === "*" ? "every minute" : `cron ${expr}`);
+  // a few set times every day, as reports.times_a_day says it: the Advisor's "twice a day: 7:30 and 16:30"
+  if (/^\d+$/.test(mi) && /^\d+(,\d+)+$/.test(h) && dom === "*" && mon === "*" && dow === "*") {
+    const at = [...new Set(h.split(",").map(Number))].sort((a, b) => a - b).map((x) => `${x}:${String(mi).padStart(2, "0")}`);
+    if (at.length > 1) return `${at.length === 2 ? "twice" : `${at.length} times`} a day: ${at.slice(0, -1).join(", ")} and ${at.at(-1)}`;
+  }
   if (mi !== "*" && dom === "*" && mon === "*" && dow === "*") return every(h, "h") ? `${every(h, "h")} at :${String(mi).padStart(2, "0")}` : hhmm ? `daily ${hhmm}` : `cron ${expr}`;
   if (hhmm && dom === "*" && mon === "*") {
     if (dow === "1-5") return `weekdays ${hhmm}`;

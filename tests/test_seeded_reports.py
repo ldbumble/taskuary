@@ -143,6 +143,32 @@ class HealingAnOlderInstallTests(unittest.TestCase):
         cfg = self._reopen({'type': 'automate', 'title': 'x', 'days': 30, 'cron': '0 8 * * 1', 'ai_prompt': 'my own words'})
         self.assertNotIn('on_startup', cfg)
 
+    def test_the_advisor_on_its_shipped_half_hour_moves_to_twice_a_day_and_a_clock_the_owner_set_is_kept(self):
+        """The owner, 2026-11-12: "let's run the advisor twice a day in AM and PM". His Advisor was seeded every 30 minutes and on app start;
+        on the next open it runs at 7:30 and 16:30. Once: a clock he sets afterwards - or had set already - stays his."""
+        import os, tempfile
+        from taskuary.assistant import TWICE_A_DAY
+        from taskuary.reports import schedule_words
+        from taskuary.store import SQLiteStore
+        d = tempfile.mkdtemp()
+        for n, (clock, want) in enumerate((({'every_minutes': 30, 'on_startup': True}, {'cron': TWICE_A_DAY}),
+                                           ({'every_minutes': 60}, {'cron': TWICE_A_DAY}),
+                                           ({'every_minutes': 45, 'on_startup': True}, {'every_minutes': 45, 'on_startup': True}),
+                                           ({'daily_at': '09:00'}, {'daily_at': '09:00'}))):
+            fn = os.path.join(d, f't{n}.db')
+            s = SQLiteStore(fn)
+            sid, cfg = next((r['SourceId'], json.loads(r['ConfigJson'])) for r in s.list_sources() if r['Address'] == 'Advisor')
+            old = {k: v for k, v in cfg.items() if k not in ('cron', 'every_minutes', 'on_startup', 'daily_at')} | clock
+            s.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(old), sid))
+            s.cx.execute("DELETE FROM setting WHERE Name='advisor_twice_a_day'"); s.cx.commit(); s.close()
+            s = SQLiteStore(fn); got = _reports(s)['Advisor']
+            self.assertEqual({k: got[k] for k in ('cron', 'every_minutes', 'on_startup', 'daily_at') if got.get(k)}, want, clock)
+            if want.get('cron'): self.assertEqual(schedule_words(got), 'twice a day: 7:30 and 16:30')
+            # ...and once: a half hour he sets afterwards is his
+            s.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(old | {'every_minutes': 30}), sid)); s.cx.commit(); s.close()
+            s = SQLiteStore(fn)
+            self.assertEqual(_reports(s)['Advisor'].get('every_minutes'), 30); s.close()
+
     def test_an_older_install_loses_the_shipped_automation_ideas_and_keeps_one_the_owner_made(self):
         """Two voices raised the same month of toil (the owner, 2026-09-29: "delete it for everyone") - the seeded row
         goes on the next open, edited or not; an Automation report the owner made himself is his."""

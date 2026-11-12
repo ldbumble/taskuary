@@ -708,7 +708,7 @@ def _pane(payload: dict, cli: str):
                  and sid and sid in (getattr(t, 'ext_id', ''), getattr(t, 'resumed_from', ''))), None)
 
 
-def _general(payload: dict, sid: str = ''):
+def _general(payload: dict, sid: str = '', task: str = ''):
     """A general agent's headless chat (general.GeneralSession) - no argv, no cwd, no pane, so _pane never finds it, and its
     browser acts went straight through while its brief said they were held (the owner's computer-use walk, 2026-10-25). Bound by
     the session id its own --settings hook names (browser_settings), else by its CLI's conversation id once a turn gave it one."""
@@ -718,6 +718,9 @@ def _general(payload: dict, sid: str = ''):
     t = term.SESSIONS.get(str(sid)) if sid else None
     if not isinstance(t, GeneralSession):
         t = next((s for s in list(term.SESSIONS.values()) if isinstance(s, GeneralSession) and csid and s.cli_sid == csid), None)
+    # ...else by the task its own settings name (general_settings): one live chat per task, before its first turn gave it a conversation id
+    if t is None and str(task or '').isdigit():
+        t = next((s for s in list(term.SESSIONS.values()) if isinstance(s, GeneralSession) and s.alive and s.task_id == int(task)), None)
     return t if t is not None and t.alive and t.task_id else None
 
 
@@ -751,6 +754,11 @@ def general_settings(task_id, sid: str = '') -> str:
     own hooks ride here, with the browser hold naming its chat; their own CLAUDE.md, which no setting source reaches, is excluded.
     Claude keeps only the last --settings it is given, so this is the whole file."""
     d = {'hooks': session_hooks(), 'claudeMdExcludes': [f'{Path.home().as_posix()}/.claude/CLAUDE.md', f'{Path.home().as_posix()}/.claude/**']}
+    # ...THE SHELL HOLD NAMES ITS TASK (the real-CLI walks, 2026-11-12): a chat's session is found by its CLI's conversation id, which its
+    # first turn has not given it yet - so a delete held in that turn passed the hook unread, was held at the ACP permission instead, and
+    # the agent heard only "User refused permission": never the hold's own words, and it told the owner the step "waits for your approval"
+    for h in d['hooks']['PreToolUse']:
+        if h.get('matcher') == BROWSER_MATCH: h['hooks'] = [{**x, 'command': x['command'].replace(BROWSER_MARK, f'{BROWSER_MARK}?task={int(task_id)}', 1)} for x in h['hooks']]
     if sid: d['hooks']['PreToolUse'].append(_browser_hold(sid))
     return _session_file(f'general-{task_id}' + (f'-{sid}' if sid else ''), d)
 
@@ -806,7 +814,7 @@ def reason(payload: dict, wait: float = None) -> dict:
     return reasonnet.pre_tool(st, t.task_id, run_sid(payload, t.task_id), tool[len(reasonnet.TOOL):], payload.get('tool_input') or {}, wait)
 
 
-def browser(payload: dict, brain=None, sid: str = '') -> dict:
+def browser(payload: dict, brain=None, sid: str = '', task: str = '') -> dict:
     """Before one of OUR sessions runs a shell command (browsergate.check): a browser act that can't be undone is refused and held
     for the owner. Not our pane, not a shell tool, nothing of agent-browser in it: {} at once - the command is Claude's."""
     from . import agentdesktop, browsergate, shellgate
@@ -818,7 +826,7 @@ def browser(payload: dict, brain=None, sid: str = '') -> dict:
     # act that can't be undone (agentdesktop.py, 2026-10-31)
     # ...and a delete outside the agent's own folder, read against the folder it runs in (shellgate.deletes, 2026-11-03)
     if not needs_gate(cmd, str(payload.get('cwd') or '')): return {}
-    t = _pane(payload, 'claude') or _general(payload, sid)
+    t = _pane(payload, 'claude') or _general(payload, sid, task)
     st = getattr(t, 'store', None) if t else None
     if not t or not st: return {}
     # ...asked in the CLI's own prompt where the owner can answer it there, held for the task's Approve where nobody can (shellgate.asks)

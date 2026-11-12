@@ -50,6 +50,18 @@ class TheGeneralAgentsBrowserIsHeld(unittest.TestCase):
             self.assertEqual(hooks.browser(self.pay), {'held': 1})
         self.assertEqual(check.call_args.args[1], self.tid)
 
+    def test_its_task_settings_find_it_before_its_first_turn_named_a_conversation(self):
+        """The real-CLI walks, 2026-11-12: a chat agent's delete in its FIRST turn passed the shell hold unread - no conversation id yet -
+        and was held at the ACP permission, where the agent hears only "User refused permission" and told the owner it "waits for your
+        approval". The task's own settings file names its task on the hold, and the hook finds the chat by it."""
+        f = Path(hooks.general_settings(self.tid))
+        cmd = next(h['hooks'][0]['command'] for h in json.loads(f.read_text(encoding='utf-8'))['hooks']['PreToolUse'] if h['matcher'] == hooks.BROWSER_MATCH)
+        self.assertIn(f'{hooks.BROWSER_MARK}?task={self.tid}', cmd)
+        with mock.patch.object(bg, 'check', return_value={'held': 1}) as check:
+            self.assertEqual(hooks.browser(self.pay, task=str(self.tid)), {'held': 1})
+            self.assertEqual(hooks.browser(self.pay, task=str(self.tid + 1)), {})                   # another task's: not this chat
+        self.assertEqual(check.call_args.args[1], self.tid)
+
     def test_a_session_that_is_not_ours_is_left_alone(self):
         with mock.patch.object(bg, 'check') as check:
             self.assertEqual(hooks.browser(self.pay, sid='nobody'), {})

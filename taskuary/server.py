@@ -5235,14 +5235,14 @@ def cli_hook_reason(payload: dict):
 
 
 @app.post('/api/hooks/claude/browser')
-async def cli_hook_browser(payload: dict, sid: str = ''):
+async def cli_hook_browser(payload: dict, sid: str = '', task: str = ''):
     """Before one of our sessions runs a shell command (hooks.browser -> browsergate.check): a browser act that can't be undone is
     refused and held on the task for the owner's press. On the permits' threads - a snapshot and a model verdict take seconds, and
     on anyio's shared forty they would queue behind every other sync route. A failure IN the judging holds (check); a failure
     around it - an unreadable payload - lets the command go, as every hook here does."""
     from . import hooks
     def go():
-        try: return hooks.browser(payload if isinstance(payload, dict) else {}, sid=sid)       # sid: a general chat's own hook (hooks.browser_settings)
+        try: return hooks.browser(payload if isinstance(payload, dict) else {}, sid=sid, task=task)       # sid: a general chat's own hook (hooks.browser_settings)
         except Exception as e:
             logger.warning(f'browser hook: {e}'); return {}
     return await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)

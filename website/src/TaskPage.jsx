@@ -97,7 +97,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { SECTIONS, cameFrom, homeSection, liveTerminal, soloTodo, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
+import { SECTIONS, cameFrom, chatLatch, homeSection, liveTerminal, soloTodo, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, sectionFade, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { chatOf, taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -1817,14 +1817,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...nor the task's status under a live agent (the overnight run, 2026-11-03): Approve on a general agent's held delete moved the task from
   // waiting to in progress, the page re-read where it was up to with the step still listed, and jumped away from the agent
   // ...and a to-do whose box started its agent (`solo` no more) opens on the chat that agent now answers in
-  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${twoUp}|${liveSession ? "live" : t?.Status}|${!!writingUp}|${solo}`;
   // ...an agent, a turn or a draft on it: its chat leads, Came from the thin tab (homeSection's one rule, 2026-11-08)
   // ...and a task given to an agent (a general job, or one assigned to an agent) is the agent's even before it says a word - Came from leads
   // only where there is no agent at all (the owner, 2026-11-08) - a coding job's as a general one's: its chat and box from the first second, typing
   // starts it (the side-by-side walk, 2026-11-11: a coding task no session had touched opened on Came from, no box anywhere)
   const anyChat = !!term?.alive || hasRecord || ["general", "coding"].includes(t?.Kind) || /^agent:/.test(String(t?.Assignee || ""))
     || (reviews || []).some((r) => r?.Status === "pending");
-  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: solo ? "from" : writingUp ? "agent" : homeSection(t?.Kind, taskStage, anyChat) };
+  const chatSeen = useRef(null);
+  chatSeen.current = chatLatch(chatSeen.current, selected, anyChat && detail?.task?.TaskId === selected);
+  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${twoUp}|${liveSession ? "live" : t?.Status}|${!!writingUp}|${solo}|${chatSeen.current.on}`;
+  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: solo ? "from" : writingUp ? "agent" : homeSection(t?.Kind, taskStage, chatSeen.current.on) };
   const main = mainHeld.current.main;
   // ...and a section the owner OPENED stays open under them: only another task, an agent starting or stopping, the task closing or
   // reopening or the width folds it - not the detail landing, the Advisor's late pick, the write-up ending, or the status catching up

@@ -122,7 +122,7 @@ test("the main view follows where the task is up to: the work with Came from on 
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   // ...the right drawer and its lit tab went with the sections in a row (2026-10-27): the section the task is up to is its kind's and its
   // stage's (homeSection) - never the Advisor's (2026-11-06: its decision names no section)
-  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: solo \? "from" : writingUp \? "agent" : homeSection\(t\?\.Kind, taskStage, anyChat\) \};/);
+  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: solo \? "from" : writingUp \? "agent" : homeSection\(t\?\.Kind, taskStage, chatSeen\.current\.on\) \};/);
   assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
   // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
   const restLine = page.match(/const restFocus = focusOf\(\{[^;]*;/)?.[0];
@@ -371,4 +371,17 @@ test("a task's first section draws at once; only a switch fades its words in", (
   const page = taskSource();
   assert.match(page, /transition: open && fade \? `opacity 160ms ease \$\{SLOT_MS\}ms, visibility 0s` : "none",\s+\.\.\.\(open && fade \? \{ "@starting-style": \{ opacity: 0 \} \} : \{\}\),/);
   for (const k of ["from", "agent"]) assert.match(page, new RegExp(`SECTION\\(isOpen\\("${k}"\\), openW\\("${k}"\\), [^)]*fades\\)`), `the ${k} section reads the page's own fade`);
+});
+
+test("a chat that lands after the task's first read opens the chat, and stays the chat once it is there", async () => {
+  // New → "email Erin for the vendor list" → Draft it: the task was read before its draft was written, the page homed on Came from from that
+  // read, and the draft and its Send sat in the folded chat under a "ready to send" header - nothing on screen to press
+  const { chatLatch } = await import("../src/taskLayout.js");
+  let m = chatLatch(null, 1, false); assert.equal(m.on, false);
+  m = chatLatch(m, 1, true); assert.equal(m.on, true, "the draft landing opens the chat");
+  m = chatLatch(m, 1, false); assert.equal(m.on, true, "...and its Send never folds it back to Came from");
+  m = chatLatch(m, 2, false); assert.equal(m.on, false, "another task reads its own");
+  const page = taskSource();
+  assert.match(page, /chatSeen\.current = chatLatch\(chatSeen\.current, selected, anyChat && detail\?\.task\?\.TaskId === selected\)/);
+  assert.match(page, /const mainHeld = useRef\(\{ key: null, main: null, sec: null \}\), mainKey = `[^`]*\|\$\{chatSeen\.current\.on\}`/);
 });

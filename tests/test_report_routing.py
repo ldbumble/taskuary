@@ -91,6 +91,16 @@ def test_the_ai_decides_each_line_it_was_asked_about():
     assert (d['timeline'], d['alert']) == (True, True)
 
 
+def test_triage_asked_of_an_ai_that_gave_no_answer_is_not_triaged():
+    """Decided 2026-11-12: a report's triage line set to "ask the AI" with no answer - the judge silent, or nothing to judge by - is NOT
+    triaged. Every other line still reaches the owner; triage makes work, and makes none on no answer."""
+    cfg = {'route': {'timeline': {'how': 'ai', 'when': 'x'}, 'triage': {'how': 'ai', 'when': 'it failed'}}}
+    d = reports.decide(cfg, res(), llm=None, judge=lambda *a: None)
+    assert (d['timeline'], d['triage']) == (True, False)
+    assert reports.route_of({'route': {'triage': {'how': 'ai', 'when': ' '}}}, 'triage')[0] == 'never'
+    assert reports.route_of({'route': {'alert': {'how': 'ai', 'when': ' '}}}, 'alert')[0] == 'always'
+
+
 def test_the_judge_answers_booleans_and_writes_no_prose():
     """The sentence was there because the thing answering happened to be able to write. It is not a
     requirement of routing, and for three of the four lines it was computed and thrown away."""

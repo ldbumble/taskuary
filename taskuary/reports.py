@@ -2266,7 +2266,9 @@ def route_of(cfg: dict, line: str) -> tuple:
     r = (cfg.get('route') or {}).get(line) or default_route(cfg)[line]
     how, when = str(r.get('how') or '').strip().lower(), str(r.get('when') or '').strip()
     if how not in ROUTE: how = default_route(cfg)[line]['how']
-    if how == 'ai' and not when: return 'always', ''
+    # ...but TRIAGE asked of an AI that has nothing to judge by is not triaged (decided 2026-11-12): triage makes work, and a run reaches it
+    # only where its line says so
+    if how == 'ai' and not when: return ('never' if line == 'triage' else 'always'), ''
     if how == 'rule':
         if str(r.get('rule') or '').strip().lower() not in ALERT_WHEN: return 'always', ''
         return 'rule', rule_words(r)
@@ -2513,7 +2515,8 @@ def decide(cfg: dict, res: dict, llm=None, judge=None, learned: str = '') -> dic
     said = {}
     if ask:
         said = judge(judge_state(res), ask, cfg) if judge is not None else chat_judge(llm, learned)(judge_state(res), ask, cfg) if llm else None
-        if said is None: said = {l: True for l in ask}
+        # ...a line the judge did not answer reaches the owner - but triage, which makes work, is not run on no answer (decided 2026-11-12)
+        if said is None: said = {l: l != 'triage' for l in ask}
     rule = lambda l: bool(condition_fires(**{k: v for k, v in ((cfg.get('route') or {}).get(l) or {}).items() if k in ('rule', 'count', 'text')}, res=res))
     out = {l: rule(l) if h == 'rule' else said.get(l, h == 'always') for l, (h, _) in how.items()}
     # the one reason anybody reads is the alert's: it quotes the owner's own rule, never a paraphrase

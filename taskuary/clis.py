@@ -91,6 +91,12 @@ ADAPTERS = {'claude': {'pkg': '@agentclientprotocol/claude-agent-acp@0.101.0', '
                       'env': {'CODEX_PATH': '{cli}'}, 'mode': 'workspace-write'}}
 
 
+def name_of(cmd: str) -> str:
+    """ONE NAME PER AI, on every picker and line (decided 2026-11-12): the CLI's own product name - "Claude Code", "OpenAI Codex CLI" - by its
+    command or its key, never "claude (on this computer)" beside "Claude Code" on the next screen. A CLI Taskuary does not know is its command."""
+    b = _base(cmd or '')
+    return next((k['label'] for k in KNOWN if b in (k['cmd'], k['name'])), str(cmd or ''))
+
 def acp_adapter(cmd: str) -> dict:
     "The adapter row for a CLI that speaks ACP only through one ({} for every other CLI)."
     return ADAPTERS.get({'cursor-agent': 'cursor'}.get(_base(cmd), _base(cmd)), {})

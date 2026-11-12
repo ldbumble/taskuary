@@ -15,9 +15,8 @@ export const DASH = words.dashboard;
 export const NOUNS = Object.fromEntries(Object.entries(words.nouns).filter(([k]) => !k.startsWith("_")));
 export const noun = (id) => NOUNS[id] || String(id || "");
 export const GONE = words.gone.words;
-// a tool that runs on the owner's own machine - "claude (on this computer)", the server's words.local said the same way
+// "on this computer" - where a folder is (RepoPicker); an AI is named by its one name (clis.name_of), never with it
 export const LOCAL = words.local;
-export const localName = (tool) => `${tool} (${LOCAL})`;
 // one pattern per word: an all-caps word (CLI, PR, JSON) is matched as written, the rest in any case; a prefix ("claude-") has no
 // end boundary. Word edges keep "approve" from reading as "PR".
 const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

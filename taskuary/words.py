@@ -11,16 +11,12 @@ JARGON = tuple(_J['jargon'])
 NOUNS = {k: v for k, v in _J['nouns'].items() if not k.startswith('_')}
 GONE = tuple(_J['gone']['words'])
 def noun(nid: str) -> str: return NOUNS[nid]
-# a tool that runs on the owner's own machine, said the one way the server and the page both say it ("claude (your CLI)" was
-# code-speak on the agent card - the dead-end walk's WORDS, 2026-10-18)
-LOCAL = _J['local']
 # what the Advisor's strip says when it lights nothing, by advisor.status's reason - only no AI is said (the owner, 2026-10-23)
 ADVICE_NONE = {k: v for k, v in _J['advice_none'].items() if not k.startswith('_')}
 # where an item stands, as facts: each state's meaning and its fact sentence, for the Advisor's model (rulebook.py)
 ADVICE_RULE = {k: v for k, v in _J['advice_rule'].items() if not k.startswith('_')}
 # what the daily check says about an item that fell through, by why (sweep.py)
 LOOSE = {k: v for k, v in _J['loose_ends'].items() if not k.startswith('_')}
-def local(tool: str) -> str: return f'{tool} ({LOCAL})'
 
 
 def place(pid: str) -> tuple:

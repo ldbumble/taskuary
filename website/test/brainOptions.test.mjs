@@ -15,9 +15,15 @@ test("old profile-shaped brain rows collapse to one choice per CLI", () => {
     copilot: { cli: "copilot", choices: ["auto", "gpt-5.4"] },
   };
   const got = normalizeBrainOptions(rows, models, ["cli:researcher"]);
-  assert.deepEqual(got.map((r) => r.label), ["claude (on this computer)", "auto", "copilot (on this computer)"]);
+  assert.deepEqual(got.map((r) => r.label), ["claude", "auto", "copilot"]);
   assert.equal(got[0].value, "cli:researcher");
   assert.deepEqual(got[2].models, ["auto", "gpt-5.4"]);
+});
+
+// ONE NAME PER AI (decided 2026-11-12): the server's name for a CLI is drawn as it comes - "Claude Code", never "claude (on this computer)"
+test("a CLI keeps the one name the server gives it", () => {
+  const got = normalizeBrainOptions([{ value: "cli:claude", label: "Claude Code" }, { value: "cli:codex", label: "OpenAI Codex CLI" }], { claude: { cli: "claude" }, codex: { cli: "codex" } });
+  assert.deepEqual(got.map((r) => r.label), ["Claude Code", "OpenAI Codex CLI"]);
 });
 
 test("API connector choices are not rewritten", () => {
@@ -30,14 +36,14 @@ import { codingChoice, codingChoices } from "../src/brainOptions.js";
 import { readFileSync } from "node:fs";
 
 const opts = [
-  { value: "cli:claude", key: "claude", kind: "cli", label: "Claude Code (on this computer)" },
+  { value: "cli:claude", key: "claude", kind: "cli", label: "Claude Code" },
   { value: "connector:7", connector: 7, kind: "card", label: "HIPAA AI · claude-sonnet-5-5" },
   { value: "connector:9", connector: 9, kind: "card", label: "Azure OpenAI · gpt-5" },
 ];
 
 test("every CLI and every AI card is offered, and nothing chosen shows what the server will run", () => {
   const got = codingChoices({ options: opts, brains: ["claude"], codingPick: "connector:7" });
-  assert.deepEqual(got.list.map((o) => o.label), ["Claude Code (on this computer)", "HIPAA AI · claude-sonnet-5-5", "Azure OpenAI · gpt-5"]);
+  assert.deepEqual(got.list.map((o) => o.label), ["Claude Code", "HIPAA AI · claude-sonnet-5-5", "Azure OpenAI · gpt-5"]);
   assert.equal(got.value, "connector:7");                  // the card chosen in Settings, not the first CLI
   assert.equal(codingChoices({ options: opts, codingPick: "cli:claude" }).value, "cli:claude");
 });

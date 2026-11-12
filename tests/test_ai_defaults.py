@@ -102,7 +102,7 @@ class ResolveTests(unittest.TestCase):
             options = aidefaults.state(s, cfg)['agent_options']
         # ...valued as resolve_brain answers, named in plain words (the coding picker, 2026-11-09)
         self.assertEqual([o['value'] for o in options], ['cli:claude', 'cli:copilot'])
-        self.assertEqual(options[0]['label'], 'Claude Code (on this computer)')
+        self.assertEqual(options[0]['label'], 'Claude Code')
         self.assertFalse(any('researcher' in o['label'] for o in options))
 
 

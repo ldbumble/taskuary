@@ -227,7 +227,7 @@ class SharedSessionTests(unittest.TestCase):
             reply = session.send_prompt('Research this', pick='cli:codex')
         self.assertEqual(reply, 'Done through the CLI.')
         self.assertEqual((session.pick, session.model), ('cli:codex', 'gpt-test'))
-        self.assertIn('on this computer', session.provider)
+        self.assertEqual(session.provider, 'OpenAI Codex CLI')          # its one name (clis.name_of), never "codex (on this computer)"
         self.assertEqual(build.call_args.kwargs['pick'], 'cli:codex')
 
     def test_one_session_persists_chat_and_exposes_the_terminal_contract(self):
@@ -568,7 +568,7 @@ class BrainOptionsTests(unittest.TestCase):
         """Three profiles on Claude are ONE brain. The picker listed them as three providers."""
         self.connected(claude={'cmd': 'claude'})
         got = general.brain_options(self.store())
-        self.assertEqual([o['label'] for o in got if o.get('type') == 'cli'], ['Claude Code (on this computer)'])
+        self.assertEqual([o['label'] for o in got if o.get('type') == 'cli'], ['Claude Code'])
         self.assertEqual(len({o['pick'] for o in got}), len(got))
         # and it carries that CLI's own model list, so the model dropdown beside it is real
         self.assertTrue(all(m['id'] and m['label'] for o in got if o.get('type') == 'cli' for m in o['models']))
@@ -592,7 +592,7 @@ class BrainOptionsTests(unittest.TestCase):
         got = [o for o in general.brain_options(self.store()) if o.get('type') == 'cli']
         # installed ones only (devin is connected but not on this machine), and claude still once
         self.assertEqual([o['pick'] for o in got], ['cli:claude', 'cli:codex', 'cli:qwen'])
-        self.assertEqual([o['label'] for o in got], ['Claude Code (on this computer)', 'OpenAI Codex CLI (on this computer)', 'Qwen Code (on this computer)'])
+        self.assertEqual([o['label'] for o in got], ['Claude Code', 'OpenAI Codex CLI', 'Qwen Code'])
 
     def test_a_connection_pick_resolves_like_a_profile(self):
         """Picking it must RUN it: every door resolves a `cli:` pick through an agent row, which a

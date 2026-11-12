@@ -128,8 +128,8 @@ def test_brain_api_lists_cli_tools_once_instead_of_every_profile_using_them():
          mock.patch('taskuary.config.load', return_value=cfg), mock.patch.object(agents, 'connection_brains', agents.connection_brains.real):
         choices = [r for r in TestClient(server.app).get('/api/brains').json()['data'] if r['kind'] == 'cli']
     assert [(r['value'], r['label']) for r in choices] == [
-        ('cli:claude', 'claude (on this computer)'),
-        ('cli:codex', 'codex (on this computer)'),
+        ('cli:claude', 'Claude Code'),
+        ('cli:codex', 'OpenAI Codex CLI'),
     ]
 
 
@@ -143,4 +143,4 @@ def test_brain_api_lists_a_connected_cli_no_profile_runs_on():
          mock.patch.object(agents, 'connection_brains', lambda s: [('codex', {'cmd': 'codex'})]), \
          mock.patch.object(agents, 'runs_here', lambda p: True):
         choices = [(r['value'], r['label']) for r in TestClient(server.app).get('/api/brains').json()['data'] if r['kind'] == 'cli']
-    assert ('cli:codex', 'codex (on this computer)') in choices and len([c for c in choices if c[1].startswith('codex')]) == 1
+    assert ('cli:codex', 'OpenAI Codex CLI') in choices and len([c for c in choices if c[0] == 'cli:codex']) == 1

@@ -717,10 +717,8 @@ def coding_options(store) -> list[dict]:
     """EVERY AI THAT CAN RUN A CODING TASK, as the pickers offer it (the owner, 2026-11-09: "fix the picker ... it should choose the
     correct one"): each connected CLI, then each active AI card - a card runs coding through general.on_card, in the checkout a CLI
     would open. `value` is the pick resolve_brain answers in (`cli:<key>` / `connector:<id>`), so the current one is found by equality."""
-    from . import words
     from .llm import AI_TYPES
-    labels = {k['cmd']: k['label'] for k in clis_mod.KNOWN}
-    out = [{'value': f'cli:{k}', 'key': k, 'kind': 'cli', 'ready': runs_here(c), 'label': words.local(labels.get(cli_of(c, k)) or k)}
+    out = [{'value': f'cli:{k}', 'key': k, 'kind': 'cli', 'ready': runs_here(c), 'label': clis_mod.name_of(cli_of(c, k) or k)}
            for k, c in connection_brains(store)]
     for c in store.list_connectors():
         if c['Type'] not in AI_TYPES or not c['Active'] or not (c['HasSecret'] or c['Type'] == 'ollama'): continue

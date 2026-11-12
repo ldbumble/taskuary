@@ -316,13 +316,12 @@ def provider_options(store) -> list:
     """Every connected CLI tool first - one each, by the tool's own key - then the API/local-model connectors. Never a profile:
     a profile is instructions on whichever brain runs it (the owner, 2026-10-15: "it's models or cli tools only")."""
     out = []
-    from .clis import KNOWN
-    labels = {k['cmd']: k['label'] for k in KNOWN}
+    from .clis import name_of
     from . import agents as hub_agents
     for key, conn in hub_agents.connection_brains(store):
         cmd = hub_agents.cli_of(conn, key)
         out.append({'id': f'cli:{key}', 'pick': f'cli:{key}', 'type': 'cli', 'cmd': cmd,
-                    'label': words.local(labels.get(cmd) or cmd), 'model': conn.get('model') or '', 'connection': True})
+                    'label': name_of(cmd), 'model': conn.get('model') or '', 'connection': True})
     for row in store.list_connectors():
         if row.get('Type') not in llm_mod.AI_TYPES or not row.get('Active'): continue
         if not row.get('HasSecret') and row.get('Type') != 'ollama': continue

@@ -7622,7 +7622,8 @@ def brains():
     # A brain is a CLI TOOL or an AI connection, never a profile: one entry per connected CLI, its value the tool's own key
     # (the owner, 2026-10-15: "it's models or cli tools only"). Its gears live on the connection.
     from . import climodels
-    out += [{'value': f"cli:{o['value']}", 'label': words.local(o['label']),
+    from .clis import name_of
+    out += [{'value': f"cli:{o['value']}", 'label': name_of(o['cli']),
              'kind': 'cli', 'ready': o['ready'],
              'models': climodels.catalog(o['cli'])['choices']}
             for o in hub_agents.cli_agent_options(store, preferred=preferred)]

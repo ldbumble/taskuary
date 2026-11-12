@@ -299,6 +299,19 @@ def test_four_ideas_the_owner_read_leave_room_for_the_next_days_pass():
     assert len(out['raised']) == 1 and [x['title'] for x in rail()] == ['Vendor billing charged $900 twice in October']
 
 
+def test_a_family_under_the_bar_still_raises_one_idea_a_day():
+    s, ids = world()
+    a, b = ids['dup']
+    for n in range(10): s.upsert_idea({'key': f'{lookout.KEY}old-{n}', 'kind': 'money', 'text': f'Old {n}', 'action': {'type': 'lookout'}}, ago(days=3))
+    s._exec("UPDATE idea SET Status='done', DecidedBy='sweep'")
+    s.set_setting(ideagrade.SINCE_KEY, ago(days=20), 't')
+    assert 'money' in ideagrade.quiet_kinds(s) and 'money' in lookout.families(s), 'quiet, and still asked for'
+    out = lookout.tick(s, brain({'ideas': [idea('money', 'Invoice 4471 billed twice', [f'msg{a}']), idea('money', 'Trainly seats unused', [f'msg{b}'])]},
+                                {'keep': [1, 2]}), force=True)
+    assert [s.get_idea(i)['Text'] for i in out['raised']] == ['Invoice 4471 billed twice'], 'one a day'
+    assert 'money' not in lookout.families(s), 'its one raised: not asked for again today'
+
+
 def test_the_days_pass_runs_from_the_morning_not_a_day_after_the_last(monkeypatch):
     """It drifted to 5:53 PM: the pass ran 24 hours after the one before (2026-11-05). Once a calendar day, from MORNING_H."""
     from datetime import datetime

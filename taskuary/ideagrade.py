@@ -1,14 +1,15 @@
 """HOW THE OWNER TOOK EACH ADVISOR IDEA, AND WHICH KINDS HAVE EARNED THEIR PLACE (the design's S0 and S7, 2026-11-01).
 
 An idea is graded by the owner's own acts - no new button:
-  taken    they made a task or an agent run of it, adopted its rule, or sent a reply on the task it names within a day
+  taken    they made a task or an agent run of it, adopted its rule, sent a reply on the task it names within a day, or finished the
+           task triage made of it
   handled  they put it down with Done
   wrong    they dismissed it (or its whole kind)
   walked   a day went by and they did none of these
   pending  raised less than a day ago with nothing done yet - not graded
 Useful is taken + handled. A KIND of model idea is QUIET while its useful share over the last DAYS is under BAR on MIN or more graded
-(the owner, 2026-11-01: quiet unless sure; precision over 80%) - its lines are not raised. The window rolls, so a quiet kind is tried
-again once its old record ages out. Read here and by tools/advisor_ideas.py, one grading."""
+(the owner, 2026-11-01: quiet unless sure; precision over 80%) - it raises one line a day, never more (spent_today), so its record can
+mend as the window rolls. Read here and by tools/advisor_ideas.py, one grading."""
 import json
 from datetime import datetime, timedelta
 
@@ -36,6 +37,9 @@ def grade(q, i: dict, now: str) -> str:
                           f"AND Actor IN ({','.join('?' * len(OWNER))}) LIMIT 1", (a['tid'], i['FirstSeen'], _later(i['FirstSeen'], 24), *OWNER)):
         return 'taken'
     if i['Status'] == 'done' and i.get('DecidedBy') in OWNER: return 'handled'
+    # ...and one triage made a task of that was then finished: work done from it, never "walked past" (the store puts the idea down
+    # with its task, DecidedBy 'task' - 2026-11-12)
+    if q("SELECT 1 x FROM task WHERE SourceRef=? AND Status='done' LIMIT 1", (f"assistant:idea:{i['IdeaId']}",)): return 'taken'
     return 'walked' if _later(i['FirstSeen'], 24) <= now else 'pending'
 
 
@@ -67,3 +71,12 @@ def quiet_kinds(store) -> set:
     if not since: return set()
     days = max(0.0, min(DAYS, (datetime.now() - datetime.fromisoformat(since[:19])).total_seconds() / 86400))
     return {k for k, t in record(store, days).items() if k in MODEL_KINDS and t['n'] >= MIN and t['pct'] is not None and t['pct'] < BAR * 100}
+
+
+def spent_today(store, kinds: set) -> set:
+    """THE BAR NARROWS, IT NEVER CLOSES: of the quiet `kinds`, those that already raised a line today. A quiet kind held every line for
+    the whole window, so its record could not change and nothing it saw reached the owner - the untyped idea went silent on 58% and the
+    Advisor with it (2026-11-12). Each quiet kind still raises one line a day, past the second look like any other."""
+    if not kinds: return set()
+    today = datetime.now().strftime('%Y-%m-%d')
+    return set(kinds) & {r['Kind'] for r in store._rows('SELECT DISTINCT Kind FROM idea WHERE FirstSeen>=?', (today,))}

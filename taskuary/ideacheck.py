@@ -2,7 +2,7 @@
 19 useful - each joined threads, people or a promise - 11 obvious, a third of them one report row said again, and 2 stale, about work
 the owner was steering that very day. So before the model's own lines post:
 
-  quiet kind   a kind of line the owner's record says is under 80% useful (ideagrade.quiet_kinds) is not raised
+  quiet kind   a kind of line the owner's record says is under 80% useful (ideagrade.quiet_kinds) raises one line a day, past the look
   touched      a line about a task or mail the owner acted on in the last day is not raised: they know
   known        the model reads each line again beside the workstream it is under and what the owner last did on it, and answers
                whether the owner would ALREADY KNOW it - a line they would know is not raised
@@ -76,10 +76,12 @@ def check(store, say: list, llm=None, memo: str = None) -> tuple:
         store.set_setting(ideagrade.SINCE_KEY, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'advisor')
     try: quiet = ideagrade.quiet_kinds(store)
     except Exception as e: logger.debug(f'idea record not read: {e}'); quiet = set()
+    spent = ideagrade.spent_today(store, quiet)          # ...one line a day still goes on to the look below: the bar narrows, never closes
     for s in say:
         if not _model(s): keep.append(s); continue
-        a = s.get('action') or {}
-        if (s.get('kind') or 'idea') in quiet: held.append((s['key'], f"its kind ({s.get('kind') or 'idea'}) is under 80% useful lately")); continue
+        a, k = s.get('action') or {}, s.get('kind') or 'idea'
+        if k in spent: held.append((s['key'], f"its kind ({k}) is under 80% useful lately - one a day")); continue
+        if k in quiet: spent.add(k)
         if (t := touched(store, a)): held.append((s['key'], f'the owner acted on it in the last day ({t})')); continue
         # ...a line the OWNER'S OWN MEMORY asks for (a What to bring up or a Promises line it rests on) and an unkept promise are
         # raised on that word, never second-guessed (the live rail A/B, 2026-11-01: the second look held "bring up the Q4 budget")

@@ -208,9 +208,9 @@ def turned_down(store) -> set:
 
 
 def families(store) -> list:
-    """The families it may raise now: not one the owner turned down, nor one the owner's record holds under the 80% bar (ideagrade)."""
+    """The families it may raise now: not one the owner turned down, nor one under the 80% bar (ideagrade) that raised its one today."""
     from . import ideagrade
-    try: quiet = ideagrade.quiet_kinds(store)
+    try: quiet = ideagrade.spent_today(store, ideagrade.quiet_kinds(store))
     except Exception: quiet = set()
     return [f for f in FAMILIES if f not in turned_down(store) and f not in quiet]
 
@@ -378,6 +378,11 @@ def tick(store, llm=None, force: bool = False) -> dict:
         if ideas is None: return out | {'calls': n[0]}
         store.set_setting(LAST_KEY, _ts(_now()), 'advisor')
         kept, held_ = check(store, counted, ideas)
+        # ...and a family under the 80% bar raises one a day (ideagrade.spent_today)
+        from . import ideagrade
+        quiet, seen = ideagrade.quiet_kinds(store), set()
+        def once(f): return f not in quiet or (f not in seen and not seen.add(f))
+        kept = [x for x in kept if once(x['family'])]
         _hold(store, held_)
         rows = [r for r in (land(store, x) for x in kept[:max(0, MAX_OPEN - len(waiting(store)))]) if r]
         if rows:

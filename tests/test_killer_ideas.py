@@ -35,6 +35,7 @@ def _say(key, kind='pattern', **act): return {'key': key, 'kind': kind, 'text': 
 def test_the_second_look_holds_a_quiet_kind_work_touched_today_and_what_the_owner_would_already_know():
     s = MemoryStore()
     for n in range(1, 11): _idea(s, n, 'idea', 'done', 'sweep')                                   # 'idea' is quiet: 0 of 10
+    _idea(s, 11, 'idea', at=ago(hours=1))                                                        # ...and raised its one line today
     s.set_setting(ideagrade.SINCE_KEY, ago(days=40), 't')
     f = Factory(s)
     t = f.task(title='Q4 variance'); u = f.task(title='Board pack')
@@ -47,12 +48,34 @@ def test_the_second_look_holds_a_quiet_kind_work_touched_today_and_what_the_owne
         return json.dumps({'known': [1]})                                                        # NOTE 1 is the obvious one
     kept, held = ideacheck.check(s, say, llm)
     assert [x['key'] for x in kept] == ['idea:killer', 'health:disk']
-    assert dict(held) == {'idea:plain': "its kind (idea) is under 80% useful lately", 'idea:touched': 'the owner acted on it in the last day (reply.sent)',
+    assert dict(held) == {'idea:plain': "its kind (idea) is under 80% useful lately - one a day",'idea:touched': 'the owner acted on it in the last day (reply.sent)',
                           'idea:obvious': 'the owner would already know it'}
     assert 'NOTE 1: line idea:obvious' in seen['user'] and 'NOTE 2: line idea:killer' in seen['user']
     # ...and a check that cannot run holds nothing back
     kept, held = ideacheck.check(s, [_say('idea:x', tid=u)], lambda *a, **k: (_ for _ in ()).throw(RuntimeError('down')))
     assert [x['key'] for x in kept] == ['idea:x']
+
+
+def test_a_quiet_kind_still_raises_one_line_a_day_past_the_second_look_and_a_finished_task_from_an_idea_is_taken():
+    """The live shape (2026-11-12): the untyped idea graded 58% on 24 - so every line of it was held, for the whole 30-day window, and
+    the owner had no ideas for days. The bar narrows: one line a day of a quiet kind goes on to the second look, the rest wait."""
+    s = MemoryStore()
+    for n in range(1, 11): _idea(s, n, 'idea', 'done', 'sweep')                                   # 0 of 10: quiet
+    s.set_setting(ideagrade.SINCE_KEY, ago(days=40), 't')
+    assert ideagrade.quiet_kinds(s) == {'idea'}
+    asked = []
+    def llm(system, user, **k): asked.append(user); return json.dumps({'known': []})
+    say = [_say('idea:board-pack', 'idea'), _say('idea:second', 'idea'), _say('idea:clash', 'clash')]
+    kept, held = ideacheck.check(s, say, llm)
+    assert [x['key'] for x in kept] == ['idea:board-pack', 'idea:clash'] and [k for k, _ in held] == ['idea:second']
+    assert 'NOTE 1: line idea:board-pack' in asked[0], 'it is still judged by the second look'
+    s.upsert_idea({'key': 'idea:board-pack', 'kind': 'idea', 'text': 'x', 'action': {}}, ago(minutes=1))
+    kept, held = ideacheck.check(s, [_say('idea:third', 'idea')], llm)
+    assert kept == [] and held == [('idea:third', 'its kind (idea) is under 80% useful lately - one a day')], 'today it has raised its one'
+    # ...and an idea triage made a task of, the task finished, is work done from it - it mends the record
+    t = Factory(s).task(title='Chase the Payworth refund', status='done', SourceRef='assistant:idea:3')
+    assert t and ideagrade.grade(s._rows, s._one('SELECT * FROM idea WHERE IdeaId=3'), ago()) == 'taken'
+    assert ideagrade.grade(s._rows, s._one('SELECT * FROM idea WHERE IdeaId=4'), ago()) == 'walked'
 
 
 def test_a_line_held_on_the_clocks_look_is_not_asked_about_again_until_something_about_it_changes():

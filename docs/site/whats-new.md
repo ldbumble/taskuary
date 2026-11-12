@@ -2,6 +2,18 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.49 - 2026-11-12
+
+- Every card says what it does and no settled card draws a button
+- The chat stays at its end under a lit Send, opens with its list, and nothing scrolls the task off the canvas's head
+- Lines typed into a coding turn he then stops are answered by one turn under the stop
+- A chat agent over ACP keeps its own settings, and its held step is its Approve card
+- A coding chat: a waiting card moves only under an answer, and a closed session reads in its own order
+- One duty line about a card: the agent adds only what the card cannot say
+- A proposal with no look of its own says where it acts in words, not by its key
+- AGENT.md says what a held step is in three lines, inside its budget
+- An answer from before the ledger stands under the message it answered
+
 ## 0.3.11.48 - 2026-11-12
 
 - The agent's question is said once, a wait on a person is no stall, and the agent is told how its reply ends

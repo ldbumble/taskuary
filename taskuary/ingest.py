@@ -2168,11 +2168,12 @@ def pass_in_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
 # possible"). Carrying a stopped agent on, passing a line into a live one and waking one to re-plan each re-derived these checks, and
 # they had drifted: answer_to_agent=off stopped two of the three, one let a dismissed task through, one read the verdict's danger only
 # while the agent was live. Each road now asks only what is its own (new work, a conversation to carry on) and this for the rest.
-def reach_why(store, tid, msg: dict, mid, follow: dict | None, kind: str, own: bool = False, lack: str = '') -> str:
+def reach_why(store, tid, msg: dict, mid, follow: dict | None, kind: str, own: bool = False, lack: str = '', vouched: bool = False) -> str:
     """'' when this line may reach the task's `kind` agent by itself, else why not. A LIVE agent hears it where its sender may start
     one (senders.start_known); a STOPPED one is carried on only where a fresh task would have started it (auto_start_ok). `own`: the
     owner's own line or press - no sender to check, nothing of theirs read as steering. `lack`: what the road itself is missing (no
-    conversation to carry on), said only past the gate - a road that starts a first agent on it instead never passes a held channel."""
+    conversation to carry on), said only past the gate - a road that starts a first agent on it instead never passes a held channel.
+    `vouched`: the owner's Trust on this task is the line's pass - its sender is not judged again (a bare quote names nobody to remember)."""
     live = live_agent(store, tid)
     if (follow or {}).get('degraded'): return reason('degraded')
     if not joinable(store, tid): return reason('closed')      # dismissed: a done task new work reopens first (land_on)
@@ -2182,7 +2183,7 @@ def reach_why(store, tid, msg: dict, mid, follow: dict | None, kind: str, own: b
     if live and live != kind: return reason('another')
     # ...nor a line that reads as steering an AI (the owner, 2026-10-28): it waits for the owner's press
     if not own and (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d})'
-    if lack or (own and live): return lack
+    if lack or (own and live) or vouched: return lack
     ok, why = senders.start_known(store, msg, mid) if live else auto_start_ok(store, msg, mid, kind, own=own)
     return '' if ok else str(why)
 
@@ -2681,7 +2682,7 @@ def replan_turn(msg: dict, follow: dict | None = None, own: bool = False) -> str
     return '\n\n'.join(x for x in [head + '\n' + body, '\n'.join(x for x in read if x), REPLAN] if x)
 
 
-def wake_why(store, tid, msg: dict, mid, follow: dict | None, own: bool = False) -> str:
+def wake_why(store, tid, msg: dict, mid, follow: dict | None, own: bool = False, vouched: bool = False) -> str:
     "'' when a line that joined the task should wake its assistant to re-plan (replan_turn), else why not."
     from . import general
     t = store.get_task(tid) or {}
@@ -2693,15 +2694,15 @@ def wake_why(store, tid, msg: dict, mid, follow: dict | None, own: bool = False)
     # A turn still OPENING counts (the night run, 2026-11-09: a colleague answered the group 6s into the task's quick call, the line went
     # unheard, and the turn asked the owner for a password nobody needed any more)
     if not live_agent(store, tid) and not general.history(store, tid): return reason('no_conversation')
-    return reach_why(store, tid, msg, mid, follow, kind, own)
+    return reach_why(store, tid, msg, mid, follow, kind, own, vouched=vouched)
 
 
-def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, own: bool = False) -> bool:
+def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, own: bool = False, vouched: bool = False) -> bool:
     """A line joined the task: wake its assistant to re-plan (wake_why) - queued behind a live or opening turn as its next one, else
     the conversation carried on. Once per arrival; nothing is sent or closed by it. True when the agent was handed the turn."""
     from . import general
     if not own and (went := start_lifted(store, tid, msg, mid, actor)) is not None: return went
-    if why := wake_why(store, tid, msg, mid, follow, own):
+    if why := wake_why(store, tid, msg, mid, follow, own, vouched):
         if code_of(why) not in QUIET_WHY: not_started(store, tid, why)
         return False
     turn = replan_turn(msg, follow, own)

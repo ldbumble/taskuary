@@ -662,6 +662,28 @@ class TheList(unittest.TestCase):
         self.assertTrue(self.say('And then?', 'l-after').get('held')); time.sleep(0.4)
         self.assertEqual(len(self.brain.calls), n)
 
+    def test_trust_on_a_thread_an_outsider_joined_hands_their_mail_to_the_agent(self):
+        """The bug hunt, 2026-11-12: a colleague's thread its agent had answered; a reply on it quoted someone's words with no "wrote:"
+        line, so the chat held it behind Trust and the agent said "press Trust and I'll look again". Trust was pressed - "You trusted the
+        sender" - and the agent never heard a word: the hand-over judged the quoted words' nameless author again and refused it quietly."""
+        from fastapi.testclient import TestClient
+        from taskuary import origin, server
+        s = self.s
+        self.say('What do you suggest?'); self.rest()
+        # ...a colleague passes on a venue's words, quoted bare - no "wrote:" line, so whose they are cannot be read
+        s.add_message({'TaskId': self.tid, 'ExternalId': 'o1', 'ConversationId': 'conv-1', 'Channel': 'email', 'Subject': 'Re: Offsite venue', 'Status': 'routed',
+                       'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                       'BodyText': 'See below.\n\n> The Harbour Room is free on March 12 for 40 people, and the deposit of 500 is due by Friday noon.'})
+        self.assertTrue(self.list()['hold'])
+        n = len(self.brain.calls); start = general.start_session
+        with mock.patch.object(server, 'store', s), mock.patch.object(general, 'start_session', lambda st, t, *a, **k: start(st, t)), \
+             mock.patch('taskuary.ingest._spawn', lambda f, *a, **k: f(*a, **k)):
+            r = TestClient(server.app).post(f'/api/tasks/{self.tid}/trust')
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertTrue(until(lambda: len(self.brain.calls) > n), r.json()); self.rest()
+        self.assertIsNone(self.list()['hold'])
+        self.assertTrue(any('Harbour Room' in x for x in self.brain.calls[n:]), [x[-300:] for x in self.brain.calls[n:]])
+
     def test_a_question_its_answer_already_ends_in_is_said_once(self):
         "The agent's recorded ask was the last sentence of its own answer, and the page drew it a second time under the reply card."
         self.brain.said[1] = 'I would pick Tuesday, it starts sooner.\n\nShould the draft say **Tuesday** or Thursday?'

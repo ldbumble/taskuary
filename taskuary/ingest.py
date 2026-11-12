@@ -757,13 +757,21 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     lrn = learned_cut.whole(store, 'triage', target=f"mail:{msg.get('external_id') or ''}")
     # WHO IS ASKING, for the usage row (aiusage.asking, 2026-11-11): triage of a mail, of a report's own run or of an Advisor idea - whichever
     # brain it rides - and about which message. A new mail has no row yet, so the rows written ride the msg until it lands (_land)
-    who = 'triage.report' if msg.get('watch_for') else 'triage.idea' if msg.get('idea_context') else 'triage.classify'
+    who = 'triage.report' if report_brief(msg) else 'triage.idea' if msg.get('idea_context') else 'triage.classify'
     with aiusage.asking(who, msg.get('_mid')) as a: intent = _classify(store, msg, _guarded, thread, carried, lrn, notes, notes_left, me, candidates)
     msg['_route_rows'] = a.rids
     intent['notes'], intent['notes_left'] = notes, notes_left
     if intent.get('workstream'): msg['_workstream'] = intent['workstream']
     personal_fyi(store, msg, intent)
     return intent, fail
+
+
+NO_BRIEF = 'none written - the owner set this report to reach triage when it runs'
+
+def report_brief(msg: dict) -> str | None:
+    """What triage is told a scheduled report's run is for: its brief, or that it has none. Triage never sees the channel, so a run with
+    no brief read as any machine's notice - and a notice is fyi (templates/triage.md) - though the owner sent it to triage to be acted on."""
+    return msg.get('watch_for') or (NO_BRIEF if msg.get('channel') == 'report' else None)
 
 
 def _classify(store, msg, llm, thread, carried, lrn, notes, notes_left, me, candidates) -> dict:
@@ -776,7 +784,7 @@ def _classify(store, msg, llm, thread, carried, lrn, notes, notes_left, me, cand
                              system=store.doc('triage'), mine=me,
                              # a scheduled report carries its own brief - what the owner
                              # set it up to catch (reports.py: the card's watch_for)
-                             watch=msg.get('watch_for'),
+                             watch=report_brief(msg),
                              # ...and the playbooks: a message that is an instance of one is
                              # tagged with it, and the agent is seeded from it (playbooks.py)
                              playbooks=_playbook_menu(store), workflows=_workflow_menu(store), candidates=candidates,

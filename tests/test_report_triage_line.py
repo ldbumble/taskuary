@@ -272,4 +272,19 @@ class WorkflowRoadTests(unittest.TestCase):
         self.assertEqual((t['Source'], self.s._rows("SELECT * FROM message WHERE Channel='report'")), ('workflow', []))
 
 
+class NoBriefTests(unittest.TestCase):
+    def test_a_run_sent_to_triage_with_no_brief_is_told_so_never_read_as_any_machines_notice(self):
+        """Triage never sees the channel: a run whose card set the triage line but wrote no brief read as a machine's notice, which the
+        guide files as fyi - though the owner sent it there to be acted on. It is told it is a report run with no brief."""
+        seen = []
+        def llm(sys_, usr, **kw): seen.append(sys_); return '{"intent": "task", "kind": "general", "why": "the check failed"}'
+        run = {'external_id': 'report:1:x', 'channel': 'report', 'conversation_id': 'report:1', 'subject': 'Process check - 3 rows',
+               'body': 'FAILED: balance mismatch on 3 rows', 'from_name': 'Process check'}
+        ingest.ingest_message(MemoryStore(), dict(run), llm=llm)
+        ingest.ingest_message(MemoryStore(), {**run, 'watch_for': 'any mismatch at all'}, llm=llm)
+        self.assertIn(ingest.NO_BRIEF, seen[0])
+        self.assertIn('any mismatch at all', seen[1]); self.assertNotIn(ingest.NO_BRIEF, seen[1])
+        self.assertIsNone(ingest.report_brief({'channel': 'email', 'subject': 'a mail'}))
+
+
 if __name__ == '__main__': unittest.main()

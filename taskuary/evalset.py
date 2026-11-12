@@ -268,7 +268,7 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
     promoted sections ride along (the doc has no history, so it is all or nothing). `system`
     replaces the install's TRIAGE.md for the run - how a wording change is scored before it ships; `lean` is the answer's shape
     (triage.classify_intent's: False asks the shape before 2026-11-11, to score the same cases both ways)."""
-    from .ingest import others_on_thread, owner_addresses, relevant_notes
+    from .ingest import others_on_thread, owner_addresses, relevant_notes, report_brief
     from . import aiusage, learned_cut
     from .routing import draft_task_fields
     from .triage import classify_intent, job_doc
@@ -295,7 +295,8 @@ def evaluate(store, cases: list, llm, verbose=True, notes: str = 'today', learne
             if attempt: time.sleep(2 * attempt)
             with aiusage.asking('triage.eval'):       # an evaluation's calls are not the day's triage (the usage row's Caller)
                 v = classify_intent(msg, llm=llm, soul=soul, job=job, thread=thread, learned=lrn, notes=ns,
-                                    notes_left=left, system=system, mine=me, lean=lean, candidates=c.get('same_day_lines'))
+                                    notes_left=left, system=system, mine=me, lean=lean, candidates=c.get('same_day_lines'),
+                                    watch=report_brief({**msg, 'watch_for': c.get('watch_for')}))
         # the funnel FILES an answer it cannot read (ingest: 'degraded' -> filed, never assumed
         # work); no model at all is no verdict - scored as such, never as a keyword guess (2026-10-11)
         got = 'fyi' if v.get('degraded') else v.get('intent') or 'unjudged'

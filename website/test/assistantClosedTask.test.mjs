@@ -37,3 +37,17 @@ test("a phone turn shows on the desktop as it happens - the dots, then the words
   assert.match(view, /const leave = \(key, how, x = \{\}\) => new Promise\(\(done\) => \{\s*const epoch = chatEpoch\.current;\s*setNextComing\(true\);/);
   assert.match(view, /try \{ if \(epoch === chatEpoch\.current && !resettingRef\.current\) await fn\(\); \} finally \{ if \(!turnFlight\.current\) setNextComing\(false\); setDeferring\(deferredChat\.current\.size > 0\); \}/);
 });
+
+// A PAGE OPEN ON THE CANVAS STAYS OPEN UNDER THE ASSISTANT'S OWN WORDS (New -> a routine -> its builder, 2026-11-12): the setup turn's line
+// came back from the 30 s chat read carrying its steps as a `words` card, the canvas took that line for an item put on the table over the
+// builder, and folded the builder - the composed draft, not yet saved, gone with it, and the page back on the walk's last task
+test("a line's own words after a page do not put the page down; an item does", async () => {
+  const { liveBrowseId } = await import("../src/funnelPile.js");
+  const page = { id: "b1", role: "browse", area: "reports" };
+  const said = { id: 58, role: "assistant", text: "The routine is laid out.", card: { kind: "words", steps: [{ summary: "Pointed at Test every step" }] } };
+  assert.equal(liveBrowseId([page, said]), "b1");
+  assert.equal(liveBrowseId([page, { id: 59, role: "assistant", card: { kind: "task", key: "task:4" } }]), null);
+  assert.equal(liveBrowseId([page, { id: 60, role: "assistant", card: { kind: "task", key: "task:4", background_event: true } }]), "b1");
+  assert.equal(liveBrowseId([{ ...page, down: true }, said]), null);
+  assert.match(readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8"), /const browsing = useMemo\(\(\) => liveBrowseId\(shown\), \[shown\]\);/);
+});

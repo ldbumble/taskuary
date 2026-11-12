@@ -76,7 +76,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
@@ -3297,13 +3297,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const walkDots = starting && (msgs.length ? msgs[msgs.length - 1].id : null) === startLast.current;
   const lastBriefId = [...shown].reverse().find((m) => m.card?.kind === "brief")?.id;
   // the live browse card: the newest one, unless the walk has put an item on the table since
-  const browsing = useMemo(() => {
-    for (let i = shown.length - 1; i >= 0; i -= 1) {
-      if (shown[i].role === "browse") return shown[i].down ? null : shown[i].id;
-      if (shown[i].card && !shown[i].card.background_event) return null;
-    }
-    return null;
-  }, [shown]);
+  const browsing = useMemo(() => liveBrowseId(shown), [shown]);
   browsingRef.current = browsing;
   // ...and during setup, the task or message opened over it (overSetup): the newest card, drawn alone like a page (W2)
   const setupCard = firstRun && overSetup && !browsing ? [...shown].reverse().find((m) => m.card && !m.card.background_event) || null : null;

@@ -35,7 +35,7 @@ test("the sidebar posts a browse card; only the newest is live, so one detail is
   assert.match(view, /return \[\.\.\.m, \{ id, role: "browse", area, state \}\];/);
   // ...and the area already open moves its own card rather than posting a second
   assert.match(view, /if \(live\?\.role === "browse" && live\.area === area\) return m\.map\(\(x\) => \(x\.id === live\.id \? \{ \.\.\.x, state, down: false \} : x\)\);/);
-  assert.match(view, /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.down \? null : shown\[i\]\.id;/);
+  assert.match(view, /const browsing = useMemo\(\(\) => liveBrowseId\(shown\), \[shown\]\);/); assert.match(process.getBuiltinModule("node:fs").readFileSync(new URL("../src/funnelPile.js", import.meta.url), "utf8"), /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.down \? null : shown\[i\]\.id;/);
   assert.match(src("CanvasBrowse.jsx"), /if \(!live\) return frame\(\{ title: AREA_TITLES\[area\], area \}\);/);
   // ...and the item on the table folds to its line while a browse card is open below it
   assert.match(view, /const foldedNow = !!canvas && live && !!m\.card && \(foldsAs\(canvas\.folded, m\.card\.key\) \|\| !!canvas\.browsing\);/);

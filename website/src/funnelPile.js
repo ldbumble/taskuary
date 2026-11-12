@@ -87,9 +87,19 @@ export const canAdvance = (pile, ready) => walkOf(pile) ? !!walkOf(pile).below :
 
 // Until durable Current lands, reload restores the latest explicitly surfaced card. Passive
 // watcher cards stay readable in history but cannot silently become the conversation subject.
-export const restorableCurrent = (messages) => [...(messages || [])].reverse().find((message) =>
-  message?.card && !message.card.background_event
-  && !["brief", "setup", "agentdone", "setup_questions", "words"].includes(message.card.kind))?.card || null;   // a set-up's questions, a line's own words: not an item
+// ...a set-up's questions, a line's own words: not an item
+const NOT_ON_TABLE = ["brief", "setup", "agentdone", "setup_questions", "words"];
+const onTable = (message) => !!message?.card && !message.card.background_event && !NOT_ON_TABLE.includes(message.card.kind);
+export const restorableCurrent = (messages) => [...(messages || [])].reverse().find(onTable)?.card || null;
+// THE PAGE OPEN ON THE CANVAS: the newest browse card, unless it was put down or an item came onto the table after it. A line's own words
+// are no item (the 30 s read brings the setup turn's line back as a `words` card, and it folded the builder under it, draft and all)
+export const liveBrowseId = (shown = []) => {
+  for (let i = shown.length - 1; i >= 0; i -= 1) {
+    if (shown[i].role === "browse") return shown[i].down ? null : shown[i].id;
+    if (onTable(shown[i])) return null;
+  }
+  return null;
+};
 // Which line carries the action words. It is the LAST thing Taskuary said, card or no card: an answer
 // to a typed question offers the same verbs as the line that introduced the item, and a receipt is not a
 // place to act. interactiveCardIndex is about the card inside the bubble and stays separate.

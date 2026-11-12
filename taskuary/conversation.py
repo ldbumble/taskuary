@@ -632,7 +632,9 @@ def items(store, tid: int) -> dict:
     published = [{**p, 'after': (t.get('answer') or t['id']) if (t := made_in(ep(p.get('created_at')) + 0.999)) else None} for p in outputs.pages(store, tid)]
     # ...A CARD STANDS IN THE TURN IT WAS FIRST DRAWN IN, or a later one that left it again - never back up (the `shown` ledger's Host)
     hosts = {r['Key'][2:]: r['Host'] for r in store._rows("SELECT Key, Host FROM shown WHERE TaskId=? AND Key LIKE 'c:%'", (tid,))}
-    turns_at = {x['id']: i for i, x in enumerate(out) if x['kind'] == 'turn'}
+    # ...by name, not place: a card no turn holds is put into `out` itself, and every place after it moves down one
+    turn_by = {x['id']: x for x in out if x['kind'] == 'turn'}
+    turns_at = {k: i for i, k in enumerate(turn_by)}
     newest = next((x for x in reversed(out) if x['kind'] == 'turn'), None)
     def place(card, at, cid=None):
         # ...a draft no turn has left yet is new now, whenever its row was made (the recorded walk, 2026-11-12: a reply owed since the mail came
@@ -643,7 +645,7 @@ def items(store, tid: int) -> dict:
         h = hosts.get(card['id'])
         # ...down only to a turn that LEFT it again (its record names that turn): a turn begun after it is not one (recorded on ACP, 2026-11-12:
         # the session went on into a second turn and the card, drawn in the first, went from the chat until the second ended)
-        if h in turns_at and (t is None or not cid or turns_at.get(t['id'], -1) < turns_at[h]): t = out[turns_at[h]]
+        if h in turns_at and (t is None or not cid or turns_at.get(t['id'], -1) < turns_at[h]): t = turn_by[h]
         elif t is not None and h != t['id'] and not (t['state'] in LIVE):
             store._exec('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host', (tid, f"c:{card['id']}", t['id']))
         if t is None:

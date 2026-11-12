@@ -513,6 +513,22 @@ class TheList(unittest.TestCase):
         turns = [x for x in self.list()['items'] if x['kind'] == 'turn']
         self.assertEqual([(c['id'], c['status']) for c in turns[0]['cards']], [(f'r:{rid}', 'passed'), (f'r:{old}', 'passed')])
 
+    def test_a_card_outside_every_turn_never_shifts_where_a_later_card_finds_its_turn(self):
+        """The owner's live task, 2026-11-12 (KeyError 'cards', the chat would not load): a card that no turn holds is put into the list
+        itself, which moved every turn after it one place down - and a later card whose ledger named its turn was handed the item above
+        that turn, his line, and the read failed. A card finds its turn by the turn's name, never by where it stood before."""
+        import json
+        self.say('Fix the tax rows.', 'l-one'); self.rest()
+        step = json.dumps({'action': 'shell_act', 'command': 'echo hi', 'what': 'say hi'})
+        early = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': step, 'Reason': 'r'})
+        self.s._exec("UPDATE review SET CreatedAt='2000-01-01 00:00:00' WHERE ReviewId=?", (early,))     # ...from before any turn began
+        late = self.s.add_review({'TaskId': self.tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': step, 'Reason': 'r'})
+        self.list()                                 # ...the first read writes the late card's turn into the ledger
+        got = self.list()['items']                  # ...and the second read finds it there
+        turn = next(x for x in got if x['kind'] == 'turn')
+        self.assertIn(f'r:{late}', [c['id'] for c in turn['cards']])
+        self.assertIn(f'r:{early}', [x['id'] for x in got if x['kind'] == 'card'])
+
     def test_a_step_he_approved_that_failed_stays_under_the_answer_he_pressed_it_under(self):
         """The recorded held step, 2026-11-11: he asked about a held delete, pressed Approve under the answer, and the step failed - the card
         went back up to the turn that first raised it, and where he had pressed stood nothing: no press, no failure, only the agent's next

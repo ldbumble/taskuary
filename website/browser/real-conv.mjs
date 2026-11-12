@@ -48,6 +48,12 @@ export const sampler = (names) => {
       if ([...vp.querySelectorAll(".tq-aui-agent-body > .tq-md + .tq-md")].some((e) => e.getBoundingClientRect().top - e.previousElementSibling.getBoundingClientRect().bottom < 4)) f.tight = true;
       // ...and where each card stands, by its own first line and the item it is under: one that goes back UP the chat is a finding (check)
       f.at = cardsOf.filter((c) => !c.matches("[data-tq-past-card]")).map((c) => [c.innerText.trim().split("\n")[0].slice(0, 60), c.closest("[data-tq-item]")?.getAttribute("data-tq-item") || ""]);
+      // ...ONE STEP, ONE PAIR OF BUTTONS, AND HIS WORDS ONCE (recorded on a coding agent, 2026-11-11: a held delete drew Allow once / Reject
+      // twice - its card, and the same request as the agent's question - and the line he typed under it stood in the chat twice)
+      f.allows = [...document.querySelectorAll("[data-tq-task-page] button:not([disabled])")].filter((b) => b.getBoundingClientRect().width > 0 && b.innerText.trim() === "Allow once").length;
+      const said2 = [...vp.querySelectorAll(".tq-aui-user-bubble")].map((e) => e.innerText.trim());
+      f.twice = said2.filter((w, i) => i && w === said2[i - 1] && w.length > 12);
+      if (!f.twice.length) delete f.twice;
       const lastLive = cardsOf.map((c, i) => (c.querySelector("button:not([disabled])") ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
       if (lastLive >= 0 && dead.some((c) => cardsOf.indexOf(c) > lastLive && c.matches("[data-tq-passed]"))) f.staleUnder = true;
       const named = said ? namedIn(said) : [];
@@ -98,6 +104,8 @@ export function check(frames) {
       const was = ids.indexOf(host), now = Math.max(-1, ...(f.at || []).filter(([t]) => t === title).map(([, h]) => ids.indexOf(h)));
       if (title && was >= 0 && now >= 0 && now < was && !(f.at || []).some(([t, h]) => t === title && ids.indexOf(h) >= was)) say(f.t, `the card "${title}" went back up the chat: from under ${host} to under ${ids[now]}`);
     }
+    if (f.allows > 1 && !(prev?.allows > 1)) say(f.t, `${f.allows} lit "Allow once" buttons: one step drawn as two cards`);
+    for (const w of f.twice || []) if (!(prev?.twice || []).includes(w)) say(f.t, `his line "${w.slice(0, 60)}" stands in the chat twice, one under the other`);
     // THE CHAT OPENS WITH AN INPUT, NEVER WITH THE AGENT (the owner, 2026-11-11: "it did not show the prompt i asked it to do"): the first
     // thing drawn is what the first turn heard - his ask, a message that came in - and a turn at work has his newest line above it
     if (f.items.length && f.items[0][1] && !(prev?.items.length && prev.items[0][1])) say(f.t, `the chat begins with the agent's turn ${f.items[0][0]} - no ask above it`);

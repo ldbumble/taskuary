@@ -328,6 +328,19 @@ class TheList(unittest.TestCase):
         self.assertEqual((len(got['permissions']), got['asking']), (1, None))
         with mock.patch.object(taskstate, 'asking', return_value={**ask, 'source': 'acp', 'choices': []}): self.assertTrue(self.list()['asking'])
 
+    def test_his_answer_to_a_step_that_waited_stands_in_the_chat_from_the_press(self):
+        """The recorded hold, 2026-11-11: he pressed Allow once, the turn it had stopped went on - and his press waited by the box as if
+        nobody had heard it, then entered above work already drawn. The turn that waited on it hears it as it is pressed."""
+        self.brain.delay = 30
+        self.say('Remove the old export.', 'l-one', wait=False)
+        self.assertTrue(until(lambda: self.list()['working'] and any(x['kind'] == 'turn' for x in self.list()['items'])))
+        self.s.audit('task', self.tid, 'permission_answered', 'owner', detail={'answer': 'allow_once', 'asked': 'delete old-export.csv'})
+        self.assertEqual([x['kind'] for x in self.list()['pending']], ['press'])
+        conversation.hear_press(self.s, self.tid, 'permission_answered')
+        got = self.list()
+        self.assertEqual((got['pending'], [x['kind'] for x in got['items']].count('press'), got['working']), ([], 1, True))
+        self.brain.delay = 0; self.rest()
+
     def test_a_reply_waiting_for_his_send_stands_with_its_send_through_a_restart_and_the_session_after_it(self):
         """The recorded restart, 2026-11-11, and the owner's ruling on it ("reply cards should survive untouched"): the agent's reply waited
         for his Send, Taskuary restarted with a line of his by the box, the new session held the card as "an earlier session's" and told

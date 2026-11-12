@@ -510,7 +510,7 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
     if (given == null) c.setText("");
     if (files.length) onClearAttachments(files.map((a) => a.path));
     const id = `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, sel = selectionRef.current || {};
-    setMine((m) => [...m, { id, kind: "line", text: w || withImages("", files.map((a) => a.path)), at: new Date(), rest: !listNow.current?.working && !listNow.current?.hold }]);      // ...on an untrusted sender's task it waits by the box at once (the list's `hold`)
+    setMine((m) => [...m, { id, kind: "line", text: w || withImages("", files.map((a) => a.path)), at: new Date(), rest: !listNow.current?.working && !listNow.current?.hold && !listNow.current?.permissions?.length }]);      // ...on an untrusted sender's task it waits by the box at once (the list's `hold`), and under a step that waits on his Allow (`permissions`)
     stick.current = true;
     api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path), line_id: id, pick: sel.connectorId || null, model: sel.model || null }, { timeout: 0 })
       .then((r) => { if (road) road(); else if (r.data?.messages) onSent?.(r.data); reloadList?.(); })

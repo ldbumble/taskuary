@@ -167,6 +167,16 @@ def take_back(store, tid: int, said: str = None, why: str = '', since: float = 0
     store._poke('task-changed', task_id=int(tid))
 
 
+def hear_press(store, tid: int, action: str) -> None:
+    """A PRESS ITS AGENT HEARS THE MOMENT IT IS MADE - his answer to a call the turn is stopped at (permissions.ask): heard there, so it
+    stands where he pressed with the turn going on under it. Left for the next hand-over, it waited by the box while the turn it had just
+    let go worked on, and then entered above work already drawn (the recorded hold, 2026-11-11)."""
+    r = store._one("SELECT MAX(Id) AS i FROM audit WHERE EntityType='task' AND EntityId=? AND Action=?", (int(tid), action))
+    if not (r and r['i']): return
+    store._exec('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (int(tid), 'press', str(r['i']), time.time(), 0, 0, ''))
+    store._poke('task-changed', task_id=int(tid))
+
+
 def unhear(store, tid: int, lines) -> None:
     "A start that was refused took nothing: its lines are pending again (general._start_line), never drawn as heard by nobody."
     for x in lines or []: store._exec("DELETE FROM heard WHERE TaskId=? AND Kind='line' AND Ref=?", (int(tid), str(x)))
@@ -369,6 +379,10 @@ def items(store, tid: int) -> dict:
                     at, _, at_ev = took.pop(hit)
                     if s['T'] > at: ev[at_ev] = (s['T'], *ev[at_ev][1:])
                     continue
+                # ...and one that names his kept line is that line - by the box until its hand-over is written, then where it was heard - never
+                # a second line under the record's own name: sent into a turn, it stood in the chat AND by the box until the ledger caught up,
+                # and went from one name to the other (the recorded hold, 2026-11-11)
+                if s.get('line'): continue
                 put(s['T'], 0, {'id': f'y:{sid}:{i}', 'kind': 'line', 'at': stamp(s['T']), 'text': s.get('text') or '', 'files': []})
             else: put(s['T'], 1, {'kind': 'step', 'sid': sid, 'seg': n, 'step': {k_: v for k_, v in s.items() if k_ != 'T'}, 'T': s['T']})
 

@@ -28,6 +28,14 @@ async function walk(tag, tid, page, ask, typed = []) {
   await sleep(2500);
   const rec = await record(page, path.join(out, "video", `${name}-${tag}`)), lay = [], stop = { now: false }, watching = watchLayout(page, lay, stop);
   await page.evaluate(sampler, NAMES);
+  // ...AND THE LAYOUT EVERY FRAME (the walk of 2026-11-12: one 200 ms read caught the chat 1145 px wide and its box 289 px past the window as the
+  // pane closed, gone by the next): each rAF, the chat's width, the box's overflow, the rail and the pane's layout - kept on every change
+  await page.evaluate(() => { window.__lay = []; let last = "", t0 = performance.now();
+    const read = () => { const pg = document.querySelector("[data-tq-task-page]"), vp = pg?.querySelector(".tq-aui-viewport"), box = pg?.querySelector(".tq-aui-input")?.getBoundingClientRect();
+      const r = [Math.round(vp?.getBoundingClientRect().width || 0), box ? Math.round(Math.max(0, box.right - innerWidth, box.bottom - innerHeight)) : -1,
+        !!document.querySelector("[data-tq-rail] .tq-pile-row"), document.querySelector("[data-tq-browser-layout]")?.getAttribute("data-tq-browser-layout") || "", document.documentElement.scrollWidth - innerWidth];
+      const s = JSON.stringify(r); if (s !== last) { last = s; window.__lay.push([Math.round(performance.now() - t0), ...r]); } requestAnimationFrame(read); };
+    requestAnimationFrame(read); });
   const snap = async (n) => { await shot(page, `${name}-${tag}-${n}`); const c = await api(`/api/tasks/${tid}/conversation`); await save(`${name}-${tag}-${n}-list.json`, c);
     console.log(`[${tag} ${n}]`, c.items.map((x) => `${x.kind}${x.state ? ":" + x.state : ""}${x.cards?.length ? "+" + x.cards.length + "c" : ""}`).join(" "), "| pending", c.pending.length, "| working", c.working, "| layout", JSON.stringify(await layout(page))); };
   await rest(page, tid); await snap("0rest");
@@ -59,6 +67,14 @@ async function walk(tag, tid, page, ask, typed = []) {
   const fr = await page.evaluate(() => window.__frames), bad = check(fr);
   // ...the layout's own rules: the chat never narrower than half its width at rest without the pane beside it, the box inside the window
   lay.forEach((l) => { if (l.over > 2) bad.push(`layout: the box overflows the window by ${l.over} px`); if (l.wide > 2) bad.push(`layout: the page scrolls sideways by ${l.wide} px`); });
+  // ...every frame: the box inside the window, no sideways scroll, and the chat never wider than its widest at rest with the rail shown
+  // ...its column: the width it holds most often with the rail shown and no pane (one bad frame cannot set it)
+  const fl = await page.evaluate(() => window.__lay), ws = fl.filter((x) => x[3] && x[4] !== "split" && x[1]).map((x) => x[1]);
+  const rest0 = ws.length ? +Object.entries(ws.reduce((m, w) => ({ ...m, [w]: (m[w] || 0) + 1 }), {})).sort((a, b) => b[1] - a[1])[0][0] : 0;
+  fl.forEach(([t, w, over, rail, lay, wide]) => { if (over > 2) bad.push(`frame ${t} ms: the box stands ${over} px past the window (chat ${w} px, rail ${rail}, pane ${lay || "-"})`);
+    if (wide > 2) bad.push(`frame ${t} ms: the page scrolls sideways by ${wide} px`);
+    if (rail && rest0 && w > rest0 + 2) bad.push(`frame ${t} ms: the chat is ${w} px with the task list shown - wider than its column (${rest0})`); });
+  await save(`${name}-${tag}-every-frame.json`, fl);
   await save(`${name}-${tag}-frames.json`, fr); await save(`${name}-${tag}-layout.json`, lay); await save(`${name}-${tag}-findings.txt`, [...new Set(bad)].join("\n") || "no rule broken");
   await rec.stop({ sheet: 12 });
   console.log(`[${tag}] FRAMES`, fr.length, "LAYOUTS", lay.length, "RULES BROKEN", new Set(bad).size); console.log([...new Set(bad)].slice(0, 20).join("\n"));
@@ -92,7 +108,7 @@ const connector = async () => {
   execFileSync(process.env.PYTHON || "python", ["-c", "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('DROP TABLE IF EXISTS seats'); c.execute('CREATE TABLE seats (plan TEXT, seats_bought INTEGER, seats_in_use INTEGER, renews TEXT)'); c.execute(\"INSERT INTO seats VALUES ('Team',60,47,'2027-01-31')\"); c.commit()", db]);
   const had = ((await api("/api/connectors"))?.data || []).find((c) => c.Name === "Trainly");
   console.log("connector", JSON.stringify(await api("/api/connectors", { ...(had ? { ConnectorId: had.ConnectorId } : {}), Type: "database", Name: "Trainly",
-    ConfigJson: JSON.stringify({ connection_string: `sqlite:///${db.replace(/\\/g, "/")}` }), Active: true, Roles: "tool", Scope: "read" })));
+    ConfigJson: JSON.stringify({ conn_str: `sqlite:///${db.replace(/\\/g, "/")}` }), Active: true, Roles: "tool", Scope: "read" })));
 };
 // BACKEND=coding: each walk is a coding task on the real CLI over ACP (fixture/coding, real), his ask typed into it - no mail
 const coding = process.env.BACKEND === "coding";
@@ -100,6 +116,8 @@ for (const k of process.env.WALKS || "abcd") {
   const [m, body, who, ask, typed] = tasks[k];
   console.log("site mode", await fetch(`${site}/_mode?${m}`).then((r) => r.text()));
   if (k === "e") await connector();
+  // ...a first sign-in is first: a saved one from an earlier walk on this home is let go of
+  if (k === "a") console.log("forget", JSON.stringify(await api(`/api/signins/${new URL(site).hostname}`, undefined, "DELETE")).slice(0, 120));
   const t = k === "e" && !coding ? await api("/api/tasks", { Title: who[2], Kind: "general", Summary: body }).then((x) => ({ task_id: x.taskId }))
     : coding ? await api("/api/fixture/coding", { git: info.git, real: true, title: (who || ["", "", "Payworth: next payroll run"])[2] }).then((x) => ({ task_id: x.taskId }))
     : await mail(`conv-${name}-${k}`, body, who);

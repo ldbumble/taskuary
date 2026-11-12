@@ -930,7 +930,10 @@ def latest_block(store, tid: int, resumed: bool = False, rules: bool = True, tur
         out.append("WHAT THE OWNER REPLIED ON THE THREAD THEMSELVES SINCE YOUR LAST TURN - their own words to the people on it, not a request to you; "
                    'take it as said:\n' + '\n'.join(f"- {clock(x.get('SentAt') or x.get('CreatedAt'))} on {channel_name(x.get('Channel')) or 'another channel'}{on(x)}: "
                                                       f"{_quote(mail_row(store, x)['words'], 600)}" for x in own))
-    if did: out.append('WHAT THE OWNER DID SINCE YOUR LAST TURN - take it as said; never undo it:\n' + '\n'.join(f'- {x}' for x in did))
+    # ...EACH ALREADY A LINE IN HIS CHAT (the recorded walk, 2026-11-12: "You signed in to localhost - saved for next time (remove it under
+    # Settings ...)" stood in the chat, and the agent's answer said the same two sentences again under it): context, never something to restate
+    if did: out.append('WHAT THE OWNER DID SINCE YOUR LAST TURN - each is a line in the chat already: take it as said, never undo it, never '
+                       'say it again:\n' + '\n'.join(f'- {x}' for x in did))
     if passed: out.append(proposals.PASSED_TOLD + '\n' + '\n'.join(passed))
     if handed: out.append('THE OWNER HANDED THIS TO A PERSON - it is theirs now; never send them what they were already sent:\n' + '\n'.join(
         f"- {clock(c['CreatedAt'])}: {c['Body'].partition(chr(10))[0].rstrip(':')} - {_quote(c['Body'].partition(chr(10))[2], 400)}" for c in handed))

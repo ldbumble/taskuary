@@ -210,6 +210,18 @@ def test_a_coding_turn_is_told_what_any_agent_s_turn_is():
     assert 'WHAT THE OWNER DID SINCE YOUR LAST TURN' in general.turn_facts(s, tid, resumed=True)
 
 
+def test_what_the_owner_did_is_told_as_lines_already_in_his_chat_never_to_say_again():
+    # the recorded walk, 2026-11-12: "You signed in to localhost - saved for next time (remove it under Settings ...)" stood in the chat as his
+    # press, and the agent's next answer said the same two sentences again under it
+    s = MemoryStore(); tid = s.create_task({'Title': 'Payroll date for Gail', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_comment(tid, 'agent', general.ASSISTANT_TYPE, 'The sign-in page is open.')
+    s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
+    s.audit('task', tid, 'signin_fill', 'owner', detail={'site': 'payworth.example', 'ok': True, 'saved': True})
+    facts = general.turn_facts(s, tid)
+    assert 'signed in to payworth.example - saved for next time' in facts
+    assert 'each is a line in the chat already: take it as said, never undo it, never say it again' in facts
+
+
 def test_an_email_the_owner_dropped_is_told_to_its_agent_and_is_a_line_in_the_chat():
     # the agent walk, 2026-11-09: "Don't send" on one of two emails - its agent heard "turned down rv3 (<its own caption>)", or nothing at
     # all for an email not drafted yet, and went on saying the dropped one "waits for Send"

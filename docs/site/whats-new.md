@@ -2,6 +2,25 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.54 - 2026-11-12
+
+- Teams and Telegram replies go as a reply to the line they answer
+- A chat line that lags its notification mail joins the task the mail made, even when the mail quoted it cut short
+- The joining set carries the owner's own answers, and the guide follows them by the combine level
+- The Advisor reads twice a day, whole, after the day's job ideas - not every half hour
+- Send and Send and close say what is happening on the card itself: a spinner while it goes, then "Closingâ€¦" under it
+- A line he types is never refused by a sync: kept and heard at once, the start goes on from what is stored, an error never glued to his words
+- Triage is told what a mail's own headers say sent it, and the message keeps it past the verdict
+- What waits for the agent is in one place: his lines as slim rows over the box with a trash, messages as counts on their sender's chip
+- One rule for every card: a held step or proposal he writes past greys in its place too, and its agent raises it again if still needed
+- The waiting room's two presses are the owner's alone, and the terminal road's prompt test pins one rule for every card
+- An update clears the install folder before its installer runs, and a failed one is said on the card
+- Never two Taskuarys open: started again, it brings the running window to the front
+- A held step he writes past greys in the same frame as his line, with what it would have done, as a reply draft does
+- His stop hands over what waited in the same step: the stop, his lines, and the turn that answers them, from the first read
+- While a turn runs the chat says what it is doing, or what it waits for, in one live line; the level decides only once it has ended
+- The working line never says "Waiting for your answer" over a turn already at work on it
+
 ## 0.3.11.53 - 2026-11-12
 
 - Teams and Telegram replies go as a reply to the line they answer

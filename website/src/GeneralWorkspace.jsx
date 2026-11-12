@@ -854,10 +854,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const needNow = needRaw || needHeld != null;
 
   // ...a start the page already knows of says so before the conversation's first read lands, never a 520px spinner over nothing
-  // ...and a task's chat with its list in hand is drawn from the list (the conversation IS the list - conversation.items): the agent's state
-  // read beside it fills in what only it knows as it lands (recorded 2026-11-12 on the built app: a chat whose list was held stood as this
-  // spinner under its head for up to 300 ms on a rail click, its /assistant read still out)
-  if (!data && !error && !(chat && conv.list)) return opening
+  // ...never drawn from the list alone before this read: the files and cards it carries landed a beat later and grew the turn by 900 px under
+  // the owner's eyes (recorded 2026-11-12) - the task view waits for the read asked ahead with it instead (TaskPage loadDetail, aheadChat)
+  if (!data && !error) return opening
     ? <Box data-tq-starting="" sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.75, overflow: "hidden", bgcolor: PANEL2, px: 1.5, pt: 1.5, ...(compact ? { height: "auto" } : { flex: "0 0 auto" }) }}>
         <AgentBand name={agentName(task)} work={workOf([])} starting={startingLine(agentName(task))} /></Box>
     : <Box data-tq-chat-reading="" sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
@@ -955,7 +954,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         hint={!coding ? "" : acp ? (cli.working ? "Enter sends it when this turn ends · Shift+Enter adds a line" : "Enter sends it to the agent · Shift+Enter adds a line")
           : cli ? "Enter types it into the running agent · Shift+Enter adds a line" : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}
         empty={coding && conv.list ? (cli ? "The agent is starting - its turns show here as it works." : "No session has run on this task yet - write below to start one.") : ""}
-        noAi={!!data && !coding && chat && !data.providers?.length && !noAiSaid && !data?.demo
+        noAi={!coding && chat && !data?.providers?.length && !noAiSaid && !data?.demo
           ? <div className="tq-aui-noai" data-tq-no-ai="">No AI is connected yet - what you type waits for one. <ConnectAi size="small" variant="text" /></div> : null} />
     </LocalFiles.Provider>
     </OutputsCtx.Provider>

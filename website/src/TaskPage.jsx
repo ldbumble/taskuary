@@ -137,7 +137,8 @@ import { PICK_REPO, openAppLink, takeRepoPick } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
 import { announceRemoved, fromAnswer } from "./removed.js";
-import { aheadTask, heldSteps, heldTask, heldTerm, keepTask, keepTerms, pageRead } from "./taskDetail.js";
+import { aheadChat, aheadTask, heldSteps, heldTask, heldTerm, keepTask, keepTerms, pageRead } from "./taskDetail.js";
+const CHAT_WAIT = 1200;
 import { coalesce } from "./coalesce.js";
 
 // ...through lazyView, fetched at the first idle moment and drawn synchronously once in (recorded 2026-11-12 on the built app: React.lazy
@@ -778,7 +779,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const caps = useCapabilities(), canCode = caps.coding;     // no coding tool connected: coding is not offered (capabilities.js)
   const manual = caps.ai === false;                          // no AI: the owner replies and hands off from the bar's ▾ themselves
   // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)
-  const [detail, setDetail] = useState(() => heldTask(selected));
+  const [detail, setDetail] = useState(() => (aheadChat(selected) ? null : heldTask(selected)));     // ...with its chat (loadDetail)
   // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
   // keyed to a task, and a response that lands after you clicked another one must be dropped:
   // a wrap-up finishing 8 seconds later used to paint ITS task's header and report over the
@@ -912,10 +913,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const loadDetail = useCallback(async (id, first = false) => {
     if (!id) { setDetail(null); return; }
     const ahead = heldTask(id), coming = !ahead && first && aheadTask(id);
-    if (ahead) setDetail((d) => (d?.task?.TaskId === id ? d : ahead));
+    // ...AND ITS CHAT WITH IT (recorded 2026-11-12 on the built app: a task opened for the first time stood its head over a spinner where the
+    // chat goes, its chat's read asked at the press still out): the task's first frame waits - its title and spinner standing - for the chat's
+    // read asked ahead with it too, never longer than CHAT_WAIT, so the task and its chat are drawn as one move
+    const chat = first ? aheadChat(id) : null, both = (p) => (chat ? Promise.all([p, Promise.race([chat, new Promise((r) => setTimeout(r, CHAT_WAIT))])]).then(([d]) => d) : p);
+    if (ahead && !chat) setDetail((d) => (d?.task?.TaskId === id ? d : ahead));
+    else if (ahead) { await both(Promise.resolve(ahead)); if (stale(id)) return; setDetail((d) => (d?.task?.TaskId === id ? d : ahead)); }
     // ...and the read a rail press asked ahead, still on its way, IS the mount's read: a second one beside it doubled a big task's wait
     // under the spinner (the owner, 2026-11-01: "this still happens")
-    if (coming) { const data = await coming; if (stale(id)) return; if (data?.task?.TaskId === id) { setDetail(data); return; } }
+    if (coming) { const data = await both(coming); if (stale(id)) return; if (data?.task?.TaskId === id) { setDetail(data); return; } }
     return detailReads.current.run(id, id);
   }, []);
   // ...and the read of the task just left is let go of: its answer would be thrown away (stale) after the server spent on it

@@ -85,9 +85,13 @@ test("a chat read still on its way when the view mounts is handed over as it lan
   const view = src("GeneralWorkspace.jsx");
   assert.match(view, /if \(!first\(\)\) aheadChat\(task\.TaskId\)\?\.then\(\(d\) => \{ if \(live && !own && d\) accept\(d\); \}\);/);
   assert.match(view, /\.then\(\(r\) => \{ own = true; if \(live\) accept\(r\.data\); \}\)/, "the view's own read is newer: what lands ahead after it is not drawn");
-  // ...and a chat with its list in hand is drawn from the list while that read is out - with no "No AI is connected" said before it is known
-  assert.match(view, /if \(!data && !error && !\(chat && conv\.list\)\) return opening/);
-  assert.match(view, /noAi=\{!!data && !coding && chat && !data\.providers\?\.length/);
+  // ...and the task view's first frame waits for it - capped - so head and chat are one move; never drawn from the list alone, whose files and
+  // cards then landed a beat later and grew the turn by 900 px (recorded 2026-11-12)
+  const page = src("TaskPage.jsx");
+  assert.match(page, /const \[detail, setDetail\] = useState\(\(\) => \(aheadChat\(selected\) \? null : heldTask\(selected\)\)\);/);
+  assert.match(page, /const chat = first \? aheadChat\(id\) : null, both = \(p\) => \(chat \? Promise\.all\(\[p, Promise\.race\(\[chat, new Promise\(\(r\) => setTimeout\(r, CHAT_WAIT\)\)\]\)\]\)/);
+  assert.match(page, /if \(coming\) \{ const data = await both\(coming\);/);
+  assert.match(view, /if \(!data && !error\) return opening/);
 });
 
 test("a failed read ahead holds nothing, so the view reads it itself", async () => {
@@ -98,7 +102,7 @@ test("a failed read ahead holds nothing, so the view reads it itself", async () 
 
 test("the view draws from the held read, and the reads ahead are where the next view is already known", () => {
   const page = src("TaskPage.jsx"), view = src("AssistantView.jsx"), search = src("SearchEverything.jsx");
-  assert.match(page, /const \[detail, setDetail\] = useState\(\(\) => heldTask\(selected\)\);/);
+  assert.match(page, /const \[detail, setDetail\] = useState\(\(\) => \(aheadChat\(selected\) \? null : heldTask\(selected\)\)\);/);
   assert.match(page, /setDetail\(data\); keepTask\(id, data, undefined, asked\);/);
   assert.match(view, /useEffect\(\(\) => \{ if \(nextTid\) prefetchTask\(api, nextTid\); \}, \[nextTid, displayRevision\(pile\)\]\);/);   // the row Next brings
   assert.match(view, /onPointerEnter=\{\(\) => \{ if \(!isCur && i\.tid\) prefetchTask\(api, i\.tid\); \}\}/);        // a rail row under the pointer

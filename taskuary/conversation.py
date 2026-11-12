@@ -261,8 +261,13 @@ def _session_steps(store, tid: int) -> list:
 def _card(r) -> dict:
     # ...one an earlier build set aside on his next line (proposals.passed) says so by its own name: read as `superseded` - a draft a later
     # turn rewrote - the page drew "Earlier draft" where it stood and the card itself again under everything, below the live one
+    # ...and a step he approved that then failed is a card HE PRESSED (`failed`), so it stays under the answer he pressed it under: settled
+    # as `superseded` it read as a rewritten draft and went back to the turn that first raised it - nothing stood where he had pressed
+    # (the recorded held step, 2026-11-11)
     from .proposals import passed
-    return {'id': f"r:{r['ReviewId']}", 'kind': 'card', 'review': r['ReviewId'], 'what': r['Kind'], 'status': 'passed' if passed(r) else r['Status'],
+    from .shellgate import FAILED, NOT_RUN
+    failed = r['Status'] == 'superseded' and r.get('DecideNote') in (FAILED, NOT_RUN)
+    return {'id': f"r:{r['ReviewId']}", 'kind': 'card', 'review': r['ReviewId'], 'what': r['Kind'], 'status': 'passed' if passed(r) else 'failed' if failed else r['Status'],
             'at': r['CreatedAt'], 'decided': r.get('DecidedAt')}
 
 
@@ -412,8 +417,9 @@ def items(store, tid: int) -> dict:
     # no message and, opened by its page, no typed line - its ask is the task's own (ownwork). It is the input the first turn heard, so it
     # stands above that turn, a line of his; where a line or a message already opens the chat, that is the ask
     first = next((x for x in out if x['kind'] in ('turn', 'line', 'arrival')), None)
-    # ...from the moment the task is made: its own row is filed only as the first session opens, a beat after the turn is at work
-    if (asked or not any_mail) and (first is None or first['kind'] == 'turn') and (said := ownwork.ask(store, store.get_task(tid) or {}, asked)):
+    # ...from the moment its agent is started: its own row is filed only as the first session opens, a beat after the turn is at work. A
+    # task he made and has not started says nothing yet - shown there, the title stood as his line and went when the line he typed began it
+    if (asked or not any_mail and at_work and not pend) and (first is None or first['kind'] == 'turn') and (said := ownwork.ask(store, store.get_task(tid) or {}, asked)):
         at = asked['T'] if asked else ep((store.get_task(tid) or {}).get('CreatedAt'))
         out.insert(0, {'id': f'a:{tid}', 'kind': 'line', 'at': stamp(at), 'text': said, 'files': [], '_h': at})
     # ONE TURN AT WORK, AND IT IS THE LAST (the owner's live task, 2026-11-11: a second head spun under a later, finished answer while the task

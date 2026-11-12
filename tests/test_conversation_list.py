@@ -246,7 +246,7 @@ class TheList(unittest.TestCase):
         ask = 'Review the user management report and tell me which accounts to remove.'
         tid = self.s.create_task({'Title': ask, 'Kind': 'general', 'Status': 'open', 'OriginBase': 'owner'}, 'o')
         shape = lambda: [(x['kind'], x.get('id', '')[:2], x.get('text') or '', x.get('state', '')) for x in conversation.items(self.s, tid)['items']]
-        self.assertEqual(shape(), [('line', 'a:', ask, '')])
+        self.assertEqual(shape(), [])                         # ...made and not started: nothing yet - the line he may type is what opens it
         self.brain.delay = 0.6
         go = threading.Thread(target=lambda: general.start_session(self.s, tid).send_prompt('Work the task.', brief=True, kept=True), daemon=True); go.start()
         self.assertTrue(until(lambda: getattr(general.session_for(tid), 'busy', False) and ownwork.row_for(self.s, tid)))

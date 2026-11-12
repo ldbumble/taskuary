@@ -214,6 +214,7 @@ class Run:
     def task(self, title, kind='general', label=None):
         "A task the owner made himself."
         self.tid = self.s.create_task({'Title': title, 'Kind': 'coding' if self.backend == 'coding' else kind, 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+        self.asked = title
         self.snap(label or f'task: {title}')
         return self.tid
 
@@ -434,7 +435,9 @@ def broken(r: Run) -> list:
         # (ii) one card per thing: never two letters waiting at once, never an empty one drawn
         if len([c for c in cards if c['kind'] in SENDS]) > 1: say('ii', i, f"two letters wait: {[c['id'] for c in cards if c['kind'] in SENDS]}")
         # (v) only what he typed is his
-        if s['lines'] != r.typed[:len(s['lines'])] or [x for x in s['lines'] if x not in r.typed]: say('v', i, f"lines {s['lines']} != typed {r.typed}")
+        # ...and the ask that opened a task he made, where no typed line did (conversation.items: the first thing in its chat)
+        ls = s['lines'][1:] if s['lines'][:1] == [getattr(r, 'asked', None)] and r.asked not in r.typed else s['lines']
+        if ls != r.typed[:len(ls)] or [x for x in ls if x not in r.typed]: say('v', i, f"lines {s['lines']} != typed {r.typed}")
         # (vii) told the truth: no draft told as waiting that is not, no unsent card told as unsent that went
         for rid in re.findall(r'^- rv(\d+):', s['told'].split('ALSO SET UP AND NOT SENT')[-1], re.M) * ('ALSO SET UP' in s['told']):
             c = next((c for c in s['cards'] if c['id'] == int(rid)), None)

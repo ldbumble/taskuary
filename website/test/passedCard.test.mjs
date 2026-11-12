@@ -18,7 +18,28 @@ test("a passed card is the server's word, drawn once in its turn, greyed, never 
   assert.match(page, /const turnCards = \[\.\.\.passedCards, /, "in the turn that raised it");
 });
 
-test("a reply draft the owner prompted past is greyed where it stands, for good (draftPassed.test.mjs)", () => {
+// THE CARD ROUND, 2026-11-12 (every card kind drawn in every state and read): a draft a later turn replaced was the whole reply card drawn again,
+// dimmed, under the new one - a greyed Send, and Add CC / Add BCC that looked live; every pressed card wore a greyed <button>; a settled
+// held step was titled "... waits for your yes" over "✓ Approved"
+test("a replaced draft is its record - its words, greyed, no button - and the reply card knows no passed state", () => {
+  const card = src("ReplacedDraft.jsx");
   assert.doesNotMatch(src("TaskPage.jsx"), /replanning=\{agentState/);
-  assert.match(src("ReviewDecision.jsx"), /const off = busy \|\| drafting \|\| passed;/);
+  assert.match(card, /className="tq-conv-past" data-tq-replaced=\{r\.ReviewId\} data-tq-past-card="superseded"/);
+  assert.doesNotMatch(card, /ReviewDecision|<Button|<button/);
+  assert.match(src("ReviewDecision.jsx"), /const off = busy \|\| drafting;/);
+  assert.doesNotMatch(src("ReviewDecision.jsx"), /PassedCtx|data-tq-passed-draft/);
+});
+
+test("the press a card took is a mark, never a button - one mark for a proposal, held steps, a sent reply and a landing", () => {
+  const card = src("PassedCard.jsx");
+  assert.match(card, /export const PressedButton = \(\{ pressed, label = "" \}\)[\s\S]*<Box component="span" role="status" data-tq-pressed=\{pressed\}/);
+  assert.doesNotMatch(card, /<Button|\bdisabled\b/);
+  assert.match(src("SentCard.jsx"), /<PressedButton pressed="sent" label="✓ Sent" \/>/);
+  assert.match(src("LandingCard.jsx"), /<PressedButton pressed=\{s\.landed\.how\} label=\{w\.done\} \/>/);
+  for (const f of ["SentCard.jsx", "PassedCard.jsx", "ReplacedDraft.jsx"]) assert.doesNotMatch(src(f), /<Button[^>]*\bdisabled\b/, f);
+  // ...and a settled card is titled by what it was (its lead), with its result beside it once
+  assert.match(card, /title = p\?\.lead \|\| p\?\.title \|\| heldLead\(proposalFrom\(r\) \|\| \{\}\)\.lead/);
+  assert.match(card, /\(!same\(done\.what, title\) && done\.what\)/);
+  // ...and one review is one card in the chat: an act with its own card is not drawn again under its settled one
+  assert.match(src("GeneralWorkspace.jsx"), /\.\.\.\(post && !got\.length && !used\.has\(`post:\$\{c\.review\}`\)/);
 });

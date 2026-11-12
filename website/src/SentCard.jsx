@@ -3,7 +3,8 @@
 // same line - the separate "sent" block it gave way to said the same thing with no card around it. Drawn at the press (TaskPage sentHere) and
 // after, in the turn that drafted it (TaskPage turnCards), the same card both times.
 import React, { useState } from "react";
-import { Box, Button, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
+import { PressedButton } from "./PassedCard.jsx";
 import { sentSaid, sentTitle } from "./sentLine.js";
 import { fmtDateTime } from "./dates.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
@@ -21,8 +22,7 @@ export default function SentCard(p) {
       {long && <Typography {...pressable(() => setOpen((o) => !o))} aria-expanded={open} sx={{ ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "var(--tq-link, #55697a)",
         cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>{open ? "Show less" : "Show all"}</Typography>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.6, flexWrap: "wrap" }}>
-        <Button size="small" variant="contained" disableElevation disabled data-tq-pressed="sent"
-          sx={{ "&.Mui-disabled": { bgcolor: "var(--tq-tint-sage, #dfe8dd)", color: "var(--tq-success, #47654a)" } }}>✓ Sent</Button>
+        <PressedButton pressed="sent" label="✓ Sent" />
         <Typography role="status" data-tq-sent-line="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>
           {sentSaid(p)}{p.at ? ` · ${fmtDateTime(p.at)}` : ""}</Typography>
       </Box>

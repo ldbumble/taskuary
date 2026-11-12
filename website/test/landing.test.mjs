@@ -84,7 +84,7 @@ test("the landing card is one title, the files folded, one filled button and the
   assert.equal(done.doneLine, "3a1b9a8 · to master and deploy");
   const body = fs.readFileSync(path.join(process.cwd(), "src", "LandingCard.jsx"), "utf8");
   assert.match(body, /\{filesOpen && <Box data-tq-landing-list=""/, "the file list waits behind Show the files");
-  assert.match(body, /data-tq-pressed=\{s\.landed\.how\}/, "the press it took stays drawn");
+  assert.match(body, /<PressedButton pressed=\{s\.landed\.how\} label=\{w\.done\} \/>/, "the press it took stays drawn");
   assert.doesNotMatch(body, /LAND THE BRANCH/);
 });
 

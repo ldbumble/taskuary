@@ -65,8 +65,17 @@ export const reviewText = (review) => {
   // the WHAT is the context line already (proposals.queue's Reason); the box is the exact command Approve runs, once - with no AI the card
   // said "agent-browser click @e12" three times over (2026-10-25)
   if (["browser_act", "shell_act", "desktop_act"].includes(proposal?.action)) return proposal.command ? `Approve runs: ${proposal.command}` : proposal.what || "";
-  return PAGES.has(proposal?.action) && proposal.text ? proposal.text : review?.DraftText || "";
+  if (PAGES.has(proposal?.action) && proposal.text) return proposal.text;
+  // ...AND NO CARD SHOWS ITS OWN JSON (the card round, 2026-11-12: a setting's change stood as `{"action": "settings", "changes": [...]}` in a
+  // box he could type into): any other proposal's box holds what it carries, in words - or nothing, and the card draws no box (`bare`)
+  return proposal ? toolBody(Object.fromEntries(Object.entries(proposal).filter(([k]) => k !== "changes"))) : review?.DraftText || "";
 };
+// a setting's change in words: "poll minutes to 15" (proposals.setting_changes: {name, value} or {connector, name, value})
+export const changeWords = (p) => (Array.isArray(p?.changes) ? p.changes : []).filter((c) => c && c.name)
+  .map((c) => `${c.connector ? `${c.connector}: ` : ""}${String(c.name).replaceAll("_", " ")} to ${c.value === true ? "on" : c.value === false ? "off" : String(c.value)}`).join("; ");
+// ...and what any proposal does, as the server worded it for its card (proposals.queue's Reason: "the agent proposes to <what> - <why>"),
+// without the lead that names who asked
+const saysOf = (review) => String(review?.Reason || "").replace(/^the (agent proposes|workflow asks) to /, "").trim();
 
 // WHAT A WAITING CARD SAYS OVER ITSELF IN THE CHAT - what its Approve does, in one line: a drafted playbook's, a held act's. Said with the one
 // card, wherever that card stands (a turn of the task's chat, the foot of a walk's)
@@ -83,10 +92,15 @@ export const heldActsLine = (reviews = []) => {
 
 // what a held step does, in words, and why it waits: the lead over its card, the command itself folded (`folded`)
 const upFirst = (x) => (x ? x[0].toUpperCase() + x.slice(1) : x);
+// ...ONE LOOK FOR EVERY HELD STEP (the card round, 2026-11-12: a held press in the agent's browser stood in the chat as "On the agent's browser"
+// over `Approve runs: agent-browser click @e12` - what it would press was the reason line the chat does not draw): a shell step, a browser
+// act and a desktop act each lead with what they do
+const HELD = { shell_act: ["Run a command in the agent's shell", "it leaves this computer"], browser_act: ["Do a step in the agent's browser", "it can't be undone"],
+  desktop_act: ["Do a step in an app on your desktop", "it can't be undone"] };
 export const heldLead = (p) => {
-  const about = String(p?.about || "").trim(), what = String(p?.what || "").trim();
-  return { lead: upFirst(about || what) || "Run a command in the agent's shell",
-    leadWhy: `Held before it ran - ${p?.why || "it leaves this computer"}${about && what ? `: it would ${what}` : ""}.`, folded: !!p?.command };
+  const about = String(p?.about || "").trim(), what = String(p?.what || "").trim(), [lead, why] = HELD[p?.action] || HELD.shell_act;
+  return { lead: upFirst(about || what) || lead,
+    leadWhy: `Held before it ran - ${p?.why || why}${about && what ? `: it would ${what}` : ""}.`, folded: !!p?.command };
 };
 
 export const proposalPresentation = (review) => {
@@ -168,6 +182,7 @@ export const proposalPresentation = (review) => {
     kind: "action",
     title: "The agent's browser waits for your yes",
     context: review.Reason || "Held before it ran · it can't be undone",
+    ...heldLead(proposal),
     destinationLabel: "On",
     destination: proposal.url || proposal.site || "the agent's browser",
     approveLabel: APPROVE,
@@ -197,6 +212,7 @@ export const proposalPresentation = (review) => {
     kind: "action",
     title: "The agent's desktop step waits for your yes",
     context: review.Reason || "Held before it ran · it can't be undone",
+    ...heldLead(proposal),
     destinationLabel: "On",
     destination: "an app on your desktop",
     approveLabel: APPROVE,
@@ -240,15 +256,36 @@ export const proposalPresentation = (review) => {
     busyLabel: "saving…",
     rejectLabel: "Dismiss",
   };
+  // A SETTING THE AGENT ASKS TO CHANGE (proposals 'settings'): which one and to what, in words, and why - Approve changes exactly that
+  if (proposal?.action === "settings") return {
+    kind: "action",
+    title: "Change a setting",
+    context: review.Reason || "Proposed · nothing changes until you approve",
+    lead: `Change ${changeWords(proposal) || "a setting"}`,
+    leadWhy: proposal.why ? upFirst(String(proposal.why)) : "Nothing changes until you approve.",
+    destinationLabel: "In",
+    destination: "Settings",
+    approveLabel: APPROVE,
+    busyLabel: "saving…",
+    rejectLabel: "Dismiss",
+    readOnly: true,
+    bare: true,
+  };
+  // ...AND ANY OTHER PROPOSAL SAYS WHAT IT DOES IN THE SERVER'S OWN WORDS FOR IT (the card round, 2026-11-12: "Action · land" over the proposal's
+  // JSON): its lead is what the gate wrote on the review, its box what it carries - none where it carries nothing
+  const says = saysOf(review), act = String(proposal?.action || "proposed action").replaceAll("_", " ");
   return {
     kind: "action",
-    title: review.Subject || review.Title || "Proposed action",
+    title: review.Subject || review.Title || upFirst(says) || "Proposed action",
     context: "Proposed action · nothing will be sent to the conversation",
+    ...(says ? { lead: upFirst(says), leadWhy: "Nothing is done until you approve." } : {}),
     destinationLabel: "Action",
-    destination: String(proposal?.action || "proposed action").replaceAll("_", " "),
+    destination: act,
     approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",
+    readOnly: true,
+    bare: !reviewText(review).trim(),
   };
 };
 

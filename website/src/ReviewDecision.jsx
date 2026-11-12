@@ -12,7 +12,6 @@ import { filesPromised, filesShort } from "./replyFiles.js";
 import { proposalPresentation, resultOf, reviewText } from "./reviewProposal.js";
 import { cardOf } from "./actionCard.js";
 import ActionCard from "./ActionCard.jsx";
-import { PassedCtx } from "./passedCtx.js";
 import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
@@ -299,10 +298,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const coRid = closeout?.ReviewId || (proposal?.kind === "closeout" ? r.ReviewId : null);
   const { gh, reload: reloadGh, act } = useCloseoutState(coRid);
   const blocked = !!gh && !gh.ok;
-  // ...and greyed once the owner has prompted past it (PassedCtx): old news, its words as they were - what the agent writes after is a new card
-  // in its own turn. It greyed only while that turn ran, and came back live under every turn after (the owner, 2026-11-10)
-  const passed = React.useContext(PassedCtx);
-  const off = busy || drafting || passed;
+  const off = busy || drafting;
   useEffect(() => {
     if (job?.state === "done") onChanged?.();
     if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or Draft with AI again.`);
@@ -609,7 +605,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   </Box>;
   const ccInline = isEmail && !proposal && !isCal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" && !(busy || delivery.frozen) && !ccNow.length && !bccNow.length && !bccOpen;
   return (
-    <Box sx={{ mt: 0.5, ...(passed ? { opacity: 0.55 } : {}) }} data-tq-passed-draft={passed ? r.ReviewId : undefined} inert={passed ? "" : undefined}>
+    <Box sx={{ mt: 0.5 }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1 }}>{err}</Alert>}
       {delivery.line && <Alert severity={delivery.state === "unknown" ? "warning" : "info"} sx={{ mb: 1 }}>{delivery.line}</Alert>}
       <ApprovalInterrupt it={interrupt} onResolve={(choice) => {
@@ -693,7 +689,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       {proposal?.folded && <Typography {...pressable(() => setCmdOpen((o) => !o))} data-tq-show-command="" aria-expanded={cmdOpen}
         sx={{ ...FOCUS_RING, display: "inline-block", fontSize: 11.5, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600, mb: cmdOpen ? 0.5 : 0,
           "&:hover": { textDecoration: "underline" } }}>{cmdOpen ? "Hide the command" : "Show the command"}</Typography>}
-      <Box ref={draftRef} data-tq-draft-box="" data-tq-field="draft" data-tq-label="Reply draft" sx={{ position: "relative", ...(proposal?.folded && !cmdOpen ? { display: "none" } : {}) }}>
+      <Box ref={draftRef} data-tq-draft-box="" data-tq-field="draft" data-tq-label="Reply draft" sx={{ position: "relative", ...((proposal?.folded && !cmdOpen) || proposal?.bare ? { display: "none" } : {}) }}>
         {drafting && <CircularProgress size={14} data-tq-drafting-spin="" sx={{ position: "absolute", top: 12, right: 12, zIndex: 1, color: FAINT }} />}
         <DraftField value={value} onChange={(e) => setText(e.target.value)} marks={blanks}
         placeholder={proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}

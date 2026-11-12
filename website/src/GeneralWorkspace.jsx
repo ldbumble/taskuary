@@ -451,8 +451,10 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
     if (PAST[c.status] && (c.status !== "superseded" || c.was)) return [<PastCard key={c.id} c={c} />];
     const got = nodes.filter((n) => n.rid === c.review && !used.has(n.key)), post = posts.find((p) => p.ReviewId === c.review);
     got.forEach((n) => used.add(n.key));
+    // ...ONE REVIEW IS ONE CARD: a post or a tracker comment an earlier build set aside has its settled card among the nodes, and was drawn
+    // again under it as the act's own card reading "Not posted · dismissed" (the card round, 2026-11-12)
     return [...got.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>),
-      ...(post && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} />] : []),
+      ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} />] : []),
       ...(next && c.review === nextRid && !used.has("next") && used.add("next") ? [<Box key="next" data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>{next}</Box>] : [])];
   });
   const rows = items.map((x, i) => {
@@ -526,7 +528,13 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
     // ...HIS scroll, not the chat's own growth (chatStream.heldAtEnd): a wheel, a finger, a key, or a press still down (the scrollbar's drag)
     let was = v.scrollTop, used = -Infinity;
     const mine = () => { used = performance.now(); }, down = () => { used = Infinity; };
-    const on = () => { stick.current = heldAtEnd(stick.current, { top: v.scrollTop, was, gap: v.scrollHeight - v.scrollTop - v.clientHeight, own: performance.now() - used < 1500 }); was = v.scrollTop; };
+    // ...AND A SCROLL THAT WAS NOT HIS, WHILE THE CHAT IS HELD AT ITS END, IS PUT BACK (the card round, 2026-11-12: a reply card under a later
+    // answer opened 9-12 px short of its end, and went back 10 px a beat after it was pinned - the browser's own scroll anchoring moved the view
+    // as the draft's box took its height, the chat's height unchanged, so nothing that watches a size saw it)
+    const on = () => { const own = performance.now() - used < 1500, gap = v.scrollHeight - v.scrollTop - v.clientHeight;
+      stick.current = heldAtEnd(stick.current, { top: v.scrollTop, was, gap, own });
+      if (stick.current && !own && gap > 1) v.scrollTop = v.scrollHeight;
+      was = v.scrollTop; };
     const ro = new ResizeObserver(() => { if (stick.current) v.scrollTop = v.scrollHeight; });
     // ...and when the VIEW itself gets shorter - the box under it grew a line as he typed - as when the chat gets longer (the recorded walks,
     // 2026-11-11: 14 px behind its end for a beat each time)

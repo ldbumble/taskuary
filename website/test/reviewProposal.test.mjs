@@ -166,7 +166,31 @@ test("a held shell step leads with what it does and why, its command folded", ()
   assert.equal(gate.lead, "Delete build in ledger"); assert.equal(gate.leadWhy, "Held before it ran - it can't be undone.");
   const card = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
   assert.match(card, /\{cmdOpen \? "Hide the command" : "Show the command"\}/);
-  assert.match(card, /\.\.\.\(proposal\?\.folded && !cmdOpen \? \{ display: "none" \} : \{\}\)/, "the command's box stays folded until asked for");
+  assert.match(card, /\.\.\.\(\(proposal\?\.folded && !cmdOpen\) \|\| proposal\?\.bare \? \{ display: "none" \} : \{\}\)/, "the command's box stays folded until asked for");
+});
+
+// THE CARD ROUND, 2026-11-12 (every card kind drawn in the chat and read): the chat draws no reason line, so a held press in the agent's
+// browser stood as "On the agent's browser" over `Approve runs: agent-browser click @e12`; a setting's change and any proposal with no look
+// of its own stood as "Action settings" over its own JSON, in a box he could type into
+test("every card says what it does in words: a held browser or desktop act leads as a shell step does, and no card shows its JSON", () => {
+  const act = (p, Reason = "") => ({ Kind: "action", Reason, DraftText: JSON.stringify(p) });
+  const b = proposalPresentation(act({ action: "browser_act", sid: "s1", args: ["click", "@e12"], command: "agent-browser click @e12", what: 'press "Submit order" on portal.vendor.example' }));
+  assert.equal(b.lead, 'Press "Submit order" on portal.vendor.example'); assert.equal(b.leadWhy, "Held before it ran - it can't be undone."); assert.equal(b.folded, true);
+  assert.equal(proposalPresentation(act({ action: "browser_act", sid: "s1", args: ["click"] })).lead, "Do a step in the agent's browser");
+  assert.equal(proposalPresentation(act({ action: "desktop_act", sid: "s1", args: ["click"] })).lead, "Do a step in an app on your desktop");
+  assert.equal(proposalPresentation(act({ action: "shell_act", sid: "s1", command: "x" })).lead, "Run a command in the agent's shell");
+  // a setting: which one and to what, why under it, and no box at all
+  const set = act({ action: "settings", changes: [{ name: "poll_minutes", value: "15" }, { connector: "github", name: "use_as_tracker", value: true }], why: "you asked for the mail to be read less often" });
+  const s = proposalPresentation(set);
+  assert.equal(s.lead, "Change poll minutes to 15; github: use as tracker to on"); assert.equal(s.leadWhy, "You asked for the mail to be read less often");
+  assert.equal(s.bare, true); assert.equal(s.readOnly, true); assert.doesNotMatch(reviewText(set), /[{}]/);
+  // any other proposal: the gate's own words for it lead, its box holds what it carries or is not drawn
+  const land = act({ action: "land" }, "the agent proposes to publish this work (a draft pull request, or straight to the default branch - your setting)");
+  assert.equal(proposalPresentation(land).lead, "Publish this work (a draft pull request, or straight to the default branch - your setting)");
+  assert.equal(proposalPresentation(land).bare, true); assert.equal(reviewText(land), "");
+  const note = act({ action: "comment_issue", body: "Fixed in the totals branch." }, "the agent proposes to post a PUBLIC comment on the linked issue/PR");
+  assert.equal(reviewText(note), "Fixed in the totals branch."); assert.equal(proposalPresentation(note).bare, false);
+  assert.equal(proposalPresentation(note).readOnly, true, "its box is what goes: the server takes no edit of it (proposals._edited)");
 });
 
 test("a break-out card says the new task and what moves to it, and its result names the task", () => {

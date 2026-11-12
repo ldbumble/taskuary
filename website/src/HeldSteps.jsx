@@ -58,7 +58,9 @@ export default function HeldSteps({ reviews, onChanged, toRow = false }) {
         </>}
       </Box>
       {/* ...the step that failed on an earlier press says so after a reload too (heldCard's error, read off the review) */}
-      {(err || (!busy && (live || c.pressed === "failed") && c.error)) && <Typography role="alert" sx={{ mt: 0.5, fontSize: 12, color: ALERT_INK }}>{err || c.error}</Typography>}
+      {/* ...IN THE CARD'S OWN SENTENCE, the same at the press as after a reload (the card round, 2026-11-12: the press's own line read "Step 1
+          failed: The held step failed: ..." over a single step, and "It failed: ..." once the page was read again) */}
+      {(err || (!busy && (live || c.pressed === "failed") && c.error)) && <Typography role="alert" sx={{ mt: 0.5, fontSize: 12, color: ALERT_INK }}>{(!busy && c.error) || err}</Typography>}
     </Box>
   );
 }

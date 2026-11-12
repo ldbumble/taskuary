@@ -130,7 +130,10 @@ test("the chat lets go of its end only for the owner's own scroll up, never for 
   assert.equal(heldAtEnd(false, { top: 4763, was: 4500, gap: AT_END - 1, own: true }), true, "back at the end takes it again");
   assert.equal(heldAtEnd(true, { top: 4740, was: 4763, gap: 23, own: true }), true, "a nudge within the end's reach stays held");
   const view = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(view, /const on = \(\) => \{ stick\.current = heldAtEnd\(stick\.current, \{ top: v\.scrollTop, was, gap: v\.scrollHeight - v\.scrollTop - v\.clientHeight, own:/);
+  assert.match(view, /stick\.current = heldAtEnd\(stick\.current, \{ top: v\.scrollTop, was, gap, own \}\);/);
+  // ...and a scroll that was not his, while it is held, is put back at the end (the card round, 2026-11-12: a reply card under a later answer
+  // opened 9-12 px short and went back 10 px by the browser's scroll anchoring, the chat's height unchanged - no resize to see)
+  assert.match(view, /if \(stick\.current && !own && gap > 1\) v\.scrollTop = v\.scrollHeight;/);
   assert.match(view, /const ro = new ResizeObserver\(\(\) => \{ if \(stick\.current\) v\.scrollTop = v\.scrollHeight; \}\);/, "and any resize while held pins it");
   assert.doesNotMatch(view, /stick\.current = v\.scrollHeight - v\.scrollTop - v\.clientHeight < 56/, "where it stands alone no longer decides");
 });

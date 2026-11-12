@@ -24,5 +24,5 @@ test("a sent reply stays its card: the subject, the words, and ✓ Sent on the b
   assert.equal(sentSaid({ channel: "email", closing: true }), "by email - closing the task");
   assert.equal(sentSaid({ to: "Ray Colton" }), "to Ray Colton");
   const card = read("SentCard.jsx");
-  assert.match(card, /data-tq-pressed="sent"[\s\S]*✓ Sent<\/Button>/);
+  assert.match(card, /<PressedButton pressed="sent" label="✓ Sent" \/>/);      // ...a mark, never a button nobody can press (passedCard.test.mjs)
 });

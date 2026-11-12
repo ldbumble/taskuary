@@ -14,6 +14,7 @@ import { hunkText, parseUnified } from "./diffView.js";
 import DiffView from "./DiffView.jsx";
 import { plural } from "./timeWords.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
+import { PressedButton } from "./PassedCard.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const btn = { minHeight: 32, py: 0, px: 1.4, fontSize: 12.5, textTransform: "none" };
@@ -125,8 +126,7 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
         {sure && <Button size="small" sx={{ ...btn, color: DIM }} onClick={() => setSure(false)}>Keep it</Button>}
       </Box> : s.landed && <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.6 }}>
         {/* ...the press it took, drawn pressed, and what came of it on the same line */}
-        <Button size="small" variant={s.landed.how === "discard" ? "outlined" : "contained"} disableElevation disabled data-tq-pressed={s.landed.how}
-          sx={{ ...btn, "&.Mui-disabled": s.landed.how === "discard" ? { color: FAINT } : { bgcolor: "var(--tq-tint-sage, #dfe8dd)", color: "var(--tq-success, #47654a)" } }}>{w.done}</Button>
+        <PressedButton pressed={s.landed.how} label={w.done} />
         <Typography data-tq-act-done="" sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{said ? said.replace(url, "").replace(/[:\s]+$/, "") : w.doneLine}
           {url && <> · <a href={url} target="_blank" rel="noreferrer">{url.replace(/^https?:\/\//, "").slice(0, 70)}</a></>}</Typography>
       </Box>}

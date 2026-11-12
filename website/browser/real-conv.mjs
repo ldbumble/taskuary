@@ -42,7 +42,14 @@ export const sampler = (names) => {
       // a disabled button on a card at rest, and a settled card standing under a live one
       const cardsOf = [...vp.querySelectorAll("[data-tq-turn-cards] > *, [data-tq-row-cards] .tq-aui-agent-body > *")];
       const dead = cardsOf.filter((c) => c.matches("[data-tq-passed], [data-tq-past-card]") || c.querySelector("[data-tq-passed]"));
-      if (dead.some((c) => c.querySelector("button[disabled]"))) f.deadButton = true;
+      // ...and so does every card that is SETTLED - pressed, sent, dismissed, failed (the card round, 2026-11-12: a greyed "✓ Approved" / "✓ Sent"
+      // <button> on each): its state is a mark, and any <button> on it is a finding, greyed or not
+      const settled = cardsOf.flatMap((c) => [c, ...c.querySelectorAll("[data-tq-act-state]")]).filter((c) => c.matches("[data-tq-act-state]:not([data-tq-act-state=waiting]):not([data-tq-act-state=resting]), [data-tq-past-card], [data-tq-passed]"));
+      if (dead.some((c) => c.querySelector("button[disabled]")) || settled.some((c) => c.querySelector("button"))) f.deadButton = true;
+      // ...ONE REVIEW, ONE CARD, AND NO CARD SHOWS ITS OWN JSON: two cards of one review in the chat, and a card whose box holds `{"action": ...`
+      const rids = cardsOf.map((c) => (c.matches("[data-tq-passed], [data-tq-act]") ? c : c.querySelector("[data-tq-passed], [data-tq-act]"))).filter(Boolean).map((c) => c.getAttribute("data-tq-passed") || c.getAttribute("data-tq-act")).filter(Boolean);
+      if (new Set(rids).size < rids.length) f.cardTwice = true;
+      if (cardsOf.some((c) => [...c.querySelectorAll("textarea")].some((t) => /^\s*\{\s*"action"\s*:/.test(t.value)))) f.rawCard = true;
       // EACH MESSAGE OF A TURN IS A PARAGRAPH (the owner, 2026-11-11: three messages of one turn stacked as consecutive lines): two blocks of a
       // turn's words with no room between them
       const box = document.querySelector("[data-tq-task-page] .tq-aui-footer")?.getBoundingClientRect();
@@ -97,6 +104,8 @@ export function check(frames) {
     if (f.unlit?.length && JSON.stringify(f.unlit) !== JSON.stringify(prev?.unlit || [])) say(f.t, `the agent's words name ${f.unlit.map((n) => `"${n}"`).join(", ")} and no such button is lit`);
     for (const id of f.empty || []) if (!(prev?.empty || []).includes(id)) say(f.t, `${id} is drawn empty`);
     if (f.deadButton && !prev?.deadButton) say(f.t, "a card nobody can press draws a button");
+    if (f.cardTwice && !prev?.cardTwice) say(f.t, "one action stands in the chat as two cards");
+    if (f.rawCard && !prev?.rawCard) say(f.t, "a card shows its own JSON");
     if (f.tight && !prev?.tight) say(f.t, "two messages of one turn stand as consecutive lines, no paragraph's room between");
     // A CHAT IS FIRST SEEN AT ITS END (the owner, 2026-11-11: "task should open on last thing not randomly in middle"): the first painted frame too
     if (!prev && f.h - f.top - f.ch > 2) say(f.t, `first seen ${f.h - f.top - f.ch} px short of its end`);

@@ -30,6 +30,14 @@ exec "$(cygpath -u '${exe}')" "$@"
 `);
   real.unshift(shim);
 }
+// THE `taskuary` COMMAND OF THIS CHECKOUT (worker 8, 2026-11-12: a walk's coding agent ran the INSTALLED build's `taskuary --reply` and
+// heard its old words): a stand-in of that name first on PATH runs this checkout's cli - terminal.own_command then finds it and adds nothing
+{ const repo = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..", ".."), bin = path.join(out, "twbin");
+  const py = execFileSync(process.env.TASKUARY_TEST_PYTHON || "python", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
+  await mkdir(bin, { recursive: true });
+  await writeFile(path.join(bin, "taskuary.cmd"), `@echo off\r\nset "PYTHONPATH=${repo}"\r\n"${py}" -m taskuary.cli %*\r\n`);
+  await writeFile(path.join(bin, "taskuary"), `#!/bin/sh\nPYTHONPATH='${repo.replace(/\\/g, "/")}' exec "$(cygpath -u '${py}')" -m taskuary.cli "$@"\n`);
+  real.unshift(bin); }
 process.env.TASKUARY_BROWSER_REAL_CLI = real.join(path.delimiter);
 const h = await startHarness({ fresh: true });
 const api = (p, body) => fetch(`${h.fixtureApi}${p}`, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", "X-Taskuary-Token": h.token }, body: body && JSON.stringify(body) }).then((r) => r.json());

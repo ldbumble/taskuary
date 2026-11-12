@@ -233,6 +233,16 @@ def test_a_compaction_is_one_quiet_step_never_the_owners_line(home):
     sessionrecord._saved_path(tid, 'pane-k').write_text(json.dumps({'steps': [{'k': 'you', 'text': SUMMARY[:3000]}, {'k': 'said', 'text': 'Go on.'}]}), encoding='utf-8')
     [ses] = codingchat.sessions(s, tid)
     assert [(x['k'], x['text']) for x in ses['steps']] == [('compact', sessionrecord.COMPACTED), ('said', 'Go on.')]
+    # ...AND A SESSION OVER ACP THAT REOPENS THAT CONVERSATION IS NEVER READ AS ITS CLI'S LOG (the recorded restart, 2026-11-11): before it
+    # has kept its first update it holds nothing yet - read as a pane's it was the whole log again, every earlier turn stamped now, and one
+    # read of the chat drew all his lines first and all the turns after them
+    from types import SimpleNamespace
+    from unittest import mock
+    from taskuary import terminal as term
+    live = SimpleNamespace(sid='acp-new', task_id=tid, alive=True, mode='auto', acp=True, cli='claude', ext_id='k1', started='2026-11-11 23:37:00')
+    with mock.patch.dict(term.SESSIONS, {'acp-new': live}):
+        got = codingchat.sessions(s, tid)
+    assert [(x['sid'], x['source'], x.get('updates')) for x in got if x['live']] == [('acp-new', 'acp', [])], got
 
 
 # NOTHING THE OWNER DID NOT TYPE IS HIS (the owner, 2026-11-10: "this is obvious stuff that your stress test should be catching.."): every

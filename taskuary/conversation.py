@@ -177,6 +177,12 @@ def hear_press(store, tid: int, action: str) -> None:
     store._poke('task-changed', task_id=int(tid))
 
 
+def handed_since(store, tid: int, at) -> bool:
+    "Was anything handed to the agent - a line of his, a turn's start - more than a second after `at`: what a session gone since never answered."
+    r = store._one("SELECT MAX(At) AS a FROM heard WHERE TaskId=? AND Kind IN ('line','turn')", (int(tid),))
+    return bool(r and r['a'] and r['a'] > ep(at) + 1)
+
+
 def unhear(store, tid: int, lines) -> None:
     "A start that was refused took nothing: its lines are pending again (general._start_line), never drawn as heard by nobody."
     for x in lines or []: store._exec("DELETE FROM heard WHERE TaskId=? AND Kind='line' AND Ref=?", (int(tid), str(x)))

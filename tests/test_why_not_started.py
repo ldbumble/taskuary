@@ -203,6 +203,23 @@ class AgentStoryTests(unittest.TestCase):
         self.assertEqual([x['text'] for x in st['steps']], ['Started', 'Finished a turn', 'Cut off - Taskuary restarted'])
         self.assertTrue(st['steps'][-1]['cut'])
 
+    def test_a_restart_while_his_line_was_opening_a_session_says_so_under_the_line(self):
+        """The recorded restart, 2026-11-11: he wrote to a coding agent at rest, the session his line opened was still coming up when Taskuary
+        restarted, and the line stood heard with nothing under it - the run's last word was the ending before it, so nothing read as cut."""
+        from taskuary import conversation, general, workerstate as ws
+        s = MemoryStore(); t = handed(s, who='agent:coding', Status='in_progress')
+        ws.record(s, t, 's1', 'disconnected', text='the session ended', source='startup')
+        s._exec("UPDATE worker_event SET CreatedAt=? WHERE TaskId=?", (ago(1), t))
+        conversation.hear(s, t, ['l-one'])
+        terminal.release_task(s, t, 'startup')
+        notes = [c['Body'] for c in s.list_comments(t, internal=True) if c.get('ActorType') == general.ASSISTANT_TYPE]
+        self.assertEqual(notes, [general.cut_line(s, t).strip('_')])
+        # ...and a session that had ended with nothing handed to it since says nothing of a cut
+        t2 = handed(s, who='agent:coding', Status='in_progress')
+        ws.record(s, t2, 's2', 'disconnected', text='the session ended', source='startup')
+        terminal.release_task(s, t2, 'startup')
+        self.assertEqual([c for c in s.list_comments(t2, internal=True) if c.get('ActorType') == general.ASSISTANT_TYPE], [])
+
     def test_only_the_last_session_is_told(self):
         from taskuary import workerstate as ws
         s = MemoryStore(); t = handed(s, who='agent:coding', Status='in_progress')

@@ -3126,7 +3126,11 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
         from . import workerstate as ws
         sid = ws.current_sid(store, task_id)
         # ...its last word `working`: a turn was under way when Taskuary went (said in its chat below)
-        cut = actor in INTERRUPTING and (store.last_worker_event(task_id, skip=ws.NOTES) or {}).get('Kind') == 'working'
+        # ...or something was handed to it after its last word (the ledger's): a line of his that opened a session still coming up when
+        # Taskuary went stood heard, with nothing under it and nothing saying why (the recorded restart, 2026-11-11)
+        from . import conversation
+        last = store.last_worker_event(task_id, skip=ws.NOTES) or {}
+        cut = actor in INTERRUPTING and (last.get('Kind') == 'working' or conversation.handed_since(store, task_id, last.get('CreatedAt')))
         # ...read off the run's own LAST WORD, not its derived status: with no session live after a restart, status() reads any unfinished run
         # as `disconnected` already, so nothing was written - the run's last word stayed `working`, and a general agent cut off by the restart
         # offered no Continue (the overnight run, 2026-11-03)

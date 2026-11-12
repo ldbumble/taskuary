@@ -1255,6 +1255,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   useEffect(() => {
     if (detail?.session?.alive || detail?.task?.TaskId !== selected) return;
     if (term?.alive && term.mode === "assistant" && term.taskId === selected && term.busy === false && !pressedHere) setTerm(null);
+    // ...AND ANY OTHER SESSION HELD HERE AS LIVE IS ASKED FOR AGAIN (the recorded restart, 2026-11-11: Taskuary restarted under a coding
+    // agent's turn - the chat said "Cut short when Taskuary restarted", the rail and the box were at rest, and the header read "agent
+    // working" for as long as the page stayed open: the session it held was the one from before the restart, and nothing ever said it
+    // had gone). The server's own word for the session, never this read's - which may predate a session just started
+    else if (term?.alive && term.mode !== "assistant" && term.taskId === selected && !pressedHere) findTerm(selected);
   }, [detail, selected]);   // eslint-disable-line react-hooks/exhaustive-deps
   const openTerm = useCallback(async (body) => {
     try {

@@ -111,9 +111,13 @@ export function check(frames) {
     if (f.items.length && f.items[0][1] && !(prev?.items.length && prev.items[0][1])) say(f.t, `the chat begins with the agent's turn ${f.items[0][0]} - no ask above it`);
     ids.filter((id) => !id.startsWith("t:")).forEach((id) => heard.add(id)); prev = f;
   }
+  // NO DEAD END AT THE END (the recorded restart, 2026-11-11: his line stood heard, nothing under it, nothing at work): the walk's last frame
+  // never ends on a line of his with no turn at work
+  const end = frames.at(-1), tail = end?.items.at(-1);
+  if (tail && /^(l[0-9a-z]|s[0-9a-z]|a:|c:|y:)/.test(tail[0]) && !end.working) say(end.t, `the chat ends on his line ${tail[0]} with nothing under it and nothing at work`);
   return bad;
 }
-const frames = (page) => page.evaluate(() => window.__frames);
+const frames =(page) => page.evaluate(() => window.__frames);
 const working = (page) => page.evaluate(() => !!document.querySelector("[data-tq-task-page] .tq-aui-viewport [data-tq-working]"));
 // at rest by the SERVER's word and the page's both - the two disagreeing for long is a finding (said when it ends)
 export async function rest(page, tid, timeout = 300000, settle = 4000) { const end = Date.now() + timeout; let calm = 0, split = 0, how = "";

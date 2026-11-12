@@ -135,10 +135,10 @@ def _worded(ups: list) -> list:
     return [{**u, 'content': {'type': 'text', 'text': asked_inline(u['content']['text'])[0]}} if words(u) else u for u in out]
 
 
-def _session(tid: int, sid: str, cli: str, ext: str, at: str, live: bool = False, local: bool = True) -> dict:
+def _session(tid: int, sid: str, cli: str, ext: str, at: str, live: bool = False, local: bool = True, acp: bool = False) -> dict:
     _local = globals()['_local'] if local else (lambda steps: steps)         # `local=False`: each step's own stamp, to the millisecond (conversation.items)
     s = {'sid': sid, 'cli': cli or '', 'at': str(at or '').replace('T', ' ')[:19], 'live': live}
-    if (ups := acp_updates(tid, sid)): return {**s, 'source': 'acp', 'updates': _worded(ups)}
+    if (ups := acp_updates(tid, sid)) or acp: return {**s, 'source': 'acp', 'updates': _worded(ups)}
     saved = sessionrecord._saved_path(tid, sid)
     # a live session's log is read fresh - its saved copy, if any, is from an earlier save of the same pane
     if not live and saved.is_file():
@@ -159,9 +159,14 @@ def sessions(store, tid: int, local: bool = True) -> list:
     if t: items.append((t.sid, getattr(t, 'cli', '') or '', getattr(t, 'ext_id', '') or '', t.started, True))
     # ...a session run over ACP keeps its OWN updates (record_update, per Taskuary session): a resumed one holds only its new turns, so it
     # never stands in for the ones before it, and they are all kept
-    acp = {sid for sid, *_ in items if _acp_path(tid, sid).is_file()}
+    # ...AND ONE OVER ACP IS SO FROM ITS START, before its first update is kept (the recorded restart, 2026-11-11: his line reopened a session
+    # on its CLI's own conversation, and until that session wrote its first update it was read as a pane's - the CLI's whole log, every
+    # earlier turn a second time and stamped now. One read of the chat drew all his lines first and every turn after them: one frame,
+    # 370 px taller, and back)
+    from . import terminal as term
+    acp = {sid for sid, *_, live in items if _acp_path(tid, sid).is_file() or (live and term.is_acp(t))}
     last = {(cli, ext): i for i, (sid, cli, ext, _, _) in enumerate(items) if ext and sid not in acp}
-    return [_session(tid, sid, cli, ext, at, live, local) for i, (sid, cli, ext, at, live) in enumerate(items)
+    return [_session(tid, sid, cli, ext, at, live, local, sid in acp) for i, (sid, cli, ext, at, live) in enumerate(items)
             if not ext or sid in acp or last.get((cli, ext)) == i]
 
 

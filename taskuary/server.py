@@ -648,6 +648,17 @@ def launch_key(request: Request):
     return {'key': launchkey.mint()}
 
 
+@app.post('/api/window')
+def show_window(request: Request):
+    """ONE TASKUARY OPEN AT A TIME (the owner, TQ-1397): Taskuary started again asks the running one to bring its window to the front,
+    and opens none of its own. 409 where this one has no window (server-only, a browser) - the second start opens the browser then."""
+    from . import workerstate
+    if guard.scope_of(cfg['server'], request.headers) != guard.OWNER: raise HTTPException(403, "showing the window is the owner's")
+    f = workerstate.SHOW[0]
+    if f is None: raise HTTPException(409, 'this Taskuary has no window to show')
+    f(); return {'shown': True}
+
+
 # ── SHARE A RESULT (sharing.py): the menu's ways, the press, the links still open, and the one page outside the token ─────────
 class ShareBody(BaseModel):
     how: str

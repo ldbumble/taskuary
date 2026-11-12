@@ -550,17 +550,23 @@ def already_serving(host='127.0.0.1', port=None):
     return url if serving(url, secs=3) else ''      # something else on that port is not ours to open
 
 
-VIEW_POLL, VIEW_GONE = 5.0, 6.0     # how often a view asks after its server, and how long a silence means it is gone
-
-
-def follow_server(url: str, window, poll: float = VIEW_POLL, gone: float = VIEW_GONE):
-    """A VIEW CLOSES WITH THE SERVER IT SHOWS. Taskuary started a second time opens a window onto the one already running - a second
-    Taskuary.exe process, which outlived that server's exit for an Update and held the exe: the old program exited, the swap could not
-    replace it in 30 tries, and the helper put the old version back (TQ-1251). Once the server stops answering, the view goes too."""
-    while serving(url, secs=gone): time.sleep(poll)
-    logger.info(f'desktop: {url} stopped answering - closing this view of it')
-    try: window.destroy()
-    except Exception as e: logger.debug(f'desktop: the view was already gone - {e}')
+def show_running(url: str, token: str) -> int:
+    """NEVER TWO TASKUARYS OPEN (the owner, TQ-1397). Started again, Taskuary used to open a window of its own onto the one running - a
+    second Taskuary.exe, which outlived that server's exit by seconds and held the install folder, so the next installer aborted and
+    the old version came back (TQ-1251, TQ-1397). Now the running one is asked to bring its window to the front, and this start ends;
+    one with no window to show (server-only, an older build) is opened in the browser instead. Never a second window."""
+    u = urllib.parse.urlsplit(url)
+    try:
+        conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=5)
+        try:
+            conn.request('POST', '/api/window', headers={'X-Taskuary-Token': token or '', 'Content-Length': '0'})
+            shown = conn.getresponse().status == 200
+        finally: conn.close()
+    except (OSError, http.client.HTTPException): shown = False
+    from taskuary import launchkey
+    if not shown: webbrowser.open(launchkey.remote_link(url, token))
+    print(f'Taskuary is already running at {url} - ' + ('brought its window to the front.' if shown else 'opened it in the browser.'))
+    return 0
 
 
 def held_elsewhere() -> str:
@@ -662,33 +668,40 @@ def main():
     # The window opens FIRST and says what is happening, then the app boots behind it. Importing
     # the app is ~8s cold before uvicorn exists at all, so the alternative is what the owner
     # actually saw: their own window telling them it could not connect, for 18 seconds.
-    # ...and if one is already up, this window is a VIEW of it, not a second copy of the app.
-    allow_downloads(webview)
+    # ...and if one is already up, that one comes to the front and this start ends: never two (show_running).
     running = already_serving() or held_elsewhere()
+    if running: splash(); return show_running(running, config.load()['server'].get('token') or '')
+    allow_downloads(webview)
     held, booted = {}, threading.Event()
-    # a view of another process's server: that server mints the key, asked with the owner token this install keeps
-    view = launchkey.remote_link(running, config.load()['server'].get('token') or '') if running else None
     # MAXIMIZED, on whatever screen it is: a fixed 1280x840 was taller than a laptop's work area, so every launch - an update's
     # relaunch included - opened hanging off the screen's edge (TQ-1251). Restore still gives the 1280x840 window.
-    window = webview.create_window('Taskuary', url=view, html=None if running else SPLASH,
-                                   width=1280, height=840, min_size=(900, 600), maximized=True)
+    window = webview.create_window('Taskuary', html=SPLASH, width=1280, height=840, min_size=(900, 600), maximized=True)
     # the window is up: the exe's splash hands over to it (and its own spinner and seconds take the wait from here)
     try: window.events.shown += lambda: splash()
     except Exception: pass
     try: window.expose(save_download)      # Download on the page saves into Downloads and says so (Attachments.saveFile)
     except Exception as e: logger.debug(f'downloads: this pywebview cannot take them from the page - {e}')
-    if running:
-        print(f'Taskuary is already running at {running} - opening that one.')
-        dotnet(); downloads_to_folder(); allow_microphone()
-        webview.start(follow_server, (running, window))
-        return 0
 
-    # this window owns the server: closing it hides it in the tray, and the tray's Quit quits - saying goodbye first (a view of another
-    # one does neither). No tray, and closing is quitting.
+    # this window owns the server: closing it hides it in the tray, and the tray's Quit quits - saying goodbye first. No tray, and
+    # closing is quitting.
     shell = {'tray': None, 'quit': False, 'gone': False}
     def show():
         try: window.show(); window.restore()
         except Exception as e: logger.debug(f'tray: the window did not come back - {e}')
+    shell['min'] = False
+    try:
+        window.events.minimized += lambda: shell.update(min=True)
+        window.events.restored += lambda: shell.update(min=False); window.events.maximized += lambda: shell.update(min=False)
+    except Exception: pass
+    def front():
+        """Taskuary started again (POST /api/window): this window to the front as it was - maximized stays maximized, a minimized
+        or tray-hidden one comes back."""
+        try:
+            window.show()
+            if shell['min']: window.restore()
+            window.on_top = True; window.on_top = False
+        except Exception as e: logger.debug(f'front: the window did not come forward - {e}')
+    _ws.SHOW[0] = front
     def quit_():
         shell['quit'] = True; show()      # in view: a Quit with work running asks in the window first
         try: window.destroy()

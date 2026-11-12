@@ -41,6 +41,15 @@ def test_the_launch_key_door_is_the_owner_s_alone():
     k = c.post('/api/launch-key').json()['key']                 # the owner (conftest's default header)
     assert TOK() in c.get(f'/?k={k}').text
 
+def test_the_window_door_brings_the_owner_s_window_forward_and_is_hers_alone(monkeypatch):
+    from taskuary import workerstate
+    fronted = []
+    monkeypatch.setattr(workerstate, 'SHOW', [None])
+    assert c.post('/api/window').status_code == 409                   # server-only: the second start opens the browser
+    workerstate.SHOW[0] = lambda: fronted.append(1)
+    assert c.post('/api/window', headers={'X-Taskuary-Token': server.cfg['server']['agent_token']}).status_code == 403 and not fronted
+    assert c.post('/api/window').json() == {'shown': True} and fronted == [1]
+
 def test_link_adds_a_fresh_key():
     a, b = launchkey.link('http://127.0.0.1:7787'), launchkey.link('http://127.0.0.1:7787/')
     assert a.startswith('http://127.0.0.1:7787/?k=') and b.startswith('http://127.0.0.1:7787/?k=') and a != b
@@ -91,29 +100,30 @@ def test_the_desktop_window_opens_on_a_keyed_url(monkeypatch):
     assert loaded and loaded[0].startswith('http://127.0.0.1:7801/?k=') and launchkey.redeem(loaded[0].split('k=')[1])
     assert made['maximized']        # a fixed 1280x840 hung off a laptop's screen on every launch (TQ-1251)
 
-def test_the_desktop_view_of_a_running_instance_asks_it_for_a_key(monkeypatch):
-    made, started = {}, []
-    fake = types.SimpleNamespace(create_window=lambda *a, **k: made.update(k) or object(), start=lambda f=None, a=(): started.append((f, a)))
+def _second_start(monkeypatch, status):
+    """Taskuary started while one runs: what it asked of the running one, what it opened, and that it made no window (TQ-1397)."""
+    made, asked, opened = [], [], []
+    fake = types.SimpleNamespace(create_window=lambda *a, **k: made.append(k), start=lambda *a, **k: made.append('start'))
     monkeypatch.setitem(sys.modules, 'webview', fake)
     monkeypatch.setattr(desktop, 'already_serving', lambda: 'http://127.0.0.1:7787')
+    class Conn:
+        def __init__(self, host, port, timeout=0): asked.append((host, port))
+        def request(self, m, path, headers=None): asked.append((m, path))
+        def getresponse(self): return types.SimpleNamespace(status=status)
+        def close(self): pass
+    monkeypatch.setattr(desktop.http.client, 'HTTPConnection', Conn)
+    monkeypatch.setattr(desktop.webbrowser, 'open', opened.append)
     monkeypatch.setattr(launchkey, 'remote_link', lambda url, tok: f'{url}/?k=fromserver')
     monkeypatch.setattr(sys, 'argv', ['taskuary-desktop'])
-    desktop.main()
-    assert made['url'] == 'http://127.0.0.1:7787/?k=fromserver'
+    assert desktop.main() == 0
+    return made, asked, opened
 
+def test_taskuary_started_again_brings_the_running_window_forward_and_opens_none(monkeypatch):
+    # a second Taskuary.exe window outlived its server for an Update and held the install folder: the installer aborted and the
+    # old version came back on every press (TQ-1251, TQ-1397). The owner: never two open at the same time.
+    made, asked, opened = _second_start(monkeypatch, 200)
+    assert ('POST', '/api/window') in asked and made == [] and opened == []
 
-def test_a_view_follows_the_server_it_shows_and_closes_with_it(monkeypatch):
-    # a view (Taskuary started a second time) outlived its server's exit for an Update and held Taskuary.exe: the swap could not
-    # replace it in 30 tries and the old version came back (TQ-1251)
-    made, started = {}, []
-    fake = types.SimpleNamespace(create_window=lambda *a, **k: made.update(k) or object(), start=lambda f=None, a=(): started.append((f, a)))
-    monkeypatch.setitem(sys.modules, 'webview', fake)
-    monkeypatch.setattr(desktop, 'already_serving', lambda: 'http://127.0.0.1:7787')
-    monkeypatch.setattr(launchkey, 'remote_link', lambda url, tok: f'{url}/?k=fromserver')
-    monkeypatch.setattr(sys, 'argv', ['taskuary-desktop'])
-    desktop.main()
-    assert started and started[0][0] is desktop.follow_server and started[0][1][0] == 'http://127.0.0.1:7787'
-    answers, gone = iter([True, True, False]), []
-    monkeypatch.setattr(desktop, 'serving', lambda url, secs=0: next(answers))
-    desktop.follow_server('http://127.0.0.1:7787', types.SimpleNamespace(destroy=lambda: gone.append(1)), poll=0)
-    assert gone == [1]
+def test_a_running_one_with_no_window_is_opened_in_the_browser_never_a_second_window(monkeypatch):
+    made, asked, opened = _second_start(monkeypatch, 409)
+    assert made == [] and opened == ['http://127.0.0.1:7787/?k=fromserver']

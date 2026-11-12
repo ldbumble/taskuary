@@ -245,10 +245,10 @@ def install_dir() -> Path:
 LEFT_S = 15                     # what the install folder's other processes get to close by themselves before they are ended
 
 
-# NOTHING ELSE MAY HOLD THE INSTALL FOLDER WHEN THE INSTALLER RUNS (TQ-1397): a view of the app - Taskuary started a second time
-# (desktop.follow_server) - is its own Taskuary.exe and closes only seconds after the server stops answering. The installer ran the
-# moment our PID went, found "Taskuary" still holding its files, could not close it, and in /SUPPRESSMSGBOXES aborted with code 5:
-# the old version came back on every press. So whatever still runs from the folder gets LEFT_S to go, then is ended.
+# NOTHING ELSE MAY HOLD THE INSTALL FOLDER WHEN THE INSTALLER RUNS (TQ-1397): a second window builds before it opened as its own
+# Taskuary.exe (desktop.show_running ends that) closed only seconds after the server stopped answering. The installer ran the moment
+# our PID went, found "Taskuary" still holding its files, could not close it, and in /SUPPRESSMSGBOXES aborted with code 5: the old
+# version came back on every press. The update runs in the OLD build, so whatever still runs from the folder gets LEFT_S, then is ended.
 def free_folder_line(folder) -> str:
     "One batch line: wait for every process whose program is inside `folder` to exit, then end what is left."
     d = str(folder).rstrip('\\/').replace("'", "''") + '\\'

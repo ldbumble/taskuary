@@ -186,6 +186,7 @@ OWNER_ONLY = (
     (r'PATCH', r'^/api/tasks/\d+/checklist/[^/]+/note$', "a note on one of a task's to-dos is the owner's (the agent writes through its own task tools)"),
     (r'POST', r'^/api/advice/press$', "the owner's own press, recorded against what the Advisor lit (presses.py)"),
     (r'POST', r'^/api/launch-key$', "a launch key opens a page that carries the owner token (launchkey.py, R29)"),
+    (r'POST', r'^/api/window$', "bringing the app's window to the front is Taskuary started again by the owner (desktop.show_running)"),
     (r'PUT', r'^/api/tasks/\d+/workstream$', "which of the owner's workstreams a task belongs to is the owner's word - it teaches where its people belong"),
     (r'PUT', r'^/api/about/workstreams$', "what the owner works on - kept, renamed, personal - is the owner's word, as at setup"),
     (r'DELETE', r'^/api/tasks/\d+/check-back$', "cancelling the agent's check-back is the owner's press - the agent sets its own"),

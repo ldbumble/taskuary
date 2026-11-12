@@ -56,6 +56,19 @@ class TheList(unittest.TestCase):
     def kinds(self, got=None): return [(x['kind'], x.get('state', '')) for x in (got or self.list())['items']]
     def rest(self): self.assertTrue(until(lambda: not self.list()['working'] and not general.waiting_lines(self.s, self.tid)), self.kinds())
 
+    def test_an_answer_from_before_the_ledger_stands_under_the_message_it_answered(self):
+        """Every task whose agent answered before hand-overs were written down (the owner's older tasks, the demo's): an answer with no
+        turn mark before it was placed at the start of time, above the mail it answered - "the chat begins with the agent's turn". A turn
+        nobody marked stands at its own time, after the input it answered."""
+        def later(): t = time.time(); self.assertTrue(until(lambda: time.time() >= t + 1.1))      # (a stamp is a whole second: each comes in a later one)
+        later(); self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Two venues: the Mill and the Quay. I would pick the Mill.')
+        later(); self.mail('Thanks - which one has parking?')
+        later(); self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'The Mill has forty spaces.')
+        self.assertFalse(self.s._rows('SELECT 1 FROM heard WHERE TaskId=?', (self.tid,)))  # nothing was ever written down as heard
+        got = self.list()
+        self.assertEqual([x['kind'] for x in got['items']], ['arrival', 'turn', 'arrival', 'turn'], self.kinds(got))
+        self.assertEqual([x['text'][:8] for x in got['items'] if x['kind'] == 'turn'], ['Two venu', 'The Mill'])
+
     def test_a_line_at_rest_is_heard_at_the_press_with_its_turn_under_it_and_keeps_its_names(self):
         self.brain.delay = 0.6
         self.say('Suggest two.', 'l-one', wait=False)

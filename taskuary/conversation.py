@@ -347,7 +347,9 @@ def items(store, tid: int) -> dict:
                 # as Taskuary closed), it stood above the work it was said of
                 last = max(last + 1e-7, ep(c['CreatedAt']) + 0.999); put(last, 0, {'id': f'n:c{cid}', 'kind': 'note', 'at': c['CreatedAt'], 'text': body}); continue
             began = max((m['At'] for m in marks if m['Seq'] < cid), default=0.)
-            last = max(last + 1e-7, began)
+            # ...AN ANSWER NOBODY MARKED THE START OF STANDS AT ITS OWN TIME (every task answered before hand-overs were written down - his
+            # older tasks, the demo's): placed at the start of time, it stood above the mail it answered and the chat began with the agent
+            last = max(last + 1e-7, began or ep(c['CreatedAt']))
             st = _said(steps_of.get(cid, []), body)
             # ...one it was made to take back (take_back): its words are a step of the work that goes on under it
             if (('back', str(cid)) in led or any(n < cid for n in backs)) and body:

@@ -55,6 +55,26 @@ def open_(s, tid, repo, seed='add a one-line comment to the top of totals.py', *
 def idle(t, turns=1): return until(lambda: not t.busy and t.turns >= turns)
 
 
+def test_a_turn_his_line_began_runs_from_his_press_and_its_clock_never_moves(world, monkeypatch):
+    """The 0.3.11.50 release run (macOS): a coding turn's start read 097.551, then 097.771 - the turn's own start, then the CLI's prompt
+    hook's time - after a press at 097.522: on screen "working Ns" restarting. It is his press, set once as the turn begins."""
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_THINK', '0.6')
+    t = open_(s, tid, repo, seed=''); assert until(lambda: t.client and not t.busy)
+    seen, done = [], threading.Event()
+    def watch():
+        while not done.is_set():
+            if (v := general.line_state(s, tid)['turnStarted']): seen.append(v)
+            time.sleep(0.005)
+    w = threading.Thread(target=watch, daemon=True); w.start()
+    general.take_line(s, tid, 'Comment the totals function.', line_id='l-one'); pressed = min(seen or [time.time()])
+    assert idle(t, 1); done.set(); w.join(2)
+    assert seen and set(seen) == {pressed}, sorted(set(seen))[:4]
+    # ...and nothing after sets it again: the CLI's own prompt hook (hooks._events) moved it on a slow runner, where the press had gone
+    was = t.turn_at; time.sleep(0.05); from taskuary import hooks; hooks._events(t, {'hook_event_name': 'UserPromptSubmit', 'prompt': 'x'})
+    assert t.turn_at == was
+
+
 def test_a_coding_task_on_claude_runs_over_acp_and_its_turn_is_the_chat(world, monkeypatch):
     s, tid, repo = world
     monkeypatch.setenv('FAKE_ACP_CODE', str(repo / 'totals.py'))

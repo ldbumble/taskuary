@@ -387,7 +387,8 @@ def _events(t, p: dict) -> None:
                 ws.record(st, tid, sid, 'answered', request_id=r['RequestId'], text=why, source='hook')
     try:
         if ev == 'UserPromptSubmit':
-            t.turn_at = time.time()             # the turn at work began now: its clock in the chat (codingchat.live_of `turnStarted`)
+            # the turn at work began now: its clock in the chat (codingchat.live_of `turnStarted`) - an ACP session's own turn set it already, once
+            if not getattr(t, 'acp', False): t.turn_at = time.time()
             # ...including a turn Claude took because a background job reported. That one is marked: it is the agent
             # working again, not the owner speaking, so it must not overtake a question still open (open_requests)
             from .background import is_wake

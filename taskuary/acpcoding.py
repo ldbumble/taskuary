@@ -391,7 +391,10 @@ class ACPCoding:
         from . import agents, acpgate
         text = '\n\n'.join(t for t, *_ in items)
         self._show(items); self._drawn.difference_update(map(id, items))
-        self.busy, self.seeding, self.accepted, self.stop_reason, self.turn_at = True, False, True, None, time.time()
+        # ...ITS CLOCK IS SET ONCE, HERE (the 0.3.11.50 release run: it read the turn's start, then the CLI's own prompt hook's time, then the
+        # press - "working Ns" restarting): his press where one began it, read before anything below takes his lines and lets the press go
+        pressed = general.PRESSED.get(self.task_id)
+        self.busy, self.seeding, self.accepted, self.stop_reason, self.turn_at = True, False, True, None, pressed or time.time()
         self.seeded = self.seeded or text
         self.witness.note({'k': 'turn'})
         # ...A LINE STOPPED TWICE IS STILL ANSWERED (decided 2026-11-12, "nothing he typed is dropped"): the turn his first stop began for it
@@ -403,7 +406,7 @@ class ACPCoding:
         # ...a turn that takes the owner's typed lines runs from his press, its clock never restarting (general.take_line, the owner 2026-11-10) - after the
         # turn's own start record, which stamps its clock now (hooks._events)
         if (took := len(lines)):
-            self.turn_at = general.PRESSED.get(self.task_id) or self.turn_at
+            self.turn_at = pressed or general.PRESSED.get(self.task_id) or self.turn_at
             general.answered(self.task_id, took)
             self.woke = self.silent = False             # ...a turn his words began may be woken once again (wake)
         # ...his by the lines it took, by the ones its opener carried onto it meanwhile (carries), or by the ones his stop left unanswered

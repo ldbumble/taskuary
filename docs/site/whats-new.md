@@ -2,6 +2,31 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.48 - 2026-11-12
+
+- The agent's question is said once, a wait on a person is no stall, and the agent is told how its reply ends
+- A stopped turn that said nothing is no item, a task his lines wait on takes the agent, and a rule he asks to keep is a card
+- A letter with a blank left to fill is no card
+- A card's save says what that card found, in the server's own sentence
+- A usage row says which function asked and which message it was about
+- Triage's answer is leaner: empty keys left out, the wrapper by its two ends, no notes_applied
+- The triage guide is 43% shorter, and watch says what the owner ruled
+- The "which AI does what" page names what runs: no Drafting card, the General agent beside the Coding agent, every level by model
+- The bar under the page is Back and Next and nothing else: no sentence under them
+- A task's chat opens on its last line and stays there as it grows; the working dots get room over them
+- A waiting card stays lit, the ask that opened a task is first in its chat, and a coding turn a restart cut says so
+- Three tests left red by the AI page change: the redraft wording, and the agent kinds read from the table
+- The opening ask stands from the moment the agent is started, not before: a task made and not yet started says nothing
+- A step he approved that failed stays where he pressed it; the approved step finds Windows' own PowerShell
+- Each message of a turn is a paragraph, and a long chat's first painted frame is its end
+- A step that waits on his Allow is one card, and a line typed under it waits by the box and is handed over once
+- His answer to a step that waited stands where he pressed, and the line he typed under it is drawn once, by the box first
+- The "which AI does what" page, read with real AIs connected: each fact once, and a resting AI says its time
+- After a restart the header, the chat and the box agree, and a session that reopens never redraws its history
+- Resume tells the agent that what it checks on the way back is its own context, not news
+- The chat keeps one width at rest and at work, and the browser pane arrives and leaves in one step
+- The lines waiting by the box are dark in the dark theme
+
 ## 0.3.11.47 - 2026-11-11
 
 - A one-shot on a Claude CLI reads its instructions from the provider's cache

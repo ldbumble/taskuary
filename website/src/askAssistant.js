@@ -4,3 +4,5 @@
 let pending = null;
 export const askAssistant = (text) => { pending = text; window.dispatchEvent(new Event("tq-ask")); };
 export const takeAsk = () => { const t = pending; pending = null; return t; };
+// ...a bell item, as that line: its detail is a sentence already, and its own full stop is the one kept ("online.. Can you", the bug hunt 2026-11-12)
+export const failureAsk = (p) => `${p.title}: ${String(p.detail || "").trim().replace(/[.\s]+$/, "")}${p.error ? ` (${p.error})` : ""}. Can you look into it and fix it?`;

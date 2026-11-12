@@ -36,7 +36,7 @@ import { useHandRaise, useMeetingAlerts, playSound, desktopNotify } from "./hand
 import { prepBody } from "./meetingAlert.js";
 import { fmtTime12, tsMs } from "./dates.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask, pruneHandRaises } from "./handraiseState.js";
-import { askAssistant } from "./askAssistant.js";
+import { askAssistant, failureAsk } from "./askAssistant.js";
 import { TaskuaryMark, asUtc, timeAgo, useAgents } from "./ui.jsx";
 import AssistantView from "./AssistantView.jsx";
 import { SEARCH_PICKED, SearchBar, openSearch } from "./SearchEverything.jsx";
@@ -654,7 +654,7 @@ export default function TaskHubPage() {
             if (p.connector) { openAppLink(`connector=${p.connector}`); return; }   // the link opens its card in the canvas
             if (p.report) { openAppLink(`report=${p.report}`); return; }
             go(p.where || "Connections");
-          }} onAsk={(p) => { go("Assistant"); askAssistant(`${p.title}: ${p.detail}${p.error ? ` (${p.error})` : ""}. Can you look into it and fix it?`); }} />
+          }} onAsk={(p) => { go("Assistant"); askAssistant(failureAsk(p)); }} />
           {!phone && <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>}

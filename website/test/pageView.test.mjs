@@ -96,3 +96,10 @@ test("the bell's Ask the assistant opens the chat window and asks in it - not in
   // askAssistant's road (tq-ask) asked into the chat pop-up without opening it; the doors (openHelp) open it first - so does this one
   assert.match(view, /const on = \(\) => \{ const t = takeAsk\(\); if \(!t\) return; setPopOpen\(true\); askRef\.current\(t\); \};/);
 });
+
+test("the bell's ask is one sentence per stop - a detail's own full stop is not doubled (2026-11-12: \"...this computer is online.. Can you\")", async () => {
+  const { failureAsk } = await import("../src/askAssistant.js");
+  const p = { title: "Vendor mailbox: the last poll failed", detail: "The server's address could not be found. Check that this computer is online." };
+  assert.equal(failureAsk(p), "Vendor mailbox: the last poll failed: The server's address could not be found. Check that this computer is online. Can you look into it and fix it?");
+  assert.equal(failureAsk({ title: "Reports", detail: "It stopped", error: "timeout" }), "Reports: It stopped (timeout). Can you look into it and fix it?");
+});

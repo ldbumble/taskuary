@@ -52,6 +52,11 @@ export const planTask = (pick, how, browser = false, stayOpen = false) => {
 // plain field's (AboutField onReady). Read off the field alone, the Assistant's general job never pressed its own Send to agent
 export const hasWords = ({ agentBox, words, field }) => (agentBox ? !!String(words || "").trim() : !!field);
 
+// THE KINDS THAT REPEAT, built on their own shelf (Reports): a report, a dashboard, a routine. One the Assistant wrote up (`line`, concierge._new)
+// goes STRAIGHT into its builder with the setup asked (owner-approved, 2026-11-12): the middle card's Set up with AI asked it all again
+export const REPEATS = ["report", "dashboard", "workflow"];
+export const goesStraight = (kind, line) => REPEATS.includes(kind) && line != null && line !== "";
+
 // THE ASSISTANT'S PRESS IS MADE ONCE PER LINE, not once per card drawn (NewSheet `start`): the card is drawn again - put down and brought
 // back, re-keyed - and a fresh card would press Send to agent again on a job already started (2026-11-02). `line` is the Assistant's line
 // that wrote the job (concierge._new); a card with none keeps only its own once.

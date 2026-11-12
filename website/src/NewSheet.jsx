@@ -21,12 +21,12 @@ import { ACCENT, ACCENT2, BORDER, DIM, FAINT, INK, PANEL, ROLES, mono } from "./
 import { ChannelIcon, MicButton, useAgents, usePeopleSearch } from "./ui.jsx";
 import { withFound } from "./peopleSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
-import { NO_REPO, firstPressOf, hasWords, planTask, withDesktop } from "./newTask.js";
+import { NO_REPO, REPEATS, firstPressOf, goesStraight, hasWords, planTask, withDesktop } from "./newTask.js";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, sendPrefill, validEmail } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
-import SetupWithAi, { NEW_HASH } from "./SetupWithAi.jsx";
+import SetupWithAi, { NEW_HASH, startSetup } from "./SetupWithAi.jsx";
 import { useVerbs } from "./actionRow.js";
 import ConnectAi from "./ConnectAi.jsx";
 import NewMeeting from "./NewMeeting.jsx";
@@ -43,7 +43,6 @@ import { capabilities, useCapabilities } from "./capabilities.js";
 import { PromptBox } from "./AgentSummary.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
 
-const REPEATS = ["report", "dashboard", "workflow"];
 // what the card IS, as its title: New's own box asks, and a card the Assistant wrote from it says what it made of the words
 const TITLE = { chat: "What do you need?", agent: "An agent's job", workflow: "A routine", report: "A report", dashboard: "A dashboard",
   playbook: "A playbook", send: "A message", meeting: "A meeting", goal: "A goal", note: "A note" };
@@ -377,6 +376,16 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
     autoPressed.current = true; if (firstPressOf(line)) submit();
   }, [start, kind, canGo, agentsRead, busy, submit, line]);
 
+  // STRAIGHT INTO THE BUILDER (owner-approved, 2026-11-12): a report, dashboard or routine the Assistant wrote up opens its builder with the setup
+  // asked in the chat - Set up with AI's own press, made once per line - and no card is drawn on the way
+  const straight = goesStraight(kind, line) && kind === initialKind;
+  const straightGone = useRef(false);
+  const toBuilder = () => { onClose?.(); openAppLink(NEW_HASH[kind]); };
+  useEffect(() => {
+    if (!straight || straightGone.current) return;
+    straightGone.current = true; if (firstPressOf(line)) startSetup(kind, initialText, toBuilder);
+  }, [straight]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   const aboutLabel = kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
     : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
     : kind === "playbook" ? "What should this playbook do" : kind === "chat" ? "What do you need" : "What do you want to remember";
@@ -388,6 +397,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         sx: { border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, overflow: "hidden", scrollMarginTop: "8px" } }
     : { open: !!open, onClose: close, fullWidth: true, maxWidth: "md", "data-tq-keep": true };   // md: the tabs fit on one line, and scroll sideways when they do not
   if (inline && !open) return null;
+  if (straight) return null;
   if (made) return <NewSheet key={made.line || made.text} open={open} onClose={onClose} onDone={onDone} onOpenTask={onOpenTask} inline={inline} onSaid={onSaid}
     initialKind={made.kind} initialHow={made.how || ""} initialText={made.text || ""} initialChannel={made.channel || ""} initialTo={made.to || ""}
     initialMeeting={made.meeting || null} initialRoutine={made.routine || null} line={made.line} start={!!made.start} madeOf={made.said} />;

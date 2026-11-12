@@ -11,13 +11,16 @@ export const NEW_HASH = { report: "report=new", dashboard: "report=new-dashboard
 const WHAT = { report: "a new report", dashboard: "a new dashboard", workflow: "a new routine" };
 export const helpAsk = (kind, words = "") => `Help me set up ${WHAT[kind] || WHAT.report}${String(words || "").trim() ? `: ${String(words).trim()}` : ""}`;
 
+// its press: the builder brought up (`onOpen`), and the chat asked for it with the owner's words - New's straight road presses this same one
+export const startSetup = (kind, words, onOpen) => { onOpen?.(); openHelp(helpAsk(kind, words), { wait: 700 }); };
+
 // ...and out of the view the Assistant is sent (data-tq-view-skip, the owner, 2026-11-02): it opens the Assistant itself, so a press from the
 // chat would only ask the chat again
 export default function SetupWithAi({ kind = "report", onOpen, words = "", sx = {} }) {
   return (
     <Button size="small" variant="outlined" disableElevation data-tq-setup-ai={kind} data-tq-view-skip="" startIcon={<AutoAwesomeIcon sx={{ fontSize: 15 }} />}
       title="Opens the chat - the Assistant sets it up with you in the builder; saving stays yours"
-      onClick={() => { onOpen?.(); openHelp(helpAsk(kind, words), { wait: 700 }); }} sx={{ alignSelf: "flex-start", ...sx }}>
+      onClick={() => startSetup(kind, words, onOpen)} sx={{ alignSelf: "flex-start", ...sx }}>
       Set up with AI
     </Button>
   );

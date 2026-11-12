@@ -16,7 +16,7 @@ test("a report or routine the Assistant wrote up on New is a door to its builder
   assert.doesNotMatch(src, /<Composer/);
   assert.doesNotMatch(src, /"repeat"/);
   const door = read("SetupWithAi.jsx");
-  assert.match(door, /onClick=\{\(\) => \{ onOpen\?\.\(\); openHelp\(helpAsk\(kind, words\), \{ wait: 700 \}\); \}\}/);
+  assert.match(door, /onClick=\{\(\) => startSetup\(kind, words, onOpen\)\}/);
   for (const [k, h] of [["report", "report=new"], ["dashboard", "report=new-dashboard"], ["workflow", "report=new-agent"]]) assert.match(door, new RegExp(`${k}: "${h}"`));
 });
 
@@ -46,4 +46,23 @@ test("a routine the Assistant wrote up opens New → Routine with its words, car
   assert.match(canvas, /JSON\.stringify\(state\?\.routine \|\| ""\)/, "a new prefill remounts the sheet, so its fields are the new ones");
   assert.match(sheet, /initialRoutine = null, madeOf = "" \}\) \{/);
   assert.match(read("SetupWithAi.jsx"), /`Help me set up \$\{WHAT\[kind\] \|\| WHAT\.report\}\$\{String\(words \|\| ""\)\.trim\(\) \? `: \$\{String\(words\)\.trim\(\)\}` : ""\}`/);
+});
+
+// STRAIGHT INTO THE BUILDER (owner-approved, 2026-11-12): "a routine that lists vendors with no invoice" came back as New's Routine card with
+// Set up with AI and Set it up by hand - a middle card, and Set up with AI asked the Assistant the same thing again. A report, dashboard or
+// routine the Assistant wrote up opens its builder with the setup already asked, once per line, through Set up with AI's own press
+test("a report, dashboard or routine the Assistant wrote up goes straight into its builder, the setup asked once", async () => {
+  const { REPEATS, goesStraight } = await import("../src/newTask.js");
+  assert.deepEqual(REPEATS, ["report", "dashboard", "workflow"]);
+  for (const k of REPEATS) assert.equal(goesStraight(k, 31), true, k);
+  assert.equal(goesStraight("workflow", null), false, "a card nobody wrote up stays the card");
+  assert.equal(goesStraight("agent", 31), false);
+  const sheet = read("NewSheet.jsx"), door = read("SetupWithAi.jsx");
+  assert.match(door, /export const startSetup = \(kind, words, onOpen\) => \{ onOpen\?\.\(\); openHelp\(helpAsk\(kind, words\), \{ wait: 700 \}\); \};/);
+  assert.match(door, /onClick=\{\(\) => startSetup\(kind, words, onOpen\)\}/);
+  assert.match(sheet, /const straight = goesStraight\(kind, line\) && kind === initialKind;/);
+  assert.match(sheet, /if \(!straight \|\| straightGone\.current\) return;\s*\n\s*straightGone\.current = true; if \(firstPressOf\(line\)\) startSetup\(kind, initialText, toBuilder\);/);
+  // ...and no card is drawn on its way there: the New card never flashes before the builder
+  assert.ok(sheet.indexOf("straightGone.current = true") < sheet.indexOf("if (inline && !open) return null;"));
+  assert.match(sheet, /if \(straight\) return null;/);
 });

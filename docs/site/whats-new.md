@@ -2,6 +2,27 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.51 - 2026-11-12
+
+- A peer's note names its sender's task by title, the way the owner is told of it
+- A coding turn's clock is his press, set once as the turn begins
+- The triage eval scores joining, and a set of joining shapes exists to score
+- Every arrival of a day is counted: judged, or kept by a road that wrote why
+- The triage eval says work vs nothing per class of sender
+- A right-now row's reason says "so its card's AI took it", not the log's "so its card"
+- A coding agent's sign-in: no marker in the chat, and the turn reads waiting on him, not working
+- A coding agent's page is shown beside its chat while he is needed on it
+- The task's one word on a coding agent that waits on his sign-in says waiting, too
+- The CLI's idle notice after a turn that ended is no question
+- A turn's end in the terminal lets go of the start in flight
+- The daily pass for ideas for the owner's job counts the ideas still on the rail, not every idea left open
+- A kind of Advisor idea under the 80% bar still raises one line a day; a finished task made from an idea counts as taken
+- A chat that has drawn never draws empty
+- A coding turn's clock starts when his line is handed to the session, from his press
+- The job-ideas pass reads the rail only on a tick whose day is up
+- A task opened from the rail draws its chat at once; only a switch between its sections fades
+- The corner's "Back to" no longer flashes the task just left on every Next
+
 ## 0.3.11.50 - 2026-11-12
 
 - A clocked Advisor look asks on its facts, not its clock

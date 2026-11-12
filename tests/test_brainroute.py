@@ -5,6 +5,7 @@ turned on"). So the golden matrix below holds `choose` against the resolvers eve
 the homes those resolvers were each written for. Fake CLIs only: nothing here starts a real one.
 """
 import ast, json
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -167,7 +168,7 @@ def test_the_default_ai_is_asked_once_and_a_choice_is_never_written_over(real):
         assert sorted(ask['options']) == ['claude', 'codex'] and ask['runs'] == s.get_setting('default_brain')
         assert len(bell()) == 1 and bell()[0]['where'] == 'Settings'
         card = aidefaults.resolve(s, cfg, 'default_brain')
-        assert card.get('ask') and card['note'] == ask['detail'] == bell()[0]['detail'], 'one sentence, said in both places'
+        assert card.get('ask') and card['note'] == ask['note'] and ask['detail'] == bell()[0]['detail'], 'one set of facts, each ending with its own move'
         problems.dismiss(s, 'default_ai')                              # put down: it was asked, once
         assert not bell() and not aidefaults.resolve(s, cfg, 'default_brain').get('ask')
         assert s.setting_writer('default_brain') == 'migration', 'putting it down chose nothing for them'
@@ -175,6 +176,64 @@ def test_the_default_ai_is_asked_once_and_a_choice_is_never_written_over(real):
         s.set_setting('default_brain', 'claude', 'owner')              # answered: theirs from here on
         assert agents.default_ask(s) == {} and not bell() and not agents.adopt_brain_setting(s)
         assert s.get_setting('default_brain') == 'claude' and not problems.news(s), 'no "working again" for an answered question'
+    real.clear(); real.add('codex')
+
+
+def test_the_default_question_lists_every_cli_that_can_take_work_and_ends_with_the_move(real):
+    """The owner, 2026-11-11: "it says codex not claude why?" - five names read "are both connected", a CLI that worked all day was
+    not among them because one test of it had failed (nothing but another Test cleared the mark), and the sentence ended on a place
+    instead of the pick. The list is what can take work now: one resting says until when, one left out says why and its way back,
+    and choosing the one already running counts as choosing."""
+    from taskuary import aidefaults, llm
+    real.update({'claude', 'codex', 'gemini'})
+    s, cfg, _ = _home(('codex', 'claude', 'gemini'), {'codex': True, 'gemini': True, 'claude': False})
+    with mock.patch.object(config, 'load', lambda: cfg):
+        clic.sync(cfg, s)
+        assert agents.adopt_brain_setting(s) and s.get_setting('default_brain') == 'codex'
+        ask = agents.default_ask(s)
+        assert ask['note'].startswith('OpenAI Codex CLI and Gemini CLI are both connected and you have not chosen between them, so work runs on OpenAI Codex CLI')
+        assert 'Claude Code is left out: its last test failed - press Test on it under Connections.' in ask['note']
+        assert ask['note'].endswith('Choose one in the list above - choosing OpenAI Codex CLI again counts.')
+        assert ask['detail'].endswith('Choose one in Settings, on the Coding agent card.')
+        # ...IT ANSWERS WORK: the failed mark is over, by the call itself - and three names are "all", never "both"
+        with mock.patch.object(llm, 'make_cli_llm', lambda *a, **k: (lambda *a, **k: 'ok')):
+            assert llm.build_llm(s, 'cli:claude', job='summary')('s', 'u') == 'ok'
+        assert agents.cli_tests(s)['claude'] is True and 'claude' in agents.ready_brains(s)
+        brainroute.cool(s, 'cli:claude', datetime.now() + timedelta(hours=2))
+        note = agents.default_ask(s)['note']
+        assert ' are all connected ' in note and 'left out' not in note
+        assert f"Claude Code (resting until {brainroute.cooldowns(s)['cli:claude'].strftime('%H:%M')})" in note
+        # ...and THE CURRENT ONE, CHOSEN, IS A CHOICE: the same value, now the owner's - the question is over and nothing else moved
+        card = aidefaults.apply(s, cfg, 'default_brain', value=aidefaults.resolve(s, cfg, 'default_brain')['value'])
+        assert s.get_setting('default_brain') == 'codex' and s.setting_writer('default_brain') == 'owner'
+        assert agents.default_ask(s) == {} and not card.get('ask') and card['chosen'] and not card['set_by']
+    real.clear(); real.add('codex')
+
+
+def test_a_card_says_what_runs_and_whose_choice_it_was(real):
+    """The owner, 2026-11-11: "where is general agent??" and "never change from what's in settings" - each card's RUNS line is the
+    router's own answer for its job (the "right now" rows' function), and a value nobody chose says so beside the pick."""
+    from taskuary import aidefaults
+    real.update({'claude', 'codex'})
+    s, cfg, _ = _home(('codex', 'claude'), {'codex': True, 'claude': True})
+    cfg['cli_connections']['claude']['model'] = 'opus'
+    with mock.patch.object(config, 'load', lambda: cfg):
+        clic.sync(cfg, s)
+        s.set_setting('default_brain', 'claude', 'migration')
+        gen, code = aidefaults.resolve(s, cfg, 'assistant_ai'), aidefaults.resolve(s, cfg, 'default_brain')
+        assert (code['chosen'], code['set_by']) == (False, aidefaults.SAVED_FOR) and gen['set_by'] == aidefaults.FOLLOWS
+        s.set_setting('ai_route_mode', 'fixed', 'owner')
+        gen, row = aidefaults.resolve(s, cfg, 'assistant_ai'), brainroute.now(s, cfg)[1]
+        assert (gen['runs']['brain'], gen['runs']['model']) == (row['brain'], row['model']) == ('Claude Code', 'opus')
+        # the general agent's model box is the general agent's (assistant_model, for this AI) - never the light gear triage rides
+        with mock.patch.object(config, 'save'), mock.patch.object(clic, 'sync'):
+            aidefaults.apply(s, cfg, 'assistant_ai', model='sonnet')
+        assert 'light_model' not in cfg['cli_connections']['claude'] and s.get_setting('assistant_model') == 'sonnet'
+        gen, row = aidefaults.resolve(s, cfg, 'assistant_ai'), brainroute.now(s, cfg)[1]
+        assert gen['model'] == 'sonnet' and gen['runs']['model'] == row['model'] == 'sonnet'
+        aidefaults.apply(s, cfg, 'assistant_ai', value='cli:codex')
+        gen = aidefaults.resolve(s, cfg, 'assistant_ai')
+        assert gen['chosen'] and not gen['set_by'] and gen['runs']['brain'] == brainroute.now(s, cfg)[1]['brain'] == 'OpenAI Codex CLI'
     real.clear(); real.add('codex')
     s, cfg, _ = _home(('codex',), {'codex': True})
     with mock.patch.object(config, 'load', lambda: cfg):

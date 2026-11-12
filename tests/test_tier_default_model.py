@@ -42,7 +42,7 @@ def test_a_default_model_session_routes_by_tier(s):
     assert (ses.pick, ses.model, ses.chosen) == ('cli:claude', 'claude-opus-5-5', '')     # the picker's "default · claude-opus-5-5"
     row, (pick, model, gear) = _turn(s, ses)
     assert (row['Tier'], row['Rule']) == ('light', 'quick-work') and gear == 'light'
-    assert row['Why'] == 'General work judged quick -> light on claude (CLI) (rule quick-work)'
+    assert row['Why'] == 'General work judged quick -> light on Claude Code (rule quick-work)'
     row, _ = _turn(s, general.GeneralSession(s, _task(s, 'standard')))
     assert (row['Tier'], row['Rule']) == ('standard', 'work')
 

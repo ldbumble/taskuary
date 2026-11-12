@@ -196,7 +196,7 @@ class KeyAndMailTests(unittest.TestCase):
 class StateTests(unittest.TestCase):
     def test_step_one_is_a_choice_not_a_cli_that_happens_to_be_installed(self):
         s = MemoryStore()
-        ready = {'ready': True, 'Name': 'claude (CLI)', 'pick': 'cli:claude', 'why': ''}
+        ready = {'ready': True, 'Name': 'Claude Code', 'pick': 'cli:claude', 'why': ''}
         with mock.patch('taskuary.setup._ai', return_value=ready), mock.patch('taskuary.setup._inbound', return_value=[]), \
              mock.patch('taskuary.setup._first_items', return_value=[]), detect(name='claude', cmd='claude', label='Claude Code'):
             self.assertEqual(firstrun.state(s)['step'], 'ai', 'installed is not chosen - it may never have signed in')
@@ -209,7 +209,7 @@ class StateTests(unittest.TestCase):
         The pick names the tool now; the coding profile beside it is instructions and never the AI's name."""
         s = MemoryStore(); s.set_setting('triage_ai', 'cli:claude', 'owner')
         s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-        ready = {'ready': True, 'Name': 'claude (CLI)', 'pick': 'cli:claude', 'why': ''}
+        ready = {'ready': True, 'Name': 'Claude Code', 'pick': 'cli:claude', 'why': ''}
         with mock.patch('taskuary.setup._ai', return_value=ready), mock.patch('taskuary.setup._inbound', return_value=[]),              mock.patch('taskuary.setup._first_items', return_value=[]), detect(name='claude', cmd='claude', label='Claude Code'),              mock.patch.object(agents, 'cli_agent_options', return_value=[{'value': 'claude', 'cli': 'claude'}]):
             st = firstrun.state(s)
         self.assertEqual(st['brain']['name'], 'Claude'); self.assertNotIn('coding', st['next'])

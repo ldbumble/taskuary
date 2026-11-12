@@ -7,8 +7,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Autocomplete, Box, Button, MenuItem, Select, Switch, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
+import { levelDefault, levelModel } from "./aiCards.js";
 
-const JOB = { triage: "triage", draft: "drafts", summary: "summaries", advisor: "the Advisor", memory: "memory", rank: "ranking",
+const JOB = { triage: "triage", draft: "redrafts", summary: "summaries", advisor: "the Advisor", memory: "memory", rank: "ranking",
   general: "general work", coding: "coding", judge: "judgements" };
 const USE = { light: "the quick model", standard: "the card's own model", strong: "the strong model" };
 // triage's three judgements, in the words a person uses for them
@@ -18,18 +19,18 @@ export const SAYS = "Triage judges each task quick, normal or hard and picks the
 const sel = { fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)", minWidth: 150 };
 const err = (e, d) => e?.response?.data?.detail || e?.message || d;
 // AN AI PER LEVEL (the owner, 2026-11-06: "not by default but you can adjust in settings"): for the agents' work only - general work,
-// quick work, and coding on a CLI. Blank is the card's AI; set, that level runs on the AI named here when it can take the call.
+// quick work, and coding on a CLI. Blank is Default - the General agent card's AI, by name (aiCards.levelDefault); set, that level runs
+// on the AI named here when it can take the call.
 const LEVELS = [["quick", "Quick"], ["normal", "Normal"], ["hard", "Hard"]];
-export const CARDS = "the card's AI";
 
-function LevelModel({ value, models, disabled, onSave }) {
+function LevelModel({ value, models, disabled, onSave, runs }) {
   const [v, setV] = useState(value || "");
   useEffect(() => setV(value || ""), [value]);
   const commit = (next) => (next || "") !== (value || "") && onSave(next || "");
   return (
     <Autocomplete freeSolo forcePopupIcon openOnFocus size="small" options={models || []} value={v} disabled={disabled}
       onInputChange={(_e, next) => setV(next)} onChange={(_e, next) => { setV(next || ""); commit(next); }} onBlur={() => commit(v)}
-      sx={{ minWidth: 170 }} renderInput={(p) => <TextField {...p} placeholder="its own model" sx={{ bgcolor: "var(--tq-panel, #fff)" }}
+      sx={{ minWidth: 170 }} renderInput={(p) => <TextField {...p} placeholder={runs} sx={{ bgcolor: "var(--tq-panel, #fff)" }}
         inputProps={{ ...p.inputProps, style: { fontSize: 12.5 } }} />} />
   );
 }
@@ -44,8 +45,7 @@ function ByLevel({ p, save }) {
     <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }} data-tq-knob="ai_route_brain_by_level" data-tq-route-by-level="">
       <Typography sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Which AI for each level</Typography>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
-        For agents' work: general work, quick work, and coding on a CLI. Triage, drafting and the Assistant keep their cards.
-        An AI that can't take the work (not connected, resting on its limit, not marked for sensitive data) leaves it on the card.
+        For agents' work only. An AI that can't take the work right now leaves it on Default, and the line above says why.
       </Typography>
       {LEVELS.map(([lvl, word]) => {
         const cur = by[lvl] || {}, b = brains.find((x) => x.pick === cur.pick);
@@ -53,14 +53,14 @@ function ByLevel({ p, save }) {
           <Box key={lvl} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.75 }} data-tq-route-by-level-row={lvl}>
             <Typography sx={{ fontSize: 12.5, color: DIM, width: 56 }}>{word}</Typography>
             <Select size="small" displayEmpty value={cur.pick || ""} onChange={(e) => put(lvl, { pick: e.target.value, model: "" })}
-              sx={{ ...sel, minWidth: 220 }} inputProps={{ "aria-label": `${word} work runs on` }}>
-              <MenuItem value="" sx={{ fontSize: 12.5 }}>{CARDS}</MenuItem>
+              sx={{ ...sel, minWidth: 300 }} inputProps={{ "aria-label": `${word} work runs on` }}>
+              <MenuItem value="" sx={{ fontSize: 12.5 }}>{levelDefault(p.default)}</MenuItem>
               {brains.map((x) => (
                 <MenuItem key={x.pick} value={x.pick} sx={{ fontSize: 12.5 }}>{x.label}{x.cli ? "" : " - not for coding"}</MenuItem>
               ))}
               {cur.pick && !b && <MenuItem value={cur.pick} sx={{ fontSize: 12.5 }}>{cur.pick} (not connected)</MenuItem>}
             </Select>
-            <LevelModel value={cur.model} models={b?.models} disabled={!cur.pick} onSave={(model) => put(lvl, { model })} />
+            <LevelModel value={cur.model} models={b?.models} disabled={!cur.pick} onSave={(model) => put(lvl, { model })} runs={levelModel(p.default, b, lvl)} />
           </Box>
         );
       })}

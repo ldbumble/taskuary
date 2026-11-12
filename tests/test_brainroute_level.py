@@ -51,13 +51,13 @@ def test_set_and_available_routes_there_with_the_card_behind_it(s):
     _set(s, hard=('cli:claude', ''))
     r = brainroute.choose(s, 'general', task=_task(s))
     assert (r.pick, r.tier, r.gear, r.level, r.chain[0]) == ('cli:claude', 'strong', 'strong', 'hard', s.a)
-    assert r.why == 'General work judged hard: hard work -> claude (CLI) as set in AI routing (rule hard-work)'
+    assert r.why == 'General work judged hard: hard work -> Claude Code as set in AI routing (rule hard-work)'
     assert brainroute.choose(s, 'general', task=_task(s, 'standard')).pick == s.a        # normal work keeps the card
     assert brainroute.choose(s, 'draft', task=_task(s)).pick == s.a                       # drafting keeps its own card
     # ...its model when the owner gave one, and a session the level opened carries it back each turn and stays the level's
     _set(s, hard=('cli:claude', 'opus@max'))
     r = brainroute.choose(s, 'general', task=_task(s), want_pick='cli:claude', want_model='sonnet')
-    assert (r.pick, r.model, r.level) == ('cli:claude', 'opus@max', 'hard') and 'claude (CLI), opus, max effort as set in AI routing' in r.why
+    assert (r.pick, r.model, r.level) == ('cli:claude', 'opus@max', 'hard') and 'Claude Code, opus, max effort as set in AI routing' in r.why
     assert brainroute.choose(s, 'general', task=_task(s), want_pick=s.a).pick == s.a      # an explicit pick still wins
 
 
@@ -72,7 +72,7 @@ def test_a_new_general_session_opens_on_the_level_s_ai(s):
 def test_set_but_unavailable_falls_back_to_the_card_and_says_why(s):
     _set(s, hard=('cli:gemini', ''))
     r = brainroute.choose(s, 'general', task=_task(s))
-    assert (r.pick, r.level) == (s.a, '') and r.why.endswith('; hard work is set to gemini (CLI) in AI routing, but it is not connected, so its card')
+    assert (r.pick, r.level) == (s.a, '') and r.why.endswith('; hard work is set to Gemini CLI in AI routing, but it is not connected, so its card')
     _set(s, hard=('cli:codex', ''))
     s.set_setting('cli_tests', json.dumps({'codex': False}), 'owner')
     assert 'but it failed its last test, so its card' in brainroute.choose(s, 'general', task=_task(s)).why
@@ -110,7 +110,7 @@ def test_the_panel_saves_it_and_its_lines_say_it(s):
     assert p['by_level'] == {'hard': {'pick': 'cli:claude', 'model': ''}} and {'cli:claude', 'cli:codex', s.a} <= {b['pick'] for b in p['brains']}
     line = next(l for l in p['levels'] if l['pick'] == s.a)
     # the card also triages, so its own hard model stays said, and the agents' hard work names the AI set for it
-    assert line['hard'] == 'claude-opus-5; agents: claude (CLI), opus' and line['normal'] == 'claude-sonnet-5'
+    assert line['hard'] == 'claude-opus-5; agents: Claude Code, opus' and line['normal'] == 'claude-sonnet-5'
     with pytest.raises(ValueError): brainroute.save_by_level(s, {'tricky': {'pick': 'cli:claude'}})
     with pytest.raises(ValueError): brainroute.save_by_level(s, {'hard': {'pick': 'claude'}})
     assert brainroute.set_panel(s, by_level_={})['by_level'] == {} and s.get_setting(brainroute.LEVEL_KEY) == ''
@@ -124,7 +124,7 @@ def test_settings_says_what_each_level_runs_on_right_now_and_why_in_the_router_s
         {'quick': (s.a, 'claude-sonnet-5, low effort', ''), 'normal': (s.a, 'claude-sonnet-5', ''), 'hard': (s.a, 'claude-opus-5', '')}
     _set(s, hard=('cli:codex', 'gpt-5.5@high'))                               # an AI set for the level: said, with the router's reason
     hard = rows()['hard']
-    assert (hard['pick'], hard['brain'], hard['model']) == ('cli:codex', 'codex (CLI)', 'gpt-5.5, high effort')
+    assert (hard['pick'], hard['brain'], hard['model']) == ('cli:codex', 'OpenAI Codex CLI', 'gpt-5.5, high effort')
     assert hard['why'] == brainroute.choose(s, 'general', task=_task(s)).why, 'the line on a hard task says the same'
     assert 'as set in AI routing' in hard['why'] and not rows()['normal']['why']
     brainroute.cool(s, 'cli:codex', datetime.now() + timedelta(hours=1))        # ...resting on its limit: back on the card, until when

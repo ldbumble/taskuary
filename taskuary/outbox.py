@@ -101,7 +101,7 @@ def subject_for(store, about: str, llm=None) -> str:
     fallback = ' '.join(str(about or 'No subject').split())[:78]
     try:
         from .llm import build_llm
-        llm = llm or build_llm(store, job='draft')
+        llm = llm or build_llm(store, job='summary')          # a line off a brief: the quick model's, like every other summary (it was a 'draft')
         if not llm: return fallback
         line = ' '.join(str(llm(SUBJECT_SYSTEM, about, max_tokens=40) or '').split()).strip('"\'. ')
         return line[:120] or fallback

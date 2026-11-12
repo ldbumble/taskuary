@@ -54,7 +54,7 @@ def test_the_rules_pick_the_tier_in_order(s):
     quick, hard, plain = brainroute.choose(s, 'triage'), brainroute.choose(s, 'draft', task=_task(s, 'hard')), brainroute.choose(s, 'draft', task=_task(s))
     assert (quick.tier, quick.gear, quick.rule) == ('light', 'light', 'quick-jobs')
     assert (hard.tier, hard.gear, hard.pick, hard.rule) == ('strong', 'strong', s.a, 'hard-work')
-    assert hard.why == 'A draft judged hard -> strong on Anthropic API (rule hard-work)'
+    assert hard.why == 'A redraft judged hard -> strong on Anthropic API (rule hard-work)'
     assert (plain.tier, plain.gear, plain.rule) == ('standard', 'main', 'work')
     assert brainroute.choose(s, 'assistant').tier == 'fixed'                    # the Assistant keeps its own model
 
@@ -92,7 +92,7 @@ def test_an_explicit_pick_or_model_always_wins(s):
 def test_hard_work_moves_to_the_first_backup_with_a_strong_model(s):
     s.set_setting('ai_route_mode', 'auto', 'owner'); s.set_setting('triage_ai', s.o, 'owner'); s.set_setting('triage_backup_ai', s.a, 'owner')
     r = brainroute.choose(s, 'draft', task=_task(s, 'hard'))
-    assert (r.pick, r.tier, r.chain) == (s.a, 'strong', [s.o]) and r.why == 'A draft judged hard -> strong on Anthropic API (rule hard-work); OpenAI API has no strong model'
+    assert (r.pick, r.tier, r.chain) == (s.a, 'strong', [s.o]) and r.why == 'A redraft judged hard -> strong on Anthropic API (rule hard-work); OpenAI API has no strong model'
 
 
 def test_no_strong_model_anywhere_stays_standard_and_says_so(s):
@@ -170,7 +170,7 @@ def test_a_one_model_cli_does_hard_work_at_high_effort_and_says_so(s):
     with _cli(s, model='sonnet'):
         r = brainroute.choose(s, 'draft', task=_task(s, 'hard'))
         assert (r.pick, r.tier, r.model) == ('cli:claude', 'strong', 'sonnet@high')
-        assert r.why == 'A draft judged hard -> strong on claude (CLI), sonnet, high effort (rule hard-work)'
+        assert r.why == 'A redraft judged hard -> strong on Claude Code, sonnet, high effort (rule hard-work)'
         assert brainroute.choose(s, 'draft', task=_task(s))[2:5] == ('cli:claude', '', 'main')   # normal: the card's own model, as before
     with _cli(s):                                                                    # no model box: the CLI's own model, thinking harder
         assert brainroute.choose(s, 'draft', task=_task(s, 'hard')).model == '@high'
@@ -207,17 +207,24 @@ def test_settings_says_what_each_level_runs_on_in_plain_words(s):
     with _cli(s, model='sonnet'):
         lv = brainroute.levels(s)
     assert {k: lv[0][k] for k in ('brain', 'quick', 'normal', 'hard')} == \
-        {'brain': 'claude (CLI)', 'quick': 'haiku', 'normal': 'sonnet', 'hard': 'same model, high effort'}
-    with _cli(s, 'codex'):
+        {'brain': 'Claude Code', 'quick': 'haiku', 'normal': 'sonnet', 'hard': 'sonnet, high effort'}
+    # EVERY LEVEL NAMES ITS MODEL (the owner, 2026-11-11: "settings are not clear" over "same model" and "its own model"): the one
+    # the CLI's own config is set to, and "its default model" only where nothing here names one
+    from taskuary import climodels
+    with _cli(s, 'codex'), mock.patch.object(climodels, 'codex_current', lambda: {'model': 'gpt-5.5'}):
         assert {k: brainroute.levels(s)[0][k] for k in ('quick', 'normal', 'hard')} == \
-            {'quick': 'same model, low effort', 'normal': 'its default model', 'hard': 'same model, high effort'}
+            {'quick': 'gpt-5.5, low effort', 'normal': 'gpt-5.5', 'hard': 'gpt-5.5, high effort'}
+    with _cli(s, 'codex'), mock.patch.object(climodels, 'codex_current', lambda: {}):
+        assert {k: brainroute.levels(s)[0][k] for k in ('quick', 'normal', 'hard')} == \
+            {'quick': 'its default model, low effort', 'normal': 'its default model', 'hard': 'its default model, high effort'}
     s.set_setting('triage_ai', s.a, 'owner')
-    assert brainroute.levels(s)[0]['hard'] == 'claude-opus-5' and brainroute.levels(s)[0]['quick'] == 'same model, low effort'
+    assert brainroute.levels(s)[0]['hard'] == 'claude-opus-5' and brainroute.levels(s)[0]['quick'] == 'claude-sonnet-5, low effort'
     s.set_setting('triage_ai', s.o, 'owner')                                          # one model on an API card: effort both ways
     assert {k: brainroute.levels(s)[0][k] for k in ('quick', 'normal', 'hard')} == \
-        {'quick': 'same model, low effort', 'normal': 'gpt-5', 'hard': 'same model, high effort'}
+        {'quick': 'gpt-5, low effort', 'normal': 'gpt-5', 'hard': 'gpt-5, high effort'}
     s.set_setting('triage_ai', _card(s, 'groq'), 'owner')
-    assert {k: brainroute.levels(s)[0][k] for k in ('quick', 'hard')} == {'quick': 'same model', 'hard': 'same model'}
+    g = brainroute.levels(s)[0]
+    assert g['quick'] == g['hard'] == g['normal'] and 'same model' not in g['normal']      # one model, no effort: its name, three times
     words = ' '.join(' '.join(str(v) for v in l.values()) for l in brainroute.panel(s)['levels'])
     assert not any(w in words.lower() for w in ('tier', 'gear'))
 

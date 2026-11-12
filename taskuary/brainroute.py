@@ -29,9 +29,9 @@ ONE_SHOT = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'judge', 
 # ...of which these may be asked again of a strong model (a report may research with tools, so it is not one of them)
 ESCALATES = ('triage', 'draft', 'summary', 'judge', 'advisor', 'rank', 'memory')
 # A job with no slot of its own rides the triage brain, as every unnamed build_llm always has (llm.build_llm).
-SLOT_OF = {**{j: 'triage_ai' for j in ONE_SHOT}, 'draft': 'draft_ai', 'general': 'assistant_ai', 'quick_work': 'assistant_ai', 'coding': 'default_brain',
+SLOT_OF = {**{j: 'triage_ai' for j in ONE_SHOT}, 'general': 'assistant_ai', 'quick_work': 'assistant_ai', 'coding': 'default_brain',
            'assistant': 'concierge_ai'}
-JOB_WORDS = {'triage': 'triage', 'draft': 'a draft', 'summary': 'a summary', 'advisor': 'the Advisor', 'memory': 'memory',
+JOB_WORDS = {'triage': 'triage', 'draft': 'a redraft', 'summary': 'a summary', 'advisor': 'the Advisor', 'memory': 'memory',
              'rank': 'ranking', 'assistant': 'the Assistant', 'general': 'general work', 'coding': 'coding',
              'quick_work': 'quick general work', 'judge': 'a judgement', 'report': 'a report'}
 
@@ -151,7 +151,12 @@ def _said(store, pick: str) -> str:
     "The brain by the name the cards use - 'claude (CLI)', 'Azure OpenAI' - for the reason line."
     if not pick: return 'no AI'
     if pick == 'demo': return 'the demo'
-    if pick.startswith('cli:'): return f'{pick[4:]} (CLI)'
+    if pick.startswith('cli:'):
+        # the name its card and every picker say (clis.KNOWN: 'OpenAI Codex CLI'), never a second one ('codex (CLI)') for the same thing
+        from . import agents
+        from .clis import KNOWN
+        k = pick[4:]
+        return {x['cmd']: x['label'] for x in KNOWN}.get(agents.cli_of(dict(agents.connection_brains(store)).get(k), k)) or f'{k} (CLI)'
     cid = pick[10:] if pick.startswith('connector:') else ''
     c = store.get_connector(int(cid)) if cid.isdigit() else None
     return (c.get('Name') or c.get('Type')) if c else pick
@@ -240,13 +245,8 @@ def session_chain(store, brain: str = None) -> list:
 def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=None) -> tuple:
     "(pick, model, gear, chain) - today's answer for this job, asked of the resolver that has always given it."
     from . import agents, llm
-    if job == 'draft' and want_pick is None:
-        # Drafting's own card (the owner, 2026-10-25), blank = the triage brain exactly as before; its model box, blank = that brain's own
-        own = '' if agents.stale(store, 'draft_ai') else str(store.get_setting('draft_ai') or '').strip()
-        pick = llm.effective_pick(store, own or store.get_setting('triage_ai') or '')
-        # ...and its model only once a drafting brain is chosen: blank is the triage brain on its own model, exactly (2026-10-25)
-        from . import aidefaults
-        return pick, want_model or (aidefaults.model_on(store, 'draft_model', own) if own else ''), gear or 'light', _backups(store)
+    # NO DRAFTING BRAIN (the owner, 2026-11-11: "drafting which the agent does now no more drafting ai"): the task's agent writes every
+    # reply; the one-shot 'draft' left - a reply or message the owner presses for - is a one-message job like the rest of these
     if job in ONE_SHOT:
         # the same reading llm._build_llm makes: the named pick, else the triage brain, else what blank means
         pick = llm.effective_pick(store, want_pick if want_pick is not None else store.get_setting('triage_ai') or '')
@@ -639,7 +639,7 @@ def cap_left(store) -> bool:
 
 
 # ── what Settings shows: the mode line, the rules as sentences, the cap line, the recent routes ───────────────────────────────
-PLURAL = {'triage': 'triage', 'draft': 'drafts', 'summary': 'summaries', 'advisor': 'the Advisor', 'memory': 'memory', 'rank': 'ranking',
+PLURAL = {'triage': 'triage', 'draft': 'redrafts', 'summary': 'summaries', 'advisor': 'the Advisor', 'memory': 'memory', 'rank': 'ranking',
           'assistant': 'the Assistant', 'general': 'general work', 'coding': 'coding', 'quick_work': 'quick general work', 'judge': 'judgements', 'report': 'reports'}
 USE_WORDS = {'light': 'the quick model', 'standard': "the card's own model", 'strong': 'the strong model'}
 
@@ -669,9 +669,6 @@ def sentence(r: dict) -> str:
     return s[0].upper() + s[1:]
 
 
-SAME = 'same model'
-
-
 def _card_model(store, pick: str) -> str:
     "What an AI card runs when nothing asks for more: its model box, its deployment, else the provider's default."
     from . import llm
@@ -682,30 +679,36 @@ def _card_model(store, pick: str) -> str:
             or (llm.OPENAI_COMPATIBLE.get(t) or ('', ''))[1] or 'its default model')
 
 
+def _base(store, p: str, cfg) -> str:
+    """The model brain `p` runs when nothing asks for more, BY NAME where the app knows it (the owner, 2026-11-11: "settings are not
+    clear" over "same model" and "its own model"): the model on its connection or card, else the one its CLI is set to in its own
+    config (climodels), else the provider's default - 'its default model' only when nothing here names one."""
+    if not p.startswith('cli:'): return _card_model(store, p)
+    from . import climodels
+    return (spell(_own(store, p, 'model', cfg)) or str((climodels.catalog(_cli(store, p, cfg)).get('current') or {}).get('model') or '')
+            or 'its default model')
+
+
 def _words(store, p: str, cfg) -> dict:
-    "{quick, normal, hard} - what each level runs on brain `p`, a model name or 'same model, low/high effort'."
+    "{quick, normal, hard} - the model each level runs on brain `p`, named: 'haiku', 'gpt-5.4, low effort'."
     from .llm import LIGHT_DEFAULT
-    if p.startswith('cli:'):
-        own, dflt = _own(store, p, 'model', cfg), LIGHT_DEFAULT.get(_cli(store, p, cfg), '')
-        light = _own(store, p, 'light_model', cfg) or ('' if dflt.startswith('effort:') else dflt)
-        quick = spell(light) or (f'{SAME}, {dflt[7:]} effort' if dflt.startswith('effort:') else '') or \
-                (f'{SAME}, {LIFT["light"]} effort' if lift(store, p, 'light', cfg=cfg) else SAME)
-        normal = spell(own) or 'its default model'
-    else: quick, normal = (spell(_own(store, p, 'light_model')) or (f'{SAME}, {LIFT["light"]} effort' if lift(store, p, 'light', cfg=cfg) else SAME),
-                           _card_model(store, p))
-    hard = spell(strong_of(store, p, cfg)) or (f'{SAME}, {LIFT["strong"]} effort' if lift(store, p, 'strong', cfg=cfg) else SAME)
-    return {'quick': quick, 'normal': normal, 'hard': hard}
+    base = _base(store, p, cfg)
+    name = base.split(', ')[0]
+    at = lambda tier: f'{name}, {LIFT[tier]} effort' if lift(store, p, tier, cfg=cfg) else base
+    dflt = LIGHT_DEFAULT.get(_cli(store, p, cfg), '') if p.startswith('cli:') else ''
+    quick = spell(_own(store, p, 'light_model', cfg)) or (f'{name}, {dflt[7:]} effort' if dflt.startswith('effort:') else dflt) or at('light')
+    return {'quick': quick, 'normal': base, 'hard': spell(strong_of(store, p, cfg)) or at('strong')}
 
 
 def levels(store, cfg=None) -> list:
-    """What quick, normal and hard work runs on, per brain doing a job here - [{pick, brain, quick, normal, hard}], each a model name
-    or 'same model, low/high effort', in the words Settings shows. Read off the same gears `choose` and llm.make_cli_llm run. A level
-    the owner gave an AI of its own (by_level) says that AI for the agents' work on it: all of it on a brain that only runs agents."""
+    """What quick, normal and hard work runs on, per brain doing a job here - [{pick, brain, quick, normal, hard}], each a model by
+    name, in the words Settings shows. Read off the same gears `choose` and llm.make_cli_llm run. A level the owner gave an AI of
+    its own (by_level) says that AI for the agents' work on it: all of it on a brain that only runs agents."""
     from . import config
     cfg = config.load() if cfg is None else cfg
-    by = {j: _fixed(store, j)[0] for j in ('triage', 'draft', 'general', 'coding')}
+    by = {j: _fixed(store, j)[0] for j in ('triage', 'general', 'coding')}
     picks = list(dict.fromkeys(p for p in by.values() if p and p != 'demo'))
-    reads, sets = {by['triage'], by['draft']}, by_level(store)
+    reads, sets = {by['triage']}, by_level(store)
     out = []
     for p in picks:
         w = _words(store, p, cfg)
@@ -717,48 +720,71 @@ def levels(store, cfg=None) -> list:
     return out
 
 
-def brains(store) -> list:
-    "The AIs a level may be given - the same list the cards and the general agent's picker offer (general.brain_options)."
-    from . import general
+def brains(store, cfg=None) -> list:
+    """The AIs a level may be given - the same list the cards and the general agent's picker offer (general.brain_options) - each
+    with `runs`, the model it runs a level on while that level's model box is blank."""
+    from . import config, general
+    cfg = config.load() if cfg is None else cfg
     return [{'pick': o['pick'], 'label': o.get('label') or _said(store, o['pick']), 'cli': o['pick'].startswith('cli:'),
-             'models': list(o.get('models') or ([o['model']] if o.get('model') else []))} for o in general.brain_options(store)]
+             'models': list(o.get('models') or ([o['model']] if o.get('model') else [])), 'runs': _words(store, o['pick'], cfg)}
+            for o in general.brain_options(store)]
 
 
 ASKED_AS = {'light': 'quick', 'standard': 'standard', 'strong': 'hard'}      # a tier, as the difficulty triage would have judged
+GEAR_LEVEL = {'light': 'quick', 'main': 'normal', 'strong': 'hard'}
+
+
+def runs(store, job: str, cfg=None, difficulty: str = None) -> dict:
+    """WHAT ONE CALL OF `job` RUNS ON THIS MINUTE, in the page's words: {pick, brain, model, why, route}. It IS `choose` - the one
+    answer a card's RUNS line, the "right now" rows and a task's own reason line (why_for_task) all say, so they cannot disagree."""
+    from . import config
+    cfg = config.load() if cfg is None else cfg
+    r = choose(store, job, difficulty=difficulty)
+    m = spell(r.model) if r.model and not r.model.startswith('@') else ''
+    # no model named for the call: an AI card runs its own - at the router's effort where it asked for one ('@low') - and a CLI its gear's
+    if not m and r.pick and r.pick != 'demo':
+        card = r.pick.startswith('connector:') and (r.model or (r.gear == 'light' and not _own(store, r.pick, 'light_model')))
+        m = (f"{_card_model(store, r.pick)}{spell(r.model)[len('its own model'):]}" if card
+             else _words(store, r.pick, cfg)[GEAR_LEVEL.get(r.gear, 'normal')])
+    return {'pick': r.pick, 'brain': _said(store, r.pick), 'model': m, 'why': r.why, 'route': r}
 
 
 def now(store, cfg=None) -> list:
     """WHAT EACH LEVEL RUNS ON THIS MINUTE (the owner, 2026-11-11: "it should show light goes to this model etc etc. never change
-    from what's in settings"): [{level, pick, brain, model, why}] for quick, normal and hard agent work, in the page's words. Each
-    row IS `choose`, asked for a general task of that difficulty now - so the row and a task's own reason line (why_for_task: the
-    same Route.why, as logged at the call) are one function's answer and cannot disagree. `why` is said only where the work is
-    not on the general card's AI at the level asked: an AI set for the level, a brain resting until HH:MM, no strong model, the
-    day's strong calls spent, a rule switched off - or nothing to run on at all."""
-    from . import config
-    cfg = config.load() if cfg is None else cfg
+    from what's in settings"): [{level, pick, brain, model, why}] for quick, normal and hard agent work - `runs`, asked for a
+    general task of that difficulty now. `why` is said only where the work is not on the general card's AI at the level asked: an
+    AI set for the level, a brain resting until HH:MM, no strong model, the day's strong calls spent, a rule switched off - or
+    nothing to run on at all."""
     card, out, sets = _fixed(store, 'general')[0], [], by_level(store) if mode(store) == 'auto' else {}
     for tier in TIERS:
-        r = choose(store, 'general', difficulty=ASKED_AS[tier])
-        ran = r.tier if r.tier in LEVEL_OF else 'standard'            # Fixed mode: every level is the card's own model
+        x = runs(store, 'general', cfg, ASKED_AS[tier]); r = x.pop('route')
         # ...moved off the card's AI or off the level asked - or an AI set for this level that could not take it
         moved = not r.pick or r.pick != card or (r.tier in LEVEL_OF and r.tier != tier) or (LEVEL_OF[tier] in sets and not r.level)
-        out.append({'level': LEVEL_OF[tier], 'pick': r.pick, 'brain': _said(store, r.pick),
-                    'model': (spell(r.model) or _words(store, r.pick, cfg)[LEVEL_OF[ran]]) if r.pick else '', 'why': r.why if moved else ''})
+        out.append({**x, 'level': LEVEL_OF[tier], 'why': r.why if moved else ''})
     return out
+
+
+def default_level(store, cfg=None) -> dict:
+    """What a level left on Default runs: {general: {pick, brain, quick, normal, hard}, coding: {...}} - the General agent and Coding
+    agent cards' AIs by name with the model each level gets, so a level's picker never says "the card's AI" (the owner, 2026-11-11:
+    "what is the cards ai on top?")."""
+    from . import config
+    cfg = config.load() if cfg is None else cfg
+    one = lambda p: {'pick': p, 'brain': _said(store, p), **(_words(store, p, cfg) if p and p != 'demo' else {})}
+    return {j: one(_fixed(store, j)[0]) for j in ('general', 'coding')}
 
 
 def panel(store) -> dict:
     "Everything the router's part of Settings draws, in one read."
     n = cap(store)
-    try: lv = levels(store)
-    except Exception as e: lv = []; logger.debug(f'brainroute: could not read what each level runs on - {e}')
-    try: nw = now(store)
-    except Exception as e: nw = []; logger.debug(f'brainroute: could not read what each level runs on right now - {e}')
-    try: bs = brains(store)
-    except Exception as e: bs = []; logger.debug(f'brainroute: could not list the AIs a level may run on - {e}')
+    def safe(f, empty, what):
+        try: return f(store)
+        except Exception as e: logger.debug(f'brainroute: could not read {what} - {e}'); return empty
     return {'mode': mode(store), 'rules': [{**r, 'sentence': sentence(r)} for r in rules(store)], 'cap': '' if n is None else n,
             'used_today': strong_today(store), 'jobs': list(JOBS), 'tiers': list(TIERS), 'difficulties': ['quick', 'standard', 'hard'],
-            'warning': coverage_warning(store), 'levels': lv, 'now': nw, 'by_level': by_level(store), 'brains': bs}
+            'warning': coverage_warning(store), 'levels': safe(levels, [], 'what each level runs on'),
+            'now': safe(now, [], 'what each level runs on right now'), 'by_level': by_level(store),
+            'brains': safe(brains, [], 'the AIs a level may run on'), 'default': safe(default_level, {}, 'what a level left on Default runs')}
 
 
 def set_panel(store, mode_: str = None, rs: list = None, cap_: str = None, actor: str = 'owner', by_level_: dict = None) -> dict:

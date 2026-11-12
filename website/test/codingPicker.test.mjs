@@ -68,7 +68,7 @@ test("Settings defaults and backups offer coding CLIs rather than profile names"
   assert.match(settings, /label: models\[a\.Name\]\?\.cli \|\| models\[a\.Name\]\?\.cmd \|\| a\.Name/);
   assert.match(settings, /automatic — any other coding CLI/);
   // the judge picks a thing that decides rather than a thing that speaks, so it gets its own word
-  assert.match(defaults, /\{isAgent \? "which AI" : isJudge \? "what decides" : "which brain"\}/);
+  assert.ok(defaults.includes('{isJudge ? "what decides" : "which AI"}'));      // one word for it on every card (2026-11-11)
   assert.match(defaults, /state\.agent_options \|\| agents/);
 });
 

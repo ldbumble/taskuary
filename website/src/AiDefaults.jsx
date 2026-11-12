@@ -12,6 +12,7 @@ import { Alert, AlertTitle, Autocomplete, Box, Checkbox, CircularProgress, FormC
 import api from "./api";
 import { ACCENT2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 import { RecentRoutes, RouteRules } from "./RouteRules.jsx";
+import { repick, runsLine } from "./aiCards.js";
 
 // A model box left blank is not "unconfigured" — it means the provider's own default, and the
 // server says which. Shown as the placeholder so an empty field never reads as broken.
@@ -71,14 +72,15 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
       <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Box>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>
-            {isAgent ? "which AI" : isJudge ? "what decides" : "which brain"}
+            {isJudge ? "what decides" : "which AI"}
           </Typography>
           <Select size="small" displayEmpty value={picked ? slot.value : ""} data-tq-slot-brain={slot.key}
             onChange={(e) => onSave({ value: e.target.value })}
             MenuProps={{ PaperProps: { sx: { maxHeight: 340 } } }}
             sx={{ minWidth: 250, fontSize: 12.5, bgcolor: "var(--tq-panel, #fff)" }}>
             {options.map((o) => (
-              <MenuItem key={o.value} value={o.value} disabled={o.ready === false} data-tq-brain-option={o.value} sx={{ fontSize: 12.5 }}>
+              <MenuItem key={o.value} value={o.value} disabled={o.ready === false} data-tq-brain-option={o.value} sx={{ fontSize: 12.5 }}
+                onClick={() => repick(slot, o.value) && onSave({ value: o.value })}>
                 {o.label}{o.ready === false ? " — no key saved" : ""}
               </MenuItem>
             ))}
@@ -90,9 +92,7 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
         {!isJudge && (
           <Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>model</Typography>
-            {/* Drafting's model is shut until a drafting brain is chosen: blank is the triage brain on its own model (2026-10-25) */}
-            <Model slot={slot} onSave={onSave} locked={slot.key === "draft_ai" && slot.default}
-              hint={slot.key === "draft_ai" && slot.default ? "choose a drafting brain first" : undefined} />
+            <Model slot={slot} onSave={onSave} />
           </Box>
         )}
         {!isJudge && slot.strong_model !== undefined && (
@@ -126,8 +126,10 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
         alignItems: "baseline", flexWrap: "wrap" }}>
         <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600 }}>RUNS</Typography>
         <Typography sx={{ ...mono, fontSize: 12.5, color: INK, fontWeight: 600 }}>
-          {picked ? picked.label : "—"}{slot.ready && runs && !picked?.label?.endsWith(` · ${runs}`) ? ` · ${runs}` : ""}{slot.ready && slot.resolved ? ` → ${slot.resolved}` : ""}{slot.effort ? ` · ${slot.effort}` : ""}
+          {slot.runs ? runsLine(slot) : <>{picked ? picked.label : "—"}{slot.ready && runs && !picked?.label?.endsWith(` · ${runs}`) ? ` · ${runs}` : ""}{slot.ready && slot.resolved ? ` → ${slot.resolved}` : ""}{slot.effort ? ` · ${slot.effort}` : ""}</>}
         </Typography>
+        {/* whose choice it was (the owner, 2026-11-11: "never change from what's in settings") - said only where it was not theirs */}
+        {slot.set_by && !slot.ask && <Typography variant="caption" data-tq-slot-set-by="" sx={{ color: FAINT }}>{slot.set_by}</Typography>}
         {slot.owner && (
           <Typography variant="caption" sx={{ color: FAINT }}>
             saved on {slot.owner}
@@ -140,6 +142,7 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
           </Typography>
         )}
       </Box>
+      {slot.runs?.why && <Typography variant="caption" data-tq-slot-why="" sx={{ color: FAINT, display: "block", mt: 0.5 }}>{slot.runs.why}</Typography>}
       {slot.note && <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>{slot.note}</Typography>}
       {/* What it is actually asked. This slot is not a taste setting - it is four yes/nos, and
           whichever thing answers them answers exactly these (the owner, 2026-09-17: "show the

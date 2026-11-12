@@ -26,16 +26,23 @@ from . import climodels
 # One row per default. `gear` says WHICH of a CLI profile's two models this slot sets, and is
 # the reason a coding brain and a triage brain can be the same agent without fighting over one field.
 SLOTS = [
-    {'key': 'triage_ai', 'label': 'AI that sorts your mail', 'pick': 'brain', 'gear': 'light',
+    {'key': 'triage_ai', 'label': 'Triage', 'pick': 'brain', 'gear': 'light',
      'desc': 'Reads every inbound message and decides: a task to do, a question to answer, or FYI to file. '
-             'Also runs the Advisor and writes what Taskuary remembers.',
+             'Also runs the Advisor, writes what Taskuary remembers, and rewrites a reply when you press Redraft.',
      'why': 'One message in, one line of JSON out - so this wants your cheapest fast model, not your best one.'},
-    # DRAFTING HAS ITS OWN CARD (the owner, 2026-10-25): every reply was written by the triage brain - the cheapest model, chosen
-    # for one line of JSON - and no card said so. Blank is exactly that brain, as before; once set, the replies, the messages and
-    # their subject lines are written on it. Nothing is sent without the owner's press either way.
-    {'key': 'draft_ai', 'label': 'Drafting', 'pick': 'brain', 'gear': 'light', 'model_setting': 'draft_model',
-     'desc': 'Writes the replies and messages you approve before anything goes out, and their subject lines.',
-     'why': 'A reply in your voice is worth more than a triage verdict. Blank uses the triage brain, as before.'},
+    # The fourth worker had no row here, so the page that exists to say "what will actually run"
+    # was silent about half the tasks on the board. `assistant_ai` was buried on the Assistant tab
+    # calling itself the bubble's brain, and with it blank general._selected quietly prefers an API
+    # connector over a CLI - so a general task ran on Azure gpt-5.4 while `default_brain` said
+    # claude, and the owner could not see why (2026-09-16). Same picker as the others: a CLI or a
+    # connector, whichever this work needs.
+    # ...and it WRITES (the owner, 2026-11-11: "drafting which the agent does now no more drafting ai"): the task's agent writes every
+    # reply, so Drafting has no card. The one-shot writer left (a press of Draft with AI or Redraft) is a quick job on triage's AI
+    {'key': 'assistant_ai', 'label': 'General agent', 'pick': 'brain', 'gear': 'main',
+     'model_setting': 'assistant_model',
+     'desc': 'Works every task that is not coding - research, planning, a job in one of your systems - and writes the replies '
+             'you approve.',
+     'why': 'A CLI here can run tools and drive a browser; an AI card has no shell, so it can only read and write.'},
     # the CLI tool itself, never a profile (the owner, 2026-10-15: "it's models or cli tools only") - it held `default_agent`,
     # a profile name, which is how a profile came to be read as a brain
     # ...or an AI card (the owner, 2026-11-09: "coding tasks should run on hipaa, why not") - saved as `connector:<id>`
@@ -46,18 +53,6 @@ SLOTS = [
      'model_setting': 'concierge_model',
      'desc': 'Speaks in the chat here and on your phone (WhatsApp, Telegram), and walks you through the pipe.',
      'why': 'Turn by turn and conversational, so it rides the same quick gear as triage.'},
-    # The fourth worker had no row here, so the page that exists to say "what will actually run"
-    # was silent about half the tasks on the board. `assistant_ai` was buried on the Assistant tab
-    # calling itself the bubble's brain, and with it blank general._selected quietly prefers an API
-    # connector over a CLI - so a general task ran on Azure gpt-5.4 while `default_brain` said
-    # claude, and the owner could not see why (2026-09-16). Same picker as the others: a CLI or a
-    # connector, whichever this work needs.
-    {'key': 'assistant_ai', 'label': 'General agent', 'pick': 'brain', 'gear': 'light',
-     'model_setting': 'assistant_model',
-     'desc': 'Works every general task: research, planning, writing, a job with no repository. Also the '
-             'floating bubble.',
-     'why': 'A CLI here can run tools, drive a browser and post to the wall; an API brain has no shell, '
-            'so it can only read and write - quicker, and enough for chat.'},
     # The fifth worker, and the only one that does not have to be able to write. A report's own
     # brain writes its summary; this decides where the finished run goes - four yes/nos about text
     # somebody else produced. They were one setting while both were chat models; they are two now
@@ -165,6 +160,7 @@ def resolve(store, cfg, slot_key: str) -> dict:
     steps up to (the router, 2026-10-25). It belongs to the brain like the other gears, so two cards on one brain show one.
     Blank is no strong tier: nothing is guessed from a model's name."""
     out = _resolve(store, cfg, slot_key)
+    out.update(_runs(store, cfg, slot_key, out))
     home = () if out.get('kind') == 'decision' else _strong_home(store, cfg, out)
     if home and home[0] == 'cli': out['strong_model'] = str(_conn(cfg, home[1]).get('strong_model') or '')
     elif home:
@@ -175,6 +171,35 @@ def resolve(store, cfg, slot_key: str) -> dict:
         from .brainroute import may_read_sensitive
         out['sensitive_ok'] = may_read_sensitive(store, f'cli:{home[1]}' if home[0] == 'cli' else f'connector:{home[1]}', cfg)
     return out
+
+
+JOB_OF = {'triage_ai': 'triage', 'assistant_ai': 'general', 'default_brain': 'coding', 'concierge_ai': 'assistant'}
+FOLLOWS = 'not chosen by you: it follows the Coding agent card'
+FIRST = 'not chosen by you: it is the first one ready'
+SAVED_FOR = 'not chosen by you: an update saved it - choose in the list above to make it yours'
+
+
+def _runs(store, cfg, slot_key: str, out: dict) -> dict:
+    """THE CARD'S RUNS LINE (the owner, 2026-11-11: "never change from what's in settings"): {runs: {brain, model, why}, chosen, set_by}.
+    `runs` is brainroute.runs - the router's own answer for this card's job this minute, the one the "right now" rows give - so a
+    card and those rows cannot disagree; `why` is said only where that is not the AI the card names (resting, stale, held).
+    `set_by` is where the choice came from: the owner's own, or one made FOR them - a blank card, or a value an update wrote."""
+    job = JOB_OF.get(slot_key)
+    if not job: return {}
+    from . import brainroute
+    from .agents import resolve_brain
+    v = str(store.get_setting(slot_key) or '').strip()
+    chosen = bool(v) and store.setting_writer(slot_key) != 'migration'
+    set_by = ('' if chosen else SAVED_FOR if v else FIRST if slot_key == 'default_brain' or out.get('value') != resolve_brain(store, 'coding')
+              else FOLLOWS)
+    own = out.get('model') or str(out.get('default_hint') or '').split(' - ')[0]
+    if job == 'coding' and out.get('connector'): return {'runs': {'brain': out.get('display') or '', 'model': own, 'why': ''}, 'chosen': chosen, 'set_by': set_by}
+    try: x = brainroute.runs(store, job, cfg)
+    except Exception as e: logger.debug(f'aidefaults: what {slot_key} runs could not be read - {e}'); return {'chosen': chosen, 'set_by': set_by}
+    # the Assistant's blank model is its own default (llm.ASSISTANT_DEFAULT), which the card already names - never the triage gear's
+    model = own if job == 'assistant' and not x['route'].model else x['model']
+    return {'runs': {'brain': x['brain'] if x['pick'] else '', 'model': model, 'why': x['why'] if x['pick'] != out.get('value') else ''},
+            'chosen': chosen, 'set_by': set_by}
 
 
 def _resolve(store, cfg, slot_key: str) -> dict:
@@ -216,7 +241,7 @@ def _resolve(store, cfg, slot_key: str) -> dict:
         # answered here or put down there
         from . import problems
         from .agents import default_ask
-        if key and (ask := default_ask(store)) and 'default_ai' not in problems._dismissed(store): out.update(note=ask['detail'], ask=True)
+        if key and (ask := default_ask(store)) and 'default_ai' not in problems._dismissed(store): out.update(note=ask['note'], ask=True)
         return out
 
     # the judge: blank has a second meaning here (the report's own brain, which is what this did
@@ -247,11 +272,8 @@ def _resolve(store, cfg, slot_key: str) -> dict:
     # brain it is, never "auto - first active AI connector" (the owner, 2026-09-24: "first connected should not matter")
     if not value:
         from .agents import default_pick
-        from .llm import effective_pick
-        # ...except Drafting, whose blank is the TRIAGE brain - what wrote every reply before it had a card
-        value = effective_pick(store) if slot_key == 'draft_ai' else default_pick(store)
+        value = default_pick(store)
         if value: out.update(value=value, default=True)
-        if value and slot_key == 'draft_ai': out['note'] = 'blank = the triage brain, as before'
     if value.startswith('cli:'):
         from .llm import ASSISTANT_DEFAULT, LIGHT_DEFAULT
         from .agents import brain_key
@@ -263,9 +285,11 @@ def _resolve(store, cfg, slot_key: str) -> dict:
             # what concierge.brain runs: its own model, else the Assistant default - never the brain's light model,
             # which is triage's (this card said "the coding model, the expensive gear" while every turn ran on haiku)
             light, dflt, owner = model_on(store, s['model_setting'], value, settings), ASSISTANT_DEFAULT.get(cli, ''), 'this page'
-        elif slot_key == 'draft_ai':
-            # its own model box, blank = what drafts ran on before: the brain's light gear (shared with triage, never written by this card)
-            light, dflt, owner = model_on(store, s['model_setting'], value, settings), light or LIGHT_DEFAULT.get(cli, ''), 'this page'
+        elif slot_key == 'assistant_ai':
+            # what a general agent runs (general._selected): this card's model for this brain, else the connection's own - never the
+            # light gear, which is triage's (the card showed and saved the light model while every agent ran the main one)
+            from .brainroute import _base
+            light, dflt, owner = model_on(store, s['model_setting'], f'cli:{key}', settings), _base(store, f'cli:{key}', cfg), 'this page'
         else: dflt, owner = LIGHT_DEFAULT.get(cli, ''), f'the {key} connection (light model)'
         model, effort = ('', light[7:]) if light.startswith('effort:') else climodels.split_pick(light)
         if slot_key == 'concierge_ai' and not effort:
@@ -275,8 +299,8 @@ def _resolve(store, cfg, slot_key: str) -> dict:
         # a blank box runs the gear's default model, so its efforts and version are that model's
         seen = model or ('' if dflt.startswith('effort:') else dflt)
         out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, seen), resolved=_resolved(cat, seen),
-                   default_hint=f"{said} - the {'Assistant' if slot_key == 'concierge_ai' else 'light'} default",
-                   owner=owner, owner_link='' if slot_key == 'concierge_ai' else 'ai_apps', cli=cli)
+                   default_hint=said if slot_key == 'assistant_ai' else f"{said} - the {'Assistant' if slot_key == 'concierge_ai' else 'light'} default",
+                   owner=owner, owner_link='' if owner == 'this page' else 'ai_apps', cli=cli)
         if not light and not dflt: out['note'] = f'no light model set - this runs on the {cli} coding model, which is the expensive gear'
         from .agents import runs_here
         # a brain that does not start is not "what will run": the card said claude while triage failed on it
@@ -397,8 +421,6 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
         # the coding card offers `cli:<key>`, but default_brain keeps a CLI by its bare key (everything that runs one reads it so)
         if s['pick'] == 'cli' and str(value).startswith('cli:'): value = str(value)[4:]
         store.set_setting(slot_key, str(value), actor)
-        # Drafting back to blank is the triage brain on ITS model: a drafting model left behind would ride it unseen (2026-10-25)
-        if slot_key == 'draft_ai' and not str(value).strip(): store.set_setting('draft_model', '', actor)
     if strong is not None:
         # the strong gear lives where the brain's other gears do: the CLI connection, or the AI card's own config
         home, strong = _strong_home(store, cfg, resolve(store, cfg, slot_key)), str(strong).strip()
@@ -416,8 +438,6 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
             store.merge_connector_config(home[1], {'sensitive_ok': '1' if sensitive else None})
         store.audit('setting', 0, 'save', actor, detail=f"{slot_key} sensitive_ok={'yes' if sensitive else 'no'}")
     if model is None and effort is None: return resolve(store, cfg, slot_key)
-    # the Drafting model box is shut until a drafting brain is chosen - blank is the triage brain, whose model is its own card's
-    if slot_key == 'draft_ai' and not str(store.get_setting('draft_ai') or '').strip(): raise ValueError('choose a drafting brain first')
 
     cur = resolve(store, cfg, slot_key)
     model = cur['model'] if model is None else str(model).strip()
@@ -425,8 +445,7 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
     now = str(store.get_setting(slot_key) or '')
     if not now and s['pick'] == 'brain':               # a blank card IS the default brain - its model goes there
         from .agents import default_pick
-        from .llm import effective_pick
-        now = effective_pick(store) if slot_key == 'draft_ai' else default_pick(store)
+        now = default_pick(store)
 
     if s['pick'] == 'cli' and cur.get('connector'):           # coding on an AI card: its model is the card's own
         store.merge_connector_config(cur['connector'], {'model': model or None})
@@ -436,9 +455,10 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
         _save_gear(store, cfg, key, 'model', f'{model}@{effort}' if (model and effort) else model)
     elif now.startswith('cli:') and slot_key == 'concierge_ai':
         keep_model(store, s['model_setting'], f'effort:{effort}' if (effort and not model) else model, actor, now)
-    elif now.startswith('cli:') and slot_key == 'draft_ai':
-        # its own setting, never the connection's light gear, which triage rides; '@low' is the brain's own model at that effort
-        keep_model(store, s['model_setting'], f'{model}@{effort}' if effort else model, actor, now)
+    elif now.startswith('cli:') and slot_key == 'assistant_ai':
+        # the general agent's own setting, read by general._selected - never the connection's light gear, which triage rides
+        from .agents import brain_key
+        keep_model(store, s['model_setting'], f'{model}@{effort}' if (model and effort) else model, actor, f'cli:{brain_key(store, now, cfg)}')
     elif now.startswith('cli:'):
         from .agents import brain_key
         # codex on a ChatGPT plan has no smaller model, so its cheap gear is effort alone -

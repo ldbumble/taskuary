@@ -26,10 +26,10 @@ def test_the_panel_reads_and_writes_the_mode_the_rules_and_the_cap():
     with mock.patch.object(server, 'store', s):
         p = c.get('/api/ai/route_rules').json()
         assert p['mode'] == 'auto' and p['cap'] == '' and p['used_today'] == 0
-        assert 'Hard drafts, general work and coding -> the strong model' in [r['sentence'] for r in p['rules']]
+        assert 'Hard redrafts, general work and coding -> the strong model' in [r['sentence'] for r in p['rules']]
         # what each level runs on, per brain, in the words Settings shows: an API card has no quick model of its own
         assert {k: p['levels'][0][k] for k in ('brain', 'quick', 'normal', 'hard')} == \
-            {'brain': 'Anthropic API', 'quick': 'same model, low effort', 'normal': 'claude-sonnet-5', 'hard': 'claude-opus-5'}
+            {'brain': 'Anthropic API', 'quick': 'claude-sonnet-5, low effort', 'normal': 'claude-sonnet-5', 'hard': 'claude-opus-5'}
         rules = [{**r, 'on': r['id'] != 'unsure'} for r in p['rules']]
         p = c.post('/api/ai/route_rules', json={'mode': 'fixed', 'rules': rules, 'cap': '5'}).json()
         assert (p['mode'], p['cap']) == ('fixed', 5) and not next(r for r in p['rules'] if r['id'] == 'unsure')['on']

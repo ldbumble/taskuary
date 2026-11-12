@@ -587,6 +587,8 @@ class _Cooling:
             elif getattr(e, 'until', None): brainroute.cool(self._store, self._pick, e.until)
             raise
         brainroute.unspend(self._store, self._pick)
+        from . import agents
+        agents.answered(self._store, self._pick)
         return out
     def __bool__(self): return bool(object.__getattribute__(self, '_brain'))
     def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)

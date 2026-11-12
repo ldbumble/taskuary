@@ -29,7 +29,7 @@ def test_a_resting_claude_hands_the_call_to_codex_and_says_until_when(s):
     brainroute.cool(s, 'cli:claude', at)
     r = brainroute.choose(s, 'triage')
     assert (r.pick, r.chain) == ('cli:codex', ['cli:claude'])
-    assert f"claude (CLI) is limited until {at.strftime('%H:%M')}, so codex (CLI)" in r.why
+    assert f"Claude Code is limited until {at.strftime('%H:%M')}, so OpenAI Codex CLI" in r.why
     s.set_setting('ai_route_mode', 'fixed', 'owner')
     assert brainroute.choose(s, 'triage').pick == 'cli:claude'                  # Fixed: the cards stand, as before
     s.set_setting('ai_route_mode', 'auto', 'owner')

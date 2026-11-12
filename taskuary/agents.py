@@ -530,9 +530,16 @@ def cli_tests(store) -> dict:
 def record_cli_test(store, key: str, ok: bool):
     if key: store.set_setting(CLI_TESTS, json.dumps({**cli_tests(store), str(key): bool(ok)}), 'system')
 
+def answered(store, pick: str):
+    """A FAILED TEST IS OVER THE MOMENT THE CLI ANSWERS WORK (the owner, 2026-11-11: "it says codex not claude why?"): the mark was
+    cleared only by pressing Test again, so a CLI whose one test failed - pressed while it rested on its usage limit, say - stayed
+    out of every list of what can take work while it ran reports and sessions all day."""
+    k = str(pick or '')[4:] if str(pick or '').startswith('cli:') else ''
+    if k and cli_tests(store).get(k) is False: record_cli_test(store, k, True)
+
 # THE BRAIN SETTINGS A START READS, and who wrote each: 'owner' is the person's own pick (setup, Settings, the Assistant tab);
 # anything else - 'migration' from adopt_brain_setting and migrate_brain_settings, blank - was saved FOR them.
-HEALED = ('default_brain', 'triage_ai', 'concierge_ai', 'assistant_ai', 'judge_ai', 'draft_ai')
+HEALED = ('default_brain', 'triage_ai', 'concierge_ai', 'assistant_ai', 'judge_ai')
 
 def picked(store, name: str) -> bool: return store.setting_writer(name) == 'owner'
 
@@ -988,16 +995,26 @@ def default_ask(store) -> dict:
     ready = ready_brains(store)
     v = str(store.get_setting('default_brain') or '').strip()
     if len(ready) < 2 or (v and store.setting_writer('default_brain') != 'migration'): return {}
-    from .clis import KNOWN
-    label = {k['cmd']: k['label'] for k in KNOWN}
-    runs, names = default_brain(store), [label.get(k, k) for k in ready]
-    return {'runs': runs, 'options': ready, 'title': 'Choose your default AI',
-            # one sentence for the bell and the Settings card alike: what is connected, what runs meanwhile and why, where to say
-            'detail': f"{', '.join(names[:-1])} and {names[-1]} are both connected, and nobody chose between them: work runs on "
-                      f"{label.get(runs, runs)} because it was ready first. Pick the one you want under Settings, Coding agent."}
+    from .brainroute import _and, _said, cooldowns
+    name = lambda k: _said(store, f'cli:{k}')
+    # every CLI that can take work, one resting on its limit with the time it is back - and one left out says why, with its way back
+    cold, tests = cooldowns(store), cli_tests(store)
+    names = [name(k) + (f" (resting until {cold[f'cli:{k}'].strftime('%H:%M')})" if f'cli:{k}' in cold else '') for k in ready]
+    out = [name(k) for k, c in connection_brains(store) if tests.get(k) is False and runs_here(c)]
+    one, runs = len(out) == 1, default_brain(store)
+    facts = (f"{_and(names)} are {'both' if len(names) == 2 else 'all'} connected and you have not chosen between them, so work runs on "
+             f"{name(runs)}, the first one ready."
+             + (f" {_and(out)} {'is' if one else 'are'} left out: {'its' if one else 'their'} last test failed - press Test on "
+                f"{'it' if one else 'them'} under Connections." if out else ''))
+    # one set of facts for the bell and the Settings card; each ends with the move where it is read (`detail` the bell's, `note` the card's)
+    return {'runs': runs, 'options': ready, 'title': 'Choose your default AI', 'detail': f'{facts} Choose one in Settings, on the {ASK_CARD} card.',
+            'note': f'{facts} Choose one in the list above - choosing {name(runs)} again counts.'}
 
 
-BRAIN_SETTINGS = ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai', 'draft_ai')
+ASK_CARD = 'Coding agent'      # the card that holds default_brain (aidefaults.SLOTS)
+
+
+BRAIN_SETTINGS = ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai')
 
 
 def migrate_brain_settings(store, cfg: dict = None) -> int:

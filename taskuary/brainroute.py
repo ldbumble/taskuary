@@ -771,7 +771,8 @@ def plain(r: 'Route') -> str:
     said = [re.sub(r'\s*\(rule [^)]*\)', '', c).strip() for c in r.why.split('; ')[1:]]
     said = [c for c in said if c]
     if not said: return 'as set in AI routing' if r.level else ''
-    s = '; '.join(said)
+    # ..."so its card" is the log's shorthand: said in words (a rendered row, 2026-11-12: "... limited until 10:59, so its card")
+    s = re.sub(r', so its card$', ", so its card's AI took it", '; '.join(said))
     return s[0].upper() + s[1:]
 
 

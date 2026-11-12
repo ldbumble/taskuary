@@ -132,6 +132,6 @@ def test_settings_says_what_each_level_runs_on_right_now_and_why_in_the_router_s
     brainroute.cool(s, 'cli:codex', datetime.now() + timedelta(hours=1))        # ...resting on its limit: back on the card, until when
     hard = rows()['hard']
     assert hard['pick'] == s.a and 'but it is limited until' in hard['why']
-    assert hard['why'].startswith('Hard work is set to OpenAI Codex CLI in AI routing, but it is limited until') and '(rule' not in hard['why'] and '->' not in hard['why']
+    assert hard['why'].startswith('Hard work is set to OpenAI Codex CLI in AI routing, but it is limited until') and '(rule' not in hard['why'] and '->' not in hard['why'] and hard['why'].endswith("so its card's AI took it")
     s.set_setting('ai_route_mode', 'fixed', 'owner')                            # Fixed: every level is the card, and nothing to explain
     assert {(r['pick'], r['model'], r['why']) for r in rows().values()} == {(s.a, 'claude-sonnet-5', '')}

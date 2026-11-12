@@ -459,7 +459,15 @@ def items(store, tid: int) -> dict:
         # ...and what an untrusted sender wrote on a thread an agent works: it waits, behind the Trust action (origin.hold)
         if not h and (at_work and x['T'] + 1 > began or x['MessageId'] > waits or (hold_ and x['MessageId'] in hold_['mids'] and (turn_of or live_sid))): pend.append(it)
         else: put(h['At'] if h else x['T'], 0 if h else -1, it, h['HId'] if h else 0)
-    stop = f"You {general.PRESSES['stopped_turn']({})}."
+    # ...AND ONE THAT WAS DRAWN HERE STAYS, though it moved to a task of its own (a break-out; the basic flow's check, 2026-11-12: the second
+    # matter left the chat with the turn that answered it): where it stood, saying where it went
+    here = {f"m:{x['MessageId']}" for x in _mail(store, tid)}
+    for r in store._rows("SELECT Key FROM shown WHERE TaskId=? AND Key LIKE 'm:%'", (tid,)):
+        if r['Key'] in here or not (m := store.get_message(int(r['Key'][2:]))) or int(m.get('TaskId') or 0) == tid: continue
+        h = led.get(('mail', r['Key'][2:]))
+        put(h['At'] if h else ep(m.get('CreatedAt')), 0, {'id': r['Key'], 'kind': 'arrival', **general.mail_row(store, {**m, 'T': ep(m.get('CreatedAt'))}),
+                                                       'moved': int(m.get('TaskId') or 0)}, h['HId'] if h else 0)
+    stop =f"You {general.PRESSES['stopped_turn']({})}."
     # ...HIS CLOSE IS ONE LINE (the recorded closed task, 2026-11-12: "You marked it done" and under it the page's "Mark done 4m ago"): the
     # press that closed an open-again-never task is marked `closes`, with the note he closed it with, and the page draws no line of its own
     shut = (store._one("SELECT Id FROM audit WHERE EntityType='task' AND EntityId=? AND Action='close_from_assistant' ORDER BY Id DESC LIMIT 1", (tid,))
@@ -496,7 +504,9 @@ def items(store, tid: int) -> dict:
     first = next((x for x in out if x['kind'] in ('turn', 'line', 'arrival')), None)
     # ...from the moment its agent is started: its own row is filed only as the first session opens, a beat after the turn is at work. A
     # task he made and has not started says nothing yet - shown there, the title stood as his line and went when the line he typed began it
-    if (asked or not any_mail and at_work and not pend) and (first is None or first['kind'] == 'turn') and (said := ownwork.ask(store, store.get_task(tid) or {}, asked)):
+    # ...and once drawn it stays, whatever starts or stops after (the basic flow's check, 2026-11-12: it went when the turn it began ended)
+    once = bool(store._one("SELECT 1 AS x FROM shown WHERE TaskId=? AND Key=?", (tid, f'a:{tid}')))
+    if (asked or once or not any_mail and at_work and not pend) and (once or first is None or first['kind'] == 'turn') and (said := ownwork.ask(store, store.get_task(tid) or {}, asked)):
         at = asked['T'] if asked else ep((store.get_task(tid) or {}).get('CreatedAt'))
         out.insert(0, {'id': f'a:{tid}', 'kind': 'line', 'at': stamp(at), 'text': said, 'files': [], '_h': at})
     # ONE TURN AT WORK, AND IT IS THE LAST (the owner's live task, 2026-11-11: a second head spun under a later, finished answer while the task
@@ -566,8 +576,10 @@ def items(store, tid: int) -> dict:
     seen, anchor, n = set(), f'0:{tid}', 0
     for x in out:
         if x['kind'] == 'turn':
-            x['id'] = f't:{anchor}:{n}'; n += 1
+            # ...a coding session's turn by its own record (its session, its place in it): an input that joined above it never renames it (the
+            # basic flow's check, 2026-11-12: a mail placed over a closed session's turn renamed it, and the turn went and came back)
             x['_seg'] = x.pop('seg', None)
+            x['id'] = f"t:{x['sid']}:{x['_seg']}" if x.get('sid') and x['_seg'] is not None else f't:{anchor}:{n}'; n += 1
         else:
             if x['kind'] in ('line', 'arrival', 'press'): anchor, n = x['id'], 0
         if x['id'] in seen: x['id'] += f":{len(seen)}"
@@ -617,10 +629,6 @@ def items(store, tid: int) -> dict:
         if x['kind'] == 'turn' and x['state'] in ('working', 'starting'): x['cards'] = []
     # ...A REPLY DRAFT ABOVE A NEWER INPUT IS NOT THE ONE TO PRESS, from the frame that input is drawn (`hear` settles it as the turn takes the
     # input): greyed where it stood - its turn drafts again under the input where a reply is still owed
-    last_in = max((i for i, x in enumerate(out) if x['kind'] in ('line', 'arrival')), default=-1)
-    for i, x in enumerate(out[:max(last_in, 0)]):
-        for c in [x] if x['kind'] == 'card' else x['cards'] if x['kind'] == 'turn' else []:
-            if c['what'] in DRAFTS and c['status'] == 'pending' and c.get('was'): c['status'] = 'passed'
     # ...and a turn that ended having said, done and left nothing (a CLI turn that only took a line in) is no item: the page drew nothing for it
     out = [x for x in out if not (x['kind'] == 'turn' and x['state'] == 'done' and not (x['text'] or x['steps'] or x['cards'] or x.get('summary')))]
 
@@ -632,8 +640,19 @@ def items(store, tid: int) -> dict:
         st_ = taskstate.task_state(store, tid=tid)
         if not st_.finished and (idle := funnel.idle_state(store, tid, st_))['kind'] == 'left' and idle['line']:
             out.append({'id': 'n:left', 'kind': 'note', 'at': out[-1].get('at'), 'text': idle['line']})
+    # ...and once said it stays where it was said when the run is taken up again (the basic flow's check, 2026-11-12: it went from the chat)
+    was_left = store._one("SELECT Host FROM shown WHERE TaskId=? AND Key='n:left'", (tid,))
+    if was_left and was_left['Host'] and not any(x['id'] == 'n:left' for x in out if x.get('id')):
+        out.append({'id': 'n:left', 'kind': 'note', 'at': '', 'text': was_left['Host']})
     for x in out: x.pop('stop', None); x.pop('_h', None); x.pop('_hm', None); x.pop('_hs', None); x.pop('_seg', None)
     out = served(store, tid, out)
+    # (the reply draft above a newer input, greyed - read in the order drawn)
+    last_in = max((i for i, x in enumerate(out) if x['kind'] in ('line', 'arrival')), default=-1)
+    for x in out[:max(last_in, 0)]:
+        for c in [x] if x['kind'] == 'card' else x['cards'] if x['kind'] == 'turn' else []:
+            if c['what'] in DRAFTS and c['status'] == 'pending' and c.get('was'): c['status'] = 'passed'
+    if (said_ :=next((x['text'] for x in out if x['id'] == 'n:left'), None)) and not (was_left and was_left['Host'] == said_):
+        store._exec("UPDATE shown SET Host=? WHERE TaskId=? AND Key='n:left'", (said_, tid))
     # ...and what the agent waits on him for, and the CLI that runs: read by the page off this one list (the chat's own payloads are gone)
     from . import taskstate
     live = general._live_of(tid)

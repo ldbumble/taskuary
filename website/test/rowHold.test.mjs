@@ -73,3 +73,20 @@ test("a held button that would do nothing is greyed, and un-greys the moment a p
   assert.ok(heldOff(verbs.list.filter((v) => v.group === "more")) && !heldOff(h.filter((v) => v.group === "more")) && !heldOff([]), "a ▾ of held moves greys with them");
   assert.ok(src("ActionRow.jsx").includes("aria-disabled={v.disabled || undefined}"), "a greyed button says so to a reader too");
 });
+
+// THE BLANK BEAT ON BACK (the visual audit, 2026-11-13): Back from a report to a task drew the task's header with no buttons for 0.3-0.8 s.
+// The held row was the report's, laid on the report's one pane; the task lays Came from and the chat, so nothing held had a pane to stand
+// on. Where the held row lays other panes than the live one, the live item's own buttons stand, greyed until the hold lets go
+test("a held row laid on other panes gives way to the new item's own buttons, greyed", () => {
+  const kept = { list: [{ id: "next", group: "next" }, { id: "r:mine", group: "more" }], lay: { all: "report", keys: ["from", "report"] } };
+  const now = { list: [{ id: "next", group: "next", disabled: true }, { id: "done", group: "more", at: "t", laid: { open: "from" } },
+    { id: "remind", group: "more", at: "t", laid: { open: "from" } }] };
+  const { verbs, liveOf } = heldRow(kept, now), by = (id) => verbs.list.find((v) => v.id === id);
+  assert.ok(by("done") && by("remind"), "the task's own buttons stand on its own panes, not a blank header");
+  assert.ok(by("done").disabled && by("done").inert && !by("r:mine"), "...greyed while the hold is on, the report's gone");
+  assert.equal(liveOf("done"), undefined, "...and a press on one runs nothing yet");
+  assert.ok(by("next").disabled, "Next stays as the live one is");
+  // ...the same panes (task to task): the held row stands as before
+  const prev = { list: [{ id: "next", group: "next" }, { id: "done", group: "more", at: "s", laid: { open: "from" } }] };
+  assert.ok(heldRow(prev, now).verbs.list.some((v) => v.id === "done" && v.at === "s"), "a task left for a task keeps its row held");
+});

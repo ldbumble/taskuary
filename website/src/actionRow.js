@@ -118,6 +118,11 @@ export function heldRow(kept, now) {
   if (kept === now) return { verbs: now, liveOf: (id) => now.list.find((x) => x.id === id) };
   const nav = (v) => v.group === "next" || v.group === "back";
   const navNow = (v) => now.list.find((x) => x.group === v.group && !x.disabled) || { ...v, disabled: true };
+  // ...a held row laid on OTHER panes than the live one has nowhere to stand on the new item (the visual audit, 2026-11-13: Back from a report
+  // drew the task's header bare for 0.3-0.8 s): the new item's own buttons stand instead, greyed and inert until the hold lets go
+  const layOf = (r) => JSON.stringify(laidOf(r.list) || r.lay || null);
+  if (layOf(kept) !== layOf(now) && now.list.some((v) => !nav(v) && !String(v.id).startsWith("floor:")))
+    return { verbs: { ...now, list: now.list.map((v) => (nav(v) ? v : { ...v, disabled: true, inert: true })) }, liveOf: (id) => now.list.find((x) => x.id === id && nav(x) && !x.disabled) };
   // ...a held button acts where its live verb stands for no item, or for the same item still on the table (2026-10-27: Run another agent did
   // nothing while a write-up re-drew the row) - never the item being left's own; a held Back or Next is the live row's, whatever the item
   // under it names it (a batch registers chat:next; the stress walk, 2026-11-02)

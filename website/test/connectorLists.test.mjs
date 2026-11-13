@@ -17,7 +17,7 @@ test("the lists read ahead are asked once, spent once by the view's first load, 
 });
 
 test("the address and the sidebar both start the read, and Connections' first load takes it", () => {
-  assert.match(src("TaskHubPage.jsx"), /const readAhead = \(req\) => \{ if \(req\?\.kind === "browse" && req\.area === "connections"\) readLists\(api\); \};/);
+  assert.match(src("TaskHubPage.jsx"), /const readAhead = \(req\) => \{ if \(req\?\.kind === "browse" && req\.area === "connections"\) readLists\(api\);/);
   assert.match(src("TaskHubPage.jsx"), /canvasRequestFromHash\(window\.location\.hash \|\| "", 1\); readAhead\(r\);/);
   assert.match(src("AssistantView.jsx"), /if \(area === "connections"\) readLists\(api\);/);
   assert.match(src("ConnectorsView.jsx"), /await \(takeLists\(\) \|\| Promise\.all\(\[api\.get\("\/api\/connectors"\), api\.get\("\/api\/sources"\), api\.get\("\/api\/report-types"\)\]\)\)/);

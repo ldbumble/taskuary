@@ -368,6 +368,11 @@ test("a task's first section draws at once; only a switch fades its words in", (
   // ...an item that names where it opens: its stale section from the item before is no switch
   let r = sectionFade(null, "report", "k1", "report"); r = sectionFade(r, "agent", "k2", "report"); assert.equal(r.moved, false);
   r = sectionFade(r, "report", "k2", "report"); assert.equal(r.moved, false); r = sectionFade(r, "agent", "k2", "report"); assert.equal(r.moved, true);
+  // ...and the page's OWN move is no switch (the bug hunt, 2026-11-12): a job New had just made was first laid on Came from, its chat not read
+  // yet; the chat landed and the page homed on it - and faded its words in over 0.4s of empty body. Only the owner's switch fades
+  let h = sectionFade(null, "from", 9, "from"); h = sectionFade(h, "agent", 9, "agent"); assert.equal(h.moved, false, "the page went home: no fade");
+  h = sectionFade(h, "from", 9, "agent"); assert.equal(h.moved, true, "the owner's switch away from it fades");
+  assert.match(taskSource(), /fadeMemo\.current = sectionFade\(fadeMemo\.current, section, selected, hereSec\);/);
   const page = taskSource();
   assert.match(page, /transition: open && fade \? `opacity 160ms ease \$\{SLOT_MS\}ms, visibility 0s` : "none",\s+\.\.\.\(open && fade \? \{ "@starting-style": \{ opacity: 0 \} \} : \{\}\),/);
   for (const k of ["from", "agent"]) assert.match(page, new RegExp(`SECTION\\(isOpen\\("${k}"\\), openW\\("${k}"\\), [^)]*fades\\)`), `the ${k} section reads the page's own fade`);

@@ -90,6 +90,9 @@ export const chatLatch = (memo, of, chat) => ({ of, on: (memo?.of === of && memo
 // (else its first one drawn). Returns the next record; its `moved` says whether the open section fades.
 export const sectionFade = (memo, open, of, home = null) => (!memo || memo.of !== of || memo.first == null
   ? { of, first: home ?? open, moved: false }
+  // ...and the page's OWN move home is no switch (the bug hunt, 2026-11-12: a job just made was laid on Came from before its chat was read,
+  // then homed on the chat and faded it in over ~0.4s of empty body): it becomes the section first drawn
+  : open != null && open === home && open !== memo.first && !memo.moved ? { ...memo, first: open }
   : { ...memo, moved: memo.moved || (open != null && open !== memo.first) });
 // ...a closed tab says MORE than its name (the owner, 2026-10-27: "maybe a little smaller and have more summary on each one"): three or four
 // short lines, each clamped so a tab never scrolls. Words quoted are somebody's own; each line only where there is something to say.

@@ -26,7 +26,9 @@ import { BOARD, canvasRequestFromHash } from "./canvasLinks.js";
 import { readLists } from "./connectorLists.js";
 // a link to Connections asks for its lists the moment the address is read - not once the canvas, its chunk and Connections' own
 // chunk have all come in (connectorLists.js: a cold #connector=whatsapp sent its first read ~1.4 s after the page was asked for)
-const readAhead = (req) => { if (req?.kind === "browse" && req.area === "connections") readLists(api); };
+// ...and a task opened by its number is read at the press, its chat with it (taskDetail.prefetchTask): a job New or the Assistant had just
+// made opened on its title alone, then its head over an empty chat, then the chat (the bug hunt, 2026-11-12)
+const readAhead = (req) => { if (req?.kind === "browse" && req.area === "connections") readLists(api); if (req?.kind === "task" && req.tid) prefetchTask(api, req.tid); };
 import { onPlace, openAppLink, recordPlace } from "./appLinks.js";
 import { restartBridge } from "./waBridge.js";
 import { SetupChip, useSetup } from "./SetupWizard.jsx";
@@ -37,6 +39,7 @@ import { prepBody } from "./meetingAlert.js";
 import { fmtTime12, tsMs } from "./dates.js";
 import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask, pruneHandRaises } from "./handraiseState.js";
 import { askAssistant, failureAsk } from "./askAssistant.js";
+import { prefetchTask } from "./taskDetail.js";
 import { TaskuaryMark, asUtc, timeAgo, useAgents } from "./ui.jsx";
 import AssistantView from "./AssistantView.jsx";
 import { SEARCH_PICKED, SearchBar, openSearch } from "./SearchEverything.jsx";
@@ -568,6 +571,7 @@ export default function TaskHubPage() {
   // A terminal belongs to the task it is working. Opening a task with start=true means "and put your CLI on it now";
   // `act` opens it with one of its dialogs up (a card's "Not a task…")
   const openTask = (taskId, opts) => {
+    readAhead({ kind: "task", tid: taskId });
     selectTask(taskId);
     ask({ kind: "task", tid: taskId, start: opts?.start ? { agent: opts.agent, model: opts.model } : null, act: opts?.act || null });
     if (tab !== "Assistant") { setTab("Assistant"); tabRef.current = "Assistant"; }

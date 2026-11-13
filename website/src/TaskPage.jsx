@@ -911,18 +911,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       loadFailed.current = true; setErr(e?.response?.data?.detail || "Failed to load task");
     }
   });
+  // ...its chat waited for by ANY read while that is out: a just-started job's write re-read the task and drew its head over an empty chat
+  // (the bug hunt, 2026-11-12)
   const loadDetail = useCallback(async (id, first = false) => {
     if (!id) { setDetail(null); return; }
     const ahead = heldTask(id), coming = !ahead && first && aheadTask(id);
     // ...AND ITS CHAT WITH IT (recorded 2026-11-12 on the built app: a task opened for the first time stood its head over a spinner where the
     // chat goes, its chat's read asked at the press still out): the task's first frame waits - its title and spinner standing - for the chat's
     // read asked ahead with it too, never longer than CHAT_WAIT, so the task and its chat are drawn as one move
-    const chat = first ? aheadChat(id) : null, both = (p) => (chat ? Promise.all([p, Promise.race([chat, new Promise((r) => setTimeout(r, CHAT_WAIT))])]).then(([d]) => d) : p);
+    const chat = aheadChat(id), both = (p) => (chat ? Promise.all([p, Promise.race([chat, new Promise((r) => setTimeout(r, CHAT_WAIT))])]).then(([d]) => d) : p);
     if (ahead && !chat) setDetail((d) => (d?.task?.TaskId === id ? d : ahead));
     else if (ahead) { await both(Promise.resolve(ahead)); if (stale(id)) return; setDetail((d) => (d?.task?.TaskId === id ? d : ahead)); }
     // ...and the read a rail press asked ahead, still on its way, IS the mount's read: a second one beside it doubled a big task's wait
     // under the spinner (the owner, 2026-11-01: "this still happens")
     if (coming) { const data = await both(coming); if (stale(id)) return; if (data?.task?.TaskId === id) { setDetail(data); return; } }
+    if (chat && (await both(0), stale(id))) return;
     return detailReads.current.run(id, id);
   }, []);
   // ...and the read of the task just left is let go of: its answer would be thrown away (stale) after the server spent on it
@@ -1839,7 +1842,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the chat's Draft reply is not the lit move there: Mark done is (the owner, 2026-10-29)
   const outside = answeredOutside({ messages: taskMessages, outside: sentOutside, pending: !!pendingReview });
   const isOpen = (k) => section === k;
-  const fadeMemo = useRef(null); fadeMemo.current = sectionFade(fadeMemo.current, section, selected);
+  const fadeMemo = useRef(null); fadeMemo.current = sectionFade(fadeMemo.current, section, selected, hereSec);
   const fades = fadeMemo.current.moved;
   const openSection = (s) => setSecPick({ key: pickKey, sec: s });
   // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that

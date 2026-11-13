@@ -4013,6 +4013,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
   // ...a task by number: its row when the rail holds it, else the task link's own road (a closed task is on no rail)
   const pressRow = (n) => {
+    prefetchTask(api, n);
     const row = (pile?.items || []).find((i) => Number(i.tid) === Number(n) && i.lane !== "unjudged");
     if (row) railPress(row.key); else openAppLink(`task=${n}`);
     return !!row;

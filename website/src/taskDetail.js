@@ -28,7 +28,7 @@ export const prefetchTask = (api, tid) => {
   // ...AND ITS CHAT WITH IT (the owner's rule: never a blank beat - seen 2026-11-11: a task opened for the first time drew its header and its
   // box over an empty chat for a quarter of a second, while the list was read only once the view had mounted)
   // ...stamped with when it was ASKED: the chat draws whichever list was asked last, this or its own (GeneralWorkspace newerList)
-  api.get(`/api/tasks/${id}/conversation`).then(({ data }) => { if (Array.isArray(data?.items)) rec.conv = Object.assign(data, { _at: asked }); }).catch(() => {});
+  const conv = api.get(`/api/tasks/${id}/conversation`).then(({ data }) => { if (Array.isArray(data?.items)) rec.conv = Object.assign(data, { _at: asked }); }).catch(() => {});
   // ...AND WHAT ITS CHAT STANDS ON (recorded 2026-11-12 on every rail click, Next and Back: the task's header over a spinner for up to a
   // second - list in hand, the chat drew nothing until its own read of the agent's state had landed)
   // ...and a view mounted before it landed waits for it rather than its own read beside it (aheadChat; recorded 2026-11-12 on the built
@@ -36,14 +36,25 @@ export const prefetchTask = (api, tid) => {
   // landed half-way through, and only the view's own later one was drawn)
   // ...and once it has ANSWERED it is no longer ahead, whatever it said: a coding task has no chat read (422), and its "still on the way" held
   // every Next onto it in the loading frame for a beat, then faded its page in (the rail walk, 2026-11-12)
-  rec.chatP = api.get(`/api/tasks/${id}/assistant`).then(({ data }) => { if (data && typeof data === "object") rec.chat = data; return rec.chat || null; })
-    .catch(() => null).finally(() => { rec.chatDone = true; });
+  // ...AND ITS LIST IS PART OF IT (the bug hunt, 2026-11-12: a job just made opened its head over an empty chat for a beat, then his ask faded
+  // in): the chat ahead is in hand once both have landed
+  const state = api.get(`/api/tasks/${id}/assistant`).then(({ data }) => { if (data && typeof data === "object") rec.chat = data; return rec.chat || null; }).catch(() => null);
+  rec.chatP = Promise.all([state, conv]).then(([c]) => c).finally(() => { rec.chatDone = true; });
   held.set(id, rec);
   return rec.p;
 };
-export const heldConversation = (tid) => { const e = held.get(Number(tid)); return fresh(e) && e.conv ? e.conv : null; };
-export const heldChat = (tid) => { const e = held.get(Number(tid)); return fresh(e) && e.chat ? e.chat : null; };
-export const aheadChat = (tid) => { const e = held.get(Number(tid)); return fresh(e) && !e.chat && !e.chatDone ? e.chatP || null : null; };
+// ...A WRITE LETS THE TASK'S READ GO, NOT ITS CHAT'S FIRST PAINT (the bug hunt, 2026-11-12: a job just made and started writes to its task
+// over and over in its first seconds, and the view opened on its head over an empty chat, reading it all again): the chat is drawn from what
+// was read for PAINT ms more - the view reads it again on mount and the newer read wins (GeneralWorkspace newerList) - never its buttons
+const PAINT = 5000, painted = new Map();             // tid -> { at, rec }: a read a write let go of, for its chat's first paint
+// ...the held read's, else the one a write let go of: a task read kept since (keepTask) carries no chat of its own
+const chatOf = (tid, k) => { const id = Number(tid), e = held.get(id), w = painted.get(id);
+  return (fresh(e) && e[k]) || (w && now() - w.at < PAINT && w.rec[k]) || null; };
+export const heldConversation = (tid) => chatOf(tid, "conv");
+export const heldChat = (tid) => chatOf(tid, "chat");
+export const aheadChat = (tid) => { const e = held.get(Number(tid)), w = painted.get(Number(tid));
+  const r = fresh(e) && e.chatP ? e : w && now() - w.at < PAINT ? w.rec : null;
+  return r && !r.chatDone ? r.chatP || null : null; };
 // ...and the agents' sessions: whether the task has one decides half its row (Answer it, Review changes, Stop and save), and a view that
 // waited to look put a session-less row up first - Reply and Send out results for ~100ms over a task whose agent was waiting on the
 // owner (G8, verified 2026-10-20). One list for every task, read with any task ahead
@@ -72,7 +83,9 @@ export const keepTask = (tid, data, _wait = undefined, asked = now()) => { const
   noteRead(id, data, asked); };
 // ...one task's write leaves every other task's session as it was: only that task's is unknown again
 export const forgetTasks = (tid = null) => {
-  if (tid == null) { terms = null; held.clear(); reads.clear(); pileAt = 0; return; }
+  const paint = (e, id) => { if (e?.chatP || e?.conv || e?.chat) painted.set(id, { at: now(), rec: e }); };
+  if (tid == null) { terms = null; held.forEach(paint); held.clear(); reads.clear(); pileAt = 0; return; }
+  paint(held.get(Number(tid)), Number(tid));
   held.delete(Number(tid));
   if (terms) terms.gone = new Set([...(terms.gone || []), Number(tid)]);
 };

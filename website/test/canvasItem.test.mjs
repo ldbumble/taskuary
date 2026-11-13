@@ -58,7 +58,7 @@ test("only the item on the table is mounted live", () => {
 test("the task view's loads do not depend on the callbacks its page passes", () => {
   const page = src("TaskPage.jsx");
   assert.match(page, /const onSelectRef = useRef\(onSelect\); onSelectRef\.current = onSelect;/);
-  const load = page.slice(page.indexOf("const loadDetail = useCallback"), page.indexOf("const loadDetail = useCallback") + 1400);
+  const load = page.slice(page.indexOf("const loadDetail = useCallback"), page.indexOf("const loadDetail = useCallback") + 1600);
   assert.match(load, /\}, \[\]\);/);
   assert.match(page, /const loadTasks = useCallback\(async \(\) => \{ await listRef\.current\?\.\(\); \}, \[\]\);/);
 });

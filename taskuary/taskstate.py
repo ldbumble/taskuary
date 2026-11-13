@@ -252,6 +252,13 @@ def closed_why(store, t: dict, comments=None) -> str | None:
     no close out is needed, I have no idea what the agent did and why it closed"). The agent's own done sentence, else the
     first line of its report. None for an open task, one the owner closed, or one its upstream item ended (`ended` says that)."""
     if not t or t.get('Status') != 'done': return None
+    # ...A ROUTINE'S RUN CLOSED BY THE ROUTINE (flow.execute; the visual audit, 2026-11-13): it read "✓ Mark done just now", a press the owner
+    # never made, over nothing of what ran - its last line says that, and a draft step's line where its draft waits
+    if str(t.get('UpdatedBy') or '') == 'workflow':
+        said = [str(c.get('Body') or '') for c in (comments if comments is not None else store.list_comments(t['TaskId'], internal=True) or [])
+                if c.get('Actor') == 'workflow']
+        waits = [b.split(': ', 1)[-1].rsplit(' (', 1)[0] for b in said if 'waiting for your yes on' in b]
+        if said: return 'Closed by the routine: ' + ' '.join([said[-1], *(f'{w[:1].upper()}{w[1:]}.' for w in waits)])[:400]
     ev = finish_evidence(store, t['TaskId'])
     if not ev or str(ev.get('who') or '').startswith('Its '): return None
     from .wrapup import is_report, report_body

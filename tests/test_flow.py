@@ -116,6 +116,19 @@ def test_a_run_whose_draft_waits_on_its_own_task_is_done(db):
     assert s.get_task(tid2)['Status'] != 'done'                      # its own review waits here
 
 
+def test_a_run_the_routine_closed_says_so_and_where_its_draft_waits(db):
+    # the visual audit, 2026-11-13: a routine's run task opened on "✓ Mark done just now" - a press the owner never made - and nothing about
+    # what ran or that its draft waited on another task
+    from taskuary import taskstate
+    s = MemoryStore()
+    src = source(s, [read_dupes(db), {'id': 's2', 'kind': 'draft', 'label': 'Tell Erin', 'to': 'erin@northwind.example', 'about': '{{s1}}'}])
+    tid = run_task(s, src)
+    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 41, 'taskId': tid + 100, 'ref': 'TQ-0999', 'draft': 'Hi'}):
+        flow.execute(s, src, tid, 'manual', llm=no_model)
+    why = taskstate.closed_why(s, s.get_task(tid))
+    assert why.startswith('Closed by the routine: Ran 2 steps') and 'waiting for your yes on TQ-0999' in why and 'agent' not in why
+
+
 def test_a_token_that_names_nothing_is_left_visible_and_said():
     ctx = flow.context({'inputs': {'site': 'North'}}, 'schedule')
     warns = []

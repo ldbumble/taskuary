@@ -217,6 +217,34 @@ def test_the_answer_time_count_lines_already_stored_are_retired_by_their_key_and
     assert not learn.drop_answer_counts(s), 'once'
 
 
+def test_the_note_a_task_was_closed_with_is_read_in_the_owners_words_answered_or_not():
+    """THE LIVE SHAPE (the audit, 2026-11-13): Close with a note is the one place the owner says WHY a task ends. The note was kept on the
+    task and no episode carried it: unanswered, the memory read a bare "closed it without replying"; answered first, nothing at all."""
+    from taskuary.store import MemoryStore
+    from taskuary.testing import Factory
+    s = MemoryStore(); f = Factory(s)
+    s.set_setting('owner_email', 'alex@northwind.example', 'test')
+    def closed(title, who, note, answered=False):
+        tid = f.task(title=title, kind='general')
+        f.message(task_id=tid, subject=title, body='Can you look at this?', from_name=who.split('@')[0].title(), from_email=who,
+                  conversation_id=f'email:{title}', sent_at=C._stamp(datetime.now() - timedelta(hours=3)))
+        if answered: s.add_message({'TaskId': tid, 'ExternalId': f'out-{tid}', 'ConversationId': f'email:{title}', 'Channel': 'email', 'Direction': 'out',
+                                    'FromName': 'You', 'FromEmail': 'alex@northwind.example', 'Subject': f'Re: {title}', 'BodyText': 'Done.',
+                                    'SentAt': C._stamp(datetime.now() - timedelta(hours=1)), 'Status': 'context'})
+        if note: s.add_comment(tid, 'owner', 'human', f'Closed out: {note}')          # as the one close door writes it (server task.complete)
+        s.update_task(tid, {'Status': 'done'}, 'owner')
+        return f'task{tid}'
+    renewal = closed('Payworth renewal', 'renewals@vendor.example', 'Ray owns vendor renewals, not me')
+    badge = closed('Badge for the new starter', 'gail@northwind.example', 'Told her in the hallway - facilities does these', answered=True)
+    plain = closed('Seat count', 'omar@northwind.example', '')
+    done = closed('Parking pass', 'paula@northwind.example', '', answered=True)
+    eps = {e[0]: e[3] for e in episodes.build(s, _since())}
+    assert 'closed it without replying, and wrote: "Ray owns vendor renewals, not me"' in eps[renewal]
+    assert 'you: closed it, and wrote: "Told her in the hallway - facilities does these"' in eps[badge], 'answered first: the note is still his word'
+    assert eps[plain].endswith('you: closed it without replying') and done not in eps, 'no note: as before'
+    assert all(episodes.is_act(k) for k in (renewal, badge)), 'a line may rest on it'
+
+
 OLD_PEOPLE = ('_(who matters to you, what they are to you, and how you deal with them: how fast you answer, what\n'
               'you hand them, who you copy - never what they are like)_')
 

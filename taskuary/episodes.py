@@ -16,6 +16,7 @@ happened. Parsing addresses, times and weekdays is fact, not meaning: no word li
     acts       a reply (and how soon - evidence of who matters, never a number to keep), a draft edited or rejected, a put-off with its
                day, a hand-off, a close without a reply, Not ours / Not a task, an idea taken up or dismissed, a promise in sent mail
     words      what the owner typed to a task's agent (say ids) - the agent's line before it rides along only as what they answered
+               and the note they closed a task with (Close with a note), on its close
     never      navigation - Next, open, focus: "Next" is "not now, in this walk", never a judgement (Shown is not acted on); and never
                an agent's own summary, lesson or outcome: what an agent concluded is not a fact about the owner (the owner, 2026-11-13)
     excluded   personal mailboxes (presses.personal), agents' own acts, auto-replies
@@ -152,27 +153,33 @@ def build(store, since: str) -> list:
             out.append((xs[-1][0], xs[-1][1].strftime('%Y-%m-%d %H:%M:%S'), who, f"you keep a promise to {who}{_relation(store, who)} on {day}s: "
                         f"{len(xs)} weeks ({', '.join(e for e, _ in xs[-4:])})"))
         seen = {e[0] for e in out}                    # a Not for me closes the task too: said once, as what the owner said
-        out += [e for e in _closed_unanswered(store, since, me) if e[0] not in seen] + _owner_said(store, since)
+        out += [e for e in _closed(store, since, me) if e[0] not in seen] + _owner_said(store, since)
     except Exception as e:
         logger.warning(f'episodes: some not read - {e}')
     return sorted(out, key=lambda e: str(e[1] or ''))
 
 
-def _closed_unanswered(store, since: str, me: set) -> list:
+def _closed(store, since: str, me: set) -> list:
     """A task the owner closed with no reply of theirs after its last inbound (the owner, 2026-11-13: "if i close task without responding
     memory should say seems like issue x is not his problem and that should feed into next triage"). The ledger's close row is the fact;
-    what kind of issue it was is the reflection's to read from the task, never a word match here."""
+    what kind of issue it was is the reflection's to read from the task, never a word match here.
+    ...AND THE NOTE THEY CLOSED IT WITH, in their words (the audit, 2026-11-13: Close with a note - "Ray owns vendor renewals, not me" - was
+    kept on the task and read by nobody; the one line where the owner says WHY reached the memory as a bare "closed it without replying",
+    and a task they had answered before closing, not at all). A close with a note is an episode whether or not a reply went."""
     from .workstreams import is_personal
     out = []
     for r in store._rows("SELECT TargetId, At FROM outcome WHERE Kind='task.closed' AND TargetKind='task' AND Actor IN ('owner','web') AND At>=? ORDER BY Id", (since,)):
         tid = r['TargetId']; m = store.last_inbound_on_task(tid)
-        if not m or _skip(store, m) or str(m.get('FromEmail') or '').lower() in me or is_personal(store, tid=tid): continue
-        own = store.own_reply_on_thread(m.get('ConversationId'), tid) if m.get('ConversationId') else None
-        if own and str(own.get('SentAt') or '') >= str(m.get('SentAt') or ''): continue
+        note = ' '.join(next((c['note'] for c in store.closeouts(tid) if c['what'] == 'closed' and c['at'][:19] == str(r['At'])[:19]), '').split())[:SAY_CHARS]
+        if (m and (_skip(store, m) or str(m.get('FromEmail') or '').lower() in me)) or (not m and not note) or is_personal(store, tid=tid): continue
+        own = store.own_reply_on_thread(m.get('ConversationId'), tid) if m and m.get('ConversationId') else None
+        answered = bool(not m or (own and str(own.get('SentAt') or '') >= str(m.get('SentAt') or '')))
+        if answered and not note: continue
         t = store.get_task(tid) or {}
         what = ' '.join(str(t.get('Summary') or t.get('Title') or '').split())[:160]
-        out.append((f'task{tid}', r['At'], str(m.get('FromEmail') or '').lower(),
-                    f"{_head(m, store)}" + (f' · the task: {what}' if what else '') + ' · you: closed it without replying'))
+        out.append((f'task{tid}', r['At'], str((m or {}).get('FromEmail') or '').lower(),
+                    (f"{_head(m, store)}" + (f' · the task: {what}' if what else '') if m else repr(what or 'a task of their own'))
+                    + ' · you: closed it' + ('' if answered else ' without replying') + (f', and wrote: "{note}"' if note else '')))
     return out
 
 

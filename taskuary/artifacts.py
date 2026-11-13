@@ -134,11 +134,13 @@ def strip_directive(text: str) -> str:
     return _CHART_LINE.sub('', text or '').strip()
 
 
+_ID = re.compile(r'(^|_)id$', re.I)          # a key column, by the schema's own naming: what a row IS, not how much
+
 def chart_columns(rows: list) -> tuple:
     """(label column, value column) - the first column that reads as a name, and the first that
     reads as a number in every row. No numbers means no chart; a table of ids and strings is not
     a chart just because we can draw axes."""
-    cols = columns(rows)
+    cols = [c for c in columns(rows) if not _ID.search(str(c))]      # ...a row's id (task_id) is neither a name nor a measure
     vals = [c for c in cols if all(_num(r.get(c)) is not None for r in rows if c in r)
             and any(_num(r.get(c)) for r in rows)]
     labels = [c for c in cols if c not in vals]

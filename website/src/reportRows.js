@@ -15,7 +15,8 @@ export const colWords = (c) => String(c || "").replace(/_/g, " ").trim();
 export function reportShape(rows) {
   const cols = [...new Set((rows || []).flatMap((r) => Object.keys(r)))];
   const nums = cols.filter((c) => rows.every((r) => r[c] == null || numOf(r[c]) !== null) && rows.some((r) => numOf(r[c])));
-  const lab = cols.find((c) => !nums.includes(c)) || null, val = nums[0] || null;
+  // ...a row's id (task_id) is no measure: it numbered the rows, and a chart of it said nothing (the visual audit, 2026-11-13)
+  const lab = cols.find((c) => !nums.includes(c)) || null, val = nums.find((c) => !/(^|_)id$/i.test(c)) || null;
   const dated = !!lab && rows.length >= 5 && rows.every((r) => DATED.test(String(r[lab] ?? "")));
   return { cols, nums, lab, val, dated, chart: !val || rows.length < 2 ? null : dated ? "line" : "bars" };
 }

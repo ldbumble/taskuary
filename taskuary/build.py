@@ -125,8 +125,9 @@ CARD_TOOLS = (
     "[[CARD-SAVE: <field key> = <value>]] - put a value YOU know onto the card (an address, a version, an id the guide gives). Never a "
     "secret: keys, tokens and passwords are pasted by the owner into the card's own masked field.\n"
     "[[CARD-TEST]] - run the card's Test; its answer comes back to you.\n"
-    "[[CARD-ASK: <field key or ->]] <the one step only the owner can do> - an account, a portal, a secret to paste: say where to go, what "
-    "to click and which field to paste into. One step, then stop.\n"
+    "[[CARD-ASK: <field key or ->]] <the one thing only the owner can give or do>, then stop. A value that is not a secret (an address, a "
+    "server, an account name): ask for it in one line - the owner answers in your box and you SAVE it. A secret: say where to get it and "
+    "which field to paste it into. A step outside (a portal, an admin's yes): say where to go and what to click.\n"
     "[[CARD-DONE]] - only after a Test passed: say in one line what now works.\n"
     "Save what you can, then Test. A failed Test: read why, fix what you can, Test again; ask only for what only the owner can do.")
 _TOOL = re.compile(r'^[ \t]*\[\[CARD-(ASK|SAVE|TEST|DONE)(?::([^\]]*))?\]\][ \t]*(.*)$', re.M)

@@ -1534,13 +1534,13 @@ def slack_team_name(tok: str, team: str) -> str:
     return _SLACK_TEAMS[team]
 
 
-def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False, user=False, state=None) -> int:
+def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False, user=False, state=None, feed=None) -> int:
     """Teams as an inbound channel: each chat is a conversation (so a thread keeps building
     ONE task, like a mail thread), each human message an item on the timeline. Bot posts,
     call-started events, deletions and empty bodies are not messages anybody has to act on.
     `state`: the source's read state, updated in place for the caller to keep once this returns - the delta link (_teams_delta),
-    `seen` (each chat's newest message the feed handed over, whatever became of it: teams_behind and the sign-in road's per-chat
-    mark) and `from` (where reading began: nothing older is owed)."""
+    `seen` (each chat's newest message the feed handed over, whatever became of it: teams_late and the sign-in road's per-chat
+    mark) and `from` (where reading began: nothing older is owed). `feed`: these messages instead of the delta read (teams_late)."""
     since_iso, users, chats, n = _utc(since), {}, {}, 0
     if state is not None: state.setdefault('from', since_iso); seen = state.setdefault('seen', {})
     touched = set()                                # chats to mark read once, not per message
@@ -1553,7 +1553,7 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
             if me: _TEAMS_ME[upn.lower()] = me
         except requests.RequestException:
             pass
-    feed = _teams_user_delta(tok, since_iso, state=state) if user else _teams_delta(tok, upn, since_iso, state=state)
+    if feed is None: feed = _teams_user_delta(tok, since_iso, state=state) if user else _teams_delta(tok, upn, since_iso, state=state)
     tenant = _token_tenant(tok)
     # oldest first, so threads read in order - by when each was written: a delta link's pages need not be newest first
     for m in sorted(reversed(feed), key=lambda m: m.get('createdDateTime') or ''):
@@ -1637,15 +1637,19 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
 # last message is older than the grace and newer than anything the feed handed over for that chat - Microsoft has it, Taskuary has not
 # been given it yet. The line goes on the card and the bell by the card's own error road (_poll_one), and goes when they come in.
 BEHIND, BEHIND_GRACE = 'Teams messages are behind', timedelta(minutes=15)
-def teams_behind(store, tok, upn, state, user=False) -> str:
-    "'' when every chat's last message has come in; else the line that says how many have not."
+# ...AND READ FROM THE CHAT LIST ITSELF (the owner, 2026-11-13: a colleague's ask sat in a group chat all morning while the export handed
+# over nothing, and "behind" was all the card could say). The list's preview of a chat's last message IS that message - its id, sender,
+# words and time - so one past the grace is taken from there, by the same road as every Teams message; the export's copy, when it comes,
+# is the same id and a duplicate. Per-chat history is no way round: an app is refused a group thread it is not a member of (403)
+def teams_late(store, tok, upn, state, user=False) -> list | None:
+    "The last messages of the chats Microsoft's export has not handed over past the grace, as messages (with `chatId`); None: the list failed."
     url = f'{GRAPH}/me/chats' if user else f'{GRAPH}/users/{upn}/chats'
     try:
         r = requests.get(url, headers={'Authorization': f'Bearer {tok}'}, timeout=45,
                          params={'$top': 50, '$expand': 'lastMessagePreview', '$orderby': 'lastMessagePreview/createdDateTime desc'})
         r.raise_for_status(); rows = r.json().get('value') or []
     except Exception as e:
-        logger.info(f'teams {upn}: the chat list for the behind check could not be read - {e}'); return ''
+        logger.info(f'teams {upn}: the chat list for the behind check could not be read - {e}'); return None
     seen, edge, start = state.get('seen') or {}, _utc(datetime.now() - BEHIND_GRACE), str(state.get('from') or '')
     def late(ch):
         p = ch.get('lastMessagePreview') or {}
@@ -1653,7 +1657,11 @@ def teams_behind(store, tok, upn, state, user=False) -> str:
         if not (start < at <= edge) or p.get('isDeleted') or p.get('messageType') not in (None, 'message'): return False
         if not ((p.get('from') or {}).get('user')): return False        # a bot's or the system's line is never a message here
         return at > str(seen.get(ch.get('id')) or '') and not store.message_exists(f"teams:{ch.get('id')}:{p.get('id')}")
-    k = sum(map(late, rows))
+    return [{**ch['lastMessagePreview'], 'chatId': ch.get('id'), 'messageType': ch['lastMessagePreview'].get('messageType') or 'message'}
+            for ch in rows if late(ch)]
+def behind_line(store, late) -> str:
+    "'' when every late message is in now; else the line that says how many chats are still behind."
+    k = len({m['chatId'] for m in late or () if not store.message_exists(f"teams:{m['chatId']}:{m.get('id')}")})
     return f"{BEHIND}: {plural(k, 'chat')} newer than what came in - Microsoft has not handed them over yet" if k else ''
 
 
@@ -2373,8 +2381,10 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                 kept = _cfg(s).get('teams_state') or {}
                 state = kept if s.get('LastPolledAt') else {'seen': kept.get('seen') or {}}
                 n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it, user=user, state=state)
+                if late := teams_late(store, tok, s['Address'], state, user):
+                    n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it, user=user, state=state, feed=late)
                 store.patch_source_poll_state(s['SourceId'], config_set={'teams_state': state})
-                if (behind := teams_behind(store, tok, s['Address'], state, user)): errors.append(behind)
+                if (behind := behind_line(store, late)): errors.append(behind)
             elif c['Type'] == 'github':
                 from .store import roles_of
                 if s.get('ConnectorId') != c['ConnectorId']: continue

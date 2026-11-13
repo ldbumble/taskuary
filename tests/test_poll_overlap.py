@@ -167,6 +167,22 @@ class LateTeamsMessageTests(unittest.TestCase):
         self.assertFalse(self.store.get_connector(self.cid).get('LastError'))
         self.assertEqual(sum(u.endswith('/chats') for u in self.g.calls), 3, 'one chat list a poll, never a history read')
 
+    def test_a_late_chat_message_is_read_from_the_chat_list_when_the_export_never_hands_it_over(self):
+        """The live card, 2026-11-13 (invented people): a colleague asked in a group chat at 10:33 and the export handed over nothing all
+        morning - the card said "behind", and the ask never became work. The chat list's preview of the last message is that message."""
+        now = datetime.now()
+        self.g.land('m1', '19:crew', now - timedelta(minutes=50))
+        self.poll()
+        self.g.chats = [{'id': '19:sec', 'topic': 'Security app help', 'lastMessagePreview': {'id': 'm9', 'createdDateTime': _iso(now - timedelta(minutes=40)),
+                         'messageType': 'message', 'from': {'user': {'id': 'u-gail', 'displayName': 'Gail Moreno'}},
+                         'body': {'contentType': 'html', 'content': '<p>Paula starts Monday - can you set up her login in the security app?</p>'}}}]
+        self.poll()
+        row = self.store._one("SELECT BodyText, FromName FROM message WHERE ExternalId='teams:19:sec:m9'")
+        self.assertTrue(row and 'set up her login' in row['BodyText'], row)
+        self.assertFalse(self.store.get_connector(self.cid).get('LastError'), 'it came in: nothing is behind')
+        self.g.land('m9', '19:sec', now - timedelta(minutes=40)); self.poll()             # the export's copy, at last: the same message
+        self.assertEqual(self.rows('teams:19:sec:m9'), 1)
+
 
 class SignedInChatsTests(unittest.TestCase):
     """The sign-in road reads chat by chat. A chat whose last message showed up after its poll - older than the next window - is

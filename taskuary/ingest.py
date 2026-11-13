@@ -3162,9 +3162,15 @@ def split_message(store, mid: int, actor: str = 'owner', kind: str = None) -> in
 def _spawn(fn, *args):
     # ...an agent's start is at work from the moment it is set going, as a hand-over's is (agent_on_reply `opening`): read before its thread
     # had run, a mail's new task said "yours" with nothing at work for the seconds its CLI took to come up (the audit, 2026-11-10)
-    if fn is _auto_general:
-        from . import general
-        general.OPENING.add(args[1])
+    from . import general
+    if fn is _auto_general: general.OPENING.add(args[1])
+    # ...and so is an input handed to a chat agent (general.HANDED), from the hand-over until its pass is through - the burst it waits for
+    # (PASS_GATHER), the idled agent it starts again - as a typed line is from the press (the owner, 2026-11-13: "it's like typing")
+    elif fn in (_pass_general, _replan_pass) and general.handles(args[0].get_task(args[1]) or {}):
+        general.hand(args[1])
+        def fn(*a, _f=fn):
+            try: _f(*a)
+            finally: general.hand(a[1], -1)
     threading.Thread(target=fn, args=args, daemon=True).start()
 
 

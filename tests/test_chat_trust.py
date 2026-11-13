@@ -449,10 +449,16 @@ def test_trust_on_a_held_reply_task_starts_the_agent_that_writes_the_reply():
                          'BodyText': 'Alex, what is the total on the March invoice?', 'Status': 'routed'})
     rid = s.add_review({'TaskId': t, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'needs a reply'})
     s.tag_task(t, ingest.HOLD_TAG, on=True, actor='t')
+    # ...the app's own store is shared by every test in the run: one before it left "start by itself" off (CI, 2026-11-13: started '' - the
+    # task said "Starting an agent by itself is switched off"), so the switch this start goes through is set here, as the owner's default
+    was = s.get_settings().get('general_auto_enabled')
+    s.set_setting('general_auto_enabled', '1', 't')
     try:
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
             got = c.post(f'/api/tasks/{t}/trust').json()
         assert got['started'] == 'started', got
         assert [x[0][0].__name__ for x in spawn.call_args_list] == ['_auto_general'] and spawn.call_args[0][2] == t
         assert s.get_task(t)['Kind'] == 'general' and s.get_review(rid)['Status'] == 'pending'       # the agent's to fill, for his Send
-    finally: general.OPENING.discard(t)
+    finally:
+        general.OPENING.discard(t)
+        if was is not None: s.set_setting('general_auto_enabled', was, 't')

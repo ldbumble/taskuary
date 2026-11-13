@@ -175,9 +175,10 @@ class TaskState:
         # PREDATES the close is a terminal nobody shut, not the task picked back up (the Board's old rule, kept).
         if live and t.get('Status') == 'done' and t.get('ClosedAt') and str(session.get('started') or '') < str(t['ClosedAt']): live = False
         if live:
-            # ...by the one function every surface asks (general.working): the session's own word here, or a line it was just handed
-            from .general import owed
-            if not session.get('waiting') or owed(store, tid): return 'working'
+            # ...by the one function every surface asks (general.working): the session's own word here, a line it was just handed (owed), or
+            # an input on its way to its next turn (starting: a typed line from the press, a mail from its hand-over)
+            from .general import owed, starting
+            if not session.get('waiting') or starting(tid) or owed(store, tid): return 'working'
             # ...but an agent PARKED - it answered, asked nothing - over a reply it drafted is the reply waiting, as the rail says: the Board
             # put it under "agent waiting on you" with "ready to send" on the same card, and the header said so until a reload (email walk 2026-10-29)
             parked = (session.get('state') or 'parked') == 'parked' and not session.get('request')
@@ -192,8 +193,8 @@ class TaskState:
         if st == 'dropped': return 'dropped'
         # ...and a start in flight for his line is at work from the press, whichever agent comes up (general.OPENING - one mark for every kind): a
         # coding task read "yours" while its adapter came up, a chat "working" (the audit, 2026-11-10)
-        from .general import OPENING
-        if tid in OPENING and st in ('open', 'in_progress'): return 'working'
+        from .general import starting
+        if starting(tid) and st in ('open', 'in_progress'): return 'working'
         if st == 'done':
             if str(t.get('UpdatedBy') or '') in OWNER_ACTORS: return 'closed'        # yours: no need to read its notes
             return 'agentdone' if finish_evidence(store, tid) else 'closed'

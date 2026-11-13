@@ -3201,7 +3201,7 @@ class GeneralSession:
         if self.busy or getattr(self, 'waiting_turns', 0) or (not locked and self._lock.locked()): return 'a turn is on'
         if ((now or time.time()) - max(self.last, self.seen)) < idle_for() and not self.cli_gone(): return 'not idle long enough'
         from . import ingest, quickwork, workerstate as ws
-        if self.task_id in OPENING or self.task_id in quickwork.RUNNING or self.task_id in ingest._PASSING: return 'an input is on its way'
+        if starting(self.task_id) or self.task_id in quickwork.RUNNING or self.task_id in ingest._PASSING: return 'an input is on its way'
         if self.store.waiting_notes(self.task_id): return 'notes wait for it'
         if ws.held_for(self.task_id): return 'a question is held for the owner'
         # ...nor while the owner has a part on its page (a sign-in, a step handed over, a held act): the browser stays up until the agent answers
@@ -3381,6 +3381,17 @@ OPENING = _Opening()
 # should be no difference"): a coding task's reopening held a set of its own (ingest's CODING_OPENING), and the pages read neither the same way
 PRESSED = {}                 # task id -> when the owner pressed the line that started the turn in flight: that turn's clock (line_state)
 _IN_FLIGHT = {}              # task id -> lines accepted (take_line) that no turn has answered yet: OPENING stays until the last is
+# ...AND A MAIL HANDED TO IT IS AS A TYPED LINE (the owner, 2026-11-13: "if a new message comes in, it's like typing"): a line that joined the
+# thread was handed to the chat agent at rest (ingest._pass_general) and waited seconds for the rest of a burst before its turn began, and
+# in between the task read "agent done", Mark done lit, over a mail owed an answer. At work from the hand-over until the pass is through
+HANDED = {}                  # task id -> inputs handed to its agent whose pass has not ended
+def hand(tid: int, n: int = 1):
+    "An input handed to the task's agent (n=1), or its pass through (n=-1): `starting` from the one to the other."
+    k = HANDED.get(tid, 0) + n
+    if k > 0: HANDED[tid] = k
+    else: HANDED.pop(tid, None)
+    _opening_moved(tid)
+def starting(tid: int) -> bool: return tid in OPENING or bool(HANDED.get(tid))
 
 
 def reopen(store, tid: int, actor='owner') -> dict:
@@ -3419,7 +3430,7 @@ def _asks(s) -> bool:
         logger.debug(f'task {getattr(s, "task_id", "?")}: its requests were not read - {e}'); return False
 
 
-def at_work(tid: int) -> bool: return tid in OPENING or _at_work(_live_of(tid))
+def at_work(tid: int) -> bool: return starting(tid) or _at_work(_live_of(tid))
 
 
 # "THE AGENT IS AT WORK" IS ONE FACT, ONE FUNCTION (the owner, 2026-11-11: a chat stood finished under a header that read "agent working", and a
@@ -3451,7 +3462,7 @@ def owed(store, tid: int, s=None) -> bool:
     return isinstance(s, GeneralSession) or not any(x['T'] > r['At'] for _sid, _live, steps in conversation._session_steps(store, tid) for x in steps)
 def working(store, tid: int) -> bool:
     s = _live_of(tid)
-    return tid in OPENING or (s is not None and not waits(store, s)) or owed(store, tid, s)
+    return starting(tid) or (s is not None and not waits(store, s)) or owed(store, tid, s)
 def turn_started(tid: int):
     "The clock of the turn at work: from the press that began it (PRESSED), else the session's own start of it."
     s = _live_of(tid)
@@ -3468,7 +3479,7 @@ def line_state(store, tid: int, rows: list = None, was: bool = False) -> dict:
     answer not in what was read: read only after, the payload drew his line with no answer under it and nothing at work (CI, 2026-11-10)."""
     s = _live_of(tid)
     at = PRESSED.get(tid) or (getattr(s, 'turn_at', 0) or getattr(s, 'last', 0) if _at_work(s) else 0) or None
-    return {'working': was or tid in OPENING or _at_work(s), 'turnStarted': at, 'waiting': waiting_lines(store, tid) if rows is None else rows}
+    return {'working': was or starting(tid) or _at_work(s), 'turnStarted': at, 'waiting': waiting_lines(store, tid) if rows is None else rows}
 
 
 def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=None, prepare=None, wait=True, **kw):

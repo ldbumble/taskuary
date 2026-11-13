@@ -116,3 +116,16 @@ def test_the_endpoints(st):
         v = c.post('/api/build', json={'kind': 'report', 'words': 'overdue invoices'}).json()
         build.BUILDS[v['id']]['thread'].join(10)
     assert c.get(f"/api/build/{v['id']}").json()['error']
+
+
+def test_a_playbook_from_a_past_email_reads_it_as_reference_data(st):
+    mid = st.add_message({'Channel': 'email', 'Direction': 'in', 'Subject': 'Updated item numbers', 'FromEmail': 'buyer@example.test',
+                          'BodyText': 'Send the latest numbers for item X.', 'SentAt': '2020-01-01 12:00:00'})
+    from fastapi.testclient import TestClient
+    seen = []
+    def llm(sys, user, **k): seen.append(json.loads(user)); return json.dumps({'text': PB})
+    with mock.patch.object(concierge, '_compose_llm', lambda store: llm):
+        v = TestClient(server.app).post('/api/build', json={'kind': 'playbook', 'words': 'Build a playbook from this email.', 'message_id': mid}).json()
+        build.BUILDS[v['id']]['thread'].join(10)
+    assert seen[0]['example_email']['Subject'] == 'Updated item numbers' and 'reference data' in build.PLAYBOOK_SYSTEM
+    assert build.view(v['id'])['done']

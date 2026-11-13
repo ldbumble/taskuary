@@ -98,6 +98,7 @@ if (!numbersWorkflow) {
   );
 }
 let nextId = 9000;
+const demoBuilds = {};   // the demo's Set up with AI answers (it has no AI to build with)
 
 const journeyListeners = new Set();
 export const demoJourneySnapshot = () => {
@@ -685,24 +686,15 @@ const write = (method, url, body) => {
     return { action: review ? "review" : "open", taskId: id, reviewId: review?.ReviewId };
   }
 
-  if (method === "post" && p === "/api/playbooks/setup") {
-    const example = feedRows().find((row) => row.MessageId === body?.message_id);
-    const id = ++nextId;
-    const task = { TaskId: id, Title: `Create playbook: ${example?.Subject || body?.text || "Updated item numbers"}`,
-      Summary: body?.text || "Create a reusable workflow from an example email", Kind: "general", Status: "open",
-      Source: "assistant", SourceRef: "assistant:playbook", Priority: "normal", CreatedAt: new Date().toISOString() };
-    taskRows().unshift(task);
-    state["/api/tasks/detail"][id] = { task, ref: `TQ-${id}`, messages: [], attachments: [], comments: [], routes: [], runs: [], audit: [], reviews: [] };
-    const box = assistantBox(id);
-    box.session.provider = "Scripted demo";
-    box.session.pick = "demo:scripted";
-    box.providers = [{ id: "demo:scripted", type: "demo", label: "Scripted demo", model: "" }];
-    box.messages = [
-      { id: `u${++nextId}`, role: "user", content: [{ type: "text", text: `${task.Summary}${example ? `\nExample email: ${example.Subject}` : ""}${body?.connector_type ? `\nConnection: ${body.connector_type}` : ""}` }] },
-      { id: `a${++nextId}`, role: "assistant", content: [{ type: "text", text: "Let's build a playbook for gathering the latest item numbers and preparing a summary for your review. This demo uses scripted answers; your own AI will tailor the steps to your request.\n\nWhich connected system holds the numbers?" }] },
-    ];
-    return clone({ taskId: id, task, ref: `TQ-${id}` });
+  // SET UP WITH AI (taskuary/build.py) is the owner's own AI building on its page: the demo has none, and says so - nothing is pretended
+  if (method === "post" && p === "/api/build") {
+    const v = { id: `demo-${++nextId}`, kind: body?.kind || "report", busy: false, done: false, ask: "", no_ai: false, ref: null, link: "",
+      steps: body?.words ? [{ kind: "you", text: String(body.words) }] : [],
+      error: "The demo has no AI of its own to build this. In Taskuary, your connected AI drafts it, checks it and saves it here." };
+    demoBuilds[v.id] = v;
+    return clone(v);
   }
+  if ((m = p.match(/^\/api\/build\/([\w-]+)(\/answer)?$/))) return clone(demoBuilds[m[1]] || {});
 
   if (method === "post" && p === "/api/tasks") {
     const id = ++nextId;

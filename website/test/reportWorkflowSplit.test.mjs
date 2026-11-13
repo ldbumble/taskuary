@@ -24,11 +24,9 @@ test("read versus write decides the shelf, not whether an agent runs it", () => 
   assert.match(view, /Routine · write access — this agent may change data/);
 });
 
-// ...the builder is the Assistant's to fill now (2026-10-30): the composer is a field of the Reports view it sets, never a box on the page
-test("the workflow shelf has its own conversational AI builder", () => {
+// ...the routine is built on its own page by Set up with AI (taskuary/build.py, 2026-11-13) - no describe field for the chat to fill
+test("the workflow shelf has its own AI builder, on its page", () => {
   const view = read("ReportsView.jsx");
-  assert.match(view, /kind === "workflow" \? "\/api\/workflows\/compose"/);
-  assert.match(view, /"Describe the routine you want"/);
-  assert.match(view, /useViewExtras\("reports", \{ item: .*?, fields: \[\{ key: "describe"/);
   assert.match(view, /<SetupWithAi kind="workflow"/);
+  assert.doesNotMatch(view, /key: "describe"/);
 });

@@ -79,14 +79,10 @@ def _researcher(s):
                           'Assignee': 'agent:researcher'}, 'owner')
 
 
-def _playbook(s, example=None):
-    return playbooks.setup_task(s, 'Every month, check the Payworth invoice against the purchase order', message_id=example)['taskId']
-
-
-def _stranger_mail(s):
-    return s.add_message({'ExternalId': 'x1', 'Channel': 'email', 'Direction': 'in', 'Subject': 'Invoice 4471',
-                          'FromEmail': 'billing@vendor.example', 'FromName': 'Vendor billing', 'BodyText': 'Please pay.',
-                          'SentAt': '2026-10-01 09:00:00', 'Status': 'filed'})
+def _job(s):
+    """The owner's own general job (it was a playbook-authoring task: playbooks are built by the Assistant on their page now, build.py)."""
+    return s.create_task({'Title': 'Check the Payworth invoice against the purchase order', 'Kind': 'general', 'Status': 'open',
+                          'OriginBase': 'owner'}, 'owner')
 
 
 # ── Codex only ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -107,28 +103,15 @@ def test_an_untested_claude_does_not_outrank_the_codex_that_passed(world):
     assert [r['cmd'] for r in world['ran']] == ['codex']
 
 
-def test_the_owner_s_own_playbook_is_not_a_stranger_s_task_and_runs_on_codex_with_its_tools(world):
+def test_the_owner_s_own_job_is_not_a_stranger_s_task_and_runs_on_codex_with_its_tools(world):
     world['installed'] |= {'codex'}
     s, cfg = _home(('codex',), tests={'codex': True}, settings={'default_brain': 'codex', 'assistant_ai': 'cli:codex'})
-    tid = _playbook(s)
+    tid = _job(s)
     assert origin.of_task(s, tid)[0] == 'owner'
     said = _run(s, cfg, tid)
     assert not said.startswith('error'), said
     assert [r['cmd'] for r in world['ran']] == ['codex']
     assert '--dangerously-bypass-approvals-and-sandbox' in world['ran'][0]['args']      # the owner's work launches as it always did
-
-
-def test_a_playbook_from_a_stranger_s_mail_runs_on_codex_in_its_read_only_sandbox(world):
-    """A real stranger's words, on a CLI with no reviewer: Codex's own read-only sandbox - never a refusal naming claude."""
-    world['installed'] |= {'codex'}
-    s, cfg = _home(('codex',), tests={'codex': True}, settings={'default_brain': 'codex', 'assistant_ai': 'cli:codex'})
-    tid = _playbook(s, _stranger_mail(s))
-    assert origin.of_task(s, tid)[0] == 'stranger'
-    said = _run(s, cfg, tid)
-    assert 'claude' not in said.lower(), said
-    assert [r['cmd'] for r in world['ran']] == ['codex']
-    args = world['ran'][0]['args']
-    assert '--dangerously-bypass-approvals-and-sandbox' not in args and args[args.index('--sandbox') + 1] == 'read-only'
 
 
 def test_a_refusal_never_names_another_tool(world):
@@ -147,7 +130,7 @@ def test_a_refusal_never_names_another_tool(world):
 def test_a_claude_only_home_runs_the_researcher_and_a_playbook_on_claude(world):
     world['installed'] |= {'claude'}
     s, cfg = _home(('claude',), tests={'claude': True}, settings={'default_brain': 'claude', 'assistant_ai': 'cli:claude'})
-    _run(s, cfg, _researcher(s)); _run(s, cfg, _playbook(s))
+    _run(s, cfg, _researcher(s)); _run(s, cfg, _job(s))
     assert [r['cmd'] for r in world['ran']] == ['claude', 'claude']
 
 
@@ -155,10 +138,10 @@ def test_a_claude_only_home_runs_the_researcher_and_a_playbook_on_claude(world):
 @pytest.mark.parametrize('typ', ['hipaa_ai', 'openai'])
 def test_an_api_only_home_runs_the_researcher_and_a_playbook_on_the_connector(world, typ):
     s, cfg = _home(connector=typ)
-    for tid in (_researcher(s), _playbook(s), _playbook(s, _stranger_mail(s))):
+    for tid in (_researcher(s), _job(s)):
         said = _run(s, cfg, tid)
         assert 'claude' not in said.lower() and not said.startswith('error'), said
-    assert world['ran'] == [] and world['api'] == [typ] * 3
+    assert world['ran'] == [] and world['api'] == [typ] * 2
 
 
 # ── No AI at all ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -166,7 +149,7 @@ def test_an_api_only_home_runs_the_researcher_and_a_playbook_on_the_connector(wo
 def test_a_home_with_no_ai_fails_saying_so(world, leftover):
     world['installed'] |= set(leftover)
     s, cfg = _home(leftover, tests={k: False for k in leftover})
-    for tid in (_researcher(s), _playbook(s)):
+    for tid in (_researcher(s), _job(s)):
         said = _run(s, cfg, tid)
         assert said.startswith('error: No AI is connected'), said
     assert world['ran'] == []

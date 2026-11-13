@@ -1949,8 +1949,7 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
         # ...and the override only for a copy of AGENT.md that still says what it overrides: the shipped one no longer does (2026-11-09)
         + (f'{GENERAL_OVER}\n\n' if '--done' in agent_rules else '') + f"WRITING STYLE\n{counsel}"
     )
-    # ...and none on a connector card's walk: it edits no code and has no repository to look in (aisetup.WALK_REF)
-    repos = '' if outsider or task.get('SourceRef') == 'connector:setup' else repos_block(store)
+    repos = '' if outsider else repos_block(store)
     if repos: system += f'\n\n{repos}'
     # The role triage named owns the INSTRUCTIONS for general work - which is what stops it being
     # "only a label on the task". Which brain runs them is a separate question, answered from
@@ -3041,11 +3040,6 @@ class GeneralSession:
         # ...A TURN THAT SAID NO WORD AT ALL is the turn that said nothing (SILENT), woken once and then asking - never "the model returned an
         # empty response" over a Continue (the audit, 2026-11-10 - the owner: "if you have nothing to reply just ask what should i reply?")
         if not reply and is_dock(self.store.get_task(self.task_id)): raise RuntimeError('the model returned an empty response')
-        from . import playbooks
-        reply = playbooks.collect_setup_draft(self.store, self.task_id, reply)
-        # a connector card's walk: the card's tools (save a field, run Test, ask for one step) out of the reply (aisetup.collect)
-        from . import aisetup
-        reply = aisetup.collect(self.store, self.task_id, reply)
         # An API-backed assistant has no shell, so Hub publishing rides as a private response
         # envelope. Consume it before the response enters history or reaches the browser.
         from . import handbook as hub

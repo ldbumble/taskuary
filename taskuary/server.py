@@ -578,10 +578,6 @@ class ConnectorBody(BaseModel):
     Roles: str | None = None                       # csv of trigger,report,tool - see store.ROLES
     Scope: str | None = None                       # read | write | admin - see scopes.SCOPES
     ConfigPatch: dict | None = None                # the config keys one field changed, merged over what is stored (None removes one)
-class AiSetupBody(BaseModel):
-    guide: list[str] = []; fields: list = []; secret_label: str | None = None   # the card's Guide + form, as the UI has them
-    agent_steps: list[str] = []                                                  # the card's Agent tab: steps written FOR the agent
-    agent: str | None = None; model: str | None = None
 
 
 _web_root = Path(__file__).parent / 'web'
@@ -8153,44 +8149,6 @@ def build_answer(bid: str, body: BuildAnswer):
     except KeyError: raise HTTPException(404, 'that setup is over - press Set up with AI to start again')
     except ValueError as e: raise HTTPException(422, str(e))
 
-# ── Get AI to set it up (taskuary/aisetup.py): the card's guide as the agent's prompt, live on the card ──
-@app.post('/api/connectors/{cid}/ai-setup')
-def connector_ai_setup(cid: int, body: AiSetupBody):
-    c = store.get_connector(cid)
-    # WhatsApp pairs itself (Node check, bridge auto-start, QR on the card); an agent here only sat on the bridge process
-    if c and c['Type'] == 'whatsapp': raise HTTPException(422, 'WhatsApp needs no agent: the Pair with your phone box does the setup itself')
-    # ...and no walk starts here any more: the card's door opens the Assistant's chat (2026-10-30). Kept one release for an old page
-    if not c: raise HTTPException(404, 'connector not found')
-    return {'session': None, 'steps': [], 'busy': False, 'now': '', 'ask': None, 'done': False, 'moved': True}
-
-def _walk_ctx(body): return {'guide': body.guide or [], 'fields': body.fields or [], 'secret_label': body.secret_label or '', 'agent_steps': body.agent_steps or []}
-
-@app.get('/api/connectors/{cid}/ai-setup')
-def connector_ai_setup_live(cid: int):
-    """The card's walk as it stands - its steps, what the agent is doing now, the step it needs from the person - and `ready`:
-    whether any brain could take a new one, so the card can say where to get one instead of a button that only answers
-    "not found" (B10)."""
-    why = aisetup.ready_why(store)
-    # THE WALK MOVED INTO THE CHAT (2026-10-30): an open one is folded into the conversation as one record and its task closed - the
-    # card's door opens the Assistant now (aisetup.move_walk)
-    moved = aisetup.move_walk(store, cid, ACTOR)
-    if moved: return {'session': None, 'steps': [], 'busy': False, 'now': '', 'ask': None, 'done': False, 'moved': True, 'earlier': moved,
-                      'ready': not why, 'why': why}
-    return {**aisetup.walk_view(store, cid), 'ready': not why, 'why': why}
-
-class AiSetupTurn(AiSetupBody): text: str = ''; saved: list[str] = []
-
-@app.post('/api/connectors/{cid}/ai-setup/say')
-def connector_ai_setup_say(cid: int, body: AiSetupTurn):
-    """The person answered the walk: words typed on the card, or the fields they just saved there - the chat's now (2026-10-30)."""
-    return {'session': None, 'steps': [], 'busy': False, 'now': '', 'ask': None, 'done': False, 'moved': True}
-
-@app.post('/api/connectors/{cid}/ai-setup/done')
-def connector_ai_setup_done(cid: int):
-    t = aisetup.walk_task(store, cid)
-    if not t: return {'wrap': 'none'}
-    return aisetup.finish_walk(store, t['TaskId'], ACTOR)
-
 # ── Sign in with ChatGPT (taskuary/chatgptauth.py): the owner's ChatGPT plan as a brain, no API key ──
 def _chatgpt_card(cid):
     c = store.get_connector(cid)
@@ -10120,38 +10078,6 @@ def list_playbooks():
 @app.get('/api/playbooks/examples')
 def playbook_examples(q: str = '', before: int = 0):
     return store.playbook_examples(q[:300], max(0, before))
-
-
-class PlaybookSetupBody(BaseModel):
-    text: str = ''
-    message_id: int | None = None
-    connector_type: str = ''
-
-
-def _playbook_opens(task_id: int):
-    from . import general
-    try:
-        general.start_session(store, task_id, actor=ACTOR).send_prompt(
-            playbooks.SETUP_OPENING, as_owner=False, echo=False)
-    except Exception as e:
-        general.drop_session(task_id)
-        _walk_cannot(task_id, f'Playbook setup could not start: {e}. You can retry in this conversation.')
-    finally:
-        general.OPENING.discard(task_id)
-
-
-@app.post('/api/playbooks/setup')
-def setup_playbook(body: PlaybookSetupBody, background: BackgroundTasks):
-    from . import general
-    if not general.provider_options(store):
-        raise HTTPException(422, f"Connect an AI under {words.name('ai')} first, then return to create your playbook.")
-    try:
-        made = playbooks.setup_task(store, body.text, body.message_id, body.connector_type, ACTOR)
-    except ValueError as e:
-        raise HTTPException(422, str(e))
-    general.OPENING.add(made['taskId'])
-    background.add_task(_playbook_opens, made['taskId'])
-    return made
 
 
 @app.get('/api/playbooks/{slug}')

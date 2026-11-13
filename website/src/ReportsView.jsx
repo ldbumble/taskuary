@@ -454,26 +454,11 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         : low ? "It is not confident about this one — preview it in step 2 before you save." : "Check it below and preview it in step 2 before you save."}` });
   };
   onDraftRef.current = onDraft;
-  // THE DESCRIBE-IT, AS THE ASSISTANT'S (2026-10-30): the box that drafted a report from words is gone from the page - its door opens the
-  // chat - and the composer it ran is a field the Assistant fills when it is helping here. Its draft lands in the builder through the same
-  // onDraft the box used; what the composer asks back, or its miss, is the page's answer the Assistant hears next (viewResult)
-  const composeKind = browseState.section === "dashboards" ? "dashboard" : browseState.section === "workflows" ? "workflow" : "report";
-  const compose = async (ask) => {
-    const kind = composeKind;
-    const endpoint = kind === "workflow" ? "/api/workflows/compose" : kind === "dashboard" ? "/api/dashboards/compose" : "/api/reports/compose";
-    const { data } = await api.post(endpoint, { ask: String(ask || "") });
-    if (data.config && !data.error) {
-      if (kind === "dashboard") { setDashDraft({ config: data.config, meta: data }); if (browse) onBrowseState?.({ section: "dashboards", open: "draft" }); else setBucket("draft-dashboard"); }
-      else if (kind === "workflow" && data.verdict !== "report") { onDraft(data.config, data); if (browse) onBrowseState?.({ section: "workflows", open: "new-agent" }); else setBucket("new-agent"); }
-      else { onDraft(data.config, data); if (browse) onBrowseState?.({ section: "reports", open: "draft" }); else setBucket("draft"); }
-      viewResult({ action: "compose", ok: true, detail: `${data.explain || "Drafted"} - in the builder now, not saved` });
-    } else viewResult({ action: "compose", ok: false, detail: data.questions?.length ? `It needs to know: ${data.questions.join(" ")}` : data.error || "It could not draft that." });
-  };
   // ...and the one open, by its id (the everyday-asks audit, 2026-11-02): "run it" over a report's builder named it by its title alone, so
   // the Assistant's report.run guessed among titles; source_id is what its report tools take
   const openNow = browse ? browseState.open : bucket;
-  useViewExtras("reports", { item: typeof openNow === "number" ? { kind: "report", id: openNow } : null, fields: [{ key: "describe", offscreen: true, label: composeKind === "workflow" ? "Describe the routine you want" : composeKind === "dashboard" ? DASH.describe : "Describe the report you want",
-    value: "", set: compose, said: (v) => `Asked the builder for: ${String(v).length > 70 ? `${String(v).slice(0, 69)}…` : v}` }] });
+  // (no describe field: a report, dashboard or routine set up from words is built on its page by Set up with AI - build.py, 2026-11-13)
+  useViewExtras("reports", { item: typeof openNow === "number" ? { kind: "report", id: openNow } : null });
 
   // a failed load is said, with a way to try again - a spinner here waited for ever
   if (!sources) return err

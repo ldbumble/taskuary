@@ -24,6 +24,7 @@ from loguru import logger
 
 FIELDS = ('when', 'uses', 'steps', 'alone', 'ask first', 'done when')
 _FIELD = re.compile(r'^(' + '|'.join(FIELDS) + r'):\s*(.*)$', re.I)
+_ITEM = re.compile(r'^(?:\d+[.)]|[-*•])\s')     # a markdown list item: "1. ", "- ", "* "
 _TAG = re.compile(r'playbook:([\w-]+)')
 SEED_CHARS = 2200            # the whole playbook usually fits; the seed line is the operative rules
 MIN_SESSION = 600            # a session shorter than this did no job worth a playbook - no AI call for it
@@ -132,16 +133,22 @@ def collect_setup_draft(store, task_id, reply):
 
 def parse(text: str) -> dict:
     """{'title', 'when', 'uses', 'steps', 'alone', 'ask first', 'done when', 'body'} - a labelled
-    line runs until the next label or a blank line (the example indents its continuations)."""
+    line runs until the next label or a blank line (the example indents its continuations).
+    ...and a markdown list under its label is that label's (the playbook builder, 2026-11-13): an agent wrote "steps:" with its
+    numbered steps on the lines below, unindented - those fields read empty, and its whole playbook was refused as "needs all
+    six fields". A label with nothing yet takes the lines below it, and list items right under a line continue it; after a blank
+    line, steps written out under a label are still the body, as before."""
     out, cur, body = {f: '' for f in FIELDS}, None, []
     out['title'] = ''
     for l in re.sub(r'<!--.*?-->', '', text or '', flags=re.S).splitlines():
         if not out['title'] and l.startswith('# '): out['title'] = l[2:].strip(); continue
-        m = _FIELD.match(l.strip())
+        s = l.strip()
+        m = _FIELD.match(s)
         if m: cur = m.group(1).lower(); out[cur] = m.group(2).strip(); continue
-        if cur and l.strip() and l[:1].isspace(): out[cur] = (out[cur] + ' ' + l.strip()).strip(); continue
+        if cur and not s and not out[cur]: continue          # a label's value may start on a line below it
+        if cur and s and (l[:1].isspace() or _ITEM.match(s) or not out[cur]): out[cur] = (out[cur] + ' ' + s).strip(); continue
         cur = None
-        if l.strip(): body.append(l.rstrip())
+        if s: body.append(l.rstrip())
     out['body'] = '\n'.join(body).strip()
     return out
 

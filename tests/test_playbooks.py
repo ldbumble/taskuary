@@ -48,6 +48,32 @@ class ParseAndFile(unittest.TestCase):
         self.assertFalse(playbooks.about_code(pb))
         self.assertTrue(playbooks.about_code(playbooks.parse(ONBOARD)))     # github on uses = code rules apply
 
+    def test_a_markdown_list_under_a_label_is_that_labels(self):
+        """The playbook builder, 2026-11-13: the agent wrote its steps and its ask-first cases as markdown lists on the lines under
+        their labels, unindented, one label with a blank before its list - each read empty and the draft was refused for wanting
+        all six fields. A label takes the list below it; what follows a blank line under a value is still the body."""
+        pb = playbooks.parse("""# Vendor W-9 request
+when: a vendor asks for the W-9
+uses: mail (read, draft)
+steps:
+
+1. Check it is a W-9 request.
+2. Find the current W-9.
+3. Draft the reply with it attached.
+alone: find the W-9 and draft the reply
+ask first: sending the reply. Also:
+- an unknown sender
+- a different tax form
+done when: the reply went out on the owner's Send
+
+House rule: the newest signed copy only.
+""")
+        self.assertTrue(all(pb[f] for f in playbooks.FIELDS), pb)
+        self.assertEqual(pb['steps'], '1. Check it is a W-9 request. 2. Find the current W-9. 3. Draft the reply with it attached.')
+        self.assertEqual(pb['ask first'], 'sending the reply. Also: - an unknown sender - a different tax form')
+        self.assertEqual(pb['body'], 'House rule: the newest signed copy only.')
+        self.assertEqual(playbooks.parse(BILL)['body'], 'House rule: the memo is card last-4 + transaction id. ZZMARKPLAYBOOKZZ')
+
     def test_the_words_of_its_steps_never_make_a_playbook_about_code(self):
         """Only `uses:` decides (2026-10-11, "everything should be ai"): a bookkeeping job that visits the branch office and
         commits a journal entry is not a code change, and its agent must not be told the repository rules outrank it."""

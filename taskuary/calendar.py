@@ -167,6 +167,11 @@ def agenda(store, days: int = DAYS, start: datetime = None) -> dict:
     start = start or now
     end = start + timedelta(days=days)
     events, errors, sources = [], [], []
+    # ...THE DEMO'S OWN WEEK (demo.agenda, as Find times reads it): its Outlook card is a prop, and read it went to Microsoft and drew a real
+    # sign-in refusal, trace ids and all, on the demo's day card (the overnight fix round, 2026-11-12)
+    from . import demo
+    if demo.enabled():
+        return {'events': demo.agenda()[:MAX_EVENTS], 'errors': [], 'sources': ['demo'], 'start': _iso(start), 'end': _iso(end), 'tz': tz_name(tz)}
     for ol in store.connectors_by_type('outlook', with_secret=True):
         if not ol.get('Active'): continue
         boxes = [s['Address'] for s in store.list_sources() if s.get('Channel') == 'email' and s.get('Address')

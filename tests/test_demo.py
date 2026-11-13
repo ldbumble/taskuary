@@ -618,3 +618,17 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
         s = MemoryStore(); demo.seed(s)
         self.assertEqual(connectorcatalog.connected_count(s, demo.cli_connections()), len(demo.CONNECTIONS) + len(demo.CLIS_ON))
         for kind in ('email', 'linkedin', 'teams', 'whatsapp', 'github'): self.assertIsNone(outbound.connect_fix(s, kind), kind)
+
+
+class DemoCalendarTests(unittest.TestCase):
+    def test_the_demo_reads_its_own_week_and_never_reaches_microsoft(self):
+        # the demo's Outlook card is a prop: read, it went to Microsoft and drew a real sign-in refusal on the day card (2026-11-12)
+        from taskuary import calendar
+        s = MemoryStore()
+        cid = s.get_connector_by_type('outlook')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'x'}, 'o')
+        s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'ConnectorId': cid, 'Name': 'Mail', 'Active': 1}, 'o')
+        with mock.patch.object(demo, 'enabled', return_value=True), mock.patch.object(calendar, 'outlook_events', side_effect=AssertionError('went to Microsoft')):
+            got = calendar.agenda(s)
+        self.assertEqual((got['errors'], got['sources']), ([], ['demo']))
+        self.assertEqual([e['subject'] for e in got['events']], [e['subject'] for e in demo.agenda()])

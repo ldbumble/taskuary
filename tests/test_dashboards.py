@@ -355,6 +355,24 @@ def test_a_run_over_sources_with_no_rows_yet_puts_nothing_on_the_rail():
     assert not any(i.get('source_id') == src['SourceId'] for i in funnel.pile(s, force=True)['items'])
 
 
+def test_a_run_whose_every_number_is_nothing_puts_nothing_on_the_rail():
+    # a fresh install's first sync: only the AI-use source had rows (the first-run checks, no tokens counted), so the glance landed
+    # "Came in 0 · New tasks 0 · Open now 0" - and stood on the rail beside the tasks the owner opened next, until the next morning's run
+    s = MemoryStore()
+    spec = {**SPEC, 'sources': SPEC['sources'] + [{'key': 'ai', 'label': 'AI used', 'type': 'taskuary_data', 'dataset': 'ai_usage', 'date': 'day'}],
+            'components': SPEC['components'] + [{'kind': 'stat', 'title': 'AI tokens', 'source': 'ai', 'agg': 'sum', 'y': 'tokens'}]}
+    src = _save(s, spec)
+    data = {'sources': {'tasks': {'label': 'Tasks', 'rows': [], 'failed': False},
+                        'ai': {'label': 'AI used', 'rows': [{'day': _day(0), 'tokens': None, 'calls': 1}], 'failed': False}}}
+    from unittest import mock
+    with mock.patch.object(dashboards, 'collect', lambda store, cfg: data):
+        out = dashboards.file_run(s, src, spec)
+    assert out['message_id'] is None and not out['failed'] and 'nothing to show yet' in out['subject']
+    # ...and a run that has a number to say lands as before
+    s.create_task({'Title': 'Reconcile the GL export', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    assert dashboards.file_run(s, src, spec)['subject'].endswith('Open tasks 1 · AI tokens -')
+
+
 def test_the_tasks_dataset_leaves_out_the_assistants_own_chat_records():
     # the owner, 2026-10-26: the built-in dashboard listed "Taskuary guide" - the Assistant's chat record - and it opened an empty task
     s = MemoryStore()

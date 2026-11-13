@@ -569,18 +569,22 @@ def fmt(v) -> str:
     return f'{v:,.0f}' if float(v).is_integer() else f'{v:,.1f}'
 
 
-def headline(spec: dict, data: dict) -> list:
-    """[(title, value)] for every stat tile, over the dashboard's default range."""
+def numbers(spec: dict, data: dict) -> list:
+    """[(tile, value)] for every stat tile, over the dashboard's default range - the value as counted, None where nothing was."""
     days, out = int((spec.get('filters') or {}).get('range') or 0), []
     srcs = {s.get('key'): s for s in spec.get('sources') or []}
     for c in spec.get('components') or []:
         if c.get('kind') != 'stat': continue
         rows = ((data.get('sources') or {}).get(c.get('source')) or {}).get('rows') or []
         date = None if c.get('range') is False else (srcs.get(c['source']) or {}).get('date')     # "range": false counts what is true now
-        rows = where(in_range(rows, date, span(c, days)), c.get('where'))
-        v = aggregate(rows, c.get('agg'), c.get('y'))
-        out.append((c.get('title') or 'value', fmt(v) + (f" {c['unit']}" if c.get('unit') and v is not None else '')))
+        out.append((c, aggregate(where(in_range(rows, date, span(c, days)), c.get('where')), c.get('agg'), c.get('y'))))
     return out
+
+
+def headline(spec: dict, data: dict, nums: list = None) -> list:
+    """[(title, value)] for every stat tile, as the tile says it."""
+    return [(c.get('title') or 'value', fmt(v) + (f" {c['unit']}" if c.get('unit') and v is not None else ''))
+            for c, v in (numbers(spec, data) if nums is None else nums)]
 
 
 # ── keeping the last result, and a run ─────────────────────────────────────────────────────────
@@ -604,10 +608,13 @@ def file_run(store, src: dict, cfg: dict, trigger: str = 'schedule') -> dict:
     store.save_dashboard_result(src['SourceId'], json.dumps(data, default=str))
     # NOTHING TO SHOW is not news (reports.NothingToReport): a fresh install's own tables are empty, and a row on the rail saying so
     # stood where the empty rail tells the owner what to connect. The page still draws its empty tiles; the rail gets nothing.
-    if srcs and not any(d['rows'] for d in srcs):
+    # ...nor is a run whose every number is nothing: a fresh install's first sync had only the AI checks' rows, and "Came in 0 · New
+    # tasks 0 · Open now 0" stood on the rail beside the tasks opened next, until the next morning's run (the bug hunt, 2026-11-12)
+    nums = numbers(cfg, data)
+    if srcs and (not any(d['rows'] for d in srcs) or (nums and not any(v for _, v in nums))):
         return {'message_id': None, 'subject': f'{title} — nothing to show yet', 'files': 0, 'said': 0, 'failed': False,
-                'summary': 'Every source was read and none has rows yet'}
-    tiles = headline(cfg, data)
+                'summary': 'Every source was read and none has a number yet'}
+    tiles = headline(cfg, data, nums)
     bad = [d for d in srcs if d['failed']]
     note = ('Read without ' + '; '.join(f"{d['label']}: {d.get('error') or 'could not be read'}" for d in bad)) if bad else ''
     head = ' · '.join(f'{t} {v}' for t, v in tiles[:3]) or f"{sum(len(d['rows']) for d in srcs)} rows"

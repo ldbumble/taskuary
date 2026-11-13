@@ -110,6 +110,7 @@ import { askNote, closeoutOf, decidedAsk, heldGroups, splitHeld } from "./review
 import PassedCard, { isPassed, isReplaced } from "./PassedCard.jsx";
 import ReplacedDraft from "./ReplacedDraft.jsx";
 import SentCard from "./SentCard.jsx";
+import { sentStands, WENT } from "./sentLine.js";
 import { FullText } from "./assistantCards.jsx";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
@@ -2776,6 +2777,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const inTurns = !solo && !["done", "dropped"].includes(t?.Status), decided = () => { loadDetail(selected); loadTasks(); onChanged?.(); };
   // ...AND A DRAFT THE AGENT REPLACED stays a dimmed record where it stood (the owner, 2026-11-10: "it should go gray and then it should generate
   // new email action box under it"): by its time, as it stood while it waited (agentSummary.draftHome), the new card in the turn that wrote it
+  const sentBox = sentStands(sentHere, allReviews, inTurns);
   const replacedCards = allReviews.filter(isReplaced).map((r) => ({ key: `replaced:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, byRow: true, record: true,
     node: <ReplacedDraft review={r} /> }));
   const turnCards = [...passedCards, ...replacedCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
@@ -2784,9 +2786,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
         : <ReviewDecision review={g.reviews[0]} toRow={inRow && !pendingReview && proposals.length === 1} onChanged={decided} /> })),
     // ...a task's email the same as a reply (the owner, 2026-11-13: "never close action boxes. once sent just say sent")
-    ...allReviews.filter((r) => r.Kind !== "action" && ["approved", "edited", "sent"].includes(r.Status) && r.ReviewId !== sentHere?.id)
+    // ...and the one just pressed here says what the press did to the task beside it (`closing`, `kept`), as it did where its draft stood
+    ...allReviews.filter((r) => r.Kind !== "action" && WENT.includes(r.Status) && r.ReviewId !== sentBox?.id)
       .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard id={r.ReviewId} text={r.FinalText || r.DraftText} channel={r.Channel || ""}
-        to={replyContext(r)} subject={deliverySubject(r)} at={r.DecidedAt} /> }))];
+        to={replyContext(r)} subject={deliverySubject(r)} at={r.DecidedAt} {...(sentHere?.id === r.ReviewId ? { closing: sentHere.closing, kept: sentHere.kept } : {})} /> }))];
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
   const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
   // ...the reply in it only once it is written or something was said about it (replyCardShown): a reply owed that nobody wrote is the agent's
@@ -2992,7 +2995,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const waits = !!(chatReview || moreDrafts.length || proposals.length - (inTurns ? asks.length : 0) || owesEmails || handoff);
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
-  const chatCards = sentHere ? <SentCard {...sentHere} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed
+  const chatCards = sentBox ? <SentCard {...sentBox} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed
     || chatReplyShown({ replyMessage, pendingReview: chatReview, sentReview: null, unsentReview: null }) || calAsk?.invite) ? <Box ref={cardsRef} data-tq-chat-cards="" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{chatBody()}</Box> : null;
   return (

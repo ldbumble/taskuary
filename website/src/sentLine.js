@@ -9,3 +9,10 @@ export const sentLine = ({ channel, to, closing, kept }) => {
 // own is no reply, 2026-11-13) - and the line beside its pressed "✓ Sent"
 export const sentTitle = ({ to, subject }) => subject || (to ? `Reply to ${to}` : "Your reply");
 export const sentSaid = (p) => sentLine(p).replace(/^Sent ?/, "");
+// THE SENT CARD STANDS IN FOR ITS OWN DRAFT, NEVER FOR WHAT COMES AFTER IT (the audit, 2026-11-13, recorded on the real CLI: he pressed Send
+// and stayed on the task, the sender wrote again, the agent drafted the new reply - and where its card belonged stood the letter that had
+// gone, "✓ Sent", no Send anywhere while the agent said "it waits for your Send"; a reload showed it). What the press leaves (TaskPage
+// sentHere) holds the draft's place only until the task's own read has that reply as gone: from then it is its card in the turn that drafted
+// it (turnCards), and the block under the chat is whatever waits now. A task with no turns has no such card, and keeps it where it stood.
+export const WENT = ["approved", "edited", "sent"];
+export const sentStands = (sentHere, reviews, inTurns) => (sentHere && !(inTurns && (reviews || []).some((r) => r.ReviewId === sentHere.id && WENT.includes(r.Status))) ? sentHere : null);

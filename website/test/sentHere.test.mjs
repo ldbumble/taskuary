@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { sentLine, sentSaid, sentTitle } from "../src/sentLine.js";
+import { sentLine, sentSaid, sentStands, sentTitle } from "../src/sentLine.js";
 
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
@@ -12,7 +12,7 @@ test("a reply that went says where, and that the task is closing or why it stays
   assert.equal(sentLine({ channel: "teams", closing: false, kept: "an agent is still working" }), "Sent on Teams. The task stays open: an agent is still working");
   assert.equal(sentLine({ channel: "", to: "Ray Colton", closing: false }), "Sent to Ray Colton");
   const page = read("TaskPage.jsx");
-  assert.match(page, /const chatCards = sentHere \? <SentCard \{\.\.\.sentHere\} \/> :/);
+  assert.match(page, /const chatCards = sentBox \? <SentCard \{\.\.\.sentBox\} \/> :/);
   assert.match(read("ReviewDecision.jsx"), /said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: replyContext\(r\), subject: deliverySubject\(r\), id: r\.ReviewId \} : null/);
 });
 
@@ -27,3 +27,20 @@ test("a sent reply stays its card: the subject, the words, and ✓ Sent on the b
   const card = read("SentCard.jsx");
   assert.match(card, /<PressedButton pressed="sent" label="✓ Sent" \/>/);      // ...a mark, never a button nobody can press (passedCard.test.mjs)
 });
+
+// THE LIVE SHAPE (the audit, 2026-11-13, on the real CLI): Send pressed, he stays on the task, the sender writes again, the agent drafts the
+// new reply. The sent letter stood where the new draft belonged - "✓ Sent" under the turn that said "it waits for your Send", no Send to press
+test("the sent card holds its draft's place only until the task reads it as gone - then it is its turn's card, and what waits now is drawn", () => {
+  const here = { id: 2, text: "Yes, March 12 works.", channel: "email", closing: false };
+  const pressed = [{ ReviewId: 2, Status: "pending" }], read = [{ ReviewId: 2, Status: "approved" }], again = [...read, { ReviewId: 3, Status: "pending" }];
+  assert.equal(sentStands(here, pressed, true), here, "at the press, before the task is read again: where its draft stood");
+  assert.equal(sentStands(here, read, true), null, "read as gone: its turn's card says it");
+  assert.equal(sentStands(here, again, true), null, "and the next draft is never hidden behind it");
+  assert.equal(sentStands({ ...here, id: 2 }, [{ ReviewId: 2, Status: "edited" }], true), null);
+  assert.equal(sentStands(here, read, false), here, "a task with no turns has no such card: it stays where it stood");
+  assert.equal(sentStands(null, again, true), null);
+  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(page, /const sentBox = sentStands\(sentHere, allReviews, inTurns\);/);
+  assert.match(page, /WENT\.includes\(r\.Status\) && r\.ReviewId !== sentBox\?\.id\)/);      // ...its turn's card is drawn from the same word
+});
+

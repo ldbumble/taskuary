@@ -206,16 +206,21 @@ _BUSY = {'at': 0.0, 'data': None, 'days': 0}
 BUSY_TTL = 300
 
 
-def busy(store, days: int = 14) -> list:
+def busy(store, days: int = 14, sure: bool = False) -> list:
     """The owner's busy events from now for `days` days, every calendar the cards reach - cached like the reply's read, and read
     again when a longer window is asked for than the cache holds. The demo has no calendar behind it, so it has a scripted week
-    (demo.agenda)."""
+    (demo.agenda). A calendar that could not be read is never cached as an empty week; `sure` (free times are offered off it)
+    raises NoAccess with the card for it - an unread calendar offered as free time had the owner booked over his own meetings."""
     from . import demo
     if demo.enabled(): return demo.agenda()
     days = max(14, int(days or 14))
     if _BUSY['data'] is not None and time.time() - _BUSY['at'] < BUSY_TTL and _BUSY['days'] >= days: return _BUSY['data']
     tz = cal.tz_of(store)
     ag = cal.agenda(store, days=days, start=datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0))
+    if ag.get('errors'):
+        if sure: raise NoAccess(f"Your calendar could not be read, so I can't say when you're free. {ag['errors'][0]}",
+                                'Open the card', connect_fix(store)['href'])
+        return ag['events']
     _BUSY.update(at=time.time(), data=ag['events'], days=days)
     return ag['events']
 
@@ -252,7 +257,7 @@ def free_slots(store, minutes: int = 30, start: date = None, end: date = None, n
     now = datetime.now(tz).replace(tzinfo=None, second=0, microsecond=0)
     start, minutes = max(start or now.date(), now.date()), max(15, min(int(minutes or 30), 480))
     end = end if end and end >= start else start + timedelta(days=6)
-    evs = events if events is not None else busy(store, days=max(1, (end - now.date()).days + 1))
+    evs = events if events is not None else busy(store, days=max(1, (end - now.date()).days + 1), sure=True)
     picks, seen_days, d = [], set(), start
     while d <= end and len(picks) < n * 4:
         if d.weekday() < 5:
@@ -627,7 +632,7 @@ def suggest(store, people, minutes: int = 30, within: str = '', first=None, last
     mins = mins if mins in LENGTHS else 30
     a, b = within_days(within, first, last, today)
     theirs, read, unread = their_busy(store, acct, _addrs(people), a, b + timedelta(days=7))
-    evs = busy(store, days=(b - today).days + 8) + theirs
+    evs = busy(store, days=(b - today).days + 8, sure=True) + theirs
     out, later = free_slots(store, mins, a, b, n=n, events=evs), False
     if not out: out, later = free_slots(store, mins, b + timedelta(days=1), b + timedelta(days=7), n=n, events=evs), True
     return {'slots': out, 'minutes': mins, 'first': str(a), 'last': str(b), 'later': later, 'read': read, 'unread': unread, 'provider': acct['provider']}

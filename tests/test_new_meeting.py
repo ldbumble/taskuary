@@ -73,6 +73,18 @@ class FindTimes(unittest.TestCase):
             out = calwrite.suggest(s, [ERIN], 30, '', D, D)
         self.assertTrue(out['later'] and out['slots'] and all(x['start'][:10] > D for x in out['slots']))
 
+    def test_a_calendar_that_could_not_be_read_offers_no_free_time(self):
+        """The owner's own read failed (offline, a lapsed token): an empty agenda is not an empty day - it says so, with the card."""
+        s = outlook_store(); calwrite._BUSY.update(at=0.0, data=None, days=0)
+        down = {'events': [], 'errors': ['The calendar service could not be reached - this computer may be offline.'], 'sources': [f'outlook: {ME}']}
+        with mock.patch.object(calwrite.cal, 'agenda', return_value=down), mock.patch.object(calwrite, 'requests', Fake({'getSchedule': R(200, {'value': []})})), \
+             mock.patch('taskuary.channels.graph_token', return_value='tok'):
+            with self.assertRaises(calwrite.NoAccess) as e: calwrite.suggest(s, [ERIN], 30, '', D, D)
+            self.assertIn('could not be read', str(e.exception))
+            self.assertEqual(e.exception.fix['href'], '#connector=outlook')
+            with self.assertRaises(calwrite.NoAccess): calwrite.free_slots(s, 30)   # a thread's Find a time reads the same road
+        self.assertIsNone(calwrite._BUSY['data'], 'a failed read is not cached as an empty week')
+
     def test_a_card_that_may_not_write_says_so_before_any_pick(self):
         s = outlook_store('offline_access Calendars.Read')
         with self.assertRaises(calwrite.NoAccess) as e: slots(s, Fake())

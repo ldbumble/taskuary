@@ -22,3 +22,12 @@ def test_a_chat_only_word_is_found_under_a_title_hit_tagged_and_at_its_line():
     d = [x for x in search.everything(s, 'zephyrine')['hits'] if x['type'] == 'task']
     assert [(x['tid'], x['who']) for x in d] == [(drafted, 'a draft')]
     assert not any(x['tid'] == hidden for x in search.everything(s, 'quokka zephyrine')['hits'] if x.get('tid'))
+
+
+def test_the_assistants_own_chat_is_no_task_hit():
+    """The demo's search for "overtime" listed "Taskuary guide · TQ-1000000001" with its snippet the raw card marker the Assistant's
+    line carries (`<!-- tq:card {"key": ..., "lane": "approve", ...} -->`): the dock is the Assistant's chat, which no task list shows."""
+    s = MemoryStore()
+    dock = s.create_task({'Title': 'Taskuary guide', 'Kind': 'general', 'Status': 'open', 'SourceRef': 'assistant:dock'}, 't')
+    s.add_comment(dock, 'assistant', ASSISTANT_TYPE, 'Opened TQ-0031.\n\n<!-- tq:card {"title": "September overtime by site"} -->')
+    assert not [x for x in search.everything(s, 'overtime')['hits'] if x.get('tid') == dock]

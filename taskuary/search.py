@@ -379,7 +379,7 @@ CHAT_TAG, DRAFTS = 'in agent chat', ('draft_reply', 'draft', 'clarification', 's
 
 
 def _chat(store, words, skip) -> tuple:
-    from .general import ASSISTANT_TYPE, USER_TYPE
+    from .general import ASSISTANT_TYPE, DOCK_TAG, USER_TYPE
     from .quickwork import report_of
     from .store import is_internal
     TEXT = "COALESCE(rv.FinalText, rv.DraftText, '')"
@@ -398,7 +398,8 @@ def _chat(store, words, skip) -> tuple:
     out = []
     for tid, c in list(best.items())[:N_TASKS]:
         t = store.get_task(tid)
-        if not t: continue
+        # ...never the Assistant's own chat: no task list shows it (store.list_tasks), and its lines carry the card markers it draws by
+        if not t or t.get('SourceRef') == DOCK_TAG: continue
         who = 'you' if c['ActorType'] == USER_TYPE else 'a draft' if c['ActorType'] == 'draft' else 'the agent'
         out.append({'type': 'task', 'id': f"chat:{tid}", 'tid': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '', 'status': t.get('Status'),
                     'sub': t.get('Kind') or '', 'tag': CHAT_TAG, 'who': who, 'line': c.get('line'), 'when': c.get('CreatedAt'),

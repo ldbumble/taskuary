@@ -115,6 +115,15 @@ def test_malformed_and_unrelated_proposals_do_not_create_reviews(tmp_path):
     assert store.list_reviews('pending') == []
 
 
+def test_the_brief_says_uses_names_connection_types():
+    """The playbook builder, 2026-11-13: told only the label, the agent wrote `uses:` as prose - "Your mail, for the request and the
+    reply. The current signed W-9..." - and the shelf showed it slugged into "your-mail · for-the-request-and-the-reply.-the-..." as
+    if those were connections. The brief shows the shape uses_of reads."""
+    line = next(l for l in playbooks.SETUP_OPENING.splitlines() if l.startswith('uses:'))
+    example = line.split('`')[1]
+    assert playbooks.uses_of({'uses': example}) == ['quickbooks', 'teller']
+
+
 def test_the_conversation_never_shows_the_setup_brief_as_you():
     """A playbook built with AI keeps its setup instructions and the example email's raw record in Summary; the row signed "You" showed
     them in The conversation (walk 2026-10-21). It carries the owner's own words; a workflow's run gets no such row at all."""

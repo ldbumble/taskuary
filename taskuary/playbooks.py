@@ -60,7 +60,8 @@ item numbers into reusable inputs; exclude private example details from the save
 When enough is known, show the draft. At the very end of your answer emit TASKUARY-PROPOSE
 followed by a single JSON object with action="write_playbook", slug="new", text=the full markdown,
 and why=a short explanation. Taskuary consumes this marker and queues the draft on the task.
-Use a markdown # title and the six labels: when:, uses:, steps:, alone:, ask first:, done when:.
+Use a markdown # title and the six labels: when:, uses:, steps:, alone:, ask first:, done when: -
+uses: names connection types, as `quickbooks (write: bills) · teller (read)`, never a sentence.
 Never save the file directly. Never claim the proposal is saved or approved.
 """
 

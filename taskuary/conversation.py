@@ -669,8 +669,11 @@ def items(store, tid: int) -> dict:
         t['cards'].append(card)
     # ...a task's emails are the page's own block while they wait (`letters`, below); one he wrote past stays where it stood, greyed with
     # its words, as a reply does
+    # ...AND ONE THAT WENT IS A CARD OF THE TURN IT STOOD UNDER, as a reply that went is (the audit, 2026-11-13, recorded on the real CLI: two
+    # emails sent, and the list placed neither - the page drew them under everything, so they went from the chat while each later turn
+    # worked and came back at its foot, under words written long after them)
     for r in store._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (tid,)):
-        if r['Kind'] == 'slot' and not (proposals_passed(r) and str(r.get('DraftText') or '').strip()): continue
+        if r['Kind'] == 'slot' and not (str(r.get('DraftText') or '').strip() and (proposals_passed(r) or r['Status'] in WENT)): continue
         if unwritten(r): continue
         left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])
         place(_card(r), ep(r['CreatedAt']) + 0.999, (left or {}).get('CommentId'))
@@ -770,6 +773,11 @@ def items(store, tid: int) -> dict:
     spots += [t for r in store._rows("SELECT CreatedAt, DraftText FROM review WHERE TaskId=? AND Kind='slot' AND Status='pending'", (tid,))
               if str(r.get('DraftText') or '').strip() and (t := run_end(wrote(ep(r['CreatedAt']) + 0.999)))]
     letters = max(spots, key=lambda t: order.get(t['id'], -1))['id'] if spots else None
+    # ...and where its block stands is where each waiting email STOOD, kept as a card's place is (`shown` Host): sent, it stays there
+    if letters and turn_by.get(letters, {}).get('state') not in LIVE:
+        for r in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Kind='slot' AND Status='pending'", (tid,)):
+            if hosts.get(f"r:{r['ReviewId']}") != letters:
+                store._exec('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host', (tid, f"c:r:{r['ReviewId']}", letters))
     # THE WAITING ROOM (the owner, 2026-11-12): what waits for the agent is drawn in ONE place until it is heard - his lines as rows over the
     # box, messages as counts on their sender's chip - and `now` says whether a waiting line can be handed into the turn at work at once (a
     # session that takes words mid-turn, not stopped at his Allow); `dropped`: the lines he took back, which leave no trace
@@ -784,6 +792,7 @@ def items(store, tid: int) -> dict:
 
 
 LIVE = ('working', 'starting')
+WENT = ('approved', 'edited', 'sent')       # a letter that left on his press
 def flow_breaks(got: dict, was: dict = None) -> list:
     """THE BASIC FLOW OF A CHAT, AS INVARIANTS OVER ITS LIST (the owner, 2026-11-12: "It's a chat with prompts and agent turns, nothing ever goes
     backwards") - pure structure, no meaning judged. `got`: a list `items` served; `was`: the one served before it, for what may never change

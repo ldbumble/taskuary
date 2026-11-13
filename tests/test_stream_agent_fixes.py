@@ -319,3 +319,38 @@ def test_a_draft_made_before_the_owner_s_line_is_not_the_card_of_the_turn_that_a
     s._exec("UPDATE review SET CreatedAt='2026-11-10 09:00:10' WHERE ReviewId=?", (rid,))
     [d] = general.draft_turns(s, tid)
     assert d['turn'] is not None and d['turn'].startswith('comment-')
+
+
+# ── a coding agent on a chat, after a restart: the owner answers outside, then the sender writes again (the owner, 2026-11-13: "why does it
+# say ready to send when there is no email and the ai never processed the final prompt" - "if a new message comes in, it's like typing,
+# which should restart the agent"). The live order: the agent drafted a reply at 21:11; Taskuary restarted at 21:24 (the session ended,
+# nothing idled in memory); at 21:52 the owner answered on the phone; at 21:53 the sender wrote on, which triage read as an fyi ──────────
+def test_after_a_restart_the_owners_outside_answer_and_the_next_line_reach_the_coding_agent_once():
+    from taskuary import acpcoding, origin, proposals, senders, waitroom
+    s, conv = store(), 'whatsapp:ray@c.us'
+    tid = s.create_task({'Title': 'Website build feedback', 'Kind': 'coding', 'Status': 'open', 'Source': 'whatsapp'}, 'router')
+    first = s.add_message({'TaskId': tid, 'ExternalId': 'wa:1', 'ConversationId': conv, 'Channel': 'whatsapp', 'FromName': 'Ray Colton',
+                           'SentAt': '2026-11-12 21:10:38', 'BodyText': 'The menu is cut off on my phone, can you look?', 'Status': 'routed'})
+    s.add_transcript(tid, 'sid-1', 'looked at the menu', agent='coding', cwd='.', ext_id='conv-1', brain='claude')
+    rid = s.add_review({'TaskId': tid, 'MessageId': first, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Fixed the menu - try now.'})
+    s._exec("UPDATE review SET CreatedAt='2026-11-12 21:11:36' WHERE ReviewId=?", (rid,))
+    general.IDLED.pop(tid, None); acpcoding.IDLED.pop(tid, None)          # the restart: nothing in memory but the store
+    reopened = []
+    run = lambda f, *a, **k: f(*a, **k)
+    with mock.patch('taskuary.ingest._spawn', side_effect=run), mock.patch.object(senders, 'start_known', return_value=(True, '')), \
+         mock.patch.object(senders, 'wrote_to', return_value=True), mock.patch('taskuary.ingest.has_room', return_value=True), \
+         mock.patch.object(origin, 'hold', return_value=None), mock.patch.object(waitroom, 'reopen_coding', side_effect=lambda store, t, notes, said, actor='router': reopened.append(said) or 'resumed'):
+        channels.ingest_own_message(s, {'external_id': 'wa:own', 'conversation_id': conv, 'channel': 'whatsapp', 'source_name': 'Ray Colton',
+                                        'sent_at': '2026-11-12 21:52:58', 'body': "let's talk it over tomorrow"}, 'your line in this chat - kept for context')
+        # ...his answer is the agent's to hear, and the draft he answered past is no longer one to send - in the store, so every surface agrees
+        assert len(reopened) == 1 and "let's talk it over tomorrow" in reopened[0]
+        assert proposals.passed(s.get_review(rid)) and not s.pending_review(tid, kind='draft')
+        ingest.ingest_message(s, {'external_id': 'wa:2', 'conversation_id': conv, 'channel': 'whatsapp', 'from_name': 'Ray Colton',
+                                  'from_email': 'ray@c.us', 'source_name': 'Ray Colton', 'sent_at': '2026-11-12 21:53:41',
+                                  'body': 'Okay, deal. I will keep testing the site build tonight and send what I find.', 'mail_meta': {'dm': True}},
+                              llm=lambda *a, **k: json.dumps({'intent': 'fyi', 'kind': 'coding', 'why': 'he carries on testing',
+                                                              'relationship': 'continues', 'existing_task_id': tid}))
+    # ...the sender's next line, read as an fyi, reaches the agent all the same - once
+    assert len(reopened) == 2 and 'keep testing the site build' in reopened[1]
+    assert sum('keep testing the site build' in x for x in reopened) == 1
+    assert not s.pending_review(tid, kind='draft')

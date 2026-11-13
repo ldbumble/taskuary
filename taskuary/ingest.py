@@ -2693,12 +2693,17 @@ def wake_why(store, tid, msg: dict, mid, follow: dict | None, own: bool = False,
     t = store.get_task(tid) or {}
     if t.get('Status') in ('done', 'dropped'): return reason('closed')
     # ...and a coding agent live on it hears it the same way (the audit, 2026-11-10: a sender's second mail woke no turn of a parked coding session)
-    if (kind := 'general' if general.handles(t) else 'coding') == 'coding' and live_agent(store, tid) != 'coding': return reason('not_assistant')
+    # ...AND ONE WHOSE SESSION ENDED, as a typed line reopens it (the owner, 2026-11-13: "if a new message comes in, it's like typing, which
+    # should restart the agent"): after a restart the coding session was neither live nor idled, so the owner's outside answer and the
+    # sender's next line both read "not this agent's" - its draft stood "ready to send" and nothing ran. A coding agent with a conversation
+    # here (a transcript - general.tell's own test) is told through the waiting room, which reopens it (waitroom.reopen_coding)
+    live, kind = live_agent(store, tid), 'general' if general.handles(t) else 'coding'
+    if kind == 'coding' and not (live == 'coding' or not live and store.last_transcript(tid)): return reason('not_assistant')
     # ...with the assistant's conversation on it: a writer's draft alone (a reply task, an invite and its banter) never starts an agent
     # by itself - the reply writer's own redraft (attach, above) is that task's road
     # A turn still OPENING counts (the night run, 2026-11-09: a colleague answered the group 6s into the task's quick call, the line went
     # unheard, and the turn asked the owner for a password nobody needed any more)
-    if not live_agent(store, tid) and not general.history(store, tid): return reason('no_conversation')
+    if kind == 'general' and not live and not general.history(store, tid): return reason('no_conversation')
     return reach_why(store, tid, msg, mid, follow, kind, own, vouched=vouched)
 
 
@@ -2712,7 +2717,8 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
         return False
     turn = replan_turn(msg, follow, own)
     store.audit('task', tid, 'thread_moved', actor, 'agent', {'message_id': mid, 'own': own})
-    if live_agent(store, tid):
+    # ...a coding agent, live or not, by the waiting room (general.tell): it reopens an ended session as a typed line does, and waits for room
+    if live_agent(store, tid) or not general.handles(store.get_task(tid) or {}):
         _spawn(_replan_pass, store, tid, {**msg, 'message_id': mid}, turn)
         return True
     if not has_room(store): queue_turn(store, tid, turn); return True

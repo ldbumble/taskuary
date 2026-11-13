@@ -459,8 +459,15 @@ def quoted_authors(text: str) -> list:
     ls, out = str(text or '').splitlines(), []
     for i, l in enumerate(ls):
         if (m := _HDR.match(l)) and m[1].lower() == 'from' and any(_HDR.match(x) for x in ls[i + 1:i + 4]): out.append(_who_of(m[2]))
-    out += [_who_of(m[0]) if _ADDR.search(m[0]) else ('', '') for m in _WROTE.finditer(str(text or ''))]
+    # an attribution with no address (Apple Mail: "On Nov 10, 2026, at 9:14 AM, Alex Doyle wrote:") names its author after the last comma;
+    # that name is only ever looked up (_by_name), so one that is not a single known person stays unreadable
+    out += [_who_of(m[0]) if _ADDR.search(m[0]) else (_named(m[0]), '') for m in _WROTE.finditer(str(text or ''))]
     return list(dict.fromkeys(out))
+
+def _named(line: str) -> str:
+    "The name an address-less 'On <when>, <name> wrote:' line ends with, else ''."
+    head = re.sub(r'\bwrote:\s*$', '', ' '.join(line.split()), flags=re.I).strip()
+    return head.rsplit(',', 1)[1].strip() if ',' in head else ''
 
 def _chain(body: str, own) -> str:
     "The quoted or forwarded block under the sender's own words (triage.split_own, or below the mailbox's uniqueBody)."
@@ -474,7 +481,9 @@ def _by_name(store, name: str) -> str:
     n = ' '.join(str(name or '').split()).lower()
     if not n: return ''
     o = store.owner() or {}
-    if n == str(o.get('owner_name') or '').strip().lower(): return str(o.get('owner_email') or '').lower()
+    # store.owner() names him 'owner' - read as 'owner_name' it never matched, and his own message quoted back by name was a stranger's
+    me = str(o.get('owner') or '').strip().lower()
+    if me and me != 'the owner' and n in (me, ', '.join(reversed(me.split(' ', 1)))): return str(o.get('owner_email') or '').lower()
     ns = (n, ' '.join(reversed([x.strip() for x in n.split(',', 1)]))) if ',' in n else (n,)
     xs = {r['a'] for r in store._rows("SELECT DISTINCT lower(FromEmail) a FROM message WHERE lower(FromName) IN (%s) AND FromEmail LIKE '%%@%%'"
                                       % ','.join('?' * len(ns)), ns)}

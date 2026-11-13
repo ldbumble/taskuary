@@ -38,6 +38,20 @@ def test_quoting_a_known_person_stays_trusted():
     t2 = _task(s); _mail(s, t2, body.replace('Gail Moreno <gail@northwind.example>', 'Alex Doyle <alex@northwind.example>'))
     assert origin.of_task(s, t2)[0] == 'trusted'                                           # the owner's own words, quoted back
 
+def test_the_owner_s_own_reply_quoted_back_is_not_a_stranger_s_forward():
+    """A colleague answers in one line above the owner's own long message. Outlook writes the owner by name only ("From: Alex Doyle",
+    the directory resolved him) and Apple Mail's attribution carries no address - both read as "words written by someone Taskuary
+    cannot name", so the owner's own thread came back a stranger's. Nothing of his had been stored from that name to match it by."""
+    s = _store(); s.set_setting('owner_name', 'Alex Doyle', 't')
+    mine = '\n'.join(f'line {i} of what Alex wrote about moving the quarter close to Thursday and the ledger numbers' for i in range(6))
+    outlook = f"Sounds good.\n\nFrom: Alex Doyle\nSent: Tuesday, November 10, 2026 9:14 AM\nTo: Erin Blake\nSubject: quarter close\n\n{mine}"
+    apple = "Sounds good.\n\nOn Nov 10, 2026, at 9:14 AM, Alex Doyle wrote:\n\n" + '\n'.join(f'> {l}' for l in mine.splitlines())
+    for body in (outlook, apple):
+        t = _task(s); _mail(s, t, body, Subject='RE: quarter close')
+        assert origin.of_task(s, t)[0] == 'trusted', body[:60]
+    t = _task(s); _mail(s, t, apple.replace('Alex Doyle', 'Pat Quill'))                    # a name that is not his stays unreadable
+    assert origin.of_task(s, t)[0] == 'stranger'
+
 def test_a_name_only_header_resolves_to_the_one_address_that_name_used():
     s = _store(); _mail(s, None, 'hi', frm='gail@northwind.example', name='Gail Moreno')
     t = _task(s); _mail(s, t, _fwd('Gail Moreno'))

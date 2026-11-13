@@ -324,6 +324,21 @@ def test_the_slots_are_there_when_the_agent_is_prompted(s):
     assert seen == [1]
 
 
+def test_a_handoff_reads_at_work_from_the_moment_it_is_made_until_its_first_turn_ends(s):
+    """The bug hunt, 2026-11-12: New's box made an agent's job and opened its task at once - and for three seconds, while the job's outputs
+    were read before the first turn, the task said "agent done" with Mark done lit, over an agent that had not begun. From the start it is at
+    work, and the first turn's end lets it go."""
+    from taskuary import general
+    seen = []
+    def llm(sys, user, **k): seen.append(('reading', general.working(s, made_box[0]))); return json.dumps({'summary': 's', 'checklist': [], 'outputs': []})
+    session, made_box = mock.Mock(busy=False), []
+    session.send_prompt.side_effect = lambda text, **k: seen.append(('turn', general.working(s, made_box[0])))
+    with mock.patch('taskuary.concierge.brain', return_value=llm), mock.patch('taskuary.general.start_session', side_effect=lambda st, tid, **k: made_box.append(tid) or session), \
+         mock.patch('taskuary.general._live_of', return_value=None), mock.patch('taskuary.concierge.threading.Thread', Inline):
+        concierge.handoff_task(s, 'Find three cafes near the office that cater lunch for 12', kind='general')
+        assert seen == [('reading', True), ('turn', True)] and not general.working(s, made_box[0])
+
+
 def test_a_handoff_whose_brain_fails_is_made_anyway(s):
     made, session = handoff(s, {'side_effect': RuntimeError('no brain')})
     assert s.get_task(made['taskId']) and slots.all_(s, made['taskId']) == [] and session.send_prompt.called

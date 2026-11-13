@@ -4707,12 +4707,19 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     made = setup_task(store, brief, actor, title=title or _handoff_title(store, tid, job), kind=kind, agent_job=kind == 'general', repo=repo,
                       profile=profile)
     if kind == 'general':
-        session = general.start_session(store, made['taskId'], actor=actor)
+        # ...AT WORK FROM THE MOMENT IT IS MADE (the bug hunt, 2026-11-12: New opened the task at once, and for the seconds its outputs were
+        # read before the first turn it said "agent done" with Mark done lit, over an agent that had not begun): a start in flight, as
+        # every other start is (OPENING), until the first turn ends
+        general.OPENING.add(made['taskId'])
+        try: session = general.start_session(store, made['taskId'], actor=actor)
+        except Exception: general.OPENING.discard(made['taskId']); raise
         def first_turn():
-            _read_outputs(store, made, job, actor)
-            # ...Taskuary's brief, never a second line in the owner's name: their words are the task's own message already, and the chat
-            # drew them twice (the click-through, 2026-11-12)
-            session.send_prompt(brief, brief=True)
+            try:
+                _read_outputs(store, made, job, actor)
+                # ...Taskuary's brief, never a second line in the owner's name: their words are the task's own message already, and the chat
+                # drew them twice (the click-through, 2026-11-12)
+                session.send_prompt(brief, brief=True)
+            finally: general.OPENING.discard(made['taskId'])
         threading.Thread(target=first_turn, daemon=True).start()
         made['started'] = True
     return made

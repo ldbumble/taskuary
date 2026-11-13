@@ -3909,8 +3909,11 @@ def route_to(store, who: str) -> tuple:
     """(the address a report's `to` names, '') - or ('', what makes it unsure) when it is not sure who: a name nobody by it has written as, or
     one several people answer to equally. An address is taken as typed; a name is never guessed into one (the owner, 2026-11-02)."""
     from . import peoplesearch as ps
+    from email.utils import parseaddr
     w = ' '.join(str(who or '').split())
     if '@' in w and ' ' not in w: return w.lower(), ''
+    # ...and a name WITH its address ("Gail Moreno <gail@northwind.example>", the visual audit 2026-11-13) is that address: a header's grammar
+    if '<' in w and '@' in (a := parseaddr(w)[1]) and ' ' not in a: return a.lower(), ''
     words = ps._words(w)
     if not words: return '', 'No one is named'
     try: ps.directory(store, w)

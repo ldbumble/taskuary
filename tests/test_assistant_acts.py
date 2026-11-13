@@ -62,6 +62,13 @@ class DeskTests(unittest.TestCase):
         self.assertNotIn('open', out)
         self.assertIn('Nobody called Zed', concierge.route_to(self.s, 'Zed')[1])
 
+    def test_a_name_with_its_address_is_that_address(self):
+        # the visual audit, 2026-11-13: "draft a reminder to Gail Moreno <gail@northwind.example>" - the address was in the ask, and the
+        # Assistant said nobody by that name had written here and left To empty
+        self.assertEqual(concierge.route_to(self.s, 'Gail Moreno <Gail@Northwind.example>'), ('gail@northwind.example', ''))
+        self.assertEqual(concierge.send_to(self.s, 'email', '"Moreno, Gail" <gail@northwind.example>'), ('email', 'gail@northwind.example', ''))
+        self.assertIn('Nobody called', concierge.route_to(self.s, 'Gail Moreno <nobody>')[1])
+
     def test_a_setting_opens_its_group_with_the_knob_named(self):
         out = self._turn('setting.set', label='sort new mail with AI', value='off')
         self.assertTrue(out['open'].startswith('#settings=config&group=How%20mail%20is%20sorted&key=intent_classify_enabled'), out['open'])

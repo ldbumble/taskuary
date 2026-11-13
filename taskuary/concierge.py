@@ -6065,7 +6065,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     if not llm:
         fb = fallback(item, False, p['items'], store=store).strip()
         if fb and not fb.endswith(('.', '!', '?', ')')): fb += '.'               # a sentence ends before the next one starts
-        say_ = fb if places.name('ai') in fb else f"{fb} {no_brain()}".strip()     # the empty table's facts already say it
+        # ...and with nothing waiting, "Nothing's waiting." is no answer to what was asked: what it needs leads (the overnight audit, 2026-11-12)
+        say_ = fb if places.name('ai') in fb else no_brain() if fb.rstrip('.') == ALL_DONE.rstrip('.') else f"{fb} {no_brain()}".strip()
         rec('assistant', say_)
         # `open: ''` - these are the app's words, and their AI link is to press: the page followed it, and "show me TQ-0003" with no
         # AI answered about the table and then covered it with Connections (2026-10-19 UI walk)

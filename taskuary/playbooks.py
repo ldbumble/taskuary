@@ -127,7 +127,9 @@ def collect_setup_draft(store, task_id, reply):
         outcome = ("Your playbook draft is below - edit it if you like, then Approve it." if queued
                    else f"The draft could not be queued. Check that \"Use playbooks\" is on in {words.name('sorting')}.")
     except (ValueError, TypeError) as e:
-        outcome = f'The draft could not be queued: {e} Ask the assistant to correct it.'
+        # ...and the one who writes it again is this task's agent, in this chat: "Ask the assistant" sent the owner to the rail, where
+        # the Assistant does not act on a task's work (the playbook builder audit, 2026-11-13)
+        outcome = f'The draft could not be queued: {e} Ask the agent here to write it again.'
     return visible.rstrip() + '\n\n' + outcome
 
 

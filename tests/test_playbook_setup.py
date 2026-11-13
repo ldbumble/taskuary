@@ -108,7 +108,10 @@ def test_malformed_and_unrelated_proposals_do_not_create_reviews(tmp_path):
     store = MemoryStore(); tid = playbooks.setup_task(store, 'Prepare item numbers')['taskId']
     with mock.patch.object(playbooks, 'folder', return_value=tmp_path):
         for envelope in ('not json', '{"action":"run_tool"}', json.dumps({'action': 'write_playbook', 'text': '# Missing fields'})):
-            assert 'could not be queued' in playbooks.collect_setup_draft(store, tid, 'TASKUARY-PROPOSE ' + envelope)
+            said = playbooks.collect_setup_draft(store, tid, 'TASKUARY-PROPOSE ' + envelope)
+            assert 'could not be queued' in said
+            # ...and the way past is the task's own agent, in this chat - the Assistant does not act on a task's work
+            assert 'Ask the agent here' in said and 'assistant' not in said.lower()
     assert store.list_reviews('pending') == []
 
 

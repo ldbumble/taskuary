@@ -34,6 +34,26 @@ def enabled() -> bool:
     return str(os.environ.get(FLAG) or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+# THE DEMO REACHES NOTHING OUTSIDE THIS COMPUTER (the overnight audit, 2026-11-12): its cards are props, and opening a Teams or WhatsApp row,
+# or reading the calendar, sent their invented tenant to Microsoft and filled the bell with real sign-in refusals. One guard under every
+# HTTP call any module makes (requests' Session.request), set when the demo starts - not a check per call site
+OFFLINE = 'This is the demo - it reaches nothing outside this computer, so its cards are not read.'
+LOCAL_HOSTS = ('127.0.0.1', 'localhost', '::1')
+
+def seal() -> bool:
+    "Shut every outside HTTP call for this process (idempotent). True once sealed."
+    import requests
+    from urllib.parse import urlparse
+    real = requests.sessions.Session.request
+    if getattr(real, 'demo_sealed', False): return True
+    def request(self, method, url, *a, **k):
+        if (urlparse(str(url)).hostname or '').lower() not in LOCAL_HOSTS: raise requests.ConnectionError(OFFLINE)
+        return request.real(self, method, url, *a, **k)
+    request.demo_sealed, request.real = True, real
+    requests.sessions.Session.request = request
+    return True
+
+
 # ── the deny list ────────────────────────────────────────────────────────────────────────
 # Written as what the demo MAY do, not as what it may not: a new endpoint is refused until
 # somebody decides it is safe, which is the only way a list like this survives a year.

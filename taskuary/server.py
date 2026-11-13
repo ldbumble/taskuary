@@ -177,6 +177,7 @@ async def _lifespan(_app):
     # the demo builds its world and puts agents on the board BEFORE anything else runs - and
     # never polls, never bridges, never catches up on a mailbox that does not exist
     if is_demo:
+        demo.seal()
         try:
             demo.seed(store)
             demo.start_sessions(store)

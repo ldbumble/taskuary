@@ -656,3 +656,18 @@ class DemoCalendarTests(unittest.TestCase):
             got = calendar.agenda(s)
         self.assertEqual((got['errors'], got['sources']), ([], ['demo']))
         self.assertEqual([e['subject'] for e in got['events']], [e['subject'] for e in demo.agenda()])
+
+
+class DemoSealedTests(unittest.TestCase):
+    def test_the_demo_reaches_nothing_outside_this_computer(self):
+        # its prop cards sent an invented tenant to Microsoft and filled the bell with real refusals (the overnight audit, 2026-11-12)
+        import requests
+        before = requests.sessions.Session.request
+        try:
+            self.assertTrue(demo.seal()); demo.seal()                                  # once is enough, twice changes nothing
+            self.assertIs(requests.sessions.Session.request.real, before)
+            with self.assertRaisesRegex(requests.ConnectionError, 'reaches nothing outside'):
+                requests.get('https://login.microsoftonline.example/token')
+            with mock.patch.object(requests.sessions.Session.request, 'real', side_effect=lambda *a, **k: 'local'):
+                self.assertEqual(requests.sessions.Session().request('GET', 'http://127.0.0.1:7803/api/health'), 'local')
+        finally: requests.sessions.Session.request = before

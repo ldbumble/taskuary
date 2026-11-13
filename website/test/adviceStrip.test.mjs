@@ -116,7 +116,9 @@ test("an important line lands in the task's Advisor section, and every other str
   assert.deepEqual((({ line, draft }) => ({ line, draft }))(taskNote(d("draft_ready", "The draft promises what nothing here shows.", { verb: "redraft", label: "Redraft", by: "model" }))),
     { line: "The draft promises what nothing here shows.", draft: true });
   // late against the learned usual, the same ask as another task, a model's reason the lit button is not the obvious one
-  for (const n of [d("asked_late", "You usually answer Erin within the hour; this is 3h."), d("waiting_late_usual", "Erin usually answers in a day; this is 4 days.", { verb: "chase" }),
+  // ...never how fast the owner answers (the owner, 2026-11-13: a count of his reply times is no use - what it means is learned instead)
+  assert.equal(taskNote(d("asked_late", "You usually answer Erin within the hour; this is 3h.")), null);
+  for (const n of [d("waiting_late_usual", "Erin usually answers in a day; this is 4 days.", { verb: "chase" }),
     d("duplicate", "Same ask as TQ-0012.", { verb: "remove" }), d("asked", "TQ-0012 may already cover this - an agent is on it.", { verb: "defer", by: "model" }),
     // ...and who and how late, where Chase is lit (the Advisor audit's judge, 2026-10-26)
     d("waiting_late", "Erin Blake: 4 days, no answer.", { verb: "chase" }), d("goal_late", "Pick the vendor: 3 days late.", { verb: "chase" })])

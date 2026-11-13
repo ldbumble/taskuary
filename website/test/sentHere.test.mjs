@@ -18,7 +18,8 @@ test("a reply that went says where, and that the task is closing or why it stays
 
 // the owner, 2026-11-09: "leave the card in the turn with the pressed button" - the sent block said it with no card around it
 test("a sent reply stays its card: the subject, the words, and ✓ Sent on the button it took with where it went beside it", () => {
-  assert.equal(sentTitle({ subject: "Q3 numbers", to: "Erin Blake" }), "Re: Q3 numbers");
+  assert.equal(sentTitle({ subject: "Re: Q3 numbers", to: "Erin Blake" }), "Re: Q3 numbers");
+  assert.equal(sentTitle({ subject: "Portal login", to: "erin@northwind.example" }), "Portal login");     // a new email is no reply
   assert.equal(sentTitle({ subject: "RE: Q3 numbers" }), "RE: Q3 numbers");
   assert.equal(sentTitle({ to: "Erin Blake" }), "Reply to Erin Blake");
   assert.equal(sentSaid({ channel: "email", closing: true }), "by email - closing the task");

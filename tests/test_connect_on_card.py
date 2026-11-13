@@ -25,3 +25,19 @@ def test_an_agent_email_with_no_mailbox_carries_connect_on_the_review():
     with mock.patch.object(server, 'store', s):
         got = server._review_connect({}, s._rows('SELECT * FROM review WHERE TaskId=?', (tid,))[0])
     assert got['says'] == 'No mailbox is connected'
+
+
+def test_a_mail_card_that_cannot_send_says_why_on_the_reply_and_its_fix():
+    """The mailbox is connected and reads, but its card cannot send (a Microsoft sign-in that never granted Mail.Send): the reply card
+    showed Copy alone, its reason only in Copy's hover. Now the review carries the reason and the card's fix, as a missing mailbox does."""
+    s = MemoryStore(); me = 'alex@northwind.example'
+    s.save_connector({'Type': 'outlook', 'Name': 'Outlook', 'Active': 1,
+                      'ConfigJson': json.dumps({'auth': 'user', 'account': me, 'granted_scope': 'offline_access User.Read Mail.ReadWrite'})}, 'owner')
+    tid = s.create_task({'Title': 'Badge access', 'Kind': 'general', 'Status': 'open'}, 'router')
+    mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'SourceName': me, 'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake',
+                         'Subject': 'Badge access', 'BodyText': 'Can you add me to the badge list?', 'Status': 'routed'})
+    s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'outbound', 'Status': 'pending', 'DraftText': 'Done - you are on it.'})
+    assert not outbound.can_reply(s, 'email')
+    with mock.patch.object(server, 'store', s):
+        got = server._review_connect({}, s._rows('SELECT * FROM review WHERE TaskId=?', (tid,))[0])
+    assert got and 'Mail.Send' in got['says'] and (got['label'], got['href']) == ('Sign in again', '#connector=outlook'), got

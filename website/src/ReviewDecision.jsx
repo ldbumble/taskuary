@@ -498,7 +498,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     setBusy(false);
   };
   // ITS CHANNEL IS NOT CONNECTED (the owner, 2026-11-08): the card says so and its one move is Connect, which opens that connection's card -
-  // the draft waits as it is, and Send is back once it is connected (server: outbound.connect_fix, `Connect` on the review)
+  // the draft waits as it is, and Send is back once it is connected (server: outbound.connect_fix, `Connect` on the review) - and a mail card
+  // that is connected but cannot send says why the same way, its fix as the move (`waits` is its own end of the line)
   const connect = !proposal && !delivery.frozen ? r.Connect : null;
   const moves = r.Status !== "pending" ? [] : [
     ...(connect ? [
@@ -863,7 +864,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       {/* ...and once a Send and close has gone, the close it goes on to, under the button until the task has closed */}
       {sent && pressed === "send_close" && <Typography data-tq-closing="" role="status" variant="body2" sx={{ color: DIM, mt: 0.75, display: "flex", alignItems: "center" }}>
         <CircularProgress size={11} sx={{ color: "inherit", mr: 0.75 }} />Closing…</Typography>}
-      {connect && <Typography data-tq-not-connected="" variant="body2" sx={{ color: DIM, mt: 0.75 }}>{connect.says} - the draft waits here until it is.</Typography>}
+      {connect && <Typography data-tq-not-connected="" variant="body2" sx={{ color: DIM, mt: 0.75 }}>{connect.says} - {connect.waits || "the draft waits here until it is"}.</Typography>}
       {fillLine && <Alert severity="warning" data-tq-fill-in="" sx={{ mt: 0.75 }} onClose={() => setFillIn(false)}>{fillLine} - nothing was sent.</Alert>}
       {asked && <BlankAsk line={asked.line} onCancel={() => setAsked(null)}
         onSend={() => (asked.both ? decideBoth(asked.verb, asked.close, true) : decide(asked.verb, asked.anyway, asked.close, true))} />}

@@ -466,7 +466,11 @@ def connect_fix(store, kind) -> dict | None:
     cards = store.list_connectors()
     live = {str(c.get('Type') or '').lower() for c in cards if c.get('Active')}
     if k == 'email':
-        if live & {*MAILBOXES, *HOSTS}: return None
+        # ...and a mailbox connected whose card cannot SEND (send_probe: no Mail.Send granted, no SMTP host) says so the same way, with its
+        # fix: the reply card showed Copy alone, the reason only in Copy's hover, and nothing to press to get Send back
+        if live & {*MAILBOXES, *HOSTS}:
+            why, fix = send_probe(store, k), block_fix(store, k)
+            return {'says': f"Email can't be sent from here: {why}", 'waits': 'the draft waits here until it can', **fix} if why and fix else None
         # ...its button opens the mailbox's own card - one set up and switched off, else Email's section, where each mailbox has its card
         had = next((str(c.get('Type')).lower() for c in cards if str(c.get('Type') or '').lower() in (*MAILBOXES, *HOSTS)), '')
         return {'says': 'No mailbox is connected', 'label': 'Connect email', 'href': f'#connector={had}' if had else MAIL[1]}
@@ -504,8 +508,12 @@ def block_fix(store, channel) -> dict | None:
     if ch == 'github': return None if store.github_replies_ok() else {'label': 'Open the GitHub card', 'href': '#connector=github'}
     if _inbox_off(store, ch): return {'label': f'Open the {INBOX_NAMES[ch]} card', 'href': f'#connector={ch}'}
     if ch in SENDABLE and ch not in reply_channels(store): return dict(zip(('label', 'href'), REPLIES))
-    if ch == 'email' and send_probe(store, ch):
-        return {'label': 'Sign in again', 'href': '#connector=outlook'} if 'Mail.Send' in send_probe(store, ch) else dict(zip(('label', 'href'), MAIL))
+    if ch == 'email' and (why := send_probe(store, ch)):
+        if 'Mail.Send' in why: return {'label': 'Sign in again', 'href': '#connector=outlook'}
+        # ...a card with no SMTP host is fixed on that card, not by connecting another mailbox
+        from .imapmail import HOSTS
+        card = next((str(c['Type']).lower() for c in store.list_connectors() if c.get('Active') and str(c.get('Type') or '').lower() in ('imap', *HOSTS)), '')
+        return {'label': 'Open the mail card', 'href': f'#connector={card}'} if card else dict(zip(('label', 'href'), MAIL))
     return None
 
 

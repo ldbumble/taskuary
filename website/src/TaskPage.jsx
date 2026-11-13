@@ -2778,7 +2778,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),
       node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
         : <ReviewDecision review={g.reviews[0]} toRow={inRow && !pendingReview && proposals.length === 1} onChanged={decided} /> })),
-    ...allReviews.filter((r) => r.Kind !== "action" && r.Kind !== "slot" && ["approved", "edited", "sent"].includes(r.Status) && r.ReviewId !== sentHere?.id)
+    // ...a task's email the same as a reply (the owner, 2026-11-13: "never close action boxes. once sent just say sent")
+    ...allReviews.filter((r) => r.Kind !== "action" && ["approved", "edited", "sent"].includes(r.Status) && r.ReviewId !== sentHere?.id)
       .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard id={r.ReviewId} text={r.FinalText || r.DraftText} channel={r.Channel || ""}
         to={replyContext(r)} subject={deliverySubject(r)} at={r.DecidedAt} /> }))];
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it

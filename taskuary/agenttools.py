@@ -162,10 +162,9 @@ TOOLS = {
                                  "mailbox (list_systems names them; never a run_system tool) - else the one this task's mail came in "
                                  "on, else the first. `replaces`: the review id (or recipient) of an unsent email, reply or post this"
                                  " takes the place of, withdrawn in the same call. `guessed`: any address on it you guessed (none on "
-                                 "record) - the card says so, for the owner to check before Send. `apart`: only for a second letter to "
-                                 "someone a reply on this task already waits for - one sentence why it cannot go in that reply.",
+                                 "record) - the card says so, for the owner to check before Send.",
                       _S({'to': _STR, 'subject': _STR, 'text': _STR, 'slot': _STR, 'cc': {'type': 'array', 'items': _STR}, 'from': _STR, 'attach': _ATTACH, 'replaces': _STR,
-                          'guessed': {'type': 'array', 'items': _STR}, 'apart': _STR},
+                          'guessed': {'type': 'array', 'items': _STR}},
                          ('to', 'subject', 'text')),
                       ('POST', '/api/agent/draft')),
     # THE FORM A MAIL BRINGS (the owner, 2026-11-04: a permission slip to sign for their kid - "the agent should sign it and say 'do you
@@ -369,7 +368,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         was = verdicts.unsent(store, tid)
         out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(store, tid, a.get('attach')),
                             a.get('cc') or (), str(a.get('from') or ''), **({'guessed': a['guessed']} if a.get('guessed') else {}),
-                            **({'slot': str(a['slot']).strip()} if a.get('slot') else {}), **({'apart': str(a['apart'])} if a.get('apart') else {}))
+                            **({'slot': str(a['slot']).strip()} if a.get('slot') else {}))
         return _j(said_once(replaced(store, doors, tid, was, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place")))
     if name == 'sign_form':
         out = doors['sign'](tid, a)

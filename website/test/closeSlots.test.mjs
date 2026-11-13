@@ -18,25 +18,13 @@ test("the slot block gets every slot review", () => {
   assert.deepEqual(slotReviews([reply, slot, { ...slot, ReviewId: 10 }]).map((r) => r.ReviewId), [9, 10]);
 });
 
-test("each email says where it stands", async () => {
-  const { slotState } = await import("../src/taskLifecycle.js");
-  assert.equal(slotState({ done: false }, undefined), "to draft");
-  assert.equal(slotState({ done: false }, slot), "waits for your yes");
-  assert.equal(slotState({ done: true }, { ...slot, Status: "approved" }), "sent");
-  assert.equal(slotState({ done: true }, { ...slot, Status: "rejected" }), "dropped");
-  assert.equal(slotState({ done: true }, undefined), "dropped");
-});
-
-test("the count is of the emails still owed: a dropped one is not a sent one", async () => {
-  // the agent walk, 2026-11-09: three emails, one sent, one dropped, one not drafted - the block read "2 of 3"
-  const { slotTally } = await import("../src/taskLifecycle.js");
-  const items = [{ id: "a", done: false, out: { to: "Ray Colton" } }, { id: "b", rid: 9, done: true, out: { to: "ray@northwind.example" } },
-    { id: "c", rid: 10, done: true, out: { to: "paula@northwind.example" } }];
-  const reviews = [{ ...slot, Status: "approved" }, { ...slot, ReviewId: 10, Status: "rejected" }];
-  assert.equal(slotTally(items, reviews), "1 of 2 · 1 dropped");
-  assert.equal(slotTally(items.slice(0, 2), reviews), "1 of 2");
-  assert.equal(slotTally(items.slice(2), reviews), "1 dropped");
-  assert.match(readFileSync(new URL("../src/SlotList.jsx", import.meta.url), "utf8"), /Closes when sent · \$\{slotTally\(items, reviews\)\}/);
+test("an email card says nothing of the app's own workings, and one that went stays as its sent card", () => {
+  // the owner, 2026-11-13: "Closes when sent · 0 of 1" and "waits for your yes · added by the agent" over the card are internal - and
+  // pressing Send on one email closed the box: "never close actions boxes. once sent just say sent"
+  const src = readFileSync(new URL("../src/SlotList.jsx", import.meta.url), "utf8");
+  for (const w of ["Closes when sent", "waits for your yes", "added by the agent"]) assert.ok(!src.includes(w), w);
+  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /r\.Kind !== "slot" && \["approved", "edited", "sent"\]/, "a sent email is drawn as its SentCard, as a reply is");
 });
 
 test("Approve all never sweeps up an email the agent added, or one with no address", async () => {
@@ -82,7 +70,7 @@ test("waiting emails open Close out, and it says how many", async () => {
 // THE OWNER, 2026-11-10: "it created reply with nothing in it" - a recipient nobody has written to is no card: never drawn in the chat
 test("a recipient with no draft is not drawn, and a task with only such ones draws no emails block", () => {
   const list = readFileSync(new URL("../src/SlotList.jsx", import.meta.url), "utf8");
-  assert.match(list, /filter\(\(i\) => i\.out && \(i\.done \|\| byRid\[i\.rid\]\?\.Status === "pending"\)\)/);
+  assert.match(list, /filter\(\(i\) => i\.out && !i\.done && byRid\[i\.rid\]\?\.Status === "pending"\)/);
   assert.doesNotMatch(list, />Drop<\/Button>/);
   assert.match(readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), /const owesEmails = emailsWaiting > 0;/);
 });

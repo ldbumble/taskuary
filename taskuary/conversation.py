@@ -129,7 +129,10 @@ def hear(store, tid: int, lines=(), turn: bool = False, sid: str = '', standing:
     # the turn that hears it drafts again under it where a reply is still owed (the rail walk, 2026-11-12: the sender wrote again, and the
     # draft to refresh stood above her new mail)
     # ...a draft written after that message is its answer, never set aside by it: older than the input, by the input's own time
-    joined = {str(x['MessageId']): x['T'] for x in _mail(store, tid)} if any(k == 'mail' for k, _ in new) else {}
+    # ...and a letter Taskuary sent on his press, come back from his Sent folder, is no input at all (the owner, 2026-11-13: two letters
+    # waited, he sent one, and its copy coming back set the other aside - "how am i supposed to send 2 messages then")
+    mine = general.went_from_here(store, tid)
+    joined = {str(x['MessageId']): x['T'] for x in _mail(store, tid) if not (x.get('Own') and mine(x))} if any(k == 'mail' for k, _ in new) else {}
     if (at := max([now for k, _ in new if k == 'line'] + [joined.get(r, 0) for k, r in new if k == 'mail'], default=0)):
         from . import proposals
         proposals.set_aside_drafts(store, tid, at, actions=now if any(k == 'line' for k, _ in new) else 0)

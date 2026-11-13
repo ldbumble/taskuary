@@ -2125,8 +2125,9 @@ export const ToRow = ({ to, onSave, disabled, needs = false, who = "" }) => {
 };
 
 // ...ONE ROW FOR CC AND BCC (the owner, 2026-11-08: "share code as much as possible with to/cc/bcc"): `label` names it, BCC the same row
-export const CcRow = ({ cc, setCc, channel, label: name = "CC" }) => {
-  const [open, setOpen] = useState(false);
+export const CcRow = ({ cc, setCc, channel, label: name = "CC", autoOpen = false, onClose }) => {
+  // `autoOpen`: opened from the To line's Cc / Bcc, its box ready; `onClose`: left empty, the row folds back to that link
+  const [open, setOpen] = useState(!!autoOpen);
   const [text, setText] = useState("");
   const [err, setErr] = useState("");
   const people = useContacts();
@@ -2146,7 +2147,7 @@ export const CcRow = ({ cc, setCc, channel, label: name = "CC" }) => {
           borderRadius: 99, bgcolor: "var(--tq-inset, #eef1ec)", border: "1px solid var(--tq-border, #d9e0d6)" }}>
           <Typography sx={{ fontSize: 11.5, color: INK }}>{a}</Typography>
           <Box component="button" type="button" aria-label={`Remove ${a} from ${name}`}
-            onClick={() => setCc((cc || []).filter((x) => x !== a))}
+            onClick={() => { const left = (cc || []).filter((x) => x !== a); setCc(left); if (!left.length && !open) onClose?.(); }}
             sx={{ cursor: "pointer", color: FAINT, fontSize: 12, lineHeight: 1, border: 0, bgcolor: "transparent", p: 0, fontFamily: "inherit", "&:hover": { color: "var(--tq-danger, #6b2733)" } }}>✕</Box>
         </Box>
       ))}
@@ -2154,7 +2155,7 @@ export const CcRow = ({ cc, setCc, channel, label: name = "CC" }) => {
         <ContactPicker people={people} value={text} onChange={setText} onPick={add} autoFocus
           placeholder="name or email address" sx={{ width: 260 }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(text); }
-                              if (e.key === "Escape") { setOpen(false); setErr(""); } }} />
+                              if (e.key === "Escape") { setOpen(false); setErr(""); if (!(cc || []).length) onClose?.(); } }} />
       ) : (
         <Typography {...pressable(() => setOpen(true))}
           sx={{ ...FOCUS_RING, fontSize: 11.5, color: "var(--tq-link, #55697a)", cursor: "pointer", fontWeight: 600,

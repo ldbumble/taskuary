@@ -277,9 +277,9 @@ def an_earlier_turns(store, rv) -> bool:
     return bool(s) and s.get('Text') == rv.get('DraftText')
 
 def sent_replies(store, task_id: int, n: int = 6) -> list:
-    "The replies that went out on this task, newest last: [{review, at, to, text}]."
+    "The replies and emails that went out on this task on the owner's Send, newest last: [{review, at, to, text}]."
     from .continuity import sent_to
-    rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Kind NOT IN ('action','slot') AND (DeliveryState='sent' OR "
+    rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Kind<>'action' AND (DeliveryState='sent' OR "
                        "(DeliveryState IS NULL AND Status IN ('approved','edited','sent'))) AND COALESCE(NULLIF(FinalText,''), DraftText, '')<>'' "
                        "ORDER BY DecidedAt, ReviewId", (task_id,))
     return [{'review': r['ReviewId'], 'at': r.get('DecidedAt') or r.get('CreatedAt'), 'to': sent_to(store, r),
@@ -411,11 +411,6 @@ def blank_why(text) -> str:
     b = blanks(text)
     return (f"the letter still has a blank left to fill ({', '.join(b[:3])}) - nothing was set up. Fill it from what you can read, or ask "
             "the owner the one thing it needs and write the letter when you have it.") if b else ''
-
-
-def _also_waiting(store, task_id: int, env, m: dict) -> str:
-    from . import slots
-    return slots.also_waiting(store, task_id, [*((env or {}).get('to') or []), m.get('FromEmail')])
 
 
 def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None, follow_up: bool = False,
@@ -557,8 +552,6 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     meanwhile = [' '.join(str(x.get('OwnText') or x.get('BodyText') or '').split())[:300] for x in own_replies(store, task_id, turn)] if turn else []
     return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '', **ends,
             **({'owner_wrote_on_the_thread_while_you_worked': meanwhile} if meanwhile else {}),
-            # ...and an email of an agent's to the same person that waits beside it (slots.also_waiting: one letter to one person at a time)
-            **({'two_letters_to_one_person': two} if (two := _also_waiting(store, task_id, env, m)) else {}),
             **({'recipients': {'to': env.get('to') or [], 'cc': env.get('cc') or []}} if env else {}),
             **({'new_on_thread': new} if new else {}),
             **({'people': many} if len(many) > 1 else {}), **_told(store, rid, attach_files(store, rid, files, agent))}

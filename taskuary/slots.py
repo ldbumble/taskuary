@@ -141,45 +141,8 @@ def _chat_id(to) -> bool:
     from .ingest import CHAT_CHANNELS
     return str(to or '').split(':')[0].strip().lower() in CHAT_CHANNELS
 
-# ONE LETTER TO ONE PERSON AT A TIME (the owner's live task, 2026-11-13: he corrected the agent, and one ask came back as two cards for the
-# same person - the rewritten reply on the thread, and a new short email to that person alone, nothing on either saying why there were two).
-# An email is an output to someone the reply does NOT already go to (is_sender, add). Where a reply to that same person waits on the
-# task, a new email to them is refused with its two ways on: put it in the reply, or - where it truly must be a letter of its own - say
-# why (`apart`), which the card then says to the owner. Never a second letter beside the first with no word about it.
-SAME_PERSON = ("a reply to {who} already waits on this task for the owner's Send, so this would be a second letter to the same person. Put "
-               "what it says into that reply (propose_reply / `taskuary --reply` rewrites it in place). Only where it must reach them as a "
-               "letter of its own - other people are on the reply and this is for {who} alone - send it again with `apart` (--apart): one "
-               "plain sentence why, which the owner reads on the card; and say in your answer that there are two letters and why.")
-APART = 'apart from the reply - '
-def reply_waiting_to(store, tid: int, to: str, name: str = '') -> dict | None:
-    "The reply draft with words that waits on task `tid` for the person an email to `to` would reach (is_sender) - else None."
-    for rv in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') ORDER BY ReviewId DESC", (int(tid),)):
-        if not str(rv.get('DraftText') or '').strip(): continue
-        try: d = json.loads(rv.get('Deliver') or '{}') or {}
-        except (TypeError, ValueError): d = {}
-        m = store.get_message(rv['MessageId']) if rv.get('MessageId') else {}
-        went = [str(a) for a in (d.get('to') if isinstance(d, dict) and isinstance(d.get('to'), list) else [])] or [str((m or {}).get('FromEmail') or '')]
-        if any(is_sender({'address': a, 'name': (m or {}).get('FromName') if a.casefold() == str((m or {}).get('FromEmail') or '').casefold() else ''}, to, name) for a in went if a): return rv
-    return None
-
-
-TWO_LETTERS = ("an email to {who} (rv{rid}) ALSO waits on this task, so the owner now has two letters for the same person. Fold it into this "
-               "reply and withdraw it (withdraw_draft, or `replaces` on the reply) - or, where it must stay a letter of its own, say in your "
-               "answer that there are two and why.")
-def also_waiting(store, tid: int, to) -> str:
-    "TWO_LETTERS for the agent whose reply to `to` (addresses) was just saved while an email of an agent's to one of them waits unexplained; else ''."
-    want = {str(a).casefold() for a in to or [] if a}
-    for rv in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind=? ORDER BY ReviewId DESC", (int(tid), KIND)):
-        try: d = json.loads(rv.get('Deliver') or '{}') or {}
-        except (TypeError, ValueError): continue
-        hit = next((a for a in d.get('to') or [] if str(a).casefold() in want), None) if isinstance(d, dict) else None
-        if hit and str(rv.get('DraftText') or '').strip() and APART not in str(rv.get('Reason') or '') and not str(rv.get('Reason') or '').startswith('your email'):
-            return TWO_LETTERS.format(who=hit, rid=rv['ReviewId'])
-    return ''
-
-
 def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent',
-          channel: str = 'email', name: str = '', cc=(), mailbox: str = '', guessed=(), apart: str = '') -> dict:
+          channel: str = 'email', name: str = '', cc=(), mailbox: str = '', guessed=()) -> dict:
     """The agent that did the work writes one output itself - the slot named by id, else the open one to the same person,
     else a slot it adds (said on the task: the owner sees the list grow). Nothing is sent: the owner approves it. `cc`: who
     else is copied - kept on the envelope, so the card shows what the agent said it did (it said "Gail on cc" and dropped her).
@@ -217,12 +180,8 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
     if hit and want and '@' in want and str(hit['out'].get('to')).casefold() != want:
         # a slot that named a person: the address the agent found is where this one goes (never guessed by us)
         hit = _point(store, tid, hit, ' '.join(str(to).split()), agent)
-    apart = ' '.join(str(apart or '').split())[:300]
     if not hit:
         if not want: return {'ok': False, 'why': 'name the slot (--slot) or who it goes to (--to)'}
-        # ...a NEW email of the agent's to the person its reply already goes to: folded into the reply, or said why it stands apart
-        if agent != 'owner' and channel == 'email' and not apart and reply_waiting_to(store, tid, to, name):
-            return {'ok': False, 'why': SAME_PERSON.format(who=name or to)}
         made = add(store, tid, [{'to': to, 'about': subject, 'kind': channel, **({} if agent == 'owner' else {'by': 'agent'}), **({'name': name} if name else {})}], f'agent:{agent}', again=True)
         if not made: return {'ok': False, 'why': f'could not add an email to {to}'}
         hit, added = made[0], True
@@ -257,8 +216,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         if not store.set_review_deliver(rid, deliver): return {'ok': False, 'why': 'that email is already being sent'}
     else:
         rid = store.add_review({'TaskId': tid, 'Kind': KIND, 'Status': 'pending', 'Deliver': deliver,
-                                'Reason': 'your email - approve to send' if agent == 'owner' else f"{agent} wrote this email - approve to send"
-                                          + (f' ({APART}{apart.rstrip(".")})' if apart else '')})       # who it goes to is on the card once
+                                'Reason': 'your email - approve to send' if agent == 'owner' else f"{agent} wrote this email - approve to send"})       # who it goes to is on the card once
         mark(store, tid, hit['id'], rid=rid, actor=f'agent:{agent}')
     was = str((store.get_review(rid) or {}).get('Reason') or '')
     if (agent != 'owner' and guessed) or found or missing or GUESSED in was or NEEDS in was: store.update_review_reason(rid, with_guess(was, guessed, missing))

@@ -37,12 +37,11 @@ def test_a_reply_goes_with_its_bcc_and_a_changed_subject():
     assert seen == {'bcc': ['gail@northwind.example'], 'subject': 'Re: Friday - confirmed'}
 
 
-# ── ONE LETTER TO ONE PERSON AT A TIME (the owner's live task, 2026-11-13, with invented people: he corrected the agent in the chat; it
-# rewrote the reply on the thread - the sender, four people copied, files attached - and a beat later left a second, short email to the
-# sender alone. Two cards for one person from one ask, and nothing on either said why) ─────────────────────────────────────────────────────
+# ── TWO LETTERS TO ONE PERSON ARE TWO LETTERS (the owner, 2026-11-13, with invented people: the reply on the thread went to the sender
+# with others copied, and a login went to her alone - two different emails he meant to send. 0.4.0.3 refused the second as "one letter
+# per person" and folded it into the reply. What was wrong was a COPY written twice, never a second letter) ──────────────────────────────
 def _answered(s):
-    "A mail from Erin with three people copied, and the agent's reply to it waiting for Send: (task, the mail, the reply)."
-    from taskuary import slots
+    "A mail from Erin with two people copied, and the agent's reply to it waiting for Send: (task, the mail, the reply)."
     s.set_setting('owner_email', 'alex@northwind.example', 't')
     tid = s.create_task({'Title': 'Portal access for the auditors', 'Kind': 'general', 'Status': 'open'}, 'owner')
     mid = s.add_message({'TaskId': tid, 'ExternalId': 'graph:P1', 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromName': 'Erin Blake',
@@ -52,37 +51,14 @@ def _answered(s):
     return tid, mid, rid
 
 
-def test_a_second_letter_to_the_person_the_reply_goes_to_is_folded_in_or_says_why_it_stands_apart():
+def test_a_separate_email_to_the_person_a_reply_goes_to_stands_as_its_own_card():
     from taskuary import slots
     s = MemoryStore(); tid, mid, rid = _answered(s)
-    cards = lambda: [(r['Kind'], r['Status']) for r in s._rows("SELECT Kind, Status FROM review WHERE TaskId=? ORDER BY ReviewId", (tid,))]
-    # the live call: a new email to the sender alone, while the reply to her waits - by her address, and by her name as an agent writes it
-    for to in ('erin@vendor.example', 'Erin Blake <erin@vendor.example>'):
-        out = slots.draft(s, tid, 'Hi Erin - your login is in the portal invite.', to=to, subject='Your login', agent='assistant')
-        assert not out['ok'] and 'second letter to the same person' in out['why'] and 'apart' in out['why'], out
-    assert cards() == [('draft_reply', 'pending')] and not slots.open_(s, tid)                         # nothing was filed, no slot was added
-    # ...someone the reply does NOT go to is an email of its own, as ever (a person copied on it too: copied is not written to)
-    assert slots.draft(s, tid, 'Paula - please add Erin to the portal.', to='paula@northwind.example', subject='Portal seat', agent='assistant')['ok']
-    # ...and where it must be a letter of its own, the agent says why and the card carries it for the owner
-    out = slots.draft(s, tid, 'Hi Erin - your login is in the portal invite.', to='erin@vendor.example', subject='Your login', agent='assistant',
-                      apart='The login is for Erin alone; Gail and Ray are copied on the reply.')
+    out = slots.draft(s, tid, 'Hi Erin - your login: user erin, host files.northwind.example.', to='Erin Blake <erin@vendor.example>', subject='Your login', agent='assistant')
     assert out['ok'], out
-    assert 'apart from the reply - The login is for Erin alone' in s.get_review(out['review_id'])['Reason']
-    # ...the owner's own email to her is his to write: never refused
-    assert slots.draft(s, tid, 'Erin - call me.', to='erin@vendor.example', subject='Call', agent='owner')['ok']
-
-
-def test_a_reply_saved_beside_an_email_to_the_same_person_tells_its_agent_there_are_two():
-    "The other order: the email first, then the reply to the same person - the reply is saved, and its agent hears there are two letters."
-    from taskuary import slots, wrapup
-    s = MemoryStore(); tid, mid, rid = _answered(s); s.decide_review(rid, 'closed_unsent', None, 'agent', note='test: no reply yet')
-    first = slots.draft(s, tid, 'Hi Erin - your login is in the portal invite.', to='erin@vendor.example', subject='Your login', agent='assistant')
-    assert first['ok'], first
-    out = wrapup.agent_reply(s, tid, 'Hi Erin - the files are attached, and your login is in the portal invite.', 'assistant')
-    assert out['ok'] and f"rv{first['review_id']}" in out['two_letters_to_one_person'], out
-    # ...not once that email says why it stands apart
-    s.update_review_reason(first['review_id'], f"assistant wrote this email - approve to send ({slots.APART}for Erin alone)")
-    assert not slots.also_waiting(s, tid, ['erin@vendor.example'])
+    cards = [(r['Kind'], r['Status']) for r in s._rows("SELECT Kind, Status FROM review WHERE TaskId=? ORDER BY ReviewId", (tid,))]
+    assert cards == [('draft_reply', 'pending'), (slots.KIND, 'pending')], cards                # both wait for their own Send
+    assert s.get_review(rid)['DraftText'] == 'Hi Erin - the files are attached.'                # the reply is untouched
 
 
 def test_a_new_email_to_someone_whose_earlier_one_went_is_a_new_letter_never_could_not_add():
@@ -100,3 +76,21 @@ def test_a_new_email_to_someone_whose_earlier_one_went_is_a_new_letter_never_cou
     assert [i['out']['to'] for i in slots.open_(s, tid)] == ['paula@northwind.example']
     # ...while triage listing her again adds nothing: what was sent is not owed twice
     assert slots.add(s, tid, [{'to': 'paula@northwind.example', 'about': 'the seat', 'kind': 'email'}], 'triage') == []
+
+
+def test_sending_one_letter_leaves_the_other_waiting_when_its_sent_copy_comes_back():
+    """The owner, 2026-11-13: two letters waited on one task - the reply on the thread and a login to the sender alone. He pressed Send on
+    one and both boxes closed. The sent copy came back from his Sent folder onto the thread, was heard as a new message, and set aside every
+    draft older than it. A letter Taskuary sent on his press is no new input: the other card waits for its own Send."""
+    from taskuary import conversation, slots
+    s = MemoryStore(); tid, mid, rid = _answered(s)
+    s._exec("UPDATE review SET CreatedAt=datetime('now','localtime','-5 minutes') WHERE ReviewId=?", (rid,))   # the reply was written first
+    s._exec("UPDATE message SET CreatedAt=datetime('now','localtime','-9 minutes') WHERE MessageId=?", (mid,))  # ...to her mail, before that
+    login = 'Hi Erin - your login: user erin, host files.northwind.example.'
+    out = slots.draft(s, tid, login, to='erin@vendor.example', subject='Your login', agent='assistant'); assert out['ok'], out
+    s.decide_review(out['review_id'], 'approved', login, 'owner'); slots.settled(s, s.get_review(out['review_id']), True, 'owner')
+    s._exec("UPDATE review SET DeliveryState='sent' WHERE ReviewId=?", (out['review_id'],))
+    s.add_message({'TaskId': tid, 'ExternalId': 'graph:SENT1', 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'FromName': 'Alex Doyle',
+                   'FromEmail': 'alex@northwind.example', 'Direction': 'out', 'Subject': 'Your login', 'BodyText': login, 'Status': 'routed'})
+    conversation.hear(s, tid, turn=True)
+    assert s.get_review(rid)['Status'] == 'pending', s.get_review(rid)

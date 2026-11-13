@@ -292,7 +292,8 @@ def _value(ctx, path: str):
     if rec is None: return None
     if not rest: return rec.get('body', '')
     k = rest[0]
-    if k == 'answer': return None if rec.get('answer') is None else 'yes' if rec['answer'] else 'no'
+    # ...a text step's answer IS its text (the visual audit, 2026-11-13: a draft "from {{s2.answer}}" off a text step named nothing)
+    if k == 'answer': return ('yes' if rec['answer'] else 'no') if rec.get('answer') is not None else rec.get('body') if rec.get('kind') == 'ai' else None
     if k == 'fields' and len(rest) > 1: return (rec.get('fields') or {}).get(rest[1])
     if k in ('head', 'rows', 'why', 'body', 'task', 'status', 'error'): return rec.get('ref' if k == 'task' else k)
     return None
@@ -407,8 +408,12 @@ def _task(store, step, ctx, llm, tid, dry, warns, title):
 def _draft(store, step, ctx, llm, tid, dry, warns, title):
     from . import outbox
     if _refs(step.get('to')) or _refs(step.get('cc')): warns.append('who it goes to comes from an earlier step - check the address before you send it')
+    n = len(warns)
     to, about = render(str(step.get('to') or ''), ctx, warns).strip(), render(str(step.get('about') or ''), ctx, warns)
     subject, cc = render(str(step.get('subject') or ''), ctx, warns).strip(), render(step.get('cc') or [], ctx, warns)
+    # ...and a token that named nothing is a hole the email would be written around: the step fails there, never drafts an apology to a person
+    if holes := [w for w in warns[n:] if 'names nothing' in w]:
+        raise RuntimeError(f"{holes[0].split(' names nothing')[0]} names nothing, so there is nothing to write this from - fix the step that should fill it")
     if dry: return {'status': 'dry', 'head': f'would draft for {to}' + (f": {subject[:80]}" if subject else ''), 'body': about}
     out = outbox.compose(store, step.get('channel') or 'email', to, about, mode='draft', subject=subject or None, actor='workflow', llm=llm,
                          cc=cc if isinstance(cc, list) else [cc])

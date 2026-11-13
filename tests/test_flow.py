@@ -123,6 +123,23 @@ def test_a_token_that_names_nothing_is_left_visible_and_said():
     assert warns == ['{{s9.head}} names nothing - left as written']
 
 
+def test_a_text_steps_answer_is_its_text_and_a_draft_from_nothing_is_never_written(db):
+    # the visual audit, 2026-11-13: a Friday status routine drafted "Weekly status ... from {{s2.answer}}" off a text step, the token named
+    # nothing, and the email to Erin Blake held the model's apology for the unfilled placeholder - on the rail as "ready to send"
+    s = MemoryStore()
+    steps = [read_dupes(db), {'id': 's2', 'kind': 'ai', 'label': 'Write it', 'prompt': 'Summarise {{s1}}', 'output': 'text'},
+             {'id': 's3', 'kind': 'draft', 'label': 'Tell Erin', 'to': 'erin@northwind.example', 'about': 'Status: {{s2.answer}}'}]
+    src = source(s, steps)
+    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 6, 'taskId': 99, 'ref': 'TQ-0099', 'draft': 'Hi'}) as made:
+        flow.execute(s, src, run_task(s, src), llm=answering('One duplicate: Payworth INV-1.'))
+    assert made.call_args.args[3] == 'Status: One duplicate: Payworth INV-1.'
+    # ...and a token that still names nothing stops the draft step, said where it happened - never an email written around the hole
+    ctx = flow.context({'title': 'Weekly'}, 'manual', None)
+    with mock.patch('taskuary.outbox.compose') as made:
+        rec = flow.run_step(s, {'id': 's3', 'kind': 'draft', 'label': 'Tell Erin', 'to': 'erin@northwind.example', 'about': '{{s9.why}}'}, ctx, None, task_id=7)
+    assert not made.called and rec['status'] == 'failed' and '{{s9.why}}' in rec['error']
+
+
 def test_a_step_may_be_named_by_its_label(db):
     s = MemoryStore()
     src = source(s, [read_dupes(db), {'id': 's2', 'kind': 'task', 'label': 'T', 'title': '{{read ap bills.rows}} found'}])

@@ -810,13 +810,15 @@ def seed_set_ups(store, f):
         rv = f.review(t, mid, kind='outbound', draft=f"I'm in quarter-end planning that morning - would {at} work instead?", Deliver=json.dumps(env),
                       reason=f"Propose {at} for {c['subject']} - press {calwrite.send_word()} and the calendar is told")
         store.update_task(t, {'Kind': 'general', 'Status': 'in_progress', 'Assignee': 'agent:general'}, 'triage')
-        # ...the invite came in, the agent was handed it, and its turn said why this time
-        store._exec('UPDATE message SET CreatedAt=? WHERE MessageId=?', (_at(56), mid)); store._exec('UPDATE route SET CreatedAt=? WHERE MessageId=?', (_at(56), mid))
-        say(t, 55, general.BRIEF_ACTOR, general.USER_TYPE, INVITE_JOB.format(line=f"{who} invited you to {c['subject']}, {iv['at']}"))
+        # ...the invite came in, the agent was handed it, and its turn said why this time - minutes after the invite's own stamp (the morning's
+        # spread moved it, and a turn at a fixed 55 minutes ago read 11:28 PM under an invitation of 11:46 PM)
+        came = (datetime.now() - datetime.strptime(str(store.get_message(mid)['SentAt']), '%Y-%m-%d %H:%M:%S')).total_seconds() / 60
+        store._exec('UPDATE message SET CreatedAt=? WHERE MessageId=?', (_at(came), mid)); store._exec('UPDATE route SET CreatedAt=? WHERE MessageId=?', (_at(came), mid))
+        say(t, came - 1, general.BRIEF_ACTOR, general.USER_TYPE, INVITE_JOB.format(line=f"{who} invited you to {c['subject']}, {iv['at']}"))
         summ = {'about': f"{who} invited you to the {c['subject']}, {iv['at']}.",
                 'did': f"Checked your calendar: it {iv['clash']}. The first free hour after it is **{at}**, so I set up a new time with a short note - "
                        'or accept or decline it instead.', 'drafted': [{'review': rv}]}
-        cid = say(t, 54, 'assistant', general.ASSISTANT_TYPE, summ['did']); say(t, 53.99, 'assistant', general.SUMMARY_TYPE, json.dumps(summ))
+        cid = say(t, came - 2, 'assistant', general.ASSISTANT_TYPE, summ['did']); say(t, came - 2.01, 'assistant', general.SUMMARY_TYPE, json.dumps(summ))
         store.snap_draft(rv, cid)
     if (sh := SET_UPS.pop('share', None)):
         t = sh['task']; gail = store.list_messages(t)[0]

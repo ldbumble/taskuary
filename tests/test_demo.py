@@ -530,6 +530,18 @@ class TheDemoOpensOnItsTourTests(unittest.TestCase):
         self.assertTrue([c for c in s.list_comments(tid) if c.get('ActorType') == general.ASSISTANT_TYPE], (named, 'has no agent turn'))
         self.assertFalse([x for x in demo.TOUR_STEPS if 'Next steps' in x])
 
+    def test_no_agent_answers_before_the_message_it_answers(self):
+        """The invite's agent turn read 11:28 PM under Ruth's invitation stamped 11:46 PM: the seed moved the message's CreatedAt to before
+        its turn, and the chat draws its SentAt. On every task the first turn comes after the first message that came in."""
+        from taskuary import general
+        s, _ = self.seeded()
+        late = []
+        for t in s.list_tasks():
+            got = sorted(str(m.get('SentAt') or '') for m in s.list_messages(t['TaskId']) if m.get('SentAt'))
+            said = sorted(str(c['CreatedAt']) for c in s.list_comments(t['TaskId']) if c.get('ActorType') == general.ASSISTANT_TYPE)
+            if got and said and said[0] < got[0]: late.append((t['Title'], got[0], said[0]))
+        self.assertEqual(late, [])
+
     def test_the_first_view_opens_on_it_until_it_is_done(self):
         s, _ = self.seeded()
         tour = next(t for t in s.list_tasks() if t['Title'] == demo.TOUR)

@@ -4,7 +4,7 @@ sure the hipaa thing works both for triage and agent as it was not working in th
 The fake answers as LiteLLM does: its own error envelope, the model ids its key may call, Gemini and Claude-on-Vertex each with the
 rules their provider enforces behind it (an empty system or user turn refused, Claude's thinking budget against max_tokens, a forced
 tool call refused while it thinks), `usage` on every answer. Each test goes in through the app's own door - build_llm, ingest_message,
-draft_reply, GeneralSession, quickwork.ask, concierge.brain - never by calling make_llm with a hand-built config."""
+draft_reply, GeneralSession, quickwork.again, concierge.brain - never by calling make_llm with a hand-built config."""
 import json, unittest
 from pathlib import Path
 from unittest import mock
@@ -205,15 +205,16 @@ class GeneralAgentRoad(unittest.TestCase):
 
 
 class QuickWorkRoad(unittest.TestCase):
-    "(e) One call that answers a task in one go: on an API card with no web search, the schema rides the wire."
-    def test_a_quick_answer_comes_back_read(self):
-        from taskuary import quickwork
+    "(e) The warm agent's turn on the card: the agent's own turn (quickwork.again), routed as quick work, on the card's model."
+    def test_a_warm_turn_answers_on_the_card(self):
+        from taskuary import general, quickwork
         for model in (FLASH, SONNET):
             s = MemoryStore(); fx = Factory(s); jobs_on(s, card(s, model))
-            tid = fx.task(title='What is the PTO policy?', kind='general'); fx.message(task_id=tid, subject='PTO', body_text='How many days do I get?')
-            ans = {'report': 'Fifteen days a year.', 'draft': 'Hi, you get fifteen days.', 'question': None, 'done': False, 'escalate': False, 'why': ''}
-            with Gateway(lambda b: json.dumps(ans)) as g: got = quickwork.ask(s, tid, 'How many PTO days?')
-            self.assertEqual(got.report, 'Fifteen days a year.', model)
+            tid = fx.task(title='What is the PTO policy?', kind='general')
+            with Gateway(lambda b: 'Fifteen days a year.') as g, mock.patch('taskuary.browserview.installed', return_value=False),                  mock.patch('taskuary.apiagent.can', return_value=False):
+                ses = general.GeneralSession(s, tid); ses.quick = True
+                self.assertEqual(quickwork.again(s, tid, ses, 'How many PTO days?'), 'filed')
+            self.assertEqual(general.history(s, tid)[-1]['content'][0]['text'], 'Fifteen days a year.', model)
             self.assertEqual(g.said()['model'], model)
 
 
@@ -420,13 +421,6 @@ class FencedJsonRoad(unittest.TestCase):
     def test_triage_reads_a_fenced_verdict(self):
         s = MemoryStore(); s.set_setting('triage_ai', f'connector:{card(s)}', 'owner')
         with Gateway(lambda b: FENCED): self.assertEqual(s.get_task(TriageRoad().mail(s)['task_id'])['Title'], VERDICT['title'])
-
-    def test_quick_work_reads_a_fenced_answer(self):
-        from taskuary import quickwork
-        s = MemoryStore(); fx = Factory(s); jobs_on(s, card(s, FLASH))
-        tid = fx.task(title='PTO policy', kind='general'); fx.message(task_id=tid, subject='PTO', body_text='How many days?')
-        ans = {'report': 'Fifteen days.', 'draft': None, 'question': None, 'done': False, 'escalate': False, 'why': ''}
-        with Gateway(lambda b: f'```json\n{json.dumps(ans)}\n```'): self.assertEqual(quickwork.ask(s, tid, 'How many?').report, 'Fifteen days.')
 
     def test_the_agents_summary_block_is_read_inside_a_fence(self):
         from taskuary import selfclose

@@ -169,6 +169,7 @@ class WorkerTests(unittest.TestCase):
     def test_the_assistant_session_gets_the_task_as_its_first_ask_once(self):
         s = store()
         tid = s.create_task({'Title': 'board meeting', 'Summary': ASK, 'Kind': 'general'}, 'triage')
+        s.judge_task(tid, {'difficulty': 'hard'}, 'triage')                       # the full agent's start (quick and normal work is the warm agent's)
         session = mock.Mock()
         with mock.patch.object(general, 'start_session', return_value=session) as start, mock.patch.object(general, 'history', return_value=[]):
             ingest._auto_general(s, tid)
@@ -196,7 +197,8 @@ class WorkerTests(unittest.TestCase):
         from taskuary import terminal
         s = store(auto_sessions='1')
         tid = s.create_task({'Title': 'board meeting', 'Summary': ASK, 'Kind': 'general'}, 'triage')
-        live = mock.Mock(alive=True)
+        s.judge_task(tid, {'difficulty': 'hard'}, 'triage')                       # the full agent's start (quick and normal work is the warm agent's)
+        live = mock.Mock(alive=True, subagents=[])
         with mock.patch.dict(terminal.SESSIONS, {'busy': live}, clear=True), mock.patch.object(general, 'start_session') as start:
             ingest._auto_general(s, tid)
         start.assert_not_called()

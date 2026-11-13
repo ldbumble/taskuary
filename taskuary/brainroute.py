@@ -489,6 +489,12 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     up = ''
     if pick and mode(store) == 'auto' and tier != 'strong' and job in ESCALATES and _first(store, f, 'escalate'): up = 'strong'
     if browser and str(pick).startswith('cli:'): chain = [c for c in chain if hands(c)]      # its failover too: no brain without a shell
+    # ...and THE MODEL IS ONE THIS BRAIN RUNS (aidefaults.fits): else its own, at the effort the tier asked for
+    from .aidefaults import fits
+    from .climodels import split_pick
+    if model and not fits(store, model, pick):
+        why, e = why + f"; {split_pick(model)[0]} is not a model {_said(store, pick)} runs, so its own", split_pick(model)[1]
+        model = f'@{e}' if e else ''
     return Route(job, tier, pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:],
                  (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''), up, lvl)
 

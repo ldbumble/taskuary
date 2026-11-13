@@ -54,38 +54,40 @@ def test_a_drain_waits_on_light_load_too():
         start.assert_not_called()                                                 # 0.2 + 1 does not fit in 1
         bb.drain(s); assert start.call_args[0][1:] == (tid, 'notes')
 
-def test_a_quick_call_waits_for_room_and_its_timeout_starts_with_its_slot():
+class Turn:
+    "A quick session whose turn is `said` - what quickwork.again holds a slot around."
+    handed_on = ''
+    def __init__(self, said=lambda: None): self.said = said
+    def send_prompt(self, *a, **k): return self.said()
+
+def test_a_quick_turn_waits_for_room_holding_nothing():
     s = home(auto_sessions='1', auto_sessions_light='2'); tid = s.create_task({'Title': 'Friday?', 'Kind': 'general'}, 't')
     live, seen = [1], []
-    def ask(store, tid_, ask_, steps, cancel): seen.append(cancel.is_set()); return None
-    with mock.patch.object(bb, 'live_count', side_effect=lambda: live[0]), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
-         mock.patch.object(quickwork, 'ask', side_effect=ask), mock.patch.object(quickwork, 'WAIT_POLL', .05), \
-         mock.patch.object(quickwork, 'QUICK_TIMEOUT', .2):
-        th = threading.Thread(target=quickwork._call, args=(s, tid, 'Friday?', [])); th.start()
+    with mock.patch.object(bb, 'live_count', side_effect=lambda: live[0]), mock.patch.dict(terminal.SESSIONS, {}, clear=True),          mock.patch.object(quickwork, 'WAIT_POLL', .05):
+        th = threading.Thread(target=quickwork.again, args=(s, tid, Turn(lambda: seen.append(quickwork.in_flight())), 'Friday?')); th.start()
         time.sleep(.5)
         assert th.is_alive() and not seen and quickwork.in_flight() == 0          # every slot is an agent's: it waits, holding nothing
         live[0] = 0; th.join(5)
-    assert seen == [False] and quickwork.in_flight() == 0                         # 0.5s waited, the 0.2s timeout had not started
+    assert seen == [1] and quickwork.in_flight() == 0                             # its turn held the slot, and gave it back
     assert any('the quick answer comes when there is room' in c['Body'] for c in s.list_comments(tid))
 
-def test_quick_calls_never_pass_the_ceiling_and_free_their_slot():
+def test_quick_turns_never_pass_the_ceiling_and_free_their_slot():
     s = home(auto_sessions='1', auto_sessions_light='2'); gate, now, most, lock = threading.Event(), [0], [0], threading.Lock()
-    def ask(*a):
+    def turn():
         with lock: now[0] += 1; most[0] = max(most[0], now[0])
         gate.wait(5)
         with lock: now[0] -= 1
-    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(quickwork, 'ask', side_effect=ask), \
-         mock.patch.object(quickwork, 'WAIT_POLL', .05):
-        ts = [threading.Thread(target=quickwork._call, args=(s, i, 'q', [])) for i in range(6)]
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(quickwork, 'WAIT_POLL', .05):
+        ts = [threading.Thread(target=quickwork.again, args=(s, i, Turn(turn), 'q')) for i in range(6)]
         for t in ts: t.start()
         time.sleep(.4); assert most[0] == 2 == quickwork.in_flight()             # 1 agent slot x 2 per agent
         gate.set()
         for t in ts: t.join(5)
     assert most[0] == 2 and quickwork.in_flight() == 0
 
-def test_a_finished_quick_call_lets_a_queued_agent_start():
+def test_a_finished_quick_turn_lets_a_queued_agent_start():
     s = home(); tid = s.create_task({'Title': 'Plan the offsite', 'Kind': 'general'}, 't')
-    with mock.patch.object(quickwork, 'ask', return_value=None), mock.patch.object(bb, 'drain_later') as drain:
-        quickwork._call(s, tid, 'q', []); drain.assert_not_called()               # nothing queued: no drain
+    with mock.patch.object(bb, 'drain_later') as drain:
+        quickwork.again(s, tid, Turn(), 'q'); drain.assert_not_called()               # nothing queued: no drain
         s.enqueue_dispatch(tid, None, 'assistant', 'full')
-        quickwork._call(s, tid, 'q', []); drain.assert_called_once()
+        quickwork.again(s, tid, Turn(), 'q'); drain.assert_called_once()

@@ -1,36 +1,27 @@
-"""How many recent general tasks would take the quick path, and why the rest go deep: `python tools/quick_replay.py --db PATH [--days 14] [--ask 0]`.
+"""How many recent general tasks would take the quick path, and why the rest go deep: `python tools/quick_replay.py --db PATH [--days 14]`.
 
 Reads a COPY of PATH (a read such as origin.of_task writes a cache) with TASKUARY_HOME pointed at a fresh temp dir, so the real home is never opened.
-There is no default for --db. Prints `key: count` lines - never a title, a name or any text. With --ask N it also makes the quick call on up to N
-would-be-quick tasks, and counts what came back (answered, asked the owner, closed, escalated); nothing is filed."""
+There is no default for --db. Prints `key: count` lines - never a title, a name or any text. (--ask went with the one quick call, 2026-11-13:
+the quick lane is now an agent's turn with tools, which a replay must not run.)"""
 import argparse, os, shutil, sys, tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
 
-def replay(store, days: int = 14, now: datetime = None, ask: int = 0) -> dict:
+def replay(store, days: int = 14, now: datetime = None) -> dict:
     "Counts for the general tasks created in the last `days`: how many would be quick, and the reason for each deep one."
-    from taskuary import general, ingest, quickwork
+    from taskuary import general, quickwork
     since = (now or datetime.now()) - timedelta(days=days)
     def recent(t):
         try: return datetime.fromisoformat(str(t.get('CreatedAt') or '')[:19]) >= since
         except ValueError: return False
     ts = [t for t in store.list_tasks() if general.handles(t) and not general.is_dock(t) and recent(t)]
     out = {'general': len(ts), 'quick': 0, **{f'deep:{w}': 0 for w in quickwork.DEEP_WHY}}
-    quick = []
     for t in ts:
         w = quickwork.why_deep(store, t['TaskId'])
         if w: out[f'deep:{w}'] += 1
-        else: out['quick'] += 1; quick.append(t['TaskId'])
+        else: out['quick'] += 1
         if w == 'stranger': k = stranger_cause(store, t['TaskId']); out[k] = out.get(k, 0) + 1
-    if ask > 0:
-        out.update(asked=0, answered=0, question=0, closed=0, escalated=0, unreadable=0, failed=0)
-        for tid in quick[:ask]:
-            out['asked'] += 1
-            try: a = quickwork.ask(store, tid, ingest.first_ask(store, tid))
-            except Exception: out['failed'] += 1; continue
-            if a is None: out['unreadable'] += 1
-            else: out['escalated' if a.escalate else 'question' if a.question else 'closed' if a.done else 'answered'] += 1
     return out
 
 
@@ -51,14 +42,14 @@ def stranger_cause(store, tid) -> str:
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--db', required=True); p.add_argument('--days', type=int, default=14); p.add_argument('--ask', type=int, default=0)
+    p.add_argument('--db', required=True); p.add_argument('--days', type=int, default=14)
     a = p.parse_args(argv)
     tmp = Path(tempfile.mkdtemp(prefix='quick-replay-')); db = tmp / 'taskuary.db'
     for x in ('', '-wal', '-shm'):                           # ...with what a live database has not yet written into its file
         if Path(a.db + x).is_file(): shutil.copy(a.db + x, str(db) + x)
     from taskuary.store import SQLiteStore
     try:
-        for k, v in replay(SQLiteStore(db), a.days, ask=a.ask).items(): print(f'{k}: {v}')
+        for k, v in replay(SQLiteStore(db), a.days).items(): print(f'{k}: {v}')
     finally: shutil.rmtree(tmp, ignore_errors=True)
     return 0
 

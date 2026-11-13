@@ -155,6 +155,26 @@ def test_a_saved_model_follows_the_brain_it_was_saved_for(real):
             assert brainroute.choose(s, 'general').model == 'claude-sonnet-5-5', 'and it is back with its brain'
 
 
+def test_a_cli_is_never_handed_a_model_it_does_not_run(real):
+    """The live shape, 2026-11-13: "Quick general work -> standard on codex (CLI), claude-sonnet-5-5 (rule work)" - Codex exited 1, "not
+    supported when using Codex with a ChatGPT account", on every quick call. The general card's model came along whatever it was saved for,
+    and Claude's own list (its built-in aliases, no catalogue cached) did not name it, so nothing called it Claude's. Whatever road a model
+    comes by, the router hands a CLI only a model that CLI runs - else its own, at the tier's effort."""
+    from taskuary import aidefaults, climodels
+    real.update({'claude', 'codex'})
+    lists = {'codex': {'choices': ['gpt-5.5'], 'source': 'codex models_cache.json'}, 'claude': {'choices': ['opus', 'sonnet', 'haiku'], 'source': 'built-in'}}
+    for conns in (('codex',), ('claude', 'codex')):
+        s, cfg, _ = _home(conns, {k: True for k in conns}, {'default_brain': 'codex'})
+        with mock.patch.object(config, 'load', lambda: cfg), mock.patch.object(climodels, 'catalog', lambda cli: lists.get(cli, {'choices': []})):
+            clic.sync(cfg, s)
+            aidefaults.keep_model(s, 'assistant_model', 'claude-sonnet-5-5', 'owner', 'cli:codex')     # stamped for the wrong brain
+            for job in ('quick_work', 'general'):
+                r = brainroute.choose(s, job)
+                assert r.pick == 'cli:codex' and 'claude-sonnet-5-5' not in r.model and r.model in ('', '@low', '@high'), (conns, job, r.model, r.why)
+            assert brainroute.choose(s, 'general', want_pick='cli:codex', want_model='gpt-5.5').model == 'gpt-5.5'     # its own model is kept
+            assert aidefaults.fits(s, 'sonnet', 'cli:claude') if 'claude' in conns else True                    # ...and an alias of its own
+
+
 def test_the_default_ai_is_asked_once_and_a_choice_is_never_written_over(real):
     """The live shape: two CLIs connected, a start named the first one ready as the default, and a day of work ran on a tool
     nobody picked. With several, the one question is owed - on the bell and on the Settings card - until answered or put down."""

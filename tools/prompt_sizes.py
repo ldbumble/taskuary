@@ -62,7 +62,7 @@ def loop(system, user, tools, steps=12, stub=True):
 
 
 def main():
-    from taskuary import assistant, general, origin, quickwork, triage
+    from taskuary import assistant, general, origin, triage
     s, tid, mid = world()
     rows = []
     def row(kind, system, user, tools=0, calls=1, unit='per arriving message', each=None):
@@ -76,9 +76,7 @@ def main():
     row('triage', seen['system'], seen['user']); seen_triage = dict(seen)
     with mock.patch.object(origin, 'of_task', return_value=('owner', '')):
         system, user = general._prompt(s, tid)
-        qs, qu = quickwork.prompt(s, tid, 'Can you confirm by Friday whether we renew?', False)
     tl = tools_list(tid); tchars = len(json.dumps(tl))
-    row('quick_work (one call)', qs, qu, 0, 1, 'per reply owed (quick)')
     system += NL * 2 + 'TOOLS BRIEF ' * 200
     before, after = loop(system, user, tl, stub=False), loop(system, user, tl)
     row('agent step on an AI card, BEFORE', system, user, tchars, len(before), 'per agent turn (12 tools)', each=sum(before) // len(before))

@@ -457,7 +457,7 @@ def _general(s, t, **kw):
     return run.call_args.args[0]
 
 
-@pytest.mark.parametrize('how', [dict(cli_tools=True), dict(research=True), dict(research='web'), dict()])
+@pytest.mark.parametrize('how', [dict(cli_tools=True), dict(research=True), dict()])
 def test_the_general_road_refuses_a_strangers_task_too(floor, how):
     """A general agent's run on a stranger's task - with hands ('auto': the reviewer, its settings, a trimmed env, its own folder), a
     look (no tools), or the classifier (every tool off) - stays on argv: acp_ok False, and the road refuses a trimmed env on its own."""

@@ -48,10 +48,6 @@ class Model:
             return json.dumps({'intent': 'reply_only' if q else 'fyi', 'kind': 'task', 'why': 'w', 'title': 'Erin asks about Tuesday' if q else 'Payworth news',
                                'summary': 'Erin asks for the figures' if hard else 'Erin asks about Tuesday', 'checklist': [], 'asks_owner': q, 'sender_class': 'person' if q else 'bulk',
                                'difficulty': 'hard' if hard else 'easy'})
-        if self.job == 'quick_work':                # the figures are looked up: the one call says so and hands on
-            up = 'for the figures' in user.split('QUICK WORK:')[0][-300:]
-            return json.dumps({'report': 'Tuesday is free.', 'draft': None if up else 'Yes, I am around Tuesday.', 'question': None, 'done': False,
-                               'escalate': up, 'why': 'the figures need looking up' if up else ''})
         return json.dumps({'lines': [], 'notes': ''})
     def chat(self, msgs, tools, max_tokens, **kw):
         self._count(msgs, tools)
@@ -96,9 +92,10 @@ def store():
     return s
 
 
-# per caller, for the day above: (calls, est. tokens). Triage is one call a mail; an agent turn of ten look-ups is eleven calls; the
-# Advisor looks where something moved - once here, since nothing does after the mail
-CEILING = {'triage': (20, 320_000), 'quick_work': (16, 130_000), 'general': (8 * 12, 1_500_000), 'advisor': (3, 60_000)}
+# per caller, for the day above: (calls, est. tokens). Triage is one call a mail; an agent turn of ten look-ups is eleven calls - the warm
+# agent's too, since it has the tools (the owner, 2026-11-13: "they should have tools"), so a quick question costs a turn, not one call;
+# hard work starts the full agent. The Advisor looks where something moved - once here, since nothing does after the mail
+CEILING = {'triage': (20, 320_000), 'quick_work': (8 * 12, 1_500_000), 'general': (8 * 12, 1_500_000), 'advisor': (3, 60_000)}
 
 
 def test_an_idle_day_calls_the_model_only_for_what_arrived():
@@ -110,11 +107,7 @@ def test_an_idle_day_calls_the_model_only_for_what_arrived():
 
 
 class Worst(Model):
-    "An agent answering the worst way every time: nothing at all, or the same look-up again and again; a quick look that always hands on."
-    def __call__(self, system, user, **kw):
-        if self.job != 'quick_work': return super().__call__(system, user, **kw)
-        self._count(system, user)
-        return json.dumps({'report': '', 'draft': None, 'question': None, 'done': False, 'escalate': True, 'why': 'needs a look'})
+    "An agent answering the worst way every time - the warm one and the full one alike: nothing at all, or the same look-up again and again."
     def chat(self, msgs, tools, max_tokens, **kw):
         self._count(msgs, tools)
         if kw.get('tool_choice') == 'none' or len(msgs) % 3: return {'role': 'assistant', 'content': ''}
@@ -302,4 +295,4 @@ def test_a_busy_day_stays_one_judgement_per_new_kind_of_mail_and_one_look_or_tur
     "150 mails, one in four a question, half of those needing a look-up: what the day costs, held under its own ceiling."
     spent = day(store(), n=150, looks=48, every=4)
     print(NL + 'BUSY DAY (calls, est. tokens):', json.dumps(spent))
-    assert spent['triage'][0] <= 42 and spent['quick_work'][0] <= 38 and spent['general'][0] <= 19 * 12 and spent.get('advisor', (0,))[0] <= 3, spent
+    assert spent['triage'][0] <= 42 and spent['quick_work'][0] <= 19 * 12 and spent['general'][0] <= 19 * 12 and spent.get('advisor', (0,))[0] <= 3, spent

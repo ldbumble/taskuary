@@ -2235,7 +2235,7 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
         return False
     from . import blackboard as bb, general, quickwork
     coding = not general.handles(store.get_task(tid) or {})
-    # a conversation of quick answers carries on quick while the task still reads quick: one call at a fraction of a desk (quickwork._take)
+    # a conversation of quick answers carries on quick while the task still reads quick: the warm agent, at a fraction of a desk (quickwork._take)
     quick = not coding and quickwork.only_quick(store, tid) and _reads_quick(store, tid)
     if not quick and not has_room(store):
         queue_turn(store, tid)
@@ -2585,9 +2585,10 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
     if mails and len(mails) == len(got) and conversation.heard(store, tid, 'mail', mails): return
     said = lines[0] if len(lines) == 1 else f'{len(lines)} NEW LINES ON THIS TASK, in the order they came - one turn for all of them:\n\n' + '\n\n---\n\n'.join(lines)
     try:
-        # a session of quick answers re-decides on the task's depth now: still quick, one more call on it; else the turn runs the agent
-        if ses.quick and quickwork.takes(store, tid): quickwork.again(store, tid, ses, said)
-        else: ses.send_prompt(said, brief=True, mails=mails if len(mails) == len(got) else ())      # Taskuary's brief, shown in the chat as coding's typed line is
+        # a session of quick answers re-decides on the task's depth now: still quick, the warm agent's turn on it; else the full agent's
+        kept = mails if len(mails) == len(got) else ()
+        if ses.quick and quickwork.takes(store, tid): quickwork.again(store, tid, ses, said, mails=kept)
+        else: ses.send_prompt(said, brief=True, mails=kept)      # Taskuary's brief, shown in the chat as coding's typed line is
     except Exception as e:
         # ...the session ended under it - the agent closed its own at the end of the turn this line waited behind (the stress run,
         # 2026-11-05): the line is not lost to a Continue, it carries the conversation on in a session of its own, as a mail on a quiet task does
@@ -3391,10 +3392,10 @@ def advisor_brief(store, msg: dict, mid: int) -> str | None:
     return '\n\n'.join(parts)
 
 
-def _reads_quick(store, tid, first: bool = False) -> bool:
-    "quickwork.takes (`first`: an arrival's first look, quickwork.looks_first), or False - the agent starts - when the depth cannot be read."
+def _reads_quick(store, tid) -> bool:
+    "quickwork.takes, or False - the full agent starts - when the depth cannot be read."
     from . import quickwork
-    try: return quickwork.looks_first(store, tid) if first else quickwork.takes(store, tid)
+    try: return quickwork.takes(store, tid)
     except Exception as e:
         logger.warning(f'the depth of task {tid} could not be read - it starts the agent: {e}')
         return False
@@ -3405,11 +3406,11 @@ def _auto_general(store, tid, brief: str = None, deep: bool = False):
     owner sees when they open the task (PW-069). A full house queues it like a coding task; the
     queue drain knows the kind. A live conversation is reused - the ask is put once.
     `deep`: the quick path already handed this one on (quickwork.escalate), so it never goes back to it.
-    A task triage judged quick (quickwork.takes) is answered in one call instead: no desk, a fraction of one (quickwork._take). Every door reaching
-    here has passed auto_start_ok already, so the gate is the same for both; a task triage never judged reads as deep."""
+    A task triage judged quick or normal (quickwork.takes) is the warm agent's instead: no desk, a fraction of one (quickwork._take). Every door
+    reaching here has passed auto_start_ok already, so the gate is the same for both."""
     from . import blackboard as bb, general, quickwork
     try:
-        if not deep and _reads_quick(store, tid, first=True): return quickwork.start(store, tid, brief)
+        if not deep and _reads_quick(store, tid): return quickwork.start(store, tid, brief)
         if not has_room(store):
             # the brief waits with it (a quick call's notes, an Advisor's idea): the drain starts the agent on it, not on the bare Summary
             store.enqueue_dispatch(tid, None, 'assistant', busy_words(store), brief=brief)

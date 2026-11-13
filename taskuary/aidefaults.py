@@ -89,14 +89,22 @@ def keep_model(store, setting: str, model, actor, pick: str = None) -> None:
     store.set_setting(setting + FOR, (pick if pick is not None else slot_pick(store, setting)) if model else '', actor)
 
 
-def _foreign(store, model: str, pick: str) -> bool:
-    """A model saved before its brain was written beside it: another brain's when this CLI's own catalogue does not list it and
-    another connected CLI's does. Anything less certain stays as the owner typed it."""
-    if not pick.startswith('cli:') or model.startswith('effort:'): return False
+# ...AND NO CLI IS EVER HANDED ANOTHER'S MODEL, wherever the name came from (2026-11-13: quick work routed to Codex carried a Claude model
+# name, and Codex exited 1 "not supported when using Codex with a ChatGPT account" on every call). The router asks this of the model it
+# chose (brainroute.choose), so one rule guards every road; a model that does not fit runs as the CLI's own, its effort kept.
+def fits(store, model: str, pick: str) -> bool:
+    """May `model` be handed to `pick`? A CLI whose own list was read from it (climodels.catalog, not the built-in fallback) takes a name
+    it lists, runs now or aliases; with only a built-in list, a name another connected CLI lists is that one's. An AI card, an effort
+    alone and anything less certain stay as the owner typed them."""
+    if not str(pick or '').startswith('cli:') or not model or model.startswith('effort:'): return True
+    name = climodels.split_pick(model)[0]
     from . import general
     clis = {o['pick']: o.get('cmd') or '' for o in general.provider_options(store) if o.get('type') == 'cli'}
-    name, lists = climodels.split_pick(model)[0], lambda c: climodels.catalog(c)['choices']
-    return pick in clis and name not in lists(clis[pick]) and any(name in lists(c) for p, c in clis.items() if p != pick)
+    if not name or pick not in clis: return True
+    cli = clis[pick]; cat = climodels.catalog(cli)
+    if name in (cat.get('choices') or []) or name == (cat.get('current') or {}).get('model') or name in [m['id'] for m in climodels.STATIC.get(cli, [])]: return True
+    if cat.get('choices') and cat.get('source') not in (None, 'built-in', 'unavailable'): return False
+    return not any(name in (climodels.catalog(c).get('choices') or []) for p, c in clis.items() if p != pick)
 
 
 def model_on(store, setting: str, pick: str, settings: dict = None) -> str:
@@ -104,7 +112,7 @@ def model_on(store, setting: str, pick: str, settings: dict = None) -> str:
     get = store.get_setting if settings is None else settings.get
     m, was = str(get(setting) or '').strip(), str(get(setting + FOR) or '').strip()
     if not m or not pick: return m
-    return (m if was == pick else '') if was else ('' if _foreign(store, m, pick) else m)
+    return (m if was == pick else '') if was else (m if fits(store, m, pick) else '')
 
 
 def _conn(cfg, key: str) -> dict:

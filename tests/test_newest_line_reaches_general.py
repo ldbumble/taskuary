@@ -157,8 +157,8 @@ class NextTurn(unittest.TestCase):
     def test_a_quick_conversation_is_asked_the_new_ask(self):
         s = store(); tid = worked(s)
         asked = []
-        with mock.patch.object(quickwork, '_call', side_effect=lambda st, t, q, steps: (asked.append(q), (None, 'stub'))[1]), \
-             mock.patch.object(quickwork, 'escalate'):
+        with mock.patch.object(general, 'start_session', return_value=mock.Mock()), \
+             mock.patch.object(quickwork, 'again', side_effect=lambda st, t, ses, q, **k: (asked.append(q), 'filed')[1]):
             quickwork.start(s, tid, ingest._pass_turn(mail(**AGAIN)))
         self.assertIn(ASK, asked[0])
 

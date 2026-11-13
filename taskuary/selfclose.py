@@ -182,7 +182,7 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: 
     # `sid` is the asker's own session (TASKUARY_SID); an older CLI that sends none is taken to be the task's one live session
     from . import workerstate as ws
     me = sid or getattr(term.session_for(tid), 'sid', None) or ''
-    # ...and a quick session's own call is the asker too: its close can land before the call that filed it lets go (quickwork.start)
+    # ...and a quick session's own turn is the asker too: its close can land before the turn that filed it lets go (quickwork.again)
     live = ws.live_work(store, tid, but=me, skip=('quick',) if getattr(term.SESSIONS.get(me), 'quick', False) else ())
     if live:
         store.add_comment(tid, agent, 'agent', f'{DONE_SAID}{line}' if line else 'The agent says it is finished.')

@@ -2276,7 +2276,8 @@ class GeneralSession:
     """A connector-backed conversation with the live-session contract used by the terminal."""
     mode = 'assistant'
     blocks_on_owner = False              # a turn that ended holds nothing up: no prompt to park at (PW-226)
-    quick = False                        # answered in one call (quickwork): takes no desk until a real turn runs on it
+    quick = False                        # the warm agent's (quickwork): takes no desk until the full agent's turn runs on it
+    handed_on = ''                       # why its last warm turn handed the work to the full agent (quickwork.HAND_ON)
     argv = []
     _cwd, dirty0, _files = '', None, ([], 0.)
     label = 'Agent'                     # how a task's agent is named everywhere (kinds.SHOWN)
@@ -2514,14 +2515,16 @@ class GeneralSession:
 
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
                     pick=None, trace=None, cancel=None, as_owner=True,
-                    delivery_instructions: str = None, kept: bool = False, brief: bool = False, waiting: int = None, line_id: str = None, mails=()) -> str:
+                    delivery_instructions: str = None, kept: bool = False, brief: bool = False, waiting: int = None, line_id: str = None, mails=(),
+                    quick: bool = False) -> str:
         """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
         make it open a conversation (the walk, a setup). It is not written to the history and
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
         rest of this product is built to avoid; the assistant's answer is recorded as normal.
         `brief`: the first ask of an agent that started by itself - kept as the conversation's turn, but filed by Taskuary (BRIEF_ACTOR).
         `waiting`: the owner's line already kept for the agent (wait_line) - a session that ended under it hands it to the next (say_line).
-        `mails`: the messages (ids) this turn exists to pass in - where an earlier turn heard them all already, there is nothing to say."""
+        `mails`: the messages (ids) this turn exists to pass in - where an earlier turn heard them all already, there is nothing to say.
+        `quick`: the warm agent's turn (quickwork.again) - the same turn and tools, on the quick_work job, at a fraction of a desk."""
         text = str(text or '').strip()
         if not text and waiting is None: raise ValueError('empty message')
         if not self.alive: raise Ended(waiting)
@@ -2562,7 +2565,7 @@ class GeneralSession:
             together = (f"THE OWNER SENT {n} MESSAGE{'S' if n > 1 else ''} while you worked - the last {n} USER turn{'s' if n > 1 else ''}. Read "
                         "them together with what came in: a later one may correct or clarify an earlier one. Answer all of it in one reply.")
             delivery_instructions = f'{delivery_instructions}\n\n{together}' if delivery_instructions else together
-        self.quick = False                   # a real turn: from here the session is a desk like any other
+        self.quick = quick                   # an agent's turn takes a desk from here; the warm agent's stays a fraction of one (quickwork._take)
         if as_owner: self.woke = self.silent = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.owned = as_owner and not brief
         self.busy, self.last = True, time.time()
@@ -2619,7 +2622,7 @@ class GeneralSession:
                 from . import workerstate as ws
                 # ...Taskuary's own turn (a line on the thread, a check-back) is not the owner speaking: their question still waits (the night run,
                 # 2026-11-09: every wake cleared it, so the agent asked "who runs the portal?" again on six turns to keep it on screen)
-                ws.record(self.store, self.task_id, self.sid, 'working', text=ws.WAKE if brief or not as_owner else '', source='api')
+                ws.record(self.store, self.task_id, self.sid, 'working', text=ws.WAKE if brief or not as_owner else '', source='quick' if quick else 'api')
             except Exception: pass
             # ...and a run under way is not a session saved: a mark left on the task spoke over this run's own ending (2026-11-04)
             from . import terminal
@@ -2813,7 +2816,8 @@ class GeneralSession:
             # classifying one message. The dock is the Assistant's own chat and keeps the quick
             # gear it shares with triage (aidefaults). See the 2026-09-16 spec.
             build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
-            brain = llm_mod.build_llm(self.store, **build_args, job='general')
+            # ...the warm agent's turn is routed as quick work (brainroute: quick and standard work on its tier), with the same tools
+            brain = llm_mod.build_llm(self.store, **build_args, job='quick_work') if quick else llm_mod.build_llm(self.store, **build_args, job='general')
             if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
             from . import apiagent
             looped, api_tools, api_box = False, None, ()
@@ -2901,7 +2905,8 @@ class GeneralSession:
                 # turn, how to tick its to-dos, the procedure triage matched or why its browser had not opened; it lost the right to
                 # look things up and its place among the open CLIs (so a 300 s leash came back on an agent's turn); and a card with
                 # tools was asked without them. Only what "resumed" changes is said again: no id, and the conversation in full
-                brain = llm_mod.build_llm(self.store, **{**build_args, 'resume': None}, job='general')
+                anew = {**build_args, 'resume': None}
+                brain = llm_mod.build_llm(self.store, **anew, job='quick_work') if quick else llm_mod.build_llm(self.store, **anew, job='general')
                 if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
                 try: reply = ask(brain, whole + files)
                 except Exception:
@@ -2967,7 +2972,7 @@ class GeneralSession:
                 raise Stopped(str(e)) from e
             try:
                 from . import workerstate as ws
-                ws.record(self.store, self.task_id, self.sid, 'stopped' if stopped else 'failed', text=said[:4000], source='api')
+                ws.record(self.store, self.task_id, self.sid, 'stopped' if stopped else 'failed', text=said[:4000], source='quick' if quick else 'api')
             except Exception as skipped: logger.debug(f'api worker event skipped: {skipped}')
             logger.warning(f'assistant turn failed on task {self.task_id}: {e}')
             # ITS CLI DIED PART-WAY THROUGH (clipool.MID_TURN): the turn was not sent again, as it may have done some of the work.
@@ -3007,37 +3012,13 @@ class GeneralSession:
         self.ending = True
         threading.Timer(0.1, self.close, kwargs=kw).start()
 
-    def file_quick(self, ask: str, out, steps: list, as_owner: bool = True, brief: bool = False) -> str:
-        """A quick answer (quickwork.ask) filed as this session's turn, by `_file` - so its draft, question and close reach the owner
-        exactly as a general turn's do. `steps` are the call's own (kind, name, detail), kept as the turn's working. `brief`: as send_prompt's."""
-        from . import quickwork, selfclose, workerstate as ws
-        self.quick = True                    # before any event: every event of this turn says 'quick' (quickwork.only_quick)
-        if not self.alive: raise Ended()
-        # outside the try: without the lock this turn never began - its finally would release a lock it does not hold, and the live turn is no failure
-        if not self._take(WAIT_TURN): raise Ended()
-        self.busy, self.last, self.owned = True, time.time(), as_owner and not brief
-        selfclose.forget(self.task_id)
-        t0 = self.last
-        try:
-            ws.record(self.store, self.task_id, self.sid, 'working', source='quick')
-            if as_owner: self.store.add_comment(self.task_id, BRIEF_ACTOR if brief else 'owner', USER_TYPE, ask)
-            self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]; self.trace_revision += 1
-            for kind, name, detail in steps or []: self._remember_trace(kind, name, detail)
-            return self._file(quickwork.as_reply(out, (self.store.task_thread(self.task_id) or {}).get('asking') or ''), [], t0)
-        except Exception as e:
-            try: ws.record(self.store, self.task_id, self.sid, 'failed', text=str(e)[:4000], source='quick')
-            except Exception as skipped: logger.debug(f'quick worker event skipped: {skipped}')
-            # ...and it ends, as a failed general turn does: left open it read "waiting on you" and held its place in SESSIONS
-            if not is_dock(self.store.get_task(self.task_id)): self._end_soon(learn=False, report=False)
-            raise
-        finally:
-            self.busy, self.last, self.spoke = False, time.time(), True
-            self._lock.release()
-
     def _file(self, reply: str, paths: list, t0: float, browser_tools: bool = False, browser_offer: bool = False) -> str:
         """File one turn's answer: its markers read, its draft, question or close raised, the reply kept as the task's comment.
-        A general turn and a quick answer (quickwork) both end here, so the two can never file differently."""
+        The warm agent's turn (quickwork) and the full agent's both end here, so the two can never file differently."""
         src = 'quick' if self.quick else 'api'     # quickwork.only_quick reads a task's runs by this source
+        # ...and the warm agent's word that this needs the full agent (quickwork.HAND_ON) is Taskuary's to act on, never the owner's to read
+        from . import quickwork
+        reply, self.handed_on = quickwork.handed_on(reply) if self.quick else (reply, '')
         # ...A TURN THAT SAID NO WORD AT ALL is the turn that said nothing (SILENT), woken once and then asking - never "the model returned an
         # empty response" over a Continue (the audit, 2026-11-10 - the owner: "if you have nothing to reply just ask what should i reply?")
         if not reply and is_dock(self.store.get_task(self.task_id)): raise RuntimeError('the model returned an empty response')
@@ -3146,7 +3127,8 @@ class GeneralSession:
             except Exception as e: logger.warning(f'task {self.task_id}: the page the agent handed over was not raised - {e}')
         # A TURN THAT ENDED SHORT is not one waiting on the owner: read by the turn judge (hooks.judge_ended), it wakes the agent once to
         # do what it said it would - never a failure in the chat (the owner, 2026-11-05: "failure means nothing to the user")
-        if not asks and signing is None and turn is None and closing is None and not is_dock(self.store.get_task(self.task_id)):
+        # ...nor one that handed the work on: the full agent's start is what comes next (quickwork.again)
+        if not asks and signing is None and turn is None and closing is None and not self.handed_on and not is_dock(self.store.get_task(self.task_id)):
             from . import background, hooks, sessionrecord
             try: path = sessionrecord.READERS['claude'][0](self.cli_sid) if self.cli_sid and self.pick.startswith('cli:') and _cli_of_pick(self.store, self.pick) == 'claude' else None
             except Exception as e: logger.debug(f'task {self.task_id}: its CLI log was not found - {e}'); path = None

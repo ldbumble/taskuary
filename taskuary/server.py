@@ -4587,8 +4587,12 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         if card:                                    # ...a coding task on an AI card works in the checkout its CLI would have
             try: general.place_coding(store, tid)
             except ValueError as e: raise HTTPException(422, str(e))
+        # THE OWNER'S OWN START TAKES THE SAME ROAD AS AN ARRIVAL'S (the owner, 2026-11-13: "that warm agent should be open for all the easy
+        # tasks"): quick and normal work is the warm agent's turn (quickwork.again), on the AI he picked if he picked one; the rest the full agent's
+        from . import ingest as _ing, quickwork
+        quick = not card and not had_session and _ing._reads_quick(store, tid)
         try:
-            session = general.start_session(store, tid, model=body.model, pick=body.pick or card or None, actor=ACTOR)
+            session = general.start_session(store, tid, model=body.model, pick=body.pick or card or None, actor=ACTOR, quick=quick)
         except (ValueError, RuntimeError) as e:
             raise HTTPException(422, str(e))
         # The source messages and their files are injected by GeneralSession.send_prompt.  On a
@@ -4606,7 +4610,8 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         # session with nothing said, drew no Starting… and never polled (2026-11-04)
         if prompt:
             def turn():
-                try: session.send_prompt(prompt, brief=not typed or body.app_words)
+                brief = not typed or body.app_words
+                try: quickwork.again(store, tid, session, prompt, brief=brief) if getattr(session, 'quick', False) is True else session.send_prompt(prompt, brief=brief)
                 finally: general.OPENING.discard(tid)
             general.OPENING.add(tid)
             background.add_task(turn)

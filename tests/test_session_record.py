@@ -106,7 +106,7 @@ def test_a_saved_answer_is_the_result_and_the_snapshot_outlives_the_cli_log(home
 
 
 def test_a_quick_answers_raw_json_kept_before_the_fix_is_not_a_said_step(home):
-    "A quick answer filed before quickwork.answer_text kept its raw object as the turn's working, cut at SAID_N: read back, it is dropped."
+    "A quick answer filed while it was one JSON call kept its raw object as the turn's working, cut at SAID_N: read back, it is dropped."
     s = MemoryStore(); tid = Factory(s).task(title='Partner day', kind='general')
     rid = s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Worth going: Erin presents at 10.')
     sessionrecord.keep_turn(tid, rid, [{'type': 'progress', 'name': 'text', 'detail': '```json\n{\n  "report": "Worth going: Erin presents at 10.",\n  "dra'}])

@@ -1,18 +1,18 @@
-"""Quick general work (spec 2026-10-29): a general task triage judged quick is answered in one call, not an agent session.
+"""Quick general work (spec 2026-10-29; with tools since 2026-11-13): a general task triage judged quick or normal is worked by the warm
+agent - a turn of the task's own session, with its tools, on the quick_work job and a fraction of a desk - not the full agent's start.
 
-An agent session costs a launch and a long wait for what is often one sentence ("does it make sense to go on Friday?"). This module only
-READS the depth - triage's difficulty, plus the things that always need the agent (a browser, a stranger, several emails owed, a task that
-already ran deep). It never guesses from the words of the task.
+This module only READS the depth - triage's difficulty, plus the things that always need the full agent (a browser, a stranger, several
+emails owed, a task that already ran deep). It never guesses from the words of the task.
 
-THE DEPTH RULING (2026-10-29, after the replay found 93 of 140 recent tasks with no recorded difficulty and 30 'standard'): quick when triage
-read the work as quick or standard or recorded nothing; the agent only for hard work, a browser, a stranger, several emails owed, a task that
-already ran deep, and a routine. A quick call that finds it needs more escalates, so a wrong 'quick' costs one cheap call."""
+THE DEPTH RULING (2026-10-29, after the replay found 93 of 140 recent tasks with no recorded difficulty and 30 'standard'; the owner again,
+2026-11-13: "only complex things" go to the full agent): quick when triage read the work as quick or standard or recorded nothing; the full
+agent for hard work, a browser, a stranger, several emails owed, a task that already ran deep, coding, and a routine. A warm turn that finds
+it needs more hands on itself (HAND_ON), so a wrong 'quick' costs one turn, whose notes the full agent starts from."""
 import json, re, threading
-from typing import NamedTuple
 from loguru import logger
-from . import brainroute, browserview, general, ingest, llm, origin, selfclose, slots, workerstate
+from . import agents, brainroute, browserview, general, ingest, origin, slots, workerstate
 
-DEEP_WHY = ('kind', 'routine', 'hard', 'browser', 'stranger', 'emails', 'ran deep', 'lines')
+DEEP_WHY = ('kind', 'routine', 'hard', 'browser', 'stranger', 'emails', 'ran deep')
 SETUP_REFS = (general.SETUP_REF, 'connector:setup')
 NOT_RUNS = ('answered',)          # an answer is the owner's reply landing, not a run; the owner's events carry their own Source
 
@@ -29,50 +29,40 @@ def ran_deep(store, tid) -> bool:
     rs = _runs(store, tid)
     return any(e.get('Source') != 'quick' for e in rs) if rs else bool(general.history(store, tid))
 
-def why_deep(store, tid, first: bool = False) -> str:
-    "'' when this general task is answered in one call (quick), else why it takes the agent - one of DEEP_WHY. `first`: an arrival's first look."
+def why_deep(store, tid) -> str:
+    "'' when the warm agent works this general task (quick or normal work), else why it takes the full agent - one of DEEP_WHY."
     t = store.get_task(tid) or {}
-    if not general.handles(t) or general.is_dock(t) or str(t.get('SourceRef') or '') in SETUP_REFS: return 'kind'
+    # ...and a CODING task on an AI card is a coding session's, never the warm agent's, though its session is this module's (general.ON_CARD)
+    if not general.handles(t) or general.is_dock(t) or str(t.get('SourceRef') or '') in SETUP_REFS or str(t.get('Kind') or '').lower() in agents.CODING_KINDS: return 'kind'
     if t.get('Source') == 'workflow': return 'routine'            # a routine runs on its own brain and definition (workflows.brain)
-    if not first and brainroute.judged(store, t)['difficulty'] == 'hard': return 'hard'
+    if brainroute.judged(store, t)['difficulty'] == 'hard': return 'hard'
     if browserview.wanted(t) or ingest.triage_wants_browser(store, tid): return 'browser'
     if origin.of_task(store, tid)[0] == 'stranger': return 'stranger'
     if slots.all_(store, tid): return 'emails'
-    if ran_deep(store, tid): return 'ran deep'
-    # ...and one his own lines wait on (typed while its sender was held, or while it started): one call takes no line - it answered the mail
-    # without his words, asked what he had already said, and his line's turn came after it (the recorded Trust, 2026-11-11)
-    if general.waiting_lines(store, tid): return 'lines'
-    return ''
+    # ...his own lines waiting on it (typed while its sender was held) are no reason any more: the warm turn takes them, as any turn does
+    # (GeneralSession.send_prompt, take_kept) - the tool-less call that could not was what sent them to the agent (2026-11-11)
+    return 'ran deep' if ran_deep(store, tid) else ''
 
 def takes(store, tid) -> bool: return not why_deep(store, tid)
-# A HARD ASK IS LOOKED AT IN ONE CALL FIRST, AT ARRIVAL (the owner, 2026-11-10: "the ai limits as much as possible to use ai"): a whole tool loop
-# started on every question triage called hard, though one call often answers it - and the call says itself when it cannot (escalate: what
-# it needs to look up or do), which hands it on with its notes. A stranger's words are not in the prompt, only in a file the call cannot open
-def looks_first(store, tid) -> bool: return not why_deep(store, tid, first=True)
 
 
-QUICK_TOKENS = 3_000
-_STR = lambda null=False: {'type': ['string', 'null']} if null else {'type': 'string'}
-QUICK_WANT = {'name': 'quick_work', 'schema': {'type': 'object', 'additionalProperties': False,
-    'required': ['report', 'draft', 'question', 'done', 'escalate', 'why'],
-    'properties': {'report': _STR(), 'draft': _STR(True), 'question': _STR(True), 'done': {'type': 'boolean'}, 'escalate': {'type': 'boolean'}, 'why': _STR()}}}
-QUICK_LINE = ('QUICK WORK: answer in one go, as one JSON object with the fields report, draft, question, done, escalate, why - not as an agent session, and '
-    'without the [[TASKUARY-...]] markers above; their jobs are fields here. report is what the owner reads (a few sentences). draft is the reply to send, '
-    'or null. question is one question only the owner can answer, or null. done is true when nothing more is owed on this task, and why says in a line what finished it. '
-    'Set escalate to true, with one line in why, when the job needs more than a lookup: acting anywhere, files to work through, booking, or multi-step research. '
-    'A decision that is the owner\'s to make - spending, who goes, which option - is not a reason to escalate: give your recommendation in report, '
-    'the draft built on it, and the decision in question with the options. '
-    # ...nor is a question only the OWNER can answer about themselves (2026-11-05: "are you here yet" started an agent that ran a command for it)
-    'Nor is a question only the owner can answer about themselves - where they are, whether they are coming, what they want or will do: there is '
-    'nothing to look up. Put a short draft reply for them to edit in draft (or null if it is theirs alone to word), say so in report, never escalate. '
-    'Never claim an action you did not take. You have no mail search, no connectors and no files - a picture or attachment on the mail is one: when the answer depends on any of them, '
-    'or on anything you cannot verify, set escalate rather than answer from memory. Never set done while a question is pending.')
-NO_LOOKUP_LINE = 'THIS AI CANNOT LOOK ANYTHING UP. When the answer depends on a fact that must be checked, set escalate (why: what needs checking) rather than answer from memory.'
-NO_CLOSE_LINE = 'DO NOT CLOSE THIS TASK: set done to false; the owner decides when it is finished.'
+# THE QUICK LANE IS THE AGENT, WITH ITS TOOLS (the owner, 2026-11-13: "that warm agent should be open for all the easy tasks and reply only
+# tasks and they should have tools"): one tool-less call could not open the screenshot, the attachment, the code or the owner's systems -
+# 16 of 20 handed on, each then paying a full agent's start. Quick and normal work is now a turn of the task's own session, with every
+# tool, floor and stranger gate an agent's turn has (GeneralSession.send_prompt), routed as quick_work and holding a fraction of a desk.
+# The warm agent itself says when the work needs the full agent - by the marker, which Taskuary acts on (handed_on, escalate)
+HAND_ON = '[[TASKUARY-FULL-AGENT]]'
+WARM_LINE = (f"YOU ARE THE QUICK AGENT on this task: do it here with your tools when it is a lookup, an answer or a reply - a decision that "
+             f"is the owner's is a question for them, not a reason to hand on. Where it needs the full agent (a browser, a long build, many steps "
+             f"across systems), write {HAND_ON} and one line saying why, after what you found so far, and stop.")
+_HAND = re.compile(r'\[\[\s*TASKUARY-FULL-AGENT\s*\]\][ \t]*([^\n]*)', re.I)
 
-
-class QuickAnswer(NamedTuple):
-    report: str; draft: str; question: str; done: bool; escalate: bool; why: str
+def handed_on(reply) -> tuple:
+    "(the reply without the marker, why the warm agent hands the work on - '' when it does not). A turn that said nothing else says that."
+    m = _HAND.search(str(reply or ''))
+    if not m: return reply, ''
+    why, rest = ' '.join(m.group(1).split()).rstrip('.') or 'it needs more than a quick turn', _HAND.sub('', reply).strip()
+    return rest or f'{ESCALATED}{why}.', why
 
 
 def _clean(s) -> str:
@@ -84,90 +74,32 @@ def _clean(s) -> str:
 # TASKUARY-PROPOSE (proposals.MARK)
 _TAG = re.compile(r'<\s*TASKUARY-HUB[^>]*>.*?<\s*/\s*TASKUARY-HUB[^>]*>|\[\[\s*/?\s*TASKUARY[^\]]*\]\]|<\s*/?\s*TASKUARY[^>]*>|TASKUARY-PROPOSE', re.I | re.S)
 def _unmark(text) -> str:
-    "Every Taskuary tag out: the fields are words for the owner, and only as_reply writes the markers _file acts on."
+    "Every Taskuary tag out: a stored field is words for the owner."
     return _TAG.sub('', str(text or '')).strip()
 
-def read(data) -> 'QuickAnswer | None':
-    "The structured answer, or None when it is not an object or says neither something nor that the job is too big. A pending question is never done."
-    if not isinstance(data, dict): return None
-    r, d, q = (_clean(data.get(k)) for k in ('report', 'draft', 'question'))
-    a = QuickAnswer(r, d, q, data.get('done') is True and not q, data.get('escalate') is True, _clean(data.get('why')))
-    return a if a.report or a.escalate else None
-
-# THE ANSWER IS NOT ITS WORKING (the owner, 2026-11-03: the agent pane drew `{ "report": "...\n\n1) **...", "draft": ...` raw, and the report
-# again under it): a CLI streams the reply it writes as `text` progress, and here that reply IS the JSON object - kept as a step, it showed
-# verbatim above the report it was filed as. What the call said is its fields (as_reply); its working is its tool calls, its thinking and
-# any text that is not the answer
+# A TURN STORED AS THE ONE CALL'S RAW OBJECT (until 2026-11-13 a quick answer was one JSON object, and a few were filed whole, fenced or cut
+# short - the owner, 2026-11-03): it reads back as the report it holds, wherever the chat is read (general._split, sessionrecord)
 RAW = re.compile(r'^\s*(?:```(?:json)?\s*)?\{\s*"(?:report|draft|question|done|escalate|why)"\s*:', re.I)
 def is_raw(text) -> bool: return bool(RAW.match(str(text or '')))
-def answer_text(step, raw: str = '') -> bool:
-    "True for a (kind, name, detail) step that is the call's answer streamed as text - the JSON object, whole or a piece of it."
-    kind, name, d = step
-    d = str(d or '').strip()
-    # ...and a CLI's readable `live` lines say it again (agents._live_line): with the text dropped the turn had no structured step left, so
-    # the pane read those lines instead (agentSteps.stepsOf) and drew the object, cut at 300 characters, as Taskuary's words (2026-11-03)
-    if kind == 'live': return bool(d) and (d in str(raw or '') or any(is_raw(x) for x in d.splitlines()))
-    return kind == 'progress' and name in ('text', 'agent_message') and bool(d) and (is_raw(d) or d in str(raw or ''))
 
-# A BODY THAT IS THE OBJECT is shown as its report: a turn filed whole, fenced or cut short reads back as what the owner reads, never as JSON
 _REPORT = re.compile(r'"report"\s*:\s*"((?:[^"\\]|\\.)*)', re.S)
 def report_of(text) -> str:
     "The report a raw quick answer holds - or the text as it is, when it is not one."
     t = str(text or '')
     if not is_raw(t): return t
     body = re.sub(r'^\s*```(?:json)?\s*|\s*```\s*$', '', t)
-    try: a = read(json.loads(body))
-    except ValueError: a = None
-    if a is not None: return a.report
+    try: d = json.loads(body)
+    except ValueError: d = None
+    if isinstance(d, dict) and d.get('report'): return _clean(d['report'])
     m = _REPORT.search(body)                       # cut short: the report as far as it got, its last escape whole or dropped
     if not m: return ''
     try: return _clean(json.loads('"' + re.sub(r'\\u?[0-9a-fA-F]{0,3}$|\\$', '', m.group(1)) + '"'))
     except ValueError: return _clean(m.group(1).replace('\\n', '\n'))
 
-def as_reply(out: QuickAnswer, about: str = '') -> str:
-    """The answer as the markers a general turn writes, so GeneralSession._file reads it exactly as it reads one - its summary too (the stress
-    run, 2026-11-05: a quick turn was the one turn on a chat task with no "What this is about" / "What I did"). `about`: triage's reading of
-    the ask. A report too long for the summary's field stays the turn's prose instead, never cut mid-sentence."""
-    own = selfclose.without_draft(out.report, out.draft) if out.draft else out.report      # a report that is only the letter has done nothing to say
-    summ = own and len(' '.join(own.split())) <= 600 and \
-        f"{selfclose.SUMMARY_OPEN}{json.dumps({'about': about, 'did': own, 'nothing_left': bool(out.done and not out.draft)})}{selfclose.SUMMARY_CLOSE}"
-    return '\n\n'.join(x for x in (out.report, out.draft and f'[[TASKUARY-REPLY]]{out.draft}[[/TASKUARY-REPLY]]',
-                                   out.question and f'[[TASKUARY-ASK]] {out.question}', out.done and f"{selfclose.MARKER} {' '.join(out.why.split())}",
-                                   summ) if x)   # the close reads one line
 
-def prompt(store, tid, ask: str, lookups: bool) -> tuple:
-    "(system, user): what the general agent reads, the mail history it would have had searched for it, and the ask."
-    system, user = general._prompt(store, tid)
-    said, prior = general.history_brief(store, tid, False)
-    if said: system = f'{system}\n\n{said}'
-    if prior: user = f'{prior}\n\n{user}'
-    system += '' if lookups else f'\n\n{NO_LOOKUP_LINE}'
-    if selfclose.mode(store) == 'off' or selfclose.stays_open(store, tid): system += f'\n\n{NO_CLOSE_LINE}'
-    # ...the shape said LAST, in the turn (the night run, 2026-11-09: 3 of 4 quick calls on a CLI came back as prose - the 30K system prompt's
-    # markers and summary won over a line at its end, so the call was wasted and the agent started anyway)
-    return system, f'{user}\n\n{ask}\n\n{QUICK_LINE}'
-
-def ask(store, tid, ask: str, steps: list = None, cancel=None) -> 'QuickAnswer | None':
-    "The one call. Raises what the brain raises; None for an answer that cannot be read."
-    trace = (lambda kind, name, detail: steps.append((kind, name, detail))) if steps is not None else None
-    brain = llm.build_llm(store, job='quick_work', task_id=tid, research='web', gear='main', trace=trace, cancel=cancel)
-    if brain is None: raise RuntimeError(f'{general.NO_AI} - connect one to answer this task')
-    # what the brain BUILT can do (a failover's every brain): a CLI run on the web-only flags, or an API brain with the provider's web search
-    web = bool(getattr(brain, 'takes_web', False))
-    lookups = bool(getattr(brain, 'looks_up', web))
-    system, user = prompt(store, tid, ask, lookups)
-    with llm.watching(trace): got = llm.ask_json(brain, system, user, want=None if web else QUICK_WANT, max_tokens=QUICK_TOKENS, **({'web': True} if web else {}))
-    if steps is not None: steps[:] = [x for x in steps if not answer_text(x, got.raw)]
-    out = read(got.data)
-    # ...an answer that could not be read says WHY in the log (the product audit, 2026-11-08: the owner saw "could not be read", the log nothing)
-    if out is None: logger.info(f'task {tid}: the quick answer could not be read - {len(str(got.raw or ""))} chars back, starting: {str(got.raw or "")[:300]!r}')
-    return out
-
-
-QUICK_TIMEOUT = 180
-# A QUICK CALL IS A FRACTION OF A DESK (the owner, 2026-10-30: "5 of them are one or something like that"): it takes a slot only while
+# A QUICK TURN IS A FRACTION OF A DESK (the owner, 2026-10-30: "5 of them are one or something like that"): it takes a slot only while
 # ingest.has_room has 1/light_per_agent to spare, so quick work and agent sessions share the one "Agents at once" width. It never holds a
-# desk of its own (blackboard.live_count skips quick sessions); a call in flight is counted here, from taking its slot to giving it back.
+# desk of its own (blackboard.live_count skips quick sessions); a turn in flight is counted here, from taking its slot to giving it back.
 GATE, WAIT_POLL = threading.Condition(), 2.0     # sessions ending and subagents finishing do not notify the gate, so a waiter looks again
 _IN_FLIGHT = 0
 
@@ -178,7 +110,7 @@ def _fits(store) -> bool:
     return _IN_FLIGHT < ingest.auto_sessions(store) * per and ingest.has_room(store, 1 / per)   # the first is the hard ceiling, whatever the load reads
 
 def _take(store, tid) -> None:
-    "Wait for room, then hold a quick slot. The wait is not the call's: its timeout starts once the slot is held."
+    "Wait for room, then hold a quick slot."
     global _IN_FLIGHT
     with GATE:
         if not _fits(store):
@@ -192,65 +124,52 @@ def _give(store) -> None:
     try:
         from . import blackboard as bb
         if store.queued_dispatches(): bb.drain_later(store, 0)      # a queued agent may fit now; never on this thread, which the drain could hold
-    except Exception as e: logger.debug(f'no drain after a quick call: {e}')
-ESCALATED = 'A quick look found this needs the agent: '
-ESCALATE_BRIEF = 'A QUICK LOOK CAME FIRST: one call, which could not act, found this needs the agent - {why}. Take it from here.'
-FOUND = 'What it found so far: '
+    except Exception as e: logger.debug(f'no drain after a quick turn: {e}')
+ESCALATED = 'This needs the full agent: '
+ESCALATE_BRIEF = 'THE QUICK AGENT CAME FIRST and found this needs the full agent - {why}. What it did and found is in the conversation above. Take it from here.'
 
-def escalate(store, tid, ask: str, why: str, report: str = '') -> None:
-    "The deep path, with the quick call's notes as its brief. The cap, the queue and the retry budget apply as to any deep start."
-    store.add_comment(tid, 'router', 'agent', f'{ESCALATED}{why}')
+def escalate(store, tid, ask: str, why: str, said: bool = False) -> None:
+    "The deep path, on the same session, the warm turn's notes in its conversation. The cap, the queue and the retry budget apply as to any deep start."
+    if not said: store.add_comment(tid, 'router', 'agent', f'{ESCALATED}{why}')       # `said`: the warm turn's own words already say it
     store.audit('task', tid, 'quick_escalated', 'router', 'agent', {'why': why})
     ask = ask.removeprefix(ingest.reply_job(store, tid)).strip()       # first_ask puts the reply job back in front of the brief
-    note = ESCALATE_BRIEF.format(why=why.rstrip('.')) + (f'\n{FOUND}{report}' if report else '')
-    ingest._auto_general(store, tid, f'{ask}\n\n{note}', deep=True)
+    ingest._auto_general(store, tid, f"{ask}\n\n{ESCALATE_BRIEF.format(why=why.rstrip('.'))}", deep=True)
 
-RUNNING, _RUN_LOCK = set(), threading.Lock()      # tasks with a quick start in flight: a second start on one (two arrivals in a poll) makes no second call
+RUNNING, _RUN_LOCK = set(), threading.Lock()      # tasks with a quick start in flight: a second start on one (two arrivals in a poll) makes no second turn
 
-def _call(store, tid, ask_: str, steps: list) -> tuple:
-    "(the answer or None, why it failed or ''): the one call, holding a quick slot only while it runs; the timeout counts the call, not the wait."
-    cancel = threading.Event()
+def again(store, tid, session, turn: str, **kw) -> str:
+    """The warm agent's turn on a quick session: filed as its turn - 'filed' - or handed to the full agent when it says the work needs it -
+    'escalated', whose start reuses this session (general.start_session returns session_for). Holds a quick slot while it runs.
+    `kw`: send_prompt's (brief - Taskuary's words unless the owner typed them - and mails). Raises what the turn raises."""
+    # ...AT WORK FROM THE MOMENT IT IS ASKED, as any start is (recorded on the real CLI, 2026-11-13: the sender wrote again, and while the
+    # answer was made the chat stood on her message with nothing at work and the header at rest)
+    general.OPENING.add(tid)
     try:
         _take(store, tid)
-        # A QUICK TURN IS A TURN: ITS HAND-OVER IS WRITTEN DOWN AS EVERY ROAD'S IS (conversation.hear - recorded on the real CLI, 2026-11-13: the
-        # owner answered a chat himself, the quick turn that heard it left no mark, so the reply draft he had answered past stayed pending -
-        # greyed in the chat, "ready to send" on the pill - and the agent, told a draft still waited, said "it still shows under your Send"
-        # over a card with no Send). What came in since the last turn is heard here, the draft above it set aside, before the prompt is read
-        from . import conversation
-        conversation.hear(store, tid, turn=True)
-        try:
-            timer = threading.Timer(QUICK_TIMEOUT, cancel.set); timer.daemon = True; timer.start()
-            try: return ask(store, tid, ask_, steps, cancel), ''
-            finally: timer.cancel()
+        try: said = session.send_prompt(turn, **{'brief': True, **kw}, quick=True, delivery_instructions=WARM_LINE)
         finally: _give(store)
-    except Exception as e:
-        logger.info(f'task {tid}: the quick call failed - {e}')
-        return None, f'the quick answer could not be made ({e})'
+    finally: general.OPENING.discard(tid)
+    why = getattr(session, 'handed_on', '')
+    if not (isinstance(why, str) and why): return 'filed'
+    session.handed_on = ''
+    escalate(store, tid, turn, why, said=str(said or '').startswith(ESCALATED))
+    return 'escalated'
 
-def _escalated(store, tid, q: str, out, failed: str) -> bool:
-    "True, having handed the task to the deep path, when the call failed, could not be read or said it needs more."
-    if out is not None and not out.escalate: return False
-    escalate(store, tid, q, failed or ('the quick answer could not be read' if out is None else out.why or 'it needs more than one call'), out.report if out else '')
-    return True
-
-def start(store, tid, brief: str = None, as_owner: bool = True) -> str:
-    """One call for a quick task, filed as a general turn - 'filed'; or the deep path, when the call says it needs more or fails - 'escalated';
-    or 'failed', when the answer could not be filed: written on the task and counted on the retry budget, as _start_general does;
-    or 'running', when a quick start is already in flight on this task. Never raises."""
+def start(store, tid, brief: str = None, **pick) -> str:
+    """The warm agent on a quick task, its turn filed as a general turn - 'filed'; or the full agent, when the turn hands it on - 'escalated';
+    or 'failed', when the turn failed: written on the task and counted on the retry budget, as _start_general does;
+    or 'running', when a quick start is already in flight on this task. `pick`: the owner's choice of AI (model=, pick=). Never raises."""
     with _RUN_LOCK:
         if tid in RUNNING: return 'running'
         RUNNING.add(tid)
-    # OPENING, as a carried-on turn holds it (ingest._continue_general): a line landing mid-call is passed in behind this one (_pass_general), never a second start
+    # OPENING, as a carried-on turn holds it (ingest._continue_general): a line landing mid-turn is passed in behind this one (_pass_general), never a second start
     general.OPENING.add(tid)
     try:
-        q, steps = ingest.first_ask(store, tid, brief), []
-        out, failed = _call(store, tid, q, steps)
-        if _escalated(store, tid, q, out, failed): return 'escalated'
-        ses = general.start_session(store, tid, actor='router', quick=True); ses.quick = True     # quick from birth: never a desk, even for an instant
-        ses.file_quick(q, out, steps, as_owner, brief=True)      # the ask is Taskuary's, not the owner's (general.BRIEF_ACTOR)
-        return 'filed'
+        ses = general.start_session(store, tid, actor='router', quick=True, **pick)        # quick from birth: never a desk, even for an instant
+        return again(store, tid, ses, ingest.first_ask(store, tid, brief))        # the ask is Taskuary's, not the owner's (general.BRIEF_ACTOR)
     except Exception as e:
-        logger.warning(f'quick answer could not be filed for task {tid}: {e}')
+        if isinstance(e, general.Stopped): return 'filed'          # the owner stopped it: nothing failed, and nothing starts it again
+        logger.warning(f'the quick agent could not take task {tid}: {e}')
         try:
             from . import blackboard as bb
             bb.record_failure(store, tid, e, 'assistant', label='The assistant')
@@ -259,17 +178,3 @@ def start(store, tid, brief: str = None, as_owner: bool = True) -> str:
     finally:
         general.OPENING.discard(tid)
         with _RUN_LOCK: RUNNING.discard(tid)
-
-def again(store, tid, session, turn: str) -> str:
-    """More work on a task whose live session is quick: another one call, filed on that session as the next turn - 'filed' - or the deep
-    path - 'escalated', whose start reuses this session (general.start_session returns session_for). Raises what filing raises."""
-    # ...AT WORK WHILE ITS ONE CALL RUNS, as a quick start is (recorded on the real CLI, 2026-11-13: the sender wrote again, and for the 28
-    # seconds the call took the chat stood on her message with nothing at work and the header at rest - then an answer appeared)
-    steps = []
-    general.OPENING.add(tid)
-    try:
-        out, failed = _call(store, tid, turn, steps)
-        if _escalated(store, tid, turn, out, failed): return 'escalated'
-        session.file_quick(turn, out, steps, brief=True)      # filed as Taskuary's brief: the chat shows the line it was handed
-        return 'filed'
-    finally: general.OPENING.discard(tid)

@@ -290,7 +290,9 @@ def test_a_stop_ends_its_own_turn_and_never_the_one_that_begins_after_it():
         a = threading.Thread(target=turn, args=(1, s1)); a.start(); time.sleep(1.5)
         s1.set(); a.join(10)                                                   # his stop: the turn honours it and ends
         assert isinstance(said[1], tuple), said                                # ...as an answer, its conversation kept
-        turn(2, s2, said[1][1])                                                # ...and the lines that waited have theirs, on that conversation
+        # ...and the lines that waited have theirs, on that conversation - bounded: on a slow runner this hung the whole part for 35 minutes
+        b = threading.Thread(target=turn, args=(2, s2, said[1][1]), daemon=True); b.start(); b.join(15)
+        assert not b.is_alive(), 'the turn after the stop never answered'
         time.sleep(2.5)                                                        # past the backstop's two seconds: it was not closed under them
         c = threading.Thread(target=turn, args=(3, s2, said[1][1]), daemon=True); c.start(); c.join(8)
         assert not c.is_alive(), 'the conversation was closed and a fresh process began its first turn'

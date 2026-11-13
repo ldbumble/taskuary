@@ -1410,6 +1410,10 @@ def _run_kind(op: dict, background: BackgroundTasks):
         origin.raise_to(store, tid, 'trusted', ACTOR)
     if kind == 'task.create_from_message':
         k = str(p.get('kind') or 'task').lower()
+        # ...SENT ON WITH NOTHING SAID YET it is a task like any made from a message, waiting on his first line in its own box (the owner,
+        # 2026-11-13, on a report: "when you hit send to agent it should look like every task with coming from and then you should be able to
+        # write what you want"): nothing starts at the press - that line starts the agent, on the one road a typed line takes (general.take_line)
+        if p.get('box'): return mine_message(mid, MineBody(kind='task' if k == 'general' else k, agent=True), background)
         # WHAT THE OWNER SAID IN THE AGENT BOX starts it with those words (the owner, 2026-10-23): the chat road opened on the task's
         # own summary and dropped them. Said nothing and chose nothing, it is the chat road as it always was - the item is the ask
         if k == 'general' and any(p.get(f) for f in ('instructions', 'agent', 'pick', 'model')):
@@ -4795,6 +4799,7 @@ class MineBody(BaseModel):
     kind: str = 'task'
     title: str | None = None        # the assistant's suggested title, accepted as-is from the panel
     standing: bool = False          # a REPORT run only: 'every run like this', not 'just this one'
+    agent: bool = False             # Send to agent's: the task waits on his first line for its agent - nobody is put on it yet
 
 @app.post('/api/messages/{mid}/mine')
 def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = None):
@@ -4811,7 +4816,8 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     # A message that ALREADY has a task short-circuits task_from_message, so "this one is mine"
     # on anything triage had already opened changed nothing and taught nothing - it claimed the
     # task and left the kind exactly as the verdict it was overturning (the audit, 2026-09-11).
-    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, want, ACTOR)
+    agent = bool(body and body.agent)
+    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, want, None if agent else ACTOR)
     _reclassify(tid, want, background)
     from . import selfclose
     selfclose.claim(store, tid, ACTOR)
@@ -4820,11 +4826,11 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     # routed (they all carry `agent:<role>`) silently ignored the owner claiming it. Only a person
     # already owning it is left alone.
     _who = str((store.get_task(tid) or {}).get('Assignee') or '')
-    if not _who or _who.startswith('agent:'): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
+    if not agent and (not _who or _who.startswith('agent:')): store.update_task(tid, {'Assignee': ACTOR}, ACTOR)
     operations.record_direct(store, 'task.create_from_message', mid, {'kind': (body.kind if body else None) or 'task'}, ACTOR, {'taskId': tid}, verdict=verdict, route_id=route_id)
     if body and (body.title or '').strip(): store.update_task(tid, {'Title': body.title.strip()[:200]}, ACTOR)
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
-    return {'taskId': tid, 'ref': task_ref(tid)}
+    return {'taskId': tid, 'ref': task_ref(tid), **({'box': True} if agent else {})}
 
 def chat_message(mid: int, background: BackgroundTasks = None):
     """The message becomes a `general` task and the assistant's chat opens on it with the question

@@ -23,5 +23,7 @@ export const AGENT_SHOWN = kinds.shown;
 // does more hard work"): in a task the one who works it is the Agent - its turns and its box; the corner pill is the Assistant
 export const AGENT_TURN = "Agent";
 export const MESSAGE = "Message the agent…", ASK_ASSISTANT = "Ask the Assistant…";
+// ...and the line a task's first box says when sent empty: the agent starts on what the task came from (AgentSummary.NoAgentChat)
+export const START_ON_SOURCE = "Work out what's needed from what this came from, and do it.";
 export const shownAgent = () => AGENT_SHOWN;      // `run` was read for a tool's name; every agent is Agent now
 export const instructionsHint = (profile) => profile ? `Instructions: ${profile}` : "";

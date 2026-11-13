@@ -103,6 +103,7 @@ import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, dueWord, holdsNew, levelOf, placed, pressOnto, pulledRow, withWalk } from "./funnelPile.js";
 import { STAYS, dropHeld, ghostsOf, keepHeld, movedEntry } from "./movedFyi.js";
+import { wantBox } from "./boxWanted.js";
 import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 const GeneralWorkspace = lazyView(loadGeneral);
@@ -361,7 +362,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
     frame = requestAnimationFrame(addBatch);
     return () => cancelAnimationFrame(frame);
   }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
-  // SHOULD BE A TASK KEEPS THE FYI WHERE IT WAS (movedFyi.js): its row stays in FYI - a report's in Reports - wearing where it went, and the
+  // SHOULD BE A TASK KEEPS THE FYI WHERE IT WAS (movedFyi.js): its row stays in FYI, wearing where it went (a report's moves to Tasks), and the
   // task's own row under Tasks is its twin - the kept row speaks for the table (its ring, its batch), the twin is a plain row of Tasks
   const ghosts = ghostsOf(moved), movedKeys = new Set(ghosts.map((g) => g.key));
   const twin = (i) => !i.moved && movedKeys.has(i.key);
@@ -2603,6 +2604,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       const mv = out.status === "done" && p.kind === "task.create_from_message"
         ? movedEntry(p.key, out.tid || res?.outcome?.taskId, res?.outcome?.ref, pileRef.current?.items, currentRef.current) : null;
       if (mv) setMovedTo((m) => ({ ...m, [mv.key]: mv }));
+      // ...and a task made to be talked to (a report sent to an agent) takes the cursor in its box once it is up (boxWanted.js)
+      // ...and its row goes where the task is, under Tasks, as any move of his on the table lets it (funnelPile.pinOf)
+      if (out.status === "done" && out.tid && res?.outcome?.box) { wantBox(out.tid); setPresses((n) => n + 1); }
       const step = afterConfirm(p, out, current);
       // a sweep cleared what was on the table too: the receipt carries Next, and the walk waits for it
       // ...and an act that did NOT happen carries its way on (concierge.recover): Try again, GitHub's own offers, the
@@ -2707,6 +2711,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...a report, an FYI, a dashboard or an Advisor item takes it in ITS OWN box, the item a chip on it (ItemSections.handToItem; the owner,
     // 2026-11-05: "attach the report or fyi list to the prompt box on bottom and make them type in"): no second box. Its Send is this Start
     const v = coding ? "coding_agent" : "regular_agent";
+    // ...but A REPORT IS SENT ON AS A TASK (the owner, 2026-11-13: "send to agent and that will move it to task"): the press makes it one, its
+    // Came from the report, and opens it with the cursor in its box - his first line there starts the agent (server: the proposal's `box`)
+    if (item.kind === "report" && !item.tid) { setAgentOn(null); startOnItem(item, { verb: v }).catch((e) => setErr(errText(e))); return; }
     if (handToItem(item.key, { verb: v, items: [{ key: item.key, title: item.title || item.ref || "this item" }],
       start: (o) => startOnItem(item, { verb: o.verb, text: withImages(o.text, o.files) }) })) { setAgentOn(null); return; }
     setAgentOn({ item, coding });

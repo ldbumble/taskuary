@@ -395,7 +395,7 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
   // THE ROW ABOVE THE CHAT LINE (layout B, 2026-09-30): Next and the card's other words ride there, in the one place every item
   // keeps them; the card keeps its own move. The same handlers - a word's click still gets the element it was pressed on.
   const rowed = !!nav.row;
-  // The first three of the card's own words stand in the row (a report's Put it on my list, Send to agent); the rest - and Mark done and
+  // The first three of the card's own words stand in the row (a report's Send to agent); the rest - and Mark done and
   // the task page's acts - sit behind More. The card's own move (its Foot `verb`) stays in the card.
   // ...and in a task's three sections on a desk, EVERY one rides the pane the item is about (ItemLay: actionRow.splitRow `all`) - the bar keeps
   // Back and Next, as under a task (the owner, 2026-10-31)

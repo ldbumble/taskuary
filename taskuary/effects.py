@@ -114,6 +114,7 @@ def missed(store, kind: str, target, params: dict | None, was, outcome) -> str:
     p = params or {}
     if kind == 'task.create_from_message':
         if str(p.get('kind') or '').lower() not in AGENT_KINDS or (outcome or {}).get('start_error'): return ''   # receipt_turn says a start_error
+        if p.get('box'): return ''                      # ...a task opened on its box promised no start: his first line there is it
         return _started(store, target, p, was, outcome)
     f = PROMISES.get(kind)
     if not f: return ''

@@ -145,7 +145,9 @@ CHIPS ={'review': ('send_close', 'approve', 'redraft', 'close', 'defer', 'watch'
          'agent': ('stop_agent', 'defer', 'watch', 'next'), 'meeting': ('prepare', 'regular_agent', 'next'),
          # ...and Pause this report, for the Advisor to light over a run whose findings the owner said they do not care about (the owner,
          # 2026-10-27: "the Advisor may suggest switching a report off"); the press is the owner's, the report stays under Reports
-         'report': ('mine', 'regular_agent', 'report_off', 'next'), 'agentdone': ('close', 'reply', 'next'),
+         # ...and Send to agent is a report's one way to work: it becomes a task, opened with its box for his words (the owner, 2026-11-13: "it
+         # should just have button send to agent and that will move it to task") - Make it a task beside it made the same task twice over
+         'report': ('regular_agent', 'report_off', 'next'), 'agentdone': ('close', 'reply', 'next'),
          'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'watch', 'next'),
          'asked': ('reply', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'next'),
          # a to-do with a task behind it (a promise you made in a chat) is closed here too - Next only read it (2026-10-15)
@@ -874,6 +876,9 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # an idea triage already opened a task for IS that task - Make a task on it made nothing new (the owner, 2026-10-01:
     # "no Make a task on an item that already is a task"); a closed one is history, and new work may be a task again
     if verb == 'mine' and item.get('kind') == 'idea' and _live_task(store, item): return f"{what} is already a task on your list."
+    # ...and a report is made a task by Send to agent alone (the owner, 2026-11-13): it opens with its box, where he says what to do with it
+    if verb == 'mine' and item.get('kind') == 'report':
+        return f"{what} is a report - {buttons.label('regular_agent')} makes it a task, and its box takes what the agent should do with it."
     # the slipped answers belong to a slipped card: typed on anything else, or pressed after they wrote back, they do nothing
     # ...save a Chase the rule lit on a wait past its day (rulebook.adds: 3 working days on 'theirs', a late goal step - the owner,
     # 2026-10-23), which goes to the thread rulebook.chase_thread names
@@ -4882,7 +4887,10 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         # THE AGENT BOX'S ANSWERS (RunForm.AgentAsk, the owner 2026-10-23): which profile, brain and model it chose ride with the
         # hand-off to the dispatch, beside the owner's words - never on Make a task, which starts nothing
         picked = {k: decision.get(k) for k in AGENT_PICKS if decision.get(k)} if verb != 'mine' else {}
-        if it.get('mid'):
+        # ...A REPORT'S SEND TO AGENT, PRESSED, is a task opened on his box (server._run_operation's `box`): his words there start it
+        if it.get('mid') and verb != 'mine' and decision.get('box') and it.get('kind') == 'report' and not d_text and not picked:
+            target, params = it['mid'], {'kind': want, 'box': True}
+        elif it.get('mid'):
             # ...an FYI's carries the button's own words, Should be a task (the owner, 2026-10-29) - its badge and its receipt say them
             target, params = it['mid'], {'kind': want, 'instructions': d_text or None, **picked, **({'state': 'fyi'} if verb == 'mine' and it.get('kind') == 'fyi' else {})}
             if params.get('state'): label = op_label(kind, params)
@@ -5038,7 +5046,8 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
     if not press: record_related(store, tid, item, 'user', f"{PROPOSALS[verb][1]}: {item.get('title') or item.get('ref') or key}")
     # `picks`: the agent box's profile, brain and model beside its words (AGENT_PICKS) - a hand-off's only
     picked = {k: v for k, v in (picks or {}).items() if k in AGENT_PICKS and v}
-    try: prop = propose_for(store, tid, {'verb': verb, 'text': text or '', 'on_item': True, **picked}, item, text or '', actor, table=item if table else None)
+    # `box`: the desk's press, whose task opens with its own box for his words - the phone has no box, its words go with the press
+    try: prop = propose_for(store, tid, {'verb': verb, 'text': text or '', 'on_item': True, 'box': press, **picked}, item, text or '', actor, table=item if table else None)
     except ValueError as e:
         # THE PRESS IS ANSWERED: its line was already in the conversation, and a refusal went to an error banner only - the
         # chat showed "Stop and save" with nothing under it until the owner typed Next (2026-09-25). The reason
@@ -5734,6 +5743,7 @@ def _past(store, op: dict, ref: str) -> str:
     # ...and Not ours and Remind me, the walk's other two receipts: "Done - Not ours · Printer on 3 is jammed again." and "Done - Remind me:
     # Fri 23 Oct · TQ-0001. Away until ..." were still the desk's button words (the 2026-10-22 re-walk)
     if kind == 'task.create_from_message' and str((op.get('params') or {}).get('kind')) == 'task' and o.get('ref'): return f"{o['ref']} is on your list."
+    if kind == 'task.create_from_message' and o.get('box') and o.get('ref'): return f"{o['ref']} is open - say in its box what the agent should do."
     if kind == 'message.file': return f'{ref} filed as not ours.' if ref.startswith('TQ-') else f'Filed as not ours: {ref}.' if ref else 'Filed as not ours.'
     # ...and a set marked read is its count and what it was: "Done - <the tool's description>." led it (the overnight walk, 2026-10-26)
     if kind in ('pipe.clear', 'agents.stop') or kind in bulk_mod.VERBS: return _outcome_line(kind, op.get('params') or {}, o).strip()

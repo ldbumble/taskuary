@@ -11,7 +11,8 @@ import { hasReply, nextSteps, oneLine } from "./agentSummary.js";
 import { isCardReview } from "./actionCard.js";
 import { Md } from "./md.jsx";
 import { MicButton } from "./ui.jsx";
-import { MESSAGE } from "./kinds.js";
+import { MESSAGE, START_ON_SOURCE } from "./kinds.js";
+import { takeBox } from "./boxWanted.js";
 import { keepUnsent, unsent } from "./unsent.js";
 import { AttachRow, IMAGE_ACCEPT, INLINE_CHIPS, fileChips, fileState, usePromptImages, withImages } from "./promptImages.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
@@ -110,8 +111,18 @@ export function NoAgentChat({ task, reviews = [], cards = null, closed = "", onS
   }, [task.TaskId, text]);
   const pics = usePromptImages({ files: true });          // ...a dropped, pasted or picked file goes with the words (the owner, 2026-11-05)
   const why = String((reviews || []).find((r) => r?.Status === "pending" && r.DraftWhy)?.DraftWhy || "").trim();
+  // ...WITH THE CURSOR IN IT where a press opened the task for his words (boxWanted.js: a report sent to an agent) - on each draw while it settles
+  const input = useRef(null);
+  useEffect(() => {
+    const id = Number(task.TaskId), go = () => { if (takeBox(id)) requestAnimationFrame(() => input.current?.focus({ preventScroll: true })); };
+    go();
+    const on = (e) => { if (Number(e.detail?.tid) === id) go(); };
+    window.addEventListener("tq-want-box", on);
+    return () => window.removeEventListener("tq-want-box", on);
+  }, [task.TaskId]);
   const send = async () => {
-    const words = text.trim();
+    // ...SENT EMPTY, the agent starts on what the task came from, told so in his line (the owner, 2026-11-13: a report sent on with nothing said)
+    const words = text.trim() || (pics.paths.length ? "" : START_ON_SOURCE);
     if ((!words && !pics.paths.length) || busy || pics.busy) return;
     setBusy(true); setErr("");
     // ...SENT IS NOT UNSENT, FROM THE PRESS (the recorded walk, 2026-11-11): the chat drew itself the moment the agent started, before this box
@@ -132,7 +143,7 @@ export function NoAgentChat({ task, reviews = [], cards = null, closed = "", onS
       </Box>}
       {/* ...a closed one says how it closed over the box - typing there reopens it (server._refuse_closed_chat) */}
       {!!closed && <div className="tq-aui-closed" data-tq-chat-closed="">{closed}</div>}
-      <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} placeholder={MESSAGE}
+      <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} placeholder={MESSAGE} inputRef={input} emptyOk
         label="Send to the agent" title="Starts the agent on this task with your words" boxAttrs={{ "data-tq-no-agent-box": "" }} sendAttrs={{ "data-tq-no-agent-send": "" }} />
       {!!err && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}>{err}</Typography>}
     </Box>

@@ -45,6 +45,7 @@ def refusal(i: dict, verb: str) -> str:
     if str(i.get('kind') or '').startswith('goal'): return 'a goal'
     if verb in ('remove', 'block') and lanes.on_you(i): return 'it waits on you'
     if verb == 'mine' and i.get('tid'): return 'already a task'
+    if verb == 'mine' and i.get('kind') == 'report': return 'a report is made a task by Send to agent'     # concierge.cannot's rule
     if verb == 'block' and not i.get('mid'): return 'no sender to block'
     return ''
 

@@ -2,13 +2,15 @@
 // press makes the line a task, and the rail draws that task under Tasks as it always did - but the FYI it came from stays in its place, in
 // the FYI band and in the batch card it was pressed in, wearing where it went ("Moved to Tasks · TQ-1290"). It leaves the way a read FYI
 // row does: when the walk moves past the table it was pressed on - the batch read, Next, Back, another row opened - and never on a clock.
-// ...and a REPORT put on the list the same, in Reports (the owner, 2026-11-03). Page-only: a reload lets it go (the owner's yes, same day).
-// The server never reads it with the batch (railwalk._effect, _settle_unmoved): it is the task now, unread under Tasks.
+// Page-only: a reload lets it go (the owner's yes, 2026-11-03). The server never reads it with the batch (railwalk._effect, _settle_unmoved):
+// it is the task now, unread under Tasks.
+// ...but never a REPORT (the owner, 2026-11-13: "send to agent and that will move it to task"): its row kept in Reports read as the same title
+// twice on the rail, and squeezed it showed the bare ref. A report sent to an agent MOVES - its row is the task's, under Tasks, and nothing stays.
 // `moved` is {key: {key, tid, ref, row, on}} - `row` the FYI row as it stood, `on` the table's key at the press.
 import { levelOf } from "./funnelPile.js";
 
 // the sections a row made a task stays in
-export const STAYS = new Set(["fyi", "reports"]);
+export const STAYS = new Set(["fyi"]);
 export const refOf = (tid, ref) => ref || (tid ? `TQ-${String(tid).padStart(4, "0")}` : "");
 // the row the press was made on, if it was an FYI or a report: the rail's, or the batch's own line on the table
 export function movedEntry(key, tid, ref, rail, cur) {

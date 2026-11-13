@@ -9,8 +9,10 @@ export const inDesktop = (w = typeof window === "undefined" ? null : window) => 
 // `running`: the server's own words for what is live (GET /api/quit - "1 running agent and 1 workflow run")
 export const quitTitle = (running = "") => `Quit Taskuary - stops it here${running ? `, and the ${running} with it` : ""}`;
 
-// what the page left behind says: it has stopped, what stopped with it, and how to start it again
-export const stoppedLines = (stopped = []) => [
+// what the page left behind says: SHUTTING DOWN while the server still answers (the owner, 2026-11-13: "it should say shutting down if it
+// needs a few seconds to close") - then it has stopped, what stopped with it, and how to start it again
+export const stoppedLines = (stopped = [], down = true) => !down
+  ? ["Shutting down…", `Stopping ${stopped.length ? `the work on ${stopped.join(", ")} and ` : ""}what Taskuary started - this takes a few seconds.`] : [
   "Taskuary has stopped",
   stopped.length ? `The work on ${stopped.join(", ")} stopped with it - it waits on your list for when you start Taskuary again.`
     : "Nothing is lost - start Taskuary again and it catches up on everything that came in.",

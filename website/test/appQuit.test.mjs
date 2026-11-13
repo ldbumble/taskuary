@@ -30,6 +30,14 @@ test("the page left behind says it has stopped, and what stopped with it", () =>
   assert.match(stoppedLines(["TQ-0012", "TQ-0014"])[1], /^The work on TQ-0012, TQ-0014 stopped with it/);
 });
 
+test("while the server still answers, the page says it is shutting down", () => {
+  assert.equal(stoppedLines([], false)[0], "Shutting down…");
+  assert.match(stoppedLines(["TQ-0012"], false)[1], /^Stopping the work on TQ-0012 and what Taskuary started/);
+  const stop = src("TaskHubPage.jsx").slice(src("TaskHubPage.jsx").indexOf("export function Stopped"));
+  assert.match(stop, /fetch\("\/api\/health"/, "it asks until the port is closed");
+  assert.match(stop, /!inDesktop\(\) && setDown\(true\)/, "the desktop window keeps Shutting down until it closes itself");
+});
+
 test("an update that waits says what for", () => {
   assert.equal(updateWaiting({ waiting: true }), true);
   assert.equal(updateWaiting({ queued: true }), true);

@@ -714,8 +714,11 @@ def main():
     except Exception as e: logger.debug(f'closing: no goodbye on this pywebview - {e}')
 
     def gone_with(server):
-        """Quit pressed in the browser stops the server (POST /api/quit): the window it served goes too, with nothing left to ask."""
+        """Quit pressed in the browser stops the server (POST /api/quit): the window it served goes too, with nothing left to ask - once
+        the server has stopped what it started (bounded), its page saying "Shutting down…" till then. Closed at the press, the window was
+        gone while agents and CLI children were still being stopped behind it, and a start in those seconds found it still running."""
         wait_for_exit(server, poll=0.5)
+        if getattr(server, 'thread', None) is not None: server.thread.join(SHUTDOWN_WAIT)
         shell['gone'] = True
         try: window.destroy()
         except Exception as e: logger.debug(f'quitting: the window was already gone - {e}')

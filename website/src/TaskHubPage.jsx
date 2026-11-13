@@ -16,7 +16,7 @@ import SportsEsportsIcon from "@mui/icons-material/SportsEsportsOutlined";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import api from "./api";
-import { quitTitle, stoppedLines } from "./appQuit.js";
+import { inDesktop, quitTitle, stoppedLines } from "./appQuit.js";
 import { track } from "./demoTrack";
 import { fmtStamp } from "./dates.js";
 import { ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRAND } from "./theme.jsx";
@@ -341,12 +341,22 @@ function HelpMenu({ onReload, onStopped }) {
 }
 
 // ...and what the tab shows once it has: plain, and nothing left on it that would call a server that is gone
+// ...polled until the server stops answering - a closed port is the only "stopped". The desktop window keeps "Shutting down…" until it
+// closes itself, which it does once the server has finished stopping what it started (desktop.gone_with)
 export function Stopped({ stopped }) {
-  const [title, line] = stoppedLines(stopped);
+  const [down, setDown] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const poll = () => fetch("/api/health", { cache: "no-store" }).then(() => live && setTimeout(poll, 500))
+      .catch(() => live && !inDesktop() && setDown(true));
+    poll(); return () => { live = false; };
+  }, []);
+  const [title, line] = stoppedLines(stopped, down);
   return (
     <Box data-tq-stopped="" sx={{ minHeight: "100vh", display: "grid", placeItems: "center", bgcolor: BG, px: 2, textAlign: "center" }}>
       <Box sx={{ maxWidth: 440 }}>
-        <TaskuaryMark size={30} sx={{ borderRadius: 1.5, mb: 1.5 }} />
+        <TaskuaryMark size={30} sx={{ borderRadius: 1.5, mb: 1.5, display: "block", mx: "auto" }} />
+        {!down && <CircularProgress size={16} sx={{ mb: 1, color: DIM }} data-tq-shutting="" />}
         <Typography sx={{ fontWeight: 600, fontSize: 15, color: INK }}>{title}</Typography>
         <Typography sx={{ mt: 0.75, fontSize: 13.5, color: DIM, lineHeight: 1.6 }}>{line}</Typography>
       </Box>

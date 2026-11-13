@@ -105,6 +105,48 @@ class ProviderTests(unittest.TestCase):
         self.assertIn(VOICE, str(e.exception)); self.assertIn('Groq', str(e.exception))
 
 
+class LocalByDefault(unittest.TestCase):
+    """The owner, 2026-11-12: "mic is still broken ... on other machines that don't have groq connected ... fix it once and for all".
+    No card: Local Whisper is made ready in the background and is the mic's voice from then on - never Windows' settings."""
+    def setUp(self): voice._PREP.clear(); self.addCleanup(voice._PREP.clear)
+
+    def test_the_suite_never_downloads_it(self):
+        with mock.patch.object(voice.threading, 'Thread') as t: self.assertEqual(voice.prepare(), '')
+        t.assert_not_called()
+
+    def test_the_first_ask_starts_one_download_and_the_mic_says_it_is_on_its_way(self):
+        s = MemoryStore()
+        with mock.patch.dict(os.environ, {'TASKUARY_TEST_HOME': ''}), mock.patch.object(voice.threading, 'Thread') as t,              mock.patch.object(voice, 'builtin', return_value=None):
+            r = voice.ready(s); voice.ready(s)
+        t.assert_called_once(); self.assertFalse(r['ready']); self.assertEqual(r['getting'], voice.GETTING)
+
+    def test_ready_it_hears_the_mic_and_voice_notes_with_no_card(self):
+        s, heard = MemoryStore(), []
+        voice._PREP['state'] = 'ready'
+        with mock.patch.object(voice, '_local', side_effect=lambda cfg, data, name, terms=(): heard.append(cfg) or ('send the report', 'faster-whisper base')):
+            self.assertEqual(voice.ready(s) | {'vocabulary': []}, {'ready': True, 'provider': 'local_whisper', 'label': voice.LABELS['local_whisper'],
+                                                                  'vocabulary': [], 'builtin': None})
+            self.assertEqual(voice.transcribe(s, b'webm', 'audio/webm', 'clip.webm', mic=True, level=0.2, seconds=2)['text'], 'send the report')
+        self.assertEqual(heard[0]['model'], voice.AUTO_MODEL)
+
+    def test_a_card_still_wins_over_it(self):
+        voice._PREP['state'] = 'ready'
+        self.assertEqual(voice.ready(_voice_store('groq_stt'))['provider'], 'groq_stt')
+
+    def test_a_failed_download_leaves_the_mic_as_it_was_and_says_why(self):
+        voice._PREP.update(state='failed', why='no internet')
+        with mock.patch.object(voice, 'builtin', return_value=voice.LIVE): r = voice.ready(MemoryStore())
+        self.assertEqual((r['ready'], r['builtin'], r['local_failed']), (False, voice.LIVE, 'no internet'))
+
+    def test_getting_ready_installs_the_package_then_the_model(self):
+        from taskuary import deps
+        got = []
+        fw = types.SimpleNamespace(utils=types.SimpleNamespace(download_model=lambda m: got.append(('model', m))))
+        with mock.patch.object(deps, 'installed', return_value=False), mock.patch.object(deps, 'install', side_effect=lambda p: got.append(('pip', p))),              mock.patch.dict(sys.modules, {'faster_whisper': fw, 'faster_whisper.utils': fw.utils}):
+            voice._get_ready()
+        self.assertEqual(got, [('pip', 'faster_whisper'), ('model', voice.AUTO_MODEL)]); self.assertEqual(voice._PREP['state'], 'ready')
+
+
 class BuiltinVoiceTests(unittest.TestCase):
     """The computer's own voice: Windows voice typing, found with no card. TQ-1283 (the owner, 2026-11-03: "You can't use something that
     doesn't work ... trigger the question if you want to turn that on"): the 2006 System.Speech fallback is gone; voice typing with its

@@ -13,7 +13,15 @@ const mic = ui.slice(ui.indexOf("export const MicButton"), ui.indexOf("export co
 test("with no voice AI and no voice found the mic is crossed out, and its press asks instead of recording", () => {
   assert.match(mic, /const off = !!\(voice && route !== "connector" && !viaBrowser && !viaBuiltin\)/);
   assert.match(mic, /off \? <MicOffIcon/);
-  assert.match(mic, /const press = \(e\) => \{ setErr\(""\); if \(!off && !\(viaBuiltin && speechAsk\)\) return start\(\); setAsk\(e\.currentTarget\)/);
+  assert.match(mic, /const press = \(e\) => \{ setErr\(""\); if \(!off && !\(viaBuiltin && speechAsk\)\) return start\(\);[^\n]*\n\s*setAsk\(e\.currentTarget\)/);
+});
+
+// THE MIC WORKS WITH NOTHING SET UP (the owner, 2026-11-12: "fix it once and for all"): with no card the server gets Local Whisper ready
+// (voice.prepare); meanwhile a press says it is on its way, the status is asked again until it is ready, and a failed setup says why
+test("while this computer's own voice is being got ready the mic says so, asks again, and a failure is said in the popup", () => {
+  assert.match(mic, /if \(voice\?\.getting\) \{ flash\(voice\.getting\); voice\.recheck\(\); return; \}/);
+  assert.match(ui, /if \(data\?\.getting\) again = setTimeout\(\(\) => alive && setN\(\(x\) => x \+ 1\), 10000\)/);
+  assert.match(mic, /voice\?\.local_failed && <Typography data-tq-local-failed/);
 });
 
 test("a browser recogniser or the computer's own is used at once, with no opt-in to press", () => {

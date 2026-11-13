@@ -245,6 +245,34 @@ def test_the_note_a_task_was_closed_with_is_read_in_the_owners_words_answered_or
     assert all(episodes.is_act(k) for k in (renewal, badge)), 'a line may rest on it'
 
 
+def test_a_draft_somebody_else_put_down_is_no_verdict_of_the_owners_and_a_close_is_one_episode():
+    """THE LIVE SHAPE (the audit, 2026-11-13): an agent says no reply is owed, and the owner marks another task done over its waiting draft.
+    The reflection read the first under DRAFT VERDICTS with "owner's note: the agent said no reply is owed", and the second twice - "sent
+    no reply" and "closed it without replying" - with Taskuary's own "the owner closed the task" as his note."""
+    from taskuary import concierge
+    from taskuary.store import MemoryStore
+    from taskuary.testing import Factory
+    s = MemoryStore(); f = Factory(s)
+    s.set_setting('owner_email', 'alex@northwind.example', 'test')
+    def owed(title, who):
+        tid = f.task(title=title, kind='general')
+        mid = f.message(task_id=tid, subject=title, body='Can you look at this?', from_name='Someone', from_email=who, conversation_id=f'email:{title}',
+                        sent_at=C._stamp(datetime.now() - timedelta(hours=3)))
+        return tid, s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'Channel': 'email', 'DraftText': 'Hi, on it. Alex'})
+    _, by_agent = owed('Seat count', 'omar@northwind.example')
+    s.decide_review(by_agent, 'no_reply', None, 'agent', 'the agent said no reply is owed')
+    closed, with_it = owed('Parking pass', 'paula@northwind.example')
+    assert concierge.close_task(s, closed, 'owner')
+    _, his = owed('Badge for the new starter', 'gail@northwind.example')
+    s.decide_review(his, 'rejected', None, 'owner', 'facilities answers these')
+    assert [r['ReviewId'] for r in episodes.own_verdicts(s, _since())] == [his]
+    eps = [e[0] for e in episodes.build(s, _since())]
+    assert f'rv{by_agent}' not in eps and f'rv{with_it}' not in eps and eps.count(f'task{closed}') == 1 and f'rv{his}' in eps
+    said = learn.gather(s, _since())
+    assert 'the agent said no reply is owed' not in said and concierge.CLOSED_TASK not in said
+    assert "owner's note: facilities answers these" in said and 'gail@northwind.example' in said
+
+
 OLD_PEOPLE = ('_(who matters to you, what they are to you, and how you deal with them: how fast you answer, what\n'
               'you hand them, who you copy - never what they are like)_')
 

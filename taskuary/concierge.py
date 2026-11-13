@@ -4233,6 +4233,7 @@ def _kept(store, tid, actor, e):
     raise KeptOpen(f"It is still open - the agent's work could not be saved first: {why}") from e
 
 
+CLOSED_TASK = 'the owner closed the task'      # the note on a draft the task's close put down: the close's own doing, never a verdict on the draft (episodes.py)
 def close_task(store, tid: int, actor: str = 'owner', save: bool = True) -> bool:
     """Close a task from the chat: the pending draft on it is dismissed first (a closed task must not
     leave a reply waiting for a yes), then the task itself. False when already closed with no draft."""
@@ -4255,11 +4256,11 @@ def close_task(store, tid: int, actor: str = 'owner', save: bool = True) -> bool
     dropped = False
     while rv:
         dropped |= rv.get('Kind') != 'action' and bool(str(rv.get('DraftText') or '').strip())
-        store.decide_review(rv['ReviewId'], 'no_reply', None, actor, note='the owner closed the task')
+        store.decide_review(rv['ReviewId'], 'no_reply', None, actor, note=CLOSED_TASK)
         rv = store.pending_review(tid, live_only=False)
     # ...and a draft HELD while an agent worked it is decided too - it stayed held and invisible for good (A6)
     for h in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Status='held'", (tid,)):
-        store.decide_review(h['ReviewId'], 'no_reply', None, actor, note='the owner closed the task')
+        store.decide_review(h['ReviewId'], 'no_reply', None, actor, note=CLOSED_TASK)
     if dropped: store.add_comment(tid, actor, 'human', 'Closed without sending the drafted reply.')
     from .ingest import REPLY_TAG
     if store.task_has_tag(tid, REPLY_TAG): store.tag_task(tid, REPLY_TAG, on=False, actor=actor)     # a closed task owes nothing

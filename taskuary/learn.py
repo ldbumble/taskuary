@@ -390,9 +390,12 @@ def gather(store, since: str) -> str:
     """The verdict window, compact enough to hand an AI whole: review decisions with the
     draft-vs-sent texts (the richest style signal there is), the standing notes written in the
     window, and the owner-made corrections the audit trail carries."""
-    revs = [r for r in store.list_reviews() if str(r.get('DecidedAt') or '') >= since]
-    ok = [r for r in revs if r['Status'] == 'approved']
-    dec = [r for r in revs if r['Status'] in ('edited', 'rejected', 'no_reply')]
+    from . import episodes
+    from .processing_unread import OWNER_ACTORS
+    ok = [r for r in store.list_reviews() if str(r.get('DecidedAt') or '') >= since and r['Status'] == 'approved' and r.get('DecidedBy') in OWNER_ACTORS]
+    # ...the owner's own, by the episodes' one road: an agent's "no reply is owed" stood here under "owner's note" (the audit, 2026-11-13)
+    dec = [{**r, **{k: v for k, v in (store.get_message(r['MessageId']) or {}).items() if k in ('Subject', 'FromEmail')}} if r.get('MessageId') else r
+           for r in episodes.own_verdicts(store, since)]
     out = [f'DRAFT VERDICTS: {len(ok)} sent unchanged (each confirms the current voice), {len(dec)} corrected:']
     for r in dec[:15]:
         out.append(f"  rv{r['ReviewId']} [{r['Status']}] \"{(r.get('Subject') or r.get('Title') or '')[:70]}\" "

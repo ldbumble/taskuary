@@ -102,7 +102,7 @@ def build(store, since: str) -> list:
             tri = _triage(store, m['MessageId'])
             out.append((f"msg{m['MessageId']}", m['SentAt'], str(m.get('FromEmail') or '').lower(),
                         f"{_head(m, store)}" + (f' · triage: {tri}' if tri else '') + f" · you: replied {lag(m['SentAt'], nxt['SentAt'])} after it arrived"))
-        for r in store._rows("SELECT * FROM review WHERE DecidedBy='owner' AND Status IN ('edited','rejected','no_reply') AND IFNULL(DecidedAt,CreatedAt)>=?", (since,)):
+        for r in own_verdicts(store, since):
             m = store.get_message(r['MessageId']) if r.get('MessageId') else None
             if m and _skip(store, m): continue
             did = {'edited': 'edited the draft before it went', 'rejected': 'threw the draft away', 'no_reply': 'sent no reply'}[r['Status']]
@@ -157,6 +157,17 @@ def build(store, since: str) -> list:
     except Exception as e:
         logger.warning(f'episodes: some not read - {e}')
     return sorted(out, key=lambda e: str(e[1] or ''))
+
+
+def own_verdicts(store, since: str) -> list:
+    """The drafts the OWNER gave a verdict on since `since` - edited, thrown away, no reply - oldest first. Never one somebody else put down
+    (the reply writer finding nothing to send, an agent saying no reply is owed, a pull request closed upstream: what an agent concluded is
+    not a fact about the owner), and never one the task's own close put down with it: that is one act, the close, and it is said once
+    (_closed) - it read as a second episode, and its note, Taskuary's words, as the owner's (the audit, 2026-11-13)."""
+    from .concierge import CLOSED_TASK
+    from .processing_unread import OWNER_ACTORS
+    return store._rows(f"SELECT * FROM review WHERE DecidedBy IN ({','.join('?' * len(OWNER_ACTORS))}) AND Status IN ('edited','rejected','no_reply') "
+                       "AND IFNULL(DecideNote,'')<>? AND IFNULL(DecidedAt,CreatedAt)>=? ORDER BY IFNULL(DecidedAt,CreatedAt)", (*OWNER_ACTORS, CLOSED_TASK, since))
 
 
 def _closed(store, since: str, me: set) -> list:

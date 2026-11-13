@@ -74,6 +74,21 @@ class ThreadIsAHint(unittest.TestCase):
         self.assertEqual((b['status'], b['task_id']), ('attached', tid))
         self.assertEqual(s.get_task(tid)['Status'], 'open')
 
+    def test_a_nudge_on_an_ask_already_on_the_closed_thread_task_joins_it_not_a_new_task(self):
+        # the live shape: the thread's task closed on its first ask; a cc'd colleague then wrote of a problem of their own, which was
+        # kept on the closed task as watch; next morning they nudged ("can we get this fixed please") and triage, measuring the nudge
+        # against the closed task's first ask, said new_job - a second task for an ask the thread's task already held
+        s = MemoryStore(); tid = mail(s, 'a', ASK, brain())['task_id']
+        s.update_task(tid, {'Status': 'done'}, 'owner')
+        w = mail(s, 'b', 'My Payworth API keys show inactive now - cannot test anything.', lambda *a, **k: json.dumps({'intent': 'watch', 'why': 'cc only'}),
+                 frm='ray@northwind.example', name='Ray Colton', at='2026-10-26 14:00:00')
+        self.assertEqual(w['task_id'], tid)
+        b = mail(s, 'c', 'Can we get this fixed please', brain(new_job="Ray's API keys, not Gail's refund", rests_on=[w['message_id']],
+                 title="Fix Ray's Payworth API keys"), frm='ray@northwind.example', name='Ray Colton', at='2026-10-27 06:35:00')
+        self.assertEqual((b['status'], b['task_id']), ('attached', tid), 'the ask it rests on is already on the thread task')
+        self.assertEqual(len(s.list_tasks()), 1)
+        self.assertEqual(s.get_task(tid)['Status'], 'open')
+
     def test_new_job_that_names_the_thread_task_as_same_as_keeps_the_join(self):
         s = MemoryStore(); tid = mail(s, 'a', ASK, brain())['task_id']
         b = mail(s, 'b', 'Also the PO number is 4471.', brain(new_job='yes', same_as=tid), at='2026-10-26 10:00:00')

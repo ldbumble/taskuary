@@ -980,6 +980,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # say this is a different job - "separately, can you set up the new starter's laptop" on a refund thread. Then it opens its
         # own task by the one create road below, judged once, and the thread's task gets one note: never reopened or retitled by it.
         # The mirror of same_as, for the thread's own task; Fold in Reshape puts it back where a split was wrong.
+        # ...but a job the thread's task ALREADY HOLDS is not new to it (the owner, 2026-11-13): a cc'd colleague's own problem kept on
+        # the closed task, then their "can we get this fixed please" next morning, was measured against the task's first ask alone and
+        # opened a second task. Where the lines the ask rests on (rests_on) sit is a stored fact: on this task, it joins this task.
+        if read and follow.get('new_job') and tid in {(store.get_message(m) or {}).get('TaskId') for m in follow.get('rests_on') or []}:
+            follow = {k: v for k, v in follow.items() if k != 'new_job'}
         if read and follow.get('new_job'):
             split_from, verdict = tid, (follow, _fail)
             r = {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],

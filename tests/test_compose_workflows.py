@@ -127,3 +127,13 @@ def test_the_workflow_builder_sees_the_catalog_and_a_lone_agent_step_is_still_a_
                    'flow': [{'id': 's1', 'kind': 'agent', 'label': 'Download', 'prompt': "Download this week's statements."}]}}, seen))
     assert 'flow' not in out['config'] and out['config']['prompt'] == "Download this week's statements." and 'repair' not in out['config']
     assert {c['type'] for c in seen['user']['catalog']} >= {'sqlite', 'taskuary'} and 'FLOW RULES' in seen['system']
+
+
+def test_a_brain_that_fails_is_the_builders_answer_not_a_500():
+    # New -> a routine on an API card whose quick model ran out of room: the composer raised, the endpoint answered 500, the builder stood
+    # empty and the Assistant's turn ended on no words. The brain's own failure, with its way past, is the composer's answer
+    def failing(system, user, **_kwargs):
+        raise RuntimeError('hipaa_ai: the model ran out of room before answering (finish_reason length) - pick a non-thinking model on its card')
+    out = compose.compose_workflow(MemoryStore(), 'Every day, list the vendors with no invoice this month', failing)
+    assert 'config' not in out
+    assert 'ran out of room' in out['error'] and 'pick a non-thinking model on its card' in out['error']

@@ -2,6 +2,7 @@
 // the call's answer, and turns a bad one into null (ViewSpec.jsx shows it as JSON). Invented people and numbers.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { MARK, buttonOf, fmtAs, labels, normalise, placesOf, specIn, verbOf, viewOf } from "../src/viewSpec.js";
 import { eventsOf, turnParts } from "../src/chatStream.js";
 
@@ -130,4 +131,12 @@ test("a filed turn's show step draws its view from the answer it kept", () => {
   const steps = [{ k: "tool", name: "mcp__taskuary__show", text: "", output: `Shown in the owner's chat. ${MARK}${JSON.stringify(SPEC)}` }, { k: "said", text: "Three are due." }];
   const view = turnParts(eventsOf(steps, false)).find((p) => p.type === "view");
   assert.equal(view?.spec.title, "Northwind renewals");
+});
+
+// A COMPARISON THE AGENT SHOWED, CUT OFF (the visual audit, 2026-11-13): three tools side by side, each cell a sentence - every one ended in
+// "..." at 280px, so the owner read "Two-way sync, included on the..." and had to hover cell by cell. Words wrap; numbers stay on one line
+test("a table's words wrap in their cell, its numbers stay on one line", () => {
+  const css = readFileSync(new URL("../src/viewSpec.css", import.meta.url), "utf8"), td = css.match(/\.tq-view-table td \{([^}]*)\}/)[1];
+  assert.doesNotMatch(td, /text-overflow: ellipsis|white-space: nowrap/, "a word cell is never cut short");
+  assert.match(css, /\.tq-view-table td\.n \{[^}]*white-space: nowrap/, "a number keeps its figures together");
 });

@@ -59,8 +59,9 @@
 .tq-view-table table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.4; }
 .tq-view-table th { height: 40px; padding: 0 8px; text-align: left; font-weight: 500; color: var(--d-muted); white-space: nowrap; vertical-align: middle;
   position: sticky; top: 0; z-index: 1; background: var(--d-surface); box-shadow: inset 0 -1px 0 var(--d-border); }
-.tq-view-table td { padding: 8px; color: var(--d-ink); border-bottom: 1px solid var(--d-grid); white-space: nowrap; max-width: 280px;
-  overflow: hidden; text-overflow: ellipsis; }
+/* ...its words wrap in the cell (the visual audit, 2026-11-13: a three-tool comparison read "Two-way sync, included on the..." in every cell) */
+.tq-view-table td { padding: 8px; color: var(--d-ink); border-bottom: 1px solid var(--d-grid); max-width: 280px; vertical-align: top; overflow-wrap: anywhere; }
+.tq-view-table td.n { white-space: nowrap; }
 .tq-view-table th:first-child, .tq-view-table td:first-child { padding-left: var(--v-pad); }
 .tq-view-table th:last-child, .tq-view-table td:last-child { padding-right: var(--v-pad); }
 .tq-view-table .n { text-align: right; font-variant-numeric: tabular-nums; }

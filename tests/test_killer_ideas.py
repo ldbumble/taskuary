@@ -33,13 +33,14 @@ def _say(key, kind='pattern', **act): return {'key': key, 'kind': kind, 'text': 
 
 
 def test_the_second_look_holds_a_quiet_kind_work_touched_today_and_what_the_owner_would_already_know():
+    # (seconds, not hours: "today" is the calendar day, and an hour back from just after midnight is yesterday - CI, 00:10 UTC)
     s = MemoryStore()
     for n in range(1, 11): _idea(s, n, 'idea', 'done', 'sweep')                                   # 'idea' is quiet: 0 of 10
-    _idea(s, 11, 'idea', at=ago(hours=1))                                                        # ...and raised its one line today
+    _idea(s, 11, 'idea', at=ago(seconds=2))                                                     # ...and raised its one line today
     s.set_setting(ideagrade.SINCE_KEY, ago(days=40), 't')
     f = Factory(s)
     t = f.task(title='Q4 variance'); u = f.task(title='Board pack')
-    s._exec("INSERT INTO outcome (Kind,TargetKind,TargetId,Actor,At,FactsJson) VALUES ('reply.sent','task',?,'owner',?,'{}')", (t, ago(hours=2)))
+    s._exec("INSERT INTO outcome (Kind,TargetKind,TargetId,Actor,At,FactsJson) VALUES ('reply.sent','task',?,'owner',?,'{}')", (t, ago(seconds=3)))
     say = [_say('idea:plain', 'idea'), _say('idea:touched', tid=t), _say('idea:obvious', tid=u), _say('idea:killer', 'clash', tid=u),
            {'key': 'health:disk', 'kind': 'health', 'text': 'disk', 'action': {}}]
     seen = {}

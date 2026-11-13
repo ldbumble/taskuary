@@ -66,6 +66,7 @@ ALLOWED_METHODS = {'POST', 'PATCH'}
 # POSTs that change nothing outside the demo's own database, and are the demo itself
 ALLOWED_WRITES = (
     r'^/api/tasks$',                                   # make a task
+    r'^/api/launch-key$',                              # `--link`: a signed-in address for this demo's own page, owner token only
     r'^/api/tasks/\d+$',                               # ...and change it
     r'^/api/tasks/\d+/(comments|waitroom|not-a-task|assistant/(session|messages|stream|cancel|seen))$',
     r'^/api/prompt-(image|file)$',                     # a picture or a file for a prompt: saved in the demo's own home

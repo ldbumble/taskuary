@@ -68,6 +68,11 @@ class TheDoorsAreShutTests(unittest.TestCase):
         # refused, the demo never said good morning: the arrive ping only writes the demo's own chat
         with on(): self.assertFalse(demo.refuse('POST', '/api/concierge/arrive'))
 
+    def test_link_opens_the_running_demo_signed_in(self):
+        # `taskuary --demo --link` asks the running demo for a one-time key: refused, it printed a bare address whose page
+        # said "Open Taskuary from its app" - the demo could only be opened by the process that started it
+        with on(): self.assertFalse(demo.refuse('POST', '/api/launch-key'))
+
     def test_an_endpoint_nobody_thought_about_is_refused_by_default(self):
         """The list says what MAY happen. Anything else - including something added next month -
         is refused until somebody decides it is safe."""

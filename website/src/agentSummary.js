@@ -50,8 +50,14 @@ export const hasReply = (reviews) => (reviews || []).some((r) => r && r.Kind !==
 // `answer_is_result`. A turn filed before it could say - or one that did not - reads by the length-or-link rule the pane used until then, so
 // history draws as it always did
 const answerWords = (w) => { const t = String(w || "").trim(); return !!t && (t.length <= 500 || /https?:\/\/|\b[A-Za-z]:\\|(^|\s)\/(Users|home|mnt|tmp)\/|\\\\\S+/.test(t)); };
-// a turn whose agent said something of its own: those words are the turn, and the summary's prose is not drawn beside them (AgentSummary `answered`)
-export const turnAnswered = (words) => !!String(words || "").trim();
+// WHAT A TURN LEFT ON THE OWNER IS SAID IN IT (the demo's same-day pay research, 2026-11-13: "Decide whether to offer it - say if I should ask
+// Payworth for terms" was the summary's `on_you`, and the chat drew only `did` - "agent finished", his decision nowhere in it). One line under
+// the words, each step the words do not already hold, so nothing is said twice
+const flat = (s) => String(s || "").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+export const turnOnYou = (summary, words) => {
+  const said = flat(words), left = (summary?.on_you || []).map((x) => String(x || "").replace(/[.\s]+$/, "")).filter((x) => x && !said.includes(flat(x)));
+  return left.length ? `For you to do: ${left.join("; ")}.` : "";
+};
 export const answerShown = (summary, words) => !String(words || "").trim() ? false
   : typeof summary?.answer_is_result === "boolean" ? summary.answer_is_result : answerWords(words);
 

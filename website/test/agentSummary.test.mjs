@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { answerShown, chatReplyShown, foldedSummaries, hasReply, lastAnswerSummed, nextSteps, oneLine } from "../src/agentSummary.js";
+import { answerShown, chatReplyShown, foldedSummaries, hasReply, lastAnswerSummed, nextSteps, oneLine, turnOnYou } from "../src/agentSummary.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
@@ -135,4 +135,16 @@ test("the To do is the work alone, and what is left on the owner is one On you l
   const page = (await import("node:fs")).readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.match(page, /const todo = checklist\.filter\(\(i\) => !i\.out && !i\.on_you\);/);
   assert.match(page, /\{onYouLeft && <Typography data-tq-on-you-line="" sx=\{\{ \.\.\.ON_YOU_SX, mt: 0\.6 \}\}>\{onYouLeft\}<\/Typography>\}/);
+});
+
+// THE CHAT SAYS WHAT A TURN LEFT ON HIM (the demo's research turn, 2026-11-13): a turn that was only its summary block is drawn as its `did`, and
+// the decision it left him - the summary's `on_you` - was drawn nowhere: "agent finished" over a list of options, his choice unsaid
+test("a turn's On you steps are said under its words, never twice", () => {
+  const sum = { did: "Compared three providers.", on_you: ["Decide whether to offer same-day pay.", "Say if I should ask Payworth for terms"] };
+  assert.equal(turnOnYou(sum, sum.did), "For you to do: Decide whether to offer same-day pay; Say if I should ask Payworth for terms.");
+  assert.equal(turnOnYou(sum, "Compared three. **Decide whether to offer same-day pay** - your call."), "For you to do: Say if I should ask Payworth for terms.");
+  assert.equal(turnOnYou({ did: "x" }, "x"), "");
+  assert.equal(turnOnYou(null, "x"), "");
+  assert.match(read("GeneralWorkspace.jsx"), /const onYou = !live && sum \? turnOnYou\(sum, words\) : ""/);
+  assert.match(read("GeneralWorkspace.jsx"), /\{!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}>/);
 });

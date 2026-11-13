@@ -58,6 +58,7 @@ import ReviewDecision from "./ReviewDecision.jsx";
 import { askNote, heldActsLine, proposalFrom } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import { OneBox } from "./AgentSummary.jsx";
+import { turnOnYou } from "./agentSummary.js";
 import HeldStart from "./HeldStart.jsx";
 import { dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
@@ -424,6 +425,7 @@ const ConvTurn = ({ t, more, cards, name }) => {
   const names = new Set(made.map((f) => f.name));
   const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name));
   const quiet = !live && !hasParts(parts) && !words && !t.fail && !cards?.length && !made.length && !rest.length;
+  const onYou = !live && sum ? turnOnYou(sum, words) : "";
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
   const compacting = live && ((x) => x?.k === "compact" && !!x.status && !["completed", "failed", "cancelled"].includes(x.status))((t.steps || []).at(-1));
@@ -435,6 +437,7 @@ const ConvTurn = ({ t, more, cards, name }) => {
     <div className="tq-aui-agent-body">
       <TurnWorkView data={{ parts }} now={live} ended={!!t.text && !live} k={t.id} />
       {!!words && <SaidText text={words} mid={key} />}
+      {!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}><Md text={onYou} /></div>}
       {/* ...and the dots say what is happening, or what we wait for, on every level: one quiet line that keeps its place (workingLine) */}
       {live && <div className="tq-aui-thinking" role="status" aria-label="The agent is at work" data-tq-working="" {...(t.state === "starting" ? { "data-tq-starting-line": "" } : {})}><i /><i /><i />{compacting
         ? <span data-tq-compacting="" style={{ marginLeft: 8, fontSize: 12.5 }}>Compacting…</span>

@@ -2,6 +2,23 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.3 - 2026-11-13
+
+- Quit says "Shutting downâ€¦" until Taskuary has stopped, and the desktop window waits for it
+- One Set up with AI for every kind: the Assistant drafts, checks and saves it on the server
+- A nudge on an ask the thread's task already holds joins that task, not a new one
+- A line that joins a coding task after a restart reaches its agent, as typing does
+- The work's card is part of the agent turn that did it, or not drawn: never pinned at the chat's foot
+- Set up with AI builds on its own page: one strip for reports, dashboards, routines, playbooks and connections
+- The old Set up with AI roads are gone: the connection walk task, the playbook build task, the chat's describe field
+- Docs: Set up with AI is the Assistant building it on its page, not the chat
+- A connection's setup asks for a non-secret value in its own box and saves it, never sends the owner to type it into the card
+- Set up with AI's routes are the owner's own, named in the guard
+- The task chat, audited across every source and state: questions, drafts, restarts and trust read one way everywhere
+- Nothing at the chat's foot: a file is in the turn that made it, and a reply box is empty only where something was said about it
+- A mail handed to a chat agent at rest reads at work until its pass is through
+- One letter per person, words above the cards, and Teams never drops a late message silently
+
 ## 0.4.0.2 - 2026-11-13
 
 - The mic hears with nothing set up: Local Whisper is made ready in the background

@@ -181,6 +181,29 @@ class TheList(unittest.TestCase):
         self.assertEqual(ids[-3:], ['l-two', *drawn, 'l-three'])
         self.assertEqual([x['state'] for x in got['items'] if x['kind'] == 'turn'][0], 'done')                 # the answer above was never stopped
 
+    def test_a_line_typed_while_the_stopped_turn_lets_go_stands_under_the_stop_from_the_first_read(self):
+        """The bug hunt's stop, 2026-11-12: he stopped a turn whose CLI took seconds to let go, then typed his next line. The chat read at
+        rest, so the page drew the line under the stop; the server kept it unheard behind the stopped turn, so the next read moved it down by
+        the box, and it came back up once the stopped turn let go - his line jumped out of the chat and back. It begins the next turn as a
+        line that waited at the stop does: heard under the stop, its turn at work under it, from the first read to the end."""
+        self.say('Suggest two.', 'l-one'); self.rest()
+        self.brain.delay = 30
+        self.say('Compare both in detail.', 'l-two', wait=False)
+        self.assertTrue(until(lambda: getattr(general.session_for(self.tid), 'busy', False)))
+        self.assertTrue(general.stop_turn(self.s, self.tid))
+        self.assertTrue(getattr(general.session_for(self.tid), 'busy', False))                  # ...still letting go
+        self.say('Go on, compare them now.', 'l-three', wait=False)
+        got = self.list(); ids = [x['id'] for x in got['items']]
+        press = next(x['id'] for x in got['items'] if x['kind'] == 'press')
+        self.assertEqual(got['pending'], [], self.kinds(got))
+        self.assertEqual(ids[ids.index(press) + 1], 'l-three', self.kinds(got))
+        self.assertTrue(got['working'] and got['items'][-1].get('state') in ('working', 'starting'), self.kinds(got))
+        self.brain.delay = 0
+        self.rest()
+        got = self.list(); ids = [x['id'] for x in got['items'] if not x['id'].startswith('t:')]
+        self.assertEqual(ids[-3:], ['l-two', press, 'l-three'])
+        self.assertEqual(self.kinds(got)[-2:], [('line', ''), ('turn', 'done')])
+
     def test_a_stop_pressed_in_the_second_its_line_was_heard_still_stands_under_that_line(self):
         """A press is stamped by the whole second: one made in the second the turn's own line was heard sorted above it by the tie, and the
         stopped mark fell on the finished answer before - order by what happened, never by the clock's grain."""

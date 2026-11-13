@@ -2436,6 +2436,8 @@ class GeneralSession:
     # ...and a session OPENED for a turn that has not taken yet is not waiting either (OPENING): the header read "answered / waiting on
     # you" eight seconds into a start, while the run was only about to begin (email walk 2026-10-29)
     def waiting(self): return self.alive and not self.busy and (self.spoke or self.task_id not in OPENING)
+    # ...a turn he STOPPED that has not let go yet (its CLI takes seconds to end): busy, but no longer at work for him (take_line)
+    def letting_go(self): return self.busy and self._cancel is not None and self._cancel.is_set()
     def tail(self, n=3):
         from .terminal import plain
         return [line for line in plain(self.scrollback()[-8000:]).splitlines() if line.strip()][-n:]
@@ -3506,7 +3508,10 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     # ...A START READS THE CHAT FIRST, as it always did (server._refresh_for_turn), at work from the press all the while: a sync that fails
     # refuses the start before anything is kept, its reason under the line on the page
     line_id = line_id or new_line_id()
-    rest = not working(store, tid)
+    # ...AND A TURN HE STOPPED IS AT REST FOR HIS NEXT LINE, though its CLI has not let go (the bug hunt's stop, 2026-11-12): the page drew the
+    # line under the stop, kept unheard it went down by the box, and came back up seconds later when the stopped turn ended. It begins the
+    # next turn as a line that waited at the stop does (stop_turn) - heard now, taken when the session is free (send_prompt waits its lock)
+    rest = not working(store, tid) or getattr(session_for(tid), 'letting_go', lambda: False)()
     if rest: PRESSED[tid] = time.time()       # the turn's clock: the press
     # ...AND HIS LINE NEVER WAITS ON IT (the owner's live task, 2026-11-12: a chat poll held its lock, the start waited 45 s on it and was
     # refused, and his line came back red with "messages are still syncing ... try again" glued to it): the line is kept and heard first,

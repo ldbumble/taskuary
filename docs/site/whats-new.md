@@ -2,6 +2,24 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.5 - 2026-11-13
+
+- Teams: a late chat message is read from the chat list, not only said to be behind
+- A report's Send to agent makes it a task and opens its box; Make it a task leaves report rows
+- A report sent on as a task reads in What came in as it does on Reports - its chart and table, never its rows' raw data
+- The view tool and the act tools load with every agent session, never a bare name it must search for
+- The memory's own explainers stop asking for answer times, in documents already made too
+- The memory reads the note a task was closed with, in the owner's words
+- The memory reads only the owner's own draft verdicts, and a close as one act
+- A reply drafted after a Send is its own card with its own Send, never the letter that went
+- An agent that set its own check-back is not woken ten seconds later to say nobody answered
+- An email that went stays a card of the turn it stood under, as a reply that went does
+- A task opens on its chat, never on a stack of its cards waiting for their turns
+- An agent is not woken to say "only you can send it" while a letter waits for the owner's Send
+- "Its agent is still working" is said only while a turn is at work
+- A card already on screen stays while the agent works - pressing Send on one of two emails never hides the other
+- Quick and normal work is the warm agent's turn, with the agent's tools; a CLI is never handed another's model
+
 ## 0.4.0.4 - 2026-11-13
 
 - Quit says "Shutting downâ€¦" until Taskuary has stopped, and the desktop window waits for it

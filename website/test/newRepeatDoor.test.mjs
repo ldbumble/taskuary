@@ -58,11 +58,13 @@ test("a report, dashboard or routine the Assistant wrote up goes straight into i
   assert.equal(goesStraight("workflow", null), false, "a card nobody wrote up stays the card");
   assert.equal(goesStraight("agent", 31), false);
   const sheet = read("NewSheet.jsx"), door = read("SetupWithAi.jsx"), chat = read("AssistantView.jsx");
-  assert.match(door, /export const startSetup = \(kind, words, onOpen\) => \{ onOpen\?\.\(\); openHelp\(helpAsk\(kind, words\), \{ wait: 700 \}\); \};/);
+  assert.match(door, /export const startSetup = \(kind, words, onOpen, quiet = false\) => \{ onOpen\?\.\(\); openHelp\(helpAsk\(kind, words\), \{ wait: 700, \.\.\.\(quiet \? \{ quiet \} : \{\}\) \}\); \};/);
   assert.match(door, /onClick=\{\(\) => startSetup\(kind, words, onOpen\)\}/);
-  assert.match(door, /if \(!goesStraight\(made\?\.kind, made\?\.line\)\) return false;\s*\n\s*if \(firstPressOf\(made\.line\)\) startSetup\(made\.kind, made\.text \|\| "", \(\) => \{ onOpen\?\.\(\); openAppLink\(NEW_HASH\[made\.kind\]\); \}\);\s*\n\s*return true;/);
+  assert.match(door, /if \(!goesStraight\(made\?\.kind, made\?\.line\)\) return false;\s*\n\s*if \(firstPressOf\(made\.line\)\) startSetup\(made\.kind, made\.text \|\| "", \(\) => \{ onOpen\?\.\(\); openAppLink\(NEW_HASH\[made\.kind\]\); \}, quiet\);\s*\n\s*return true;/);
+  // ...and from New the Assistant's window stays as it was (the owner, 2026-11-12: "we also should not open assistant tab if we have new tab open")
+  assert.match(chat, /if \(!e\.detail\?\.quiet\) setPopOpen\(true\);/);
   // ...one road from New's box and from the chat: the card is drawn only where it did not go (pressed at the card's mount, the chat's
   // road raced the canvas opening its New card, and the setup ask was typed into New's own box instead)
-  assert.match(sheet, /if \(data\?\.new\) \{ if \(!goStraight\(data\.new, onClose\)\) setMade\(/);
-  assert.match(chat, /if \(data\.new && !goStraight\(data\.new\)\) browseRef\.current\?\.\("new", \{ \.\.\.data\.new, aid \}\);/);
+  assert.match(sheet, /if \(data\?\.new\) \{ if \(!goStraight\(data\.new, onClose, true\)\) setMade\(/);
+  assert.match(chat, /if \(data\.new && !goStraight\(data\.new\)\) browseRef\.current\?\.\("new", data\.new\);/);
 });

@@ -1797,27 +1797,68 @@ def send_to(store, channel: str, who: str) -> tuple:
 
 
 def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = '', recurs: dict | None = None, lead: str = '',
-         channel: str = '') -> dict:
+         channel: str = '', job: dict | None = None) -> dict:
     # A JOB THAT REPEATS IS A ROUTINE (the owner, 2026-10-29): the model's `recurs` brings up New → Routine filled in - its clock, its job,
     # its repository and skill - and Set up with AI, then Save, are the owner's presses; nothing is saved from here
     if recurs: want, (text, runs) = 'workflow', routine_prefill(recurs, text)
     kind, how, verb = NEW_TAB[want]
+    # A JOB, OR A MESSAGE WITH ITS RECIPIENT, IS MADE AND OPENED - NOT WRITTEN INTO NEW (the owner, 2026-11-12: "assistant tab should not open new
+    # but open task directly"): the card came up filled in and pressed itself, a step between the ask and the task. What still needs the owner
+    # - a recipient nobody could place, a meeting's time, a goal's date, a builder's setup - still comes up in New
+    # ...`job`: the checkout or profile the ask named, which the task is made with (handoff_task)
+    if kind == 'agent' and str(text or '').strip():
+        return _made_now(store, tid, 'task.create_from_text', {'kind': want, 'text': str(text).strip(), **{k: v for k, v in (job or {}).items() if v}}, lead)
+    ch, to, miss = send_to(store, channel, to) if kind == 'send' else ('', '', '')
+    if kind == 'send' and to and not miss and str(text or '').strip():
+        return _made_now(store, tid, 'outbox', {'channel': ch, 'to': to, 'about': str(text).strip()}, lead)
     press = buttons.label(verb) if verb else new_press(store, kind)
     # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
     # ...and what it did LEADS, what it found after: the receipt at the end of a paragraph read as a turn that did nothing (said_what; the
     # live audit, 2026-11-02)
-    # ...AND AN AGENT'S JOB IS PRESSED (the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that"): its Send to agent is
-    # the card's own press, made by the page once the card is filled (`start`, NewSheet) - every other tab still waits for the owner's
-    start = kind == 'agent' and bool(str(text or '').strip())
-    ch, to, miss = send_to(store, channel, to) if kind == 'send' else ('', '', '')
-    said = (f"Wrote it into New and pressed {press}." if start else f"Wrote it into New - {press} there starts it.") + (f' {miss}' if miss else '') + (f' {lead}' if lead else '')
-    # `line`: this line's id, which the card's press says again as what it started (said_started)
+    said = f"Wrote it into New - {press} there starts it." + (f' {miss}' if miss else '') + (f' {lead}' if lead else '')
     line = record(store, tid, 'assistant', said)
     # ...and Send something's channel and recipient, as its own fields take them (NewSheet initialChannel, initialTo) - nothing goes before its Send
     return {'say': said, 'options': [], 'chips': [], 'decision': None,
-            'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line, **({'start': True} if start else {}),
+            'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line,
                     **({'routine': runs} if recurs else {}),
                     **({'channel': ch} if ch else {}), **({'to': to[:300]} if to else {})}}
+
+
+def no_start(store, kind: str) -> str:
+    "Why an agent of `kind` cannot run here, or '' - what New's own press asks before it makes a task (an agent failing a second later is a dead end)."
+    from . import capabilities
+    if kind == 'general' and not capabilities.has_ai(store): return f"{general.NO_AI}, so an agent can't run this yet"
+    if kind == 'coding' and not capabilities.can_code(store): return 'No coding tool is connected, so a coding agent cannot run this yet'
+    return ''
+
+
+def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str = 'owner') -> dict:
+    """What New's own press would make, made here and opened (`open`, the chat's and New's box's one road to a task): an agent's job down the
+    phone's road (task.create_from_text -> handoff_task), a message to a known recipient drafted on its own task (outbox.compose) - nothing
+    sent. A start that did not happen says why, with no task to open."""
+    # ...an agent with nothing to run it is not made at all: a task whose agent fails a second later is a dead end on the rail
+    if no := ('' if op == 'outbox' else no_start(store, params.get('kind'))):
+        say_ = f"{no} - connect one under {places.name('ai')}, then ask again. Nothing was made."
+        record(store, tid, 'assistant', say_)
+        return {'say': say_, 'options': [], 'chips': [connect_ai_chip()] if routes() else [], 'decision': None}
+    try:
+        if op == 'outbox':
+            from . import outbox
+            o = outbox.compose(store, params['channel'], params['to'], params['about'], 'draft', actor=actor)
+            o = {**o, 'drafted': bool(o.get('draft'))}
+        else:
+            done = run_proposal(store, operations.propose(store, op, 0, params, actor), actor)
+            o = done.get('outcome') or {}
+            if done.get('status') != 'done' or not o.get('taskId'):
+                r = receipt_turn(store, done, actor, table=True)
+                return {'say': r['say'], 'options': [], 'chips': r['chips'], 'decision': None}
+    except ValueError as e:
+        say_ = f"{str(e)[:1].upper()}{str(e)[1:]}." .replace('..', '.') + ' Nothing was made.'
+        record(store, tid, 'assistant', say_); return {'say': say_, 'options': [], 'chips': [], 'decision': None}
+    ref = o.get('ref') or task_ref(o['taskId'])
+    what = (f"Drafted it on {ref} - it waits for your Send." if o.get('drafted') else f"Made {ref}, but the draft could not be written - write it there.") if op == 'outbox' \
+        else f"Started {ref} - an agent is on it." if o.get('started') or o.get('existing') else f"Made {ref} - it waits its turn for an agent."
+    return {**_did(store, tid, what + (f' {lead}' if lead else ''), op, o), 'open': f"#task={o['taskId']}"}
 
 
 # A MEETING IS THE CALENDAR'S (the owner, 2026-10-28: "schedule a meeting" brought up Give an agent a job - "is that what we want?"). The one
@@ -1872,21 +1913,6 @@ def _meeting(store, tid: int, table: dict | None, params: dict, text: str, actor
     if pre['unplaced']: said += f" I could not place {', '.join(pre['unplaced'])} - add their address there."
     line = record(store, tid, 'assistant', said)
     return {'say': said, 'options': [], 'chips': [], 'decision': None, 'new': {'kind': 'meeting', 'how': '', 'text': pre['about'], 'meeting': pre, 'line': line}}
-
-
-def said_started(store, cid, out: dict) -> str:
-    """The chat's "Wrote it into New" line said again as what its card STARTED. Its Send to agent starts the task and takes the card away,
-    and the line stood over a researcher already working, promising a press nobody had left to make (the owner, 2026-10-21: every acting
-    answer says what it did). '' - and nothing rewritten - when nothing started or `cid` is not one of the Assistant's own chat lines."""
-    if not (out.get('started') or out.get('existing')) or not str(cid or '').isdigit(): return ''
-    row = next(iter(store._rows('SELECT * FROM comment WHERE CommentId=?', (int(cid),))), None)
-    if not row or row['Actor'] != 'assistant' or not general.is_dock(store.get_task(row['TaskId'])): return ''
-    general_ = out.get('dispatch') == 'assistant'
-    # ...by the name the owner meets it under - Taskuary, never the profile it runs under (kinds.json `shown_`, 2026-10-28)
-    said = (f"Started {out.get('ref') or task_ref(out['taskId'])} with {task_kinds.SHOWN}"
-            + (f" on {out['agent']}" if general_ and out.get('agent') else '') + '.')
-    rewrite(store, int(cid), said)
-    return said
 
 
 def _answer_now(store, tid: int, table: dict | None, target: int, said: str, actor: str, owner: str = '') -> dict:
@@ -3470,7 +3496,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if routes() and kind == 'task.create_from_text':
         want = str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general'
         return _new(store, tid, item, want if want in NEW_TAB else 'general', str(params.get('text') or text or '').strip(), str(params.get('to') or ''),
-                    channel=str(params.get('channel') or ''), recurs=recurs or (recurs_of({'objective': params.get('text') or text}) if want == 'routine' else None))
+                    channel=str(params.get('channel') or ''), recurs=recurs or (recurs_of({'objective': params.get('text') or text}) if want == 'routine' else None),
+                    job={'repo': str(params.get('repo') or ''), 'profile': str(params.get('profile') or params.get('as') or '')})
     if recurs or (kind == 'task.create_from_text' and params.get('kind') == 'routine'):
         say_ = f"A routine is set up on the desk, under {places.name('workflows')} - nothing was started."
         record(store, tid, 'assistant', say_); return {'say': say_, 'options': [], 'chips': [], 'decision': None}
@@ -4683,7 +4710,9 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
         session = general.start_session(store, made['taskId'], actor=actor)
         def first_turn():
             _read_outputs(store, made, job, actor)
-            session.send_prompt(brief)
+            # ...Taskuary's brief, never a second line in the owner's name: their words are the task's own message already, and the chat
+            # drew them twice (the click-through, 2026-11-12)
+            session.send_prompt(brief, brief=True)
         threading.Thread(target=first_turn, daemon=True).start()
         made['started'] = True
     return made

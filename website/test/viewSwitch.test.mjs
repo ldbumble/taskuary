@@ -22,6 +22,6 @@ test("Board opens the Board; Chat and Game are the Assistant, walked or not", ()
 
 test("the Board's New opens on New's one box", () => {
   const sheet = read("NewSheet.jsx");
-  assert.match(sheet, /initialKind = "chat", initialHow = "", initialText = "", line = null, onSaid, start = false,\n  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null, madeOf = "" \}\) \{\n  const \[kind, setKind\] = useState\(initialKind\);/);
+  assert.match(sheet, /initialKind = "chat", initialHow = "", initialText = "", line = null,\n  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null, madeOf = "" \}\) \{\n  const \[kind, setKind\] = useState\(initialKind\);/);
   assert.match(sheet, /setKind\(initialKind\); \}, \[open, initialKind\]\);/);
 });

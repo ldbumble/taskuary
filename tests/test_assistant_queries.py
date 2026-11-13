@@ -132,28 +132,24 @@ class EverydayAsks(unittest.TestCase):
     def test_work_that_is_an_agents_goes_to_one_never_done_in_the_chat(self):
         # the owner, 2026-11-01: an image asked of the Assistant was "created" in the chat and never shown - it is an agent's job
         for r in (r for r in self.rows if r['q'].cat == 'agentwork' and r['q'].text.startswith(('make me', 'write'))):
-            with self.subTest(ask=r['q'].text): self.assertIn('new:agent:general', r['ideal']['got'])
+            with self.subTest(ask=r['q'].text): self.assertIn('did:task.create_from_text', r['ideal']['got'])   # an agent's job, started on its own task
 
     def test_a_job_written_into_new_names_the_press_its_tab_draws(self):
         # the audit of New, 2026-11-02: "Wrote it into New - Build it there starts it." over a report, a dashboard and a routine, whose tab
         # has had Set up with AI since 2026-10-30 (NewSheet.jsx) - and a goal's press is Plan it while an AI can plan the steps
         from taskuary import capabilities
-        drawn = {'agent:general': 'Send to agent', 'agent:terminal': 'Send to coding agent', 'send': 'Draft it', 'note': 'Note it',
+        drawn = {'send': 'Draft it', 'note': 'Note it',
                  'goal': 'Plan it' if capabilities.has_ai(Q._world()) else 'Track it',
                  **{k: 'Set up with AI' for k in ('report', 'dashboard', 'workflow', 'playbook')}}
         for r in (r for r in self.rows if r['q'].cat == 'new' and r['q'].expect.startswith('new:')):
             with self.subTest(ask=r['q'].text):
-                # ...an agent's job is pressed for the owner (the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that")
-                if r['q'].expect.startswith('new:agent'):
-                    self.assertEqual(r['ideal']['say'], f"Wrote it into New and pressed {drawn[r['q'].expect[4:]]}.")
-                    self.assertIn('press:new', r['ideal']['got'])
-                else: self.assertEqual(r['ideal']['say'], f"Wrote it into New - {drawn[r['q'].expect[4:]]} there starts it.")
+                self.assertEqual(r['ideal']['say'], f"Wrote it into New - {drawn[r['q'].expect[4:]]} there starts it.")
 
     def test_a_message_on_whatsapp_comes_up_on_whatsapp_to_the_group_named(self):
-        # the owner, 2026-11-02: "write to the team WhatsApp group that ..." opened Send something on email with To empty
-        from tests.assistant_queries import TEAM_GROUP
+        # the owner, 2026-11-02: "write to the team WhatsApp group that ..." opened Send something on email with To empty - now drafted on a
+        # task of its own and opened (2026-11-12), its Send the owner's
         r = next(r for r in self.rows if r['q'].text.startswith('write to the Northwind team WhatsApp group'))
-        self.assertIn(f'to:whatsapp:{TEAM_GROUP}', r['ideal']['got']); self.assertNotIn('press:new', r['ideal']['got'])
+        self.assertIn('did:outbox', r['ideal']['got']); self.assertTrue(r['ideal']['say'].startswith('Drafted it on TQ-'), r['ideal']['say'])
 
     def test_the_assistant_starts_an_agent_and_tells_one_at_work_but_never_sends(self):
         # the owner, 2026-11-02: "it itself should not be the agent" - "start it" presses Send to agent, "tell the agent ..." reaches the

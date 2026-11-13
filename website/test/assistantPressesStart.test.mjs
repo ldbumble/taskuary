@@ -7,13 +7,14 @@ import test from "node:test";
 
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
-test("New's card presses its own start, once, when the Assistant wrote an agent's job into it", () => {
+// ...and since 2026-11-12 the job is MADE by the Assistant and its task opened (the owner: "assistant tab should not open new but open task
+// directly", concierge._made_now): no card filled in and pressed on the way
+test("an agent's job the Assistant made opens its task from New's box; no card presses itself", () => {
   const canvas = read("CanvasBrowse.jsx"), sheet = read("NewSheet.jsx");
-  assert.match(canvas, /start=\{!!state\?\.start\}/);
-  assert.match(sheet, /line = null, onSaid, start = false,/);
-  assert.match(sheet, /if \(!start \|\| autoPressed\.current \|\| kind !== "agent" \|\| !canGo \|\| !agentsRead \|\| busy\) return;\s*\n\s*autoPressed\.current = true; if \(firstPressOf\(line\)\) submit\(\);/);
-  // ...before the sheet's early return, so the hook runs on every draw
-  assert.ok(sheet.indexOf("autoPressed.current = true") < sheet.indexOf("if (inline && !open) return null;"));
+  assert.doesNotMatch(canvas, /state\?\.start/);
+  assert.doesNotMatch(sheet, /autoPressed|start = false/);
+  assert.ok(sheet.includes('const made = /^#?task=(\\d+)$/.exec(data?.open || "");'));
+  assert.ok(sheet.includes("if (made) { setOk(String(data.say || \"\")); onDone?.(); openIt(Number(made[1]));"));
 });
 
 test("the Assistant's press is made once per line, however often its card is drawn again", async () => {

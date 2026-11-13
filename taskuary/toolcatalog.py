@@ -256,11 +256,11 @@ PURPOSE = {
 KEPT = frozenset({'people.relate', 'memory.wrong', 'memory.remember', 'problems.dismiss', 'agent.tell', 'advisor.ideas'})
 # ...and a SET named in the owner's words, whose words are the press (pipe.clear's ruling, 2026-10-20; bulk.py 2026-10-28) - a phone asks yes or no
 SETS = frozenset({'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'agents.stop'})
-# ...and a tool whose press is not one thing: an agent's job written into New is started by the card's own Send to agent at once (concierge._new
-# `start`), and the model, told only "the owner presses its button", said the job was still waiting in New over an agent already at work (2026-11-02)
-RUNS = {'task.create_from_text': "kind general or coding STARTS at once - New's card presses its own Send to agent, the job runs on a task of "
-                                 "its own, and the conversation's line and YOUR OPEN ASKS name that task and where it stands; any other kind "
-                                 "waits in New for the owner's press"}
+# ...and a tool whose press is not one thing: an agent's job is started at once on a task of its own, opened (concierge._made_now - the owner,
+# 2026-11-12: "open task directly"), and the model, told only "the owner presses its button", said it was still waiting in New (2026-11-02)
+RUNS = {'task.create_from_text': "kind general or coding STARTS at once on a task of its own, which opens; a message to someone it can place "
+                                 "is DRAFTED on a task of its own (never sent - Send is the owner's); the conversation's line and YOUR OPEN "
+                                 "ASKS name that task and where it stands; any other kind waits in New for the owner's press"}
 # ...and the acts whose button is a page's alone: the page comes up at the thing, the owner presses there
 PAGED = frozenset({'rule.change', 'deleted.restore', 'hub.comment', 'hub.vote', 'page.open'})
 INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'setting.set', 'task.defer', 'task.watch',
@@ -365,10 +365,10 @@ def block(store=None) -> str:
         'alone, no words before it: the button is the answer.',
         'Answer in plain words. To look something up or do anything, end with ONE line:',
         '  CALL: {"kind": "<tool>", "params": {...}}',
-        # ...save the one press made for them: New's card presses its own Send to agent (concierge._new `start`), and "where is it?" was
-        # answered "waiting in New, not started" over an agent at work on its own task (2026-11-02)
+        # ...save the one made for them: an agent's job starts on its own task (concierge._made_now), and "where is it?" was answered
+        # "waiting in New, not started" over an agent at work on its own task (2026-11-02)
         'A look-up runs at once and answers you. A change is the owner\'s to press: Taskuary brings up its button, lit, or',
-        "its page - never say it is done. Only an agent's job in New starts at once (YOUR OPEN ASKS). When two different",
+        "its page - never say it is done. Only an agent's job starts at once (YOUR OPEN ASKS). When two different",
         'things fit and you cannot tell which, ask one short question and end with OPTIONS: first | second instead.',
         'Never both, never an unlisted tool. A task the owner names goes in params.ref ("TQ-0123"); otherwise',
         "the item on the table is the target. A decision about a DIFFERENT item than the table's puts the",

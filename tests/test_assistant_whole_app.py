@@ -297,9 +297,16 @@ class EveryRoadIsOffered(unittest.TestCase):
     def test_new_send_something_comes_up_addressed(self):
         s = store()
         notice(s, 0, 'Gail Moreno', 'gail@northwind.example', 'May close', 'Numbers attached.')
-        out = call(s, 'task.create_from_text', kind='send', text='the May numbers', to='Gail Moreno')
-        self.assertEqual((out['new']['kind'], out['new']['channel'], out['new']['to']), ('send', 'email', 'gail@northwind.example'))
-        self.assertIn('Draft it', out['say'])
+        # a recipient it can place: drafted on a task of its own and opened (the owner, 2026-11-12: "open task directly") - never sent
+        from taskuary import outbox
+        with mock.patch.object(outbox, 'draft_message', return_value='Hi Gail, the May numbers are attached.'):
+            out = call(s, 'task.create_from_text', kind='send', text='the May numbers', to='Gail Moreno')
+        tid = int(out['open'].split('=')[1]); rv = s.pending_review(tid)
+        self.assertNotIn('new', out); self.assertEqual(out['say'], f'Drafted it on TQ-{tid:04d} - it waits for your Send.')
+        self.assertEqual((rv['DraftText'], json.loads(rv['Deliver'])['to'], rv['Status']), ('Hi Gail, the May numbers are attached.', ['gail@northwind.example'], 'pending'))
+        # ...and with no AI to write it the task is still made, and says the draft is the owner's to write
+        out = call(s, 'task.create_from_text', kind='send', text='the June numbers', to='Gail Moreno')
+        self.assertTrue(out['say'].endswith('but the draft could not be written - write it there.'), out['say'])
         for k in ('goal', 'dashboard'): self.assertEqual(call(s, 'task.create_from_text', kind=k, text='x')['new']['kind'], k)
         with concierge.delivering(concierge.PHONE), self.assertRaises(concierge.CallMiss): call(s, 'task.create_from_text', kind='send', text='x')
 
@@ -310,10 +317,11 @@ class EveryRoadIsOffered(unittest.TestCase):
         s, grp = store(), '120363000000000001@g.us'
         s.save_connector({'Type': 'whatsapp', 'Name': 'WhatsApp', 'Active': 1}, 't')
         s.set_setting(wanames.KEY, json.dumps({grp: 'Northwind team', '120363000000000002@g.us': 'Northwind night shift'}), 't')
-        out = call(s, 'task.create_from_text', kind='send', channel='whatsapp', text='everything is updated and the installer is ready', to='Northwind team')
-        self.assertEqual((out['new']['kind'], out['new']['channel'], out['new']['to']), ('send', 'whatsapp', grp))
-        self.assertEqual(out['say'], 'Wrote it into New - Draft it there starts it.')
-        self.assertNotIn('start', out['new'])                                                     # its Draft it stays the owner's press
+        from taskuary import outbox
+        with mock.patch.object(outbox, 'draft_message', return_value='Everything is updated and the installer is ready.'),              mock.patch('taskuary.capabilities.send_refusal', return_value=''):
+            out = call(s, 'task.create_from_text', kind='send', channel='whatsapp', text='everything is updated and the installer is ready', to='Northwind team')
+        tid = int(out['open'].split('=')[1])
+        self.assertEqual({k: json.loads(s.pending_review(tid)['Deliver'])[k] for k in ('channel', 'to')}, {'channel': 'whatsapp', 'to': grp})   # its Send stays the owner's
         # ...a group nobody knows opens on WhatsApp with To empty, and the line says it was not found
         out = call(s, 'task.create_from_text', kind='send', channel='whatsapp', text='x', to='Payworth billing')
         self.assertEqual((out['new']['channel'], 'to' in out['new']), ('whatsapp', False))

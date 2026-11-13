@@ -21,7 +21,7 @@ import { ACCENT, ACCENT2, BORDER, DIM, FAINT, INK, PANEL, ROLES, mono } from "./
 import { ChannelIcon, MicButton, useAgents, usePeopleSearch } from "./ui.jsx";
 import { withFound } from "./peopleSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
-import { NO_REPO, REPEATS, firstPressOf, hasWords, planTask, withDesktop } from "./newTask.js";
+import { NO_REPO, REPEATS, hasWords, planTask, withDesktop } from "./newTask.js";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, sendPrefill, validEmail } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -179,10 +179,9 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 
 // `inline`: the card the sidebar's New button posts into the conversation (the canvas redesign) - the same tabs and fields,
 // drawn in the conversation's own width instead of a dialog over the page. Without it the dialog stays for any other door.
-// `line`: the Assistant's line that wrote this card (concierge._new) - its press says that line again as what it started (`onSaid`)
+// `line`: the Assistant's line that wrote this card (concierge._new)
 // `initialChannel` / `initialTo`: Send something already addressed - a People hit's Message them (SearchEverything, trust audit F6)
-// `start`: the Assistant pressed the agent's Send to agent for the owner - the card presses it once it can go (concierge._new)
-export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "chat", initialHow = "", initialText = "", line = null, onSaid, start = false,
+export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "chat", initialHow = "", initialText = "", line = null,
   initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null, madeOf = "" }) {
   const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, as the field debounces them
@@ -317,14 +316,12 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           // `needs_repo` with started: false, and this announced "is on it in a live session" over
           // the top of it (the owner, 2026-09-22: "hit the new button with coding agent but it did
           // not start"). One reading of a dispatch answer, the same one every other surface uses.
-          ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, { ...(general ? { kind: "general", agent: role || null } : {}),
-            ...(line ? { said: line } : {}) }));
+          ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, general ? { kind: "general", agent: role || null } : {}));
         } catch (e) {
           // ...and the line says the task is there: "nothing started" over a task already filed sent the owner to press again
           throw { response: { data: { detail: `${data.ref} is filed but did not start - ${String(e?.response?.data?.detail || "the start was refused").replace(/\.$/, "")}. Press ${verb} to try it again.` } } };
         }
         filed.current = null;
-        if (out?.said) onSaid?.(out.said);
         setOk(`${data.ref} — ${outcomeOf({ ...out, ref: "" }).text}.`);      // the line leads with the ref: said once, not twice
         aboutRef.current?.clear(); setText(""); setHasAbout(false); pics.clear(); onDone?.(); openIt(data.taskId);
       } else if (kind === "chat") {
@@ -334,7 +331,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         const { data } = await api.post("/api/concierge/say", { text: about, images: pics.paths || [] });
         setText(""); pics.clear();
         // ...a report, dashboard or routine goes straight into its builder, the setup asked there (goStraight) - no card on the way
-        if (data?.new) { if (!goStraight(data.new, onClose)) setMade({ ...data.new, said: data.say || "" }); setBusy(false); return; }
+        if (data?.new) { if (!goStraight(data.new, onClose, true)) setMade({ ...data.new, said: data.say || "" }); setBusy(false); return; }
+        // ...an agent's job or a message it could address was MADE (concierge._made_now - the owner, 2026-11-12: "open task directly"): its task opens
+        const made = /^#?task=(\d+)$/.exec(data?.open || "");
+        if (made) { setOk(String(data.say || "")); onDone?.(); openIt(Number(made[1])); if (!(inline && opened)) setBusy(false); return; }
         setSaid(String(data?.say || "").trim() || "Done.");
       } else if (kind === "playbook") {
         // the one road to a playbook is the shelf's New playbook: this press is its Set up with AI, made there once with these words
@@ -360,7 +360,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     if (!(inline && opened)) setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, role, when, by, who, plan, noAi, onDone, onOpenTask, onClose, pics, line, onSaid, inline]);
+  }, [kind, channel, to, emailTo, cc, mode, how, role, when, by, who, plan, noAi, onDone, onOpenTask, onClose, pics, line, inline]);
 
   // ...and no live session without a coding tool the owner chose (owner-approved, 2026-10-21): Send to coding agent stays disabled
   const noCodingTool = kind === "agent" && how === "terminal" && (!agentsRead || !codingReady);
@@ -369,13 +369,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const verb = kind === "send" ? (mode === "task" ? btn("regular_agent") : "Draft it")
     : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it")
     : kind === "playbook" ? "Set up with AI" : kind === "chat" ? "Go" : "Note it";
-  // THE ASSISTANT PRESSED IT (`start`, concierge._new - the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that"):
-  // an agent's job it wrote here is started by this card's own button, once, the moment the card can go - the same press the owner's is
-  const autoPressed = useRef(false);
-  useEffect(() => {
-    if (!start || autoPressed.current || kind !== "agent" || !canGo || !agentsRead || busy) return;
-    autoPressed.current = true; if (firstPressOf(line)) submit();
-  }, [start, kind, canGo, agentsRead, busy, submit, line]);
 
   const aboutLabel = kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
     : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
@@ -388,9 +381,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         sx: { border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, overflow: "hidden", scrollMarginTop: "8px" } }
     : { open: !!open, onClose: close, fullWidth: true, maxWidth: "md", "data-tq-keep": true };   // md: the tabs fit on one line, and scroll sideways when they do not
   if (inline && !open) return null;
-  if (made) return <NewSheet key={made.line || made.text} open={open} onClose={onClose} onDone={onDone} onOpenTask={onOpenTask} inline={inline} onSaid={onSaid}
+  if (made) return <NewSheet key={made.line || made.text} open={open} onClose={onClose} onDone={onDone} onOpenTask={onOpenTask} inline={inline}
     initialKind={made.kind} initialHow={made.how || ""} initialText={made.text || ""} initialChannel={made.channel || ""} initialTo={made.to || ""}
-    initialMeeting={made.meeting || null} initialRoutine={made.routine || null} line={made.line} start={!!made.start} madeOf={made.said} />;
+    initialMeeting={made.meeting || null} initialRoutine={made.routine || null} line={made.line} madeOf={made.said} />;
   return (
     <Shell {...shell}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0.5 }}>

@@ -315,7 +315,7 @@ def test_a_chat_handoff_reads_its_slots_before_the_agents_first_turn(s):
 def test_the_slots_are_there_when_the_agent_is_prompted(s):
     llm = lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': [], 'outputs': FOUR[:1]})
     session, seen = mock.Mock(), []
-    session.send_prompt.side_effect = lambda brief: seen.append(len(slots.open_(s, made_box[0])))
+    session.send_prompt.side_effect = lambda text, **k: seen.append(len(slots.open_(s, made_box[0])))
     made_box = []
     real_start = lambda st, tid, **k: made_box.append(tid) or session
     with mock.patch('taskuary.concierge.brain', return_value=llm), mock.patch('taskuary.general.start_session', side_effect=real_start), \

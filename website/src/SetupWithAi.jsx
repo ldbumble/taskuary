@@ -14,13 +14,15 @@ const WHAT = { report: "a new report", dashboard: "a new dashboard", workflow: "
 export const helpAsk = (kind, words = "") => `Help me set up ${WHAT[kind] || WHAT.report}${String(words || "").trim() ? `: ${String(words).trim()}` : ""}`;
 
 // its press: the builder brought up (`onOpen`), and the chat asked for it with the owner's words - New's straight road presses this same one
-export const startSetup = (kind, words, onOpen) => { onOpen?.(); openHelp(helpAsk(kind, words), { wait: 700 }); };
+// ...`quiet`: asked from New (the owner, 2026-11-12: "we also should not open assistant tab if we have new tab open") - the builder comes up and the
+// Assistant fills it, its window left as it was
+export const startSetup = (kind, words, onOpen, quiet = false) => { onOpen?.(); openHelp(helpAsk(kind, words), { wait: 700, ...(quiet ? { quiet } : {}) }); };
 // STRAIGHT INTO THE BUILDER (owner-approved, 2026-11-12): a report, dashboard or routine the Assistant wrote up (`made`, concierge._new) - from
 // New's box or from the chat - opens its builder with the setup asked there, this press made once per line; the middle card's Set up with AI
 // asked the Assistant it all again. True when it went (`onOpen`: what the door shuts first, New's card); false leaves the caller its card
-export const goStraight = (made, onOpen) => {
+export const goStraight = (made, onOpen, quiet = false) => {
   if (!goesStraight(made?.kind, made?.line)) return false;
-  if (firstPressOf(made.line)) startSetup(made.kind, made.text || "", () => { onOpen?.(); openAppLink(NEW_HASH[made.kind]); });
+  if (firstPressOf(made.line)) startSetup(made.kind, made.text || "", () => { onOpen?.(); openAppLink(NEW_HASH[made.kind]); }, quiet);
   return true;
 };
 

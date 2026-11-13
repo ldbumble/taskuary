@@ -21,7 +21,7 @@ test("a general agent's job is typed into the chat's own box, with no pickers, a
   assert.match(ns, /const agentBox = \(kind === "agent" && how === "general"\) \|\| kind === "chat"/);
   assert.match(ns, /!agentBox && <Button size="small" variant="contained"/, "the box's own Send, no second one in the footer");
   assert.match(ns, /\(await capabilities\(\)\)\.ai === false/, "no AI is the one capability's answer - the demo's agents work");
-  assert.ok(ns.includes('/dispatch`, { ...(general ? { kind: "general", agent: role || null } : {})'));
+  assert.ok(ns.includes('/dispatch`, general ? { kind: "general", agent: role || null } : {})'));
 });
 
 // NO KINDS TO PICK (TQ-1397): New is one box - the Assistant makes the words what they are - so there is no row of kinds to lose

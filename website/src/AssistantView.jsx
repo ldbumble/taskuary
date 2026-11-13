@@ -984,7 +984,7 @@ function Line({ m, lastBrief = false, live, last, moves = false, actions, fresh,
     <div className="tq-browse-line tq-canvas-live" data-tq-browse-line={m.area}>
       <CanvasBrowse area={m.area} state={m.state || {}} live={canvas?.browsing === m.id}
         onState={(state) => actions.browseState(m.id, state)} onOpenCard={actions.openCard} onReopen={() => actions.browse(m.area, m.state)}
-        onNavigate={actions.navigate} onOpenTask={actions.openTask} onClose={() => actions.browseClose(m.id)} onSaid={actions.said} />
+        onNavigate={actions.navigate} onOpenTask={actions.openTask} onClose={() => actions.browseClose(m.id)} />
     </div>
   );
   if (m.role === "receipt") return (
@@ -2437,9 +2437,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           const name = linkName(data.say, page);
           if (name && !String(data.say || "").trim().startsWith("Opened ")) receipt(`Opened ${name}.`);
         }
-        // ...its line rides with it (`aid`): the card's Send to agent says it again as what it started (concierge.said_started)
-        // ...and a report, dashboard or routine goes straight into its builder, the setup asked there - the same road New's box takes
-        if (data.new && !goStraight(data.new)) browseRef.current?.("new", { ...data.new, aid });
+        // ...a report, dashboard or routine goes straight into its builder, the setup asked there - the same road New's box takes
+        if (data.new && !goStraight(data.new)) browseRef.current?.("new", data.new);
         const l = lightOf(data.light);
         if (l) {
           setLit(l);
@@ -2498,7 +2497,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => {
     const help = (e) => {
       const line = String(e.detail?.line || "").trim(); if (!line) return;
-      setPopOpen(true);
+      if (!e.detail?.quiet) setPopOpen(true);
       setTimeout(() => askRef.current?.(line, { door: true }), Number(e.detail?.wait ?? 350));    // ...after the page it opened has drawn
     };
     // ...and a card's walk left open from before is said here once, folded, its steps under it (aisetup.move_walk)
@@ -3282,7 +3281,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     browse: (area, state) => browse(area, state),
     browseClose: (id) => setMsgs((m) => m.filter((x) => x.id !== id)),    // the New card, closed: its line goes
     // ...and pressed: the line that wrote it says what it started, as the server now has it (a reload reads the same words)
-    said: (id, text) => { if (id && text) setMsgs((m) => m.map((x) => (x.id === id ? { ...x, text } : x))); },
     openCard,
     walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || deferring || resetting,
     confirm: confirmProposal, cancel: cancelProposal, propose: proposeDirect, preview: previewProposal, agent: startOnItem,

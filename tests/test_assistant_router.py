@@ -10,7 +10,7 @@ import json, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import buttons, concierge, funnel, ingest, operations, server, terminal
+from taskuary import buttons, concierge, funnel, general, ingest, operations, server, terminal
 from taskuary.store import MemoryStore
 
 
@@ -346,53 +346,26 @@ class DeskRoutes(unittest.TestCase):
         self.assertEqual(out['light']['verb'], 'approve'); self.assertNotIn('pressed', out)
         self.assertEqual((s.get_review(rid) or {}).get('Status'), 'pending')
 
-    def test_a_new_job_is_written_into_new_and_its_send_to_agent_pressed_there(self):
-        # the card's own press makes the task and starts it (NewSheet `start`, the owner 2026-11-02) - the words themselves make nothing
-        s = store()
-        out, spawn = say(s, 'research which payroll vendors integrate with Payworth', None,
+    def test_a_new_job_is_started_on_its_own_task_and_opened(self):
+        # the owner, 2026-11-12: "assistant tab should not open new but open task directly" - no New card filled in and pressed on the way
+        s = store(); started = []
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True),              mock.patch.object(general, 'start_session', side_effect=lambda st, t, actor='owner': started.append(t) or mock.Mock()):
+            out, _ = say(s, 'research which payroll vendors integrate with Payworth', None,
                          'CALL: {"kind": "task.create_from_text", "params": {"kind": "general", "text": "which payroll vendors integrate with Payworth"}}')
-        self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text', 'start')},
-                         {'kind': 'agent', 'how': 'general', 'text': 'which payroll vendors integrate with Payworth', 'start': True})
-        self.assertEqual(out['say'], f"Wrote it into New and pressed {buttons.label('regular_agent')}.")
-        spawn.assert_not_called()
-        self.assertEqual([t for t in s.list_tasks() if 'Payworth' in str(t.get('Title'))], [])
+        t = next(t for t in s.list_tasks() if 'payroll' in str(t.get('Title')).lower())
+        self.assertNotIn('new', out)
+        self.assertEqual((out['open'], out['say']), (f"#task={t['TaskId']}", f"Started TQ-{t['TaskId']:04d} - an agent is on it."))
+        self.assertEqual(started, [t['TaskId']])
 
-    def test_the_line_that_wrote_into_new_says_what_its_card_started(self):
-        # "Wrote it into New - Send to agent there starts it." stood over a researcher already working, with no New card left under it:
-        # the card's press started TQ-n and took the card away (the owner, 2026-10-21). The press says the line again as what it did.
-        from fastapi.testclient import TestClient
-        from taskuary import general, server
+    def test_with_no_ai_nothing_is_made_and_the_line_says_how_to_connect_one(self):
         s = store()
-        out, _ = say(s, "look at Gail Moreno's mail about the renewal and brief me before the meeting", None,
-                     'CALL: {"kind": "task.create_from_text", "params": {"kind": "general", "text": "brief me on the renewal mail from Gail Moreno"}}')
-        line = out['new']['line']
-        dock = general.dock_task(s)[0]['TaskId']
-        s.upsert_agent('researcher', 'research', 'cli', '{}')
-        self.assertTrue(any(c['CommentId'] == line and c['Body'].startswith('Wrote it into New') for c in s.list_comments(dock)))
-        tid = s.create_task({'Title': 'Brief me on the renewal mail from Gail Moreno', 'Kind': 'general', 'Assignee': 'agent:researcher'}, 'owner')
-        started = {'dispatch': 'assistant', 'agent': 'Codex', 'started': True, 'existing': False, 'taskId': tid, 'ref': f'TQ-{tid:04d}'}
-        with mock.patch.object(server, 'store', s), mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value=started):
-            got = TestClient(server.app).post(f'/api/tasks/{tid}/dispatch', json={'kind': 'general', 'agent': 'researcher', 'said': line}).json()
-        said = f'Started TQ-{tid:04d} with Agent on Codex.'
-        self.assertEqual(got['said'], said)
-        self.assertEqual(next(c['Body'] for c in s.list_comments(dock) if c['CommentId'] == line), said)
-
-    def test_a_start_that_did_not_happen_leaves_the_line_and_no_other_line_is_rewritten(self):
-        from fastapi.testclient import TestClient
-        from taskuary import server
-        s = store()
-        out, _ = say(s, 'research which payroll vendors integrate with Payworth', None,
-                     'CALL: {"kind": "task.create_from_text", "params": {"kind": "general", "text": "which payroll vendors integrate with Payworth"}}')
-        line = out['new']['line']
-        tid = s.create_task({'Title': 'Payroll vendors', 'Kind': 'general'}, 'owner')
-        other = s.add_comment(tid, 'assistant', 'assistant', 'not a chat line')
-        refused = {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'taskId': tid, 'ref': f'TQ-{tid:04d}'}
-        with mock.patch.object(server, 'store', s), mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value=refused):
-            self.assertNotIn('said', TestClient(server.app).post(f'/api/tasks/{tid}/dispatch', json={'kind': 'general', 'said': line}).json())
-        ok = {**refused, 'dispatch': 'assistant', 'started': True}
-        with mock.patch.object(server, 'store', s), mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value=ok):
-            self.assertNotIn('said', TestClient(server.app).post(f'/api/tasks/{tid}/dispatch', json={'kind': 'general', 'said': other}).json())
-        self.assertEqual(next(c['Body'] for c in s.list_comments(tid) if c['CommentId'] == other), 'not a chat line')
+        with mock.patch('taskuary.capabilities.has_ai', return_value=False):
+            out, _ = say(s, 'research which payroll vendors integrate with Payworth', None,
+                         'CALL: {"kind": "task.create_from_text", "params": {"kind": "general", "text": "which payroll vendors integrate with Payworth"}}')
+        self.assertNotIn('open', out); self.assertNotIn('new', out)
+        self.assertTrue(out['say'].startswith("No AI is connected, so an agent can't run this yet"), out['say'])
+        self.assertTrue(out['say'].endswith('Nothing was made.')); self.assertEqual(out['chips'][0]['label'], 'Connect an AI')
+        self.assertEqual([t for t in s.list_tasks() if 'payroll' in str(t.get('Title')).lower()], [])
 
     def test_a_button_the_row_does_not_draw_is_never_named(self):
         # a task's row has no Not ours: "Press Not ours" was said over it, lit nothing, and the model was never told (verify, 2026-10-19)
@@ -511,9 +484,10 @@ class DeskRoutes(unittest.TestCase):
                          ('workflow', 'every weekday at 7 - review the failed imports', False))
         spawn.assert_not_called()
         # ...and an ask with no `recurs` is the one-off it always was
-        out, _ = say(s, 'look into the failed import', None,
-                     'CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'general', 'text': 'look into the failed import'}}))
-        self.assertEqual((out['new']['kind'], 'routine' in out['new']), ('agent', False))
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch.object(general, 'start_session'):
+            out, _ = say(s, 'look into the failed import', None,
+                         'CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'general', 'text': 'look into the failed import'}}))
+        self.assertNotIn('new', out); self.assertTrue(out['open'].startswith('#task='))
 
     def test_a_report_brought_up_by_name_carries_its_words(self):
         s = store()

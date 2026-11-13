@@ -562,8 +562,6 @@ class DispatchBody(BaseModel):
     # step - a task nobody had pressed - while the goal's card showed the error under a line that never moved (the matrix's verify,
     # 2026-10-20). `via` is the goal the press was made on; a failed start is left there, where it was pressed and is read.
     via: int | None = None
-    # the Assistant's "Wrote it into New" line whose card this press is: said again as what it started (concierge.said_started)
-    said: int | None = None
     # RUN ANOTHER AGENT: a second agent with a conversation of its own, never the one before picked back up (general.new_run)
     fresh: bool = False
     # WHO DOES IT, JUST CHANGED TO AN AGENT (task.set_kind): the kind is already written, so the task no longer says it was the owner's own
@@ -3204,29 +3202,16 @@ def _start_went(task_id: int):
         store.add_operation({'OpId': uuid.uuid4().hex[:12], 'Kind': 'dispatch.prepare', 'TargetKind': 'task', 'TargetId': int(task_id), 'ParamsJson': '{}',
                              'Version': 1, 'Status': 'done', 'OutcomeJson': json.dumps({'what': 'the agent started'})})
 
-# THE SAME PRESS TWICE IS ONE START: the Assistant's line (DispatchBody.said) -> the task its card's Send to agent started. New's card keeps the
-# task it filed when the answer did not come back, and pressed again it reached the agent that press had started - a red "already working on
-# this task" over work going fine (2026-11-02). Only that line on that task, while its agent is live; any other press is refused as ever.
-_SAID_STARTED: dict = {}
-
 @app.post('/api/tasks/{task_id}/dispatch')
 def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
-    if body.said and _SAID_STARTED.get(int(body.said)) == task_id and (live := hub_term.session_for(task_id)) and live.alive:
-        from . import general
-        return {'dispatch': 'assistant' if general.handles(task) else 'session', 'started': False, 'existing': True, 'taskId': task_id,
-                'ref': task_ref(task_id)}
     if why := _no_brain(task, body): _start_refused(task_id, body, why)
     from . import asks
     asks.mark(store, task_id)          # the owner started it - the button or the assistant: it reports back like an ask
     try:
         out = _dispatch_task_to_its_agent(task_id, body, background)
         if isinstance(out, dict) and (out.get('started') or out.get('existing')): _start_went(_pressed_on(task_id, body))
-        if isinstance(out, dict) and body.said:
-            from . import concierge
-            said = concierge.said_started(store, body.said, out)
-            if said: out, _SAID_STARTED[int(body.said)] = {**out, 'said': said}, task_id
         return out
     except HTTPException as e:
         # a repository the agent cannot open - none chosen, several plausible, a path that is gone - is a

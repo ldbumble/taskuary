@@ -134,7 +134,7 @@ const NoSubject = ({ onOpenCard }) => { useEffect(() => { onOpenCard?.(null); },
 
 // One browse card on the chat line: which area, and its state ({section, open}) - the view keeps the rest.
 // `live` is false once a newer browse card is posted, so only one detail is ever mounted.
-export default function CanvasBrowse({ area, state, onState, live, onOpenCard, onNavigate, onOpenTask, onReopen, onClose, onSaid }) {
+export default function CanvasBrowse({ area, state, onState, live, onOpenCard, onNavigate, onOpenTask, onReopen, onClose }) {
   const frame = (props) => <BrowseFrame {...props} live={live} onOpenCard={onOpenCard} onReopen={onReopen} />;
   const common = { browse: frame, browseState: state, onBrowseState: onState };
   if (!live) return frame({ title: AREA_TITLES[area], area });
@@ -145,7 +145,7 @@ export default function CanvasBrowse({ area, state, onState, live, onOpenCard, o
     <Box data-tq-browse="new"><NoSubject onOpenCard={onOpenCard} /><NewSheet key={`${state?.kind || ""}|${state?.text || ""}|${state?.channel || ""}|${state?.to || ""}|${JSON.stringify(state?.meeting || "")}|${JSON.stringify(state?.routine || "")}`} inline open onClose={onClose}
       onOpenTask={onOpenTask} initialKind={state?.kind || "chat"} initialHow={state?.how || ""} initialText={state?.text || ""}
       initialChannel={state?.channel || ""} initialTo={state?.to || ""} initialMeeting={state?.meeting || null} initialRoutine={state?.routine || null}
-      line={state?.line} start={!!state?.start} onSaid={(text) => onSaid?.(state?.aid, text)} /></Box>
+      line={state?.line} /></Box>
   );
   return (
     <Box data-tq-browse={area}>

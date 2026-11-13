@@ -41,11 +41,11 @@ class TypedWordsStartAnAgent(unittest.TestCase):
         s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
         item, before = an_idea(s), tasks(s)
         llm, _ = scripted('I would have it researched.\n' + call('regular_agent', text='review the Payworth seat count', **{'as': 'researcher'}))
-        out = ask(s, 'what should I do next?', item['key'], llm)
-        self.assertNotIn('proposal', out)
-        self.assertEqual((out['new']['kind'], out['new']['how'], out['new']['start']), ('agent', 'general', True))   # New, written up and pressed
-        self.assertTrue(out['say'].startswith('Wrote it into New and pressed Send to agent.'), out['say'])
-        self.assertEqual(tasks(s), before)                                                    # the card's own press makes the task, not the words
+        with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.general.start_session'), mock.patch('taskuary.server.store', s):
+            out = ask(s, 'what should I do next?', item['key'], llm)
+        self.assertNotIn('proposal', out); self.assertNotIn('new', out)
+        self.assertTrue(out['say'].startswith('Started TQ-'), out['say'])                   # started on a task of its own, and opened
+        self.assertEqual(tasks(s), before + 1); self.assertTrue(out['open'].startswith('#task='))
 
     def test_on_a_phone_a_typed_hand_off_starts_at_once_and_an_unclear_checkout_waits_for_the_pick(self):
         s = T.store()
@@ -69,11 +69,11 @@ class TypedWordsStartAnAgent(unittest.TestCase):
         s.save_doc('soul', '# SOUL.md\n## Repository map\n- **northwind/ledger**: the ledger app\n', 'owner')
         s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger'}}))
         llm, _ = scripted('CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'coding', 'text': 'fix the login crash', 'repo': 'ledger'}}))
-        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch('taskuary.capabilities.can_code', return_value=True),              mock.patch('taskuary.ingest._spawn'), mock.patch('taskuary.server.store', s):
             out = concierge.say(s, 'start a coding agent on ledger to fix the login crash', llm=llm)
-        self.assertNotIn('proposal', out)
-        self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text', 'start')}, {'kind': 'agent', 'how': 'terminal', 'text': 'fix the login crash', 'start': True})
-        self.assertNotIn('Starting', out['say'])
+        self.assertNotIn('proposal', out); self.assertNotIn('new', out)
+        t = s.get_task(int(out['open'].split('=')[1]))
+        self.assertIn('repo:ledger', str(t.get('Tags')))      # the checkout the ask named goes with it
 
     def test_continue_session_in_words_is_a_card_but_the_button_still_runs_at_once(self):
         self.assertIn('continue', concierge.AGENT_STARTS)

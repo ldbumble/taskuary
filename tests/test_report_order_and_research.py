@@ -76,23 +76,25 @@ class ReportOrderTests(unittest.TestCase):
 class ResearchIsAWalkThroughTests(unittest.TestCase):
     def _proposed(self, said, verb):
         s = MemoryStore(); s.upsert_agent('coding', 'coding', 'cli', '{}')
-        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]), mock.patch('taskuary.capabilities.has_ai', return_value=True), \
+             mock.patch('taskuary.capabilities.can_code', return_value=True), mock.patch('taskuary.general.start_session'), mock.patch('taskuary.ingest._spawn'), mock.patch('taskuary.server.store', s):
             return s, concierge.say(s, said, llm=lambda *a, **k: 'On it.\n' + 'CALL: ' + json.dumps({'kind': verb, 'params': {'text': said}}))
+
+    def _kind(self, s, out): return s.get_task(int(out['open'].split('=')[1]))['Kind']
 
     def test_research_routes_to_the_regular_agent_not_the_coding_agent(self):
         """Research is work to hand off, but it has no repository or system to change. The brain names
-        the regular agent (the road the contract gives it) and New is written up for a general agent - never a
-        coding checkout (the owner, 2026-09-04); nothing starts until the owner presses its button (2026-10-19)."""
+        the regular agent (the road the contract gives it) and a general agent starts on it - never a coding checkout (the owner,
+        2026-09-04); its task opens (the owner, 2026-11-12: "open task directly")."""
         for said in ('can you research teh factor elara gravel bike', 'research the best gravel bike for me', 'can you research the Factor Elara'):
             s, out = self._proposed(said, 'regular_agent')
-            self.assertEqual((out['new']['kind'], out['new']['how']), ('agent', 'general'), said)
-            self.assertEqual(s.list_tasks(active_only=True), [], said)      # written up, not a task
+            self.assertEqual(self._kind(s, out), 'general', said)
 
     def test_diagnosing_a_system_is_still_a_hand_off(self):
         for said in ('look into that server and tell me what the file looks like', 'find out why the export drops rows',
                      'send it to the coding agent and figure out why this was not updated'):
             s, out = self._proposed(said, 'coding_agent')
-            self.assertEqual((out['new']['kind'], out['new']['how']), ('agent', 'terminal'), said)
+            self.assertNotEqual(self._kind(s, out), 'general', said)
 
     def test_the_brain_is_given_the_walk_through_road_and_the_test_for_it(self):
         """It had `coding agent` and no way to say "let's talk this through", so reading work had nowhere

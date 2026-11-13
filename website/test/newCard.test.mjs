@@ -30,6 +30,6 @@ test("New is one box that hands the words to the Assistant: no tabs, and no agen
   assert.doesNotMatch(board, /initialKind="agent"/);
   assert.doesNotMatch(sheet, /data-tq-new-kinds|role="tab"|NewRepo|AgentPicker|\/api\/repos|Who works it/);
   assert.match(sheet, /api\.post\("\/api\/concierge\/say", \{ text: about/);                // the Assistant's own road...
-  assert.match(sheet, /if \(data\?\.new\) \{ if \(!goStraight\(data\.new, onClose\)\) setMade\(\{ \.\.\.data\.new, said: data\.say/);                            // ...and what it made comes up in New, not the chat
+  assert.match(sheet, /if \(data\?\.new\) \{ if \(!goStraight\(data\.new, onClose, true\)\) setMade\(\{ \.\.\.data\.new, said: data\.say/);                            // ...and what it made comes up in New, not the chat
   assert.doesNotMatch(sheet, /askAssistant\(/);
 });

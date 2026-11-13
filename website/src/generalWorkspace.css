@@ -103,6 +103,10 @@
 .tq-aui-composer { width: 100%; margin: 0 auto; min-height: 40px; display: flex; flex-wrap: nowrap; align-items: center; gap: 5px; padding: 6px 7px; border: 1px solid var(--tq-border, #d5d0c7); background: var(--tq-panel, #fff); border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
 .tq-aui-input { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; color: var(--tq-text, #292824); font: inherit; font-size: 13px; line-height: 1.45; padding: 5px 5px; max-height: 150px; overflow-x: hidden; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tq-aui-input::placeholder { color: var(--tq-muted, #8f8b84); }
+/* ...and a PromptBox (New's box, a task's box before its agent) is as tall as its words and its example (the phone audit, 2026-11-13): one row
+   fixed, New's "build me a website - a report on ..." wrapped at 390px into a row and a half under a scrollbar, and typing ran on unseen.
+   The chat's own composer sizes itself (assistant-ui's autosize sets its height), so this is the PromptBox's alone */
+[data-tq-prompt-box] .tq-aui-input { field-sizing: content; }
 .tq-aui-send, .tq-aui-cancel { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-aui-send:disabled { cursor: default; opacity: .4; }
 .tq-aui-cancel { background: #9a6d65; }

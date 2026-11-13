@@ -148,3 +148,12 @@ test("a turn's On you steps are said under its words, never twice", () => {
   assert.match(read("GeneralWorkspace.jsx"), /const onYou = !live && sum \? turnOnYou\(sum, words\) : ""/);
   assert.match(read("GeneralWorkspace.jsx"), /\{!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}>/);
 });
+
+// the phone audit (2026-11-13): New's box was one fixed row - its example wrapped to a row and a half under a scrollbar at 390px, and long
+// typing scrolled out of sight. A PromptBox's words size it, up to the box's own max-height
+test("a PromptBox grows with its words and its example, up to its cap", () => {
+  const css = read("generalWorkspace.css"), box = read("AgentSummary.jsx");
+  assert.match(box, /"data-tq-prompt-box": ""/, "the box carries its mark");
+  assert.match(css, /\[data-tq-prompt-box\] \.tq-aui-input \{ field-sizing: content; \}/);
+  assert.match(css.split("\n").find((l) => l.startsWith(".tq-aui-input {")), /max-height: \d+px/, "and stops at its cap, scrolling after");
+});

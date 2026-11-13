@@ -1424,10 +1424,6 @@ def install_processing_changes(app, store):
                           'Actions: Read the Trainly completion report.\nSummary: The four names, with their sites.')
         ws.record(store, fin, f'adv-fin-{fin}', 'working', source='fixture')
         ws.record(store, fin, f'adv-fin-{fin}', 'finished', text='Four people are missing the safety module; the list is in the result.', source='fixture')
-        # ...AND ERIN'S USUAL AS A LINE IN LEARNED.md, as the day's reflection writes it from the count (learn.answer_lines): the task's late
-        # line reads that line and nothing else, so the task, LEARNED.md and Why? say one thing (the judge's problem 3)
-        from taskuary import learn
-        store.save_doc('learned', learn.answer_lines(store, store.get_doc('learned') or ''), 'reflect')
         return {'late': late, 'plain': plain, 'dup1': dup1, 'dup2': dup2, 'working': work, 'finished': fin}
 
     @app.post('/api/fixture/intake/arrive')

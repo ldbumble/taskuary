@@ -1,8 +1,8 @@
 """THE GENERAL AGENT, ROUND TWO (the owner, 2026-11-05: adapt the best of the open-source assistants - Hermes' skills and session_search,
 OpenClaw's cron).
 
-5. Playbooks learn: a turn's lesson reaches its playbook as an amend_playbook proposal on the task - the card a drafted playbook already
-   has - and a lesson no playbook takes goes to LEARNED.md. The model says whether there is one.
+5. A turn leaves no lesson: what an agent concluded never becomes memory about the owner (the owner, 2026-11-13). Its check-back
+   still rides the summary.
 6. Playbooks are a menu: every one's `when` and its file, read by the agent itself; code no longer hands it one.
 7. Search before asking: the search an agent already has also reads what earlier tasks settled (their own endings).
 8. Check-backs: the agent wakes on its own task at a time it set, on the reminders' clock, with its note as the turn.
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from unittest import mock
 
 from fastapi.testclient import TestClient
-from taskuary import agenttools, checkback, config, general, guard, playbooks, proposals, remind, search, selfclose, server
+from taskuary import agenttools, checkback, config, general, guard, playbooks, remind, search, selfclose, server
 from taskuary.store import MemoryStore
 from tests.test_general_turn_ends_short import a_claude, turn
 
@@ -41,49 +41,29 @@ def summary(**extra):
     return selfclose.SUMMARY_OPEN + json.dumps({'about': 'a card charge', 'did': 'Posted the bill', 'on_you': [], 'nothing_left': False, **extra}) + selfclose.SUMMARY_CLOSE
 
 
-# ── 5. playbooks learn ──────────────────────────────────────────────────────────────────────
-class PlaybooksLearnTests(unittest.TestCase):
+# ── 5. a turn leaves no lesson: an agent's takeaway is never memory (the owner, 2026-11-13) ─────────────────────────────────
+class NoLessonTests(unittest.TestCase):
     def setUp(self): fresh_books(('bill', BILL))
 
-    def test_the_summary_carries_the_lesson_and_the_check_back_off_the_page(self):
+    def test_the_summary_carries_the_check_back_and_no_lesson(self):
         text, summ = selfclose.summary_marker('Done.\n' + summary(lesson={'playbook': 'bill', 'text': 'Payworth is vendor 4471'},
                                                                  check_back={'when': 'tomorrow 9am', 'what': 'the bill posted'}))
         self.assertEqual(text, 'Done.')
-        self.assertEqual(summ['lesson']['text'], 'Payworth is vendor 4471'); self.assertEqual(summ['check_back']['what'], 'the bill posted')
-        self.assertNotIn('lesson', selfclose.summary_marker(summary(lesson={'playbook': 'bill', 'text': ' '}))[1])
+        self.assertNotIn('lesson', summ); self.assertEqual(summ['check_back']['what'], 'the bill posted')
 
-    def test_a_lesson_goes_to_learned_md_named_for_its_playbook_and_no_card_is_made(self):
-        """The owner, 2026-11-05: "i thought we were using same memory learned.md" - one memory; the playbook page is theirs alone."""
+    def test_a_strangers_task_schedules_nothing(self):
         s = MemoryStore(); tid = owner_task(s)
-        with mock.patch('taskuary.learn.learn_from') as lf:
-            self.assertEqual(playbooks.take_lesson(s, tid, {'playbook': 'bill', 'text': 'Payworth is vendor 4471 in QuickBooks'}), {'learned': True})
-        said = lf.call_args[0][1]
-        self.assertIn('Payworth is vendor 4471', said); self.assertIn(playbooks.parse(BILL)['title'], said)
-        self.assertEqual([r for r in s.list_reviews('pending') if r['TaskId'] == tid], [])
-        self.assertEqual(playbooks.read('bill'), BILL, 'the page is untouched')
+        with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'unknown sender')):
+            general.take_check(s, tid, {'when': 'tomorrow', 'what': 'y'})
+        self.assertFalse(s.get_task(tid).get('CheckBackAt'))
 
-    def test_a_lesson_no_playbook_takes_goes_to_learned_md_and_a_secret_goes_nowhere(self):
-        s = MemoryStore(); tid = owner_task(s)
-        with mock.patch('taskuary.learn.learn_from') as lf:
-            self.assertEqual(playbooks.take_lesson(s, tid, {'playbook': None, 'text': 'The Trainly portal signs in through the company SSO'}), {'learned': True})
-            self.assertEqual(playbooks.take_lesson(s, tid, {'playbook': 'no-such-book', 'text': 'Spendly exports as CSV only'}), {'learned': True})
-            self.assertIsNone(playbooks.take_lesson(s, tid, {'playbook': 'bill', 'text': 'password: hunter2-Secret!9 for the portal'}))
-        self.assertEqual(lf.call_count, 2); self.assertIn('company SSO', lf.call_args_list[0][0][1])
-        self.assertEqual([r for r in s.list_reviews('pending') if r['TaskId'] == tid], [])
-
-    def test_a_strangers_task_teaches_nothing_and_schedules_nothing(self):
-        s = MemoryStore(); tid = owner_task(s)
-        with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'unknown sender')), mock.patch.object(playbooks, 'take_lesson') as tl:
-            general.take_lesson_and_check(s, tid, {'playbook': 'bill', 'text': 'x'}, {'when': 'tomorrow', 'what': 'y'})
-        tl.assert_not_called(); self.assertFalse(s.get_task(tid).get('CheckBackAt'))
-
-    def test_a_real_turn_leaves_its_lesson_and_its_check_back(self):
+    def test_a_real_turn_leaves_its_check_back_and_teaches_the_memory_nothing(self):
         s = MemoryStore(); a_claude(self); tid = owner_task(s)
         reply = 'Posted the bill as Payworth (vendor 4471).\n' + summary(lesson={'playbook': 'bill', 'text': 'Payworth is vendor 4471'},
                                                                           check_back={'when': 'in 2 days', 'what': 'the bill shows paid'})
         with mock.patch('taskuary.learn.learn_from') as lf: seen = turn(s, tid, reply)
-        self.assertIn(general.LESSON_LINE, seen['prompt']); self.assertIn(general.CHECK_BACK_LINE, seen['prompt'])
-        self.assertTrue(any('Payworth is vendor 4471' in c[0][1] for c in lf.call_args_list), 'the lesson went to LEARNED.md')
+        self.assertIn(general.CHECK_BACK_LINE, seen['prompt']); self.assertNotIn('A LESSON FOR NEXT TIME', seen['prompt'])
+        self.assertFalse(any('Payworth is vendor 4471' in c[0][1] for c in lf.call_args_list), "the agent's takeaway is not learned")
         t = s.get_task(tid); self.assertEqual(t['CheckBackWhat'], 'the bill shows paid'); self.assertTrue(t['CheckBackAt'])
         kept = [json.loads(c['Body']) for c in s.list_comments(tid, internal=True) if c['ActorType'] == general.SUMMARY_TYPE]
         self.assertTrue(kept and not any('lesson' in k or 'check_back' in k for k in kept))     # taken off the summary, never drawn

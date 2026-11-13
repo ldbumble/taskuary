@@ -426,9 +426,8 @@ def summary_marker(text: str, letters=()) -> tuple:
     if cs := [{'kind': c['kind'], 'review': c['review'] if isinstance(c.get('review'), int) else None, 'said': ' '.join(c['said'].split())[:1000]}
               for c in j.get('corrections') or [] if isinstance(c, dict) and c.get('kind') in ('redraft', 'ask') and isinstance(c.get('said'), str) and c['said'].strip()]:
         out['corrections'] = cs[:6]
-    # ...and the turn's lesson for the playbooks and its check-back (general.LESSON_LINE, CHECK_BACK_LINE): taken off the summary, never drawn
-    for k, need in (('lesson', 'text'), ('check_back', 'what')):
-        if isinstance(j.get(k), dict) and isinstance(j[k].get(need), str) and j[k][need].strip(): out[k] = j[k]
+    # ...and the turn's check-back (general.CHECK_BACK_LINE): taken off the summary, never drawn
+    if isinstance(c := j.get('check_back'), dict) and isinstance(c.get('what'), str) and c['what'].strip(): out['check_back'] = c
     return (rest, out) if out['about'] or out['did'] or out.get('on_you') else bare()
 
 

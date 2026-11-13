@@ -1,5 +1,5 @@
 """SLICE 4: THE ADVISOR'S DEFAULTS AND MEMORY-FACT LINES (the memory redesign, 2026-10-25). The Advisor's recommendation and its reason stay
-ONE line on the strip (the owner: "Reply: you usually answer Erin within the hour; this is 3h"); Remind me opens on the learned day
+ONE line on the strip; Remind me opens on the learned day
 (ruling 7); a hand-off rests on whom the owner hands that kind of ask to; Chase is late on the person's own day (ruling 8); and with nothing
 checkable there is no line (ruling 1). All counted from what the owner DID in the yardstick's Northwind world - invented people only."""
 import json
@@ -107,12 +107,12 @@ def test_one_hand_off_is_no_usual(w):
     assert usual.handoff_usual(s, t) is None
 
 
-def test_erins_usual_is_in_what_the_model_reads(w):
+def test_how_soon_the_owner_answers_erin_is_no_number_the_model_reads(w):
+    """The owner, 2026-11-13: how soon he answers is evidence of who matters, which the memory says in words - never a count handed on."""
     s, _ = w
     t = ask(s, 'erin', 'Board deck numbers', 'Can you check the board deck numbers?')
     p = advisor._prompt(s, advisor.SHOWN, advisor._item(s, 'task', t, f'task:{t}'), [], 2, 'task', t)
-    assert 'HOW SOON YOU ANSWER erin@northwind.example: within the hour - the median of your last 6 answers' in p
-    assert 'this one has waited 3h' in p
+    assert 'HOW SOON YOU ANSWER' not in p and 'the median of your last' not in p
 
 
 def test_chase_is_late_on_the_persons_own_day_once_three_answers_say_it(w):

@@ -204,6 +204,17 @@ def test_not_the_ask_is_an_owner_correction():
     lf.assert_called_once(); assert 'owner_correction' in lf.call_args[0][1] and 'the pay date, not the bonus' in lf.call_args[0][1]
 
 
+def test_the_memory_learns_the_owners_own_words_never_the_agents_account_of_them():
+    """The owner, 2026-11-13: the memory "saves information about the user from the agents' takeaway and not what [the user] writes" - the
+    model only says a correction was made; what is learned is what the owner typed."""
+    s = MemoryStore(); tid = task(s)
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Wrong one - Paula wants the vendor list, the invoices can wait')
+    with mock.patch('taskuary.learn.learn_from') as lf:
+        assert general.take_corrections(s, tid, [{'kind': 'ask', 'review': None, 'said': 'Alex prefers vendor work over invoices in general'}]) == 1
+    said = lf.call_args[0][1]
+    assert 'Paula wants the vendor list, the invoices can wait' in said and 'prefers vendor work' not in said
+
+
 def test_the_models_statement_of_a_correction_is_trusted():
     "The owner, 2026-11-05: the model reads intent - a correction it states in its own words is kept, not only one quoted word for word."
     s = MemoryStore(); tid = task(s); rid = draft_for(s, tid, 'ray@northwind.example')

@@ -35,7 +35,7 @@ class PageTests(unittest.TestCase):
         name = people_pages.compile(s, WHO, llm=llm)
         self.assertEqual(name, 'person-ray@northwind.example')
         doc = s.get_doc(name)
-        self.assertIn('<!-- ledger:start -->', doc); self.assertIn('needs a second chase', doc); self.assertIn('3 replies', doc)
+        self.assertIn('<!-- ledger:start -->', doc); self.assertIn('needs a second chase', doc); self.assertNotIn('3 replies', doc)   # no statistic kept
         self.assertIn('median', llm.calls[0]); self.assertIn('out2', llm.calls[0])                 # the numbers and the evidence reach the model
         self.assertIn('needs a second chase', counsel.dossier(s, {'from_email': WHO, 'subject': 'anything'}, calendar=False))
 

@@ -89,7 +89,7 @@ def test_the_reflection_reads_the_episodes_and_its_lines_are_kept_by_code(w):
     _reflect.seen.clear()
     assert _reflect(s, lambda d: d.replace(learned_cut.PEOPLE + '\n', learned_cut.PEOPLE + '\n' + '\n'.join((good, bogus, inbound, press)) + '\n', 1))
     system, user = _reflect.seen[-1]
-    assert 'EPISODES' in user and 'replied 12 min after it arrived' in user and 'never a count of button presses' in system
+    assert 'EPISODES' in user and 'replied 12 min after it arrived' in user and 'never a line that names a' in system
     doc = s.get_doc('learned')
     people, watching = learned_cut.section(doc, learned_cut.PEOPLE), learn._block(doc, learn.HYP_START, learn.HYP_END)
     assert 'answer her asks within the hour' in people
@@ -158,3 +158,60 @@ def test_a_machine_line_with_no_bullet_is_still_the_machines_and_kept_by_its_boo
     assert 'key partner' not in learned_cut.section(doc, learned_cut.PEOPLE), 'it rests on nothing that resolves: it waits in Watching'
     assert learn._bullets('Erin [s:4 | ev: msg1 | seen: 2026-10-20]\nyours, untagged\n- tagged [s:2 | ev: msg1 | seen: 2026-10-20]') == \
         '- Erin [s:4 | ev: msg1 | seen: 2026-10-20]\nyours, untagged\n- tagged [s:2 | ev: msg1 | seen: 2026-10-20]'
+
+
+# ── WHAT THE MEMORY LEARNS FROM IS THE OWNER (the owner, 2026-11-13: "memory is broken 2 ways: it saves some random how quickly we respond,
+# which is just useless, and it saves information about the user from the agents' takeaway and not what [the user] writes to the hub") ──
+def test_how_soon_the_owner_answers_becomes_who_matters_and_triage_reads_it_and_no_statistic_is_kept():
+    """Erin is answered within minutes, again and again: the reflection reads the lag as evidence and writes what it means - she matters -
+    and triage reads that line on the next mail. No line the code counted ("You answer Erin Blake within the hour") is ever written; what
+    the owner typed to an agent and a task they closed without a reply reach the reflection; an agent's own stop never does."""
+    from taskuary import general, ingest, learnedgraph as lg, outcomes
+    from taskuary.testing import Factory
+    s, facts = C.world()
+    s.set_setting('learn_last_reflect', _since(), 'test')
+    f = Factory(s)
+    report = f.task(title='License usage report', kind='task')
+    f.message(task_id=report, subject='License usage report', body='Your seats this month.', from_name='Vendor alerts', from_email='alerts@vendor.example',
+              conversation_id='email:lic', sent_at=C._stamp(datetime.now() - timedelta(hours=5)))
+    s.update_task(report, {'Status': 'done'}, 'owner')                                      # closed, and nothing sent back
+    chat = f.task(title='Headcount sheet', kind='general')
+    f.message(task_id=chat, subject='Headcount sheet', body='Can you send the sheet?', from_name='Gail Moreno', from_email='gail@northwind.example',
+              conversation_id='email:hc', sent_at=C._stamp(datetime.now() - timedelta(hours=4)))
+    s.add_comment(chat, 'assistant', general.ASSISTANT_TYPE, 'I drafted the sheet for Gail and will send it once you press Send.')
+    s.add_comment(chat, 'owner', general.USER_TYPE, 'Headcount numbers always go past Ray before Gail sees them')
+    outcomes.record(s, 'agent.stopped', 'task', chat, 'agent:general', at=C._stamp(datetime.now() - timedelta(days=3))); outcomes.resolve(s)
+    msgs = ', '.join(f"msg{i}" for i in facts['erin_fast'][:4])
+    matters = f"- Erin Blake (erin@northwind.example) matters most: her mail comes before anything else [s:5 | ev: {msgs} | seen: {learn._today()}]"
+    _reflect.seen.clear()
+    assert _reflect(s, lambda d: d.replace(learned_cut.PEOPLE + '\n', learned_cut.PEOPLE + '\n' + matters + '\n', 1))
+    system, user = _reflect.seen[-1]
+    assert 'replied 12 min after it arrived' in user, 'how soon he answered is read, as evidence'
+    assert 'you wrote: "Headcount numbers always go past Ray before Gail sees them"' in user and 'answering the agent' in user
+    assert 'License usage report' in user and 'closed it without replying' in user
+    assert 'stopped on' not in user and 'WHAT CAME OF ACTIONS' not in user, "an agent's stop is not a fact about the owner"
+    assert 'Keep only lines that change how a future task is handled' in system and 'nothing merely descriptive or statistical' in system
+    doc = s.get_doc('learned')
+    assert 'You answer' not in doc and not any(learn.ANSWER_KEY.match(l['key']) for l in lg.lines(doc)), 'no counted answer time is written'
+    assert 'matters most' in learned_cut.section(doc, learned_cut.PEOPLE)
+    seen = []
+    ingest.judge(s, {'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake', 'channel': 'email', 'subject': 'Board deck',
+                     'body': 'Can you check the deck?', 'conversation_id': 'email:deck', 'external_id': 'deck1'},
+                 llm=lambda system, user, **k: (seen.append(system + user), '{}')[1])
+    assert any('matters most: her mail comes before anything else' in p for p in seen), 'triage reads it on the next arrival'
+
+
+def test_the_answer_time_count_lines_already_stored_are_retired_by_their_key_and_never_come_back():
+    from taskuary import learnedgraph as lg
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    count = lg.fmt({'key': 'answer erin@northwind.example', 'text': 'You answer Erin Blake (erin@northwind.example) within the hour',
+                    'ev': ['msg1', 'msg2', 'msg3'], 'score': 4, 'seen': learn._today(), 'status': 'live'})
+    model = lg.fmt({'key': 'erin matters', 'text': 'Erin Blake (erin@northwind.example) matters most', 'ev': ['msg1'], 'score': 4,
+                    'seen': learn._today(), 'status': 'live'})
+    s.save_doc('learned', f"# LEARNED\n\n{learned_cut.PEOPLE}\n{count}\n{model}\n- My own line about Erin stays\n", 'reflect')
+    assert learn.migrate(s)
+    doc = s.get_doc('learned')
+    assert 'within the hour' not in doc and 'matters most' in doc and 'My own line about Erin stays' in doc
+    assert learnedlines.row(s, 'answer erin@northwind.example')['Status'] == 'retired'
+    assert not learn.drop_answer_counts(s), 'once'

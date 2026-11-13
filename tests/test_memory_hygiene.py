@@ -4,11 +4,11 @@ its shape, with invented people only (CLAUDE.md)."""
 from datetime import datetime, timedelta
 from unittest import mock
 import pytest
-from taskuary import funnel, learn, learned_cut, learnedgraph as lg, memorylines, usual, workstreams as W
+from taskuary import funnel, learn, learned_cut, learnedgraph as lg, memorylines, workstreams as W
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
-OMAR, ERIN, RELAY, MOM = 'omar@ledger.example', 'erin@northwind.example', 'relay@mailsystem.example', 'mom@family.example'
+OMAR, ERIN, MOM = 'omar@ledger.example', 'erin@northwind.example', 'mom@family.example'
 def ago(**k): return (datetime.now() - timedelta(**k)).strftime('%Y-%m-%d %H:%M:%S')
 TODAY = datetime.now().strftime('%Y-%m-%d')
 
@@ -20,18 +20,6 @@ def s():
     W.save(s, [{'name': 'Northwind finance systems', 'domains': ['northwind.example']}, {'name': 'Ledger app', 'people': [OMAR]},
                {'name': 'Personal', 'personal': True, 'people': [MOM]}])
     return s
-
-
-def _answered(s, who, n=3, cls='person'):
-    f = Factory(s)
-    for i in range(n):
-        f.message(channel='email', from_email=who, conversation_id=f'{who}-{i}', sent_at=ago(days=i + 1, hours=2), SenderClass=cls)
-        f.message(channel='email', direction='out', conversation_id=f'{who}-{i}', sent_at=ago(days=i + 1), status='context')
-
-
-def test_a_system_sender_and_a_personal_contact_are_never_among_your_people(s):
-    _answered(s, ERIN); _answered(s, RELAY, cls='automated'); _answered(s, MOM)
-    assert [h['who'] for h in usual.answer_habits(s)] == [ERIN]
 
 
 def test_a_line_whose_habit_went_quiet_for_ninety_days_is_closed_not_kept(s):

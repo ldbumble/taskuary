@@ -86,7 +86,6 @@
     "stranger":      {"line": "First mail from {domain}.", "is": "the first mail from a sender the owner has not vouched for"},
     "duplicate":     {"line": "Same ask as {ref} - fold it into that one.", "is": "another open task holds the same conversation, and that one stays"},
     "asked":         {"line": "{who} asked {ago}.", "is": "someone asked the owner something"},
-    "asked_late":    {"line": "You usually answer {who} {usual}; this is {age}.", "is": "someone asked, and it is later than the owner usually answers them"},
     "answered":      {"line": "Your reply went {when}; nothing since.", "is": "the owner's reply went after the newest message; nothing has come in since"},
     "done_list":     {"line": "All {n} to-dos ticked.", "is": "every to-do on the task is ticked"},
     "watch_handled": {"line": "{who} wrote; it looks handled.", "is": "a watched task came back, and triage read the new message as handled by somebody else"},

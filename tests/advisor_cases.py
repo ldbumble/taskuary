@@ -62,16 +62,16 @@ CASES = [
     ('Vendor W-9 for the new supplier', {'chase'}, {'let_go', 'close'}, []),
     ('Budget figures for Q4', {'chase'}, {'let_go'}, []),
     ('can you cover the Thursday call', {'reply', None}, {'not_ours'}, ['whatsapp']),
-    # the owner's own usual (slice 4, 2026-10-25): Marcus is answered within the hour, and this ask has waited 3h - Reply, its lateness
-    # the one line beside it, with what it was counted from in the prompt
-    ('Q4 forecast numbers', {'reply'}, {'not_ours', 'defer'}, ['HOW SOON YOU ANSWER marcus@northwind.example: within the hour']),
+    # Marcus is answered within the hour, and this ask has waited 3h - Reply; how soon the owner answers is never a line of its own any
+    # more (the owner, 2026-11-13: the memory says who matters, never the number)
+    ('Q4 forecast numbers', {'reply'}, {'not_ours', 'defer'}, []),
     # ...whom the owner hands this sender's asks to, and the day their mail is put off to - read from the How you work line the owner can
     # correct, never from the count (the memory follow-ups, 2026-10-25)
     ('Night shift overtime rate', {'reply', 'forward', None}, {'not_ours'}, ['WHOM YOU HANDED THEIR ASKS TO: ray@northwind.example, 2 of 2 times']),
     ('Payworth seat count renewal', {'reply', 'defer', None}, {'not_ours'},
      ['WHEN YOU PUT THEIR MAIL OFF (a How you work line the owner can correct): "You put mail from renewals@payworth.example off to Friday"']),
 ]
-LINES = {'Q4 forecast numbers': 'You usually answer Marcus within the hour; this is 3h.'}
+LINES = {}
 
 RAIL = {'Vendor W-9 for the new supplier', 'Move payroll to Payworth', 'Migrate the census export'}     # judged as the processing rail draws them
 # a duplicate whose agent is at work while the case is judged: "an agent is on it" now needs a live session or run, not the task's

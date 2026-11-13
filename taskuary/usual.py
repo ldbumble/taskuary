@@ -1,12 +1,9 @@
 """THE OWNER'S OWN USUAL, COUNTED FROM WHAT THEY DID (slice 4 of the memory redesign, 2026-10-25).
 
 The Advisor says a line only for a checkable fact the card does not show (the owner's ruling 1, 2026-10-23), and now that includes what
-the memory knows about how the owner works - kept to ONE line on the strip (the owner, 2026-10-25: "Reply: you usually answer Erin within
-the hour; this is 3h"). Each fact here is counted from the owner's own acts, the same rows the episodes are written from (episodes.py),
-and cited by the same ids, so Why? can show what it rests on:
+the memory knows about how the owner works - kept to ONE line on the strip. Each fact here is counted from the owner's own acts, the
+same rows the episodes are written from (episodes.py), and cited by the same ids, so Why? can show what it rests on:
 
-    reply_lag    how soon the owner answers this person: the median of their last answers (msg ids, the asks they answered)
-    late_reply   that usual, against how long THIS ask has waited - only when it has waited well past it
     put_off_habits  the weekday the owner puts a sender's mail off to - fs ids, the tasks put off. The count writes or confirms a How
                  you work line through the reflection (learn.put_off_lines), and it is THAT line Remind me reads (remind_day): the owner
                  can see it and correct it, and the default follows (the owner, 2026-10-25: "Remind me's learned day comes from a How you
@@ -16,139 +13,28 @@ and cited by the same ids, so Why? can show what it rests on:
     chase_usual  the day a silence is late for this person (ruling 8: after 3 working days, then learned per person), from the ledger
 
 Times, addresses and weekdays are facts, not meaning: nothing here reads a mail's words. Fewer than three answers (or two put-offs) is
-no habit, and says nothing."""
-import json, math, re
+no habit, and says nothing.
+
+How soon the owner answers someone is NOT counted here (the owner, 2026-11-13: "If i respond to email after 10 seconds from one person
+that means that person is important"): the reply episodes carry the lag as evidence (episodes.py), and the reflection writes only what it
+means - that person matters - never the number, and nothing here shows one."""
+import json, re
 from collections import Counter
 from datetime import datetime, timedelta
-from .episodes import _dt, _mine, _skip
+from .episodes import _dt
 from .projects import PUBLIC_MAIL
 
-ANSWERS, PUT_OFFS = 3, 2            # what makes a habit: three answers, two put-offs to one weekday
+ANSWERS, PUT_OFFS = 3, 2            # what makes a habit: three of their answers (chase_usual), two put-offs to one weekday
 IN_USE = 3                          # ...and a put-off line is in use at three of them: the ladder every line climbs (three episodes)
-LATE_X, LATE_MIN = 2, 60            # late is twice the usual, and an hour at least - "you usually answer in 10 min; this is 25" is noise
-LOOK_DAYS, REPLY_DAYS, KEEP = 90, 7, 10
+LOOK_DAYS, KEEP = 90, 10
 HELD_DAYS = 14                      # the owner's ruling 7: the learned day only after about two weeks of data
 DAYS = ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
 
 
 def _ago(days: int, now=None) -> str: return ((now or datetime.now()) - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
-def _first(name: str, email: str) -> str: return (' '.join(str(name or '').split()).split(' ') or [''])[0] or str(email or '').split('@')[0]
-def median(xs: list): xs = sorted(xs); n = len(xs); return None if not n else xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
-
-
-def span(m: float) -> str:
-    """Minutes in the words a person uses: '25 min', '3h', '2 days'."""
-    m = int(m)
-    return f'{m} min' if m < 90 else f'{round(m / 60)}h' if m < 36 * 60 else f'{round(m / 1440)} days'
 
 
 def days(d: float) -> str: return 'a day' if d <= 1 else f'{round(d)} days'
-
-
-def within(m: float) -> str:
-    """A usual answer time as a promise of speed: 'within the hour', 'within 3h', 'within a day', 'within 2 days'."""
-    return ('within the hour' if m <= 60 else f'within {math.ceil(m / 60)}h' if m < 20 * 60 else 'within a day' if m <= 30 * 60
-            else f'within {math.ceil(m / 1440)} days')
-
-
-def reply_lag(store, who: str, now=None, skip=()) -> dict:
-    """{n, minutes, evidence}: how soon the owner answered `who`'s last asks - each ask's first answer of the owner's on its own thread
-    within REPLY_DAYS, newest KEEP. `skip`: message ids not to count (the ask being judged)."""
-    who = str(who or '').strip().lower()
-    if '@' not in who: return {'n': 0, 'minutes': None, 'evidence': []}
-    ins = [m for m in store._rows("SELECT * FROM message WHERE lower(IFNULL(FromEmail,''))=? AND IFNULL(Direction,'in')<>'out' "
-                                  "AND Status NOT IN ('context','skipped','history') AND SentAt>=? ORDER BY SentAt DESC", (who, _ago(LOOK_DAYS, now)))
-           if m['MessageId'] not in skip and not _skip(store, m)]
-    cids = list({m['ConversationId'] for m in ins if m.get('ConversationId')})
-    outs = store._rows(f"SELECT ConversationId, SentAt FROM message WHERE Direction='out' AND ConversationId IN ({','.join('?' * len(cids))}) "
-                       "ORDER BY SentAt", cids) if cids else []
-    got = []
-    for m in ins:
-        a = _dt(m.get('SentAt'))
-        o = next((_dt(o['SentAt']) for o in outs if o['ConversationId'] == m.get('ConversationId') and _dt(o['SentAt']) and a and _dt(o['SentAt']) > a), None)
-        if a and o and (o - a).days < REPLY_DAYS: got.append(((o - a).total_seconds() / 60, f"msg{m['MessageId']}"))
-        if len(got) >= KEEP: break
-    return {'n': len(got), 'minutes': median([g[0] for g in got]), 'evidence': [g[1] for g in got]}
-
-
-def answered(store, m: dict) -> bool:
-    """Whether the owner already wrote on this ask's thread after it came - then nothing is late."""
-    return bool(m.get('ConversationId') and store._one("SELECT 1 x FROM message WHERE ConversationId=? AND Direction='out' AND SentAt>? LIMIT 1",
-                                                      (m['ConversationId'], str(m.get('SentAt') or ''))))
-
-
-# THE USUAL IS A LINE YOU CAN SEE, NOT A COUNT (the Advisor audit's judge, 2026-10-26): the task said "You usually answer Erin within the
-# hour; this is 5h" from a count of her answers while LEARNED.md said "You answer Erin Blake the same day" - by the line 5h is not late -
-# and Wrong on that line changed nothing on the task. As with the put-off day, the count writes or confirms a How you work line
-# (learn.answer_lines) and the late line reads THAT line, or the owner's own words about the person: one source, quoted by Why?, and
-# Wrong or Forget on it takes the task's line away. A duration said in words is parsing, like a weekday - never what a mail means.
-_SPEED = ((re.compile(r'\bwithin (?:the|an|one) hour\b', re.I), lambda m: 60),
-          (re.compile(r'\b(?:within|in) (\d+)\s*(?:min|mins|minutes)\b', re.I), lambda m: int(m.group(1))),
-          (re.compile(r'\b(?:within|in) (\d+)\s*(?:h|hr|hrs|hours?)\b', re.I), lambda m: int(m.group(1)) * 60),
-          (re.compile(r'\b(?:the same day|same-day|(?:within|in) (?:a|one) day)\b', re.I), lambda m: 1440),
-          (re.compile(r'\b(?:within|in) (\d+) days\b', re.I), lambda m: int(m.group(1)) * 1440))
-
-
-def speed(text: str):
-    """Minutes an answer-speed line says ("within the hour" 60, "the same day" 1440), else None."""
-    return next((f(m) for rx, f in _SPEED if (m := rx.search(str(text or '')))), None)
-
-
-def answer_key(who: str) -> str: return f'answer {str(who or "").strip().lower()}'
-
-
-def answer_line(store, who: str, doc: str = None) -> dict | None:
-    """{text, key, cite, minutes, evidence}: the line the owner's usual answer time to `who` comes from - a line the Advisor reads (Your
-    people, How you work) naming their address and saying how soon: the owner's own words first, then the count's own line, then any other.
-    None while no line says it: the count alone sets no usual."""
-    from .learnedgraph import TAG
-    from . import learned_cut as lc
-    who = str(who or '').strip().lower()
-    if '@' not in who: return None
-    doc = store.get_doc('learned') if doc is None else doc
-    got = []
-    for s in ('people', 'work'):
-        for raw, key in lc.lines(doc or '', lc.SECTIONS[s]):
-            m = TAG.match(raw)
-            text = m.group('text').strip() if m else raw.strip().lstrip('-* ').strip()
-            if who not in lc.names(raw) or (mins := speed(text)) is None: continue
-            ev = [e.strip() for e in m.group('ev').split(',') if e.strip()] if m else []
-            got.append((0 if not m else 1 if key == answer_key(who) else 2, {'text': text, 'key': key, 'cite': lc.cite_of(key), 'minutes': mins, 'evidence': ev}))
-    return min(got, key=lambda g: g[0])[1] if got else None
-
-
-def late_reply(store, m: dict, now=None) -> dict | None:
-    """{who, usual, age, evidence, line} when this ask (the newest inbound message on the item) has waited past the owner's usual for its
-    sender - as their answer-speed line says it (answer_line): twice the usual, an hour at least. `evidence` leads with the line's cite id,
-    so Why? shows the line and Wrong or Forget on it reaches the task. None while no line says a usual, the ask is answered, or not late."""
-    if not m or answered(store, m) or str(m.get('FromEmail') or '').lower() in _mine(store): return None
-    at = _dt(m.get('SentAt') or m.get('CreatedAt'))
-    if not at: return None
-    u = answer_line(store, m.get('FromEmail'))
-    if not u: return None
-    waited = ((now or datetime.now()) - at).total_seconds() / 60
-    if waited < max(LATE_X * u['minutes'], LATE_MIN): return None
-    return {'who': _first(m.get('FromName'), m.get('FromEmail')), 'usual': within(u['minutes']), 'age': span(waited),
-            'evidence': [u['cite'], *[e for e in u['evidence'] if e.startswith('msg')][:3]], 'line': u}
-
-
-def answer_habits(store, now=None) -> list:
-    """[{who, name, minutes, n, evidence}] - each sender whose last answers say how soon the owner answers them (reply_lag, ANSWERS of them
-    at least): THE COUNT a How you work line is written or confirmed from (learn.answer_lines). It sets no usual by itself."""
-    # ...WHO IS A PERSON (the 2026-11-01 audit: a mail-system relay stood among "Your people"): a sender triage classed automated or bulk
-    # more often than a person is a system, never one of the owner's people - triage's own reading, no address pattern; and nobody personal
-    rows = store._rows("SELECT lower(FromEmail) AS w, MAX(FromName) AS n, SUM(IFNULL(SenderClass,'person')='person') AS p, "
-                       "SUM(SenderClass IN ('automated','bulk')) AS a FROM message WHERE IFNULL(Direction,'in')<>'out' AND IFNULL(FromEmail,'')<>'' "
-                       "AND Status NOT IN ('context','skipped','history') AND SentAt>=? GROUP BY lower(FromEmail)", (_ago(LOOK_DAYS, now),))
-    mine, out = _mine(store), []
-    from .workstreams import personal, streams, by_signals
-    ps, xs = personal(store), streams(store)
-    for r in rows:
-        if r['w'] in mine or '@' not in r['w'] or (r.get('a') or 0) > (r.get('p') or 0): continue
-        if ps and by_signals(xs, {'FromEmail': r['w']})[0] in ps: continue
-        u = reply_lag(store, r['w'], now)
-        if u['n'] >= ANSWERS: out.append({'who': r['w'], 'name': ' '.join(str(r.get('n') or '').split()), 'minutes': u['minutes'], 'n': u['n'], 'evidence': u['evidence']})
-    return out
 
 
 def _sender_of(store, tid) -> str:
@@ -280,12 +166,6 @@ def prompt_lines(store, m: dict, tid=None, now=None) -> list:
     """What the Advisor's model reads about the owner's own usual with this item's sender - facts, each with the ids it rests on."""
     if not m: return []
     who, out = str(m.get('FromEmail') or '').lower(), []
-    u = reply_lag(store, who, now, skip={m.get('MessageId')})
-    if u['n'] >= ANSWERS:
-        at = _dt(m.get('SentAt') or m.get('CreatedAt'))
-        waited = span(((now or datetime.now()) - at).total_seconds() / 60) if at else ''
-        out.append(f"HOW SOON YOU ANSWER {who}: {within(u['minutes'])} - the median of your last {u['n']} answers ({', '.join(u['evidence'][:3])})"
-                   + ('; you have answered this one' if answered(store, m) else f'; this one has waited {waited}' if waited else ''))
     if tid and (d := remind_day(store, tid, now)):
         out.append(f"WHEN YOU PUT THEIR MAIL OFF (a How you work line the owner can correct): \"{d['line']}\""
                    + (f" ({', '.join(d['evidence'])})" if d['evidence'] else '') + f" - Remind me opens on {d['on']}, a {d['day']}")

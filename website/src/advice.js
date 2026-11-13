@@ -62,7 +62,7 @@ export function stripWord({ speaks, busy, shown = null, lit = null, aiOff = fals
 // ...AND MARK DONE'S REASON, AND WHAT THE FINISH CHECK FOUND (NO DEFAULT VERB, the owner 2026-10-28: "it should RECOMMEND ACTION"): Mark
 // done is lit only with its reason ("Your reply went at 10:02; nothing since."), so the reason is said; a dropped ball the check found
 // (`by` "check") carries its fix - Continue with this / Redraft with this
-const SHOWN = new Set(["draft_ready", "duplicate", "asked_late", "waiting_late_usual", "waiting_late", "goal_late",
+const SHOWN = new Set(["draft_ready", "duplicate", "waiting_late_usual", "waiting_late", "goal_late",
   "answered", "agent_done", "stopped_done", "done_list"]);
 const SAID = new Set(["failed", "failed_cause", "report_failed", "invite_clash", "invite_free", "stranger", "working", "closed", "agent_asking", "waiting_overdue"]);
 // ...and with nothing to add, the menu's notes name the button in the owner's words: "Nothing to add - Copy is the lit button." read the

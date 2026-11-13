@@ -380,7 +380,7 @@ def test_adopting_a_line_about_someone_files_it_under_your_people():
 
 def test_the_hot_pass_is_told_never_to_count_presses():
     assert 'button' in learn.LESSON_SYSTEM and 'pr ids' not in learn.LESSON_SYSTEM
-    assert 'never a count of button presses' in learn.REFLECT_SYSTEM and 'pr ids' not in learn.REFLECT_SYSTEM
+    assert 'never a line that names a' in learn.REFLECT_SYSTEM and 'no counts' in learn.REFLECT_SYSTEM and 'pr ids' not in learn.REFLECT_SYSTEM
 
 
 def test_the_drafter_reads_how_you_work():

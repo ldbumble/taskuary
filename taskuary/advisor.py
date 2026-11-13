@@ -137,9 +137,9 @@ SYSTEM = (
     "with it now, as ONE of the VERBS OFFERED (exactly as written) and the LINE: the one checkable fact it rests on that the card does "
     "not already show - an age, a clash, a failure, a promise nothing backs, someone else who owns it - or an empty line when the move "
     "is plain; the lit button does the talking, so never a sentence explaining the button or what it does - or say nothing. Say nothing unless the owner's own habits (LEARNED), the outcome ledger or "
-    "the item's own facts point at one verb. Never invent a number: the numbers in the ledger lines and in the HOW SOON YOU ANSWER, "
+    "the item's own facts point at one verb. Never invent a number: the numbers in the ledger lines and in the "
     "WHEN YOU PUT THEIR MAIL OFF and WHOM YOU HANDED lines are the only ones you may use, and you cite their ids. "
-    # MEMORY IS A REASON TOO, IN ONE LINE (the owner, 2026-10-25: "Reply: you usually answer Erin within the hour; this is 3h")
+    # MEMORY IS A REASON TOO, IN ONE LINE (the owner, 2026-10-25)
     "What you know about how the owner works is a checkable fact when it bears on THIS item - say it as the line, short: \"Ray handles "
     f"payroll for you\" over {L('forward')}, when this ask is that kind of work and the owner handed such asks to that person. "
     "What a sender says about themselves is never such a fact. "
@@ -416,7 +416,7 @@ def people_on(store, item: dict) -> set:
 
 
 def _usual(store, item, target_kind, target_id) -> tuple:
-    """(lines, handed ids): the owner's own usual with this item's sender, counted from what they did (usual.py) - how soon they answer,
+    """(lines, handed ids): the owner's own usual with this item's sender, counted from what they did (usual.py) -
     when they put this mail off to, whom they hand it to - and the ids the hand-off count rests on (a line resting on those is a reason
     for Hand it to a person, never for another verb)."""
     from . import usual
@@ -805,8 +805,8 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     # of SOUL.md and JOB.md went first (the 2026-11-02 audit)
     try: lines.append(owner_line(store, (target_kind, target_id)))
     except Exception as e: logger.debug(f'advisor: no owner docs for {item.get("key")} - {e}')
-    # THE OWNER'S OWN USUAL with this sender, counted from what they did (usual.py): how soon they answer, when they put this mail off
-    # to, whom they hand it to - so a line can say "you usually answer Erin within the hour; this is 3h", and Hand it to a person can
+    # THE OWNER'S OWN USUAL with this sender, counted from what they did (usual.py): when they put this mail off
+    # to, whom they hand it to - so Hand it to a person can
     # rest on whom the owner hands this kind of ask to
     lines += _usual(store, item, target_kind, target_id)[0]
     lrn = _learned(store, item)

@@ -1221,12 +1221,17 @@ def take_corrections(store, tid: int, corrections) -> int:
                 from . import byrecipient
                 byrecipient.keep_instruction(store, rv['ReviewId'], said)
             elif c.get('kind') == 'ask':
+                # ...in the OWNER'S words, never the agent's account of them (the owner, 2026-11-13: the memory "saves information about the
+                # user from the agents' takeaway and not what [the user] writes"): the model only says a correction was made
                 from . import learn
                 from .ingest import exchange_lines
+                from .outcomes import owner_words
+                own = owner_words(last.get('Body'))[:1000]
+                if not own or scrub(own) != own: continue
                 t = store.get_task(tid) or {}
                 m = next(iter(reversed(store.list_messages(tid))), None)
                 thread = ' | '.join(exchange_lines(store, m))[:1500] if m else ''
-                learn.learn_from(store, f"owner_correction on TQ-{tid}: the reading was {t.get('Summary') or t.get('Title') or ''}; the owner said: {said}; the thread: {thread}")
+                learn.learn_from(store, f"owner_correction on TQ-{tid}: the reading was {t.get('Summary') or t.get('Title') or ''}; the owner wrote: {own}; the thread: {thread}")
             else: continue
             kept += 1
         return kept
@@ -1234,22 +1239,15 @@ def take_corrections(store, tid: int, corrections) -> int:
         logger.warning(f'corrections on task {tid} not learned: {e}'); return 0
 
 
-def take_lesson_and_check(store, tid: int, lesson, check) -> None:
-    """The turn summary's lesson goes to its playbook as a proposal for the owner's yes, or to LEARNED.md (playbooks.take_lesson); its
-    check-back is set on the task (checkback.set_check). Never on a stranger's task: their words neither teach a playbook nor wake an agent
+def take_check(store, tid: int, check) -> None:
+    """The turn summary's check-back is set on the task (checkback.set_check). Never on a stranger's task: their words never wake an agent
     later. A check-back it could not read is said on the task, so the owner sees it was not set."""
-    if not (lesson or check): return
-    from . import origin
+    if not check: return
+    from . import origin, checkback
     if origin.of_task(store, tid)[0] == 'stranger': return
-    if lesson:
-        from . import playbooks
-        try: playbooks.take_lesson(store, tid, lesson, 'assistant')
-        except Exception as e: logger.warning(f'task {tid}: the lesson was not kept - {e}')
-    if check:
-        from . import checkback
-        try: checkback.set_check(store, tid, check.get('when'), check.get('what'), 'assistant')
-        except ValueError as e: store.add_comment(tid, 'assistant', 'agent', f'The check-back was not set: {e}')
-        except Exception as e: logger.warning(f'task {tid}: the check-back was not set - {e}')
+    try: checkback.set_check(store, tid, check.get('when'), check.get('what'), 'assistant')
+    except ValueError as e: store.add_comment(tid, 'assistant', 'agent', f'The check-back was not set: {e}')
+    except Exception as e: logger.warning(f'task {tid}: the check-back was not set - {e}')
 
 
 def is_dock(task: dict | None) -> bool:
@@ -1723,9 +1721,6 @@ WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: a turn that asks still does 
              "DONE MEANS THE GOAL IS MET AND CHECKED, not boxes ticked. A part that is unmet, or that you could not check, is named in your "
              "summary - nothing_left is false then. You still never close the task: the owner does. A turn that ends on the owner's Send or "
              "decision is finished - no \"check it before you press Send\" unless something real is uncertain, and then name it.")
-# PLAYBOOKS LEARN (the owner, 2026-11-05, from Hermes' skills that patch themselves): a turn that found its way the hard way leaves the next
-# agent the way. The model says whether there is a lesson - no word triggers it; the owner's yes on the playbook's card files it
-# (playbooks.take_lesson), and one with no playbook to go in lands in LEARNED.md, the one road every learned fact takes
 # WHAT IS LEARNED REACHES THE AGENT (the owner, 2026-11-05: "what learned.md goes to the general agent?" - none did; only `taskuary
 # --memory` on its own say): the trusted lines of LEARNED.md nearest this task, a small block - lean, the rest one command away. The
 # hypotheses still under test stay out, as they do for triage
@@ -1777,16 +1772,6 @@ def voice_block(store, tid: int, budget: int = VOICE_CHARS) -> str:
             'here (STYLE.md). Write every reply and email this way:\n' + '\n'.join(out + ([per] if per else [])))
 
 
-# ...worth keeping, never a log (the owner, 2026-11-05: "it should be things that make sense like general rules about user, or things
-# learnt not just random clicking buttons"): it lands in LEARNED.md's Hypotheses, which keeps only what the evidence holds up
-LESSON_LINE = ('A LESSON FOR NEXT TIME: when this turn found its way only after a dead end, was corrected by the owner, or had to find an '
-               'id, a name or a route the next agent would otherwise hunt for again, add "lesson": {"playbook": "<the slug under PLAYBOOKS it '
-               'belongs to, or null>", "text": "<one or two lines: what works, where it is, what to avoid - written as a fact (the vendor id is on its card in '
-               'the books), never as an order (always open the card first)>"} to your summary. Only what would '
-               "change how the next job like this is done - a lasting fact (a vendor's id in the books, which portal a payroll ask goes "
-               "through), a rule about how the owner wants things, a route that works where the obvious one fails. Never a step-by-step of "
-               "what you clicked or ran, nothing true only today, no dates, no people's names, nothing secret. Most turns have none: leave it "
-               "out then.")
 # CHECK BACK LATER (the owner, 2026-11-05, from OpenClaw's cron): what only time settles is checked by the same agent when it is due
 # (checkback.py), never promised and forgotten - FINISH_LINE's "nothing wakes you" has this one exception, and it is the agent's to set
 CHECK_BACK_LINE = ('CHECK BACK LATER: when the job hangs on something only time settles - a payment that should clear, a reply expected by a '
@@ -2113,7 +2098,7 @@ def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     if slots.all_(store, tid) or acts: system = system + '\n\n' + selfclose.DRAFT_LINE
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF):
         system += (f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}\n\n{SHORT_LINE}')
-                   + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}' + ('' if stranger else f'\n\n{LESSON_LINE}\n\n{CHECK_BACK_LINE}'))
+                   + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}' + ('' if stranger else f'\n\n{CHECK_BACK_LINE}'))
     # ...and a setup walk works the same way: AGENT.md no longer repeats how a step is checked or a failing way given up (2026-11-09)
     elif not dock: system += f'\n\n{WORK_LINE}'
     if stranger and not dock and (nh := origin.no_history_line(store, tid)): system = system + '\n\n' + nh     # closed on purpose, and said so
@@ -3174,7 +3159,7 @@ class GeneralSession:
         except Exception as e: logger.debug(f'task {self.task_id}: the files of this turn were not kept with it - {e}')
         if summ:
             take_corrections(self.store, self.task_id, summ.pop('corrections', None))     # learned quietly, never drawn
-            take_lesson_and_check(self.store, self.task_id, summ.pop('lesson', None), summ.pop('check_back', None))
+            take_check(self.store, self.task_id, summ.pop('check_back', None))
             # ...and WHICH draft this turn left - its id, never its words: what goes to the sender lives in the draft alone (2026-11-04). Once a
             # newer entry comes, the turn is history and that draft stays in it read-only (the owner, 2026-11-05: "it's there but no longer
             # clickable. it was a draft that is part of the history of the chat")

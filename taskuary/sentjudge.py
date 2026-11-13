@@ -107,7 +107,7 @@ def keep_on(store, tid: int, m: dict, what: str, due, why: str):
     beside the ask it answered, with the same thing owed on both). Its day is the task's due day (the owner, 2026-10-26: "if date
     promised then due date otherwise just a note"), never pushing an earlier one out, which the owner or the sender set for a reason.
     With a day and an agent on the task, that agent looks that morning whether it went (checkback.py - one line, said by set_check);
-    never over a check-back the agent set itself, and never on a stranger's task (general.take_lesson_and_check's rule)."""
+    never over a check-back the agent set itself, and never on a stranger's task (general.take_check's rule)."""
     from . import checkback, general, origin, remind
     t = store.get_task(tid) or {}
     cur = str(t.get('DueAt') or '')[:10]

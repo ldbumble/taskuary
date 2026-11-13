@@ -332,14 +332,11 @@ def draft(store, task_id: int, transcript: str, agent: str = 'agent', llm=None) 
         return None
 
 
-# ── a lesson from a turn: the playbook learns (the owner, 2026-11-05, from Hermes' skills that patch themselves) ─────────────
-# A turn that found its route after a dead end, was corrected by the owner, or had to dig out an id or a name leaves its lesson in the turn
-# summary (general.LESSON_LINE) - the model says whether there is one. It reaches the playbook it names as an `amend_playbook` proposal on
-# the task, drawn under the answer with its Approve (server's playbookDrafts) - the road a drafted playbook already takes; a turn's next
-# lesson for the same playbook joins the card still waiting. A lesson no playbook is named for goes to LEARNED.md (learn.learn_from), the one
-# road every learned fact takes - never a store of its own. The lessons sit in a marked block, so the owner's own lines are never touched.
+# ── lessons on a playbook page: an `amend_playbook` card's lessons, onto the page in a marked block, so the owner's own lines are never
+# touched (proposals.py). A turn's own summary no longer leaves a lesson: it went to LEARNED.md, and the memory wrote an agent's takeaway
+# as a fact about the owner (the owner, 2026-11-13) - the memory learns from what the owner did and wrote, never from what an agent concluded.
 LESSONS_START, LESSONS_END, LESSONS_HEAD = '<!-- lessons:start -->', '<!-- lessons:end -->', '## Lessons from the work'
-LESSON_CHARS, LESSONS_MAX = 400, 40
+LESSONS_MAX = 40
 
 
 def lessons_of(text: str) -> list:
@@ -359,29 +356,3 @@ def with_lessons(text: str, lines: list) -> str:
         head, rest = text.split(LESSONS_START, 1)
         return head + block + rest.split(LESSONS_END, 1)[1]
     return (text.rstrip('\n') + '\n\n' if text.strip() else '') + block + '\n'
-
-
-def _lesson_card(store, tid: int, slug: str):
-    "The lesson proposal for this playbook still waiting on the task, as (review, proposal) - or (None, None)."
-    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId DESC", (int(tid),)):
-        try: p = json.loads(r.get('DraftText') or '{}') or {}
-        except ValueError: continue
-        if isinstance(p, dict) and p.get('action') == 'amend_playbook' and p.get('slug') == slug and isinstance(p.get('lessons'), list): return r, p
-    return None, None
-
-
-def take_lesson(store, tid: int, lesson, agent: str = 'assistant'):
-    """The turn's lesson, to LEARNED.md - the one memory (the owner, 2026-11-05: "i thought we were using same memory learned.md"): named
-    for the kind of job when it has a playbook, so the agent reads it there next time that job comes. Playbooks stay the owner's own pages;
-    LEARNED.md's caps and consolidation keep it small. {'learned': True}, or None for no lesson (empty, or carrying a secret - redact.scrub)."""
-    from .redact import scrub
-    from . import learn
-    l = lesson if isinstance(lesson, dict) else {}
-    text = ' '.join(str(l.get('text') or '').split())[:LESSON_CHARS]
-    if not text or scrub(text) != text: return None
-    slug = slugify(l['playbook']) if str(l.get('playbook') or '').strip() else ''
-    page = read(slug) if slug else None
-    job = f'doing "{(parse(page).get("title") or slug)}" work' if page is not None else 'doing this kind of work'
-    learn.learn_from(store, f"agent_lesson on TQ-{tid}: what the agent found the hard way {job} - {text}")
-    logger.info(f'playbooks: {agent} learned a lesson on task {tid}{f" for {slug}" if page is not None else ""}')
-    return {'learned': True}

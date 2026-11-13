@@ -302,15 +302,12 @@ def state(store, item: dict, verbs: list) -> tuple:
         if dup and offered & {'split', 'remove'} and (keep := survivor(store, tid, dup)) != int(tid):
             from .store import task_ref
             return 'duplicate', {'ref': task_ref(keep)}
-        # LATE FOR THIS PERSON, BY THE OWNER'S OWN USUAL (the owner, 2026-10-25: "Reply: you usually answer Erin within the hour; this is
-        # 3h") - one line, the reason beside the lit Reply, counted from the answers it cites (usual.late_reply)
+        # (no "you usually answer Erin within the hour; this is 3h" any more - the owner, 2026-11-13: how soon they answer is evidence of
+        # who matters, which the memory says in words, never a number shown)
         # THE OWNER ALREADY ANSWERED (trust audit A3, 2026-10-28): their own reply went after the sender's newest message, so nobody is
         # waiting - Mark done, as the model's prompt says ("someone is waiting only when they wrote again after it"); Reply lit there
         # offered to say twice what was said
         if (went := answered(store, it, ins[-1])): return 'answered', {'when': when(went)}
-        from . import usual
-        if (late := usual.late_reply(store, ins[-1])):
-            return 'asked_late', {'who': late['who'], 'usual': late['usual'], 'age': late['age'], EV: late['evidence']}
         return 'asked', {'who': _name(ins[-1]), 'ago': ago(ins[-1].get('SentAt') or ins[-1].get('CreatedAt'))}
     if t and (cl := advisor._checklist(t)) and all(c.get('done') for c in cl): return 'done_list', {'n': len(cl)}
     return 'own', {}
@@ -422,7 +419,7 @@ NOTHING_LEFT = 'Its agent said nothing is left to do'
 # should i deploy"): these lit nothing, and their line was hidden too - work left unpushed is looked at, an agent stopped with its work
 # unfinished is carried on, an ask no agent started on is handed to one (as needs_agent is), a phish filed FYI is put down ("Not ours is its
 # move"), and the duplicate of a pair is folded into the one that stays ("fold it into that one")
-MOVES = {'unpushed': ('review_changes',), 'stopped': ('continue',), 'asked': ('regular_agent',), 'asked_late': ('regular_agent',),
+MOVES = {'unpushed': ('review_changes',), 'stopped': ('continue',), 'asked': ('regular_agent',),
          'fyi_danger': ('not_ours', 'remove'), 'duplicate': ('split', 'remove')}
 
 

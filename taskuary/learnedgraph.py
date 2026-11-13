@@ -26,7 +26,7 @@ PROMOTE_AT = 4          # mirrors learn.REFLECT_SYSTEM: s:4 with evidence from 3
 DECAY_EVERY = 10        # reflections that read the evidence and left a line alone, per point off it
 DECAYS = ('hypothesis', 'proposed')   # only what is still a guess: a promoted rule earned its s, an adopted one is the owner's
 LOG, LOG_KEEP = 'learn_reflect_log', 200   # the dates reflections ran on; 200 is 20 points of decay, past any live score
-_EV = re.compile(r'^(mem|rv|task|out|pr|msg|fs|sv|idea)(\d+)$')
+_EV = re.compile(r'^(mem|rv|task|out|pr|msg|fs|sv|idea|say)(\d+)$')
 
 
 def _today(): return datetime.now().strftime('%Y-%m-%d')
@@ -170,6 +170,10 @@ def _resolve(store, ev_id: str) -> dict:
         r = store._one('SELECT * FROM idea WHERE IdeaId=?', (n,)) or {}
         return {'id': ev_id, 'kind': 'idea', 'date': r.get('DecidedAt') or r.get('LastSaid'),
                 'label': f"{r.get('Status') or 'idea'}: {(r.get('Text') or '')[:90]}" if r else ev_id}
+    if kind == 'say':                      # a line the owner typed in a task's chat (episodes._owner_said)
+        r = store._one('SELECT * FROM comment WHERE CommentId=?', (n,)) or {}
+        return {'id': ev_id, 'kind': 'said', 'date': r.get('CreatedAt'),
+                'label': f"you wrote: {' '.join(str(r.get('Body') or '').split())[:90]}" if r else ev_id}
     if kind == 'out':
         r = store._one('SELECT * FROM outcome WHERE Id=?', (n,)) or {}
         return {'id': ev_id, 'kind': 'outcome', 'date': r.get('ResolvedAt') or r.get('At'),
@@ -191,7 +195,8 @@ def resolves(store, ev_id: str) -> bool:
         except ValueError: return False
     q = {'rv': 'SELECT 1 FROM review WHERE ReviewId=?', 'task': 'SELECT 1 FROM task WHERE TaskId=?',
          'fs': 'SELECT 1 FROM task WHERE TaskId=?', 'out': 'SELECT 1 FROM outcome WHERE Id=?', 'pr': 'SELECT 1 FROM advice_press WHERE Id=?',
-         'msg': 'SELECT 1 FROM message WHERE MessageId=?', 'sv': 'SELECT 1 FROM sent_verdict WHERE MessageId=?', 'idea': 'SELECT 1 FROM idea WHERE IdeaId=?'}[kind]
+         'msg': 'SELECT 1 FROM message WHERE MessageId=?', 'sv': 'SELECT 1 FROM sent_verdict WHERE MessageId=?', 'idea': 'SELECT 1 FROM idea WHERE IdeaId=?',
+         'say': 'SELECT 1 FROM comment WHERE CommentId=?'}[kind]
     try: return bool(store._one(q, (n,)))
     except Exception: return False
 

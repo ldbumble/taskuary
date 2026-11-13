@@ -76,7 +76,7 @@ ACTIONS = {
                        ('slug', 'text'), 'playbooks_enabled'),
     # what the outcome ledger counted about a kind of work, as a block on its playbook (playbook_facts.py): reflection proposes it,
     # the owner's yes writes it - a derived line never edits a playbook on its own (spec 2026-10-12, build step 5)
-    # ...and what an agent's turn found the hard way, as a lesson on the playbook it belongs to (playbooks.take_lesson, the owner 2026-11-05)
+    # ...and lessons onto a playbook page (playbooks.with_lessons, the owner 2026-11-05)
     'amend_playbook': ('add what was learned to a playbook', ('slug', 'text'), 'playbooks_enabled'),
     # An instruction that BELONGS in a switch should be written there, not left as a note the
     # classifier merely weighs - but nothing may change a switch on its own. So it arrives as a
@@ -438,7 +438,7 @@ def closeout_pending(store, tid: int):
 # playbook proposal its agent left (approved or dismissed) are each said on the task, and only the owner's Mark done closes it
 # (2026-10-18: "sending and closing are two steps, never automatic"). A sent reply used to dismiss the undecided playbook.
 PLAYBOOK = 'write_playbook'
-# ...and a lesson an agent's turn left for a playbook (playbooks.take_lesson) is the same kind of ask: the owner's yes or no on how a kind of
+# ...and lessons proposed for a playbook (amend_playbook) are the same kind of ask: the owner's yes or no on how a kind of
 # job is done, never a close-out owed on the task - so it holds, settles and counts as the playbook does (the owner, 2026-11-05)
 PLAYBOOKS = (PLAYBOOK, 'amend_playbook')
 
@@ -845,7 +845,7 @@ def _run(store, rv: dict, p: dict, tid, a: str, actor: str, edited, skip_checks:
         if a == 'amend_playbook' and p.get('block') and not edited:      # the ledger's block onto the page as it is NOW (playbook_facts)
             from .people_pages import splice
             p['text'] = splice(playbooks.read(p['slug']) or p['text'], p['block'])
-        elif a == 'amend_playbook' and p.get('lessons') and not edited:   # ...and an agent's lessons, onto the page as it is NOW (take_lesson)
+        elif a == 'amend_playbook' and p.get('lessons') and not edited:   # ...and its lessons, onto the page as it is NOW (with_lessons)
             p['text'] = playbooks.with_lessons(playbooks.read(p['slug']) or p['text'], p['lessons'])
         slug = playbooks.write(p['slug'], p['text'])
         out = {'playbook': slug, 'path': str(playbooks.folder() / f'{slug}.md')}

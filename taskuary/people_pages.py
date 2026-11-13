@@ -9,10 +9,10 @@ from .llm import build_llm
 
 START, END = '<!-- ledger:start -->', '<!-- ledger:end -->'
 SYSTEM = ("You write the one page Taskuary keeps about a person the owner deals with, from the outcome ledger's facts about them. "
-          "Return 3 to 10 markdown bullet lines, each one fact about how this person works with the owner - how fast they answer, "
-          "whether a chase is needed, who on copy moves them, what they deliver late - each ending with the evidence ids in "
-          "brackets like [ev: out12, out15]. Only what the numbers and the lines support; never a number the facts do not carry; "
-          "nothing about their character. Return nothing at all when the facts say nothing yet.")
+          "Return up to 10 markdown bullet lines, each one thing that changes how the owner handles this person next time - whether a "
+          "chase is needed and when, who on copy moves them, what they deliver late - each ending with the evidence ids in brackets "
+          "like [ev: out12, out15]. A conclusion, never a statistic: no counts, medians or averages. Only what the numbers and the lines "
+          "support; nothing about their character. Return nothing at all when the facts say nothing yet.")
 
 def doc_name(who: str) -> str: return f"person-{str(who or '').lower()}"
 def who_of(name: str) -> str: return name[7:] if str(name or '').startswith('person-') else ''
@@ -48,7 +48,9 @@ def compile(store, who: str, llm=None):
     lines = [l for l in text.splitlines() if l.strip().startswith('-')]
     if not lines: return None
     stamp = datetime.now().strftime('%Y-%m-%d')
-    body = f"_From the outcome ledger, {stamp}. The numbers are counted; the lines are read from them._\n\n" + '\n'.join(lines) + f"\n\n```\n{facts}\n```"
+    # ...the lines only: the counts are what the model reads, never what the page keeps (the owner, 2026-11-13: a statistic is no use to
+    # remember - only what changes how the next task is handled)
+    body = f"_Read from the outcome ledger, {stamp}._\n\n" + '\n'.join(lines)
     name = doc_name(who)
     store.save_doc(name, splice(store.get_doc(name) or '', body), 'reflect')
     return name

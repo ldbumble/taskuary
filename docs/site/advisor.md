@@ -146,9 +146,6 @@ What it knows about how you work is a reason too, said in the same one line besi
 and only when it is a fact it can show. Each is counted from what you did, and **Why?** lists the
 acts it rests on:
 
-- **How soon you answer someone.** Once you have answered a person three times, an ask of theirs
-  that has waited well past your usual says so: *You usually answer Erin within the hour; this is 3h.*
-  Inside your usual, or for someone you have not answered yet, there is no line.
 - **Whom you hand that kind of ask to.** The Advisor reads whom you handed a sender's asks to before;
   when this ask is the same kind of work, it lights **Hand it to a person** with *Ray handles payroll
   for you.* What the ask is about is the model's to read, never a count's. Once you have handed a
@@ -176,8 +173,11 @@ switch, and a cap on judgements per hour.
 pressed, and what kind of item it was from whom. It is a record, and nothing is learned from it: a
 button press is not a fact about how you work, and a count of them once lit the same button on two
 asks from one domain that had nothing else in common. What `LEARNED.md` knows comes from what you
-did, in context - who wrote, what they are to you, how soon you answered, what you put off and until
-when, whom you handed it to.
+did and wrote, in context - who wrote, what they are to you, how soon you answered, what you put off
+and until when, whom you handed it to, what you closed without a reply, what you typed to an agent.
+It keeps what that means, never the number: answering someone within minutes, again and again, is
+written as *that person matters*, and a kind of mail you close without a reply as *not yours to
+answer* - and triage reads both on the next arrival. What an agent concluded is never a fact about you.
 
 **What it brings up is yours to teach.** The clock reads what you took up and what you said no
 to: the ideas you dismissed, and **What to bring up** in `LEARNED.md`. An idea of a kind you said no

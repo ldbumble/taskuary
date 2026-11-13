@@ -81,7 +81,7 @@ def test_a_wait_past_its_due_day_is_named_late_counted_like_the_header_and_its_g
     assert rulebook.adds(s, {'key': f'task:{k}', 'tid': k, 'lane': 'theirs', 'kind': 'task'}) == ['chase'], 'Chase is on the row for the model to light'
 
 
-# ── 3. the usual is ONE line, and the owner's hand on it reaches the task ─────────────────────────────────────────────────────────────
+# ── 3. how soon the owner answers is no line on a task ─────────────────────────────────────────────────────────────────────────────
 def _erins_habit(s):
     f = Factory(s)
     for n in range(3):
@@ -90,14 +90,14 @@ def _erins_habit(s):
         f.message(task_id=old, subject=f'RE: Form {n}', body='Signed.', direction='out', sent_at=at(days=10 + n, minutes=-20), conversation_id=f'email:old{n}')
 
 
-def test_the_owners_own_words_about_the_person_are_the_usual(s):
+def test_how_soon_the_owner_answers_is_never_a_line_on_the_task(s):
+    """The owner, 2026-11-13: how soon he answers someone says that person matters - the memory writes that, never the number, and no
+    task says "You usually answer Erin within the hour; this is 5h" from a count of his answers."""
     _erins_habit(s)
     t, _ = ask(s, 'Trainly renewal', ERIN, 5)
-    s.save_doc('learned', learn.answer_lines(s, s.get_doc('learned') or ''), 'reflect')
-    doc = s.get_doc('learned')
-    s.save_doc('learned', learn._under(doc, lc.SECTIONS['people'], '- You answer Erin Blake (erin@northwind.example) the same day'), 'owner')
-    assert usual.answer_line(s, ERIN[1])['text'].endswith('the same day')
-    assert advisor.decide(s, f'task:{t}')['state'] == 'asked', 'by the line she is answered the same day: 5h is not late'
+    d = advisor.decide(s, f'task:{t}')
+    assert d['state'] == 'asked' and 'usually' not in (d.get('line') or '')
+    assert not hasattr(usual, 'late_reply') and not hasattr(learn, 'answer_lines')
 
 
 def test_a_model_answer_resting_on_a_forgotten_memory_line_stands_no_more(s):
@@ -116,8 +116,8 @@ def _d(verb, kind, state='asked', line='x'):
 
 def test_late_on_a_drafted_task_the_models_reply_stands(s):
     """The swap to the draft's Send went (2026-11-02): the model reads THE DRAFT and decides; code checks only what cannot be pressed."""
-    d = advisor.checked(s, {'key': 'task:1'}, V('approve', 'reply', 'redraft'), _d('reply', 'late', 'asked_late', 'You usually answer Erin within the hour; this is 5h.'))
-    assert (d['verb'], d['line'], d.get('checked')) == ('reply', 'You usually answer Erin within the hour; this is 5h.', None)
+    d = advisor.checked(s, {'key': 'task:1'}, V('approve', 'reply', 'redraft'), _d('reply', 'late', 'asked', 'Erin asked 5h ago.'))
+    assert (d['verb'], d['line'], d.get('checked')) == ('reply', 'Erin asked 5h ago.', None)
     assert advisor.checked(s, {'key': 'task:1'}, V('reply'), _d('reply', 'late'))['verb'] == 'reply'
 
 

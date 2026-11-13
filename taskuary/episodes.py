@@ -7,23 +7,29 @@ what it was about, what triage made of it, what the owner did and how soon, and 
     msg455 2026-10-20 · erin@northwind.example (your manager) · "Q3 budget numbers" · triage: task · you: replied 38 min after it arrived
     fs88 2026-10-21 · renewals@payworth.example · "Renewal notice" · you: put it off to Fri 2026-10-24 09:00, 2h after it arrived
     task91 2026-10-21 · east.manager@northwind.example · "Payroll correction" · you: handed it to ray@northwind.example, the sender on copy
+    task93 2026-10-22 · alerts@vendor.example · "License usage report" · you: closed it without replying
+    say812 2026-10-22 · gail@northwind.example · "Headcount" · you wrote: "Gail's numbers always go to Ray first" (answering the agent: ...)
 
 Code builds them from rows that already exist and cites them by their ids, so every line the reflection writes can be traced to what
 happened. Parsing addresses, times and weekdays is fact, not meaning: no word list decides anything here. What counts:
 
-    acts       a reply (and how soon), a draft edited or rejected, a put-off with its day, a hand-off, a close, Not ours / Not a task,
-               an idea taken up or dismissed, a promise in the owner's sent mail
-    never      navigation - Next, open, focus: "Next" is "not now, in this walk", never a judgement (Shown is not acted on)
+    acts       a reply (and how soon - evidence of who matters, never a number to keep), a draft edited or rejected, a put-off with its
+               day, a hand-off, a close without a reply, Not ours / Not a task, an idea taken up or dismissed, a promise in sent mail
+    words      what the owner typed to a task's agent (say ids) - the agent's line before it rides along only as what they answered
+    never      navigation - Next, open, focus: "Next" is "not now, in this walk", never a judgement (Shown is not acted on); and never
+               an agent's own summary, lesson or outcome: what an agent concluded is not a fact about the owner (the owner, 2026-11-13)
     excluded   personal mailboxes (presses.personal), agents' own acts, auto-replies
 
 Evidence ids: msg (a reply to an inbound message, by its id), rv (a review decision), fs (a task put off, by the task's id), task (an
-owner act on a task), idea (an Advisor idea's fate), sv (a promise in sent mail, by the sent message's id), out (an outcome row)."""
+owner act on a task), idea (an Advisor idea's fate), sv (a promise in sent mail, by the sent message's id), say (a line the owner typed
+in a task's chat, by its comment id). out (an outcome row) is no longer an episode, but old lines still cite it."""
 import json, re
 from datetime import datetime
 from loguru import logger
 
 CAP_N, CAP_CHARS = 40, 5000          # what one reflection reads; the rest is counted, never silently cut
-ACTS = ('msg', 'rv', 'fs', 'task', 'idea', 'sv', 'out', 'mem')   # evidence of something the OWNER did (or said: mem is a verdict note)
+ACTS = ('msg', 'rv', 'fs', 'task', 'idea', 'sv', 'say', 'out', 'mem')   # evidence of something the OWNER did or said (mem: a verdict note)
+SAY_CHARS, CONTEXT_CHARS = 400, 160  # an owner's line, and the agent's line it answered (context only)
 
 
 def _dt(s):
@@ -145,13 +151,50 @@ def build(store, since: str) -> list:
             if len({d.isocalendar()[:2] for _, d in xs}) < 3: continue
             out.append((xs[-1][0], xs[-1][1].strftime('%Y-%m-%d %H:%M:%S'), who, f"you keep a promise to {who}{_relation(store, who)} on {day}s: "
                         f"{len(xs)} weeks ({', '.join(e for e, _ in xs[-4:])})"))
-        from . import outcomes
-        for r in store._rows("SELECT * FROM outcome WHERE ResolvedAt IS NOT NULL AND Verdict!='unknown' AND At>=? AND IFNULL(Actor,'') NOT LIKE 'agent%' ORDER BY Id", (since,)):
-            who = str((json.loads(r.get('FactsJson') or '{}') or {}).get('who') or '').lower()
-            out.append((f"out{r['Id']}", r['At'], who, f"{who + ' · ' if who else ''}{outcomes._sentence(store, r)}"))
+        seen = {e[0] for e in out}                    # a Not for me closes the task too: said once, as what the owner said
+        out += [e for e in _closed_unanswered(store, since, me) if e[0] not in seen] + _owner_said(store, since)
     except Exception as e:
         logger.warning(f'episodes: some not read - {e}')
     return sorted(out, key=lambda e: str(e[1] or ''))
+
+
+def _closed_unanswered(store, since: str, me: set) -> list:
+    """A task the owner closed with no reply of theirs after its last inbound (the owner, 2026-11-13: "if i close task without responding
+    memory should say seems like issue x is not his problem and that should feed into next triage"). The ledger's close row is the fact;
+    what kind of issue it was is the reflection's to read from the task, never a word match here."""
+    from .workstreams import is_personal
+    out = []
+    for r in store._rows("SELECT TargetId, At FROM outcome WHERE Kind='task.closed' AND TargetKind='task' AND Actor IN ('owner','web') AND At>=? ORDER BY Id", (since,)):
+        tid = r['TargetId']; m = store.last_inbound_on_task(tid)
+        if not m or _skip(store, m) or str(m.get('FromEmail') or '').lower() in me or is_personal(store, tid=tid): continue
+        own = store.own_reply_on_thread(m.get('ConversationId'), tid) if m.get('ConversationId') else None
+        if own and str(own.get('SentAt') or '') >= str(m.get('SentAt') or ''): continue
+        t = store.get_task(tid) or {}
+        what = ' '.join(str(t.get('Summary') or t.get('Title') or '').split())[:160]
+        out.append((f'task{tid}', r['At'], str(m.get('FromEmail') or '').lower(),
+                    f"{_head(m, store)}" + (f' · the task: {what}' if what else '') + ' · you: closed it without replying'))
+    return out
+
+
+def _owner_said(store, since: str) -> list:
+    """Every line the owner typed into a task's chat (general.USER_TYPE by 'owner' - never a brief Taskuary wrote in their voice), with the
+    agent's line before it as what they were answering. The owner's words are the evidence; the agent's are context, never a fact."""
+    from .general import USER_TYPE, ASSISTANT_TYPE
+    from .outcomes import owner_words
+    from .workstreams import is_personal
+    out, last = [], {}
+    for c in store._rows("SELECT * FROM comment WHERE CreatedAt>=? AND ActorType IN (?,?) ORDER BY CommentId", (since, USER_TYPE, ASSISTANT_TYPE)):
+        tid = c.get('TaskId')
+        if c['ActorType'] == ASSISTANT_TYPE: last[tid] = c.get('Body'); continue
+        words = owner_words(c.get('Body'))[:SAY_CHARS]
+        if c.get('Actor') != 'owner' or not words or (tid and is_personal(store, tid=tid)): continue
+        m = store.last_inbound_on_task(tid) if tid else None
+        if m and _skip(store, m): continue
+        ctx = ' '.join(str(last.get(tid) or '').split())[:CONTEXT_CHARS]
+        out.append((f"say{c['CommentId']}", c['CreatedAt'], str((m or {}).get('FromEmail') or '').lower(),
+                    f"{_head(m, store) if m else repr((store.get_task(tid) or {}).get('Title') or 'a chat')} · you wrote: \"{words}\""
+                    + (f' (answering the agent: "{ctx}")' if ctx else '')))
+    return out
 
 
 def block(store, since: str, cap_n: int = CAP_N, cap_chars: int = CAP_CHARS) -> tuple:

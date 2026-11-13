@@ -80,7 +80,7 @@ def test_an_ask_no_agent_started_on_fills_send_to_agent(s):
     """Someone asked, no agent started by itself (the switch, a stranger, a full house), and nothing was lit: Send to agent is the move, as
     for a reply nothing has written - and where an agent already holds the task its row draws none, so nothing is filled."""
     tid = agent_task(s, kind='todo', summary=None)
-    for st in ('asked', 'asked_late'):
+    for st in ('asked',):
         with mock.patch.object(rulebook, 'facts', return_value={'state': st, 'line': 'Erin Blake asked 3 days ago.'}):
             r = rulebook.recommended(s, item(tid), verbs('reply', 'regular_agent', 'close'))
             assert (r['verb'], r['why']) == ('regular_agent', 'Erin Blake asked 3 days ago.'), st

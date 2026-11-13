@@ -2,6 +2,55 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.2 - 2026-11-13
+
+- The mic hears with nothing set up: Local Whisper is made ready in the background
+- An agent's job or an addressed message asked of the Assistant is made and opened, not written into New
+- The mic installs nothing by itself: Local Whisper by default is taken back out
+- A failing card switched off closes its episode quietly, not as working again
+- Find times says the calendar could not be read instead of offering free times
+- A report run that found nothing is not counted as an arrival
+- The owner's own message quoted back under a reply is his, not a stranger's forward
+- A reply whose mail card cannot send says why under the draft, with the card's fix
+- The reply card that cannot send keeps Copy beside its fix
+- A dashboard run whose every number is nothing lands no row on the rail
+- The opener's open-work card is headed What's open, not TASKS over a Tasks row
+- A line typed after Stop, while the stopped turn lets go, stands under the stop
+- A card set aside reads "set aside when you moved on", not "you wrote again"
+- An agent's job made from New or the Assistant reads at work from the moment it is made
+- A task opened by its number draws its head, the ask and its working turn as one move
+- The demo reads its own week on every calendar road, never Microsoft
+- A coding agent's closing question is drawn once, not twice
+- A turn says what it left on the owner, under its words
+- The demo tour sends the visitor to the task whose agent has turns
+- The demo's invite turn comes after the invite, not twenty minutes before it
+- Search leaves the Assistant's own chat out of the task hits
+- The demo reaches nothing outside this computer: one guard under every HTTP call
+- The running demo hands --link a signed-in address
+- Back from a report draws the task's buttons at once, greyed until the walk lands
+- An agent's table wraps its words instead of cutting every cell short
+- A name given with its address is that address
+- A report Set up with AI on Taskuary's own tables keeps which table it reads
+- New's answer under its box draws its links instead of raw markdown
+- A schedule the composer's model nests is the one the report runs on
+- A report's chart never plots a row's id as its measure
+- A routine's Set up with AI carries the job already typed in What it does
+- A routine's draft is written from its text step, never around an empty token
+- The Assistant fills the builder's describe itself, never points the owner at it
+- A routine's run says the routine closed it and where its draft waits
+- A draft with nothing to send it says Connect, not Send
+- The mail and GitHub marks show on the night rail
+- A Hub entry's kind chip is readable in dark mode
+- On a phone the chat head's name is not run over by the Back chip
+- New's box grows with its words on a phone
+- On a phone a report row wraps instead of crushing its name
+- The schedule's time box fits a 12-hour clock
+- A playbook drafted with markdown lists under its labels is accepted
+- A playbook draft that fails its check points at the agent, not the Assistant
+- The playbook builder's brief shows what uses: takes
+- A typed ask with no AI and nothing waiting leads with the AI it needs, not "Nothing's waiting."
+- A mic that hears silence says to check the microphone, not "Windows answered: Success"
+
 ## 0.4.0.1 - 2026-11-12
 
 - Every link in a mail keeps its address in the text its readers see

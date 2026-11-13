@@ -58,3 +58,17 @@ test("what the foot's boxes said over a held act and a playbook is said over its
   assert.equal(askNote(act({ action: "close_task", why: "the folder is clear" })), "", "a card that says itself gets no line over it");
 });
 
+// THE LIVE SHAPE (the audit, 2026-11-13, recorded on the walk's Back and on a rail click): the task's cards arrive with the task, its
+// conversation a beat later - and for that beat every letter that went and the draft with its Send stood in one stack at the chat's foot
+test("no card is drawn loose at the chat's foot before the conversation is read, nor under a turn at work", async () => {
+  const { placesLoose } = await import("../src/chatStream.js");
+  assert.equal(placesLoose(null), false, "the list not read yet: nothing can be placed, so nothing is");
+  assert.equal(placesLoose(undefined), false);
+  assert.equal(placesLoose({ items: [], working: true }), false, "a turn at work holds its cards back");
+  assert.equal(placesLoose({ items: [], working: false }), true, "read, at rest: a card the list places nowhere is never lost");
+  const ws = read("GeneralWorkspace.jsx");
+  assert.match(ws, /loose=\{placesLoose\(list\)\}/);
+  assert.match(ws, /const loose = looseOk \? nodes\.filter/);
+  assert.match(ws, /const nextLoose = next && !used\.has\("next"\) && looseOk && /);
+});
+

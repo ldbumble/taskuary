@@ -18,7 +18,7 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, placesLoose } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
@@ -472,7 +472,7 @@ const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.s
   {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
-function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, landAt, name, tid, onChanged, working = false, ask = null, askAt = "", lettersAt = "" }) {
+function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, landAt, name, tid, onChanged, loose: looseOk = true, ask = null, askAt = "", lettersAt = "" }) {
   // THE WORK'S CARD IS PART OF THE AGENT TURN THAT DID IT, or not drawn at all (the owner, 2026-11-13: "stop putting worked on master at the
   // bottom ... it's part of the agent turn or doesn't belong at all"): the turn its newest change came in (landing.landingTurn); until the card
   // has read its state it is mounted hidden, so it can say when
@@ -509,8 +509,9 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
   // ...BUT NEVER UNDER A TURN AT WORK, nor one the list holds in another state (the owner, 2026-11-12: "it should finish thinking and last thing
   // should be show action box" - drawn at the foot while the turn worked, its words landed above the card; and greyed in its turn, the same
   // reply stood live again at the foot): a turn's card comes when the list has it, as the turn's last thing
-  const loose = working ? [] : nodes.filter((n) => !used.has(n.key) && !listed.has(n.rid));
-  const nextLoose = next && !used.has("next") && !working && !listed.has(nextRid) && !lettersAt;
+  // ...NOR BEFORE THE LIST IS READ (chatStream.placesLoose): every card of the task stood stacked at the foot until its turns arrived
+  const loose = looseOk ? nodes.filter((n) => !used.has(n.key) && !listed.has(n.rid)) : [];
+  const nextLoose = next && !used.has("next") && looseOk && !listed.has(nextRid) && !lettersAt;
   return <>{rows}
     {!!loose.length && <div className="tq-aui-message tq-aui-agent" data-tq-row-cards="loose"><div className="tq-aui-agent-body">{loose.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>)}</div></div>}
     {nextLoose && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
@@ -658,7 +659,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
             <RetryCtx.Provider value={retry}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
-              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} ask={askNode} askAt={askAt} lettersAt={lettersTurn(list, merged.items)} /></WaitOnCtx.Provider></RetryCtx.Provider>
+              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} loose={placesLoose(list)} ask={askNode} askAt={askAt} lettersAt={lettersTurn(list, merged.items)} /></WaitOnCtx.Provider></RetryCtx.Provider>
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}

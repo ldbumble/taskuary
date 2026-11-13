@@ -79,8 +79,10 @@ test("nothing drawn goes or moves, and nothing new is drawn above it", () => {
 
 test("a card is drawn where the list has it and nowhere else - never loose under a turn at work, never live again at the foot", async () => {
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(src, /const loose = working \? \[\] : nodes\.filter\(\(n\) => !used\.has\(n\.key\) && !listed\.has\(n\.rid\)\)/);
-  assert.match(src, /const nextLoose = next && !used\.has\("next"\) && !working && !listed\.has\(nextRid\)/);
+  // ...nor before the list is read (chatStream.placesLoose: one word for "there is a list, and no turn of it is at work")
+  assert.match(src, /const loose = looseOk \? nodes\.filter\(\(n\) => !used\.has\(n\.key\) && !listed\.has\(n\.rid\)\) : \[\]/);
+  assert.match(src, /const nextLoose = next && !used\.has\("next"\) && looseOk && !listed\.has\(nextRid\)/);
+  assert.match(src, /loose=\{placesLoose\(list\)\}/);
   // ...a draft no longer to press is greyed in its place with its words: rewritten, set aside as he wrote again, taken back by its agent
   assert.match(src, /const PAST = \{ superseded: .*passed: .*withdrawn: /);
   assert.doesNotMatch(src, /stands below, under a later answer/);

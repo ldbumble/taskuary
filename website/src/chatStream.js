@@ -222,6 +222,11 @@ export const askTurn = (asking, items) => (asking?.turn && (items || []).some((x
 // reply's card, that turn's words under both
 // ...nor above a line of his: what stood over the line he just sent is set aside as it is heard (proposals.set_aside_drafts), and the page
 // draws that from the same frame (withMine) - the block's Send stood lit over his new line until the list was read again
+// A CARD THE LIST PLACES NOWHERE STANDS UNDER EVERYTHING - ONCE THERE IS A LIST (the audit, 2026-11-13, recorded on Back and on a rail click): a
+// task's cards arrive with the task, its conversation a beat later, and for that beat (1.5 s on the recording) every card of the task -
+// each letter that went, newest first, and the draft with its Send - stood in one stack at the chat's foot, then jumped up into the turns
+// that wrote them. Until the list is read nothing can be placed, so nothing is; nor under a turn at work, which holds its own cards back.
+export const placesLoose = (list) => !!list && !list.working;
 export const lettersTurn = (list, items) => { const xs = items || [], i = list?.letters ? xs.findIndex((x) => x.kind === "turn" && x.id === list.letters) : -1;
   return i >= 0 && !["starting", "working"].includes(xs[i].state) && !xs.slice(i + 1).some((x) => x.kind === "line") ? xs[i].id : ""; };
 // ...what a turn at work waits on HIM for, in words: the step its session is stopped at, a sign-in, a question

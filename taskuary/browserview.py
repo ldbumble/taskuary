@@ -727,7 +727,8 @@ STRANGER_LINE = ('NO BROWSER ON THIS TASK: it carries a message from someone the
 
 
 TURN_LINE = ('NEVER SOLVE, CLICK OR WORK AROUND A CAPTCHA, an "I\'m not a robot" box, a puzzle or any other check that a human is at the '
-             'page - not even to try - and never ask the owner whether you may. That, and any step only the owner can do on the page '
+             'page (a page that only says it is verifying you are human and never moves is one: never retry it) - not even to try - and never '
+             'ask the owner whether you may. That, and any step only the owner can do on the page '
              '(a sign-in or code you cannot type, a card number), is THEIRS: leave the page on it and end your turn with a final line '
              '[[TASKUARY-YOURTURN: <what they need to do on the page, in a few words>]]. Taskuary shows them this page; '
              'they do it and hand it back, and their "Done" is your next message - then look at the page and go on. Run no browser '

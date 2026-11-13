@@ -51,3 +51,10 @@ test("the owner's turn on a stacked page takes the room, and says the page scrol
   assert.match(term, /yourTurn \|\| turn \|\| held\.length \? \{ flex: "0 1 85%", minHeight: 360, maxHeight: 900 \} : \{ flex: "0 1 60%", minHeight: 220, maxHeight: 560 \}/);
   assert.match(pane, /your turn — click the page and type; scroll it for a button below the edge/);
 });
+
+test("a page handed over can be opened in his own browser, for a check that turns away the agent's", () => {
+  // the owner, 2026-11-13: a registrar's "Verifying you are human" spun forever in the agent's browser, and Approve could not get past it
+  assert.match(pane, /<TurnBar turn=\{turn\} url=\{url\}/);
+  assert.match(pane, /href=\{url\} target="_blank" rel="noreferrer" data-tq-browser-own=""/);
+  assert.match(pane, />Open in my browser</);
+});

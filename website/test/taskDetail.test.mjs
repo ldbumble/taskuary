@@ -47,7 +47,7 @@ test("a task read ahead brings its chat's list, and the chat draws it on its fir
   assert.equal(heldConversation(4).rev, "r1", "...its chat stays for the first paint only, read again on mount (the bug hunt, 2026-11-12)");
   const view = src("GeneralWorkspace.jsx");
   // ...whichever was asked last of the two, the view's own last read or the read-ahead (chatStream.newerList; basicFlow.test.mjs)
-  assert.match(view, /const listOf = \(tid\) => \{ const l = newerList\(LISTS\.get\(tid\), heldConversation\(tid\)\); if \(l\) LISTS\.set\(tid, l\); return l; \};/);
+  assert.match(view, /const listOf = \(tid\) => \{ const l = paintable\(LISTS\.get\(tid\), heldConversation\(tid\)\); if \(l\) LISTS\.set\(tid, l\); return l; \};/);
   assert.match(view, /const \[list, setList\] = useState\(\(\) => listOf\(tid\)\)/);
 });
 

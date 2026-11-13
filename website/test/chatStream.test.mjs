@@ -209,3 +209,13 @@ test("the letters that wait for his Send are drawn at the end of the turn the li
   // ...nor over a line he has just sent (recorded 2026-11-13: its Send stood lit above his new line until the list was read again)
   assert.equal(lettersTurn({ letters: "t:l1:1" }, [...items, { id: "l2", kind: "line" }]), "");
 });
+
+test("a chat paints a held list only if it was read a moment ago - an older one spins until its read lands", async () => {
+  // the owner, 2026-11-13: a long task opened on messages from his last visit, the rest coming in after
+  const { paintable, HELD_FOR } = await import("../src/chatStream.js");
+  const now = 1_000_000, old = { _at: now - HELD_FOR - 1, items: [{ id: "a" }] }, recent = { _at: now - 2000, items: [{ id: "b" }] };
+  assert.equal(paintable(old, null, now), null);                   // from his last visit: nothing is painted, the chat spins
+  assert.equal(paintable(recent, null, now), recent);              // drawn again as its session starts: no blank beat
+  assert.equal(paintable(old, recent, now), recent);               // read ahead for Next: painted
+  assert.equal(paintable(null, null, now), null);
+});

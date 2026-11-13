@@ -341,7 +341,7 @@ Take over to drive it yourself; close the session to close it."
       {/* WHAT WAITS ON THE OWNER, ON THE PAGE IT WAITS ON - below the page, never over it: a CAPTCHA box under a bar is not one they
           can tick. A held act's Approve / Dismiss, and the owner's turn with its hand-back; both flow back into the agent's chat. */}
       {waiting.map((h) => <HeldBar key={h.id} held={h} onDecided={onDecided} />)}
-      {turn && <TurnBar turn={turn} onHandBack={onHandBack} />}
+      {turn && <TurnBar turn={turn} url={url} onHandBack={onHandBack} />}
     </Box>
   );
 }
@@ -383,7 +383,7 @@ function HeldBar({ held: h, onDecided }) {
 
 // THE OWNER'S TURN (browserview.your_turn): the page is theirs to click and type on (yourTurn hands it over), and Done hands it back -
 // their press, never words in their name: Taskuary tells the agent, which looks at the page and goes on (browsergate.done).
-function TurnBar({ turn, onHandBack }) {
+function TurnBar({ turn, url = "", onHandBack }) {
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const back = async () => {
     if (busy) return;
@@ -400,6 +400,12 @@ function TurnBar({ turn, onHandBack }) {
         <Box component="span" sx={{ color: CATPPUCCIN.yellow, fontWeight: 600 }}>{turn.text || "Your turn in the browser"}</Box>
         {!pressing && <Box component="span" sx={{ color: "var(--tq-warning, #a8a196)" }}> · do it on the page, and the agent goes on when it moves on</Box>}
       </Typography>
+      {/* ...AND IN HIS OWN BROWSER WHERE THIS ONE IS REFUSED (the owner, 2026-11-13: a registrar's "Verifying you are human" spun forever in the
+          agent's browser - a check that turns away an automated browser even with a person at it, and Approve could not get past it): the
+          same page in his everyday browser, where he does the step; his I'm done hands it back */}
+      {/^https?:\/\//i.test(url) && <Box component="a" href={url} target="_blank" rel="noreferrer" data-tq-browser-own=""
+        title="If the page will not let you through here - a check that you are human that never ends - do the step in your own browser, then press I'm done"
+        sx={{ ...mono, fontSize: 11, color: "var(--tq-link, #8fb3d9)", whiteSpace: "nowrap", "&:hover": { textDecoration: "underline" } }}>Open in my browser</Box>}
       <Box component="button" onClick={back} disabled={busy} sx={press}
         title="The agent looks at the page as you left it and carries on">{busy ? "handing back…" : "I'm done"}</Box>
       {err && <Typography role="alert" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.red, flexBasis: "100%" }}>{err}</Typography>}

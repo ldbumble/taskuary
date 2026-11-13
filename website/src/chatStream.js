@@ -147,6 +147,11 @@ export const heldAtEnd = (held, { top, was, gap, own }) => gap < AT_END || (held
 // THE LIST ASKED LAST: the one this view last read, or one read ahead with its task as he came back to it (taskDetail.prefetchTask) - an older
 // read is never drawn over a newer one (the owner's live task, 2026-11-12: he left a task and came back); `_at` is when each was ASKED
 export const newerList = (a, b) => (!a ? b || null : !b ? a : (b._at || 0) > (a._at || 0) ? b : a);
+// ...WHAT A CHAT MAY PAINT BEFORE ITS OWN READ LANDS (the owner, 2026-11-13: a long task opened on messages from his last visit, the rest
+// coming in after - "if you need time to load full convo then just spin, don't open with weird data"): only a list read a moment ago - the
+// view drawn again as its session starts, one read ahead for Next. An older one is not painted; the chat spins until its read lands
+export const HELD_FOR = 15000;
+export const paintable = (own, ahead, now = Date.now()) => newerList(own && now - (own._at || 0) < HELD_FOR ? own : null, ahead || null);
 /* ...AND HIS OWN LINES: a line it sent is drawn at once - in the conversation when the agent was at rest (it is heard as it is sent, its turn
    under it), by the box when a turn was at work - and the server's copy takes over by the same name.
    ...ABOVE THE TURN HIS LINE BEGAN (the owner's live task, 2026-11-12: back on a task, he typed - the dots stood above "try now"): a read that

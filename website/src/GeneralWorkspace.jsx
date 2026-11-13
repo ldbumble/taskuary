@@ -18,7 +18,7 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, newerList, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
@@ -380,7 +380,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 // under the pointer) on its first frame - the read on mount still follows, so what is held is only ever the first paint
 const LISTS = new Map();
 // ...WHICHEVER WAS ASKED LAST (chatStream.newerList): the list this view last read, or the one read ahead as he came back
-const listOf = (tid) => { const l = newerList(LISTS.get(tid), heldConversation(tid)); if (l) LISTS.set(tid, l); return l; };
+const listOf = (tid) => { const l = paintable(LISTS.get(tid), heldConversation(tid)); if (l) LISTS.set(tid, l); return l; };
 // ...and what the chat stands on beside its list - the agent's state, its picks, what it holds (`/assistant`) - by the same rule: as last
 // read here, else as asked ahead with the task; the read on mount follows and is the newest word
 const CHATS = new Map();
@@ -651,6 +651,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
         {/* ...`data-tq-follows-end`: this scroller keeps its own place - its end, or where he scrolled to - and nothing else moves it (inView.unclip) */}
         <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport" autoScroll={false} data-tq-follows-end="">
           <div ref={inner} className="tq-conv" data-tq-conv={list ? "loaded" : ""}>
+            {!list && <Box data-tq-chat-reading="" sx={{ py: 6, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}
             {chat && !!list && !merged.items.length && reading}
             {!!list && !merged.items.length && !!empty && <div className="tq-aui-hint" style={{ margin: "8px 0 16px" }}>{empty}</div>}
             {!!list && !merged.items.length && !empty && !(chat && reading) && <div className="tq-aui-welcome"><TaskuaryMark size={22} /><div>

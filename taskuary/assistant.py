@@ -371,7 +371,7 @@ def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
     from .triage import own_words, strip_wrapper, wrapper_of
     settings = store.get_settings(); team = team_domains_of(settings); me = (settings.get('owner_email') or '').lower()
     cut = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
-    pend = {r['TaskId'] for r in store.list_reviews('pending')}
+    pend = {r['TaskId'] for r in store.waiting_reviews()}
     # a note the owner handed an agent (channel `own`) is their own word, not an ask of them - it put
     # "You asked ... no answer from you" under People want for two handoffs the agents had already done
     mine = lambda c: (c.get('Status') == 'context' or c.get('Direction') == 'out' or c.get('Channel') == 'own'

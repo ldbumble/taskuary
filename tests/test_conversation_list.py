@@ -716,6 +716,26 @@ class TheList(unittest.TestCase):
         # ...one the turn did not say - a sign-in it waits on, a step handed over - is the page's own line still
         with mock.patch('taskuary.taskstate.asking', return_value={**ask, 'text': 'Sign in to the portal to continue'}): self.assertNotIn('said', self.list()['asking'])
 
+    def test_an_open_question_stands_in_the_turn_that_asked_it_and_never_follows_the_chat_s_foot(self):
+        """Recorded on the real CLI, 2026-11-13: the agent asked which city, the sender wrote again, and the turn that mail woke answered
+        without asking again. The question - still open, nobody had answered - was drawn a second time under the new turn, as a line of
+        the chat's foot, and again under the next: an item pinned at the bottom that left the turn it had stood under. The list names the
+        turn that asked (`turn`), whose words hold it (`said`): the page draws it there, once."""
+        self.brain.said[1] = 'I could not find where the offsite is.\n\n[[TASKUARY-ASK]] Which city should the offsite be in?'
+        self.brain.said[2] = 'Noted: parking for 15 cars. I still need the city before I can name venues.'
+        self.say('Suggest two.'); self.rest()
+        got = self.list(); asked = next(x for x in got['items'] if x['kind'] == 'turn')
+        self.assertEqual((got['asking']['turn'], got['asking'].get('said')), (asked['id'], True), got['asking'])
+        t = time.time(); until(lambda: time.time() >= t + 1.1)                       # (a stamp is a whole second)
+        self.say('One more thing - it needs parking for 15 cars.', wait=True); self.rest()
+        with mock.patch('taskuary.taskstate.asking', return_value={k: v for k, v in got['asking'].items() if k not in ('turn', 'said')}): now = self.list()
+        turns = [x for x in now['items'] if x['kind'] == 'turn']
+        self.assertEqual(len(turns), 2, self.kinds(now))
+        self.assertEqual((now['asking']['turn'], now['asking'].get('said')), (asked['id'], True), now['asking'])       # where it was asked, not the newest
+        # ...and one no turn's words hold (a CLI's own question tool, a step handed over) is still placed in the turn it was raised in
+        with mock.patch('taskuary.taskstate.asking', return_value={**got['asking'], 'text': 'Pick one', 'choices': ['Mill', 'Quay'], 'turn': None, 'said': None}): tool = self.list()['asking']
+        self.assertEqual((tool['turn'], tool.get('said')), (asked['id'], None), tool)
+
     def test_a_question_a_coding_turn_ended_in_is_said_once(self):
         """A coding agent's words are its turn's steps, not its text: the demo's #214 ended "Push it to a branch and open a pull request
         for your review?" and the chat drew that line twice - in the turn, and again as the agent's question under it."""

@@ -188,7 +188,7 @@ def _holds(store, tid, pad='    ') -> str:
     return ''.join(f"{NL}{pad}· {x['line']}" + (f" [rv{x['rid']}]" if x.get('rid') else '') for x in owed_items(store, int(tid))[:6]) if tid else ''
 
 def approvals_list(store, p: dict) -> str:
-    rows = store.list_reviews(status='pending')
+    rows = store.waiting_reviews()
     if not rows: return 'Nothing is waiting for your approval.'
     # ...each task's by what it holds - "a slot to them" was an agent's email to Gail, said as nothing the owner could act on
     tids = list(dict.fromkeys(r['TaskId'] for r in rows if r.get('TaskId')))[:30]

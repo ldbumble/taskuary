@@ -191,4 +191,30 @@ class IdleOut(unittest.TestCase):
             self.assertEqual(general.idle_sweep(self.later()), [])
 
 
+    def test_a_restart_over_a_chat_agent_at_rest_interrupts_nothing_and_the_task_reads_as_it_did(self):
+        """Recorded on the real CLI, 2026-11-13: a chat agent had answered and was at rest ("agent done"); Taskuary was stopped and started.
+        Its task came back tagged interrupted - "agent stopped ... Taskuary restarted after the agent session ended. The task is open again -
+        nobody is working it" - over an answer that had ended minutes before: nothing was cut. Interrupted is a turn the stop cut short
+        (terminal.release_task `cut`); a session at rest that went with the process is the same agent, not running - it reads as it did live,
+        as when it idles out, and a question it had open still waits."""
+        from taskuary import taskstate, terminal
+        s, tid = self.s, self.tid
+        state = lambda: taskstate.state(s, s.get_task(tid))
+        self.assertEqual(taskstate.state(s, s.get_task(tid), self.ses.info()), 'agentdone')
+        n = len(s.list_comments(tid))
+        with mock.patch.dict(terminal.SESSIONS, dict(terminal.SESSIONS)): terminal.shutdown_sessions()        # Taskuary stops...
+        terminal.recover_after_restart(s)                                                                     # ...and starts again
+        self.assertNotIn(terminal.INTERRUPTED, str(s.get_task(tid).get('Tags') or ''))
+        self.assertEqual(state(), 'agentdone')
+        # ...and on its rail row the same - not "agent stopped: its conversation is saved", which only this process's memory of an idle-out held off
+        from taskuary import funnel
+        row = funnel.paused_conversation(s, {'tid': tid, 'lane': 'yours', 'kind': 'task'})
+        self.assertEqual((row.get('lane'), row.get('chat_done'), row.get('paused')), ('yours', True, None), row)
+        self.assertFalse([c['Body'] for c in s.list_comments(tid)[n:] if 'nobody is working it' in c['Body']])  # nothing to say: nothing was cut
+        # ...and a turn the stop DID cut is interrupted, as before
+        ses = general.start_session(s, tid, actor='owner'); ws.record(s, tid, ses.sid, 'working', source='api')
+        with mock.patch.dict(terminal.SESSIONS, dict(terminal.SESSIONS)): terminal.shutdown_sessions()
+        self.assertIn(terminal.INTERRUPTED, str(s.get_task(tid).get('Tags') or '')); self.assertEqual(state(), 'stopped')
+
+
 if __name__ == '__main__': unittest.main()

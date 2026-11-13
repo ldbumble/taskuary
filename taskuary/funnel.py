@@ -61,6 +61,9 @@ CHANNEL_MARKS = {'email': '📧', 'teams': '👥', 'slack': '💬', 'telegram': 
                  'promise': '🤝', 'followup': '📨', 'prep': '📅', 'cold': '🥶'}
 
 
+def _written_past(store, tid) -> set:
+    from . import proposals
+    return proposals.written_past(store, tid)
 def owed_no_draft(item: dict) -> bool:
     """A reply owed with NO DRAFT YET (the owner, 2026-10-27): it rode the 'approve' lane and said "ready to send" with its flag on the
     rail, the header and the phone over a reply nothing had written. It reads "reply owed" until the draft lands (railStatus.owedNoDraft)."""
@@ -315,7 +318,9 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                              ranked_wait=waits, **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
             continue
-        if r.get('ReviewStatus') == 'pending' and r.get('ReviewId'):
+        # ...never a reply draft the thread has moved past (proposals.written_past, the one rule the chat greys it by and the task's state
+        # reads): after a restart the row said "ready to send" over a draft the owner had answered past (the owner's live task, 2026-11-13)
+        if r.get('ReviewStatus') == 'pending' and r.get('ReviewId') and not (r.get('TaskId') and r['ReviewId'] in _written_past(store, r['TaskId'])):
             if r['ReviewId'] in reviews: continue
             reviews.add(r['ReviewId'])
             action = r.get('ReviewKind') == 'action'
@@ -945,7 +950,13 @@ def paused_conversation(store, item: dict, st=None) -> dict:
         # ...nor one that IDLED OUT (general.idle_out): nothing stopped and nothing was saved - its agent is just not running until the next
         # input, and the task reads as the task (a reply ready, on you), never "agent stopped" or "conversation saved" (the owner, 2026-11-05)
         # ...and AS IT READ LIVE (the owner, 2026-11-07): its open question still asks you, and a turn that asked nothing is done for now
-        if general.idled(tid, store):
+        # ...OFF THE TASK'S SAVED RECORD, as its state is read (taskstate._chat_resting), never only this process's memory of who idled out
+        # (recorded on the real CLI, 2026-11-13: after a restart the same agent at rest read "agent done" on its task and "agent stopped -
+        # its conversation is saved" on its row): its run's last word is a turn's end or its question (workerstate.at_rest), and nothing
+        # says it stopped, was saved or failed (the record's `left`). A conversation saved with no such word - an older one, a walkthrough's -
+        # is the paused one below, as before
+        from . import workerstate
+        if general.idled(tid, store) or (not st.left and workerstate.at_rest(store, tid, st.events)):
             if (q := taskstate.open_question(store, tid)):
                 return item | {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'asking': True, 'agent': 'assistant', 'mode': 'assistant',
                                'tail': [str(q.get('text') or '')[:300]], 'request_id': q.get('request_id'), 'request_kind': q.get('kind'),

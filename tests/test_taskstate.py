@@ -38,7 +38,12 @@ class StateTests(unittest.TestCase):
         self.assertEqual(taskstate.state(s, row(s, t, ReviewStatus='pending'), parked), 'approve')
         self.assertEqual(taskstate.column('approve'), 'agentdone')
         self.assertEqual(taskstate.state(s, row(s, t, ReviewStatus='pending'), asking), 'blocked')      # a question still outranks it
+        # ...A CHAT SESSION THAT NEVER BEGAN A TURN IS NO AGENT AT REST (recorded on the real CLI, 2026-11-13: a start refused behind Trust left
+        # its session open, parked - "agent done", Mark done lit, over a chat holding only the sender's message): it reads as with no session
+        self.assertEqual(taskstate.state(s, row(s, t), parked), 'yours')
         # ...and a chat turn that drafted nothing and asked nothing is done for now, never waiting on you (the owner, 2026-11-07)
+        from taskuary import general
+        s.add_comment(t, 'assistant', general.ASSISTANT_TYPE, 'Nothing to do here - it is already booked.')
         self.assertEqual(taskstate.state(s, row(s, t), parked), 'agentdone')
         self.assertEqual(taskstate.state(s, row(s, task(s)), parked), 'blocked')                         # a coding agent parked still waits on you
 

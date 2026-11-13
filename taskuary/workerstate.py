@@ -272,6 +272,12 @@ def left_asking(store, tid) -> list:
     return [r for r in st['requests'] if own_question(r)] if st['state'] in ('disconnected', 'stopped') else []
 
 
+# A RUN AT REST, BY ITS OWN LAST WORD: a turn that ended, or the request it ended on - nothing under way, nothing that ended it. What a
+# restart may take as "not interrupted" (terminal.release_task) and the rail as "reads as it did live" (funnel.paused_conversation)
+RESTS = ('turn_end', *REQUESTS)
+def at_rest(store, tid, evs=None) -> bool: return ((newest(store, tid, evs, skip=NOTES) or {}).get('Kind')) in RESTS
+
+
 def newest(store, tid, evs=None, kinds=None, skip=()):
     """The task's newest event - of `kinds` only, none of `skip` - or None: off `evs` (its events, oldest first) when the caller holds
     them (taskstate.TaskState), else the one indexed row (store.last_worker_event). The same reading either way."""

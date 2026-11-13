@@ -1308,7 +1308,7 @@ def dock_snapshot(store) -> str:
 
     tasks = [t for t in store.list_tasks()
              if t.get('Status') not in ('done', 'dropped') and not is_dock(t)][:30]
-    reviews = store.list_reviews('pending')[:20]
+    reviews = store.waiting_reviews()[:20]
     recent = store.feed(limit=30, days=14)
     needs = [r for r in recent if r.get('NeedsYou')][:12]
 

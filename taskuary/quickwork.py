@@ -212,6 +212,12 @@ def _call(store, tid, ask_: str, steps: list) -> tuple:
     cancel = threading.Event()
     try:
         _take(store, tid)
+        # A QUICK TURN IS A TURN: ITS HAND-OVER IS WRITTEN DOWN AS EVERY ROAD'S IS (conversation.hear - recorded on the real CLI, 2026-11-13: the
+        # owner answered a chat himself, the quick turn that heard it left no mark, so the reply draft he had answered past stayed pending -
+        # greyed in the chat, "ready to send" on the pill - and the agent, told a draft still waited, said "it still shows under your Send"
+        # over a card with no Send). What came in since the last turn is heard here, the draft above it set aside, before the prompt is read
+        from . import conversation
+        conversation.hear(store, tid, turn=True)
         try:
             timer = threading.Timer(QUICK_TIMEOUT, cancel.set); timer.daemon = True; timer.start()
             try: return ask(store, tid, ask_, steps, cancel), ''

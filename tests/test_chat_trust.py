@@ -434,3 +434,25 @@ def test_a_copied_name_in_another_teams_chat_borrows_nothing():
     s = _store(); _line(s, 'teams:19:crew', 'Marcus Reed', ch='teams', FromEmail=''); _line(s, 'teams:19:crew', 'Erin Blake', ch='teams')
     _mine(s, 'teams:19:crew', ch='teams'); mid = _sister(s)
     assert not senders.known(s, _sister_msg(), exclude_mid=mid)[0]
+
+
+def test_trust_on_a_held_reply_task_starts_the_agent_that_writes_the_reply():
+    """Recorded on the real CLI, 2026-11-13: a question in a chat from a sender not yet vouched for made a REPLY task - a reply owed, no
+    draft, its start held ("you haven't talked with them one-to-one"). Trust lifted the hold and returned no start (only an agent's kind
+    of task started one): the chat stood on "You trusted the sender" over an empty reply box, nothing at work and nothing lit. The start
+    the hold refused is the one Trust makes - the reply's own hand-over (ingest.reply_to_agent), as at arrival."""
+    from unittest import mock
+    from taskuary import general, ingest
+    s = server.store
+    t = s.create_task({'Title': 'What is the total?', 'Kind': 'reply', 'Source': 'whatsapp'}, 'router')
+    mid = s.add_message({'TaskId': t, 'Channel': 'whatsapp', 'ConversationId': f'wa:g-{t}', 'SourceName': 'Gail Moreno', 'FromName': 'Gail Moreno',
+                         'BodyText': 'Alex, what is the total on the March invoice?', 'Status': 'routed'})
+    rid = s.add_review({'TaskId': t, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'needs a reply'})
+    s.tag_task(t, ingest.HOLD_TAG, on=True, actor='t')
+    try:
+        with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
+            got = c.post(f'/api/tasks/{t}/trust').json()
+        assert got['started'] == 'started', got
+        assert [x[0][0].__name__ for x in spawn.call_args_list] == ['_auto_general'] and spawn.call_args[0][2] == t
+        assert s.get_task(t)['Kind'] == 'general' and s.get_review(rid)['Status'] == 'pending'       # the agent's to fill, for his Send
+    finally: general.OPENING.discard(t)

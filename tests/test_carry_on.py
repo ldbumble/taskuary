@@ -184,11 +184,26 @@ class CodingCarryOnTests(unittest.TestCase):
         self.assertEqual((out['task_id'], spawned), (tid, ['_continue_coding']))
         self.assertTrue(any('coding agent reopens its own session' in c['Body'] for c in s.list_comments(tid)))
         self.assertIn(tid, general.OPENING)
-        with mock.patch.object(terminal, 'start_on_task') as start: ingest._continue_coding(s, tid)
+        # ...BY THE ONE ROAD (general.tell -> the waiting room -> waitroom.reopen_coding), as a typed line and an approval reach it: it
+        # started the CLI itself, so nothing was written down as heard and a start that found no room was never tried again
+        with mock.patch.object(terminal, 'start_on_task', return_value={}) as start, mock.patch.object(ingest, 'has_room', return_value=True): ingest._continue_coding(s, tid)
         args, kw = start.call_args
-        self.assertEqual((args[1], args[2], args[4], args[5]), (tid, 'coder', None, 'router'))     # no instruction: resume_seed says what is new
+        self.assertEqual((args[1], args[2], kw['actor']), (tid, 'coder', 'router'))
         self.assertEqual((kw['resume'], kw['cwd'], kw['brain']), ('cli-conv-1', self.cwd, 'cli:claude'))
+        self.assertIn(ingest.CARRY_ON_PROMPT, kw['instruction'])                                    # told what came in, in the carry-on's own words
+        self.assertFalse(s.waiting_notes(tid))                                                      # handed over, once
+        self.assertTrue(s._rows("SELECT 1 FROM heard WHERE TaskId=? AND Kind='turn'", (tid,)))      # ...and the hand-over is the ledger's
         self.assertNotIn(tid, general.OPENING)
+
+    def test_a_reopen_that_finds_no_room_keeps_its_turn_and_takes_it_when_there_is(self):
+        from taskuary import waitroom
+        s = store(); tid = coding_task(s, self.cwd)
+        with mock.patch.object(terminal, 'start_on_task', return_value={}) as start:
+            with mock.patch.object(ingest, 'has_room', return_value=False): ingest._continue_coding(s, tid)
+            self.assertFalse(start.called); self.assertEqual(len(s.waiting_notes(tid)), 1)          # kept, never "Continue picks it up" over nothing
+            self.assertFalse([c for c in s.list_comments(tid) if 'Continue picks it up' in c['Body']])
+            with mock.patch.object(ingest, 'has_room', return_value=True): waitroom.tick(s)
+        self.assertEqual(start.call_args.kwargs['resume'], 'cli-conv-1'); self.assertFalse(s.waiting_notes(tid))
 
     def test_a_full_house_queues_the_reopen_and_a_free_slot_reopens_it(self):
         from taskuary import blackboard

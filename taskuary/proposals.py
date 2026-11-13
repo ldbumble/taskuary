@@ -536,6 +536,13 @@ def set_aside_drafts(store, tid: int, before: float, actions: float = 0) -> list
     of its turn if it is still needed. A reply draft older than `before` (his line, or a message that came in), and the agent's own actions -
     a held step, a proposal - older than `actions` (his line only). Never what Taskuary raised itself: a close-out, a playbook, a routine's step.
     Every road hears an input through conversation.hear, which calls this. -> the review ids."""
+    out = [r for r in _older(store, tid, before, actions) if store.decide_review(r, 'superseded', None, 'taskuary', note=SET_ASIDE)]
+    if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out})
+    return out
+
+
+def _older(store, tid: int, before: float, actions: float = 0) -> list:
+    "The pending cards of the agent's an input at `before` (his line too: `actions`) stands after - set_aside_drafts' rule, read only."
     from .conversation import ep
     rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft','action') AND DeliveryClaim IS NULL", (int(tid),))
     def ours(r):
@@ -544,11 +551,22 @@ def set_aside_drafts(store, tid: int, before: float, actions: float = 0) -> list
         except (TypeError, ValueError): d = {}
         return isinstance(d, dict) and not (d.get('closeout') or d.get('action') in CLOSEOUT or d.get('action') in PLAYBOOKS or d.get('block')
                                             or str(r.get('Reason') or '').startswith('the workflow'))
-    out = [r['ReviewId'] for r in rows if (r['Kind'] != 'action' and str(r.get('DraftText') or '').strip() and ep(r['CreatedAt']) < before
-                                            or actions and ours(r) and ep(r['CreatedAt']) < actions)
-           and store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', note=SET_ASIDE)]
-    if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out})
-    return out
+    return [r['ReviewId'] for r in rows if (r['Kind'] != 'action' and str(r.get('DraftText') or '').strip() and ep(r['CreatedAt']) < before
+                                            or actions and ours(r) and ep(r['CreatedAt']) < actions)]
+
+
+def written_past(store, tid: int) -> set:
+    """THE CARDS THE CONVERSATION HAS MOVED PAST AND NO AGENT HAS HEARD OF YET - ONE FUNCTION FOR EVERY SURFACE (the owner, 2026-11-13: the
+    chat greyed a reply draft his own outside answer stood under while the header's pill said "ready to send"): a pending reply draft
+    with a newer message on the task's thread, the sender's or his own. `hear` settles it for good the moment an agent takes that message
+    (set_aside_drafts, by this same rule, and its agent drafts again where a reply is still owed); until then - no agent may start, the
+    switch is off, the house is full - the row still reads pending, and what waits on his press (store.waiting_on_owner: the pill, the
+    rail, the board) and what the chat draws lit (conversation.items) both leave it out. -> the review ids."""
+    from . import conversation
+    if not store._one("SELECT 1 AS x FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') LIMIT 1", (int(tid),)): return set()
+    # ...a message its agent HAS heard settled what it stood after at that hand-over (hear): only one no agent heard can leave a draft behind
+    led = {r['Ref'] for r in store._rows("SELECT Ref FROM heard WHERE TaskId=? AND Kind='mail'", (int(tid),))}
+    return set(_older(store, tid, max((x['T'] for x in conversation._mail(store, int(tid)) if str(x['MessageId']) not in led), default=0.)))
 
 
 # what its agent is told of a card it raised that the conversation moved past - ONE sentence for every kind and both agent kinds

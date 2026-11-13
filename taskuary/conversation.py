@@ -689,11 +689,14 @@ def items(store, tid: int) -> dict:
     out = served(store, tid, served_back(store, tid, out, was_shown, {p['id'] for p in pend})); keep_shown(store, tid, out, was_shown)
     # (the reply draft above a newer input, greyed - read in the order drawn)
     # (and any card of the agent's above his newer line - every kind, 2026-11-12 - `hear` settles it as his line is heard)
+    # ...and one the thread moved past that no agent has heard yet, by the rule the header's pill and the rail read (proposals.written_past)
+    from . import proposals
     last_in = max((i for i, x in enumerate(out) if x['kind'] in ('line', 'arrival')), default=-1)
     last_his = max((i for i, x in enumerate(out) if x['kind'] == 'line'), default=-1)
+    past = proposals.written_past(store, tid)
     for i, x in enumerate(out):
         for c in [x] if x['kind'] == 'card' else x['cards'] if x['kind'] == 'turn' else []:
-            if c['status'] == 'pending' and c.get('was') and (c['what'] in DRAFTS and i < last_in or i < last_his): c['status'] = 'passed'
+            if c['status'] == 'pending' and c.get('was') and (c['what'] in DRAFTS and i < last_in or i < last_his or c['review'] in past): c['status'] = 'passed'
     if (said_ :=next((x['text'] for x in out if x['id'] == 'n:left'), None)) and not (was_left and was_left['Host'] == said_):
         store._exec("UPDATE shown SET Host=? WHERE TaskId=? AND Key='n:left'", (said_, tid))
     # ...and what the agent waits on him for, and the CLI that runs: read by the page off this one list (the chat's own payloads are gone)
@@ -711,6 +714,14 @@ def items(store, tid: int) -> dict:
     # ...a coding turn's words are its `said` steps, its text empty: the demo's #214 drew its closing question twice
     words = last and ' '.join([str(last.get('text') or ''), *(s.get('text') or '' for s in last.get('steps') or [] if s.get('k') == 'said')])
     if ask and last and flat(ask.get('text')) and flat(ask['text']) in flat(words): ask = {**ask, 'said': True}
+    # ...AND IT STANDS IN THE TURN THAT ASKED IT, NEVER AT THE CHAT'S FOOT (the owner, 2026-11-13: "never ever pin items on the bottom of the
+    # chat" - recorded the same day: a question still open was drawn again under each later turn, leaving the one it had stood under): the
+    # list names that turn (`turn`: the one at work when the ask was raised, else the newest) and the page draws the ask inside it, once -
+    # with no line of its own where that turn's words already hold it
+    if ask and last:
+        said_of = lambda t: ' '.join([str(t.get('text') or ''), *(s.get('text') or '' for s in t.get('steps') or [] if s.get('k') == 'said')])
+        by = (made_in(ep(ask['at']) + 0.999) if ask.get('at') else None) or last
+        ask = {**ask, 'turn': by['id'], **({'said': True} if flat(ask.get('text')) and flat(ask['text']) in flat(said_of(by)) else {})}
     # THE WAITING ROOM (the owner, 2026-11-12): what waits for the agent is drawn in ONE place until it is heard - his lines as rows over the
     # box, messages as counts on their sender's chip - and `now` says whether a waiting line can be handed into the turn at work at once (a
     # session that takes words mid-turn, not stopped at his Allow); `dropped`: the lines he took back, which leave no trace

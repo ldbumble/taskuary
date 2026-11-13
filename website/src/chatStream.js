@@ -206,6 +206,10 @@ export const workingLine = (parts, label, { starting = false, ask = "" } = {}) =
   if (!last) return starting ? "Waiting for the agent to start" : "Thinking…";
   return last.status === "running" ? String(label(last) || "").split(/\r?\n/)[0].trim() || "Working…" : "Thinking…";
 };
+// WHERE THE AGENT'S QUESTION IS DRAWN (the owner, 2026-11-13: "never ever pin items on the bottom of the chat"): in the turn that asked it,
+// which the list names (conversation.items `asking.turn`) - "" only while that turn is not in what is drawn (a read behind, a chat with no
+// turn yet), when it stands under everything as it did
+export const askTurn = (asking, items) => (asking?.turn && (items || []).some((x) => x.kind === "turn" && x.id === asking.turn) ? asking.turn : "");
 // ...what a turn at work waits on HIM for, in words: the step its session is stopped at, a sign-in, a question
 // ...(a question the agent asked before is no wait while it works: the recorded walk, 2026-11-12, read "Waiting for your answer" over a turn
 // already at work on his answer - only a step it is stopped at, or a sign-in on the page, holds a turn at work)

@@ -32,7 +32,7 @@ def can_resume(store, pick):
 
 def previous_work(store, limit=5):
     from . import general, terminal
-    reviews = {r['TaskId']: r for r in reversed(store.list_reviews('pending')) if r.get('TaskId')}
+    reviews = {r['TaskId']: r for r in reversed(store.waiting_reviews()) if r.get('TaskId')}
     live = {s.task_id: s for s in list(terminal.SESSIONS.values()) if s.alive}
     result = []
     for row in store.previous_work():

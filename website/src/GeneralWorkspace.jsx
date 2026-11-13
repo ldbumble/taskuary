@@ -18,7 +18,7 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, newerList, withMine, waitingChips, workingLine, waitingOn } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, newerList, withMine, waitingChips, workingLine, waitingOn, askTurn } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
@@ -417,7 +417,7 @@ const TurnTime = ({ t }) => {
   const ran = t.started && t.ended ? turnStamp({ start: t.started * 1000, end }) : "";
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>· {when(end)}{ran ? ` · ${ran}` : ""}</span>;
 };
-const ConvTurn = ({ t, more, cards, name }) => {
+const ConvTurn = ({ t, more, cards, name, ask = null }) => {
   const live = t.state === "working" || t.state === "starting";
   const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { answer: t.text || "" }), [t.steps, t.text, live]);
   const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
@@ -425,7 +425,7 @@ const ConvTurn = ({ t, more, cards, name }) => {
   const made = at ? turnFiles({ listed: at.listed, id: key, words, did: sum?.did, tid: at.tid, skip: [] }) : [];
   const names = new Set(made.map((f) => f.name));
   const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name));
-  const quiet = !live && !hasParts(parts) && !words && !t.fail && !cards?.length && !made.length && !rest.length;
+  const quiet = !live && !hasParts(parts) && !words && !t.fail && !cards?.length && !made.length && !rest.length && !ask;
   const onYou = !live && sum ? turnOnYou(sum, words) : "";
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
@@ -446,6 +446,8 @@ const ConvTurn = ({ t, more, cards, name }) => {
       {t.state === "failed" && !!t.fail && <div className="tq-aui-hint" role="alert" data-tq-turn-failed="">⚠ {t.fail}</div>}
       {!!rest.length && <PublishedPages pages={rest} open />}
       {!!made.length && <TurnFiles files={made} />}
+      {/* ...what this turn asked him, where it asked it (the list's `asking.turn`): above its card, never at the chat's foot */}
+      {ask}
       {!!cards?.length && <div data-tq-turn-cards="">{cards}</div>}
     </div></div>;
 };
@@ -470,7 +472,7 @@ const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.s
   {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
-function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, landAt, name, tid, onChanged, working = false }) {
+function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, landAt, name, tid, onChanged, working = false, ask = null, askAt = "" }) {
   // THE WORK'S CARD IS PART OF THE AGENT TURN THAT DID IT, or not drawn at all (the owner, 2026-11-13: "stop putting worked on master at the
   // bottom ... it's part of the agent turn or doesn't belong at all"): the turn its newest change came in (landing.landingTurn); until the card
   // has read its state it is mounted hidden, so it can say when
@@ -490,7 +492,7 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
   });
   const rows = items.map((x, i) => {
     const prev = items[i - 1];
-    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn"} name={name}
+    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn"} name={name} ask={x.id === askAt ? ask : null}
       cards={x.id === landIn ? [...draw(x.cards), <React.Fragment key="landing">{landing}</React.Fragment>] : draw(x.cards)} />;
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;
@@ -634,6 +636,9 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
   // pressed Send on went to the first draft's turn, screens above (the recorded walk, 2026-11-11)
   const replies = (nextAt?.reviews || []).filter((r) => ["draft_reply", "draft"].includes(r.Kind)).sort((a, b) => b.ReviewId - a.ReviewId);
   const nextRid = (replies.find((r) => r.Status === "pending") || replies[0])?.ReviewId ?? null;
+  // WHAT THE AGENT ASKS STANDS IN THE TURN THAT ASKED IT (conversation.items `asking.turn`): one node, drawn there
+  const askNode = asking ? <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} /> : null;
+  const askAt = askTurn(asking, merged.items);
   const askWords = !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : "Answer the agent's question…";
   return (
     <AssistantRuntimeProvider runtime={runtime}><StopCtx.Provider value={onStop}>
@@ -647,10 +652,11 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
             <RetryCtx.Provider value={retry}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
-              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} /></WaitOnCtx.Provider></RetryCtx.Provider>
+              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} ask={askNode} askAt={askAt} /></WaitOnCtx.Provider></RetryCtx.Provider>
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
-            {asking && <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} />}
+            {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}
+            {!askAt && askNode}
             <PublishedPages pages={published} deliver />
             {/* ...a chat whose page places no cards itself (a walk's, a journey's): a drafted playbook and a held act are approved here */}
             {!turnCards && !!drafts?.length && <Box data-tq-playbook-drafts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>

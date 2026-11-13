@@ -181,10 +181,13 @@ class TaskState:
             # ...but an agent PARKED - it answered, asked nothing - over a reply it drafted is the reply waiting, as the rail says: the Board
             # put it under "agent waiting on you" with "ready to send" on the same card, and the header said so until a reload (email walk 2026-10-29)
             parked = (session.get('state') or 'parked') == 'parked' and not session.get('request')
-            if parked and (t.get('ReviewStatus') == 'pending' or store.waiting_on_owner(tid)): return 'approve'
-
-            # ...and an agent whose turn asked nothing is done for now, never waiting on you (the owner, 2026-11-07) - as it reads once idled out
-            return 'agentdone' if done_for_now(store, t, session) else 'blocked'
+            if parked and waits_press(store, t): return 'approve'
+            # ...A CHAT SESSION THAT NEVER BEGAN A TURN IS NO AGENT AT REST (recorded on the real CLI, 2026-11-13: a start was refused - its
+            # sender not trusted yet - after the session had opened; the session stayed, parked, and the task read "agent done" with Mark
+            # done lit over a chat that held only the sender's message and the Trust action): the task reads as it does with no session
+            if not (parked and never_ran(store, t, session)):
+                # ...and an agent whose turn asked nothing is done for now, never waiting on you (the owner, 2026-11-07) - as it reads once idled out
+                return 'agentdone' if done_for_now(store, t, session) else 'blocked'
         st = t.get('Status')
         if st == 'dropped': return 'dropped'
         # ...and a start in flight for his line is at work from the press, whichever agent comes up (general.OPENING - one mark for every kind): a
@@ -195,7 +198,7 @@ class TaskState:
             if str(t.get('UpdatedBy') or '') in OWNER_ACTORS: return 'closed'        # yours: no need to read its notes
             return 'agentdone' if finish_evidence(store, tid) else 'closed'
         if t.get('RunStatus') == 'running': return 'working'
-        if t.get('ReviewStatus') == 'pending': return 'approve'
+        if waits_press(store, t, row=True): return 'approve'
         # still waiting to start, a failed start included - the row carries the error and the page offers Start now / Cancel (T10)
         if self.queued: return 'queued'
         left = funnel.left_by_facts(t.get('Tags'), [{'Status': t.get('RunStatus')}] if t.get('RunStatus') else [])
@@ -214,6 +217,26 @@ class TaskState:
         return 'yours'
 
 
+def never_ran(store, t: dict, session: dict) -> bool:
+    "A chat agent's live session with no word of its own - no event of a turn, no answer on the task: opened, and never set to work."
+    from . import workerstate as ws
+    from .general import ASSISTANT_TYPE, handles
+    if not handles(t) or (session.get('mode') or 'assistant') != 'assistant': return False
+    if any(e['Kind'] not in ws.NOTES for e in ws.events(store, t['TaskId'], session.get('sid'))): return False
+    return not store._one('SELECT 1 AS x FROM comment WHERE TaskId=? AND ActorType=? LIMIT 1', (t['TaskId'], ASSISTANT_TYPE))
+
+
+def waits_press(store, t: dict, row: bool = False) -> bool:
+    """DOES SOMETHING ON THIS TASK WAIT FOR HIS PRESS - one read for the task's state: the list row's own latest ReviewStatus, and (not `row`)
+    anything else the queue shows waiting (store.waiting_on_owner). Never a reply draft the thread has moved past (proposals.written_past):
+    its row still reads pending until an agent hears the newer message, and the pill said "ready to send" over a draft the chat had greyed
+    (the owner's live task, 2026-11-13)."""
+    from . import proposals
+    pending = t.get('ReviewStatus') == 'pending'
+    if pending and not proposals.written_past(store, t['TaskId']): return True
+    return bool(store.waiting_on_owner(t['TaskId'])) if pending or not row else False
+
+
 def done_for_now(store, t: dict, session: dict) -> bool:
     """A live agent whose turn ENDED with nothing asked and nothing left for a press: "agent done", Mark done lit, the task still open under
     Tasks (the owner, 2026-11-10). A chat agent always read so; a coding agent that had pushed and said "Nothing is left to do on this
@@ -221,7 +244,7 @@ def done_for_now(store, t: dict, session: dict) -> bool:
     a pane just opened has done nothing yet, and one with work still in the background is not over - and no landing question of its waits."""
     if (session.get('state') or 'parked') != 'parked' or session.get('request') or session.get('held'): return False
     tid = t['TaskId']
-    if t.get('ReviewStatus') == 'pending' or store.waiting_on_owner(tid): return False
+    if waits_press(store, t): return False
     from . import landing, workerstate as ws
     from .general import handles
     last = next((e['Kind'] for e in reversed(ws.events(store, tid, session.get('sid'))) if e['Kind'] not in ws.NOTES), None)

@@ -187,3 +187,13 @@ test("the waiting strip shows the newest lines with the count, and a failed line
   assert.match(view, /\{more > 0 && <div className="tq-conv-pending-more" data-tq-pending-more="" data-tq-pending-ids=\{rows\.filter\(\(x\) => !shown\.includes\(x\)\)\.map\(\(x\) => x\.id\)\.join\(" "\)\}>\+\{more\} more<\/div>\}/);
   assert.match(view, /\{shown\.map\(\(x\) =>/);
 });
+
+test("the agent's open question is drawn in the turn that asked it, never under whatever came after", async () => {
+  const { askTurn } = await import("../src/chatStream.js");
+  const items = [{ id: "m:1", kind: "arrival" }, { id: "t:m:1:0", kind: "turn" }, { id: "m:2", kind: "arrival" }, { id: "t:m:2:0", kind: "turn" }];
+  // recorded 2026-11-13: asked in the first turn, still open after the turn a second mail woke - it stood under that one, at the chat's foot
+  assert.equal(askTurn({ request_id: "q1", text: "Which city?", turn: "t:m:1:0", said: true }, items), "t:m:1:0");
+  // ...at the foot only while the list holds no such turn (a read behind), or names none
+  assert.equal(askTurn({ request_id: "q1", turn: "t:m:9:0" }, items), "");
+  assert.equal(askTurn({ request_id: "q1" }, items), ""); assert.equal(askTurn(null, items), "");
+});

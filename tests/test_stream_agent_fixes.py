@@ -354,3 +354,28 @@ def test_after_a_restart_the_owners_outside_answer_and_the_next_line_reach_the_c
     assert len(reopened) == 2 and 'keep testing the site build' in reopened[1]
     assert sum('keep testing the site build' in x for x in reopened) == 1
     assert not s.pending_review(tid, kind='draft')
+
+
+# ── ...and where NO agent may take that line yet - the switch off, no AI, every slot taken - the draft's row still reads pending: its agent
+# decides about its own draft once it hears the line. Until then the chat greyed it while the header's pill, the rail and the board said
+# "ready to send" off the row. One rule says a draft is written past (proposals.written_past), and every surface reads it ──────────────────
+def test_a_draft_the_thread_moved_past_reads_the_same_on_the_pill_the_rail_and_the_chat_before_any_agent_hears_it():
+    from taskuary import conversation, proposals, taskstate
+    s = MemoryStore(); tid, rid = chat_task(s)
+    s._exec('UPDATE message SET CreatedAt=? WHERE TaskId=?', (stamp(-600), tid)); s._exec('UPDATE review SET CreatedAt=? WHERE ReviewId=?', (stamp(-400), rid))
+    lit = lambda: [c['status'] for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
+    from taskuary import funnel
+    rail = lambda: [(i.get('lane'), i.get('rid')) for i in funnel.build(s)['items'] if i.get('tid') == tid and i.get('rid')]
+    assert s.waiting_on_owner(tid)['ReviewId'] == rid and taskstate.state(s, s.get_task(tid)) == 'approve' and lit() == ['pending']
+    assert rail() == [('approve', rid)] and [r['ReviewId'] for r in s.waiting_reviews()] == [rid]
+    # his own answer on the phone, a minute ago; nothing starts (no agent may), so nothing hears it
+    s.add_message({'TaskId': tid, 'ExternalId': 'me1', 'ConversationId': CONV, 'Channel': 'whatsapp', 'FromName': 'You', 'SentAt': stamp(-60),
+                   'BodyText': 'yes 3pm, same room', 'Status': 'context', 'Direction': 'out'})
+    assert s.get_review(rid)['Status'] == 'pending' and proposals.written_past(s, tid) == {rid}          # the agent's to decide, once it hears
+    assert s.waiting_on_owner(tid) is None and lit() == ['passed']
+    assert rail() == [] and s.waiting_reviews() == []                                                    # the rail's row (and the pill that reads it), every list of what waits
+    for row in (s.get_task(tid), {**s.get_task(tid), 'ReviewStatus': 'pending'}):                       # the list's row carries its ReviewStatus
+        assert taskstate.state(s, row) != 'approve', taskstate.state(s, row)
+    # ...and a draft written AFTER that line is its answer: lit everywhere
+    new = s.add_review({'TaskId': tid, 'ConversationId': CONV, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Erin - 3pm, same room.'})
+    assert proposals.written_past(s, tid) == {rid} and s.waiting_on_owner(tid)['ReviewId'] == new

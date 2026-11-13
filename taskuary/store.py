@@ -5597,6 +5597,15 @@ class SQLiteStore:
                        m.Channel, m.SourceName, m.ConversationId, substr(m.BodyText, 1, 1500) Preview {_REVIEW_FROM}
                 WHERE {_NOT_ORPHAN} AND {_VISIBLE_PENDING}'''
         return self._rows(q + (' AND rv.Status=?' if status else '') + ' ORDER BY rv.ReviewId DESC', (status,) if status else ())
+    def waiting_reviews(self):
+        """WHAT WAITS ON THE OWNER'S PRESS, for every list that SAYS so - the page's queue, the Assistant's view, the digest, the phone: the
+        pending reviews less any reply draft the thread has moved past (proposals.written_past - the one rule the chat greys it by and the
+        task's state reads). A road that DECIDES about a pending row (what his own line may have answered, an item that ended upstream)
+        reads list_reviews: the row is still pending there until its agent hears the newer message."""
+        from . import proposals
+        past = {}
+        gone = lambda r: bool(r.get('TaskId')) and r['Kind'] in ('draft', 'draft_reply') and r['ReviewId'] in (past.get(r['TaskId']) if r['TaskId'] in past else past.setdefault(r['TaskId'], proposals.written_past(self, r['TaskId'])))
+        return [r for r in self.list_reviews('pending') if not gone(r)]
     @contextlib.contextmanager
     def review_delivery_edit(self, rid):
         """Exclude send claims while attachment bytes/envelopes change, even in another process."""
@@ -5752,8 +5761,12 @@ class SQLiteStore:
         """The newest thing on the task waiting for the owner's press - a reply draft, one of its emails (slots.py) or a proposal - by
         the queue's visibility rule. pending_review leaves the emails out (they are never the reply), so "is anything waiting on you"
         asked of it read an agent's unsent email as nothing: the task said "agent done" and went to Reports (the product audit, 2026-11-08)."""
-        return self._one(f"SELECT rv.* {_REVIEW_FROM} WHERE rv.TaskId=? AND rv.Status='pending' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING} "
-                         "ORDER BY rv.ReviewId DESC LIMIT 1", (task_id,))
+        # ...never a reply draft the thread has moved past (proposals.written_past - the one rule the chat greys it by): it is not the one to
+        # press, whether or not an agent has heard the newer message yet
+        from . import proposals
+        past = proposals.written_past(self, task_id)
+        return next((r for r in self._rows(f"SELECT rv.* {_REVIEW_FROM} WHERE rv.TaskId=? AND rv.Status='pending' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING} "
+                                           "ORDER BY rv.ReviewId DESC", (task_id,)) if r['ReviewId'] not in past), None)
     def sent_reply(self, message_id=None, task_id=None):
         """The newest reply that actually passed the send gate for this message/task.
 

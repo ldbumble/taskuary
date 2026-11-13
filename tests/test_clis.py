@@ -39,6 +39,33 @@ class StoreAppTests(unittest.TestCase):
             self.assertEqual(agents._resolve_cmd('codex'), [alias])
 
 
+class UpdatingCliTests(unittest.TestCase):
+    """Recorded on the real CLI, 2026-11-13: claude replaced its own binary between two turns; the line that waited by the box began its
+    turn in that second and the chat said "'claude' not found on PATH - is the CLI installed?" on a machine that had just answered with it."""
+    def setUp(self):
+        from taskuary import agents
+        self.agents, self.was = agents, set(agents._FOUND)
+        for p in (mock.patch.object(agents, 'GONE_WAIT', 0), mock.patch.object(agents, '_fresh_path', return_value='')): p.start(); self.addCleanup(p.stop)
+        self.addCleanup(lambda: (agents._FOUND.clear(), agents._FOUND.update(self.was)))
+
+    def test_a_cli_found_a_moment_ago_and_gone_for_a_beat_is_looked_for_again(self):
+        looks = iter(['/bin/zcli', None, None, None, '/bin/zcli'])           # found; then gone while it swaps itself (twice asked each look); back
+        with mock.patch.object(self.agents.pathcache, 'which', side_effect=lambda *a, **k: next(looks)), mock.patch.object(self.agents.os, 'name', 'posix'):
+            self.assertEqual(self.agents._resolve_cmd('zcli'), ['/bin/zcli'])
+            self.assertEqual(self.agents._resolve_cmd('zcli'), ['/bin/zcli'])          # the turn that began mid-swap still starts
+
+    def test_one_never_found_or_gone_for_good_fails_at_once_and_is_not_waited_for_twice(self):
+        asked = []
+        with mock.patch.object(self.agents.pathcache, 'which', side_effect=lambda *a, **k: asked.append(a) or None):
+            with self.assertRaises(FileNotFoundError): self.agents._resolve_cmd('ncli')
+            self.assertEqual(len(asked), 2)                                            # PATH, and PATH as it is now - no waiting
+            self.agents._FOUND.add('ncli'); asked.clear()
+            with self.assertRaises(FileNotFoundError): self.agents._resolve_cmd('ncli')
+            self.assertEqual(len(asked), 2 + self.agents.GONE_TRIES); asked.clear()
+            with self.assertRaises(FileNotFoundError): self.agents._resolve_cmd('ncli')
+            self.assertEqual(len(asked), 2)                                            # said gone once: the next check does not wait again
+
+
 class OptionalToolTests(unittest.TestCase):
     """agent-browser is an OPTIONAL dependency (the owner, 2026-08-30): a tool the coding agent may use,
     declared so the app can say installed-or-not with the install line - never offered as an agent."""

@@ -125,6 +125,7 @@ def _programs_copy(base: str) -> str:
     return ''
 
 
+_FOUND, GONE_TRIES, GONE_WAIT = set(), 5, 1.0        # the CLIs this process has found; how long one of them may be gone before it is said so
 def _resolve_cmd(name: str) -> list:
     """Windows can't CreateProcess a bare 'claude': npm installs it as claude.cmd, which only
     PATH-resolves via which(). Reaching THROUGH the shim beats running it under cmd /c - see
@@ -138,8 +139,19 @@ def _resolve_cmd(name: str) -> list:
         base = re.split(r'[\\/]', str(name))[-1]
         path = pathcache.which(base) or pathcache.which(base, path=_fresh_path())
         if path: logger.info(f'{name} has moved; using {path} instead')
+    # A CLI THAT WAS HERE A MOMENT AGO IS UPDATING ITSELF (recorded on the real CLI, 2026-11-13: claude swapped its own binary between two
+    # turns, and the line that waited by the box began its turn in that second - "'claude' not found on PATH - is the CLI installed?" in
+    # the chat, on a machine that had just answered with it): one found earlier in this process is looked for again for a few seconds
+    # before it is said to be gone. One never found fails at once, as before - a check for what is installed never waits
+    # ...(while shutil.which is a test's double its answer is the answer, as pathcache holds: nothing is waited for)
+    if not path and name in _FOUND and shutil.which is pathcache._ORIG:
+        for _ in range(GONE_TRIES):
+            time.sleep(GONE_WAIT); pathcache.forget()
+            if (path := pathcache.which(name)): break
+        if not path: _FOUND.discard(name)
     if not path:
         raise FileNotFoundError(f"'{name}' not found on PATH - is the CLI installed?")
+    _FOUND.add(name)
     if os.name == 'nt' and path.lower().endswith(('.cmd', '.bat')):
         return _shim_target(path) or ['cmd', '/c', path]
     if os.name == 'nt' and '\\windowsapps\\' in path.lower():

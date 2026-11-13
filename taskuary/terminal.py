@@ -3110,6 +3110,13 @@ def sign_in_again(t):
     return n
 
 
+def _turn_cut(store, task_id) -> bool:
+    "Was a turn under way on the task, by its run's own last word (`working`), or anything handed to its agent since that word (the ledger's)?"
+    from . import conversation, workerstate as ws
+    last = store.last_worker_event(task_id, skip=ws.NOTES) or {}
+    return last.get('Kind') == 'working' or conversation.handed_since(store, task_id, last.get('CreatedAt'))
+
+
 def release_task(store, task_id, actor='terminal', note=None) -> bool:
     """Release unfinished work when its worker has really gone away.
 
@@ -3118,6 +3125,18 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
     """
     task = store.get_task(task_id) or {}
     if task.get('Status') != 'in_progress': return False
+    # A CHAT AGENT AT REST WHEN TASKUARY STOPPED WAS NOT INTERRUPTED (recorded on the real CLI, 2026-11-13: it had answered minutes before,
+    # "agent done"; after the restart its task read "agent stopped ... nobody is working it" and wore the interrupted tag): nothing was cut,
+    # and its next input brings it back as the same run. It went with the process as it goes when it idles out
+    # (general.GeneralSession.idle_out): no ending written, no tag, no line - the task reads as it did live, off its saved record
+    # (taskstate._chat_resting: its open question still waits, a turn that asked nothing is done for now)
+    # ...by its run's own last word: a turn's end, or the question it ended on. A task whose run never said a word (a headless run under
+    # way, a session still coming up) is interrupted, as before
+    try:
+        from . import general, workerstate as ws
+        if (actor in INTERRUPTING and general.handles(task) and ws.at_rest(store, task_id) and not _turn_cut(store, task_id)
+                and not any(r.get('Status') == 'running' for r in store.list_runs(task_id))): return False
+    except Exception as e: logger.debug(f'release_task: whether a turn of {task_id} was cut was not read - {e}')
     for run in store.list_runs(task_id):
         if run.get('Status') == 'running':
             store.update_run(run['RunId'], {'Status': 'stopped'}, finished=True)
@@ -3131,9 +3150,7 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
         # ...its last word `working`: a turn was under way when Taskuary went (said in its chat below)
         # ...or something was handed to it after its last word (the ledger's): a line of his that opened a session still coming up when
         # Taskuary went stood heard, with nothing under it and nothing saying why (the recorded restart, 2026-11-11)
-        from . import conversation
-        last = store.last_worker_event(task_id, skip=ws.NOTES) or {}
-        cut = actor in INTERRUPTING and (last.get('Kind') == 'working' or conversation.handed_since(store, task_id, last.get('CreatedAt')))
+        cut = actor in INTERRUPTING and _turn_cut(store, task_id)
         # ...read off the run's own LAST WORD, not its derived status: with no session live after a restart, status() reads any unfinished run
         # as `disconnected` already, so nothing was written - the run's last word stayed `working`, and a general agent cut off by the restart
         # offered no Continue (the overnight run, 2026-11-03)

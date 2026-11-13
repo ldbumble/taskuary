@@ -2267,7 +2267,7 @@ def queue_turn(store, tid, turn: str = '') -> None:
 def queued_turn(store, tid, turn: str, said: str = '') -> None:
     "Run a turn queue_turn held, now a slot is free: a coding task's own session reopened, else the assistant handed its turn."
     from . import general
-    if not general.handles(store.get_task(tid) or {}): general.OPENING.add(tid); return _continue_coding(store, tid)
+    if not general.handles(store.get_task(tid) or {}): general.OPENING.add(tid); return _continue_coding(store, tid, said)
     general.OPENING.add(tid)
     _replan_general(store, tid, '\n\n---\n\n'.join(x for x in [carry_on_turn(store, tid) if turn == 'carry_on' else '', said] if x))
 
@@ -2790,21 +2790,22 @@ def folded_in(store, tid, src, title: str, msgs: list, result: str = '', drafts:
 def _asker(msg: dict) -> str: return person_name(msg.get('from_name')) or msg.get('from_email') or 'someone'
 
 
-def _continue_coding(store, tid):
-    """Continue's resume road (server.continue_session) without the press: the same CLI, the same checkout, its own conversation
-    by the id its CLI gave it. No instruction rides it - terminal.resume_seed tells it how many messages are new and where they are."""
-    from . import terminal
+def _continue_coding(store, tid, said: str = ''):
+    """A stopped coding task carries on BY THE ONE ROAD Taskuary's words to an agent take (general.tell -> the waiting room): its own CLI
+    conversation reopened in its checkout (waitroom.reopen_coding), told what came in since - as a typed line, an approval and a line that
+    joins after a restart reach it. It started the CLI itself here, a second road: nothing was written down as heard (a reply draft above
+    the new mail stood pending), and a start that found no room said "Continue picks it up" with nothing to try it again. Through the
+    waiting room the turn is kept until its agent takes it, and the hand-over is the ledger's (conversation.hear)."""
+    from . import general
     try:
         row, why = _resumable_coding(store, tid)
         if not row: raise RuntimeError(why)
         if (store.get_task(tid) or {}).get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(tid, {'Status': 'in_progress'}, 'router')
-        terminal.start_on_task(store, tid, row['Agent'], None, None, 'router', cwd=row['Cwd'], resume=row['ExtId'], brain=row.get('Brain') or None)
+        general.tell(store, tid, '\n\n---\n\n'.join(x for x in (carry_on_turn(store, tid), said) if x), 'router')
     except Exception as e:
         logger.warning(f'coding carry-on failed for task {tid}: {e}')
         store.add_comment(tid, 'router', 'agent', f"The coding agent couldn't reopen its session by itself: {' '.join(str(e).split())[:200]} - Continue picks it up.")
-    finally:
-        from . import general
-        general.OPENING.discard(tid)
+    finally: general.OPENING.discard(tid)
 
 
 def _who(m: dict) -> str:

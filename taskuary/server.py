@@ -2101,7 +2101,13 @@ def _trusted_starts(task_id: int) -> str:
     from . import general, ingest as _ing, senders, waitroom
     t = store.get_task(task_id) or {}
     if store.task_has_tag(task_id, _ing.HOLD_TAG): store.tag_task(task_id, _ing.HOLD_TAG, on=False, actor=ACTOR)
-    if t.get('Status') in ('done', 'dropped') or t.get('Kind') not in _ing.task_kinds.AGENT: return ''
+    if t.get('Status') in ('done', 'dropped'): return ''
+    # ...AND A REPLY OWED IS ITS AGENT'S TO WRITE, AS AT ARRIVAL (ingest.reply_to_agent - the one hand-over; recorded on the real CLI,
+    # 2026-11-13: a chat question from a sender not yet vouched for made a reply task, his Trust lifted the hold and started nobody -
+    # the reply stood owed in an empty box with nothing at work): the start the hold refused is the one Trust makes
+    if t.get('Kind') not in _ing.task_kinds.AGENT:
+        rv = store.pending_review(task_id)
+        return 'started' if rv and rv.get('Kind') in ('draft', 'draft_reply') and _ing.reply_to_agent(store, task_id, rv['ReviewId']) else ''
     if _ing.live_agent(store, task_id):
         m = next((m for m in reversed(store.list_messages(task_id)) if not _ing.is_ours(m)), None)
         if m: _ing._spawn(_ing.thread_moved, store, task_id, {**senders.row_msg(m), 'body': m.get('BodyText') or '', 'subject': m.get('Subject') or ''}, m['MessageId'], None, 'router', vouched=True)       # Taskuary hands it on: his press is its own one line, and its pass

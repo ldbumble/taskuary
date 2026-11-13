@@ -233,6 +233,9 @@ async function untilWorking(page, timeout = 60000) { const end = Date.now() + ti
 if (process.argv[1]?.endsWith("real-conv.mjs")) {
   const [name, road = "general", ...steps] = process.argv.slice(2);
   let tid; const leave = {};
+  // THE TASK'S OWN CHANNEL, for its first message and every one after it (`mail`): a WhatsApp task's next message came in as an email
+  const CH = process.env.TOPIC_CHANNEL || "email", CHAT = ["whatsapp", "teams", "telegram", "slack", "sms"].includes(CH);
+  const FROM = { ...(process.env.TOPIC_SOURCE ? { source_name: process.env.TOPIC_SOURCE } : {}), ...(process.env.TOPIC_LINK ? { source_link: process.env.TOPIC_LINK } : {}) };
   await api("/api/fixture/outbox", {});          // ...the mailbox that sends nowhere lives in the server's process: set again after a restart of it
   // ...`stranger`: a general task whose first mail is from someone the owner never trusted (no agent starts: the hold and its Trust action)
   const who = road === "stranger" ? { from_name: "Paula Vance", from_email: "paula@vendor.example" } : { from_name: "Gail Moreno", from_email: "gail@northwind.example" };
@@ -241,7 +244,9 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
   else if (road === "general" || road === "stranger") {
     // ...TOPIC_SUBJECT / TOPIC_BODY: another ask than the venue one - a second walk of one instance with the same words is read as the same mail again
     // ...TOPIC_CHANNEL: the entry as a chat message (whatsapp, teams) - no subject, the sender's words alone
-    const got = await api("/api/ingest/push", { channel: process.env.TOPIC_CHANNEL || "email", subject: process.env.TOPIC_CHANNEL ? "" : process.env.TOPIC_SUBJECT || "Offsite venue", ...who, conversation_id: `conv-${name}`,
+    // ...TOPIC_SOURCE / TOPIC_LINK: where a tracker's item came from (a GitHub issue of `northwind/ledger`, a Monday board) - the walk of every
+    // source (the owner, 2026-11-13: "task coming in via email/chat/github/monday"); such an item has a subject, a chat message none
+    const got = await api("/api/ingest/push", { channel: CH, subject: CHAT ? "" : process.env.TOPIC_SUBJECT || "Offsite venue", ...who, ...FROM, conversation_id: `conv-${name}`,
       body: (process.env.TOPIC_BODY || "Hi Alex,\n\nCan you suggest two venues for the March offsite, about 40 people, and tell me which one you would pick? A short answer is fine.\n\nThanks,\nGail").replace(/\\n/g, "\n") });
     console.log("push", JSON.stringify(got).slice(0, 200)); tid = got.task_id;
   // ...`new`: a task he made himself with New - no mail, no typed line: its ask is the task's own words, and its agent is started as the page starts it
@@ -268,7 +273,7 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     else if (k === "wait") await sleep(Number(arg));
     // ...a stranger writes on the thread: his words wait by the box, behind the Trust action
     else if (k === "strangermail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: "email", subject, from_name: "Omar Keller", from_email: "omar@other.example", conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
-    else if (k === "mail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: "email", subject, from_name: "Gail Moreno", from_email: "gail@northwind.example", conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
+    else if (k === "mail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: CH, subject: CHAT ? "" : subject, ...who, ...FROM, conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
     else if (k === "press") console.log(await press(page, new RegExp(arg), "[data-tq-task-page]"));
     // ...pressed twice in one breath (one send, one line), his own answer on the channel outside the app, a card's words changed before its press
     else if (k === "press2") console.log(await press(page, new RegExp(arg), "[data-tq-task-page]"), "|", await press(page, new RegExp(arg), "[data-tq-task-page]"));
@@ -298,6 +303,8 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
       await page.evaluate(() => { window.__away = false; }); await sleep(Number(arg) || 0); }
     // ...the three ways a turn ends with his lines still waiting: his own stop (the x on the turn), its process dying under it, the app restarting
     else if (k === "stop") console.log("stop", await page.evaluate(() => { const b = document.querySelector("[data-tq-task-page] [data-tq-stop-run]"); b?.click(); return !!b; }));
+    // ...and its agent idling out, as time does it (closed quietly; the next input - his line, or a message that joins - brings it back)
+    else if (k === "idle") console.log("idle", JSON.stringify(await api("/api/fixture/session", { taskId: tid, state: "idled" })));
     else if (k === "kill") console.log("kill", JSON.stringify(await api("/api/fixture/session", { taskId: tid, state: "killed" })));
     else if (k === "restart") { await writeFile(path.join(out, "restart"), ""); const end = Date.now() + 120000;
       while (existsSync(path.join(out, "restart")) && Date.now() < end) await sleep(500);

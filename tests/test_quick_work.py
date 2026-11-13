@@ -600,3 +600,30 @@ def test_an_answer_that_could_not_be_read_says_why_in_the_log():
         with mock.patch.object(llm, 'build_llm', return_value=Brain('Sorry, I cannot help with that.', web=False)): assert quickwork.ask(s, tid, ASK) is None
     finally: logger.remove(sink)
     assert any(f'task {tid}: the quick answer could not be read' in x and 'Sorry, I cannot' in x for x in said), said
+
+
+def test_a_quick_turn_writes_its_hand_over_down_so_a_draft_the_owner_answered_past_is_set_aside_before_it_is_told():
+    """Recorded on the real CLI, 2026-11-13 (invented people): a quick answer drafted the reply; the owner answered in the chat himself; the
+    quick turn that heard that left no mark in the ledger - the draft stayed pending (greyed in the chat by where it stood, "ready to
+    send" on the pill), and the agent, told a draft still waited and with no tool to put it down, said "it still shows under your Send"."""
+    from taskuary import conversation, proposals
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'start_session', side_effect=opened), \
+         mock.patch.object(llm, 'build_llm', return_value=Brain(ANSWER)) as build:
+        quickwork.start(s, tid)
+        assert len(s._rows("SELECT 1 FROM heard WHERE TaskId=? AND Kind='turn'", (tid,))) == 1          # the first turn's hand-over: the mail, heard
+        assert conversation.heard(s, tid, 'mail', [m['MessageId'] for m in s.list_messages(tid)])
+        rv = s.pending_review(tid, 'draft_reply', live_only=False) or s.pending_review(tid, 'draft', live_only=False)
+        assert rv and rv['Status'] == 'pending'
+        t = time.time()
+        while time.time() < t + 1.1: time.sleep(0.05)                                                 # (a stamp is a whole second)
+        own = s.add_message({'TaskId': tid, 'ExternalId': 'own1', 'ConversationId': 'conv-partner', 'Channel': 'email', 'FromName': 'You',
+                             'BodyText': 'Erin - yes, we will be there.', 'Status': 'context', 'Direction': 'out'})
+        seen = []
+        class Seeing(Brain):
+            "...and says, as its call is made, how the draft's row reads"
+            def __call__(self, sy, u, **k): seen.append(s.get_review(rv['ReviewId'])['Status']); return super().__call__(sy, u, **k)
+        build.return_value = Seeing({**ANSWER, 'report': 'I see you answered Erin there - nothing is left.', 'draft': None})
+        quickwork.again(s, tid, general.session_for(tid), 'THE THREAD CHANGED: you already answered - the words of the owner:\nErin - yes, we will be there.')
+    assert seen == ['superseded'], seen                                                               # set aside BEFORE the call read its prompt
+    assert proposals.passed(s.get_review(rv['ReviewId'])) and conversation.heard(s, tid, 'mail', [own]) and not s.waiting_on_owner(tid)

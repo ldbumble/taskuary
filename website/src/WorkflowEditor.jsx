@@ -89,8 +89,9 @@ export const SchedulePicker = ({ sched, setSched, cron = "" }) => (
     {sched.mode === "monthly" && <TextField size="small" type="number" label="day" value={sched.day}
       inputProps={{ min: 1, max: 28 }} sx={{ width: 80, bgcolor: "var(--tq-panel, #fff)" }}
       onChange={(e) => setSched((s) => ({ ...s, day: Math.min(28, Math.max(1, Number(e.target.value) || 1)) }))} />}
+    {/* 140, not 120: an en-US clock reads "07:00 AM" plus its clock icon, and at 120 it showed "07:00 A" cut off (the audit, 2026-11-13) */}
     {["daily", "weekly", "monthly"].includes(sched.mode) && <TextField size="small" type="time" label="at" value={sched.at}
-      sx={{ width: 120, bgcolor: "var(--tq-panel, #fff)" }} onChange={(e) => setSched((s) => ({ ...s, at: e.target.value }))} />}
+      sx={{ width: 140, bgcolor: "var(--tq-panel, #fff)" }} onChange={(e) => setSched((s) => ({ ...s, at: e.target.value }))} />}
     {sched.mode === "every" && <TextField size="small" type="number" label="minutes" value={sched.minutes}
       sx={{ width: 110, bgcolor: "var(--tq-panel, #fff)" }} onChange={(e) => setSched((s) => ({ ...s, minutes: e.target.value }))} />}
     {sched.mode === "cron" && <TextField size="small" label="cron" value={sched.cron} placeholder="0 8 * * 1"

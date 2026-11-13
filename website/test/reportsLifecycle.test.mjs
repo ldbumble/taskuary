@@ -194,3 +194,10 @@ test("on a phone a report row's name keeps its line and the buttons wrap under i
   assert.match(row, /flexWrap: \{ xs: "wrap", sm: "nowrap" \}/);
   assert.match(row, /<Box sx=\{\{ flex: \{ xs: "1 1 calc\(100% - \d+px\)", sm: 1 \}, minWidth: 0 \}\}>/);
 });
+
+// A ROUTINE ON THE DEFAULT PROFILE SAYS SO (the setup walk, 2026-11-13): saved with agent "assistant" - the composer's own pick - its Who does it
+// drew blank, because "assistant" is the default's row ("") and has no row of its own
+test("a routine whose agent is the default profile shows the default's row, never a blank picker", () => {
+  const ed = readFileSync(new URL("../src/WorkflowEditor.jsx", import.meta.url), "utf8");
+  assert.match(ed, /value=\{roles\.includes\(cfg\.agent\) && cfg\.agent !== "assistant" \? cfg\.agent : ""\}/);
+});

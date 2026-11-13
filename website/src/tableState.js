@@ -25,13 +25,13 @@ export const overChat = (t) => !!t?.place || (!!t?.key && !t?.folded);
 // ...and the next ask is about THE PAGE ALONE (the owner, 2026-11-05): it no longer carries the task beneath, so the box names only the page
 export function tableWords(table, ref = "") {
   const has = !!table?.key, under = has && !!table.place;
-  return { box: !has ? "Ask Taskuary anything — a name or a subject pulls it in…"
+  return { box: !has ? "Ask the Assistant — a name or a subject pulls it in…"
       : under ? "Ask about this page…" : "Ask about this one, tell me what to do with it, or name something else…",
     // ...the corner pill is the Assistant (the owner, 2026-11-06): it brings you around; the task's own agent has the task's box
-    phone: !has ? "Ask Taskuary anything…" : under ? "Ask about this page…" : ASK_ASSISTANT,
+    phone: !has ? "Ask the Assistant…" : under ? "Ask about this page…" : ASK_ASSISTANT,
     // ...and the one-row bar's pill, whose words ("Ask…") name no task: its name for a reader and the walk says which
     // one the chat will talk about, with no visible change (the dead-end walk's RING, 2026-10-27)
-    name: !has ? "Ask Taskuary anything" : under ? "Ask Taskuary about this page" : `Tell Taskuary what to do with ${ref || "this one"}` };
+    name: !has ? "Ask the Assistant" : under ? "Ask the Assistant about this page" : `Tell the Assistant what to do with ${ref || "this one"}` };
 }
 
 // What an /api/advice answer (advisor.status) means for the strip: the Advisor's ONE decision - a lit verb, its line '' when the move is

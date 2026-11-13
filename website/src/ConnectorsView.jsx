@@ -64,41 +64,22 @@ import { chatsError, readChats, waLabel, waMatches, waPhone, waSaid } from "./wa
 import { PEOPLE_MISSING } from "./peopleSearch.js";
 import ReasonPanel from "./ReasonNetwork.jsx";
 import { DESKTOP_HOW } from "./newTask.js";
-import { openHelp, sayEarlier, viewResult } from "./pageView.js";
+import { viewResult } from "./pageView.js";
+import SetupWithAi from "./SetupWithAi.jsx";
 import { READ_META, READ_TYPES } from "./apiReads.js";
 import schema from "../../taskuary/settings_schema.json";   // the saved sign-ins' search words, the ones Settings finds the vault by
 
-/* ── Get AI to set it up: THE ASSISTANT, IN THE CHAT (the owner, 2026-10-30: "don't you think this sort of ai troubleshooting should go
-   on in the assistant. it's more intuitive and it will know if you change something in the screen"). The button is the card's door to
-   the chat window: it opens with this card as what it is about, and the Assistant fills what it knows, presses Test, lights what is the
-   owner's to paste - each a step in the chat (pageView.js). No walk on the card, no Board task: the conversation is the record. A walk
-   left open from before is folded into the chat the next time the card opens (aisetup.move_walk). ── */
 // opens Connections > AI CLI agents from inside a card - the door the "no AI app here" line points at
 const AgentsDoor = createContext(null);
-// ...and it is never greyed: the chat answers with no AI too, in its own words and with Connect an AI under them (concierge.no_brain) - the
-// old "needs an AI first" was the walk's agent, which is gone
-function useAiWalk({ conn }) {
-  const cid = conn.ConnectorId, name = conn.Name || conn.Type || "this connection";
-  useEffect(() => {
-    if (!cid) return undefined;
-    let live = true;
-    api.get(`/api/connectors/${cid}/ai-setup`).then(({ data }) => { if (live && data?.moved && data.earlier) sayEarlier(data.earlier); })
-      .catch(() => { /* the card still works without it */ });
-    return () => { live = false; };
-  }, [cid]);
-  return { start: () => openHelp(`Help me set up ${name}`) };
+// ...the card's own guide and fields go with it: they live here, with its form (META), and the Assistant builds from them on the server
+function useAiWalk({ conn, steps = [], fields = [], secretLabel = "", agentSteps = [], reload }) {
+  return { conn, reload, ctx: { guide: steps, fields, secret_label: secretLabel || "", agent_steps: agentSteps } };
 }
 
-// the button, in the card's own row beside Save and Test - outlined, never the card's one filled button
-// ...and out of the view the Assistant is sent (data-tq-view-skip): it is the door INTO that chat, so a press from the chat ("walk me
-// thru setting this up") typed a second line the owner never wrote - the Assistant walks the card in words (the Connections audit, 2026-11-02)
+// SET UP WITH AI, ON THE CARD (the owner, 2026-11-13): the Assistant fills in what it knows, runs the card's Test, fixes and tests again, and
+// asks for what only the owner can do - a secret is always theirs to paste into its own box (SetupWithAi, taskuary/build.py)
 function AiWalkButton({ ai }) {
-  return (
-    <Button variant="outlined" onClick={ai.start} data-tq-ai-setup="start" data-tq-view-skip="" title="Optional - opens the chat, and the Assistant sets this card up with you"
-      startIcon={<BoltIcon sx={{ fontSize: 15 }} />}>
-      Get AI to set it up
-    </Button>
-  );
+  return <SetupWithAi kind="connection" refId={ai.conn.ConnectorId} ctx={ai.ctx} onDone={() => ai.reload?.()} />;
 }
 
 // TEST WHAT IS ON SCREEN (the owner, 2026-10-30: "a connection's Test can try the values on screen, so the Assistant can test before the

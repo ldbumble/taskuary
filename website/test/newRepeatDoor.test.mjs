@@ -16,7 +16,7 @@ test("a report or routine the Assistant wrote up on New is a door to its builder
   assert.doesNotMatch(src, /<Composer/);
   assert.doesNotMatch(src, /"repeat"/);
   const door = read("SetupWithAi.jsx");
-  assert.match(door, /onClick=\{\(\) => startSetup\(kind, words, onOpen\)\}/);
+  assert.match(door, /onClick=\{\(\) => \(onOpen \? \(handTo\(kind, words\), onOpen\(\)\)/, "a door hands its words to the builder it opens");
   for (const [k, h] of [["report", "report=new"], ["dashboard", "report=new-dashboard"], ["workflow", "report=new-agent"]]) assert.match(door, new RegExp(`${k}: "${h}"`));
 });
 
@@ -45,7 +45,10 @@ test("a routine the Assistant wrote up opens New → Routine with its words, car
   assert.match(canvas, /initialRoutine=\{state\?\.routine \|\| null\}/);
   assert.match(canvas, /JSON\.stringify\(state\?\.routine \|\| ""\)/, "a new prefill remounts the sheet, so its fields are the new ones");
   assert.match(sheet, /initialRoutine = null, madeOf = "" \}\) \{/);
-  assert.match(read("SetupWithAi.jsx"), /`Help me set up \$\{WHAT\[kind\] \|\| WHAT\.report\}\$\{String\(words \|\| ""\)\.trim\(\) \? `: \$\{String\(words\)\.trim\(\)\}` : ""\}`/);
+  // ...and the builder's strip starts the build with them, on that page (taskuary/build.py) - the chat is never asked
+  const strip = read("SetupWithAi.jsx");
+  assert.match(strip, /if \(handed\.current === undefined\) handed\.current = onOpen \? null : takeFor\(kind\);/, "taken in the first draw - no empty beat");
+  assert.match(strip, /useEffect\(\(\) => \{ if \(first != null\) go\(first\); \}, \[\]\);/);
 });
 
 // STRAIGHT INTO THE BUILDER (owner-approved, 2026-11-12): "a routine that lists vendors with no invoice" came back as New's Routine card with
@@ -58,13 +61,12 @@ test("a report, dashboard or routine the Assistant wrote up goes straight into i
   assert.equal(goesStraight("workflow", null), false, "a card nobody wrote up stays the card");
   assert.equal(goesStraight("agent", 31), false);
   const sheet = read("NewSheet.jsx"), door = read("SetupWithAi.jsx"), chat = read("AssistantView.jsx");
-  assert.match(door, /export const startSetup = \(kind, words, onOpen, quiet = false\) => \{ onOpen\?\.\(\); openHelp\(helpAsk\(kind, words\), \{ wait: 700, \.\.\.\(quiet \? \{ quiet \} : \{\}\) \}\); \};/);
-  assert.match(door, /onClick=\{\(\) => startSetup\(kind, words, onOpen\)\}/);
-  assert.match(door, /if \(!goesStraight\(made\?\.kind, made\?\.line\)\) return false;\s*\n\s*if \(firstPressOf\(made\.line\)\) startSetup\(made\.kind, made\.text \|\| "", \(\) => \{ onOpen\?\.\(\); openAppLink\(NEW_HASH\[made\.kind\]\); \}, quiet\);\s*\n\s*return true;/);
-  // ...and from New the Assistant's window stays as it was (the owner, 2026-11-12: "we also should not open assistant tab if we have new tab open")
-  assert.match(chat, /if \(!e\.detail\?\.quiet\) setPopOpen\(true\);/);
+  // ...THE ASSISTANT BUILDS IT ON THAT PAGE (the owner, 2026-11-13): the words are handed to the builder, whose strip builds it there;
+  // the chat is not asked and its window stays as it was
+  assert.match(door, /if \(!goesStraight\(made\?\.kind, made\?\.line\)\) return false;\s*if \(firstPressOf\(made\.line\)\) \{ handTo\(made\.kind, made\.text \|\| ""\); onOpen\?\.\(\); openAppLink\(NEW_HASH\[made\.kind\]\); \}\s*return true;/);
+  assert.doesNotMatch(door, /openHelp/, "no road through the chat");
   // ...one road from New's box and from the chat: the card is drawn only where it did not go (pressed at the card's mount, the chat's
   // road raced the canvas opening its New card, and the setup ask was typed into New's own box instead)
-  assert.match(sheet, /if \(data\?\.new\) \{ if \(!goStraight\(data\.new, onClose, true\)\) setMade\(/);
+  assert.match(sheet, /if \(data\?\.new\) \{ if \(!goStraight\(data\.new, onClose\)\) setMade\(/);
   assert.match(chat, /if \(data\.new && !goStraight\(data\.new\)\) browseRef\.current\?\.\("new", data\.new\);/);
 });

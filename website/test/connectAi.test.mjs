@@ -19,7 +19,7 @@ test("each no-AI line carries the button", () => {
     // (not the profile editor: a profile is a name and instructions and runs on no AI of its own - the owner, 2026-10-22)
     ["ui.jsx", /brainsRead && !generalBrains\.length && <ConnectAi/],
     ["NewSheet.jsx", /action=\{errAi \? <ConnectAi/],
-    ["NewPlaybookDialog.jsx", /action=\{noAi \? <ConnectAi/],
+    ["SetupWithAi.jsx", /v\?\.no_ai && <ConnectAi/],      // every Set up with AI, built on its page (taskuary/build.py)
     ["DigestText.jsx", /noAi \? <ConnectAi/],
     // (not a connection's Get AI to set it up any more: it opens the chat, whose own no-AI answer carries the button - 2026-10-30)
   ]) {

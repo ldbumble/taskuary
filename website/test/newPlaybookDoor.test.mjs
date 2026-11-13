@@ -38,5 +38,7 @@ test("the words wait for the shelf and are taken once; the dialog starts from th
   const shelf = read("PlaybookShelf.jsx"), dlg = read("NewPlaybookDialog.jsx");
   assert.match(shelf, /initialText=\{ask\?\.text \|\| ""\} autoStart=\{!!ask\?\.start\}/);
   assert.match(dlg, /useState\(initialText\.trim\(\) \? "scratch" : ""\)/);
-  assert.match(dlg, /if \(autoStart && initialText\.trim\(\) && !pressed\.current\) \{ pressed\.current = true; start\(\); \}/);
+  // ...and it builds right there (taskuary/build.py): the strip, started with the words, opens the playbook once it is saved
+  assert.match(dlg, /useState\(autoStart && !!initialText\.trim\(\)\)/);
+  assert.match(dlg, /<SetupWithAi kind="playbook"[\s\S]{0,260}auto\s+onDone=\{\(v\) => \{ onClose\?\.\(\); openAppLink\(v\.link\); \}\} \/>/);
 });

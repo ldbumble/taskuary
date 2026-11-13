@@ -54,12 +54,13 @@ test("the LinkedIn card asks in plain words and says where each comes from; AI s
 
 // THE WALK MOVED INTO THE CHAT (the owner, 2026-10-30: "this sort of ai troubleshooting should go on in the assistant"): the button is the
 // card's door to the chat window - no walk drawn on the card, no Board task - and a walk left open from before is folded into the chat
-test("Get AI to set it up is a button in the card's own row that opens the chat - nothing of the walk is drawn on the card", () => {
+// SET UP WITH AI ON THE CARD (the owner, 2026-11-13): the Assistant builds it there (taskuary/build.py) with the card's own guide and fields -
+// no chat opened, no walk task
+test("Set up with AI is the shared strip in the card's own row, carrying the card's guide and fields", () => {
   const ai = src.slice(src.indexOf("function useAiWalk("), src.indexOf("const GATEWAY_HINT"));
-  assert.match(ai, /<Button variant="outlined" onClick=\{ai\.start\} data-tq-ai-setup="start"/, "outlined, never the card's filled button - and never greyed: the chat answers with no AI too");
-  assert.match(ai, /start: \(\) => openHelp\(`Help me set up \$\{name\}`\)/, "the door opens the chat with the card as its subject");
-  assert.match(ai, /if \(live && data\?\.moved && data\.earlier\) sayEarlier\(data\.earlier\)/, "an open walk from before is said in the chat once");
-  for (const gone of ['post("/say"', 'post("/done"', "lightField(", "AI SETUP ·", "data-tq-walk-say", "TerminalPane"]) assert.ok(!ai.includes(gone), gone);
+  assert.match(ai, /ctx: \{ guide: steps, fields, secret_label: secretLabel \|\| "", agent_steps: agentSteps \}/);
+  assert.match(ai, /<SetupWithAi kind="connection" refId=\{ai\.conn\.ConnectorId\} ctx=\{ai\.ctx\} onDone=\{\(\) => ai\.reload\?\.\(\)\} \/>/);
+  for (const gone of ["openHelp(", "sayEarlier(", "/ai-setup", "TerminalPane"]) assert.ok(!ai.includes(gone), gone);
   const data = src.slice(src.indexOf("function DataDetail("), src.indexOf("const ROLE_META"));
   assert.match(data, /<AiWalkButton ai=\{ai\} \/>\s*\{msg && /, "beside Save and Test");
   assert.doesNotMatch(data, /ai\.saved\(/, "Save tells no walk - the chat hears the owner's own Save itself (pageView)");

@@ -278,7 +278,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
           </Box>
         </Field>}
         <Field label="Who does it" hint="the profile whose rules it works by">
-          <Select size="small" displayEmpty value={roles.includes(cfg.agent) ? cfg.agent : ""} onChange={(e) => set("agent", e.target.value)}
+          <Select size="small" displayEmpty value={roles.includes(cfg.agent) && cfg.agent !== "assistant" ? cfg.agent : ""} onChange={(e) => set("agent", e.target.value)}
             sx={{ minWidth: 220, bgcolor: "var(--tq-panel, #fff)", fontSize: 13 }}>
             <MenuItem value="" sx={{ fontSize: 13 }}>{roles.includes("assistant") ? "assistant (the default)" : "the default"}</MenuItem>
             {roles.filter((a) => a !== "assistant").map((a) => <MenuItem key={a} value={a} sx={{ fontSize: 13 }}>{a}</MenuItem>)}

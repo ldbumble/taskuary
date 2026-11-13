@@ -109,7 +109,7 @@ def _playbook_turn(store, b, llm) -> str:
     except ValueError as e:
         b['answers']['problem_with_your_last_draft'] = str(e)
         _step(b, f'Checked it: {e}', 'failed'); return 'retry'
-    b['link'] = f"#report=playbooks:{b['ref']}"
+    b['link'] = f"#playbook={b['ref']}"
     _step(b, f"Saved the playbook {pb['title']}"); return 'done'
 
 
@@ -200,7 +200,7 @@ def _run(store, b):
     from . import concierge
     try:
         llm = concierge._compose_llm(store)
-        if not llm: _stuck(b, concierge.no_brain()); return
+        if not llm: b['no_ai'] = True; _stuck(b, concierge.no_brain()); return
         for _ in range(TRIES):
             got = _turn(store, b, llm)
             if got != 'retry': break
@@ -215,7 +215,7 @@ def _run(store, b):
 
 
 def _go(store, b):
-    b['busy'], b['ask'], b['error'] = True, '', ''
+    b['busy'], b['ask'], b['error'], b['no_ai'] = True, '', '', False
     b['thread'] = threading.Thread(target=_run, args=(store, b), daemon=True, name=f"build-{b['id']}"); b['thread'].start()
 
 
@@ -233,6 +233,7 @@ def start(store, kind: str, words: str, ref=None, ctx: dict = None, example: dic
         bid = uuid.uuid4().hex[:12]
         b = BUILDS[bid] = {'id': bid, 'kind': kind, 'words': words, 'ref': int(ref) if ref else None, 'ctx': ctx or {}, 'example': example,
                            'answers': {}, 'steps': [], 'ask': '', 'error': '', 'done': False, 'busy': False, 'link': '', 'at': now}
+    if kind != 'connection' or str(words) != 'Set this connection up.': _step(b, words, 'you')      # what was asked, first
     _go(store, b)
     return view(b['id'])
 
@@ -254,4 +255,4 @@ def view(bid: str) -> dict | None:
     b = BUILDS.get(bid)
     if not b: return None
     return {'id': bid, 'kind': b['kind'], 'steps': list(b['steps']), 'busy': b['busy'], 'ask': '' if b['busy'] else b['ask'],
-            'error': '' if b['busy'] else b['error'], 'done': b['done'], 'ref': b.get('ref'), 'link': b.get('link') or ''}
+            'error': '' if b['busy'] else b['error'], 'no_ai': bool(b.get('no_ai')), 'done': b['done'], 'ref': b.get('ref'), 'link': b.get('link') or ''}

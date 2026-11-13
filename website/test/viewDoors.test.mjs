@@ -18,13 +18,14 @@ test("pageView leaves out anything marked data-tq-view-skip", () => {
 
 test("every button that opens the Assistant, on every page, is kept out of the view", () => {
   const doors = files.flatMap((f) => buttons(read(f)).filter(isDoor).map((b) => ({ f, b })));
-  assert.ok(doors.length >= 5, `found only ${doors.length} doors - the scan is not reading the pages`);
+  assert.ok(doors.length >= 4, `found only ${doors.length} doors - the scan is not reading the pages`);
   for (const { f, b } of doors) assert.match(b, /data-tq-view-skip/, `${f}: ${b.slice(0, 160)}`);
 });
 
 test("the named doors each carry the mark", () => {
   assert.match(read("SetupWithAi.jsx"), /data-tq-setup-ai=\{kind\} data-tq-view-skip=""/);
-  assert.match(read("ConnectorsView.jsx"), /data-tq-ai-setup="start" data-tq-view-skip=""/);
+  // (a connection's door is the same strip now: <SetupWithAi kind="connection"> - checked above)
+  assert.match(read("ConnectorsView.jsx"), /<SetupWithAi kind="connection" refId=\{ai\.conn\.ConnectorId\} ctx=\{ai\.ctx\}/);
   assert.match(read("ReportsView.jsx"), /data-tq-setup-ai="sources" data-tq-view-skip=""/);
   assert.match(read("RunSteps.jsx"), /onFix && <Button [^>]*data-tq-view-skip=""/);
   assert.match(read("NewPlaybookDialog.jsx"), /onClick=\{start\} data-tq-view-skip=""/);
@@ -36,7 +37,8 @@ test("the named doors each carry the mark", () => {
 // AiWalkButton; WorkflowEditor hands it to RunSteps as its Fix - both marked above
 test("the pages that open the Assistant are the ones whose doors are checked here", () => {
   const callers = files.filter((f) => f !== "pageView.js" && read(f).includes("openHelp(")).sort();
-  assert.deepEqual(callers, ["ConnectorsView.jsx", "ReportsView.jsx", "SetupWithAi.jsx", "WorkflowEditor.jsx"]);
+  // (Set up with AI builds on its own page now and opens no chat - taskuary/build.py, 2026-11-13)
+  assert.deepEqual(callers, ["ReportsView.jsx", "WorkflowEditor.jsx"]);
 });
 
 // ...AND THE ROUTINE'S OWN WORDS GO THROUGH IT (the visual audit, 2026-11-13): the job typed in What it does, then Set up with AI - and the

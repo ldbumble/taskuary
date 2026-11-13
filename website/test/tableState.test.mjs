@@ -30,10 +30,10 @@ test("a page over the item: the box says it is under the page, not in view", () 
   assert.match(shown.box, /^Ask about this one/);
   // ...the open box over a task, and a phone's: "Talk to Taskuary…" (the owner, 2026-10-28), the resting pill still "Ask…"
   assert.equal(shown.phone, "Ask the Assistant…", "the pill is the Assistant (the owner, 2026-11-06)");
-  assert.equal(shown.name, "Tell Taskuary what to do with TQ-0003", "the pill names the task its words do not");
-  assert.equal(under.name, "Ask Taskuary about this page");
+  assert.equal(shown.name, "Tell the Assistant what to do with TQ-0003", "the pill names the task its words do not");
+  assert.equal(under.name, "Ask the Assistant about this page");
   assert.match(tableWords(tableOf({ cardKey: "task:9" })).box, /^Ask about this one/, "a task opened by name is on the table too");
-  assert.match(tableWords(tableOf({ browsing: "b1" })).box, /^Ask Taskuary anything/, "a page with nothing under it");
+  assert.match(tableWords(tableOf({ browsing: "b1" })).box, /^Ask the Assistant/, "a page with nothing under it");
   assert.doesNotMatch(src, /tableSays\.tag|tq-pile-now/, "no \"on the table\" tag under the ringed row (audit 2026-11-05)");
   // ...and the box its words - but the one-row bar's pill, at rest and widened, its own short ones (2026-10-26)
   // ...and the pill at rest with no task on the table the short hint, the long one ran on under its send button (2026-10-26)

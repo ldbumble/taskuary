@@ -42,7 +42,7 @@ import { openAppLink } from "./appLinks.js";
 import { routeOfHash } from "./canvasLinks.js";
 import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
 import { NEW_PB, takePlaybookAsk } from "./playbookOpen.js";
-import SetupWithAi from "./SetupWithAi.jsx";
+import SetupWithAi, { onBuilt } from "./SetupWithAi.jsx";
 import { openHelp, useViewExtras, viewResult } from "./pageView.js";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
@@ -369,6 +369,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     } catch (e) { setErr(e?.response?.data?.detail || "The reports could not be loaded."); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // ...and a thing the Assistant just built here is read in BEFORE its page opens (SetupWithAi's BUILT): opened first, it was "not here any more"
+  useEffect(() => onBuilt(async (link) => { await load(); openAppLink(link); }), [load]);
 
   // Manual runs belong to the server, not to this mounted page. A synchronous browser request was
   // abandoned when the owner switched tabs, so the report stopped before it filed its result.
@@ -1418,6 +1420,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
           Remove {workflow ? "routine" : "report"}
         </Button>}
       </Box>
+      {/* SET UP WITH AI, ON THE NEW REPORT'S OWN PAGE (taskuary/build.py): the Assistant drafts, checks and saves it here */}
+      {!cur && !draft && <SetupWithAi kind={workflow ? "workflow" : "report"} sx={{ mb: 2 }} />}
       {/* ...and what they answered, here: the shelf's line is off screen while the builder is open */}
       {cur && said?.sid === cur.SourceId && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: said.ok ? "var(--tq-success, #47654a)" : "var(--tq-danger, #6b2733)" }}>{said.ok ? "✓" : "✗"} {said.detail}</Typography>}
       {removeErr && <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}>{removeErr}</Alert>}

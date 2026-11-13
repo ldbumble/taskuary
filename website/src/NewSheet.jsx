@@ -332,7 +332,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         const { data } = await api.post("/api/concierge/say", { text: about, images: pics.paths || [] });
         setText(""); pics.clear();
         // ...a report, dashboard or routine goes straight into its builder, the setup asked there (goStraight) - no card on the way
-        if (data?.new) { if (!goStraight(data.new, onClose, true)) setMade({ ...data.new, said: data.say || "" }); setBusy(false); return; }
+        if (data?.new) { if (!goStraight(data.new, onClose)) setMade({ ...data.new, said: data.say || "" }); setBusy(false); return; }
         // ...an agent's job or a message it could address was MADE (concierge._made_now - the owner, 2026-11-12: "open task directly"): its task opens
         const made = /^#?task=(\d+)$/.exec(data?.open || "");
         if (made) { setOk(String(data.say || "")); onDone?.(); openIt(Number(made[1])); if (!(inline && opened)) setBusy(false); return; }

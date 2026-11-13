@@ -38,7 +38,7 @@ def test_a_routine_is_drafted_saved_and_its_page_linked(st):
     assert v['done'] and not v['busy'] and v['link'] == f"#report={v['ref']}"
     src = st.get_source(v['ref'])
     assert src['Address'] == 'Vendor bills check' and json.loads(src['ConfigJson'])['prompt'].startswith('Each Friday')
-    assert [s['text'] for s in v['steps']] == ['Drafted: Vendor bills check', 'Saved Vendor bills check']
+    assert [s['text'] for s in v['steps']] == ['every Friday tell me which vendors have not sent a bill', 'Drafted: Vendor bills check', 'Saved Vendor bills check']
 
 
 def test_a_question_waits_for_the_owner_and_the_answer_goes_back_to_the_model(st):
@@ -65,7 +65,7 @@ def test_a_routine_that_only_reads_is_built_as_a_report_and_said(st):
     with mock.patch.object(compose, 'compose_workflow', return_value={'report': rep}), \
          mock.patch.object(compose, 'validate', return_value=(True, '')), mock.patch.object(build, 'preview_problem', return_value=''):
         v = run(st, object(), 'workflow', 'show me my open tasks')
-    assert v['done'] and v['kind'] == 'report' and 'set it up as a report' in v['steps'][0]['text']
+    assert v['done'] and v['kind'] == 'report' and 'set it up as a report' in v['steps'][1]['text']
 
 
 def test_a_report_whose_executor_writes_is_never_previewed(st):
@@ -82,7 +82,7 @@ def test_a_playbook_is_written_after_its_check_and_a_bad_draft_is_drafted_again(
     said = iter([json.dumps({'text': '# Only a title'}), json.dumps({'text': PB})])
     v = run(st, lambda sys, user, **k: next(said), 'playbook', 'how we chase late bills')
     assert v['done'] and v['ref'] == 'chase-a-late-bill' and playbooks.read('chase-a-late-bill').startswith('# Chase a late bill')
-    assert v['steps'][0]['kind'] == 'failed' and 'when:' in v['steps'][0]['text']
+    assert v['steps'][1]['kind'] == 'failed' and 'when:' in v['steps'][1]['text']
 
 
 def test_a_connection_saves_what_it_knows_never_a_secret_tests_and_finishes(st):

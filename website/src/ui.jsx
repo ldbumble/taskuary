@@ -492,13 +492,8 @@ export const useVoiceReady = () => {
   const [v, setV] = React.useState(null), [n, setN] = React.useState(0);
   React.useEffect(() => {
     let alive = true;
-    let again = null;
-    api.get("/api/voice/status", { params: { builtin: true } }).then(({ data }) => {
-      if (!alive) return; setV(data);
-      // ...and while this computer's own voice is being got ready (voice.prepare), asked again until it is
-      if (data?.getting) again = setTimeout(() => alive && setN((x) => x + 1), 10000);
-    }).catch(() => alive && setV({ ready: false }));
-    return () => { alive = false; clearTimeout(again); };
+    api.get("/api/voice/status", { params: { builtin: true } }).then(({ data }) => alive && setV(data)).catch(() => alive && setV({ ready: false }));
+    return () => { alive = false; };
   }, [n]);
   React.useEffect(() => {
     const changed = () => setN((x) => x + 1);
@@ -588,9 +583,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   const viaBuiltin = !!(builtin && !viaBrowser && (route === "windows" || (route === "browser" && voice?.choice === "auto")));
   const viaLive = !!(viaBuiltin && builtin.live && !speechAsk);     // Windows voice typing hears the microphone itself: a session, not a clip
   const off = !!(voice && route !== "connector" && !viaBrowser && !viaBuiltin);
-  // ...a mic with nothing to hear it yet, while Local Whisper downloads, says so rather than asking to set up what is on its way
-  const press = (e) => { setErr(""); if (!off && !(viaBuiltin && speechAsk)) return start(); if (voice?.getting) { flash(voice.getting); voice.recheck(); return; }
-    setAsk(e.currentTarget); voice.recheck(); };
+  const press = (e) => { setErr(""); if (!off && !(viaBuiltin && speechAsk)) return start(); setAsk(e.currentTarget); voice.recheck(); };
   const [turning, setTurning] = React.useState(false);
   const turnOn = async () => {
     setTurning(true);
@@ -683,7 +676,6 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
     : viaLive ? `Dictate — ${builtin.label}. A voice AI (${placeName("voice")}) also reads voice notes.`
     : viaBuiltin ? "Dictate — turn on Windows' speech recognition first (press to say yes)"
     : voice.choice !== "auto" ? "The selected built-in speech service is unavailable here — check Windows / browser voice in Connections"
-    : voice.getting ? voice.getting
     : "Voice is off — no voice AI is set up yet");
   return (<>
     <MuiTooltip title={ask || err ? "" : title} open={!ask && !err && hover && !!title}
@@ -724,9 +716,6 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
         <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>
           Pick a voice AI under {placeName("voice")}. Groq has a free tier; Local Whisper runs on this computer with no key.
         </Typography>
-        {voice?.local_failed && <Typography data-tq-local-failed="" sx={{ fontSize: 12.5, color: DIM, mt: 0.75, lineHeight: 1.5 }}>
-          This computer's own voice could not be set up: {voice.local_failed}
-        </Typography>}
       </>}
       {/* a Mac's own voice typing takes any box with the cursor in it - this window cannot call it, the owner can (voice.py LIVE) */}
       {/Mac/.test(navigator.platform || navigator.userAgent || "") && <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.75, lineHeight: 1.5 }}>

@@ -90,49 +90,18 @@ def save_vocabulary(store, terms, actor: str = 'owner') -> list:
     return clean
 
 
-# THE MIC WORKS WITH NOTHING SET UP (the owner, 2026-11-12: "mic is still broken as well on other machines that don't have groq connected
-# ... fix it once and for all"). With no card the window's mic leaned on Windows voice typing - a PowerShell child reaching a WinRT type,
-# behind Online speech recognition: a setting a managed PC locks, a language mode it blocks. Now no card means Local Whisper, made ready in
-# the background the first time a mic asks (faster-whisper through deps.install, then its model): the clip never leaves the computer and
-# nothing in Windows has to allow it. Until it is ready, or where it cannot be (no download), the mic is what it was, and says which.
-AUTO_MODEL = 'base'      # ~1.5s a sentence on a laptop CPU; 'small' hears better at 3x the time and 480MB
-AUTO = {'ConnectorId': None, 'Type': 'local_whisper', 'ConfigJson': json.dumps({'model': AUTO_MODEL}), 'Active': 1, 'HasSecret': 0, 'Secret': ''}
-GETTING = 'Getting voice ready on this computer - a one-time download of a few minutes. The mic hears you once it is done.'
-_PREP = {}
-
-def _get_ready():
-    from . import deps
-    try:
-        if not deps.installed('faster_whisper'): deps.install('faster_whisper')
-        from faster_whisper.utils import download_model
-        download_model(AUTO_MODEL)
-        _PREP['state'] = 'ready'; logger.info('voice: Local Whisper is ready - the mic hears on this computer')
-    except Exception as e:      # pip, the model download, a DLL - whichever failed, the mic stays what it was and says why
-        _PREP.update(state='failed', why=str(e)[-300:]); logger.warning(f'voice: Local Whisper could not be made ready - {e}')
-
-def prepare() -> str:
-    "Local Whisper's state: '' (not asked - always under the test suite), 'getting', 'ready' or 'failed'; the first ask starts it, once a run."
-    if not _PREP and not os.environ.get('TASKUARY_TEST_HOME'):
-        _PREP['state'] = 'getting'; threading.Thread(target=_get_ready, daemon=True, name='voice-local').start()
-    return _PREP.get('state', '')
-
-
 def pick(store):
-    """The first active voice connector that can actually run - a key where one is needed - else a HIPAA AI card with its access code,
-    else Local Whisper once it is ready here (AUTO)."""
+    """The first active voice connector that can actually run - a key where one is needed - else a HIPAA AI card with its access code."""
     cs = [c for c in store.list_connectors() if c['Active']]
     c = next((c for c in cs if c['Type'] in VOICE_TYPES and (c['HasSecret'] or c['Type'] not in NEEDS_KEY)), None) \
         or next((c for c in cs if c['Type'] in GATEWAY_TYPES and c['HasSecret']), None)
-    return store.get_connector(c['ConnectorId'], with_secret=True) if c else (dict(AUTO) if prepare() == 'ready' else None)
+    return store.get_connector(c['ConnectorId'], with_secret=True) if c else None
 
 
 def ready(store) -> dict:
     c = pick(store)
-    out = {'ready': bool(c), 'provider': c['Type'] if c else None, 'label': LABELS.get(c['Type']) if c else None,
-           'vocabulary': vocabulary(store), 'builtin': None if c else builtin()}
-    if not c and _PREP.get('state') == 'getting': out['getting'] = GETTING
-    if not c and _PREP.get('state') == 'failed': out['local_failed'] = _PREP.get('why') or 'it could not be installed'
-    return out
+    return {'ready': bool(c), 'provider': c['Type'] if c else None, 'label': LABELS.get(c['Type']) if c else None,
+            'vocabulary': vocabulary(store), 'builtin': None if c else builtin()}
 
 
 def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.ogg', c: dict = None, mic: bool = False,

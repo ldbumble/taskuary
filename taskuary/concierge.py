@@ -1856,7 +1856,11 @@ def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str
         say_ = f"{str(e)[:1].upper()}{str(e)[1:]}." .replace('..', '.') + ' Nothing was made.'
         record(store, tid, 'assistant', say_); return {'say': say_, 'options': [], 'chips': [], 'decision': None}
     ref = o.get('ref') or task_ref(o['taskId'])
-    what = (f"Drafted it on {ref} - it waits for your Send." if o.get('drafted') else f"Made {ref}, but the draft could not be written - write it there.") if op == 'outbox' \
+    # ...and with nothing connected to send it, the draft waits on the card's Connect, not a Send it does not have (the visual audit, 2026-11-13)
+    from . import outbound
+    gone = op != 'outbox' or params.get('channel') in outbound.send_channels(store)
+    what = ((f"Drafted it on {ref} - it waits for your Send." if gone else f"Drafted it on {ref} - nothing can send {params.get('channel')} "
+             f"yet, so press Connect {params.get('channel')} there first.") if o.get('drafted') else f"Made {ref}, but the draft could not be written - write it there.") if op == 'outbox' \
         else f"Started {ref} - an agent is on it." if o.get('started') or o.get('existing') else f"Made {ref} - it waits its turn for an agent."
     return {**_did(store, tid, what + (f' {lead}' if lead else ''), op, o), 'open': f"#task={o['taskId']}"}
 

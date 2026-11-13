@@ -299,7 +299,9 @@ class EveryRoadIsOffered(unittest.TestCase):
         notice(s, 0, 'Gail Moreno', 'gail@northwind.example', 'May close', 'Numbers attached.')
         # a recipient it can place: drafted on a task of its own and opened (the owner, 2026-11-12: "open task directly") - never sent
         from taskuary import outbox
-        with mock.patch.object(outbox, 'draft_message', return_value='Hi Gail, the May numbers are attached.'):
+        # ...from a mailbox that can send it (test_assistant_acts: with none, the line says Connect, not Send)
+        with mock.patch.object(outbox, 'draft_message', return_value='Hi Gail, the May numbers are attached.'), \
+                mock.patch('taskuary.outbound.send_channels', return_value=['email']):
             out = call(s, 'task.create_from_text', kind='send', text='the May numbers', to='Gail Moreno')
         tid = int(out['open'].split('=')[1]); rv = s.pending_review(tid)
         self.assertNotIn('new', out); self.assertEqual(out['say'], f'Drafted it on TQ-{tid:04d} - it waits for your Send.')

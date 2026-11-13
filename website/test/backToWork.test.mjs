@@ -53,3 +53,14 @@ test("the head draws Back and New chat in its corner, the pill drops its own pen
   assert.doesNotMatch(view, /byNameTid/);
   assert.match(view, /openTaskRef\.current = openTaskCard;/);
 });
+
+// the phone audit (2026-11-13): at 390px the Back chip and the head's icons left "Taskuary" less room than its word, and with the name's box
+// free to shrink and nothing clipping it, the word ran on under the Your work icon. The chip gives way first; the name clips, never overlaps
+test("on a phone the chat head's name is not overrun by the Back chip", () => {
+  const css = readFileSync(fileURLToPath(new URL("../src/assistantView.css", import.meta.url)), "utf8");
+  const rule = (sel) => css.split("\n").find((l) => l.startsWith(`${sel} {`)) || "";
+  assert.match(rule(".tq-chat-head .who"), /overflow: hidden/);
+  assert.match(rule(".tq-chat-head .who"), /text-overflow: ellipsis/);
+  assert.match(rule(".tq-chat-head .who"), /flex-shrink: 0; max-width: 60%/, "the name keeps its word; the chip gives way");
+  assert.match(rule(".tq-chat-head .tq-back-work"), /min-width: 0; flex-shrink: 1/);
+});

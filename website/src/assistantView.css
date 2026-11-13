@@ -186,7 +186,9 @@
 /* ── the chat ─────────────────────────────────────────────────────────────────────────────── */
 .tq-chat-head { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 12px; border-bottom: 1px solid var(--tq-border, #e1dcd5); background: var(--tq-panel, #fffdfb); }
 .tq-chat-head .who b { display: inline; font-size: 13px; color: var(--tq-text, #262521); font-weight: 600; letter-spacing: .2px; }
-.tq-chat-head .who { min-width: 0; }
+/* ...the name keeps its room and the Back chip gives way (the phone audit, 2026-11-13): at 390px "Back to TQ-..." took the name's width, and
+   "Taskuary" ran on under the Your work icon - the chip ellipsizes and the name keeps its word (an earlier chat's date line clips at 60%) */
+.tq-chat-head .who { min-width: 0; flex-shrink: 0; max-width: 60%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tq-chat-head .who span { display: inline; font-size: 10.5px; color: var(--tq-secondary, #6e685f); margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-chat-head .grow { flex: 1; }
 /* the way back to the task you were working on: quiet, the size of the header icons, never wider than half the head (a phone) */

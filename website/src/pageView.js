@@ -144,8 +144,8 @@ export function context(root = currentRoot()) {
   if (!v) return null;
   const text = words(v.root).slice(0, 600);
   return { area: v.area, title: v.title, ...(v.item ? { item: v.item } : {}), rev,
-    fields: v.fields.map(({ key, label, kind, value, secret, state, options, disabled }) => (secret || isSecret(key, label)
-      ? { key, label, kind, secret: true, state: state || "empty" } : { key, label, kind, value: String(value ?? "").slice(0, 200), ...(options ? { options } : {}), ...(disabled ? { disabled } : {}) })),
+    fields: v.fields.map(({ key, label, kind, value, secret, state, options, disabled, offscreen }) => (secret || isSecret(key, label)
+      ? { key, label, kind, secret: true, state: state || "empty" } : { key, label, kind, value: String(value ?? "").slice(0, 200), ...(options ? { options } : {}), ...(disabled ? { disabled } : {}), ...(offscreen ? { offscreen } : {}) })),
     buttons: v.buttons.map(({ id, label, enabled, send }) => ({ id, label, enabled, ...(send || isSend({ id, label }) ? { send: true } : {}) })),
     ...(v.last ? { last: v.last } : {}), ...(text ? { text } : {}) };
 }

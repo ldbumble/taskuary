@@ -103,3 +103,11 @@ test("the bell's ask is one sentence per stop - a detail's own full stop is not 
   assert.equal(failureAsk(p), "Vendor mailbox: the last poll failed: The server's address could not be found. Check that this computer is online. Can you look into it and fix it?");
   assert.equal(failureAsk({ title: "Reports", detail: "It stopped", error: "timeout" }), "Reports: It stopped (timeout). Can you look into it and fix it?");
 });
+
+// THE BUILDER'S DESCRIBE IS ON NO SCREEN (the visual audit, 2026-11-13): the Assistant pointed at it and told the owner to describe the
+// dashboard "in the box" - there was no box. It says so to the server, which never lights it
+test("a view field drawn nowhere says it is offscreen", () => {
+  assert.match(read("pageView.js"), /fields: v\.fields\.map\(\(\{ key, label, kind, value, secret, state, options, disabled, offscreen \}\)/);
+  assert.match(read("pageView.js"), /\.\.\.\(offscreen \? \{ offscreen \} : \{\}\)/);
+  assert.match(read("ReportsView.jsx"), /fields: \[\{ key: "describe", offscreen: true,/);
+});

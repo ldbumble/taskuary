@@ -87,6 +87,17 @@ class TakeTests(unittest.TestCase):
             self.assertEqual(ops[0], {'op': 'press', 'button': 'new:start'}, start)
             self.assertEqual((ops[1]['op'], ops[1]['target']), ('point', 'new:send'))
 
+    def test_a_field_off_the_screen_is_filled_never_pointed_at(self):
+        # the visual audit, 2026-11-13: Set up with AI on a new dashboard - "Pointed at Describe the dashboard you want ... Describe it in the
+        # box" - the builder's describe is the Assistant's own field, on no screen, and the owner had no box to type in
+        v = pageview.clean({'area': 'reports', 'fields': [{'key': 'describe', 'label': 'Describe the dashboard you want', 'value': '', 'offscreen': True}],
+                            'buttons': [{'id': 'save', 'label': 'Save'}]})
+        self.assertTrue(v['fields'][0]['offscreen'])
+        self.assertIn('offscreen', pageview.GUIDE)
+        _, ops = pageview.take('\n'.join([view_line(op='point', target='Describe the dashboard you want'),
+                                          view_line(op='set', field='describe', value='open tasks by kind')]), v)
+        self.assertEqual(ops, [{'op': 'set', 'field': 'describe', 'value': 'open tasks by kind'}])
+
     def test_a_secret_is_never_set(self):
         _, ops = pageview.take(view_line(op='set', field='bot token (xoxb-…)', value='xoxb-1'), pageview.clean(SLACK))
         self.assertEqual(ops, [{'op': 'refused', 'target': 'bot token (xoxb-…)', 'why': pageview.REFUSED_SECRET}])

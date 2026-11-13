@@ -83,6 +83,7 @@ def clean(view) -> dict | None:
             out['value'] = _cut(f.get('value'), MAX_VALUE)
             if f.get('options'): out['options'] = [_cut(o, 60) for o in list(f['options'])[:20]]
         if f.get('disabled'): out['disabled'] = True
+        if f.get('offscreen'): out['offscreen'] = True
         fields.append(out)
     buttons = []
     for b in (view.get('buttons') or [])[:MAX_BUTTONS]:
@@ -111,7 +112,7 @@ GUIDE = ('WHAT IS ON THE SCREEN IS YOURS TO WORK, as the owner would - only beca
          'title)\nA dialog open over the page (Search, the Hub\'s Write one, the bell) is the page while it is open.\nThey run in order, on the page, through '
          'its own buttons, and the owner sees each one in the chat. Never press a button that SENDS something out (Send, Approve, an email, '
          'a chat message) or installs Taskuary\'s update (Update to v...): point at it - the owner presses it. Never set a secret (a password, a key, a token): tell them to paste it into '
-         'its box. Work that needs this computer (listing channels with a token, a script) is the general agent\'s: hand it to it. Your words '
+         'its box. A field marked offscreen is on no screen: fill it yourself from the owner\'s words, or ask them for those words in the chat. Work that needs this computer (listing channels with a token, a script) is the general agent\'s: hand it to it. Your words '
          # ...are drawn BEFORE the acts run, each act its own step once it is done (the owner, 2026-11-03: "if it opens it, it should say open")
          'are shown before the acts run, and each act says itself as a step once it is done ("Opened ...", "Pressed Save") - so never '
          'narrate them ("Opening ...", "I\'ll open ..."): one short line of what you need from them, or no words at all. A VIEW line is never '
@@ -181,6 +182,7 @@ def take(raw: str, view: dict | None) -> tuple[str, list]:
             # ...and so is Taskuary's own install (2026-11-02, the Settings audit): Updates promises "Nothing installs unless the owner
             # presses it" (update.status_line), and the install reopens the app under the chat that pressed it
             ops.append({'op': 'point', 'target': (b or {}).get('id') or name, 'why': INSTALL_IS_YOURS}); continue
+        if f and f.get('offscreen'): continue     # ...nothing on the screen to light (the visual audit, 2026-11-13: "Pointed at Describe ...")
         if op == 'press' and f: op = 'point'
         ops.append({'op': op, ('button' if op == 'press' else 'target'): (b or f or {}).get('id') or (f or {}).get('key') or name})
         # ...and A PRESS OR A PICK CAN DRAW NEW BOXES (2026-11-02): New's Set a goal tab brings its By box, Another repository… its folder,

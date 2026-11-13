@@ -470,7 +470,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   // ...and the one open, by its id (the everyday-asks audit, 2026-11-02): "run it" over a report's builder named it by its title alone, so
   // the Assistant's report.run guessed among titles; source_id is what its report tools take
   const openNow = browse ? browseState.open : bucket;
-  useViewExtras("reports", { item: typeof openNow === "number" ? { kind: "report", id: openNow } : null, fields: [{ key: "describe", label: composeKind === "workflow" ? "Describe the routine you want" : composeKind === "dashboard" ? DASH.describe : "Describe the report you want",
+  useViewExtras("reports", { item: typeof openNow === "number" ? { kind: "report", id: openNow } : null, fields: [{ key: "describe", offscreen: true, label: composeKind === "workflow" ? "Describe the routine you want" : composeKind === "dashboard" ? DASH.describe : "Describe the report you want",
     value: "", set: compose, said: (v) => `Asked the builder for: ${String(v).length > 70 ? `${String(v).slice(0, 69)}…` : v}` }] });
 
   // a failed load is said, with a way to try again - a spinner here waited for ever

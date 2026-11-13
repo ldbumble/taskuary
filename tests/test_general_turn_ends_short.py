@@ -185,6 +185,23 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
         hooks.judge_ended(s2, t2, 'g8', said, brain=judge, wait=True, then=woke.append)
         self.assertEqual(len(asked), 1)
 
+    def test_a_turn_is_not_woken_while_something_it_set_up_waits_for_the_owners_press(self):
+        """Recorded on the real CLI, 2026-11-13 (invented people): the agent wrote two emails; the owner sent the first; the agent, told so,
+        said the second "hasn't been sent yet" - and the judge read that as work left unfinished, so it was woken to answer "Only you can
+        send the email to Omar. Nothing else is needed from me for it." A card waiting for his press is a stored fact: he moves next."""
+        said = "Your email asking Marcus to book the AV went out. The email to Omar asking for the attendee list hasn't been sent yet."
+        asked, woke = [], []
+        def judge(*a, **k): asked.append(1); return json.dumps({'unfinished': True, 'why': 'email to Omar not yet sent'})
+        s = MemoryStore(); tid = researcher(s)
+        rid = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Hi Omar, could you send me the attendee list? Alex',
+                            'Deliver': json.dumps({'channel': 'email', 'to': ['omar@northwind.example'], 'cc': [], 'subject': 'Attendee list', 'slot': 's1'})})
+        ws.record(s, tid, 'g9', 'working', text='', source='api'); ws.record(s, tid, 'g9', 'turn_end', text=said, source='api')
+        hooks.judge_ended(s, tid, 'g9', said, brain=judge, wait=True, then=woke.append)
+        self.assertEqual((woke, asked), ([], []), 'no wake, and no model was asked')
+        s.decide_review(rid, 'approved', None, 'owner')                # ...nothing waits on him any more: the same words are the judge's to read
+        hooks.judge_ended(s, tid, 'g9', said, brain=judge, wait=True, then=woke.append)
+        self.assertEqual((woke, asked), (['email to Omar not yet sent'], [1]))
+
     def test_an_unreadable_verdict_is_no_verdict(self):
         s = MemoryStore(); tid = researcher(s)
         ws.record(s, tid, 'g2', 'turn_end', text=SHORT, source='api')

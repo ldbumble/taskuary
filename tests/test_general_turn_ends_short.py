@@ -158,6 +158,33 @@ class AShortTurnWakesTheAgentOnceTests(unittest.TestCase):
             self.assertEqual(woke, [] if sid == 'g3' else ['Approve'])
             self.assertEqual(s.last_worker_event(tid, skip=ws.NOTES)['Kind'], 'turn_end')        # never a failure
 
+    def test_a_turn_that_set_its_own_check_back_is_not_woken_before_it_is_due(self):
+        """Recorded on the real CLI, 2026-11-13 (invented people): two emails went on the owner's Send; the agent said "I'll check back in two
+        days for Ray's quote" and set the check-back; the judge read that as work of its own, and the agent was woken ten seconds later to
+        say that nobody had answered yet. The check-back is the wake: a stored fact, read before any model. One set by an EARLIER turn says
+        nothing of this one, and a turn that says the same with none set is still the judge's to read."""
+        from taskuary import checkback
+        said = "Both emails, to Ray and to Erin, have gone out. I'll check back in two days for Ray's quote and Erin's answer on the budget."
+        short, asked = verdict(True, "its own check-in in two days for Ray's quote"), []
+        def judge(*a, **k): asked.append(1); return short(*a, **k)
+        s = MemoryStore(); tid = researcher(s)
+        ws.record(s, tid, 'g7', 'working', text='', source='api')
+        checkback.set_check(s, tid, 'in 2 days', 'Ray Colton sent the bus quote', 'assistant')
+        ws.record(s, tid, 'g7', 'turn_end', text=said, source='api')
+        woke = []
+        hooks.judge_ended(s, tid, 'g7', said, brain=judge, wait=True, then=woke.append)
+        self.assertEqual((woke, asked), ([], []), 'no wake, and no model was asked')
+        # ...a later turn on the same task, the old check-back still waiting: that turn's own short end is read as before
+        s._exec("UPDATE audit SET CreatedAt='2026-11-01 09:00:00' WHERE Action='check_back'")
+        ws.record(s, tid, 'g7', 'working', text='go on', source='api'); ws.record(s, tid, 'g7', 'turn_end', text=SHORT, source='api')
+        hooks.judge_ended(s, tid, 'g7', SHORT, brain=verdict(True, 'the walkthrough'), wait=True, then=woke.append)
+        self.assertEqual(woke, ['the walkthrough'])
+        # ...and with none set, the same words are the judge's to read
+        s2 = MemoryStore(); t2 = researcher(s2)
+        ws.record(s2, t2, 'g8', 'working', text='', source='api'); ws.record(s2, t2, 'g8', 'turn_end', text=said, source='api')
+        hooks.judge_ended(s2, t2, 'g8', said, brain=judge, wait=True, then=woke.append)
+        self.assertEqual(len(asked), 1)
+
     def test_an_unreadable_verdict_is_no_verdict(self):
         s = MemoryStore(); tid = researcher(s)
         ws.record(s, tid, 'g2', 'turn_end', text=SHORT, source='api')

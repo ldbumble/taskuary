@@ -78,6 +78,16 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(out['confidence'], 'high')
         self.assertTrue(out['explain'])
 
+    def test_a_schedule_the_model_nested_is_the_schedule_the_report_runs_on(self):
+        # the visual audit, 2026-11-13: "every Monday at 8am" came back as {"schedule": {"cron": "0 8 * * 1"}} - the explain said Monday, the
+        # builder's clock said "Only when I press Run now", and Save would have made a report that never ran by itself
+        llm = llm_saying(cfg_answer(type='digest', title='Old tasks', schedule={'cron': '0 8 * * 1'}))
+        cfg = compose.compose(self.s, 'every Monday at 8am, my old tasks', llm)['config']
+        self.assertEqual(cfg.get('cron'), '0 8 * * 1'); self.assertNotIn('schedule', cfg)
+        # ...a key it wrote at the top stays the one that counts
+        llm = llm_saying(cfg_answer(type='digest', title='Old tasks', daily_at='07:00', schedule={'daily_at': '09:00'}))
+        self.assertEqual(compose.compose(self.s, 'daily', llm)['config']['daily_at'], '07:00')
+
     def test_the_catalog_is_what_the_model_sees(self):
         llm = llm_saying(cfg_answer(type='digest', title='Daily digest', daily_at='08:00'))
         compose.compose(self.s, 'daily digest', llm)

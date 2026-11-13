@@ -26,6 +26,17 @@ def test_ai_agent_workflow_uses_a_real_configured_agent():
     assert 'reports only read and summarize' in seen['system']
 
 
+def test_a_weekly_routine_the_model_nested_stays_weekly():
+    # the visual audit, 2026-11-13: a nested {"schedule": {"cron": ...}} was filtered out with the other unknown keys, and the routine fell
+    # to the default "every day at 08:00" - a weekly job run daily
+    store = MemoryStore()
+    store.upsert_agent('coding', 'cli', 'local', json.dumps({'cmd': 'codex'}))
+    out = compose.compose_workflow(store, 'every Monday', answering({
+        'config': {'type': 'agent', 'title': 'Weekly review', 'agent': 'coding', 'prompt': 'review', 'schedule': {'cron': '0 8 * * 1'}},
+        'explain': 'Mondays.', 'confidence': 'high'}))
+    assert out['config'].get('cron') == '0 8 * * 1' and 'daily_at' not in out['config']
+
+
 def test_invoice_workflow_resolves_customer_ids_to_trusted_zoho_records(monkeypatch):
     store = MemoryStore()
     card = store.get_connector_by_type('zoho_invoice')

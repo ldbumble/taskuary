@@ -447,6 +447,15 @@ def ask_of(q) -> dict:
     return {'q': str(q.get('q') or q.get('question') or '').strip()[:300], 'kind': 'text' if kind == 'choice' and len(opts) < 2 else kind,
             'options': opts if len(opts) >= 2 else []}
 
+SCHEDULE_KEYS = ('every_minutes', 'daily_at', 'cron', 'on_startup')
+def flat_schedule(cfg: dict) -> dict:
+    """A schedule the model NESTED ({"schedule": {"cron": "0 8 * * 1"}}, the visual audit 2026-11-13) lifted to the keys the scheduler
+    reads: nested, a report's clock read "only when I press Run now" and a routine's fell to every day at 08:00. A key at the top wins."""
+    s = cfg.get('schedule')
+    if not isinstance(s, dict): return cfg
+    return {**{k: v for k, v in cfg.items() if k != 'schedule'}, **{k: s[k] for k in SCHEDULE_KEYS if s.get(k) not in (None, '') and not cfg.get(k)}}
+
+
 def _rounds(store, llm, system, user, rounds, finish):
     """The loop both composers share: the model may go and READ a real schema before it writes
     anything, a question comes back as a question, and `finish` reads its final answer."""
@@ -461,6 +470,8 @@ def _rounds(store, llm, system, user, rounds, finish):
             return {'error': classify(e)['sentence']}
         out = _json(said)
         if not out: return {'error': AGAIN.format('a report')}
+        for k in ('config', 'report'):
+            if isinstance(out.get(k), dict): out[k] = flat_schedule(out[k])
         if out.get('questions'):
             asks = [a for a in map(ask_of, out['questions'] if isinstance(out['questions'], list) else [out['questions']]) if a['q']][:3]
             if asks: return {'questions': [a['q'] for a in asks], 'asks': asks, 'looked_at': looked}

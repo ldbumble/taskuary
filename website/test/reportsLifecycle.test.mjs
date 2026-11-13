@@ -185,3 +185,12 @@ test("a report with no schedule wears a red border and says it only runs by hand
   // ...and the editor's picker says it as its first choice (B3: the free boxes and their "Everything blank" caption are gone)
   assert.match(readFileSync(new URL("../src/WorkflowEditor.jsx", import.meta.url), "utf8"), /Only when I press Run now/);
 });
+
+// the phone audit (2026-11-13): a report's row was one flex line - dot, icon, name, AI summary, Run now, Edit, switch - and at 390px the
+// name's box (flex 1, basis 0) got nothing, its words one to a line down the left edge. On a phone the row wraps and the name holds line one
+test("on a phone a report row's name keeps its line and the buttons wrap under it", () => {
+  const src = readFileSync(new URL("../src/ReportsView.jsx", import.meta.url), "utf8");
+  const row = src.slice(src.indexOf("const row = (s) =>"), src.indexOf("const wizardNote"));
+  assert.match(row, /flexWrap: \{ xs: "wrap", sm: "nowrap" \}/);
+  assert.match(row, /<Box sx=\{\{ flex: \{ xs: "1 1 calc\(100% - \d+px\)", sm: 1 \}, minWidth: 0 \}\}>/);
+});

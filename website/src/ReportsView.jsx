@@ -528,15 +528,17 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         // it wears a red border and says so - a workflow is started by hand on purpose and is left alone
         const unscheduled = !sched && !workflowOverview;
         // ...and every row takes that frame's inset, so Run now, Edit and the switch stand in one column down the list
+        // ...ON A PHONE the name takes the first line and the buttons the next (the phone audit, 2026-11-13): in one line at 390px the
+        // name's box got 0px and "Advisor - its notes for you" stood one word to a line, a column of mono down the left edge
         return (
           <Box key={s.SourceId} sx={{ px: 1, border: "1px solid transparent", borderBottom: `1px solid ${BORDER}`,
             ...(unscheduled ? { borderColor: ALERT, borderRadius: 1, my: 0.5 } : {}) }}>
           <Box onClick={() => openOne(s.SourceId)}
-            sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1.5, cursor: "pointer",
+            sx={{ display: "flex", flexWrap: { xs: "wrap", sm: "nowrap" }, alignItems: "center", gap: 1.5, py: 1.5, cursor: "pointer",
               "&:hover": { bgcolor: "var(--tq-panel, #faf8f4)" } }}>
             <StatusDot ok={!!s.Active} />
             <ChannelIcon channel={isWorkflowConfig(c) ? "workflow" : "report"} />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Box sx={{ flex: { xs: "1 1 calc(100% - 64px)", sm: 1 }, minWidth: 0 }}>
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{c.title || s.Address}</Typography>
               <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
                 {asSteps(c) && c.flow.length ? plural(c.flow.length, "step")

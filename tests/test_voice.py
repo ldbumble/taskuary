@@ -241,7 +241,7 @@ class BuiltinVoiceTests(unittest.TestCase):
             def wait(self, timeout=None): return 0
             def kill(self): pass
         for out, want in ((b'.\r\n?Unknown\r\n?Unknown\r\n', 'speech service did not answer'), (b'.\r\n?TimeoutExceeded\r\n', 'heard no speech'),
-                          (b'.\r\n', 'heard no speech')):
+                          (b'.\r\n', 'heard no speech'), (b'.\r\n?Success\r\n?Success\r\n', 'heard no speech')):
             with mock.patch.object(voice, 'builtin', return_value=voice.LIVE), mock.patch.object(spawn, 'popen', lambda argv, **kw: Child(out)):
                 sid = voice.listen_start(); voice._LISTEN['cur']['reader'].join(2)
                 got = voice.listen_stop(sid)

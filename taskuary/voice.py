@@ -466,6 +466,7 @@ _HEARD_NOTHING = {'Unknown': "Windows voice typing heard no words - Windows' spe
                              "recognition is on in Windows' speech privacy settings (your organisation may block it), or set up a voice AI",
                   'TimeoutExceeded': "Windows voice typing heard no speech - check the microphone Windows is using (Sound settings) "
                                      "and that it is not muted, then press the mic and talk"}
+_HEARD_NOTHING['Success'] = _HEARD_NOTHING['TimeoutExceeded']     # a muted or silent mic: Windows answers 'Success' with no text
 
 def heard_nothing(last: str = '') -> str:
     "The line a session that ended with no words shows, by Windows' last answer (`last`: a SpeechRecognitionResultStatus name, or '')."

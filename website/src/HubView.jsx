@@ -106,8 +106,10 @@ const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen 
             <Typography sx={{ fontSize: 14, fontWeight: 600, color: INK, letterSpacing: "-.15px", flex: 1, minWidth: 140 }}>
               {p.Title}
             </Typography>
+            {/* a role's text-on-tint pair (theme.jsx ROLES): `.soft` is no role's key, so the chip had no ground and its brass solid
+                read as nothing on the night palette (the dark-mode audit, 2026-11-13) */}
             <Chip size="small" label={k.label} sx={{ height: 18, fontSize: 10,
-              bgcolor: ROLES[k.role].soft, color: ROLES[k.role].solid }} />
+              bgcolor: ROLES[k.role].tint, color: ROLES[k.role].ink }} />
             <Chip size="small" label={p.Topic} sx={{ height: 18, fontSize: 10, bgcolor: PANEL2, color: DIM }} />
           </Box>
           {/* a body written as markdown - a table, a list - is drawn as one: industry reference ran together as a single

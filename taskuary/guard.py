@@ -115,6 +115,8 @@ DENIED = (
     (r'POST', r'^/api/(mcp|mssql)/', 'runs a command, or sends saved credentials to a host of the caller\'s choosing'),
     (r'POST', r'^/api/(reports/(preview|compose|compose-sources)|workflows/compose|dashboards/(compose|preview|tile))$',
      'the report/workflow composer may read a connected system with the card\'s credentials'),
+    # ...and Set up with AI (build.py) runs those composers, then saves and tests what they made - the owner's press, never an agent's
+    (r'POST', r'^/api/build(/[\w-]+/answer)?$', 'Set up with AI saves and tests what it builds with the cards\' credentials'),
     # testing a step reads a connected system with the card's credentials; a repair rewrites a saved workflow
     (r'POST', r'^/api/workflows/(step-test|\d+/repair)$',
      "a workflow's steps - testing one reads with the card's credentials, a repair changes what runs on its schedule"),

@@ -182,10 +182,18 @@ def _episodes(store, failing: list) -> tuple:
         got[p['key']] = {**{k: p.get(k) for k in ('title', 'back', 'detail', 'where', 'connector', 'report', 'kind')}, 'from': e['from'], 'shown': shown}
         if shown: ring.append(p)
     for k, e in was.items():
-        if k in got or not e.get('shown') or e.get('kind') in OWN_NEWS: continue
+        if k in got or not e.get('shown') or e.get('kind') in OWN_NEWS or _off(store, e): continue
         _news_put(store, f'back:{k}', {**e, 'kind': 'recovered', 'to': now})
     if got != was: store.set_setting(OPEN, json.dumps(got), 'system')
     return ring, failing
+
+
+def _off(store, e) -> bool:
+    """The card or report the episode was about is switched off or gone: its failure stopped being read, it did not
+    heal, so the episode closes quietly - "working again" for a card the owner just turned off would be untrue."""
+    if e.get('connector'): return not (store.get_connector(e['connector']) or {}).get('Active')
+    if e.get('report'): return not (store.get_source(e['report']) or {}).get('Active')
+    return False
 
 
 # ── 1. signed out of Microsoft ───────────────────────────────────────────────────────────────────

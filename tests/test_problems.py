@@ -39,6 +39,18 @@ class Problems(unittest.TestCase):
         problems.dismiss(s, f'back:{key}')                            # Got it
         self.assertEqual(problems.news(s), [])
 
+    def test_a_failing_card_switched_off_is_not_working_again(self):
+        """Turning a failing card off stops it being read; it did not heal, so the episode closes without a word."""
+        s = MemoryStore()
+        wa = _on(s, 'whatsapp')
+        s.touch_connector(wa['ConnectorId'], 'the WhatsApp bridge is not running')
+        _since(s, wa, minutes=problems.GRACE_MINUTES + 5)
+        key = f"connector:{wa['ConnectorId']}"
+        self.assertIn(key, {p['key'] for p in problems.collect(s)})
+        s._exec('UPDATE connector SET Active=0 WHERE ConnectorId=?', (wa['ConnectorId'],))   # the owner switches it off, error still on it
+        self.assertNotIn(key, {p['key'] for p in problems.collect(s)})
+        self.assertEqual(problems.news(s), [], 'a card switched off is not "working again"')
+
     def test_a_retry_at_work_does_not_ring(self):
         """2026-10-26: "the classic whatsapp timeout should not show up". The poll starts a dropped bridge again
         (wabridge.supervise); one that is back inside the grace never rang, so it says no "working again" either."""

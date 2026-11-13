@@ -41,6 +41,7 @@ import { place } from "./words.js";
 import { label as btn } from "./buttons.js";
 import { capabilities, useCapabilities } from "./capabilities.js";
 import { PromptBox } from "./AgentSummary.jsx";
+import { MdLine } from "./md.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
 
 // what the card IS, as its title: New's own box asks, and a card the Assistant wrote from it says what it made of the words
@@ -543,7 +544,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         {err && <Alert severity="error" sx={{ py: 0.25, fontSize: 12.5, alignItems: "center" }}
           action={errAi ? <ConnectAi onGo={() => onClose?.()} /> : null}>{err}</Alert>}
         {ok && <Alert severity="success" sx={{ py: 0.25, fontSize: 12.5 }}>{ok}</Alert>}
-        {saidBack && <Alert data-tq-new-said="" severity="info" icon={false} sx={{ py: 0.25, fontSize: 12.5, whiteSpace: "pre-wrap" }}>{saidBack}</Alert>}
+        {saidBack && <Alert data-tq-new-said="" severity="info" icon={false} sx={{ py: 0.25, fontSize: 12.5, whiteSpace: "pre-wrap" }}><MdLine text={saidBack} /></Alert>}
       </DialogContent>
 
       <ButtonBar>

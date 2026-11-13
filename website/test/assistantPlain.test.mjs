@@ -98,3 +98,9 @@ test("no screen points at the removed Timeline or Tasks tab", () => {
     assert.doesNotMatch(strings, /on the Timeline|Timeline (post|feed|headline)|lives in Tasks|Saved in Tasks/, f);
   }
 });
+
+// THE ANSWER UNDER NEW IS READ AS THE CHAT READS IT (the visual audit, 2026-11-13): the Assistant answered in New's box with a link to the
+// report builder, and the box printed "[Open the report builder](#report=new)" as raw text - a link that went nowhere
+test("New's answer under its box draws its links and bold, never the raw markdown", () => {
+  assert.match(read("NewSheet.jsx"), /data-tq-new-said=""[^>]*><MdLine text=\{saidBack\} \/><\/Alert>/);
+});

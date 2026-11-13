@@ -62,6 +62,8 @@ export const sessionWord = (s) => (s ? JSON.stringify([!!s.alive, !!s.waiting, s
 // session has no `busy`, so a coding agent is never read this way.
 // ...and not while the server says it is not waiting (general.waiting): a session opened for a turn that has not taken yet is idle, not answered
 export const generalAnswered = (isGeneral, session) => !!(isGeneral && session?.alive && session.busy === false && session.waiting !== false);
+// ...so a line that says "its agent is still working" is said of a live session that has NOT answered - never of one at rest waiting on him
+export const stillWorking = (live, answered) => !!live && !answered;
 
 // Action proposals (write a playbook, push a branch, close an issue) share the review table
 // with outbound replies, but they are not communication. A proposal is normally queued after

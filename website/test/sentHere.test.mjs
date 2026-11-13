@@ -44,3 +44,16 @@ test("the sent card holds its draft's place only until the task reads it as gone
   assert.match(page, /WENT\.includes\(r\.Status\) && r\.ReviewId !== sentBox\?\.id\)/);      // ...its turn's card is drawn from the same word
 });
 
+// THE LIVE SHAPE (the audit, 2026-11-13, on the real CLI): a reply had gone, the agent wrote two emails and came to rest; under their cards the
+// line read "The task stays open while its agent is still working." beside the chip "agent waiting on you". A chat agent keeps its session
+// after it answers: alive is not at work
+test("the line under what was sent says the agent is still working only while a turn is at work", async () => {
+  const { generalAnswered, stillWorking } = await import("../src/taskLifecycle.js");
+  const atRest = { alive: true, busy: false, waiting: true }, atWork = { alive: true, busy: true };
+  assert.equal(stillWorking(true, generalAnswered(true, atRest)), false, "answered and waiting on him: not working");
+  assert.equal(stillWorking(true, generalAnswered(true, atWork)), true);
+  assert.equal(stillWorking(true, generalAnswered(false, { alive: true })), true, "a coding session has no such word: live is at work, as before");
+  assert.equal(stillWorking(false, false), false);
+  assert.match(readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), /stillWorking\(liveSession, answered\) \? "The task stays open while its agent is still working\."/);
+});
+

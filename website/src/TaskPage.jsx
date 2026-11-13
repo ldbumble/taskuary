@@ -104,7 +104,7 @@ import { chatOf, taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
-  AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
+  AGENT, agentPhase, focusStage, generalAnswered, stillWorking, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { askNote, closeoutOf, decidedAsk, heldGroups, splitHeld } from "./reviewProposal.js";
 import PassedCard, { isPassed, isReplaced } from "./PassedCard.jsx";
@@ -2840,10 +2840,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               <Box sx={{ flex: 1, minWidth: 12 }} />
               <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
                 {/* no More button: with these on the surface there is nothing left to hide */}
+                {/* ...and "its agent is still working" only while a turn IS at work (the audit, 2026-11-13: a chat agent keeps its session after
+                    it answers, and under two emails waiting for Send the line said it was working while the chip said "agent waiting on you") */}
                 {pendingReview
                   ? (inRow ? "" : "Nothing is sent until you approve it.")
                   : sentReview
-                  ? `${sentCarded ? "" : `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. `}${String(t?.Status || "") === "done" ? "The task closed with it." : liveSession ? "The task stays open while its agent is still working." : "The task stays open until you mark it done."}`
+                  ? `${sentCarded ? "" : `Sent${sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}. `}${String(t?.Status || "") === "done" ? "The task closed with it." : stillWorking(liveSession, answered) ? "The task stays open while its agent is still working." : "The task stays open until you mark it done."}`
                   : inRow ? "" /* the chip already says "not drafted" */ : "A reply is optional. Starting or stopping an agent does not send one."}
               </Typography>
             </Box>

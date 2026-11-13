@@ -61,6 +61,9 @@ class TheServer(unittest.TestCase):
         self.assertTrue(tools['search_messages']['annotations']['readOnlyHint'])
         self.assertFalse(tools['propose_reply']['annotations']['readOnlyHint'])
         self.assertIn('nothing is sent', tools['propose_reply']['description'])
+        # ...and the view and the acts load with the session, never a bare name it must search for (2026-11-13: no view in 8 sessions)
+        self.assertEqual({n for n, t in tools.items() if (t.get('_meta') or {}).get('anthropic/alwaysLoad')} - {'propose_email', 'propose'}, {'show', 'propose_reply'})
+        self.assertNotIn('_meta', tools['search_messages'])
 
     def test_a_file_that_came_on_this_tasks_mail_is_sent_on_by_its_id_and_checked_again_at_send(self):
         """The north-star audit, 2026-11-10: asked to send a document the task received on to someone else, the agent could attach only

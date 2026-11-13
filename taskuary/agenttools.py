@@ -234,9 +234,15 @@ REPLY_TOOLS = ('propose_reply', 'reply_not_needed')
 # ...and the tools only a coding agent has a use for are not offered on any other task (2026-11-09): a general agent called find_repos
 # for a WhatsApp bug report - and four tool schemas rode on every turn for nothing
 CODING_TOOLS = ('note_peers', 'use_repo', 'find_repos', 'propose_land')
+# ...AND THE FEW AN AGENT MUST KNOW FROM ITS FIRST TURN LOAD WITH IT (the owner, 2026-11-13: "i don't see the agents using the json renders"):
+# Claude Code defers an MCP server's tools - the model holds a bare name like `show` until it searches for it, and none of 8 sessions ever
+# did, so no view was drawn and every result came back as prose. These ride whole on every turn (Claude Code 2.1.285+, the per-tool
+# `anthropic/alwaysLoad`): the view, and the three that set an act up for the owner's press
+ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose')
 def listing(skip=()) -> list:
     "tools/list: every tool with what it does and whether it only reads - but those in `skip`."
-    return [{'name': n, 'description': d, 'inputSchema': s, 'annotations': ANNOTATIONS[c]} for n, (c, d, s, _) in TOOLS.items() if n not in skip]
+    return [{'name': n, 'description': d, 'inputSchema': s, 'annotations': ANNOTATIONS[c], **({'_meta': {'anthropic/alwaysLoad': True}} if n in ALWAYS_LOAD else {})}
+            for n, (c, d, s, _) in TOOLS.items() if n not in skip]
 
 
 def _out(text, fence_it: bool = False) -> str:

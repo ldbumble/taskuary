@@ -115,3 +115,17 @@ test("the row's Review changes with no session open opens the landing card's dif
   assert.match(page, /!liveSession && filled\("review_changes"\) \? \[\{ id: "diff"/);
   assert.match(page, /window\.dispatchEvent\(new CustomEvent\(LANDING_DIFF, \{ detail: ask \}\)\); if \(!ask\.handled\) setDiffOpen\(true\);/);
 });
+
+// THE WORK'S CARD IS PART OF THE AGENT TURN THAT DID IT, OR NOT THERE (the owner, 2026-11-13: "stop putting worked on master at the bottom.
+// i told you this 20 times.. it's part of the agent turn or doesn't belong at all. we have diff thing in the logo on top")
+test("the chat draws the work's card inside the turn its newest change came in, never at the chat's foot", async () => {
+  const fs = await import("node:fs");
+  const ws = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(ws, /const landIn = landAt \? landingTurn\(/);
+  assert.match(ws, /cards=\{x\.id === landIn \? \[\.\.\.draw\(x\.cards\), <React\.Fragment key="landing">\{landing\}<\/React\.Fragment>\] : draw\(x\.cards\)\}/);
+  assert.match(ws, /\{!landIn && landing && <div hidden>\{landing\}<\/div>\}<\/>;/, "unplaced, it is mounted hidden - never drawn at the foot");
+  assert.match(ws, /const landAt = landS && \(landS\.ask \|\| landS\.landed\) \? landS\.at \|\| "" : null;/, "only a press, or what a press did - the diff is the header's");
+  const { landingTurn } = await import("../src/landing.js");
+  const turns = [{ role: "assistant", id: "t1", createdAt: "2026-11-12 21:00:00" }, { role: "assistant", id: "t2", createdAt: "2026-11-12 21:30:00" }];
+  assert.equal(landingTurn(turns, "2026-11-12 21:10:00"), "t1", "the turn the change came in, not the newest");
+});

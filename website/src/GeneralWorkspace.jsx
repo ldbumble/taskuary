@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { landingTurn } from "./landing.js";
 import { createPortal } from "react-dom";
 import { says, subState } from "./laneSays.js";
 import {
@@ -469,7 +470,11 @@ const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.s
   {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
-function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, name, tid, onChanged, working = false }) {
+function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, landAt, name, tid, onChanged, working = false }) {
+  // THE WORK'S CARD IS PART OF THE AGENT TURN THAT DID IT, or not drawn at all (the owner, 2026-11-13: "stop putting worked on master at the
+  // bottom ... it's part of the agent turn or doesn't belong at all"): the turn its newest change came in (landing.landingTurn); until the card
+  // has read its state it is mounted hidden, so it can say when
+  const landIn = landAt ? landingTurn(items.filter((x) => x.kind === "turn").map((x) => ({ role: "assistant", id: x.id, createdAt: x.at })), landAt) : null;
   // ...every review the list places, in whatever state: a card is drawn where the list has it and nowhere else
   const used = new Set(), listed = new Set(items.flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : [])).map((c) => c.review));
   const draw = (cs) => (cs || []).flatMap((c) => {
@@ -485,7 +490,8 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
   });
   const rows = items.map((x, i) => {
     const prev = items[i - 1];
-    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn"} cards={draw(x.cards)} name={name} />;
+    if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn"} name={name}
+      cards={x.id === landIn ? [...draw(x.cards), <React.Fragment key="landing">{landing}</React.Fragment>] : draw(x.cards)} />;
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;
     if (x.kind === "card") { const got = draw([x]); return got.length ? <div key={x.id} className="tq-aui-message tq-aui-agent" data-tq-item={x.id} data-tq-row-cards=""><div className="tq-aui-agent-body">{got}</div></div> : null; }
@@ -501,7 +507,7 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
   return <>{rows}
     {!!loose.length && <div className="tq-aui-message tq-aui-agent" data-tq-row-cards="loose"><div className="tq-aui-agent-body">{loose.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>)}</div></div>}
     {nextLoose && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
-    {landing}</>;
+    {!landIn && landing && <div hidden>{landing}</div>}</>;
 }
 /* WHAT WAITS FOR THE AGENT, BY THE BOX: accepted, not yet handed over - never in the conversation until it is (the heard rule).
    ...A ROW IS NOT MARKED [data-tq-held] (seen 2026-11-11: with lines waiting, the task's card stood 8 px under the canvas's head): that name
@@ -618,7 +624,11 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
     return c.subscribe(() => keepUnsent(id, c.getState().text));
   }, [runtime, task.TaskId]);
   const onKey = (e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent?.isComposing) { e.preventDefault(); sendLine(); } };
-  const landNode = landing ? React.cloneElement(landing, { onState: () => {} }) : null;
+  // ...what the card read (LandingCard's onState) places it, and is handed back so it draws at once wherever it lands
+  const [landS, setLandS] = useState(undefined);
+  const landNode = landing ? React.cloneElement(landing, { onState: setLandS, ...(landS ? { initial: landS } : {}) }) : null;
+  // ...and only when it asks for a press or says what one did: "Worked on master - 8 files" alone is the header's diff, said again
+  const landAt = landS && (landS.ask || landS.landed) ? landS.at || "" : null;
   // ...the reply that waits stands at its own card - and once it went, where it stood: the newest reply of the task, waiting or not
   // ...by its number, never by the order the page happened to hold them in: the newest was read as the oldest, and the card he had just
   // pressed Send on went to the first draft's turn, screens above (the recorded walk, 2026-11-11)
@@ -637,7 +647,7 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
             <RetryCtx.Provider value={retry}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
-              landing={landNode} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} /></WaitOnCtx.Provider></RetryCtx.Provider>
+              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} /></WaitOnCtx.Provider></RetryCtx.Provider>
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
             {asking && <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} />}

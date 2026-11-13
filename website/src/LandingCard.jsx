@@ -27,13 +27,13 @@ export const SHOWN = 8;
 // the row's Review changes asks the task's own card to open its diff (TaskPage): `handled` says a card took it
 export const LANDING_DIFF = "tq-landing-diff";
 
-export default function LandingCard({ taskId, onChanged, onState, inChat = false }) {
-  const [s, setS] = useState(null), [diff, setDiff] = useState(null), [busy, setBusy] = useState(""), [said, setSaid] = useState(""),
+export default function LandingCard({ taskId, onChanged, onState, inChat = false, initial = null }) {
+  const [s, setS] = useState(initial), [diff, setDiff] = useState(null), [busy, setBusy] = useState(""), [said, setSaid] = useState(""),
     [err, setErr] = useState(""), [sure, setSure] = useState(false), [marks, setMarks] = useState({}), [open, setOpen] = useState(false),
     [diffErr, setDiffErr] = useState(""), [filesOpen, setFiles] = useState(false);
   const load = () => api.get(`/api/tasks/${taskId}/landing`).then(({ data }) => { setS(data?.data || null); onState?.(data?.data || null); })
     .catch(() => { setS(null); onState?.(null); });
-  useEffect(() => { setS(null); setDiff(null); setOpen(false); setSaid(""); setErr(""); setSure(false); setMarks({}); setFiles(false); load(); }, [taskId]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!initial) setS(null); setDiff(null); setOpen(false); setSaid(""); setErr(""); setSure(false); setMarks({}); setFiles(false); load(); }, [taskId]);   // eslint-disable-line react-hooks/exhaustive-deps
   const seeRef = useRef(null);
   useEffect(() => {
     const on = (e) => { if (Number(e.detail?.taskId) === Number(taskId) && seeRef.current) { e.detail.handled = true; seeRef.current(); } };

@@ -238,7 +238,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
         <Button size="small" color="inherit" onClick={() => { setCfg((c) => ({ ...c, flow: repair.was })); setRepair(null); }}>Discard</Button></Box>}>
         The AI's repair{repair.explain ? `: ${repair.explain}` : "."} The changed steps are marked below - nothing is saved yet.</Alert>}
       {/* describing it is how a new one starts; a draft that arrived built (New, or this box) is already past that */}
-      {!cur && !draft && composer}
+      {!cur && !draft && (typeof composer === "function" ? composer(cfg) : composer)}
       {note && <Alert severity={note.severity} sx={{ mb: 1.5, fontSize: 12.5 }}>{note.text}</Alert>}
 
       <Box sx={{ ...card, p: 2.5 }}>

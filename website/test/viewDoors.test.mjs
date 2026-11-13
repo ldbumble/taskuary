@@ -38,3 +38,10 @@ test("the pages that open the Assistant are the ones whose doors are checked her
   const callers = files.filter((f) => f !== "pageView.js" && read(f).includes("openHelp(")).sort();
   assert.deepEqual(callers, ["ConnectorsView.jsx", "ReportsView.jsx", "SetupWithAi.jsx", "WorkflowEditor.jsx"]);
 });
+
+// ...AND THE ROUTINE'S OWN WORDS GO THROUGH IT (the visual audit, 2026-11-13): the job typed in What it does, then Set up with AI - and the
+// Assistant asked "What should the routine do, and when should it run?", the words on the page left behind
+test("a routine's Set up with AI carries what is already typed in What it does", () => {
+  assert.match(read("WorkflowEditor.jsx"), /\{!cur && !draft && \(typeof composer === "function" \? composer\(cfg\) : composer\)\}/);
+  assert.match(read("ReportsView.jsx"), /composer=\{\(c\) => <>\s*<SetupWithAi kind="workflow" words=\{c\.prompt \|\| ""\}/);
+});

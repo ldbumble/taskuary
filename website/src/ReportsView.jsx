@@ -585,8 +585,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         lastRunRec={openId != null ? lastRuns[openId] : null}
         fixRun={fixRun?.sid === openId ? fixRun.runId : browse && browseState.fix && browseState.open === openId ? browseState.fix : null}
         onFixTaken={() => { setFixRun(null); if (browse && browseState.fix) onBrowseState?.({ ...browseState, fix: null }); }} onReport={asReportDraft}
-        composer={<>
-          <SetupWithAi kind="workflow" sx={{ mb: 2 }} />
+        composer={(c) => <>
+          <SetupWithAi kind="workflow" words={c.prompt || ""} sx={{ mb: 2 }} />
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: -1.25, mb: 2 }}>
             Monthly Zoho invoices have a form of their own — <Box component="span" onClick={toInvoices}
               sx={{ color: "var(--tq-link, #55697a)", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>open it</Box>.

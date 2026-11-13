@@ -504,6 +504,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const moves = r.Status !== "pending" ? [] : [
     ...(connect ? [
       { id: no("connect"), label: connect.label, tone: "p", disabled: off, run: () => openAppLink(connect.href), title: `${connect.says} - opens its connection` },
+      // ...and a card that is connected but cannot send keeps the Copy it drew before (`waits`): the draft can still go out by hand
+      ...(connect.waits ? [{ id: no("copy"), label: copied ? `✓ ${btn("copy", "done")}` : btn("copy"), tone: "s", disabled: off || !words.trim(), run: copyIt, title: copyTitle }] : []),
     ] : delivery.frozen ? [
       { id: no("approve"), label: busy ? "Checking delivery…" : delivery.label, tone: "p", disabled: off || !delivery.canCheck,
         run: () => decide("approve"), title: delivery.line, why: delivery.active ? "waiting for the provider" : "" },

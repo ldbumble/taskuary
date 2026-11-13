@@ -29,7 +29,7 @@ a system prompt is a rule. Only promoted sections travel (injectable()) - and ru
 effect is to HIDE mail never promote themselves at all: they wait in 'Proposed' for the
 owner, because a wrong ignore-rule silences the very corrections that would revoke it.
 """
-import json, re
+import json, re, zlib
 from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
@@ -791,11 +791,12 @@ SORT_INTRO = ('_(triage reads only this: what you are responsible for and what b
 
 def migrate(store) -> bool:
     """Every LEARNED.md this app ever wrote, to today's shape: one section per reader first (2026-10-23), then one per subject
-    (migrate_v2, 2026-10-25), then without the answer-time counts (drop_answer_counts, 2026-11-13). Each step runs once and is a no-op
-    after. Returns whether anything was rewritten. Never raises."""
+    (migrate_v2, 2026-10-25), then without the answer-time counts (drop_answer_counts, 2026-11-13), and with the explainers the
+    template has now (refresh_explainers). Each step runs once and is a no-op after. Returns whether anything was rewritten. Never raises."""
     one = _migrate_v1(store)
     two = migrate_v2(store)
-    return drop_answer_counts(store) or two or one
+    three = drop_answer_counts(store)
+    return refresh_explainers(store) or three or two or one
 
 
 ANSWER_KEY = re.compile(r'^answer \S+@\S+$')     # the key the old answer-time count gave its line ("answer erin@northwind.example")
@@ -815,6 +816,40 @@ def drop_answer_counts(store) -> bool:
         return True
     except Exception as e:
         logger.warning(f'answer-time lines not retired: {e}'); return False
+
+
+# THE DOCUMENT EXPLAINS ITSELF AS THE TEMPLATE DOES NOW (the audit, 2026-11-13): the note under the title and the one under each subject
+# were written once, when the document was made, and never again - so the day the answer-time count went, every document still said the
+# memory is written from "who you answer and how soon", and "Your people" still asked for "how fast you answer". The owner read that on
+# the memory page, and the reflection - which is handed the whole document - read it as what to write there. An explainer this app
+# shipped is known by the crc of its words (every one it ever shipped, below - a reworded template adds its new ones, which
+# tests/test_episodes.py holds it to); one the owner reworded is theirs and stays.
+SHIPPED = frozenset((2235917645, 549137115, 2201727616, 221355146, 1765801443, 409344007, 154688981, 1914669305,      # the note under the title
+                     3716043219, 3942194735, 465983434, 1286666407, 921753713, 1196195323, 1460090426))             # the five subjects' own
+_HEAD_NOTE = re.compile(r'\A#[^\n]*\n+(_.*?_)\s*\n+(?=#)', re.S)
+def _shipped(s: str) -> bool: return zlib.crc32(' '.join(s.split()).encode()) in SHIPPED
+
+
+def refresh_explainers(store) -> bool:
+    """Each explainer in LEARNED.md that is one this app shipped, replaced by the template's own now. Returns whether any changed. Never raises."""
+    try:
+        doc = store.get_doc(DOC) or ''
+        tpl = (Path(__file__).parent / 'templates' / 'learned.md').read_text(encoding='utf-8').replace('\r\n', '\n')
+        new, m, now = doc, _HEAD_NOTE.search(doc), _HEAD_NOTE.search(tpl)
+        if m and now and _shipped(m.group(1)) and m.group(1) != now.group(1): new = new[:m.start(1)] + now.group(1) + new[m.end(1):]
+        for h in SECTIONS.values():
+            if f'\n{h}\n' not in new or not (want := _intro(h)): continue
+            head, body = new.split(f'\n{h}\n', 1)
+            nxt = body.find('\n## ')
+            sect, rest = (body, '') if nxt < 0 else (body[:nxt], body[nxt:])
+            p = _PH.search(sect)
+            if p and _shipped(p.group(0)) and p.group(0) != want: new = f'{head}\n{h}\n{sect[:p.start()]}{want}{sect[p.end():]}{rest}'
+        if new == doc: return False
+        store.save_doc(DOC, new, 'template')
+        logger.info('LEARNED.md: its explainers now say what the template says')
+        return True
+    except Exception as e:
+        logger.warning(f'LEARNED.md explainers not refreshed: {e}'); return False
 
 
 def _migrate_v1(store) -> bool:

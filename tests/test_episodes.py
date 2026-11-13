@@ -215,3 +215,29 @@ def test_the_answer_time_count_lines_already_stored_are_retired_by_their_key_and
     assert 'within the hour' not in doc and 'matters most' in doc and 'My own line about Erin stays' in doc
     assert learnedlines.row(s, 'answer erin@northwind.example')['Status'] == 'retired'
     assert not learn.drop_answer_counts(s), 'once'
+
+
+OLD_PEOPLE = ('_(who matters to you, what they are to you, and how you deal with them: how fast you answer, what\n'
+              'you hand them, who you copy - never what they are like)_')
+
+def test_a_document_made_before_the_count_went_explains_itself_as_the_template_does_now_and_a_reworded_note_stays():
+    """THE LIVE SHAPE (the audit, 2026-11-13): a home made last month. Its "Your people" still asked for "how fast you answer" - on the
+    memory page, and in the whole document the reflection is handed - the day the answer-time count was taken out."""
+    from pathlib import Path
+    from taskuary.store import MemoryStore
+    tpl = (Path(learn.__file__).parent / 'templates' / 'learned.md').read_text(encoding='utf-8').replace('\r\n', '\n')
+    notes = [learn._HEAD_NOTE.search(tpl).group(1)] + [learn._intro(h) for h in learned_cut.SECTIONS.values()]
+    assert all(n and learn._shipped(n) for n in notes), 'a reworded template adds its explainers to learn.SHIPPED'
+    assert not any(w in tpl for w in ('how fast you answer', 'how soon', 'when you answer'))
+    s, mine = MemoryStore(), '_(only what I batch)_'
+    old = tpl.replace(learn._intro(learned_cut.PEOPLE), OLD_PEOPLE + '\n- Erin Blake is my manager').replace(learn._intro(learned_cut.WORK), mine)
+    assert OLD_PEOPLE in old and mine in old
+    s.save_doc('learned', old, 'seed')
+    assert learn.migrate(s)
+    doc = s.get_doc('learned')
+    assert 'how fast you answer' not in doc and learn._intro(learned_cut.PEOPLE) in doc, "the shipped note is the template's now"
+    assert mine in doc and '- Erin Blake is my manager' in doc, 'his own note and his own line are left as they are'
+    sent = []
+    learn.reflect(s, llm=lambda system, user, **k: (sent.append(user), '')[1])
+    assert sent and 'how fast you answer' not in sent[0], 'and the reflection is no longer handed the old ask'
+    assert not learn.refresh_explainers(s), 'once'

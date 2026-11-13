@@ -1,9 +1,11 @@
 # LEARNED.md — what the system has learned about how {{owner_first}} works
 
 _This is Taskuary's memory of how you work - the one place it keeps what it knows about you. It
-writes it from what you do: who you answer and how soon, what you put off and until when, what you
-hand to whom, what you promise, which ideas you take up. Never from which button you pressed, never
-from personal mail, and never from what a sender says about themselves. A fact you tell the
+writes it from what you do and write in the app: what you tell an agent, how you change a draft,
+what you put off and until when, what you hand to whom, what you close without answering, what you
+promise, which ideas you take up - and keeps what that means for the next task, never a count or a
+time. Never from which button you pressed, never from personal mail, never from what an agent
+concluded, and never from what a sender says about themselves. A fact you tell the
 Assistant goes in at once as your own line. A verdict - "Not ours", "Not a task", "Not for the
 agent", a kind or a road you corrected, an idea taken up or turned down - goes in as one line saying
 what it teaches about you, and only when it adds something: one that repeats a line writes nothing,
@@ -19,8 +21,8 @@ or your own word. Delete a line and it stays deleted; reword one and your wordin
 without a tag are yours and are never touched. **SOUL.md always outranks this file.**_
 
 ## Your people
-_(who matters to you, what they are to you, and how you deal with them: how fast you answer, what
-you hand them, who you copy - never what they are like)_
+_(who matters to you, what they are to you, and how you deal with them: what you hand them, who
+you copy - never what they are like)_
 
 ## What you care about
 _(what you are responsible for, what deserves a task, which topics come first and which wait -
@@ -28,8 +30,7 @@ learned from your sorting verdicts: Not ours, Not a task, a kind or repository y
 you approved)_
 
 ## How you work
-_(your rhythm: when you answer, what you put off and until when, what you hand to agents, what you
-batch)_
+_(your rhythm: what you put off and until when, what you hand to agents, what you batch)_
 
 ## Promises
 _(what you owe on a schedule, and what others owe you, from your own sent words)_

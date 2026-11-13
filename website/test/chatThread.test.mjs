@@ -66,7 +66,7 @@ test("Show all draws compact bubbles: the name inside once per run, the time on 
 // THE FULL CHAT IS IN TASK, CONDENSED IN CLOSE OUT (the owner, 2026-10-16: "in close out you have the full chat, it's too confusing.
 // full chat should be in task (condensed and full). in close out chats condensed version?")
 // ...its heading in Close out's section, its body the closeBody that section draws - or, where the chat is home, the agent's summary (Task 4.2)
-const cards = page.slice(page.indexOf("const chatBody = () =>"), page.indexOf("const chatCards ="));
+const cards = page.slice(page.indexOf("const chatBody = ("), page.indexOf("const chatCards ="));
 // ...Came from's facts and conversations, drawn once and placed by the layout (fromFacts, fromConvs - the three sections, 2026-10-27)
 const cameFrom = page.slice(page.indexOf("const fromFacts = () =>"), page.indexOf("const fromSorted = () =>"));
 test("Show all on a chat draws the back-and-forth in Came from; an email thread keeps its rows", () => {

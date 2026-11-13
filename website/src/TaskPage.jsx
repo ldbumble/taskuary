@@ -86,6 +86,7 @@ import SendIcon from "@mui/icons-material/Send";
 import { Divider, ListItemText } from "@mui/material";
 import { NoAgentChat } from "./AgentSummary.jsx";
 import { chatReplyShown } from "./agentSummary.js";
+import { replyCardShown } from "./sendState.js";
 import ThreadReading from "./ThreadReading.jsx";
 import { LastView } from "./BrowserPane.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
@@ -2782,7 +2783,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         to={replyContext(r)} subject={deliverySubject(r)} at={r.DecidedAt} /> }))];
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
   const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
-  const chatBody = () => <>
+  // ...the reply in it only once it is written or something was said about it (replyCardShown): a reply owed that nobody wrote is the agent's
+  // to draft - never an empty box at the chat's foot. A to-do no agent has touched (no turns) keeps its card over its box: there it is the way in
+  const chatReview = !inTurns || replyCardShown(pendingReview) ? pendingReview : null;
+  const chatBody = (pendingReview = chatReview) => <>
       {/* HAND IT TO A PERSON, IN THE CHAT (the owner, 2026-10-29: "you click the button and the matching UI opens in its pane"): on
           the canvas the hand-off is a compose card here - who, the forward the AI drafts, and Send it - where the drawer stood;
           "sending" keeps it mounted behind, so a send that fails brings back what was typed */}
@@ -2904,7 +2908,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   do): the empty reply box under the To line, as a draft with no words wears it (ReviewDecision's "No draft yet - hit Draft
                   with AI"), and the same press - Draft with AI writes it here; a press in the box opens it to write by hand. The row's Reply
                   is the same openReply */}
-              {replyEmpty && (
+              {/* ...only on a to-do no agent has touched (the owner, 2026-11-13): where an agent works the task it drafts, and a box nobody spoke
+                  of is not drawn (chatReview) */}
+              {replyEmpty && !inTurns && (
                 <Box data-tq-reply-empty="" sx={{ mt: 1 }}>
                   <Box sx={{ position: "relative" }} onMouseDown={(e) => { if (!openingReply) { e.preventDefault(); openReply(false); } }}>
                     <DraftField value="" onChange={() => {}} placeholder={openingReply === "generate" ? "Drafting…" : "No draft yet — hit Draft with AI"}
@@ -2977,11 +2983,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...only where it holds something (an empty Next steps said nothing), and marked while it waits on the owner: a resting Result keeps the chat
   // that holds it on screen (`data-tq-waits`, the agent room's :has)
   // ...the asks drawn in their turns are not this block's: with nothing else to hold it is not drawn (a "Next steps" over nothing)
-  const waits = !!(pendingReview || moreDrafts.length || proposals.length - (inTurns ? asks.length : 0) || owesEmails || handoff);
+  const waits = !!(chatReview || moreDrafts.length || proposals.length - (inTurns ? asks.length : 0) || owesEmails || handoff);
   // ...ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer, emails owed -
   // never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
   const chatCards = sentHere ? <SentCard {...sentHere} /> : !["done", "dropped"].includes(t?.Status) && (waits || (!inTurns && kept.length) || upFailed
-    || chatReplyShown({ replyMessage, pendingReview, sentReview: null, unsentReview: null }) || calAsk?.invite) ? <Box ref={cardsRef} data-tq-chat-cards="" data-tq-waits={waits ? "" : undefined}
+    || chatReplyShown({ replyMessage, pendingReview: chatReview, sentReview: null, unsentReview: null }) || calAsk?.invite) ? <Box ref={cardsRef} data-tq-chat-cards="" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{chatBody()}</Box> : null;
   return (
     <>

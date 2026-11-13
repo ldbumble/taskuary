@@ -119,6 +119,12 @@ def _install_fresh_routes(app, store):
         mid = store.add_message({"TaskId": tid, "ExternalId": f"fx-{tid}", "Channel": "email", "FromName": who, "FromEmail": addr,
                                  "ToEmail": "alex@northwind.example", "Subject": body.get("title") or "Your review of the tool?", "SentAt": body.get("sent") or "2026-11-10 08:00:00",
                                  "BodyText": f"Hi Alex, could you send me your review of the tool? Thanks, {who.split()[0]}", "Status": "routed"})
+        # ...`owed`: the reply as arrival opens it - no words yet, the agent's to write (ingest: reply_to_agent); `needs`: and its drafter said why not
+        if body.get("owed"):
+            rid = store.add_review({"TaskId": tid, "MessageId": mid, "Kind": "draft", "Status": "pending", "Origin": "triage", "Channel": "email",
+                                    "Reason": "needs a reply: a question for you"})
+            if body.get("needs"): store.set_review_draft_needs(rid, body["needs"])
+            return {"taskId": tid, "reviewId": rid, "messageId": mid}
         rid = store.add_review({"TaskId": tid, "MessageId": mid, "Kind": "draft_reply", "Status": "pending", "Channel": "email",
                                 "DraftText": body.get("draft") or "Hi Erin, here is a long review of every flaw we found in the tool, one by one. Alex"})
         return {"taskId": tid, "reviewId": rid, "messageId": mid}

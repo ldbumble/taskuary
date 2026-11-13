@@ -38,7 +38,7 @@ import { LinkPopups, LocalFiles, Md } from "./md.jsx";
 import PublishedPages, { FileDialog } from "./PublishedPages.jsx";
 import { Attachments } from "./Attachments.jsx";
 import { placeShown } from "./shownPages.js";
-import { forTurn, outputRefs, outputRow, shownOnce, turnFiles, uncited } from "./taskOutputs.js";
+import { forTurn, outputRefs, outputRow, placeMade, shownOnce, turnFiles } from "./taskOutputs.js";
 import TurnFiles from "./TurnFiles.jsx";
 import ActionCard from "./ActionCard.jsx";
 import CopyCorner from "./CopyCorner.jsx";
@@ -533,7 +533,7 @@ const PendingStrip = ({ items, now = false, onRetry = null, onDrop = null, onNow
     className="tq-aui-arrived-more-btn" data-tq-try-again="" onClick={() => onRetry(x)}>{btn("try_again")}</button></>}</div>)}
 </div>; };
 
-function AssistantThread({ task, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack,
+function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack,
   prompt, onPromptUsed, name = "Taskuary", asking, onAnswer, drafts = [], acts = [], onDraftDecided, noComposer = false,
   chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, queued = null, hold = null, onTrusted, hint = "", placeholder = "",
   empty = "", seed = null, list = null, reloadList = null }) {
@@ -657,7 +657,6 @@ function AssistantThread({ task, published, onAsked, onStop, selectionRef, attac
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}
             {!askAt && askNode}
-            <PublishedPages pages={published} deliver />
             {/* ...a chat whose page places no cards itself (a walk's, a journey's): a drafted playbook and a held act are approved here */}
             {!turnCards && !!drafts?.length && <Box data-tq-playbook-drafts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
               <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>{askNote(drafts[0])}</Typography>
@@ -978,13 +977,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     <LevelCtx.Provider value={level}><ChatCtx.Provider value={chat}><AgentNameCtx.Provider value={AGENT_TURN}><ShownCtx.Provider value={placed.by}>
     <WorkCtx.Provider value={{ reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next,
       cards: data?.cards || [], refresh }}>
-    <OutputsCtx.Provider value={{ tid: task.TaskId, listed: data?.outputs, versions: data?.turnOutputs }}>
+    {/* ...and each file in the turn that made it (placeMade): one no turn made, or a page no turn holds, is not drawn in the conversation */}
+    <OutputsCtx.Provider value={{ tid: task.TaskId, listed: placeMade(data?.outputs, turnsNow), versions: data?.turnOutputs }}>
     <LocalFiles.Provider value={{ tid: task.TaskId }}>
-      {/* ...and every other file in the task's outputs folder - one no answer names - at the foot, with what it published or showed */}
       <AssistantThread key={task.TaskId} task={task} list={conv.list} reloadList={conv.load}
-        published={[...placed.foot, ...uncited(data?.outputs, turnsNow.map((x) => x.text || ""), task.TaskId)
-          // ...a file its turn draws, or a post's own picture, is not one more row at the foot of a chat
-          .filter((r) => !(chat && (turnKeys.some((m) => m.id === r.after) || (data?.cards || []).some((p) => p.post?.image === r.path))))]}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
         attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments} onAttachBack={attachBack}
         onAttach={upload}

@@ -44,7 +44,7 @@ test("the task page hands every waiting ask to its turn, and draws it in its own
   assert.match(page, /\.\.\.\(inTurns \? askCards : \[\]\)\.map\(\(g\) => \(\{ key: g\.key, at: g\.reviews\[0\]\.CreatedAt \|\| "", rid: g\.reviews\[0\]\.ReviewId, waits: true, also: asksBelow, note: g\.held \? "" : askNote\(g\.reviews\[0\]\),/);
   assert.match(page, /\{!inTurns && askCards\.length > 0 && \(/);
   // ...and the block is not drawn for them: a chat whose only ask stands in its turn has no "Next steps" over nothing
-  assert.match(page, /const waits = !!\(pendingReview \|\| moreDrafts\.length \|\| proposals\.length - \(inTurns \? asks\.length : 0\) \|\| owesEmails \|\| handoff\);/);
+  assert.match(page, /const waits = !!\(chatReview \|\| moreDrafts\.length \|\| proposals\.length - \(inTurns \? asks\.length : 0\) \|\| owesEmails \|\| handoff\);/);
   assert.match(page, /\(waits \|\| \(!inTurns && kept\.length\) \|\| upFailed/);
   for (const k of ["pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,", 'at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard'])
     assert.ok(page.includes(k), "a pressed card names its review too");

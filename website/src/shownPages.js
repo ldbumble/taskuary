@@ -44,9 +44,10 @@ export function csvRows(text) {
   return rows.filter((r) => r.length > 1 || r[0] !== "");
 }
 
-// split what was published or shown: under the answer that made it, or - an answer not in the thread yet - at the foot
+// what was published or shown, under the answer that made it - and one no answer in the thread holds is not drawn in the chat (the owner,
+// 2026-11-13: nothing is pinned at its foot); it stays in the task's files
 export const placeShown = (published, messages) => {
-  const ids = new Set((messages || []).map((m) => m.id)), by = {}, foot = [];
-  for (const p of published || []) (p.after && ids.has(p.after) ? (by[p.after] ||= []) : foot).push(p);
-  return { by, foot };
+  const ids = new Set((messages || []).map((m) => m.id)), by = {};
+  for (const p of published || []) if (p.after && ids.has(p.after)) (by[p.after] ||= []).push(p);
+  return { by };
 };

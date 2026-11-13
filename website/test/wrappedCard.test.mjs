@@ -6,7 +6,7 @@ import { replySource, sentElsewhere, unsentReplyReview, replyPhase } from "../sr
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 // the chat's cards (TaskPage chatBody): the draft, what went out, the envelope
-const closeOut = () => { const page = read("TaskPage.jsx"); return page.slice(page.indexOf("const chatBody = () =>"), page.indexOf("const chatCards =")); };
+const closeOut = () => { const page = read("TaskPage.jsx"); return page.slice(page.indexOf("const chatBody = ("), page.indexOf("const chatCards =")); };
 
 // The card drew the NEWEST AGENT REPORT, and the poll that saw the agent's own merge filed a second one whose "last
 // message" was our sentence - the agent's account was there, then gone (2026-10-12). Then it was a second telling of the run

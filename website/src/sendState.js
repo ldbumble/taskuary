@@ -103,3 +103,7 @@ export function draftState(rv) {
   if (rv?.DraftError) return { state: "failed", line: `Draft failed: ${rv.DraftError}. Press ${label("redraft", "none")} again or write the answer yourself.`, retry: true };
   return { state: "undrafted", line: "No draft yet — draft it with AI or write the answer.", retry: true };
 }
+// A CHAT DRAWS A REPLY CARD ONCE THERE IS SOMETHING IN IT OR SOMETHING SAID ABOUT IT (the owner, 2026-11-13: "why would you have empty write a
+// reply box, unless the agent said i'm not sure what to respond"): a draft, or its record of why there is none - never a reply nobody wrote
+// or spoke of, an empty box at the chat's foot. The server's list keeps the same one out (conversation.unwritten)
+export const replyCardShown = (rv) => !!rv && draftState(rv).state !== "undrafted";

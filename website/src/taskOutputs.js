@@ -152,11 +152,15 @@ export function shownOnce(cited, shown) {
   return { isShown: (rel) => seen.has(baseName(rel)), rest: (shown || []).filter((p) => !names.has(p.name)) };
 }
 
-// the task's files no answer names: listed at the foot of the conversation, so every one is reachable and none is drawn twice
-// ...and an older version of a file an answer names is that file's history, not one more file at the foot (deliverables)
-export const uncited = (listed, answers, tid) => {
-  const named = new Set((answers || []).flatMap((t) => outputRefs(t, tid, listed).files)), fams = new Set([...named].map(family));
-  return (listed || []).filter((r) => !named.has(r.path) && !fams.has(family(r.name || r.path)));
+// A FILE IS IN THE TURN THAT MADE IT, OR NOT IN THE CHAT (the owner, 2026-11-13: nothing is pinned at the chat's foot): one the server named no
+// turn of this list for (`after`) goes to the turn at work when it was written - begun by then, not ended more than a second before - as the
+// work card goes to its turn (landing.landingTurn). One no turn was at work for keeps `after` null: no turn draws it, and it stays in the
+// task's files (Email someone, the task's folder), never a row under the conversation
+const secs = (s) => (typeof s === "number" ? s : +new Date(String(s || "").replace(" ", "T")) / 1000);
+export const placeMade = (listed, turns) => {
+  const ts = (turns || []).map((t) => ({ key: t.answer || t.id, from: t.started ?? secs(t.at), to: t.ended })), keys = new Set(ts.map((t) => t.key));
+  const madeIn = (at) => { const s = secs(at); return Number.isFinite(s) ? ts.filter((t) => t.from <= s + 1 && (t.to == null || t.to + 1 >= s)).at(-1)?.key ?? null : null; };
+  return (listed || []).map((r) => (keys.has(r.after) ? r : { ...r, after: madeIn(r.at || r.created_at) }));
 };
 
 // ONE OF EACH THING IT MADE (the owner, 2026-10-28: "it looks like it created a million attachments. Agents should not create lists of

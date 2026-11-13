@@ -29,9 +29,9 @@ test("a CSV reads as rows, quotes and all", () => {
     [["Category", "August"], ["Supplies", "$78,400"], ['Say "hi"', "1"]]);
 });
 
-test("each item sits under the answer that made it; one whose answer is not in the thread yet waits at the foot", () => {
+// ...and nothing is pinned at the chat's foot (the owner, 2026-11-13): one no answer in the thread holds is not drawn in the chat at all
+test("each item sits under the answer that made it; one whose answer is not in the thread is drawn nowhere in the chat", () => {
   const msgs = [{ id: "comment-1", role: "user" }, { id: "comment-2", role: "assistant" }];
-  const { by, foot } = placeShown([{ id: 7, after: "comment-2" }, { id: 8, after: "comment-9" }, { id: 9, after: null }], msgs);
-  assert.deepEqual(by, { "comment-2": [{ id: 7, after: "comment-2" }] });
-  assert.deepEqual(foot.map((p) => p.id), [8, 9]);
+  const got = placeShown([{ id: 7, after: "comment-2" }, { id: 8, after: "comment-9" }, { id: 9, after: null }], msgs);
+  assert.deepEqual(got, { by: { "comment-2": [{ id: 7, after: "comment-2" }] } });
 });

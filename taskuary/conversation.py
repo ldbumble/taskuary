@@ -319,6 +319,15 @@ def _card(r) -> dict:
             'at': r['CreatedAt'], 'decided': r.get('DecidedAt'), **({'was': {'text': words if r['Kind'] == 'action' else r['DraftText']}} if words and st in ('passed', 'withdrawn', 'pending') else {})}
 DRAFTS = ('draft_reply', 'draft')
 
+def unwritten(r: dict) -> bool:
+    """A REPLY OWED THAT NOBODY HAS WRITTEN, AND NOBODY SAID WHY, IS NO CARD (the owner, 2026-11-13: "why would you have empty write a reply box,
+    unless the agent said i'm not sure what to respond, feel free to respond here"): the agent drafts it, and its draft is the card. An empty
+    one is drawn only where its own record says why it is empty - the drafter said what it needs (DraftNeeds), it failed (DraftError), or the
+    agent filed it so (DraftBy) - and then in the turn that said so. The page reads the same three (sendState.draftState: not `undrafted`)."""
+    from .wrapup import AGENT_DRAFT
+    return (r.get('Kind') in DRAFTS and r.get('Status') == 'pending' and not str(r.get('DraftText') or '').strip()
+            and not (r.get('DraftError') or r.get('DraftNeeds') or str(r.get('DraftBy') or '').startswith(AGENT_DRAFT)))
+
 
 def served_back(store, tid: int, out: list, was: dict, waiting: set) -> list:
     """AN ITEM ONCE DRAWN IS IN EVERY READ AFTER (the basic flow's check on the release run, 2026-11-12: a turn at work whose session was
@@ -654,7 +663,7 @@ def items(store, tid: int) -> dict:
             else: out.insert(i + 1, card); return
         t['cards'].append(card)
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind<>'slot' ORDER BY ReviewId", (tid,)):
-        if r['Kind'] in ('draft_reply', 'draft') and r['Status'] == 'pending' and not str(r.get('DraftText') or '').strip() and not r.get('DraftError'): continue
+        if unwritten(r): continue
         left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])
         place(_card(r), ep(r['CreatedAt']) + 0.999, (left or {}).get('CommentId'))
 

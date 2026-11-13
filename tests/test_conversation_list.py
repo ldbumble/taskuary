@@ -354,6 +354,22 @@ class TheList(unittest.TestCase):
         self.assertEqual([(c['review'], c['status'], c.get('was', {}).get('text')) for c in turns[-2]['cards']], [(rid - 1, 'approved', None), (rid, 'passed', 'Hi Gail, which date? Alex')])
         self.assertEqual(turns[-1]['cards'], [])
 
+    def test_an_empty_reply_is_drawn_only_where_its_record_says_why_and_then_in_the_turn(self):
+        """The owner, 2026-11-13: "why would you have empty write a reply box, unless the agent said i'm not sure what to respond, feel free to
+        respond here - then it's fine." A reply owed opened on arrival (no words, nothing said about it) is no card: the agent drafts it. Once
+        its record says why it is empty - the drafter said what it needs - it is a card, in the newest turn, never loose at the chat's foot."""
+        self.say('Have a look.', 'l-one'); self.rest()
+        rid = self.s.add_review({'TaskId': self.tid, 'MessageId': self.s.list_messages(self.tid)[0]['MessageId'], 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage',
+                                 'Reason': 'needs a reply: a question for you'})
+        cards = lambda: [(c['review'], x['kind']) for x in self.list()['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
+        self.assertEqual(cards(), [])
+        self.s.set_review_draft_needs(rid, 'not drafted - it needs which March dates suit Gail')
+        self.assertEqual(cards(), [(rid, 'turn')])
+        self.assertEqual(self.list()['items'][-1]['cards'][0]['review'], rid)          # ...in the turn that stands last, under what it said
+        self.assertTrue(conversation.unwritten({'Kind': 'draft', 'Status': 'pending', 'DraftText': '  '}))
+        self.assertFalse(conversation.unwritten({'Kind': 'draft', 'Status': 'pending', 'DraftText': '', 'DraftBy': 'agent:claude'}))
+        self.assertFalse(conversation.unwritten({'Kind': 'draft', 'Status': 'pending', 'DraftText': '', 'DraftError': 'the AI returned nothing'}))
+
     def test_a_reply_card_he_writes_past_greys_in_its_place_at_once_and_the_new_turns_card_comes_when_it_ends(self):
         """The owner's live task on 0.3.11.50, 2026-11-12 ("it shows ... on top of new prompt and action card is not greyed out ... the email
         from prior prompt disappears. I thought we keep it but grey out buttons right away"; and "it should finish thinking and last thing

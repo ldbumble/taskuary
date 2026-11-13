@@ -86,6 +86,14 @@ test("a card is drawn where the list has it and nowhere else - never loose under
   assert.doesNotMatch(src, /stands below, under a later answer/);
 });
 
+// the bug hunt's stop, 2026-11-12: after Stop his next line set the stopped turn's draft aside, and it read "Earlier draft - not sent; you
+// wrote again" - he had written once, his next line. A card set aside says what the server and its agent say of it (proposals.SET_ASIDE)
+test("a card set aside reads \"set aside when you moved on\" on every surface, never \"you wrote again\"", async () => {
+  const ws = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8"), pc = await readFile(new URL("../src/PassedCard.jsx", import.meta.url), "utf8");
+  const past = /const PAST = \{[^\n]*\};/.exec(ws)[0], line = /export const PASSED_LINE = [^\n]*/.exec(pc)[0];
+  for (const s of [past, line]) { assert.doesNotMatch(s, /wrote again/); assert.match(s, /set aside when you moved on/i); }
+});
+
 test("the box says what the header says: never \"pick the session back up\" while a turn is at work", async () => {
   const src = await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /cli \|\| convWorks \|\| !conv\.list\?\.ran \? MESSAGE : "Write to pick the session back up…"/);

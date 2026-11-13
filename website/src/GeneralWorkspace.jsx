@@ -52,6 +52,7 @@ import { label as btn } from "./buttons.js";
 import { placeName } from "./words.js";
 import { starting as startingLine } from "./laneSays.js";
 import { plural } from "./timeWords.js";
+import { PASSED_LINE } from "./PassedCard.jsx";
 import ConnectAi from "./ConnectAi.jsx";
 import ReviewDecision from "./ReviewDecision.jsx";
 import { askNote, heldActsLine, proposalFrom } from "./reviewProposal.js";
@@ -458,7 +459,8 @@ const ConvLine = ({ x, more }) => {
 /* A DRAFT WHERE IT STOOD, once it is no longer the one to press: rewritten by a later turn, set aside as he wrote again (the owner, 2026-11-12:
    "I thought we keep it but grey out buttons right away"), or taken back by its agent - greyed in its own place with its words, nothing to press.
    It never goes from the chat and never moves */
-const PAST = { superseded: () => "Earlier draft - rewritten below", passed: (c) => (/draft/.test(c.what || "") ? "Earlier draft - not sent; you wrote again" : "Set aside when you wrote again - the agent raises it again if it is still needed"), withdrawn: () => "Earlier draft - not sent; the agent took it back" };
+// ...SET ASIDE IN THE SERVER'S OWN WORDS (proposals.SET_ASIDE): "you wrote again" stood over a draft his first line after a Stop set aside (2026-11-12)
+const PAST = { superseded: () => "Earlier draft - rewritten below", passed: (c) => (/draft/.test(c.what || "") ? "Earlier draft - not sent; set aside when you moved on" : PASSED_LINE.replace(/\.$/, "")), withdrawn: () => "Earlier draft - not sent; the agent took it back" };
 const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.status} role="note">
   <div className="tq-conv-past-head">{PAST[c.status](c)}</div>
   {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;

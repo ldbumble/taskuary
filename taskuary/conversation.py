@@ -686,19 +686,21 @@ def items(store, tid: int) -> dict:
     # permission (`permissions`, drawn under the turn), never as a card in it
     # ...AND A TURN THAT GOES ON FROM THE ONE BEFORE IT, WITH NO INPUT BETWEEN, IS THE SAME WORK (the owner's live task, 2026-11-13: a turn
     # left its reply card, Taskuary woke its agent a beat later, and the woken turn's words were drawn UNDER that card - "text after the
-    # action box"): what still waits for his press stands at the END of the run, under its last words - the turn that goes on holds it
-    # back while it works, as any turn does its own. A card he pressed, or one set aside, is its turn's record and stays where it stood
+    # action box"): what still waits for his press stands at the END of the run, under its last words - once the turn that goes on has
+    # ended. WHILE IT WORKS the card stays where it stood, lit (the owner, 2026-11-13: "never close actions boxes" - a Send on one of two
+    # emails woke the agent, and the other email vanished for the 15-30 s that turn ran). A card he pressed, or one set aside, stays put
     for a, b in zip(out, out[1:]):
-        if a['kind'] == 'turn' and b['kind'] == 'turn' and (lit := [c for c in a['cards'] if c['status'] == 'pending']):
+        if a['kind'] == 'turn' and b['kind'] == 'turn' and b['state'] not in LIVE and (lit := [c for c in a['cards'] if c['status'] == 'pending']):
             a['cards'], b['cards'] = [c for c in a['cards'] if c['status'] != 'pending'], [*lit, *b['cards']]
-            if b['state'] not in LIVE:
-                for c in lit:
-                    if hosts.get(c['id']) != b['id']:
-                        store._exec('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host', (tid, f"c:{c['id']}", b['id']))
+            for c in lit:
+                if hosts.get(c['id']) != b['id']:
+                    store._exec('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host', (tid, f"c:{c['id']}", b['id']))
     from . import permissions
     perms = permissions.pending(tid, store)
     for x in out:
-        if x['kind'] == 'turn' and x['state'] in ('working', 'starting'): x['cards'] = []
+        # ...a turn at work holds back only what it has not drawn yet: a card already shown in it stays (the owner, 2026-11-13: "never close
+        # actions boxes" - a Send woke the agent, the same turn went on, and the other email waiting in it vanished until the turn ended)
+        if x['kind'] == 'turn' and x['state'] in ('working', 'starting'): x['cards'] = [c for c in x['cards'] if hosts.get(c['id']) == x['id']]
     # ...A REPLY DRAFT ABOVE A NEWER INPUT IS NOT THE ONE TO PRESS, from the frame that input is drawn (`hear` settles it as the turn takes the
     # input): greyed where it stood - its turn drafts again under the input where a reply is still owed
     # ...and a turn that ended having said, done and left nothing (a CLI turn that only took a line in) is no item: the page drew nothing for it
@@ -835,9 +837,11 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     if at and not got.get('working'): say(f"e: {at[0]['id']} reads at work and the list says nothing works")
     turns = [x for x in xs if x['kind'] == 'turn']
     if got.get('working') and turns and not live(turns[-1]) and at: say(f"e: the turn at work {at[-1]['id']} is not the last turn")
-    # g
+    # g: a turn at work draws no NEW card - one already on the canvas before it worked stays (never closed under him, 2026-11-13)
+    seen = {c['id'] for x in (was or {}).get('items') or [] for c in ([x] if x.get('kind') == 'card' else x.get('cards') or [])}
     for x in at:
-        for c in x.get('cards') or []: say(f"g: the turn at work {x['id']} draws its card {c['id']}")
+        for c in x.get('cards') or []:
+            if c['id'] not in seen: say(f"g: the turn at work {x['id']} draws its card {c['id']}")
     # h: ONE PLACE AT A TIME (the owner, 2026-11-12: "it does not show in 2 places"): waiting by the box or on the canvas, never both...
     for i in {p['id'] for p in got.get('pending') or []} & set(ids): say(f'h: {i} waits by the box AND stands on the canvas')
     if was is None: return out

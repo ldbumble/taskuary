@@ -322,7 +322,8 @@ class TheList(unittest.TestCase):
         self.brain.delay = 0.5
         general.session_for(tid).wake('the rest of it'); self.assertTrue(until(lambda: self.list()['working']))
         mid = self.list()
-        self.assertEqual([c for x in mid['items'] if x['kind'] == 'turn' for c in x['cards']], [], 'the turn at work holds what waits back')
+        # ...and while it works the card stays lit where it stood - never gone for the turn (the owner, 2026-11-13: "never close actions boxes")
+        self.assertEqual([c['review'] for x in mid['items'] if x['kind'] == 'turn' for c in x['cards']], [rid], 'the waiting card stays on screen while the woken turn works')
         self.assertEqual(conversation.flow_breaks(mid, was), [])
         slot = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Hi Gail, your login is in the portal invite. Alex',
                              'Deliver': json.dumps({'channel': 'email', 'to': ['gail@northwind.example'], 'cc': [], 'subject': 'Your login', 'slot': 's1'})})

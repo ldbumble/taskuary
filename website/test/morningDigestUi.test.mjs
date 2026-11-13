@@ -51,8 +51,17 @@ test("the opening card loads in place: the digest says it is coming", () => {
   assert.match(view, /: "Writing today's digest…"\)\}/);
   assert.match(view, /dg\.waiting \? `Not written yet - \$\{plural\(dg\.waiting, "email"\)\}/, "queued by Finish, it says it waits on the mail");
   assert.match(view, /data\?\.said \|\| data\?\.drawn/, "an opener drawn mid catch-up is read at once");
-  assert.match(cards, /loading \? "Counting…" : tasks \? "Tasks" : "Nothing on you"/);
+  assert.match(cards, /loading \? "Counting…" : tasks \? "What's open" : "Nothing on you"/);
   assert.match(turns, /turn\.card\?\.kind === "brief"/, "the opener filled in its place is redrawn, not skipped by id");
+});
+
+// the bug hunt, 2026-11-12: the opener's second card read "TASKS" over its own Tasks row - the card's heading said the band its row says
+test("the open-work card's heading names the card, never a band its rows name", () => {
+  const cards = read("assistantCards.jsx"), lanes = JSON.parse(readFileSync(fileURLToPath(new URL("../../taskuary/lanes.json", import.meta.url)), "utf8"));
+  const head = /<div className="tq-day-h">\{loading \? "Counting…" : tasks \? "([^"]+)" : "([^"]+)"\}<\/div>/.exec(cards);
+  assert.ok(head, "the card's heading");
+  const words = lanes.sections.map((s) => s.word.toLowerCase());
+  for (const h of head.slice(1)) assert.ok(!words.includes(h.toLowerCase()), `"${h}" is a band's own word`);
 });
 
 // the whole card from the first day (the owner, 2026-10-15: "say calendar missing if not available")

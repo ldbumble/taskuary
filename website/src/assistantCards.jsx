@@ -1528,8 +1528,9 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
       )}
       {waits && (
         <div className="tq-day-pane tq-day-wait">
-          {/* ...said ONCE (the owner, 2026-10-28): "13 TASKS" stood over a Tasks row saying 13 - the heading names the band, the row counts it */}
-          <div className="tq-day-h">{loading ? "Counting…" : tasks ? "Tasks" : "Nothing on you"}</div>
+          {/* ...said ONCE (the owner, 2026-10-28): "13 TASKS" stood over a Tasks row saying 13 - the row names its band and counts it; the
+              heading names the card (what is open, the owner's word of 2026-10-31), never a band: "TASKS" over the Tasks row read twice (2026-11-12) */}
+          <div className="tq-day-h">{loading ? "Counting…" : tasks ? "What's open" : "Nothing on you"}</div>
           {!groups.length && <div className="note">Your mail is still being read - what needs you shows up here.</div>}
           {act.map(row)}
         </div>

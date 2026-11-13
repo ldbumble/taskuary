@@ -479,7 +479,7 @@ function RowsTable({ rows }) {
 }
 
 // `report`: { name } - a report on the table: its rows drawn as a report (ReportRows), its words on the card without a box (reportRows.css)
-function FullText({ mid, revision, report = null }) {
+export function FullText({ mid, revision, report = null }) {
   // a card with no mail behind it asks for nothing. A task whose only message a skip rule hid has no
   // mid, and fetching /api/messages/null painted FastAPI's own validation sentence ("path.mid: Input
   // should be a valid integer") into the card (the owner, 2026-09-15).

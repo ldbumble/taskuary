@@ -110,6 +110,7 @@ import { askNote, closeoutOf, decidedAsk, heldGroups, splitHeld } from "./review
 import PassedCard, { isPassed, isReplaced } from "./PassedCard.jsx";
 import ReplacedDraft from "./ReplacedDraft.jsx";
 import SentCard from "./SentCard.jsx";
+import { FullText } from "./assistantCards.jsx";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
 import LandingCard, { LANDING_DIFF } from "./LandingCard.jsx";
@@ -2095,6 +2096,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const CARD = { bgcolor: "var(--tq-panel, #fff)", border: `1px solid ${FOCUS_EDGE}`, borderRadius: "12px", px: 2, py: 1.75, minWidth: 0, display: "flex", flexDirection: "column", gap: 0.75 };
   const cardHead = { fontSize: 12, fontWeight: 600, color: DIM };
   const cameSummary = cameIn ? String(triaged.why || "").trim() : "";
+  const cameReport = !!cameIn && t?.Source === "report" && typeof cameIn.MessageId === "number";
   const fromCards = () => (
     <Box data-tq-from-cards="" sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 2, "@container (min-width: 620px)": { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" } }}>
       <Box data-tq-came-in="" sx={CARD}>
@@ -2106,14 +2108,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {/* WHO AND WHAT, HERE; WHAT TRIAGE MADE OF IT, BESIDE (the owner, 2026-11-05: "one should be who and summary, other the triage"):
               the summary of what came in moved here from the triage card, which keeps only its verdict */}
           {cameSummary && <Typography data-tq-came-in-summary="" sx={{ fontSize: 15, lineHeight: 1.5, color: INK, overflowWrap: "anywhere", mt: 0.25 }}>{cameSummary}</Typography>}
-          {flow ? <Typography data-tq-came-in-newest="" sx={{ fontSize: 13, color: FAINT }}>The newest of {timeline.length} messages - the conversation is below</Typography>
+          {/* ...A REPORT SENT ON AS A TASK reads as it does on Reports - its chart and its table - never its rows' raw data (the owner,
+              2026-11-13: "What came in" showed {"site": ..., "headcount": ...}) */}
+          {cameReport ? <Box data-tq-came-in-report=""><FullText mid={cameIn.MessageId} report={{ name: cameIn.Subject || t?.Title || "" }} /></Box>
+            : flow ? <Typography data-tq-came-in-newest="" sx={{ fontSize: 13, color: FAINT }}>The newest of {timeline.length} messages - the conversation is below</Typography>
             : <Typography data-tq-came-in-words="" title={cameInFull ? undefined : "Read it all"} onClick={() => setCameInFull((v) => !v)}
             sx={{ fontSize: 15, lineHeight: 1.5, color: INK, overflowWrap: "anywhere", whiteSpace: "pre-wrap", cursor: "pointer",
               ...(cameInFull ? {} : { display: "-webkit-box", WebkitLineClamp: 6, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>
             {cameInFull ? cleanText(cameIn.ReadText ?? cameIn.BodyText ?? "") || rowText(cameIn, sourceFiles.get(cameIn.MessageId))
               : rowText(cameIn, sourceFiles.get(cameIn.MessageId)) || cleanText(cameIn.ReadText || cameIn.BodyText || "")}</Typography>}
           {/* ...and the way to the whole of it is a word you can see, not only a click on the text (the owner, 2026-10-28) */}
-          {!flow && <Link component="button" type="button" underline="hover" data-tq-came-in-more="" aria-expanded={cameInFull}
+          {!flow && !cameReport && <Link component="button" type="button" underline="hover" data-tq-came-in-more="" aria-expanded={cameInFull}
             onClick={() => setCameInFull((v) => !v)} sx={{ display: "block", fontSize: 12.5, color: "var(--tq-link, #55697a)", mt: 0.4, textAlign: "left" }}>
             {cameInFull ? "Show less" : "Show the whole email"}</Link>}
           {!flow && cameInFull && typeof cameIn.MessageId === "number" && <Attachments messageId={cameIn.MessageId} dense original={cameIn.SourceLink} />}

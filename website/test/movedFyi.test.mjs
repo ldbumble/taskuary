@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { awayFromClear } from "../src/funnelPile.js";
 import { dropHeld, ghostsOf, holds, keepHeld, movedEntry, refOf } from "../src/movedFyi.js";
 
@@ -53,4 +54,11 @@ test("a report sent to an agent wants its task's box for a moment, and only that
   assert.equal(takeBox(31, 3500), true, "and the draw after the page read the task");
   assert.equal(takeBox(31, 6000), false, "never later, when he may be typing elsewhere");
   assert.equal(takeBox(32, 1500), false);
+});
+
+test("a report sent on as a task reads in What came in as it does on Reports, never its rows' raw data", () => {
+  // the owner, 2026-11-13: the task's What came in showed {"site": ..., "headcount": ...}
+  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(page, /const cameReport = !!cameIn && t\?\.Source === "report"/);
+  assert.match(page, /cameReport \? <Box data-tq-came-in-report=""><FullText mid=\{cameIn\.MessageId\} report=/);
 });

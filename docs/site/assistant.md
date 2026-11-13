@@ -126,7 +126,7 @@ These have no button. Say them, in the app or on your phone.
 | "tell the agent to use the main branch" to an agent at work | Your next prompt, as **Tell the agent** takes it: typed in when it stops at its prompt, never mid-step | at once |
 | "run it again" on a report | **Run it again** lit on the report | you press it |
 | "remember that…", "I don't care about X any more" | Kept at once as a line in your memory (LEARNED.md), where triage, reports, the Advisor and agents read it | at once |
-| "set up a report that…" | **New** opens on Report with your words in it | you press **Set up with AI** |
+| "set up a report that…" | The report's page opens and the Assistant builds it there from your words | at once |
 | "turn off sign every email" (over Settings) | The setting's group opens and its switch is turned off - a step in the chat | at once |
 | "what's waiting on me?" | Looked up and answered — tasks, reports, mail, calendar, settings | at once |
 | "what's in For later?" | The rail read by its own sections - Tasks, For later (with when each comes back), Reports, FYI | at once |
@@ -154,10 +154,12 @@ step under its answer in the chat:
   value, and it never types one: it tells you to paste it into its box. The server checks this again.
 - **Your hand wins.** A click or a key on the page while it is working stops the rest.
 
-**Get AI to set it up** on a connection's card, **Set up with AI** on Reports, Dashboards and Routines (and
-on New's tabs), **let AI fill this in** on a report's source card and **Fix with AI** on a routine's failed
-run all open the chat window on that page and ask for you - there is no AI box on the page any more, and no
-task on the Board: the chat is the record. Its **Test** tries the values on screen before you save them.
+**Set up with AI** - on a report, dashboard, routine or playbook, and on a connection's card - is the Assistant
+building it right there on that page, with no chat window and no task: it drafts it, checks it (a report's
+preview, a connection's **Test**), fixes what failed and tries again, and saves it. Its steps show on the page,
+and so does the one question only you can answer, with a box to answer it. It never types a secret - you paste
+it into its own box - and anything that sends something out still waits for your press. **let AI fill this in**
+on a report's source card and **Fix with AI** on a routine's failed run open the chat window on that page.
 
 While you are talking to it about a page, it notices what you do there - "I see you pasted the secret -
 testing again" - once per change, and never while you are typing to it. With the window shut its answer

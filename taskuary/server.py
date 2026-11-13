@@ -8126,6 +8126,33 @@ def wa_chats(cid: int):
     for r in rows: r['self'] = bool(r.get('group')) and remote_assistant.own_thread(store, c, r, guide)
     return {'data': rows}
 
+# ── SET UP WITH AI, every kind, on its own page (taskuary/build.py): the Assistant drafts, checks, saves; the page shows its steps ──
+class BuildBody(BaseModel): kind: str; words: str = ''; ref: int | None = None; ctx: dict | None = None; message_id: int | None = None
+class BuildAnswer(BaseModel): text: str
+
+@app.post('/api/build')
+def build_start(body: BuildBody):
+    from . import build
+    m = store.get_message(body.message_id) if body.message_id is not None else None
+    # ...a past email a playbook is made from: reference data, read by the model as such (build.PLAYBOOK_SYSTEM)
+    example = {k: m.get(k) for k in ('Subject', 'FromName', 'SentAt')} | {'BodyText': (m.get('BodyText') or '')[:12000]} if m else None
+    try: return build.start(store, body.kind, body.words, body.ref, body.ctx, example)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.get('/api/build/{bid}')
+def build_view(bid: str):
+    from . import build
+    v = build.view(bid)
+    if v is None: raise HTTPException(404, 'that setup is over - press Set up with AI to start again')
+    return v
+
+@app.post('/api/build/{bid}/answer')
+def build_answer(bid: str, body: BuildAnswer):
+    from . import build
+    try: return build.answer(store, bid, body.text)
+    except KeyError: raise HTTPException(404, 'that setup is over - press Set up with AI to start again')
+    except ValueError as e: raise HTTPException(422, str(e))
+
 # ── Get AI to set it up (taskuary/aisetup.py): the card's guide as the agent's prompt, live on the card ──
 @app.post('/api/connectors/{cid}/ai-setup')
 def connector_ai_setup(cid: int, body: AiSetupBody):

@@ -544,14 +544,18 @@ def set_aside_drafts(store, tid: int, before: float, actions: float = 0) -> list
 def _older(store, tid: int, before: float, actions: float = 0) -> list:
     "The pending cards of the agent's an input at `before` (his line too: `actions`) stands after - set_aside_drafts' rule, read only."
     from .conversation import ep
-    rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft','action') AND DeliveryClaim IS NULL", (int(tid),))
+    rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft','action','slot') AND DeliveryClaim IS NULL", (int(tid),))
     def ours(r):
+        # ...AN EMAIL THE AGENT WROTE IS ITS CARD TOO (the owner, 2026-11-10: "the second you write prompt on email action it should go gray and
+        # then it should generate new email action box under it"; recorded 2026-11-13: he wrote again and the agent's email stood lit above
+        # his line beside the reply that had greyed) - never one he wrote himself
+        if r['Kind'] == 'slot': return bool(str(r.get('DraftText') or '').strip()) and not str(r.get('Reason') or '').startswith('your email')
         if r['Kind'] != 'action': return False
         try: d = json.loads(r.get('DraftText') or '{}') or {}
         except (TypeError, ValueError): d = {}
         return isinstance(d, dict) and not (d.get('closeout') or d.get('action') in CLOSEOUT or d.get('action') in PLAYBOOKS or d.get('block')
                                             or str(r.get('Reason') or '').startswith('the workflow'))
-    return [r['ReviewId'] for r in rows if (r['Kind'] != 'action' and str(r.get('DraftText') or '').strip() and ep(r['CreatedAt']) < before
+    return [r['ReviewId'] for r in rows if (r['Kind'] not in ('action', 'slot') and str(r.get('DraftText') or '').strip() and ep(r['CreatedAt']) < before
                                             or actions and ours(r) and ep(r['CreatedAt']) < actions)]
 
 
@@ -576,6 +580,7 @@ PASSED_TOLD = ('THE OWNER MOVED ON PAST THESE CARDS OF YOURS WITHOUT PRESSING TH
                f'them now. {AGAIN}')
 def _passed_line(r: dict) -> str:
     if r.get('Kind') in ('draft_reply', 'draft'): return f"- rv{r['ReviewId']}: your reply draft, which began: " + ' '.join(str(r.get('DraftText') or '').split())[:160]
+    if r.get('Kind') == 'slot': return f"- rv{r['ReviewId']}: the email you wrote, which began: " + ' '.join(str(r.get('DraftText') or '').split())[:160]
     try: p = json.loads(r.get('DraftText') or '{}') or {}
     except (TypeError, ValueError): p = {}
     return f"- rv{r['ReviewId']}: " + ' '.join(str(p.get('what') or p.get('command') or r.get('Reason') or p.get('action') or 'a card').split())[:200]

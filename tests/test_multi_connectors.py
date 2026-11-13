@@ -198,7 +198,7 @@ class TwoTeamsCards(unittest.TestCase):
         store, first, second = two_teams()
         self.assertTrue({first, second} <= {c['ConnectorId'] for c, _ in channels._poll_jobs(store)}, 'both Teams cards are polled')
         read = []
-        def feed(tok, since_iso, cap=200):
+        def feed(tok, since_iso, cap=200, state=None):
             read.append(tok)
             return [{'id': f'm-{tok}', 'chatId': f'19:{tok}', 'messageType': 'message', 'createdDateTime': '2026-10-20T10:00:00Z',
                      'from': {'user': {'id': 'u-erin', 'displayName': 'Erin Blake'}}, 'body': {'content': '<p>can you send the deck?</p>'}}]

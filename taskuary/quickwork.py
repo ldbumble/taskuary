@@ -263,8 +263,13 @@ def start(store, tid, brief: str = None, as_owner: bool = True) -> str:
 def again(store, tid, session, turn: str) -> str:
     """More work on a task whose live session is quick: another one call, filed on that session as the next turn - 'filed' - or the deep
     path - 'escalated', whose start reuses this session (general.start_session returns session_for). Raises what filing raises."""
+    # ...AT WORK WHILE ITS ONE CALL RUNS, as a quick start is (recorded on the real CLI, 2026-11-13: the sender wrote again, and for the 28
+    # seconds the call took the chat stood on her message with nothing at work and the header at rest - then an answer appeared)
     steps = []
-    out, failed = _call(store, tid, turn, steps)
-    if _escalated(store, tid, turn, out, failed): return 'escalated'
-    session.file_quick(turn, out, steps, brief=True)      # filed as Taskuary's brief: the chat shows the line it was handed
-    return 'filed'
+    general.OPENING.add(tid)
+    try:
+        out, failed = _call(store, tid, turn, steps)
+        if _escalated(store, tid, turn, out, failed): return 'escalated'
+        session.file_quick(turn, out, steps, brief=True)      # filed as Taskuary's brief: the chat shows the line it was handed
+        return 'filed'
+    finally: general.OPENING.discard(tid)

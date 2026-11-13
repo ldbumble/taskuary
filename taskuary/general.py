@@ -1487,6 +1487,22 @@ def said_nothing(store, tid: int, reply: str) -> bool:
     "A turn's filed answer with no words, and no card of any kind waiting on the owner on task `tid`."
     return not str(reply or '').strip() and not store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status IN ('pending','held') "
                                                           "AND IFNULL(DraftText,'')<>'' LIMIT 1", (int(tid),))
+# A REPLY STILL OWED WHEN A TURN ENDS SAYS WHAT IT NEEDS, ON ITS CARD (the owner, 2026-11-13: an empty reply box is drawn only where its
+# record says why it is empty - so a turn that ended with the reply owed, no draft and nothing on its record left no reply card at all:
+# something owed, nothing lit). Kept from what the turn itself recorded, never read off its prose: the question it asked (its ask marker or
+# question tool), else the first thing its summary put on the owner (`on_you`), else the one question of an agent that could not draft
+# (COULD_NOT). The card then stands in that turn with the line on it; a draft written later clears it (store.update_review_draft)
+def reply_needs(store, tid: int, asks=(), summ=None) -> str:
+    "Record on task `tid`'s owed, unwritten reply what its agent needs from the owner - '' where none is owed or its record already says."
+    rv = store._one("SELECT ReviewId, DraftNeeds FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') AND TRIM(IFNULL(DraftText,''))='' "
+                    "AND IFNULL(DraftError,'')='' ORDER BY ReviewId DESC LIMIT 1", (int(tid),))
+    if not rv: return ''
+    on = (summ or {}).get('on_you') if isinstance(summ, dict) else None
+    first = next((str(x.get('text') if isinstance(x, dict) else x or '').strip() for x in (on if isinstance(on, list) else []) if x), '')
+    # ...what THIS turn recorded, where it recorded anything; else what an earlier turn left on it stands
+    why = next((str(q).strip() for q, *_ in asks or () if str(q).strip()), '') or first or str(rv.get('DraftNeeds') or '') or COULD_NOT
+    if why != str(rv.get('DraftNeeds') or ''): store.set_review_draft_needs(rv['ReviewId'], why)
+    return why
 # THE SILENT TURN'S ROAD, EVERY AGENT'S (the audit, 2026-11-10: a coding agent's empty turn sat as nothing at all): `s` is the session - a chat's
 # or a coding one's - with its own wake(why, said) and `silent`, the mark of a turn woken for saying nothing
 def could_not(s, reply: str) -> str:
@@ -3171,6 +3187,8 @@ class GeneralSession:
             except Exception as e: logger.debug(f'task {self.task_id}: the turn draft was not kept with it - {e}')
             self.store.add_comment(self.task_id, 'assistant', SUMMARY_TYPE, json.dumps(summ))
             if 'on_you' in summ: self.store.set_on_you(self.task_id, summ['on_you'], 'assistant')     # no list said: the steps stay as they are
+        try: reply_needs(self.store, self.task_id, asks, summ)
+        except Exception as e: logger.debug(f'task {self.task_id}: what the owed reply needs was not kept on it - {e}')
         # the turn's working - its tool calls and thinking - was thrown away with the next turn; it is the record now
         from . import sessionrecord
         try: sessionrecord.keep_turn(self.task_id, rid, self.trace)

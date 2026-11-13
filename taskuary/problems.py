@@ -313,7 +313,10 @@ def collect(store, all_of_them: bool = False) -> list:
         restart = c.get('Type') == 'whatsapp' and wabridge.managed(c)
         # ...and the bridge it stopped starting again is past any retry (wabridge.supervise's give-up line)
         gave_up = restart and bool(wabridge._SUP.get('gave_up'))
-        out.append({'key': f"connector:{c['ConnectorId']}", 'title': f"{c.get('Name') or c['Type']}: the last poll failed",
+        # ...a read that worked but has not been handed everything says so, not "failed" (channels.teams_behind)
+        from .channels import BEHIND
+        late = err.startswith(BEHIND)
+        out.append({'key': f"connector:{c['ConnectorId']}", 'title': f"{c.get('Name') or c['Type']}: {'messages are behind' if late else 'the last poll failed'}",
                     'back': f"{c.get('Name') or c['Type']} is working again",
                     'detail': card_error(c)[:400], 'since': c.get('LastErrorAt') or '', 'where': 'Connections', 'connector': str(c['ConnectorId']),
                     'fix': 'Open the card', **({'restart': True} if restart else {}), **({'now': True} if gave_up else {})})

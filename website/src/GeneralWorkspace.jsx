@@ -18,7 +18,7 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, newerList, withMine, waitingChips, workingLine, waitingOn, askTurn } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, newerList, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
@@ -466,13 +466,13 @@ const ConvLine = ({ x, more }) => {
    "I thought we keep it but grey out buttons right away"), or taken back by its agent - greyed in its own place with its words, nothing to press.
    It never goes from the chat and never moves */
 // ...SET ASIDE IN THE SERVER'S OWN WORDS (proposals.SET_ASIDE): "you wrote again" stood over a draft his first line after a Stop set aside (2026-11-12)
-const PAST = { superseded: () => "Earlier draft - rewritten below", passed: (c) => (/draft/.test(c.what || "") ? "Earlier draft - not sent; set aside when you moved on" : PASSED_LINE.replace(/\.$/, "")), withdrawn: () => "Earlier draft - not sent; the agent took it back" };
+const PAST = { superseded: () => "Earlier draft - rewritten below", passed: (c) => (/draft|slot/.test(c.what || "") ? "Earlier draft - not sent; set aside when you moved on" : PASSED_LINE.replace(/\.$/, "")), withdrawn: () => "Earlier draft - not sent; the agent took it back" };
 const PastCard = ({ c }) => <div className="tq-conv-past" data-tq-past-card={c.status} role="note">
   <div className="tq-conv-past-head">{PAST[c.status](c)}</div>
   {!!c.was?.text && <div className="tq-conv-past-words" dir="auto">{c.was.text}</div>}</div>;
 /* `items`: the server's list, with this page's own lines the server has not answered for yet (`mine`) already merged in by their names.
    `nodes`: the cards the page draws, by the review each is of ([{key, rid, node}]); `next`: the reply that waits, at the card it is. */
-function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, landAt, name, tid, onChanged, working = false, ask = null, askAt = "" }) {
+function Conversation({ items, nodes = [], posts = [], next = null, nextRid = null, landing = null, landAt, name, tid, onChanged, working = false, ask = null, askAt = "", lettersAt = "" }) {
   // THE WORK'S CARD IS PART OF THE AGENT TURN THAT DID IT, or not drawn at all (the owner, 2026-11-13: "stop putting worked on master at the
   // bottom ... it's part of the agent turn or doesn't belong at all"): the turn its newest change came in (landing.landingTurn); until the card
   // has read its state it is mounted hidden, so it can say when
@@ -488,12 +488,17 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
     // again under it as the act's own card reading "Not posted · dismissed" (the card round, 2026-11-12)
     return [...got.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>),
       ...(post && !got.length && !used.has(`post:${c.review}`) && used.add(`post:${c.review}`) ? [<ActionCard key={`post:${c.review}`} row={post} tid={tid} onChanged={onChanged} />] : []),
-      ...(next && c.review === nextRid && !used.has("next") && used.add("next") ? [<Box key="next" data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>{next}</Box>] : [])];
+      // ...the letters that wait: at the end of the turn the list names (`lettersAt`, below); only where it names none, on the reply's own card
+      ...(next && !lettersAt && c.review === nextRid && !used.has("next") && used.add("next") ? [nextBox()] : [])];
   });
+  const nextBox = () => <Box key="next" data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>{next}</Box>;
+  // A TURN'S CARDS, ITS LAST THING: what the list placed in it, then the letters that wait for his Send where this is their turn, then the work's card
+  const cardsOf = (x) => [...draw(x.cards), ...(next && x.id === lettersAt && !used.has("next") && used.add("next") ? [nextBox()] : []),
+    ...(x.id === landIn ? [<React.Fragment key="landing">{landing}</React.Fragment>] : [])];
   const rows = items.map((x, i) => {
     const prev = items[i - 1];
     if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn"} name={name} ask={x.id === askAt ? ask : null}
-      cards={x.id === landIn ? [...draw(x.cards), <React.Fragment key="landing">{landing}</React.Fragment>] : draw(x.cards)} />;
+      cards={cardsOf(x)} />;
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;
     if (x.kind === "card") { const got = draw([x]); return got.length ? <div key={x.id} className="tq-aui-message tq-aui-agent" data-tq-item={x.id} data-tq-row-cards=""><div className="tq-aui-agent-body">{got}</div></div> : null; }
@@ -505,7 +510,7 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
   // should be show action box" - drawn at the foot while the turn worked, its words landed above the card; and greyed in its turn, the same
   // reply stood live again at the foot): a turn's card comes when the list has it, as the turn's last thing
   const loose = working ? [] : nodes.filter((n) => !used.has(n.key) && !listed.has(n.rid));
-  const nextLoose = next && !used.has("next") && !working && !listed.has(nextRid);
+  const nextLoose = next && !used.has("next") && !working && !listed.has(nextRid) && !lettersAt;
   return <>{rows}
     {!!loose.length && <div className="tq-aui-message tq-aui-agent" data-tq-row-cards="loose"><div className="tq-aui-agent-body">{loose.map((n) => <React.Fragment key={n.key}>{n.node}</React.Fragment>)}</div></div>}
     {nextLoose && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>{next}</Box>}
@@ -652,7 +657,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
               <div className="tq-aui-welcome-title">Work on this with your assistant</div>
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
             <RetryCtx.Provider value={retry}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
-              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} ask={askNode} askAt={askAt} /></WaitOnCtx.Provider></RetryCtx.Provider>
+              landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} working={!!list?.working} ask={askNode} askAt={askAt} lettersAt={lettersTurn(list, merged.items)} /></WaitOnCtx.Provider></RetryCtx.Provider>
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}

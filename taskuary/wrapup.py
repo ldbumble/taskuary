@@ -413,6 +413,11 @@ def blank_why(text) -> str:
             "the owner the one thing it needs and write the letter when you have it.") if b else ''
 
 
+def _also_waiting(store, task_id: int, env, m: dict) -> str:
+    from . import slots
+    return slots.also_waiting(store, task_id, [*((env or {}).get('to') or []), m.get('FromEmail')])
+
+
 def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None, follow_up: bool = False,
                 to: str = '', sid: str = None, answers: int | None = None, only: bool = False, cc=None, why_to: str = '') -> dict:
     """Put the agent's reply on the task as the pending draft - the same review the responder would
@@ -552,6 +557,8 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     meanwhile = [' '.join(str(x.get('OwnText') or x.get('BodyText') or '').split())[:300] for x in own_replies(store, task_id, turn)] if turn else []
     return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '', **ends,
             **({'owner_wrote_on_the_thread_while_you_worked': meanwhile} if meanwhile else {}),
+            # ...and an email of an agent's to the same person that waits beside it (slots.also_waiting: one letter to one person at a time)
+            **({'two_letters_to_one_person': two} if (two := _also_waiting(store, task_id, env, m)) else {}),
             **({'recipients': {'to': env.get('to') or [], 'cc': env.get('cc') or []}} if env else {}),
             **({'new_on_thread': new} if new else {}),
             **({'people': many} if len(many) > 1 else {}), **_told(store, rid, attach_files(store, rid, files, agent))}

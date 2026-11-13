@@ -154,6 +154,11 @@ def _install_fresh_routes(app, store):
                 if os.name == "nt" and getattr(p, "pid", None): subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], capture_output=True)
                 else: p.kill()
             return {"ok": bool(ps)}
+        # ...`woken`: Taskuary wakes its agent to go on, as the turn-end judge does when a turn ended short (hooks.judge_ended -> wake) - the
+        # judge is a model's reading and cannot be asked for on demand; the turn that goes on is the shape a walk needs
+        if body.get("state") == "woken":
+            t.woke = False; t.wake(str(body.get("why") or "the rest of what the owner asked"))
+            return {"ok": True}
         if body.get("state") == "idled":
             t.last -= 10 ** 6; was = general.idle_for; general.idle_for = lambda: 0
             try: ok = t.idle_out()

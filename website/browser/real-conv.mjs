@@ -305,6 +305,8 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     else if (k === "stop") console.log("stop", await page.evaluate(() => { const b = document.querySelector("[data-tq-task-page] [data-tq-stop-run]"); b?.click(); return !!b; }));
     // ...and its agent idling out, as time does it (closed quietly; the next input - his line, or a message that joins - brings it back)
     else if (k === "idle") console.log("idle", JSON.stringify(await api("/api/fixture/session", { taskId: tid, state: "idled" })));
+    // ...Taskuary waking its agent to go on from the turn that just ended (no input between: the same work)
+    else if (k === "wake") console.log("wake", JSON.stringify(await api("/api/fixture/session", { taskId: tid, state: "woken", why: arg })));
     else if (k === "kill") console.log("kill", JSON.stringify(await api("/api/fixture/session", { taskId: tid, state: "killed" })));
     else if (k === "restart") { await writeFile(path.join(out, "restart"), ""); const end = Date.now() + 120000;
       while (existsSync(path.join(out, "restart")) && Date.now() < end) await sleep(500);

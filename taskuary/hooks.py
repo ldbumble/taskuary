@@ -596,6 +596,7 @@ def held_for(store, tid: int, sid: str) -> bool:
 # "Working on this..." by itself). Only the turn's own nothing_left is taken as read: whether what is left is just the owner's press is the
 # judge's call (ENDED_SYSTEM says so), never a word list
 def finished(summ) -> bool: return isinstance(summ, dict) and summ.get('nothing_left') is True
+def left_for_send(summ) -> bool: return isinstance(summ, dict) and bool(summ.get('drafted'))
 
 
 def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = False, then=None, summ=None, jobs=None):
@@ -605,6 +606,12 @@ def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = F
     import hashlib
     from . import background
     if finished(summ): return
+    # ...NOR ONE THAT LEFT A LETTER FOR THE OWNER'S SEND, by its own record (the summary's `drafted`): a person moves next - the rule the
+    # judge is asked to apply, answered here by a stored fact, with no model call. The owner's live task, 2026-11-13: a turn rewrote the
+    # reply and said one thing on it was still his; the model read that as asking him for a sign-in, the answer was taken back and its
+    # agent woken with "you asked for a password" - and came back with a second letter to the same person under the first. Work the turn
+    # itself put aside and that still runs (`jobs`) wakes it as before
+    if jobs is None and left_for_send(summ): return
     key = (str(sid), hashlib.sha1(said.encode('utf-8', 'replace')).hexdigest())
     def go():
         from . import workerstate as ws

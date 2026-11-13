@@ -303,6 +303,73 @@ class TheList(unittest.TestCase):
         self.assertEqual((last['kind'], last['text']), ('note', funnel.idle_state(s, tid)['line']))
         self.assertIn('left without finishing', last['text'])
 
+    def test_the_words_of_a_turn_that_goes_on_stand_above_what_waits_for_his_press_and_the_letters_are_named_their_turn(self):
+        """The owner's live task, 2026-11-13 (invented people): he corrected the agent; its turn left the rewritten reply's card; Taskuary
+        woke the agent a beat later and that turn's words - and a second letter - were drawn UNDER the card: "text after the action box".
+        A turn that goes on from the one before it with no input between is the same work: what still waits for his press stands at the
+        end of the run, under its last words, and the turn at work holds it back as it does its own cards. And the page's letters block
+        (the reply, the task's emails) is named its turn by the list - the last one that left a letter still waiting."""
+        import json
+        s, tid = self.s, self.tid
+        self.brain.said = {1: 'The reply is rewritten with the three files.', 2: 'The login goes to Gail alone, apart from the thread - it is the second letter.',
+                           3: 'Paula has her own note now.'}
+        self.say('No - send her the files, and mind who is copied.', 'l-fix'); self.rest()
+        rid = s.add_review({'TaskId': tid, 'MessageId': s.list_messages(tid)[0]['MessageId'], 'Kind': 'draft_reply', 'Status': 'pending',
+                            'Channel': 'email', 'DraftText': 'Hi Gail, the three files are attached. Alex'})
+        was = self.list(); first = [x for x in was['items'] if x['kind'] == 'turn'][-1]
+        self.assertEqual(([c['review'] for c in first['cards']], was['letters']), ([rid], first['id']))
+        # Taskuary wakes its agent (hooks.judge_ended -> wake): the same work goes on, no input between
+        self.brain.delay = 0.5
+        general.session_for(tid).wake('the rest of it'); self.assertTrue(until(lambda: self.list()['working']))
+        mid = self.list()
+        self.assertEqual([c for x in mid['items'] if x['kind'] == 'turn' for c in x['cards']], [], 'the turn at work holds what waits back')
+        self.assertEqual(conversation.flow_breaks(mid, was), [])
+        slot = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Hi Gail, your login is in the portal invite. Alex',
+                             'Deliver': json.dumps({'channel': 'email', 'to': ['gail@northwind.example'], 'cc': [], 'subject': 'Your login', 'slot': 's1'})})
+        self.brain.delay = 0; self.rest()
+        got = self.list(); turns = [x for x in got['items'] if x['kind'] == 'turn']
+        a, b = turns[-2:]
+        self.assertEqual((a['id'], a['cards']), (first['id'], []))                                   # nothing lit is left above the later words
+        self.assertTrue(b['text'].startswith('The login goes to Gail alone')); self.assertEqual([c['review'] for c in b['cards']], [rid])
+        self.assertEqual(got['letters'], b['id'])                                                    # the reply and the email: under the last words
+        self.assertEqual(conversation.flow_breaks(got, mid), [])
+        self.assertEqual([c['review'] for c in [x for x in self.list()['items'] if x['kind'] == 'turn'][-1]['cards']], [rid])   # ...and on a reload
+        # ...a card he pressed is its turn's record and never moves; an email written turns later names ITS turn, not the reply's
+        s.decide_review(rid, 'approved', None, 'owner'); s.decide_review(slot, 'approved', None, 'owner')
+        self.assertIsNone(self.list()['letters'])
+        self.brain.delay = 0.5; self.say('Also tell Paula.', 'l-more', wait=False); self.assertTrue(until(lambda: self.list()['working']))
+        s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': 'Paula - Gail has the files. Alex',          # written in its turn
+                      'Deliver': json.dumps({'channel': 'email', 'to': ['paula@northwind.example'], 'cc': [], 'subject': 'Files', 'slot': 's2'})})
+        self.brain.delay = 0; self.rest()
+        end = self.list(); turns = [x for x in end['items'] if x['kind'] == 'turn']
+        self.assertEqual(end['letters'], turns[-1]['id']); self.assertEqual([c['review'] for c in turns[-2]['cards']], [rid])
+
+
+    def test_an_email_the_agent_wrote_greys_where_it_stood_when_he_writes_past_it_as_a_reply_does(self):
+        """Recorded on the real CLI, 2026-11-13: the agent's email waited beside its reply; he typed a new line - the reply greyed, the email
+        stood lit above his line with its Send. The owner, 2026-11-10: "the second you write prompt on email action it should go gray and
+        then it should generate new email action box under it". Set aside as his line is heard, by the one rule (proposals.set_aside_drafts),
+        its words kept where it stood; its agent is told, and raises it again if it is still owed. His own email is his: never set aside."""
+        import json
+        from taskuary import proposals
+        s, tid = self.s, self.tid
+        mail = lambda to, words, why: s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': words, 'Reason': why,
+                                                    'Deliver': json.dumps({'channel': 'email', 'to': [to], 'cc': [], 'subject': 'Venues', 'slot': to})})
+        self.brain.delay = 0.5; self.say('Tell Paula which venue.', 'l-one', wait=False); self.assertTrue(until(lambda: self.list()['working']))
+        its = mail('paula@northwind.example', 'Paula - we are going with the Mill. Alex', 'assistant wrote this email - approve to send')
+        his = mail('ray@northwind.example', 'Ray - call me about the Mill.', 'your email - approve to send')
+        self.brain.delay = 0; self.rest()
+        got = self.list(); turn = [x for x in got['items'] if x['kind'] == 'turn'][-1]
+        self.assertEqual((got['letters'], turn['cards']), (turn['id'], []))                  # waiting: the page's block, at the end of its turn
+        t = time.time(); until(lambda: time.time() >= t + 1.1)                               # (a stamp is a whole second)
+        self.say('Actually, the Quay.', 'l-two'); self.rest()
+        self.assertTrue(proposals.passed(s.get_review(its))); self.assertEqual(s.get_review(his)['Status'], 'pending')
+        now = self.list(); old = next(x for x in now['items'] if x['id'] == turn['id'])
+        self.assertEqual([(c['what'], c['status'], c['was']['text']) for c in old['cards']], [('slot', 'passed', 'Paula - we are going with the Mill. Alex')])
+        self.assertIn('the email you wrote, which began: Paula - we are going with the Mill.', self.brain.calls[-1])       # ...and its agent is told
+        self.assertEqual(conversation.flow_breaks(now, got), [])
+
+
     def test_redraft_on_a_task_its_agent_works_wakes_that_agent(self):
         """Decided 2026-11-12 (rule 1: no second voice drafts): Redraft / Draft with AI on a task an agent works went to a one-shot writer that
         rewrote the agent's card in a voice of its own. The press is his line in the chat and wakes the task's agent, which writes it again."""

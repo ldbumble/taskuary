@@ -79,7 +79,7 @@ def test_an_agent_with_no_shell_takes_back_an_email_by_its_marker():
     answer = f'Taken back.\n[[TASKUARY-WITHDRAW which=rv{paula}: the owner wants it to go to Gail only]]'
     with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')): sess = general.GeneralSession(s, tid)
     with mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: answer), mock.patch('taskuary.hooks.judge_ended'):
-        reply = sess.send_prompt('only Gail, please')
+        reply = sess.send_prompt('only Gail, please', as_owner=False)          # Taskuary's own word to it: nothing of his is written past
     assert 'TASKUARY-WITHDRAW' not in reply and s.get_review(paula)['Status'] == 'closed_unsent'
     assert waiting(s, tid) == [('slot', gail)]
 

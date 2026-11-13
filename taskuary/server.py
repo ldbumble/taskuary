@@ -5646,7 +5646,7 @@ def agent_reply(body: AgentReplyBody, request: Request):
     return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files, body.task_id), follow_up=body.follow_up, to=body.to,
                               answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to)
 
-class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []; mailbox: str = ''; guessed: list[str] = []
+class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []; mailbox: str = ''; guessed: list[str] = []; apart: str = ''
 
 @app.post('/api/agent/draft')
 def agent_draft(body: AgentDraftBody, request: Request):
@@ -5656,7 +5656,7 @@ def agent_draft(body: AgentDraftBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     from . import wrapup
     files = _agent_files(body.files, body.task_id)
-    out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed)
+    out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc, mailbox=body.mailbox, guessed=body.guessed, apart=body.apart)
     return {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)} if out.get('ok') and files else out
 
 class AgentWaitBody(BaseModel): task_id: int; who: str; agent: str = 'agent'
@@ -6058,7 +6058,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'remind': lambda tid, until: agent_remind(AgentRemindBody(task_id=tid, until=until), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),
-             'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='', guessed=(), slot='': agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, slot=slot, files=list(files), cc=list(cc), mailbox=mailbox, guessed=list(guessed)), request),
+             'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='', guessed=(), slot='', apart='': agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, slot=slot, apart=apart, files=list(files), cc=list(cc), mailbox=mailbox, guessed=list(guessed)), request),
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request),
              'answer_invite': lambda tid, a: agent_answer_invite(AgentInviteBody(**{**a, 'task_id': tid}), request),
@@ -8467,7 +8467,9 @@ def _ms_finish(cid, f, t) -> dict:
     # NOW: f['cfg'] is the card as it was when the sign-in STARTED, minutes ago, and writing it back undid every field saved since
     was = f.get('was') or {}
     signed = {**{k: v for k, v in f['cfg'].items() if was.get(k) != v}, 'auth': 'user', 'account': who['account'],
-              'name': who['name'], **({'granted_scope': t['scope']} if t.get('scope') else {})}      # what was granted, for the send probe (PW-143)
+              'name': who['name'], **({'granted_scope': t['scope']} if t.get('scope') else {}),      # what was granted, for the send probe (PW-143)
+              # ...and how and when, for the card's one line on whose permission this is (msaccess.access)
+              'signed_in_via': 'code' if f.get('device_code') else 'browser', 'signed_in_at': datetime.now().isoformat(timespec='seconds')}
     cfg = {**f['cfg'], **signed}
     store.save_connector({'ConnectorId': cid, 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
     store.merge_connector_config(cid, signed)
@@ -8581,6 +8583,14 @@ def ms_adminlink(cid: int):
     ccfg = json.loads(c.get('ConfigJson') or '{}')
     try: return {'url': msauth.admin_consent_url(ccfg, msauth.scopes_for(c['Type'], bool(ccfg.get('allow_files'))))}
     except RuntimeError as e: raise HTTPException(409, str(e))
+
+@app.get('/api/connectors/{cid}/ms/access')
+def ms_access(cid: int):
+    """Whose Microsoft permission this card reads with - a sign-in or a company app - and what it needs against what it holds (msaccess)."""
+    from . import msaccess
+    c = store.get_connector(cid)
+    if not c: raise HTTPException(404, 'no such connection')
+    return msaccess.access(store, c)
 
 @app.post('/api/connectors/{cid}/ms/signout')
 def ms_signout(cid: int):

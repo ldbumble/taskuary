@@ -1275,12 +1275,24 @@ def _utc(dt) -> str:
     return dt.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
 
 
-def _teams_delta(tok, upn, since_iso, cap=200):
-    """Every chat message this user can see since a timestamp, newest first."""
-    url = f'{GRAPH}/users/{upn}/chats/getAllMessages/delta'
-    params, out = {'$top': 50, '$filter': f'lastModifiedDateTime gt {since_iso}'}, []
+# A LATE MESSAGE IS NOT A LOST ONE (the owner, 2026-11-13: "a bad bug dropping messages silently"). getAllMessages reads Microsoft's
+# export copy of the chats, and that copy lags the chat itself - by over half an hour on a bad morning. A filtered window ("modified
+# after the last poll, less five minutes") then asked once for each stretch of time: a message that landed in the export after its
+# stretch had been asked for carried an older lastModifiedDateTime than the next window, and was never asked for again. So the window
+# is only the FIRST read: it hands back Graph's own delta link, kept on the source (`state['link']`), and every poll after follows it -
+# everything that landed since, however late and whatever its timestamp. A link Graph no longer honours (410 Gone, or a 400/404 for a
+# token it dropped) starts over from the window. A read cut short at `cap` keeps its nextLink, so the next poll goes on from there.
+def _teams_delta(tok, upn, since_iso, cap=200, state=None):
+    """Every chat message this user can see, newest first on a first read: since a timestamp, or since the last read when `state`
+    carries the delta link that read handed back. `state` is the source's own (ingest_teams_chats): the link is updated in it."""
+    start, window = f'{GRAPH}/users/{upn}/chats/getAllMessages/delta', {'$top': 50, '$filter': f'lastModifiedDateTime gt {since_iso}'}
+    link = (state or {}).get('link')
+    (url, params), out = (link, None) if link else (start, window), []
     while url and len(out) < cap:
         r = requests.get(url, headers={'Authorization': f'Bearer {tok}'}, params=params, timeout=45)
+        if link and r.status_code in (400, 404, 410):
+            logger.info(f'teams {upn}: the delta link is no longer honoured ({r.status_code}) - reading the window again')
+            link, url, params, out, state['link'] = None, start, window, [], None; continue
         if r.status_code == 403:
             raise RuntimeError('token OK but chat read DENIED (403) - app-only Chat.Read.All is a Microsoft '
                                'protected API: submit the approval form for this app registration')
@@ -1288,28 +1300,32 @@ def _teams_delta(tok, upn, since_iso, cap=200):
         j = r.json()
         out += j.get('value', [])
         url, params = j.get('@odata.nextLink'), None       # the nextLink carries the filter itself
-    return out[:cap]
+        if state is not None: state['link'] = url or j.get('@odata.deltaLink') or state.get('link')
+    return out if state is not None else out[:cap]          # a kept link is past every message read: none may be cut
 
 
-def _teams_user_delta(tok, since_iso, cap=200):
+def _teams_user_delta(tok, since_iso, cap=200, state=None):
     """The same feed for a person's own sign-in (a Teams card's MsSignIn): getAllMessages is app-only, so their chats
     one by one - the ones whose last message is past the watermark (Graph lists /me/chats newest first), each read since
-    it. Newest first, like the delta, and each message carries its chatId as the delta's do."""
-    h, chats, out = {'Authorization': f'Bearer {tok}'}, [], []
+    it. Newest first, like the delta, and each message carries its chatId as the delta's do.
+    ...and each chat since ITS OWN newest message already in (`state['seen']`, ingest_teams_chats), not only since the poll: a message
+    that shows up after its poll, older than the next window, is still newer than the last one taken from its chat."""
+    h, chats, out, seen = {'Authorization': f'Bearer {tok}'}, [], [], (state or {}).get('seen') or {}
+    lo = lambda ch: min(seen[ch['id']], since_iso) if seen.get(ch['id']) else since_iso
     url = f'{GRAPH}/me/chats'
     params = {'$top': 50, '$expand': 'lastMessagePreview', '$orderby': 'lastMessagePreview/createdDateTime desc'}
+    when = lambda x: str((x.get('lastMessagePreview') or {}).get('createdDateTime') or x.get('lastUpdatedDateTime') or '')
     while url and len(chats) < 200:
         r = requests.get(url, headers=h, params=params, timeout=45)
         if r.status_code == 403:
             raise RuntimeError('signed in, but chat read DENIED (403) - sign in again on the Teams card and accept the chat permissions')
         r.raise_for_status()
         j = r.json(); page = j.get('value', [])
-        live = [x for x in page if str((x.get('lastMessagePreview') or {}).get('createdDateTime') or x.get('lastUpdatedDateTime') or '') > since_iso]
-        chats += live
-        url, params = (j.get('@odata.nextLink') if len(live) == len(page) else None), None   # the rest are older still
+        chats += [x for x in page if when(x) > lo(x)]
+        url, params = (j.get('@odata.nextLink') if all(when(x) > since_iso for x in page) else None), None   # the rest are older still
     for ch in chats:
         r = requests.get(f'{GRAPH}/chats/{ch["id"]}/messages', headers=h, timeout=45,
-                         params={'$top': 50, '$orderby': 'lastModifiedDateTime desc', '$filter': f'lastModifiedDateTime gt {since_iso}'})
+                         params={'$top': 50, '$orderby': 'lastModifiedDateTime desc', '$filter': f'lastModifiedDateTime gt {lo(ch)}'})
         if r.status_code in (403, 404):            # one chat refused (a federated thread) must not blind the rest
             logger.warning(f"teams chat {ch['id'][:24]} not readable ({r.status_code})"); continue
         r.raise_for_status()
@@ -1518,11 +1534,15 @@ def slack_team_name(tok: str, team: str) -> str:
     return _SLACK_TEAMS[team]
 
 
-def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False, user=False) -> int:
+def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False, user=False, state=None) -> int:
     """Teams as an inbound channel: each chat is a conversation (so a thread keeps building
     ONE task, like a mail thread), each human message an item on the timeline. Bot posts,
-    call-started events, deletions and empty bodies are not messages anybody has to act on."""
+    call-started events, deletions and empty bodies are not messages anybody has to act on.
+    `state`: the source's read state, updated in place for the caller to keep once this returns - the delta link (_teams_delta),
+    `seen` (each chat's newest message the feed handed over, whatever became of it: teams_behind and the sign-in road's per-chat
+    mark) and `from` (where reading began: nothing older is owed)."""
     since_iso, users, chats, n = _utc(since), {}, {}, 0
+    if state is not None: state.setdefault('from', since_iso); seen = state.setdefault('seen', {})
     touched = set()                                # chats to mark read once, not per message
     me = _TEAMS_ME.get(upn.lower(), '')
     if not me:
@@ -1533,9 +1553,11 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
             if me: _TEAMS_ME[upn.lower()] = me
         except requests.RequestException:
             pass
-    feed = _teams_user_delta(tok, since_iso) if user else _teams_delta(tok, upn, since_iso)
+    feed = _teams_user_delta(tok, since_iso, state=state) if user else _teams_delta(tok, upn, since_iso, state=state)
     tenant = _token_tenant(tok)
-    for m in reversed(feed):                                       # oldest first, so threads read in order
+    # oldest first, so threads read in order - by when each was written: a delta link's pages need not be newest first
+    for m in sorted(reversed(feed), key=lambda m: m.get('createdDateTime') or ''):
+        if state is not None and m.get('chatId'): seen[m['chatId']] = max(seen.get(m['chatId']) or '', m.get('createdDateTime') or '')
         user = (m.get('from') or {}).get('user') or {}
         body = _clean((m.get('body') or {}).get('content'))
         # Deleted at the source. Teams' delta reports it (mail's plain $top list does not, so
@@ -1607,7 +1629,32 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         if cid: touched.add(cid)
     for cid in touched if read_it else ():
         mark_chat_read(tok, upn, cid, me)
+    if state is not None and len(seen) > 500: state['seen'] = dict(sorted(seen.items(), key=lambda kv: kv[1])[-500:])
     return n
+
+
+# ...AND A LATE ONE IS NEVER SILENT. Each poll lists the chats once (their last message's preview, no history) and counts the ones whose
+# last message is older than the grace and newer than anything the feed handed over for that chat - Microsoft has it, Taskuary has not
+# been given it yet. The line goes on the card and the bell by the card's own error road (_poll_one), and goes when they come in.
+BEHIND, BEHIND_GRACE = 'Teams messages are behind', timedelta(minutes=15)
+def teams_behind(store, tok, upn, state, user=False) -> str:
+    "'' when every chat's last message has come in; else the line that says how many have not."
+    url = f'{GRAPH}/me/chats' if user else f'{GRAPH}/users/{upn}/chats'
+    try:
+        r = requests.get(url, headers={'Authorization': f'Bearer {tok}'}, timeout=45,
+                         params={'$top': 50, '$expand': 'lastMessagePreview', '$orderby': 'lastMessagePreview/createdDateTime desc'})
+        r.raise_for_status(); rows = r.json().get('value') or []
+    except Exception as e:
+        logger.info(f'teams {upn}: the chat list for the behind check could not be read - {e}'); return ''
+    seen, edge, start = state.get('seen') or {}, _utc(datetime.now() - BEHIND_GRACE), str(state.get('from') or '')
+    def late(ch):
+        p = ch.get('lastMessagePreview') or {}
+        at = str(p.get('createdDateTime') or '')
+        if not (start < at <= edge) or p.get('isDeleted') or p.get('messageType') not in (None, 'message'): return False
+        if not ((p.get('from') or {}).get('user')): return False        # a bot's or the system's line is never a message here
+        return at > str(seen.get(ch.get('id')) or '') and not store.message_exists(f"teams:{ch.get('id')}:{p.get('id')}")
+    k = sum(map(late, rows))
+    return f"{BEHIND}: {plural(k, 'chat')} newer than what came in - Microsoft has not handed them over yet" if k else ''
 
 
 # Four chat servers that behave exactly like Discord - one watched room per source, and a
@@ -2322,7 +2369,12 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                         except Exception as e: logger.warning(f'chain history for {conv} skipped: {e}')
                 continue                            # exact cutoff above replaces generic touch_source(now)
             elif c['Type'] == 'teams':
-                n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it, user=user)
+                # the source's read state: a rewound (or never read) source starts from its window, never from an old delta link
+                kept = _cfg(s).get('teams_state') or {}
+                state = kept if s.get('LastPolledAt') else {'seen': kept.get('seen') or {}}
+                n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it, user=user, state=state)
+                store.patch_source_poll_state(s['SourceId'], config_set={'teams_state': state})
+                if (behind := teams_behind(store, tok, s['Address'], state, user)): errors.append(behind)
             elif c['Type'] == 'github':
                 from .store import roles_of
                 if s.get('ConnectorId') != c['ConnectorId']: continue

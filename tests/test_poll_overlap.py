@@ -12,9 +12,11 @@ Every channel here shares that shape - a watermark that jumps to now - so the wi
 back past it. Dedupe makes the re-read free: ingest_message checks external_id in its first
 line, before policies and before any AI call.
 """
-import unittest
+import json, unittest
 from datetime import datetime, timedelta
+from unittest import mock
 
+from taskuary import channels, net
 from taskuary.channels import POLL_OVERLAP, STARTUP_OVERLAP, _since
 
 
@@ -72,6 +74,118 @@ class OverlapTests(unittest.TestCase):
         self.assertEqual(out['status'], 'duplicate')
         pol.assert_not_called()                                # no policy pass
         llm.assert_not_called()                                # and no AI call
+
+
+def _iso(dt): return channels._utc(dt)
+
+
+class _R:
+    def __init__(self, code=200, j=None): self.status_code, self._j, self.text = code, j or {}, ''
+    def json(self): return self._j
+    def raise_for_status(self):
+        if self.status_code >= 400: raise net.HTTPError(str(self.status_code))
+
+
+class _Graph:
+    """Microsoft, as the live card saw it on 2026-11-13: getAllMessages reads an EXPORT copy of the chats that lags the chat itself,
+    so a message lands in it late, carrying the older lastModifiedDateTime it was written at. A filtered read sees what is in the
+    export and modified after its filter; a delta link sees whatever landed in the export after that link was handed out."""
+    UPN = 'alex@northwind.example'
+    def __init__(self): self.export, self.chats, self.calls = [], [], []
+    def land(self, mid, chat, at, text='can you send the deck?'):
+        self.export.append({'id': mid, 'chatId': chat, 'messageType': 'message', 'createdDateTime': _iso(at), 'lastModifiedDateTime': _iso(at),
+                            'from': {'user': {'id': 'u-erin', 'displayName': 'Erin Blake'}}, 'body': {'content': f'<p>{text}</p>'}})
+    def request(self, method, url, **kw):
+        self.calls.append(url); p = kw.get('params') or {}
+        if 'getAllMessages/delta' in url or 'deltatoken=' in url:
+            if 'deltatoken=' in url: got = self.export[int(url.rsplit('=', 1)[1]):]
+            else: got = [m for m in self.export if m['lastModifiedDateTime'] > p['$filter'].split(' gt ')[1]]
+            return _R(200, {'value': got[::-1], '@odata.deltaLink': f'{channels.GRAPH}/delta?$deltatoken={len(self.export)}'})
+        if url.endswith('/chats'): return _R(200, {'value': self.chats})
+        return _R(200, {})
+
+
+class LateTeamsMessageTests(unittest.TestCase):
+    """A Teams message that reaches Microsoft's export after its poll, stamped older than the next poll's window, was never asked for
+    again: the watermark had moved past it. Delayed became lost, and nothing said so (the owner, 2026-11-13)."""
+    def setUp(self):
+        from taskuary.store import DEFAULT_ROLES, SQLiteStore
+        self.store = s = SQLiteStore(':memory:')
+        self.cid = s.get_connector_by_type('teams')['ConnectorId']
+        s.save_connector({'ConnectorId': self.cid, 'Active': 1, 'Secret': 'app-secret', 'Roles': DEFAULT_ROLES['teams'],
+                          'ConfigJson': json.dumps({'tenant_id': 'tid-1', 'client_id': 'cid-1'})}, 'test')
+        s.save_source({'Channel': 'teams', 'Address': _Graph.UPN, 'ConnectorId': self.cid, 'Active': 1}, 'test')
+        self.g = _Graph()
+
+    def poll(self):
+        with mock.patch.object(net, 'session', lambda: self.g), mock.patch.object(channels, 'graph_token', return_value='tok'):
+            channels._poll_one(self.store, self.store.get_connector(self.cid), True, 0, None, False)
+
+    def rows(self, ext): return self.store._one('SELECT COUNT(*) AS n FROM message WHERE ExternalId=?', (ext,))['n']
+
+    def test_a_message_that_lands_late_with_an_old_stamp_is_still_read_once(self):
+        now = datetime.now()
+        self.g.land('m1', '19:crew', now - timedelta(minutes=30))
+        self.poll()                                              # the first read: the window, and Graph's delta link kept
+        self.assertEqual(self.rows('teams:19:crew:m1'), 1)
+        # an hour old when it finally reaches the export - well behind the next window (the last poll, less five minutes)
+        self.g.land('late', '19:crew', now - timedelta(hours=1), text='the contract needs your signature today')
+        self.poll()
+        self.assertEqual(self.rows('teams:19:crew:late'), 1, 'a message that landed late is read, whatever its stamp')
+        self.poll()                                              # and again: still one row
+        self.assertEqual(self.rows('teams:19:crew:late'), 1)
+
+    def test_an_expired_delta_link_reads_the_window_again(self):
+        self.g.land('m1', '19:crew', datetime.now() - timedelta(minutes=30))
+        self.poll()
+        real = self.g.request
+        self.g.request = lambda method, url, **kw: _R(410) if 'deltatoken=' in url else real(method, url, **kw)
+        self.g.land('m2', '19:crew', datetime.now() - timedelta(minutes=1))
+        self.poll()
+        self.assertEqual(self.rows('teams:19:crew:m2'), 1)
+        self.assertFalse(self.store.get_connector(self.cid).get('LastError'))
+
+    def test_chats_ahead_of_what_came_in_are_said_on_the_card_and_the_bell_until_they_arrive(self):
+        from taskuary import problems
+        now = datetime.now()
+        self.g.land('m1', '19:crew', now - timedelta(minutes=50))
+        self.poll()
+        # Microsoft's chat list already shows a newer message in two chats; the export has handed neither over
+        preview = lambda chat, mid, at: {'id': chat, 'lastMessagePreview': {'id': mid, 'createdDateTime': _iso(at), 'messageType': 'message',
+                                                                            'from': {'user': {'id': 'u-erin'}}}}
+        self.g.chats = [preview('19:crew', 'm2', now - timedelta(minutes=40)), preview('19:ops', 'm3', now - timedelta(minutes=35)),
+                        preview('19:new', 'm4', now - timedelta(minutes=2))]          # inside the grace: not behind yet
+        self.poll()
+        err = self.store.get_connector(self.cid)['LastError']
+        self.assertTrue(err.startswith('Teams messages are behind: 2 chats newer than what came in'), err)
+        self.assertEqual(channels.card_error(self.store.get_connector(self.cid)), err)
+        item = next(x for x in problems.collect(self.store, True) if x['key'] == f'connector:{self.cid}')
+        self.assertIn('messages are behind', item['title'])
+        # ...they arrive: the line goes
+        self.g.land('m2', '19:crew', now - timedelta(minutes=40)); self.g.land('m3', '19:ops', now - timedelta(minutes=35))
+        self.poll()
+        self.assertFalse(self.store.get_connector(self.cid).get('LastError'))
+        self.assertEqual(sum(u.endswith('/chats') for u in self.g.calls), 3, 'one chat list a poll, never a history read')
+
+
+class SignedInChatsTests(unittest.TestCase):
+    """The sign-in road reads chat by chat. A chat whose last message showed up after its poll - older than the next window - is
+    still read: each chat is asked since its own newest message already in, not only since the poll."""
+    def test_a_chat_whose_late_message_is_older_than_the_window_is_still_read(self):
+        now = datetime.now()
+        since, mark, late = now - timedelta(minutes=10), now - timedelta(hours=2), now - timedelta(hours=1)
+        asked = []
+        def answer(method, url, **kw):
+            if url.endswith('/me/chats'):
+                return _R(200, {'value': [{'id': '19:crew', 'lastMessagePreview': {'createdDateTime': _iso(late)}}]})
+            asked.append(kw['params']['$filter'])
+            lo = kw['params']['$filter'].split(' gt ')[1]
+            m = {'id': 'late', 'lastModifiedDateTime': _iso(late), 'createdDateTime': _iso(late), 'messageType': 'message'}
+            return _R(200, {'value': [m] if m['lastModifiedDateTime'] > lo else []})
+        with mock.patch.object(net, 'session', lambda: type('S', (), {'request': staticmethod(answer)})()):
+            got = channels._teams_user_delta('tok', _iso(since), state={'seen': {'19:crew': _iso(mark)}})
+        self.assertEqual([m['id'] for m in got], ['late'])
+        self.assertEqual(asked, [f'lastModifiedDateTime gt {_iso(mark)}'])
 
 
 if __name__ == '__main__':

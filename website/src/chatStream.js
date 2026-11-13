@@ -210,6 +210,15 @@ export const workingLine = (parts, label, { starting = false, ask = "" } = {}) =
 // which the list names (conversation.items `asking.turn`) - "" only while that turn is not in what is drawn (a read behind, a chat with no
 // turn yet), when it stands under everything as it did
 export const askTurn = (asking, items) => (asking?.turn && (items || []).some((x) => x.kind === "turn" && x.id === asking.turn) ? asking.turn : "");
+// WHERE THE LETTERS THAT WAIT FOR HIS SEND ARE DRAWN (the reply's card and the task's emails, one block of the page): at the end of the turn
+// the list names (conversation.items `letters` - the last turn that left a letter still waiting), under that turn's words. "" while the
+// list names none or holds no such turn yet, or while that turn is at work - it holds the block back, as it does its cards - and the page
+// then hangs the block on the reply's own card, as it did. The owner's live task, 2026-11-13: an email a later turn wrote stood up at the
+// reply's card, that turn's words under both
+// ...nor above a line of his: what stood over the line he just sent is set aside as it is heard (proposals.set_aside_drafts), and the page
+// draws that from the same frame (withMine) - the block's Send stood lit over his new line until the list was read again
+export const lettersTurn = (list, items) => { const xs = items || [], i = list?.letters ? xs.findIndex((x) => x.kind === "turn" && x.id === list.letters) : -1;
+  return i >= 0 && !["starting", "working"].includes(xs[i].state) && !xs.slice(i + 1).some((x) => x.kind === "line") ? xs[i].id : ""; };
 // ...what a turn at work waits on HIM for, in words: the step its session is stopped at, a sign-in, a question
 // ...(a question the agent asked before is no wait while it works: the recorded walk, 2026-11-12, read "Waiting for your answer" over a turn
 // already at work on his answer - only a step it is stopped at, or a sign-in on the page, holds a turn at work)

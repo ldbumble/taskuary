@@ -3079,6 +3079,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       {note}
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
+      {MS_ACCESS.includes(conn.Type) && <MsAccess conn={conn} />}
       {/* WhatsApp has no agent box: there is nothing for an agent to do that the pairing box does not do
           itself (install Node is the owner's; the bridge starts on its own; the QR is scanned from a phone).
           An agent handed this setup sat on the bridge process for five minutes on a tester's machine. */}
@@ -3752,6 +3753,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
     <Box sx={{ maxWidth: 980, mx: "auto" }} onBlur={draft.flush}>
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
+      {MS_ACCESS.includes(conn.Type) && <MsAccess conn={conn} />}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         {meta.desc}
       </Typography>
@@ -4640,8 +4642,41 @@ const MsOwnApp = ({ conn, cfg, setCfg, copy }) => {
     </Box>
   );
 };   // a browser sign-in this long without coming back: say what a tenant's admin approval looks like
+// WHOSE MICROSOFT PERMISSION A CARD READS WITH (msaccess.access, the owner 2026-11-13): a person's sign-in - sees what they can see - or a
+// company app reading across the organisation, and each permission the card uses against what the token holds. Lines only, no buttons.
+const MS_ACCESS = ["outlook", "teams", "ms_planner", "sharepoint", "onedrive", "office365_files"];
+const MsAccess = ({ conn }) => {
+  const [a, setA] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api.get(`/api/connectors/${conn.ConnectorId}/ms/access`).then(({ data }) => { if (alive) setA(data); }).catch(() => { if (alive) setA(null); });
+    return () => { alive = false; };
+  }, [conn.ConnectorId, conn.ConfigJson, conn.HasSecret, conn.LastError]);
+  if (!a || (!a.kind && !a.behind)) return null;
+  const bad = "var(--tq-danger, #6b2733)";
+  return (
+    <Box data-tq-ms-access={a.kind || "none"} sx={{ mb: 1.5, display: "flex", flexDirection: "column", gap: 0.5, maxWidth: 720 }}>
+      {a.kind && <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{a.line}</Typography>}
+      {a.kind && a.known && (
+        <Typography variant="caption" component="div" sx={{ color: DIM, lineHeight: 1.7 }}>
+          This card needs:{" "}
+          {a.needs.map((n) => (
+            <Box component="span" key={n.name} title={n.for} data-tq-ms-perm={n.granted ? "granted" : "missing"}
+              sx={{ mr: 1.25, whiteSpace: "nowrap", color: n.granted ? "var(--tq-success, #47654a)" : n.optional ? DIM : bad }}>
+              {n.granted ? "✓" : "✗"} {n.name}{n.granted ? "" : n.optional ? " (missing, optional)" : " (missing)"}
+            </Box>
+          ))}
+          {a.note && <Box component="span">{a.note}</Box>}
+        </Typography>
+      )}
+      {a.kind && !a.known && <Typography variant="caption" sx={{ color: DIM }}>
+        {a.note} It needs {a.needs.filter((n) => !n.optional).map((n) => n.name).join(", ")}.</Typography>}
+      {a.behind && <Typography variant="body2" data-tq-ms-behind="" sx={{ color: bad }}>{a.behind}</Typography>}
+    </Box>
+  );
+};
 // shared with the first-run card on the canvas (FirstRun.jsx) - one Microsoft sign-in, wherever it is drawn
-export const MsSignIn = ({ conn, cfg, setCfg, reload, onSignedIn, plain = false }) => {
+export const MsSignIn =({ conn, cfg, setCfg, reload, onSignedIn, plain = false }) => {
   // {flow, mode: "browser", url} - the default, Microsoft's page in the browser coming back to this server - or {flow, mode: "code",
   // user_code, verification_uri, interval}, the device code the owner asks for when the browser cannot reach Taskuary on localhost
   const [flow, setFlow] = useState(null);

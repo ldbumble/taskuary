@@ -212,6 +212,28 @@ class TheTurnsOwnRecordAnswersFirstTests(unittest.TestCase):
         hooks.judge_ended(s, tid, 'g7', SHORT, brain=verdict(True, 'the walkthrough'), wait=True, then=woke.append, jobs=None)
         self.assertEqual(woke, ['the walkthrough'])
 
+    def test_a_turn_that_left_a_letter_for_the_owners_send_is_never_read_as_short_or_as_asking_for_a_sign_in(self):
+        """The owner's live task, 2026-11-13 (invented people): he corrected the agent; its turn rewrote the reply to Erin and said the
+        login she needs "comes separately, so that one is still yours". The judge read those words as asking him for a sign-in: the answer
+        was taken back, its agent woken with "your last answer asked the owner for a password", and that second turn left a second letter
+        to Erin under the first card, its words under both. The turn's own record says it left a letter for his Send (the summary's
+        `drafted`): a person moves next, so nothing is read and nobody is woken."""
+        s = MemoryStore(); tid = researcher(s)
+        said = 'The reply to Erin is rewritten with the three files. It says the portal login comes separately, so that one is still yours.'
+        ws.record(s, tid, 'g8', 'turn_end', text=said, source='api')
+        woke, asked = [], []
+        brain = lambda *a, **k: asked.append(1) or json.dumps({'unfinished': False, 'why': '', 'asks_secret': True})
+        hooks.judge_ended(s, tid, 'g8', said, brain=brain, wait=True, then=lambda *a: woke.append(a), summ={'did': 'Rewrote the reply.', 'nothing_left': False, 'drafted': [{'review': 7}]})
+        self.assertEqual((woke, asked), ([], []))                                   # no wake, and no model call: the stored fact answers
+        # ...a turn that left the draft as it was (`drafted` empty) is read as before
+        hooks.judge_ended(s, tid, 'g8', said, brain=brain, wait=True, then=lambda *a: woke.append(a), summ={'did': 'Looked again.', 'drafted': []})
+        self.assertEqual(len(woke), 1)
+        # ...and work the turn itself put aside that still runs wakes it, a letter left or not
+        woke.clear()
+        hooks.judge_ended(s, tid, 'g8', said, brain=brain, wait=True, then=lambda *a: woke.append(a), summ={'drafted': [{'review': 7}]},
+                          jobs=[{'kind': 'shell'}])
+        self.assertEqual(len(woke), 1)
+
 
 class AnOwnersAskAnsweredWithNothingTests(unittest.TestCase):
     """The owner, 2026-11-10: "it created reply with nothing in it. that's dumb. if you have nothing to reply just ask what should i reply?" -

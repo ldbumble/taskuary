@@ -622,8 +622,45 @@ def test_a_quick_turn_writes_its_hand_over_down_so_a_draft_the_owner_answered_pa
         seen = []
         class Seeing(Brain):
             "...and says, as its call is made, how the draft's row reads"
-            def __call__(self, sy, u, **k): seen.append(s.get_review(rv['ReviewId'])['Status']); return super().__call__(sy, u, **k)
+            def __call__(self, sy, u, **k): seen.append((s.get_review(rv['ReviewId'])['Status'], general.working(s, tid))); return super().__call__(sy, u, **k)
         build.return_value = Seeing({**ANSWER, 'report': 'I see you answered Erin there - nothing is left.', 'draft': None})
         quickwork.again(s, tid, general.session_for(tid), 'THE THREAD CHANGED: you already answered - the words of the owner:\nErin - yes, we will be there.')
-    assert seen == ['superseded'], seen                                                               # set aside BEFORE the call read its prompt
+    assert seen == [('superseded', True)], seen                                                       # set aside BEFORE the call read its prompt - and at work while it runs
+    assert not general.working(s, tid)
     assert proposals.passed(s.get_review(rv['ReviewId'])) and conversation.heard(s, tid, 'mail', [own]) and not s.waiting_on_owner(tid)
+
+
+def test_a_turn_that_ends_with_the_reply_owed_and_unwritten_leaves_on_its_card_what_the_agent_needs():
+    """The owner, 2026-11-13: an empty reply box is drawn only where its record says why it is empty - so a turn that ended with the reply
+    still owed, no draft and nothing on its record left no reply card at all: something owed, nothing lit. The end of the turn keeps, from
+    what the turn itself recorded (its question; never its prose), what the agent needs - and the card stands in that turn."""
+    from taskuary import conversation
+    def owed(s, tid):
+        mid = s.list_messages(tid)[0]['MessageId']
+        return s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'needs a reply'})
+    q = 'Do you want to go Friday or send Erin alone?'
+    for answer, want in (({**ANSWER, 'draft': None, 'question': q}, q),                                  # it asked: its question
+                         ({**ANSWER, 'draft': None, 'question': None, 'report': 'I looked.'}, general.COULD_NOT)):   # it asked nothing: the one question left
+        s = home(); tid, _ = arrived(s); rid = owed(s, tid)
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+            ses = opened(s, tid); ses.quick = True; ses.file_quick(ASK, quickwork.read(answer), [])
+            assert s.get_review(rid)['DraftNeeds'] == want and not s.get_review(rid)['DraftText'], s.get_review(rid)
+            got = conversation.items(s, tid); turn = [x for x in got['items'] if x['kind'] == 'turn'][-1]
+            assert [(c['review'], c['status']) for c in turn['cards']] == [(rid, 'pending')] and got['letters'] == turn['id'], turn
+    # ...and where he answers and the next turn still cannot write it, the card is THAT turn's, with what it needs now - never left above his
+    # line, lit and empty, nor nowhere (the turn before's question is that turn's words)
+    s = home(); tid, _ = arrived(s); rid = owed(s, tid)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        ses = opened(s, tid); ses.quick = True; ses.file_quick(ASK, quickwork.read({**ANSWER, 'draft': None, 'question': q}), [])
+        t = time.time()
+        while time.time() < t + 1.1: time.sleep(0.05)
+        ses.file_quick('Friday, I think.', quickwork.read({**ANSWER, 'draft': None, 'question': 'Morning or afternoon?'}), [], as_owner=True)
+        got = conversation.items(s, tid); turns = [x for x in got['items'] if x['kind'] == 'turn']
+        assert s.get_review(rid)['DraftNeeds'] == 'Morning or afternoon?'
+        assert [[c['review'] for c in x['cards']] for x in turns] == [[], [rid]] and got['letters'] == turns[-1]['id'], [(x['id'], x['cards']) for x in turns]
+    # ...a turn that wrote the reply needs nothing: the draft is the card
+    s = home(); tid, _ = arrived(s); rid = owed(s, tid)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        ses = opened(s, tid); ses.quick = True; ses.file_quick(ASK, quickwork.read(ANSWER), [])
+    assert not any(r.get('DraftNeeds') for r in s._rows('SELECT DraftNeeds FROM review WHERE TaskId=?', (tid,)))
+    assert 'asks the owner the one thing it needs' in ingest.REPLY_JOB                                 # ...and its job says so, for the agent to do it itself

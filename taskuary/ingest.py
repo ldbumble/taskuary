@@ -2351,7 +2351,8 @@ REPLY_JOB = ('THIS TASK IS A REPLY OWED to {who}. Work out the answer - read, lo
              'up, check or think it through - then write the reply they get, in the owner\'s voice, with the substance in it: never a '
              'promise to look into it later. Nothing is sent: the reply waits for the owner\'s Send. When they asked for your thoughts '
              'on something (a draft, a plan, numbers), your result for the owner is those thoughts - what works, what to change, the '
-             'specific points - and the reply is built from them.')
+             'specific points - and the reply is built from them. A turn that ends without the reply written asks the owner the one '
+             'thing it needs for it - that question stands on the reply\'s card - or marks the reply not needed.')
 
 
 def reply_job(store, tid) -> str:

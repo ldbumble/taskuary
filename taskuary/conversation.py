@@ -307,7 +307,7 @@ def _card(r) -> dict:
     # ...A DRAFT ITS AGENT TOOK BACK STAYS WHERE IT STOOD, greyed, with its words (the owner's live task, 2026-11-12: he wrote again, the agent
     # withdrew its reply in the turn that answered him, and the card went from the chat - no page draws a draft "closed unsent")
     # ...and one set aside as he wrote past it (proposals.set_aside_drafts) the same way: a draft is its words, which the page draws greyed
-    words = str(r.get('DraftText') or '').strip() if r['Kind'] in DRAFTS else ''
+    words = str(r.get('DraftText') or '').strip() if r['Kind'] in (*DRAFTS, 'slot') else ''
     # ...and an action's is what it would do (its proposal's own words) - so one he wrote past is drawn greyed with them, in the frame he wrote
     if r['Kind'] == 'action':
         try: d = json.loads(r.get('DraftText') or '{}') or {}
@@ -645,6 +645,7 @@ def items(store, tid: int) -> dict:
     turn_by = {x['id']: x for x in out if x['kind'] == 'turn'}
     turns_at = {k: i for i, k in enumerate(turn_by)}
     newest = next((x for x in reversed(out) if x['kind'] == 'turn'), None)
+    from .proposals import passed as proposals_passed
     def place(card, at, cid=None):
         # ...a draft no turn has left yet is new now, whenever its row was made (the recorded walk, 2026-11-12: a reply owed since the mail came
         # was filled in the turn under his line and drawn in the turn of the mail's arrival - live, above his line): it goes in the newest turn,
@@ -654,7 +655,8 @@ def items(store, tid: int) -> dict:
         h = hosts.get(card['id'])
         # ...down only to a turn that LEFT it again (its record names that turn): a turn begun after it is not one (recorded on ACP, 2026-11-12:
         # the session went on into a second turn and the card, drawn in the first, went from the chat until the second ended)
-        if h in turns_at and (t is None or not cid or turns_at.get(t['id'], -1) < turns_at[h]): t = turn_by[h]
+        # ...(one with no words yet has nothing that stood anywhere: it is the newest turn's, each time, with what that turn needs for it)
+        if h in turns_at and not (fresh and not card.get('was')) and (t is None or not cid or turns_at.get(t['id'], -1) < turns_at[h]): t = turn_by[h]
         elif t is not None and h != t['id'] and not (t['state'] in LIVE):
             store._exec('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host', (tid, f"c:{card['id']}", t['id']))
         if t is None:
@@ -662,7 +664,10 @@ def items(store, tid: int) -> dict:
             if i >= 0 and out[i]['kind'] == 'turn': t = out[i]
             else: out.insert(i + 1, card); return
         t['cards'].append(card)
-    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind<>'slot' ORDER BY ReviewId", (tid,)):
+    # ...a task's emails are the page's own block while they wait (`letters`, below); one he wrote past stays where it stood, greyed with
+    # its words, as a reply does
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (tid,)):
+        if r['Kind'] == 'slot' and not (proposals_passed(r) and str(r.get('DraftText') or '').strip()): continue
         if unwritten(r): continue
         left = None if r['Kind'] == 'action' else wrapup.left_by(store, r['ReviewId'])
         place(_card(r), ep(r['CreatedAt']) + 0.999, (left or {}).get('CommentId'))
@@ -673,6 +678,17 @@ def items(store, tid: int) -> dict:
     # ...AND A TURN'S CARD IS DRAWN ONCE THE TURN HAS ENDED, as its last thing (the owner, 2026-11-12: "it should finish thinking and last thing
     # should be show action box" - its words landed above a card drawn while it worked): a step it is stopped at waits on him mid-turn as its
     # permission (`permissions`, drawn under the turn), never as a card in it
+    # ...AND A TURN THAT GOES ON FROM THE ONE BEFORE IT, WITH NO INPUT BETWEEN, IS THE SAME WORK (the owner's live task, 2026-11-13: a turn
+    # left its reply card, Taskuary woke its agent a beat later, and the woken turn's words were drawn UNDER that card - "text after the
+    # action box"): what still waits for his press stands at the END of the run, under its last words - the turn that goes on holds it
+    # back while it works, as any turn does its own. A card he pressed, or one set aside, is its turn's record and stays where it stood
+    for a, b in zip(out, out[1:]):
+        if a['kind'] == 'turn' and b['kind'] == 'turn' and (lit := [c for c in a['cards'] if c['status'] == 'pending']):
+            a['cards'], b['cards'] = [c for c in a['cards'] if c['status'] != 'pending'], [*lit, *b['cards']]
+            if b['state'] not in LIVE:
+                for c in lit:
+                    if hosts.get(c['id']) != b['id']:
+                        store._exec('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host', (tid, f"c:{c['id']}", b['id']))
     from . import permissions
     perms = permissions.pending(tid, store)
     for x in out:
@@ -706,6 +722,11 @@ def items(store, tid: int) -> dict:
     for i, x in enumerate(out):
         for c in [x] if x['kind'] == 'card' else x['cards'] if x['kind'] == 'turn' else []:
             if c['status'] == 'pending' and c.get('was') and (c['what'] in DRAFTS and i < last_in or i < last_his or c['review'] in past): c['status'] = 'passed'
+    # ...and a reply with NO words yet - its card said only what its agent needed - is not the one to press above his newer line either
+    # (recorded 2026-11-13: he answered the agent's question, and the empty reply box stood lit over his answer while the turn that writes it
+    # worked): it has nothing to grey, so it is not drawn there; the turn his line began raises it, written, as its own last thing
+    for i, x in enumerate(out[:max(last_his, 0)]):
+        if x['kind'] == 'turn': x['cards'] = [c for c in x['cards'] if not (c['status'] == 'pending' and c['what'] in DRAFTS and not c.get('was'))]
     if (said_ :=next((x['text'] for x in out if x['id'] == 'n:left'), None)) and not (was_left and was_left['Host'] == said_):
         store._exec("UPDATE shown SET Host=? WHERE TaskId=? AND Key='n:left'", (said_, tid))
     # ...and what the agent waits on him for, and the CLI that runs: read by the page off this one list (the chat's own payloads are gone)
@@ -731,6 +752,21 @@ def items(store, tid: int) -> dict:
         said_of = lambda t: ' '.join([str(t.get('text') or ''), *(s.get('text') or '' for s in t.get('steps') or [] if s.get('k') == 'said')])
         by = (made_in(ep(ask['at']) + 0.999) if ask.get('at') else None) or last
         ask = {**ask, 'turn': by['id'], **({'said': True} if flat(ask.get('text')) and flat(ask['text']) in flat(said_of(by)) else {})}
+    # WHERE THE LETTERS THAT WAIT FOR HIS SEND ARE DRAWN: the reply and the task's emails are one block of the page (the reply's card, the
+    # emails over it), and the list names its turn - `letters`: the LAST turn that left a letter still waiting, the end of its run. The page
+    # hung the block on the newest reply whatever its state, so an email written turns after a reply had gone was drawn up at that reply's
+    # card, above everything said since; a turn at work holds the block back as it does its cards
+    order = {x['id']: i for i, x in enumerate(out)}
+    def run_end(t):
+        i = order.get((t or {}).get('id'), -1)
+        while 0 <= i < len(out) - 1 and out[i + 1]['kind'] == 'turn': i += 1
+        return out[i] if i >= 0 else None
+    # ...an email is written INSIDE its turn: of two turns a whole-second stamp cannot tell apart, the later one wrote it (the one before had ended)
+    wrote = lambda at: next((x for x in reversed(out) if x['kind'] == 'turn' and (x.get('started') or 0) <= at and (x.get('ended') is None or x['ended'] + 1 >= at - 0.999)), None)
+    spots = [x for x in out if x['kind'] == 'turn' and any(c['status'] == 'pending' and c['what'] in DRAFTS for c in x['cards'])]
+    spots += [t for r in store._rows("SELECT CreatedAt, DraftText FROM review WHERE TaskId=? AND Kind='slot' AND Status='pending'", (tid,))
+              if str(r.get('DraftText') or '').strip() and (t := run_end(wrote(ep(r['CreatedAt']) + 0.999)))]
+    letters = max(spots, key=lambda t: order.get(t['id'], -1))['id'] if spots else None
     # THE WAITING ROOM (the owner, 2026-11-12): what waits for the agent is drawn in ONE place until it is heard - his lines as rows over the
     # box, messages as counts on their sender's chip - and `now` says whether a waiting line can be handed into the turn at work at once (a
     # session that takes words mid-turn, not stopped at his Allow); `dropped`: the lines he took back, which leave no trace
@@ -739,7 +775,7 @@ def items(store, tid: int) -> dict:
     dropped = [json.loads(r['Detail'] or '{}').get('line') for r in store._rows("SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='line_dropped'", (tid,))]
     body = {'items': out, 'pending': pend, 'now': now, 'dropped': [d for d in dropped if d], 'working': at_work, 'started': t0 if at_work else None, 'asking': ask,
             'permissions': perms, 'live': codingchat.live_of(codingchat._live(tid)),
-            'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
+            'letters': letters, 'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
                               **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if any(x['kind'] == 'turn' for x in out) else {})}, 'published': published, 'ran': bool(turn_of) or any(x['kind'] == 'turn' for x in out)}
     return {'rev': hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16], **body}
 
@@ -801,8 +837,10 @@ def flow_breaks(got: dict, was: dict = None) -> list:
     now, by = {x['id']: i for i, x in enumerate(xs)}, {x['id']: x for x in xs}
     for x in old:
         if x['id'] not in now and not (live(x) and not (x.get('text') or x.get('steps'))): say(f"c: {x['id']} was on the canvas and is gone")
-    had = {c['id'] for x in old for c in ([x] if x['kind'] == 'card' else x.get('cards') or [] if x['kind'] == 'turn' else [])}
-    for c in had - {c['id'] for _, c in cards}: say(f'c: the card {c} was on the canvas and is gone')
+    # ...but a card still waiting for his press that the turn now at work holds back (it goes on from the turn that left it - `items`)
+    had = {c['id']: c for x in old for c in ([x] if x['kind'] == 'card' else x.get('cards') or [] if x['kind'] == 'turn' else [])}
+    for c in had.keys() - {c['id'] for _, c in cards}:
+        if not (at and had[c].get('status') == 'pending'): say(f'c: the card {c} was on the canvas and is gone')
     kept = [x['id'] for x in old if x['id'] in now]
     if [i for i in ids if i in set(kept)] != kept: say('f: items already drawn changed their order')
     top = max((now[i] for i in kept), default=-1)

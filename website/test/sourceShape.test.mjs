@@ -51,6 +51,13 @@ test("an old single-source config still loads as one card", () => {
     [{ type: "intacct", object: "VENDOR" }]);
 });
 
+// the visual audit, 2026-11-13: "every Monday list my open tasks older than a week" - Set up with AI wrote {type: taskuary_data, dataset:
+// "tasks"}, the builder dropped the dataset, and its Test said "no Taskuary dataset called ''"
+test("a composed report on Taskuary's own tables keeps which table it reads", () => {
+  assert.deepEqual(toSources({ type: "taskuary_data", title: "Open tasks older than a week", dataset: "tasks", days: 90, cron: "0 8 * * 1" }),
+    [{ type: "taskuary_data", dataset: "tasks", days: 90 }]);
+});
+
 test("sources[] wins when it is there", () => {
   const cfg = { type: "assistant", sources: [{ type: "mssql", query: "SELECT 1" }] };
   assert.deepEqual(toSources(cfg), cfg.sources);

@@ -690,10 +690,14 @@ def fold_fyi_threads(cards: list) -> list:
 
 def arrived(store, now, query) -> list:
     """When each message of the last day and a half came in - ARRIVALS, read or not (trust audit F2, 2026-10-28): "16 arrived today"
-    counted the unread cards, so it fell to 11 and 9 as the owner read them. The page counts the ones on its own today (its zone)."""
+    counted the unread cards, so it fell to 11 and 9 as the owner read them. The page counts the ones on its own today (its zone).
+    A report run its own Timeline line held back (a check that found nothing, put down by the run as it landed - reports._run_report_source)
+    is not one: it counted "1 arrived" on a day nothing came in."""
     since = now.replace(tzinfo=None) - timedelta(hours=36)            # stamps are the server's own clock, as SentAt is kept
-    try: rows = store._rows("SELECT SentAt, Channel, SourceName FROM message WHERE IFNULL(Direction,'in')<>'out' AND IFNULL(Status,'')<>'context' "
-                            "AND replace(SentAt,'T',' ')>=? ORDER BY SentAt DESC LIMIT 2000", (since.strftime('%Y-%m-%d %H:%M:%S'),))
+    try: rows = store._rows("SELECT m.SentAt, m.Channel, m.SourceName FROM message m LEFT JOIN funnel_state f ON f.Key='report:' || m.MessageId "
+                            "WHERE IFNULL(m.Direction,'in')<>'out' AND IFNULL(m.Status,'')<>'context' AND replace(m.SentAt,'T',' ')>=? "
+                            "AND NOT (m.Channel='report' AND IFNULL(f.By,'')='report') ORDER BY m.SentAt DESC LIMIT 2000",
+                            (since.strftime('%Y-%m-%d %H:%M:%S'),))
     except Exception: return []
     return [r['SentAt'] for r in rows if processing_all._matches(r.get('Channel') or '', r.get('SourceName') or '', query)]
 

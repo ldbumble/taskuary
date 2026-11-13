@@ -1620,7 +1620,11 @@ def day_stats(store) -> list:
     rows = store.feed(400, 1)
     cats = [category_of(r, team) for r in rows]
     tasks = [t for t in store.list_tasks(active_only=True) if t.get('Status') in ('open', 'in_progress', 'waiting')]
-    return [{'n': len(rows), 'label': 'arrived today'},
+    # "arrived today" is the rail's own count (processing_unread.arrived), so a report run that found nothing is not one here either
+    from . import processing_unread
+    now = datetime.now()
+    came = [a for a in processing_unread.arrived(store, now, processing_unread.query_for(store)) if str(a)[:10] == now.strftime('%Y-%m-%d')]
+    return [{'n': len(came), 'label': 'arrived today'},
             {'n': sum(1 for c in cats if c in ('info', 'automated', 'promo', 'feed', 'report')), 'label': 'wanted nothing'},
             {'n': len(tasks), 'label': 'open'},
             {'n': sum(1 for t in tasks if t.get('ReviewStatus') == 'pending'), 'label': 'waiting on you', 'hot': True}]

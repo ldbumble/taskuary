@@ -20,3 +20,20 @@ def test_arrivals_are_every_recent_inbound_message_read_or_not():
     s._exec("UPDATE message SET Status='filed' WHERE MessageId=?", (a,))
     assert len(processing_unread.arrived(s, now, q)) == 3, 'reading or filing a message never takes it out of what arrived'
     assert processing_unread.arrived(s, now, {**q, 'channel': ['teams']}) == [at(3)], 'a filtered rail counts only what it shows'
+
+
+def test_a_report_run_that_found_nothing_is_not_an_arrival():
+    """A scheduled check that came back with nothing (0 rows), held off the Timeline by its own line, landed as a row put down at once -
+    and still counted one more in "arrived today", on a day nothing came in. A run that found something still counts."""
+    import json
+    from unittest import mock
+    from taskuary import reports
+    s, now = MemoryStore(), datetime.now()
+    sid = s.save_source({'Channel': 'report', 'Address': 'Overdue invoices', 'Active': 1, 'ConfigJson': json.dumps(
+        {'title': 'Overdue invoices', 'route': {'timeline': {'how': 'rule', 'rule': 'something_came_back'}}})}, 't')
+    run = lambda head, rows: mock.patch.object(reports, 'render_report', return_value=(head, rows))
+    with run('0 rows', ''): reports.run_report_source(s, s.get_source(sid), None)
+    q = processing_unread.query_for(s)
+    assert processing_unread.arrived(s, now, q) == [], 'nothing found is nothing arrived'
+    with run('2 rows', '{"invoice": "INV-1001"}\n{"invoice": "INV-1002"}'): reports.run_report_source(s, s.get_source(sid), None)
+    assert len(processing_unread.arrived(s, now, q)) == 1, 'a run with something in it reached the Timeline and is an arrival'

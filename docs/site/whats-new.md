@@ -2,6 +2,27 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.1 - 2026-11-12
+
+- Every link in a mail keeps its address in the text its readers see
+- A meeting is a notification fifteen minutes before it, with Prepare
+- The meeting rule reads fifteen minutes everywhere: tests, the how-it-works table, and no SOON_MIN left behind
+- A service that is down, or refuses a signed-in read, is said as the service's trouble - the same words on the card and the bell
+- The bell's Ask the assistant opens the chat window and asks in it
+- The meeting lane's hint names no button it does not carry, and the asks' meeting is inside the fifteen minutes
+- Trust on a held thread hands the held mail to its agent, not judged again by a sender it cannot name
+- The held line names a nameless sender in lower case: "You have not trusted this sender yet"
+- The chat's receipt names an opened page without the link's own "Open": no more "Opened Open the Vendor mailbox."
+- The bell's ask to the chat keeps one full stop: "...is online. Can you look into it", not "online.. Can"
+- The chat's "Remembered under ..." keeps one full stop after a note that ends its own sentence
+- Triage's offer on an untrusted sender's task is refused with the hold's line, not started and called done
+- New's general job written by the Assistant presses its own Send to agent again
+- A task whose draft lands after its first read opens on its chat, not Came from
+- A report, dashboard or routine asked for in New goes straight into its builder, the setup already asked
+- The straight road to the builder is taken where the Assistant's answer lands, from New's box and from the chat alike
+- A page open on the canvas stays open under the Assistant's own words
+- A composer whose brain fails answers with the failure and its way past, not a 500
+
 ## 0.4.0.0 - 2026-11-12
 
 - A card finds the turn its ledger names by the turn's name, never by its old place in the list

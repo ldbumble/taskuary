@@ -253,11 +253,14 @@ class ReportTaskTests(PhoneCase):
                              source_name='Helpdesk tickets by day', from_name='Helpdesk tickets by day', conversation_id=f'report:{sid}', body=rows)
         self.f.route(mid, None, 'file', 'scheduled report', by='report')
         self.ph.ready()
-        # ...put on the list on the DESKTOP: the phone's report card no longer offers it (A9, 2026-10-22 - a report leads with Next);
-        # F13's past-tense receipt for it is pinned on an FYI (test_phone_approved)
-        from taskuary import concierge, funnel
+        # ...sent on as a task on the DESKTOP - its Send to agent (2026-11-13: a report row offers that alone); the phone's report card
+        # does not offer it (A9, 2026-10-22 - a report leads with Next); F13's past-tense receipt is pinned on an FYI (test_phone_approved)
+        from unittest import mock
+        from taskuary import concierge, funnel, general, terminal
         key = next(i['key'] for i in funnel.pile(self.s).get('items') or [] if i.get('kind') == 'report')
-        self.assertEqual(concierge.run_proposal(self.s, concierge.propose_direct(self.s, 'mine', key, actor='owner'), 'owner')['status'], 'done')
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(general, 'start_session', side_effect=AssertionError('started')):
+            prop = concierge.propose_direct(self.s, 'regular_agent', key, '', 'owner', table=True, exact=True, press=True)
+            self.assertEqual(concierge.run_proposal(self.s, prop, 'owner')['status'], 'done')
         self.ph.ready()                                                        # the rail takes the new task in, as the background does
         said = text_of(self.ph.walk())
         self.assertIn('TQ-', said)

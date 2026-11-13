@@ -708,7 +708,9 @@ def items(store, tid: int) -> dict:
     if ask and ask.get('source') == 'permission' and perms: ask = None
     flat = lambda v: ' '.join(re.sub(r'[*_`]', '', str(v or '')).split())
     last = next((x for x in reversed(out) if x['kind'] == 'turn'), None)
-    if ask and last and flat(ask.get('text')) and flat(ask['text']) in flat(last.get('text')): ask = {**ask, 'said': True}
+    # ...a coding turn's words are its `said` steps, its text empty: the demo's #214 drew its closing question twice
+    words = last and ' '.join([str(last.get('text') or ''), *(s.get('text') or '' for s in last.get('steps') or [] if s.get('k') == 'said')])
+    if ask and last and flat(ask.get('text')) and flat(ask['text']) in flat(words): ask = {**ask, 'said': True}
     # THE WAITING ROOM (the owner, 2026-11-12): what waits for the agent is drawn in ONE place until it is heard - his lines as rows over the
     # box, messages as counts on their sender's chip - and `now` says whether a waiting line can be handed into the turn at work at once (a
     # session that takes words mid-turn, not stopped at his Allow); `dropped`: the lines he took back, which leave no trace

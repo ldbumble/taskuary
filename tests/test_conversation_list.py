@@ -716,6 +716,20 @@ class TheList(unittest.TestCase):
         # ...one the turn did not say - a sign-in it waits on, a step handed over - is the page's own line still
         with mock.patch('taskuary.taskstate.asking', return_value={**ask, 'text': 'Sign in to the portal to continue'}): self.assertNotIn('said', self.list()['asking'])
 
+    def test_a_question_a_coding_turn_ended_in_is_said_once(self):
+        """A coding agent's words are its turn's steps, not its text: the demo's #214 ended "Push it to a branch and open a pull request
+        for your review?" and the chat drew that line twice - in the turn, and again as the agent's question under it."""
+        from taskuary import codingchat
+        at = '2026-11-12 13:21:56.715'
+        ups = [{'sessionUpdate': 'agent_message_chunk', 'messageId': m, 'content': {'type': 'text', 'text': t}, '_at': at, '_t': conversation.ep(at) + n / 1000}
+               for n, (m, t) in enumerate([('a', 'Fixed and tested.'), ('b', 'Push it to a branch and open a pull request for your review?')])]
+        ask = {'request_id': 'q2', 'kind': 'input_needed', 'text': 'Push it to a branch and open a pull request for your review?', 'choices': []}
+        with mock.patch.object(codingchat, 'owned', return_value=[{'sid': 's1', 'source': 'acp', 'updates': ups, 'at': at}]), \
+             mock.patch.object(codingchat, 'sessions', return_value=[]), mock.patch.object(general, 'handles', return_value=False),              mock.patch('taskuary.taskstate.asking', return_value=dict(ask)):
+            got = self.list()
+        self.assertIn(('turn', 'done'), self.kinds(got))
+        self.assertTrue(got['asking'].get('said'), got['asking'])
+
     def test_the_agents_markers_never_reach_the_list(self):
         block = f'{selfclose.SUMMARY_OPEN}{{"about": "", "did": "Looked at both.", "on_you": []}}'
         self.assertEqual(conversation.clean(f'Both are free in March.\n\n{block}{selfclose.SUMMARY_CLOSE}'), 'Both are free in March.')

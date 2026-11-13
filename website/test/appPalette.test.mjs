@@ -36,3 +36,17 @@ test("every colour token the chat's own styles use is one the dark palette decla
     assert.deepEqual(used.filter((v) => !(v in darkVariables)), [], `${file}: a colour with a light fallback and no dark value`);
   }
 });
+
+// the dark-mode audit (2026-11-13): the rail's two commonest marks were fixed near-black art - the envelope's slate body vanished
+// into the night rail and left only its flap, GitHub's disc was a hole - so each takes palette tokens the dark root declares
+test("the mail and GitHub marks are drawn from palette tokens, so they show on the night rail", async () => {
+  const { darkVariables } = await import("../src/appPalette.js");
+  const logos = readFileSync(new URL("../src/logos.jsx", import.meta.url), "utf8");
+  for (const name of ["email", "github"]) {
+    const at = logos.indexOf(`  ${name}: (p) => (`), art = logos.slice(at, logos.indexOf("</S>", at));
+    const used = [...art.matchAll(/(?:fill|stroke): "var\((--tq-[a-z-]+),/g)].map((m) => m[1]);
+    assert.ok(used.length >= 2, `${name}: body and mark take tokens`);
+    assert.deepEqual(used.filter((v) => !(v in darkVariables)), [], `${name}: a token the night palette names`);
+    assert.doesNotMatch(art, /(?:fill|stroke)="#[0-9a-f]{3,6}"/i, `${name}: no fixed colour left`);
+  }
+});

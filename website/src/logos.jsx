@@ -27,10 +27,12 @@ const T = ({ p, bg, fg = "#fff", text, size = 11, weight = 800 }) => (
 
 export const LOGOS = {
   // dark slate, not the brand mid-tone: on oat paper the lighter envelope read as disabled
+  // ...and the night palette's link ink at night, its flap cut in the panel: the fixed slate vanished into the dark rail and left
+  // only the flap's white V (the dark-mode audit, 2026-11-13)
   email: (p) => (
     <S {...p}>
-      <rect x="1.5" y="4.5" width="21" height="15" rx="2.5" fill="#3a4a58" />
-      <path fill="none" stroke="#fffdfb" strokeWidth="1.9" strokeLinejoin="round" d="M3.8 7.3l8.2 6.2 8.2-6.2" />
+      <rect x="1.5" y="4.5" width="21" height="15" rx="2.5" style={{ fill: "var(--tq-link, #3a4a58)" }} />
+      <path fill="none" style={{ stroke: "var(--tq-panel, #fffdfb)" }} strokeWidth="1.9" strokeLinejoin="round" d="M3.8 7.3l8.2 6.2 8.2-6.2" />
     </S>
   ),
   outlook: (p) => (
@@ -213,8 +215,9 @@ export const LOGOS = {
   ),
   github: (p) => (
     <S {...p}>
-      <circle cx="12" cy="12" r="10" fill="#24292f" />
-      <path fill="#fff" d="M12 5.8a6.2 6.2 0 0 0-1.96 12.08c.31.06.42-.13.42-.3v-1.1c-1.72.37-2.09-.73-2.09-.73-.28-.72-.69-.91-.69-.91-.56-.38.04-.37.04-.37.62.04.95.64.95.64.55.95 1.45.68 1.8.52.06-.4.22-.68.39-.83-1.37-.16-2.82-.69-2.82-3.06 0-.68.24-1.23.64-1.66-.07-.16-.28-.79.06-1.64 0 0 .52-.17 1.7.63a5.9 5.9 0 0 1 3.1 0c1.18-.8 1.7-.63 1.7-.63.34.85.13 1.48.06 1.64.4.43.64.98.64 1.66 0 2.38-1.45 2.9-2.83 3.05.22.19.42.57.42 1.15v1.7c0 .17.11.36.43.3A6.2 6.2 0 0 0 12 5.8z" />
+      {/* ...GitHub's own light mark at night, as github.com draws it: the near-black disc was a hole in the dark rail */}
+      <circle cx="12" cy="12" r="10" style={{ fill: "var(--tq-text, #24292f)" }} />
+      <path style={{ fill: "var(--tq-panel, #fff)" }} d="M12 5.8a6.2 6.2 0 0 0-1.96 12.08c.31.06.42-.13.42-.3v-1.1c-1.72.37-2.09-.73-2.09-.73-.28-.72-.69-.91-.69-.91-.56-.38.04-.37.04-.37.62.04.95.64.95.64.55.95 1.45.68 1.8.52.06-.4.22-.68.39-.83-1.37-.16-2.82-.69-2.82-3.06 0-.68.24-1.23.64-1.66-.07-.16-.28-.79.06-1.64 0 0 .52-.17 1.7.63a5.9 5.9 0 0 1 3.1 0c1.18-.8 1.7-.63 1.7-.63.34.85.13 1.48.06 1.64.4.43.64.98.64 1.66 0 2.38-1.45 2.9-2.83 3.05.22.19.42.57.42 1.15v1.7c0 .17.11.36.43.3A6.2 6.2 0 0 0 12 5.8z" />
     </S>
   ),
   slack: (p) => (

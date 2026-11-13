@@ -1307,11 +1307,11 @@ TOUR_BODY = ('Welcome to the demo. Northwind, its people and their mail are inve
              'The to-do on this task is a short tour - each step is something you can try in the demo. Tick a step as you go; '
              'ticking the last one closes this task.')
 TOUR_STEPS = (                           # in the order they are read: the to-do draws newest first, so they are stored the other way round
-    'Open "Month-end close is short by 4,180": Came from is what arrived, Agent is one chat - its turns and what it set up for you',
+    'Open "Reconcile the August GL export": Came from is what arrived, Agent is one chat - its turns and what it set up for you',
     'See what an agent sets up for one press: open "Fairhaven safety milestone" - a LinkedIn post with its chart, waiting on Post to LinkedIn',
     'Walk your work with Next and Back - Next goes down the rail, Back comes up it',
     'Watch an agent work: open "northwind/importers#214" and read its run in the Agent pane',
-    'Send a reply: open "Invoice 88213 - past due", read the draft under Next steps and press Send - nothing leaves the demo',
+    'Send a reply: open "Invoice 88213 - past due", read the draft in its chat and press Send - nothing leaves the demo',
     'Put one off from Came from: Remind me, or Not for me, on "New starter on Monday"',
     'Open a report under Reports, then ask the chat pill "What\'s on me right now?"',
 )

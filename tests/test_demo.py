@@ -9,7 +9,7 @@ These tests are the lock. They check what is REFUSED, not what is hidden: a butt
 nothing is a design, a deny list is a control - and the list is written so that an endpoint
 added next month is refused until somebody decides otherwise.
 """
-import os
+import os, re
 import tempfile, time, unittest
 from pathlib import Path
 from unittest import mock
@@ -517,6 +517,18 @@ class TheDemoOpensOnItsTourTests(unittest.TestCase):
         labels = {v['label'] for v in json.loads((Path(demo.__file__).with_name('buttons.json')).read_text(encoding='utf-8'))['verbs'].values()}
         for b in ('Next', 'Back', 'Send', 'Remind me', 'Not for me'): self.assertIn(b, labels)
         self.assertIn("What's on me right now?", [ask for _, ask, _ in demo.PROMPTS], 'the chat answers the question the tour asks')
+
+    def test_a_step_that_shows_an_agents_turns_names_a_task_that_has_them(self):
+        """The first step sent the visitor to "Month-end close is short by 4,180" to see "Agent is one chat - its turns and what it set
+        up": that task has no agent and its chat is the one email. The turns are on the reconciliation's task. And "the draft under Next
+        steps" named a heading the chat no longer draws."""
+        from taskuary import general
+        s, _ = self.seeded()
+        step = next(x for x in demo.TOUR_STEPS if 'its turns' in x)
+        named, = re.findall(r'"([^"]+)"', step)
+        tid = next(t['TaskId'] for t in s.list_tasks() if t['Title'].startswith(named))
+        self.assertTrue([c for c in s.list_comments(tid) if c.get('ActorType') == general.ASSISTANT_TYPE], (named, 'has no agent turn'))
+        self.assertFalse([x for x in demo.TOUR_STEPS if 'Next steps' in x])
 
     def test_the_first_view_opens_on_it_until_it_is_done(self):
         s, _ = self.seeded()

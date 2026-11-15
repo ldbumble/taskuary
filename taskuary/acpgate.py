@@ -133,6 +133,13 @@ def answerer(ctx: dict, trace=None, held: dict = None):
         out = acp.pick(params.get('options'), answer == ALLOWED)
         iid = str(tc.get('toolCallId') or '')
         if answer != ALLOWED and held is not None: held[iid] = why if answer in (HELD, CARD) or why == YOU_REJECTED else f'Taskuary refused it: {why}'
+        # ...AND THE AGENT HEARS TASKUARY'S OWN REASON (recorded on the real CLI, 2026-11-15): the adapter's answer is "User refused permission
+        # to run tool" whoever said no, so a push refused with the way on ("call propose_land") reached only the page's trace - the agent
+        # told the owner "once you approve, I'll push" over nothing to approve. Said as the owner's own no is (put_to_owner), by the one road
+        if answer in (REFUSED, CARD) and why and why != YOU_REJECTED and ctx.get('store') is not None and str(ctx.get('task_id') or '').isdigit():
+            from .browsergate import _tell
+            cmd = tool_of(tc)['command']
+            _tell(ctx['store'], int(ctx['task_id']), f"{f'`{cmd[:200]}`' if cmd else 'That step'} was not run - Taskuary's own answer, not the owner's: {why}")
         name = tool_of(tc)['name'] or str(tc.get('title') or 'tool')
         (logger.info if answer == ALLOWED else logger.warning)(f'acp permission: {name} {answer}' + (f' - {why}' if why else ''))
         if trace: trace('permission', name, {'tool_call_id': iid, 'answer': answer, 'why': why, 'title': str(tc.get('title') or '')[:200]})

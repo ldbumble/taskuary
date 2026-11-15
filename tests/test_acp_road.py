@@ -125,6 +125,21 @@ def test_the_owners_reject_reaches_the_agent_as_the_owners_no_and_their_allow_sa
         assert 'do not ask for the same step again' in text
 
 
+def test_a_step_taskuary_refuses_is_told_to_the_agent_with_the_way_on():
+    """Recorded on the real CLI, 2026-11-15: a push from the task's own checkout was refused with "call propose_land" - in the log and the
+    page's trace only. The adapter told the agent "User refused permission to run tool", and it told the owner "Once you approve, I'll
+    push" with nothing on screen to approve."""
+    from taskuary import browsergate, landing
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+    told, way = [], "a push from this task's checkout is the owner's Push button - call propose_land (how push)"
+    call = {'toolCall': {'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': 'git push origin master'}},
+            'options': [{'optionId': 'y', 'kind': 'allow_once'}, {'optionId': 'n', 'kind': 'reject_once'}]}
+    with mock.patch.object(shellgate, 'trusted', return_value=''), mock.patch.object(landing, 'push_asked', return_value=(False, way)),          mock.patch.object(browsergate, '_tell', lambda store, t, text, **k: told.append((t, text))):
+        assert acpgate.answerer({'store': s, 'task_id': tid, 'cwd': HERE})(call) == {'outcome': 'selected', 'optionId': 'n'}
+    assert len(told) == 1 and told[0][0] == tid and way in told[0][1] and 'git push origin master' in told[0][1] and "Taskuary's own answer, not the owner's" in told[0][1]
+
+
 def test_the_automatic_rules_still_answer_first_and_never_reach_the_owner():
     s = MemoryStore()
     tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'coding', 'Status': 'open'}, 'owner')

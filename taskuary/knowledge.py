@@ -55,7 +55,17 @@ def _xml_text(data: bytes, para_end: str, tag: str) -> str:
 def _zip_part(data: bytes, name: str) -> bytes:
     with zipfile.ZipFile(io.BytesIO(data)) as z: return z.read(name)
 
-def _docx(data: bytes) -> str: return _xml_text(_zip_part(data, 'word/document.xml'), r'</w:p>', 'w:t')
+# A TABLE READS AS ITS ROWS, a ` | ` between cells as a sheet's do (_xlsx): one cell to a line, an invoice template's line-item row was
+# seven lines nobody could tell from its paragraphs - and an agent filling it could not say which row it meant (artifacts.edit_docx)
+TBL, ROW, CELL = (re.compile(rf'<w:{t}\b[^>]*>.*?</w:{t}>', re.S) for t in ('tbl', 'tr', 'tc'))
+def docx_cell(xml: str) -> str: return ' '.join(_xml_text(xml.encode(), r'</w:p>', 'w:t').split('\n'))
+def docx_row(xml: str) -> str: return ' | '.join(docx_cell(c) for c in CELL.findall(xml))
+def _docx(data: bytes) -> str:
+    s, out, at = _zip_part(data, 'word/document.xml').decode('utf-8', errors='replace'), [], 0
+    for t in [*TBL.finditer(s), None]:
+        out.append(_xml_text(s[at:t.start() if t else len(s)].encode(), r'</w:p>', 'w:t'))
+        if t: out += [docx_row(r) for r in ROW.findall(t.group())]; at = t.end()
+    return '\n'.join(x for x in out if x)
 
 def _pptx(data: bytes) -> str:
     with zipfile.ZipFile(io.BytesIO(data)) as z:

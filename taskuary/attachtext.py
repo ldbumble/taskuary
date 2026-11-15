@@ -30,7 +30,7 @@ import base64, hashlib, io, json, sqlite3, threading, zipfile
 from pathlib import Path
 from loguru import logger
 
-VERSION = 1
+VERSION = 2                                      # 2: a Word table reads as its rows (knowledge._docx)
 FILE_CHARS, MESSAGE_CHARS = 3000, 6000          # per file, per message - what a prompt is handed
 KEEP_CHARS = 20000                               # what the cache keeps of one file, so a roomier caller can ask for more
 READ_BYTES, UNZIP_BYTES = 10 * 1024 * 1024, 40 * 1024 * 1024

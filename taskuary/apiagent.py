@@ -64,9 +64,13 @@ FILES = [
         _S({'path': _PATH}, ['path'])),
 ]
 WRITE = [
-    _fn('file_write', 'Write a whole file (created, or replaced).', _S({'path': _PATH, 'text': {'type': 'string'}}, ['path', 'text'])),
-    _fn('file_edit', 'Replace one exact piece of a file with another - `old` must occur in it exactly once.',
-        _S({'path': _PATH, 'old': {'type': 'string'}, 'new': {'type': 'string'}}, ['path', 'old', 'new'])),
+    _fn('file_write', 'Write a whole file (created, or replaced). A .docx or .xlsx path writes a real Word document or Excel workbook from '
+        'the text: a line a paragraph (# a heading), and `a | b | c` lines a table - in a workbook its rows, `=SUM(G2:G9)` a formula.',
+        _S({'path': _PATH, 'text': {'type': 'string'}}, ['path', 'text'])),
+    _fn('file_edit', 'Replace one exact piece of a file with another - `old` must occur in it exactly once. In a .docx or .xlsx it is the '
+        "text as file_read shows it, and the file keeps its look; `old` a whole table row (`a | b | c`) and `new` several such lines fills one "
+        "row per line - a template's line items. `save_as`: the result goes there, the file itself left as it was.",
+        _S({'path': _PATH, 'old': {'type': 'string'}, 'new': {'type': 'string'}, 'save_as': _PATH}, ['path', 'old', 'new'])),
 ]
 WEB = [
     _fn('web_search', "Search the web - the AI's own search (OpenAI's, Google's, Anthropic's), else a connected search service - and read pages "
@@ -260,15 +264,20 @@ def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
             return _cut(got.get('text') or f"{p.name}: {got.get('note') or 'nothing in it to read'}")
         return _cut(p.read_text(encoding='utf-8', errors='replace'))
     if name in ('file_write', 'file_edit'):
-        p = _path(store, tid, a.get('path'))
+        # A WORD OR EXCEL FILE IS MADE, NOT SPELLED OUT (officefiles): written as text it was a file no one could open, and the agent went on
+        # to build one by hand in PowerShell - a script of output a step, for as long as it took
+        from . import officefiles as of
+        p = _path(store, tid, a.get('path')); to = _path(store, tid, a['save_as']) if a.get('save_as') else p
+        to.parent.mkdir(parents=True, exist_ok=True)
         if name == 'file_edit':
             if not p.is_file(): raise ValueError(f'no file at {p}')
+            if of.is_office(p): return f'Edited {to} ({of.edit(p, str(a.get("old") or ""), str(a.get("new") or ""), to)}).'
             text, old = p.read_text(encoding='utf-8'), str(a.get('old') or '')
             if not old or text.count(old) != 1: raise ValueError(f'`old` occurs {text.count(old) if old else 0} times in {p.name} - it must be exactly once')
-            p.write_text(text.replace(old, str(a.get('new') or '')), encoding='utf-8')
-        else:
-            p.parent.mkdir(parents=True, exist_ok=True); p.write_text(str(a.get('text') or ''), encoding='utf-8')
-        return f'{"Edited" if name == "file_edit" else "Wrote"} {p} ({p.stat().st_size} bytes).'
+            to.write_text(text.replace(old, str(a.get('new') or '')), encoding='utf-8')
+        elif of.is_office(p): return f'Wrote {p}: {of.write(p, str(a.get("text") or ""))} ({p.stat().st_size} bytes).'
+        else: p.write_text(str(a.get('text') or ''), encoding='utf-8')
+        return f'{"Edited" if name == "file_edit" else "Wrote"} {to} ({to.stat().st_size} bytes).'
     if name == 'web_fetch':
         from . import knowledge, webguard
         u = _url(a.get('url'))

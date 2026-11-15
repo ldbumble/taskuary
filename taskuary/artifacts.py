@@ -51,13 +51,15 @@ def columns(rows: list) -> list:
     return cols[:MAX_COLS]
 
 
-def _cell(ref: str, v) -> str:
+def _cell(ref: str, v, formulas: bool = False) -> str:
     # a missing value writes NO cell (refs are explicit, so nothing shifts): an empty inline
     # string is a value, and Excel treats "" and blank differently in counts and filters
     if v is None or v == '': return ''
     if isinstance(v, bool): v = str(v)
     if isinstance(v, (int, float)):
         return f'<c r="{ref}"><v>{v}</v></c>'
+    # ...a formula only where the agent wrote the sheet (its total): a report's rows are other systems' data, and `=` in them stays text
+    if formulas and isinstance(v, str) and v.startswith('=') and len(v) > 1: return f'<c r="{ref}"><f>{escape(v[1:])}</f></c>'
     s = json.dumps(v, default=str) if isinstance(v, (dict, list)) else str(v)
     return f'<c r="{ref}" t="inlineStr"><is><t xml:space="preserve">{escape(s)}</t></is></c>'
 
@@ -74,11 +76,16 @@ def to_xlsx(rows: list, path, sheet: str = 'Report') -> bool:
     sums them. Returns False when there is nothing tabular to write."""
     if not rows: return False
     cols = columns(rows)
+    return grid_xlsx([cols, *([r.get(c) for c in cols] for r in rows)], path, sheet)
+
+
+def grid_xlsx(grid: list, path, sheet: str = 'Report', formulas: bool = False) -> bool:
+    "The rows of `grid` (lists of cells, the first at A1) as a workbook: a number a number, `=...` a formula where `formulas`, the rest text."
+    if not grid: return False
     xml = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>']
-    xml.append('<row r="1">' + ''.join(_cell(f'{_col_name(i)}1', c) for i, c in enumerate(cols)) + '</row>')
-    for n, r in enumerate(rows, start=2):
-        xml.append(f'<row r="{n}">' + ''.join(_cell(f'{_col_name(i)}{n}', r.get(c)) for i, c in enumerate(cols)) + '</row>')
+    xml += [f'<row r="{n}">' + ''.join(_cell(f'{_col_name(i)}{n}', v, formulas) for i, v in enumerate(r[:MAX_COLS])) + '</row>'
+            for n, r in enumerate(grid[:MAX_SHEET_ROWS + 1], start=1)]
     xml.append('</sheetData></worksheet>')
     name = escape(_SAFE.sub('', str(sheet))[:31] or 'Report')
     with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:

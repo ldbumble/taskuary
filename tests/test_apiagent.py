@@ -505,6 +505,41 @@ class TheHandsTests(unittest.TestCase):
         self.assertIn('Payworth,4100', self.run_('file_read', path='notes/quotes.csv'))
         with self.assertRaises(ValueError): self.run_('file_edit', path='notes/quotes.csv', old='nowhere', new='x')
 
+    def test_a_word_invoice_template_is_filled_by_its_own_file_tools(self):
+        """An outside user's ask (2026-11-15, "it says it took 25 min"): fill an invoice template with a month's sessions and mail it. A
+        .docx was text to file_edit (a decode error) and file_write made a file Word cannot open, so the agent spliced the template's XML
+        in PowerShell, a script a step. Now its line-item row, read as `a | b | c`, becomes one row per session - and the template keeps its look."""
+        from taskuary import officefiles
+        d = Path(apiagent.workdir(self.s, self.tid)); (d / 'Invoice template.docx').write_bytes(officefiles.docx(
+            'Invoice number: {{NO}}\n| Date | Units | Amount |\n| {{DATE}} | {{UNITS}} | {{AMOUNT}} |\nTotal due: {{TOTAL}}'))
+        shown = self.run_('file_read', path='Invoice template.docx')
+        self.assertIn('{{DATE}} | {{UNITS}} | {{AMOUNT}}', shown)
+        said = self.run_('file_edit', path='Invoice template.docx', old='{{DATE}} | {{UNITS}} | {{AMOUNT}}',
+                         new='2026-10-01 | 4 | 60.00\n2026-10-02 | 6 | 90.00\n2026-10-03 | 2 | 60.00', save_as='Invoice INV-2026-10.docx')
+        self.assertIn('3 rows', said)
+        self.run_('file_edit', path='Invoice INV-2026-10.docx', old='{{NO}}', new='INV-2026-10')
+        self.run_('file_edit', path='Invoice INV-2026-10.docx', old='{{TOTAL}}', new='$210.00')
+        got = self.run_('file_read', path='Invoice INV-2026-10.docx')
+        for line in ('Invoice number: INV-2026-10', 'Date | Units | Amount', '2026-10-01 | 4 | 60.00', '2026-10-03 | 2 | 60.00', 'Total due: $210.00'):
+            self.assertIn(line, got)
+        self.assertIn('{{DATE}}', self.run_('file_read', path='Invoice template.docx'))          # save_as left the template as it was
+        with self.assertRaises(ValueError): self.run_('file_edit', path='Invoice INV-2026-10.docx', old='60.00', new='61.00')   # twice: say so
+
+    def test_an_excel_invoice_is_written_and_its_template_row_filled_with_the_total_widened(self):
+        from openpyxl import Workbook, load_workbook
+        d = Path(apiagent.workdir(self.s, self.tid))
+        self.assertIn('Excel workbook', self.run_('file_write', path='hours.xlsx', text='Date | Units | Rate | Amount\n2026-10-01 | 4 | 15.00 | =B2*C2'))
+        ws = load_workbook(d / 'hours.xlsx').active
+        self.assertEqual([ws['B2'].value, ws['C2'].value, ws['D2'].value], [4, 15.0, '=B2*C2'])
+        wb = Workbook(); ws = wb.active
+        ws.append(['Date', 'Units', 'Rate', 'Amount']); ws.append(['2026-10-01', 4, 15, '=B2*C2']); ws.append([None, None, 'Total', '=SUM(D2:D2)'])
+        wb.save(d / 'Invoice template.xlsx')
+        self.run_('file_edit', path='Invoice template.xlsx', old='2026-10-01 | 4 | 15',
+                  new='2026-10-01 | 4 | 15\n2026-10-02 | 6 | 15\n2026-10-03 | 2 | 30', save_as='Invoice INV-2026-10.xlsx')
+        ws = load_workbook(d / 'Invoice INV-2026-10.xlsx').active
+        self.assertEqual([ws['A4'].value, ws['B4'].value, ws['C4'].value, ws['D4'].value], ['2026-10-03', 2, 30, '=B4*C4'])
+        self.assertEqual([ws['C5'].value, ws['D5'].value], ['Total', '=SUM(D2:D4)'])
+
     def test_a_command_the_cli_would_run_runs_now_in_the_working_folder(self):
         class Done:
             pid, returncode = 4242, 0

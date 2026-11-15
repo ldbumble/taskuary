@@ -59,3 +59,10 @@ test("an ended general session's chat gives the page back to the stage that is f
 
 
 
+
+// A QUESTION IS SAID ONCE (the audit, 2026-11-15: the agent's words ended on its question, and "For you to do: Tell me ..." said it again under them)
+test("a turn's open question is not said again as what is left to him", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /const onYou = !live && sum && !ask \? turnOnYou\(sum, words\) : "";/);
+});

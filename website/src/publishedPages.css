@@ -34,7 +34,7 @@
 .tq-published[data-tq-turn-files] .tq-published-picture { display: flex; align-items: center; justify-content: center; }
 .tq-published[data-tq-turn-files] .tq-published-picture img { max-height: 100% !important; max-width: 100%; object-fit: contain; }
 .tq-published-text { margin: 0; border-top: 1px solid var(--tq-border, #e3ddd2); padding: 10px 14px; max-height: min(70vh, 640px); overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
-/* an agent's files, each thing once (PublishedPages deliver): its earlier versions, the rest of a long list and its working files fold */
+/* an agent's files, each thing once (PublishedPages deliver): its earlier versions and the rest of a long list fold */
 .tq-published .tq-published { margin: 0; }
 .tq-published-more { border: 0; background: none; padding: 0 2px; font: inherit; font-size: 11.5px; color: var(--tq-muted, #8a8d86); cursor: pointer; text-align: left; }
 .tq-published-more:hover { color: var(--tq-secondary, #4d514b); }

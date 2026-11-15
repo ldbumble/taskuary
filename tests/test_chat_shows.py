@@ -50,7 +50,7 @@ class ShowFilesTests(unittest.TestCase):
         self.assertTrue(any('secrets.png was not shown' in (c.get('Body') or '') for c in self.s.list_comments(self.tid)))
 
     def test_only_pictures_pages_and_tables_can_be_shown(self):
-        f = self.scratch / 'tool.exe'; f.write_bytes(b'MZ')
+        f = self.scratch / 'tool.exe'; f.write_bytes(b'MZ' + bytes([0x90, 0, 3, 0, 0, 0, 0xff, 0xff]))
         general._show_files(self.s, self.tid, [str(f)], [])
         self.assertEqual(self.shown(), [])
         self.assertTrue(any('cannot be shown' in (c.get('Body') or '') for c in self.s.list_comments(self.tid)))

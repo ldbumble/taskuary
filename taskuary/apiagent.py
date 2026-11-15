@@ -22,6 +22,7 @@ HIPAA: what the page shows goes to the card that runs the turn and nowhere else 
 import json, re, shlex
 from pathlib import Path
 from loguru import logger
+from .selfclose import SHOW_WHAT
 
 IDLE_STEPS = 8                 # steps in a row whose answers held nothing the turn had not read already: going in circles, not working
 CAP = 12_000                  # one tool answer, as the model reads it
@@ -42,7 +43,7 @@ BROWSER = [
     _fn('browser_press', 'Press a key in the page, like Enter or Tab.', _S({'key': {'type': 'string'}}, ['key'])),
     _fn('browser_screenshot', 'Save a picture of the page; answers with its path, which `show` puts in the chat.', _S({})),
 ]
-SHOW = _fn('show', "Show the owner files in this chat - a screenshot, a file you made - by path.",
+SHOW = _fn('show', f"Show the owner files in this chat - a screenshot, a file you made - by path. {SHOW_WHAT}",
            _S({'files': {'type': 'array', 'items': {'type': 'string'}}}, ['files']))
 
 BRIEF = ('YOUR TOOLS: you drive Taskuary\'s browser for this task with browser_open, browser_look, browser_click, browser_fill, browser_press '

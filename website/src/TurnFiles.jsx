@@ -3,21 +3,10 @@
 // picture opening it over the chat (FileDialog), Download beside it
 import React, { useState } from "react";
 import { Button } from "@mui/material";
-import api from "./api.js";
 import { attUrl, useSave } from "./Attachments.jsx";
-import { label as btn } from "./buttons.js";
-import { copyText } from "./CopyCorner.jsx";
-import { FileDialog, Preview } from "./PublishedPages.jsx";
+import { CopyFile, FileDialog, isText, Preview } from "./PublishedPages.jsx";
 
 const isPic = (f) => /^image\//.test(f?.content_type || "") && !/svg/.test(f?.content_type || "");
-
-// ...and one that reads as text - a query, a script, a letter - copies whole at a press, to paste where it is wanted
-const CopyFile = ({ f }) => {
-  const [done, setDone] = useState(false);
-  const press = () => api.get(f.url, { responseType: "text", transformResponse: (x) => x }).then((r) => copyText(r.data))
-    .then(() => { setDone(true); setTimeout(() => setDone(false), 1500); }, () => {});
-  return <Button size="small" data-tq-copy-file="" onClick={press}>{btn("copy", done ? "done" : undefined)}</Button>;
-};
 
 export default function TurnFiles({ files }) {
   const [viewing, setViewing] = useState(null), [err, save, saved] = useSave();
@@ -29,7 +18,7 @@ export default function TurnFiles({ files }) {
           <div className="tq-published-row">
             <button type="button" className="tq-published-name" onClick={() => setViewing(f)} title="Open it here">
               <b>{f.name}</b><span>{isPic(f) ? "picture" : f.preview || "file"} · open</span></button>
-            {f.preview === "text" && <CopyFile f={f} />}
+            {isText(f) && <CopyFile f={f} />}
             <Button size="small" href={attUrl(f, true)} data-tq-download="" onClick={(e) => { e.preventDefault(); save(f); }}>Download</Button>
           </div>
           {isPic(f)

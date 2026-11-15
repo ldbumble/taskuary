@@ -225,18 +225,13 @@ def listing(tid: int) -> list:
 # ONE OF EACH THING IT MADE (the owner, 2026-10-28: "it looks like it created a million attachments. Agents should not create lists of
 # lists of attachments unless specifically asked"). A workbook saved as v1..v9 listed nine rows, with the helper script and its log
 # between them. A FAMILY is one name with its version marks taken off (v2, _final, (1), a timestamp); only its newest is the deliverable,
-# the rest are its earlier versions, kept and reachable behind it. The agent's own working files - its scripts, logs, temp and cache
-# files, anything under a tmp/ or scratch/ folder - are not things it made for the owner, so they fold under one line.
-# taskOutputs.deliverables is the same rule for the page: keep the two alike.
+# the rest are its earlier versions, kept and reachable behind it.
+# ...AND NOTHING AN AGENT MADE IS HIDDEN (the owner, 2026-11-15, of a query saved as a file and folded away as the agent's own scratch: "this has
+# nothing to do with sql, anything an agent creates should not be hidden of course"): no list of extensions, folder names or file names
+# says what he may see - a helper script stands in the list with the workbook it built. taskOutputs.deliverables is the same rule for
+# the page: keep the two alike.
 _VER = re.compile(r'(?:[ _.-]+(?:v|ver|version|rev)[ _.-]?\d+|[ _.-]+(?:final|draft|copy|old|new|latest|updated|edited|revised)'
                   r'|[ _.-]*\(\d+\)|[ _.-]+\d{8}(?:[ _T-]?\d{4,6})?|[ _.-]+\d{4}-\d\d-\d\d(?:[ _T-]?\d\d[-.]?\d\d(?:[-.]?\d\d)?)?)+$', re.I)
-_WORK_EXT = {'.log', '.tmp', '.temp', '.bak', '.pyc', '.cache', '.lock', '.swp', '.part', '.crdownload'}
-# ...A SCRIPT IS A WORKING FILE ONLY BESIDE SOMETHING ELSE IT MADE (the owner, 2026-11-15: "The sql is hidden behind the 6 steps. if it returns
-# something you need to see it"): the helper that built a workbook folds away under it; a query or a script that is all the agent made, or one
-# its words name, IS what it made
-_SCRIPT_EXT = {'.py', '.ps1', '.sh', '.bat', '.cmd', '.js', '.mjs', '.ts', '.sql', '.r', '.ipynb'}
-_WORK_DIR = re.compile(r'(?:^|/)(?:tmp|temp|scratch|cache|__pycache__|work|working|intermediate|drafts?)/', re.I)
-_WORK_NAME = re.compile(r'^(?:tmp|temp|scratch|debug)(?:[ _.-]|$)', re.I)
 
 
 def family(name: str) -> str:
@@ -246,30 +241,14 @@ def family(name: str) -> str:
     return re.sub(r'[ _.-]+', ' ', stem) + p.suffix
 
 
-def _base(rel) -> str: return str(rel or '').replace('\\', '/').rsplit('/', 1)[-1]
-def _scratch(rel: str) -> bool:
-    rel = str(rel or '').replace('\\', '/')
-    return Path(rel).suffix.lower() in _WORK_EXT or bool(_WORK_DIR.search(rel)) or bool(_WORK_NAME.match(_base(rel)))
-def _script(rel: str) -> bool: return Path(_base(rel)).suffix.lower() in _SCRIPT_EXT
-def is_working(rel: str, beside: bool = True) -> bool:
-    """The agent's own working file, not a deliverable: a log, a temp or cache file, anything in a tmp/ or scratch/ folder - and a script
-    `beside` something else it made."""
-    return _scratch(rel) or beside and _script(rel)
-
-
-def deliverables(rows: list, named=()) -> tuple:
-    """(made, working): each family once - its newest row, the older ones on it as `earlier`, newest first - and the working files apart.
-    A row that is not a file in the folder (a page the agent showed or published) is never a working file: it chose to show it. Nor is a
-    file its words name (`named`), nor a script where scripts are all it made."""
-    made, by, working, said = [], {}, [], {_base(n) for n in named}
-    of = lambda r: r.get('path') or r.get('name')
-    beside = any(r.get('kind') != 'output' or not (_scratch(of(r)) or _script(of(r))) for r in rows or [])
+def deliverables(rows: list) -> list:
+    "Each family once - its newest row, the older ones on it as `earlier` - newest first. Every file is in it: none is left out for its kind."
+    made, by = [], {}
     for r in sorted(rows or [], key=lambda r: str(r.get('at') or r.get('created_at') or ''), reverse=True):
-        if r.get('kind') == 'output' and _base(of(r)) not in said and is_working(of(r), beside): working.append(r); continue
         k = family(r.get('name') or r.get('path'))
         if k in by: by[k].setdefault('earlier', []).append(r)
         else: by[k] = dict(r); made.append(by[k])
-    return made, working
+    return made
 
 
 # WHERE IS THE EXCEL THE AGENT MADE (the owner, 2026-10-28: "if I ask the chat assistant to pull up the Excel created by the agent on the
@@ -311,8 +290,8 @@ def pages(store, tid: int) -> list:
 
 
 def find(store, query: str = '', kind: str = '', tid: int = None, limit: int = 8) -> list:
-    """The files agents made, best match first: [{tid, title, name, url, at, earlier, ...}] - each family once (deliverables), working
-    files never. `query` is matched against the task's title and summary and the file's own name by MEANING (embeddings, textsim) -
+    """The files agents made, best match first: [{tid, title, name, url, at, earlier, ...}] - each family once (deliverables), whatever
+    its kind. `query` is matched against the task's title and summary and the file's own name by MEANING (embeddings, textsim) -
     a count of shared word stems decided it once (the owner, 2026-10-28) - or, with no embedder, found there whole; `kind` narrows
     by what it is. Newest first when nothing is asked about."""
     from . import textsim
@@ -327,7 +306,7 @@ def find(store, query: str = '', kind: str = '', tid: int = None, limit: int = 8
     for t in dict.fromkeys(ids + ([] if tid else sorted(pages, reverse=True))):
         task = store.get_task(t)
         if not task: continue
-        made, _ = deliverables(listing(t) + pages.get(t, []))
+        made = deliverables(listing(t) + pages.get(t, []))
         about = f"{task.get('Title') or ''} {task.get('Summary') or ''}"
         for r in made:
             if want and Path(str(r.get('name') or '')).suffix.lower() not in want: continue

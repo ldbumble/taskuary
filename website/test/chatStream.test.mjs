@@ -243,3 +243,17 @@ test("an earlier version of a draft never takes its review's own card", async ()
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /if \(isPastCard\(c\)\) \{ if \(!stands\.has\(c\.review\)\) nodes\.forEach/);
 });
+
+// NOTHING IT WROTE IS INVISIBLE (the owner, 2026-11-15): the agent decides what to show, and where it saved a file and never showed it, the
+// write's own step stands open on what was written once the turn's steps are opened - as a terminal shows it. A shown text file copies whole
+test("a file the agent wrote opens on its contents inside the steps, and a shown text file has Copy", async () => {
+  const { editRow } = await import("../src/chatStream.js");
+  const w = editRow({ name: "Write", file: "/x/scratch/outputs/TQ-0017/clear_columns.sql", edit: { parts: [{ old: "", new: "BEGIN;\nUPDATE facilities SET fax = NULL;\nCOMMIT;\n" }] } });
+  assert.equal(w.wrote, true); assert.match(w.summary, /^Wrote clear_columns\.sql/);
+  assert.equal(editRow({ name: "Edit", file: "a.py", edit: { parts: [{ old: "x = 1", new: "x = 2" }] } }).wrote, false);
+  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /\{\.\.\.\(chat && p\.wrote && p\.hunks\.length \? \{ open: true, "data-tq-wrote": "" \} : \{\}\)\}/);
+  const pages = fs.readFileSync(new URL("../src/PublishedPages.jsx", import.meta.url), "utf8");
+  assert.ok(pages.includes("export const isText = (p) =>") && pages.includes("plain"), "plain text is read as text wherever it came from");
+  assert.match(pages, /\{p\.url && isText\(p\) && <CopyFile f=\{p\} \/>\}/);
+});

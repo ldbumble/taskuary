@@ -5,7 +5,7 @@ feed-changed / ingest-status / task-changed / run-tail, and the views refetch on
 actually moved. emit() is safe from any thread (the poll, a click, a pty byte).
 Many writes in one gulp coalesce: forty new mail rows are one feed-changed, not forty.
 """
-import asyncio, contextvars, itertools, threading
+import asyncio, contextvars, itertools, threading, time
 from loguru import logger
 
 FEED, INGEST, TASK, RUN = 'feed-changed', 'ingest-status', 'task-changed', 'run-tail'
@@ -23,8 +23,11 @@ KINDS = (FEED, INGEST, TASK, RUN, CHAT, ARRIVE, ADVICE)
 # write committed, so it holds it and the page need not read again. `by`: the tab whose request made the write (X-Taskuary-Tab) - that
 # page already drew what its own press answered, and only it waits for the burst; anyone else's write is read at once.
 # A wake-up with no stamp (a direct emit, a write still inside a transaction) is never covered: the safe error is one read too many.
-_seq = itertools.count(1)
-_last = 0
+# ...AND A STAMP NEVER GOES BACK ACROSS A RESTART (the audit, 2026-11-15: Taskuary restarted under an open page, the count began again at 1,
+# and every wake-up of the new process read as older than the rail the page held from before - "already seen", so the rail was not read
+# again and a task's header went on saying "agent working" over a turn the restart had cut): the count begins at the clock
+_last = int(time.time() * 1000)
+_seq = itertools.count(_last + 1)
 TAB = contextvars.ContextVar('taskuary_tab', default=None)
 
 

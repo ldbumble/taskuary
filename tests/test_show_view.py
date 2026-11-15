@@ -148,7 +148,7 @@ class TheTool(unittest.TestCase):
         from pathlib import Path
         from taskuary import config, session_artifacts
         d = Path(tempfile.mkdtemp(dir=tempfile.gettempdir()))           # a CLI's own scratchpad lives in the system's temp folder
-        (d / 'dark.png').write_bytes(PNG + b'fake'); (d / 'run.exe').write_bytes(b'MZ')
+        (d / 'dark.png').write_bytes(PNG + b'fake'); (d / 'run.exe').write_bytes(b'MZ' + bytes([0x90, 0, 3, 0, 0, 0, 0xff, 0xff]))
         text, err = tool(self.tid, 'show', files=[str(d / 'dark.png'), str(d / 'run.exe'), str(d / 'gone.png')])
         self.assertFalse(err, text)
         head, rows = text.split(agenttools.FILES_MARK)
@@ -209,6 +209,32 @@ class TheTool(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+# WHAT IT MAKES FOR HIM TO LOOK AT, IT SHOWS (the owner, 2026-11-15: he asked for a query to review, the agent saved it as a file and said
+# only that it was ready - the ruling: the agent decides what to show, code draws it). One sentence, the same on every road, and a file
+# that is plain text can be shown whatever its name - by its bytes
+def test_every_road_is_told_in_one_sentence_to_show_what_it_makes():
+    from taskuary import apiagent, selfclose
+    assert selfclose.SHOW_WHAT in agenttools.TOOLS['show'][1], 'the tool a CLI session is handed'
+    assert selfclose.SHOW_WHAT in apiagent.SHOW['function']['description'], 'the tool an API brain is handed'
+    assert selfclose.SHOW_WHAT in selfclose.SHOW_LINE, 'the line a chat with no tool reads'
+
+
+def test_a_query_saved_as_a_file_is_shown_as_text_by_its_bytes():
+    import tempfile
+    from pathlib import Path
+    from taskuary import session_artifacts
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Clear three columns on three rows', 'Kind': 'general'}, 'owner')
+    d = Path(tempfile.mkdtemp(dir=tempfile.gettempdir()))
+    (d / 'clear_columns.sql').write_text('BEGIN;\nUPDATE facilities SET fax = NULL WHERE id IN (14, 22, 31);\nCOMMIT;\n', encoding='utf-8')
+    a = session_artifacts.shown(s, tid, d / 'clear_columns.sql', 'agent')
+    assert (a['Name'], a['ContentType'], a['Kind']) == ('clear_columns.sql', 'text/plain', 'shown')
+    assert 'UPDATE facilities' in Path(a['Path']).read_text(encoding='utf-8')
+    (d / 'blob.dat').write_bytes(bytes([0, 1, 2, 255]) * 40)
+    try: session_artifacts.shown(s, tid, d / 'blob.dat', 'agent'); raise AssertionError('bytes that are no text are not shown')
+    except ValueError as e: assert 'cannot be shown' in str(e)
 
 
 def test_the_tool_says_not_to_repeat_the_view_in_words():

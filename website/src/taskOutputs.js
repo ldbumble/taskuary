@@ -165,35 +165,23 @@ export const placeMade = (listed, turns) => {
 
 // ONE OF EACH THING IT MADE (the owner, 2026-10-28: "it looks like it created a million attachments. Agents should not create lists of
 // lists of attachments unless specifically asked"). The same rule as outputs.deliverables - keep the two alike: a FAMILY is one name with
-// its version marks off (v2, _final, (1), a timestamp) and only its newest is listed, the rest `earlier` on it; the agent's own working
-// files (scripts, logs, temp and cache, anything under tmp/ or scratch/) are `working`, folded under one line. Never dropped: reachable.
+// its version marks off (v2, _final, (1), a timestamp) and only its newest is listed, the rest `earlier` on it. Never dropped: reachable.
 const VER = /(?:[ _.-]+(?:v|ver|version|rev)[ _.-]?\d+|[ _.-]+(?:final|draft|copy|old|new|latest|updated|edited|revised)|[ _.-]*\(\d+\)|[ _.-]+\d{8}(?:[ _T-]?\d{4,6})?|[ _.-]+\d{4}-\d\d-\d\d(?:[ _T-]?\d\d[-.]?\d\d(?:[-.]?\d\d)?)?)+$/i;
-const WORK_EXT = new Set(["log", "tmp", "temp", "bak", "pyc", "cache", "lock", "swp", "part", "crdownload"]);
-// ...A SCRIPT IS A WORKING FILE ONLY BESIDE SOMETHING ELSE IT MADE (the owner, 2026-11-15: "The sql is hidden behind the 6 steps. if it returns
-// something you need to see it"): the helper that built a workbook folds away under it; a query or a script that is all the agent made, or one
-// its words name, IS what it made
-const SCRIPT_EXT = new Set(["py", "ps1", "sh", "bat", "cmd", "js", "mjs", "ts", "sql", "r", "ipynb"]);
-const WORK_DIR = /(?:^|\/)(?:tmp|temp|scratch|cache|__pycache__|work|working|intermediate|drafts?)\//i;
-const WORK_NAME = /^(?:tmp|temp|scratch|debug)(?:[ _.-]|$)/i;
-
 export function family(name) {
   const b = baseName(name).toLowerCase(), i = b.lastIndexOf("."), stem = i > 0 ? b.slice(0, i) : b, x = i > 0 ? b.slice(i) : "";
   return (stem.replace(VER, "").replace(/^[ _.-]+|[ _.-]+$/g, "") || stem).replace(/[ _.-]+/g, " ") + x;
 }
-const isScratch = (rel) => { const p = String(rel || "").replace(/\\/g, "/"); return WORK_EXT.has(ext(baseName(p))) || WORK_DIR.test(p) || WORK_NAME.test(baseName(p)); };
-const isScript = (rel) => SCRIPT_EXT.has(ext(baseName(rel)));
-export const isWorking = (rel, beside = true) => isScratch(rel) || (beside && isScript(rel));
-// {made, working}, newest first; a shown or published page is never working - the agent chose to show it - nor is a file its words name (`named`)
-export const deliverables = (rows, named = []) => {
-  const by = new Map(), made = [], working = [], at = (r) => String(r?.at || r?.created_at || ""), of = (r) => r.path || r.name, said = new Set(named.map(baseName));
-  const beside = (rows || []).some((r) => r.kind !== "output" || !(isScratch(of(r)) || isScript(of(r))));
+// {made}, newest first - every file is in it: NOTHING AN AGENT MADE IS HIDDEN (the owner, 2026-11-15, of a query saved as a file and folded
+// away as the agent's own scratch: "this has nothing to do with sql, anything an agent creates should not be hidden of course"). No list of
+// extensions, folders or names says what he may see: a helper script stands in the list with the workbook it built
+export const deliverables = (rows) => {
+  const by = new Map(), made = [], at = (r) => String(r?.at || r?.created_at || "");
   for (const r of [...(rows || [])].sort((a, b) => at(b).localeCompare(at(a)))) {
-    if (r.kind === "output" && !said.has(baseName(of(r))) && isWorking(of(r), beside)) { working.push(r); continue; }
     const k = family(r.name || r.path), kept = by.get(k);
     if (kept) kept.earlier.push(r);
     else { const n = { ...r, earlier: [] }; by.set(k, n); made.push(n); }
   }
-  return { made, working };
+  return { made };
 };
 
 // EACH TURN SHOWS THE FILE AS IT MADE IT (the owner, 2026-11-07: "same file with revisions"): turn 1 named the table a later turn rewrote in
@@ -208,11 +196,10 @@ export const forTurn = (listed, versions, id) => {
 
 // WHAT A TURN MADE, IN THE TURN (the owner, 2026-11-05: "the post and images are as artifacts separate not inline???"): the files placed on this
 // answer by when they were made (the server's `after`, as a shown page's) and the ones its words or its summary name - each thing once, the
-// newest of a family, never the agent's working files - less `skip` (a post's own picture, drawn on the post)
+// newest of a family, whatever its kind - less `skip` (a post's own picture, drawn on the post)
 export const turnFiles = ({ listed = [], id, words = "", did = "", tid, skip = [] } = {}) => {
   const no = new Set((skip || []).map(baseName)), by = new Map();
   for (const r of (listed || []).filter((x) => x?.after != null && x.after === id)) by.set(r.path, r);
-  const named = outputRefs(`${words || ""}\n${did || ""}`, tid, listed).files;
-  for (const rel of named) if (!by.has(rel)) by.set(rel, outputRow(tid, rel, listed));
-  return deliverables([...by.values()].filter((r) => !no.has(baseName(r.path || r.name)) && !r.missing), named).made;
+  for (const rel of outputRefs(`${words || ""}\n${did || ""}`, tid, listed).files) if (!by.has(rel)) by.set(rel, outputRow(tid, rel, listed));
+  return deliverables([...by.values()].filter((r) => !no.has(baseName(r.path || r.name)) && !r.missing)).made;
 };

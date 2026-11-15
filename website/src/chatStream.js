@@ -58,7 +58,7 @@ export function editOf(e, res) {
 export const editRow = (s) => {
   const hunks = editHunks(s.edit), { plus, minus } = stat(hunks), file = s.file || "";
   const wrote = /^(write|writefile|createfile)$/i.test(String(s.name || "").replace(/[^a-z]/gi, "")) || (hunks.length && hunks.every((h) => h.lines.every((l) => l[0] === "+")));
-  return { type: "edit", file, summary: `${wrote ? "Wrote" : "Edited"} ${baseName(file) || "a file"}${hunks.length ? ` (+${plus} −${minus})` : ""}`, plus, minus, hunks };
+  return { type: "edit", file, wrote: !!wrote, summary: `${wrote ? "Wrote" : "Edited"} ${baseName(file) || "a file"}${hunks.length ? ` (+${plus} −${minus})` : ""}`, plus, minus, hunks };
 };
 // THE PLAN IS A CHECKLIST, the newest one of the turn where it was last updated - never "Updated its plan (3 steps)" six times over
 const PLAN_MARK = { completed: "done", done: "done", in_progress: "now", now: "now" };

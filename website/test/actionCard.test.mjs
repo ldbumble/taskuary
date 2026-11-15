@@ -54,13 +54,13 @@ test("waiting is live only on the newest turn; done keeps its words and link; an
   assert.equal(stateOf(row("rejected"), true).said, "Not posted · dismissed");
 });
 
-// WHAT A TURN MADE, IN THE TURN: placed by `after` or named in its words, each thing once, never a working file or the post's own picture
-test("a turn's files: placed or named, newest of a family, no working files, the post's picture skipped", () => {
+// WHAT A TURN MADE, IN THE TURN: placed by `after` or named in its words, each thing once, whatever its kind - less the post's own picture
+test("a turn's files: placed or named, newest of a family, the helper script too, the post's picture skipped", () => {
   const row = (path, after, at) => ({ id: `output:${path}`, name: path, path, kind: "output", after, at, content_type: path.endsWith(".png") ? "image/png" : "text/csv" });
   const listed = [row("chart.png", "m2", "2026-11-05 10:02:00"), row("prices v2.csv", "m2", "2026-11-05 10:03:00"), row("prices v1.csv", "m2", "2026-11-05 10:01:00"),
     row("fetch.py", "m2", "2026-11-05 10:00:00"), row("gas.png", "m2", "2026-11-05 10:04:00"), row("older.csv", "m1", "2026-11-05 09:00:00")];
   const got = turnFiles({ listed, id: "m2", tid: 5, skip: ["gas.png"] }).map((f) => f.path).sort();
-  assert.deepEqual(got, ["chart.png", "prices v2.csv"]);
+  assert.deepEqual(got, ["chart.png", "fetch.py", "prices v2.csv"]);
   assert.deepEqual(turnFiles({ listed, id: "m1", tid: 5, words: "See `/x/scratch/outputs/TQ-0005/chart.png`" }).map((f) => f.path).sort(), ["chart.png", "older.csv"]);
 });
 

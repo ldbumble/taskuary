@@ -542,12 +542,18 @@ def withdraw_markers(text: str) -> tuple:
 
 # ...a VIEW freely, a FILE only when it truly helps (the owner, 2026-11-09: "use visuals ... ensure they are used liberally"; the 2026-10-09
 # "random scratch stuff not" stands for files): "either way" here held the views back as well
+# WHAT IT MAKES FOR HIM TO LOOK AT, IT SHOWS (the owner, 2026-11-15, of a query he asked to review that the agent saved as a file and only
+# said was ready: "anything an agent creates should not be hidden" - and the ruling: the agent decides, as it does on Claude.ai and ChatGPT,
+# and code draws what it showed). ONE sentence, in the show tool's own words on every road: the tool a CLI session is handed
+# (agenttools), the one an API brain is handed (apiagent) and the line a chat with no tool reads (SHOW_LINE)
+SHOW_WHAT = ('Whatever you make for the owner to look at - a query, a script, a document, a picture - show it: a file you only saved '
+             'is not in front of them.')
 _SHOW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?SHOW\s*:?\s*(.+?)\s*\]\][ \t]*\n?', re.I | re.M)
 SHOW_LINE = ('SHOWING YOUR ANSWER: a table, a chart, a few numbers or a checklist goes in the chat itself through the `show` tool, '
              'where your session has it - drawn in place, nothing to open. Make a file only for what show cannot draw: an image, a '
-             'long page, a spreadsheet the owner keeps (.png .jpg .svg .html .md .csv .pdf in your working folder), and name it on its '
+             'long page, a spreadsheet the owner keeps, a query or a script (any picture, PDF, page or text file in your working folder), and name it on its '
              'own line: [[TASKUARY-SHOW: <full path>]] (or the `show` tool\'s `files`) - it appears in the chat under this answer and stays '
-             'on the task. Never open a viewer, a browser or an app on the computer to show it, and never say it is on the owner\'s screen. A file only '
+             'on the task. ' + SHOW_WHAT + ' Never open a viewer, a browser or an app on the computer to show it, and never say it is on the owner\'s screen. A file only '
              'when it truly helps - never your working files, test data or drafts. An .html page runs with no network: put its data and '
              'scripts in it.')
 

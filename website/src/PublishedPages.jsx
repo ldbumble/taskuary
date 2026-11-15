@@ -10,6 +10,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api.js";
 import { attUrl, fileError, useSave } from "./Attachments.jsx";
+import { label as btn } from "./buttons.js";
+import { copyText } from "./CopyCorner.jsx";
 import { Md } from "./md.jsx";
 import { csvRows, fitSvg, lockDown } from "./shownPages.js";
 import { deliverables } from "./taskOutputs.js";
@@ -29,6 +31,15 @@ const isVideo = (p) => p?.preview === "video" || /^video\//.test(type(p));
 export const isPicture = (p) => /^image\//.test(type(p)) && !/svg/.test(type(p));
 // ...and a file the agent made for its task (taskOutputs.js, outputs.py): previewed by what it is, everything else Download only
 const isOutput = (p) => p?.kind === "output";
+// ...one that reads as plain text - a query, a script, a letter - in its task's folder or shown by its agent (the server says so by its bytes)
+export const isText = (p) => (isOutput(p) && p.preview === "text" && !/markdown/.test(type(p))) || /^text\/plain\b/.test(type(p));
+// ...and it copies whole at a press, to paste where it is wanted (the owner, 2026-11-15: a query he asked for to review)
+export const CopyFile = ({ f }) => {
+  const [done, setDone] = useState(false);
+  const press = () => api.get(f.url, { responseType: "text", transformResponse: (x) => x }).then((r) => copyText(r.data))
+    .then(() => { setDone(true); setTimeout(() => setDone(false), 1500); }, () => {});
+  return <Button size="small" data-tq-copy-file="" onClick={press}>{btn("copy", done ? "done" : undefined)}</Button>;
+};
 const OUTPUT_LABEL = { sheet: "spreadsheet", table: "table", pdf: "PDF", picture: "picture", text: "text", page: "page", document: "document",
   video: "video", audio: "sound" };
 // ...an SVG previews through the page frame (isPicture) but it IS a picture, and the card says so: "page" read as a broken image
@@ -37,7 +48,7 @@ const isImage = (p) => /^image\//.test(type(p)) || /\.svg$/i.test(p?.name || "")
 const isPdf = (p) => (isOutput(p) && p.preview === "pdf") || /^application\/pdf\b/i.test(type(p));
 const label = (p) => isImage(p) && (isOutput(p) || p.kind === "shown") ? "picture" : isPdf(p) ? "PDF"
   : isOutput(p) ? (OUTPUT_LABEL[p.preview] || (/\.xlsm?$/i.test(p.name) ? "spreadsheet" : "file"))
-  : (p.kind === "shown" ? (/csv/.test(type(p)) ? "table" : "page") : "published page");
+  : (p.kind === "shown" ? (/csv/.test(type(p)) ? "table" : isText(p) ? "text" : "page") : "published page");
 
 // a workbook's sheet as the server read it (outputs.sheet): capped rows and columns, a tab per sheet
 function SheetPreview({ page }) {
@@ -114,7 +125,7 @@ function MediaPlayer({ page }) {
 export function Preview({ page }) {
   const [body, setBody] = useState(null), [err, setErr] = useState("");
   const sheet = isOutput(page) && page.preview === "sheet", pdf = isPdf(page), doc = isOutput(page) && page.preview === "document";
-  const picture = isPicture(page) || pdf, text = isOutput(page) && page.preview === "text" && !/markdown/.test(type(page));
+  const picture = isPicture(page) || pdf, text = isText(page);
   // ...and a file of a kind with no preview (a zip, a .pptx) says so: read as text it drew its raw bytes over the chat
   const media = isMedia(page), none = isOutput(page) && !page.preview && !media;
   React.useEffect(() => {
@@ -191,6 +202,7 @@ function OutputFile({ file: p, open, onToggle, verb = "" }) {
         </button>
         {can && <Button size="small" variant={open ? "contained" : "outlined"} disableElevation onClick={onToggle}
           title={open ? "Hide the preview" : "Show it here"} data-tq-open={verb ? "" : undefined}>{open ? (verb ? "Hide" : "Hide preview") : verb || "Preview"}</Button>}
+        {!p.missing && isText(p) && <CopyFile f={p} />}
         {!p.missing && <Button size="small" href={attUrl(p, true)} title="Save a copy" data-tq-download=""
           onClick={(e) => { e.preventDefault(); save(p); }}>Download</Button>}
       </div>
@@ -202,7 +214,7 @@ function OutputFile({ file: p, open, onToggle, verb = "" }) {
   );
 }
 
-// a quiet line that unfolds what it counts: the earlier versions of one file, the rest of a long list, the agent's working files
+// a quiet line that unfolds what it counts: the earlier versions of one file, the rest of a long list
 function Fold({ label, tag, children }) {
   const [open, setOpen] = useState(false);
   return (
@@ -215,7 +227,7 @@ function Fold({ label, tag, children }) {
 
 // `verb`: the press that shows each one is a button named for it ("Open", the Result's What it made) rather than the name's own " · show here"
 // `deliver`: an agent's files, each thing it made ONCE (taskOutputs.deliverables) - its newest version with "N earlier versions" under it,
-// the agent's working files under one line, and past FOLD the rest behind "Show N more"
+// and past FOLD the rest behind "Show N more" - every file it made is in the list, whatever its kind
 export const FOLD = 5;
 const many = (n, one) => `${n} ${one}${n === 1 ? "" : "s"}`;
 export default function PublishedPages({ pages, open: openAll = false, verb = "", deliver = false }) {
@@ -227,7 +239,7 @@ export default function PublishedPages({ pages, open: openAll = false, verb = ""
     openAll ? setShut(flip) : setOpened(flip);
   };
   if (deliver) {
-    const { made, working } = deliverables(pages);
+    const { made } = deliverables(pages);
     const one = (p) => <PublishedPages key={p.id} pages={[p]} open={openAll} verb={verb} />;
     const item = (p) => <React.Fragment key={p.id}>{one(p)}
       {!!p.earlier?.length && <Fold tag="earlier" label={many(p.earlier.length, "earlier version")}>{p.earlier.map(one)}</Fold>}</React.Fragment>;
@@ -235,7 +247,6 @@ export default function PublishedPages({ pages, open: openAll = false, verb = ""
       <div className="tq-published" data-tq-made-list="">
         {made.slice(0, FOLD).map(item)}
         {made.length > FOLD && <Fold tag="more" label={`Show ${made.length - FOLD} more`}>{made.slice(FOLD).map(item)}</Fold>}
-        {!!working.length && <Fold tag="working" label={`${many(working.length, "working file")} it used`}>{working.map(one)}</Fold>}
       </div>
     );
   }
@@ -259,6 +270,7 @@ function PageRow({ p, open, onToggle, verb }) {
         </button>
         {p.url && verb && <Button size="small" variant={open ? "contained" : "outlined"} disableElevation data-tq-open=""
           onClick={onToggle} title={open ? "Hide it" : "Show it here"}>{open ? "Hide" : verb}</Button>}
+        {p.url && isText(p) && <CopyFile f={p} />}
         {p.url && (
           <Button size="small" href={attUrl(p, true)} title="Save a copy" data-tq-download=""
             onClick={(e) => { e.preventDefault(); save(p); }}>Download</Button>

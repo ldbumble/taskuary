@@ -255,12 +255,15 @@ const foldKey = (id) => String(id || "").replace(/^(live-.+)-\d+$/, "$1");
 // HOW MUCH OF THE WORK IS DRAWN (chatDetail.js): "summary", "steps" or "everything" - the task's own, else its kind's default from Settings
 const LevelCtx = React.createContext("steps");
 // AN EDIT IS A ROW THAT OPENS ON ITS DIFF: "Edited budget.py (+12 −3)", the code with its line numbers under it
-const EditRow = ({ p }) => (
-  <details className="tq-aui-step tq-aui-step-edit tq-cc-edit" data-tq-edit={baseName(p.file)}>
+// ...AND A FILE IT WROTE STANDS OPEN ON WHAT IT WROTE, as a terminal shows it (the owner, 2026-11-15): where the agent saved something and
+// never showed it, opening the turn's steps is enough to read it - nothing it wrote is a row to hunt through. In a chat; a coding turn's
+// rows stay shut, there the list of edits is the thing read
+const EditRow = ({ p }) => { const chat = React.useContext(ChatCtx); return (
+  <details className="tq-aui-step tq-aui-step-edit tq-cc-edit" data-tq-edit={baseName(p.file)} {...(chat && p.wrote && p.hunks.length ? { open: true, "data-tq-wrote": "" } : {})}>
     <summary><WriteIcon aria-hidden className="tq-aui-step-icon" /><span>{p.summary}</span></summary>
     <div className="tq-cc-diff">{p.hunks.length ? p.hunks.map((h, i) => <Hunk key={i} h={h} path={p.file} />)
       : <div className="tq-dv-empty">Its log keeps no diff for this one.</div>}</div>
-  </details>);
+  </details>); };
 // ...a fold the owner opened stays open across the live turn's new ids (OPEN_FOLDS)
 const Fold = ({ k, label, quiet = false, children }) => {
   const [open, setOpen] = useState(() => OPEN_FOLDS.has(k));
@@ -427,7 +430,9 @@ const ConvTurn = ({ t, more, cards, name, ask = null }) => {
   const names = new Set(made.map((f) => f.name));
   const rest = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown).rest.filter((p) => !names.has(p.name));
   const quiet = !live && !hasParts(parts) && !words && !t.fail && !cards?.length && !made.length && !rest.length && !ask;
-  const onYou = !live && sum ? turnOnYou(sum, words) : "";
+  // ...and never under the turn's own open question (the audit, 2026-11-15: "What is your plate number?" in its words, then "For you to do:
+  // Tell me your plate number"): what it asks him IS what is left to him, said once
+  const onYou = !live && sum && !ask ? turnOnYou(sum, words) : "";
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
   const compacting = live && ((x) => x?.k === "compact" && !!x.status && !["completed", "failed", "cancelled"].includes(x.status))((t.steps || []).at(-1));

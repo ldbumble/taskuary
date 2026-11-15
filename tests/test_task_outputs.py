@@ -164,7 +164,9 @@ def _stamp(p: Path, n: int):
 
 class OneOfEachTests(unittest.TestCase):
     """The owner, 2026-10-28: "it looks like it created a million attachments". A workbook saved v1..v9 beside its helper script, its log
-    and a temp folder is ONE deliverable: its newest version, the eight before it behind it, the working files apart."""
+    and a temp folder: the workbook is listed ONCE - its newest version, the eight before it behind it.
+    ...and nothing it made is hidden (the owner, 2026-11-15: "anything an agent creates should not be hidden of course"): the script, the log
+    and the file in tmp/ are in the list too."""
     def setUp(self):
         self.store = MemoryStore()
         self.tid = self.store.create_task({'Title': 'Vendor pricing review', 'Summary': 'Compare what Payworth and Trainly charge.',
@@ -181,25 +183,24 @@ class OneOfEachTests(unittest.TestCase):
         (o / 'snag list.xlsx').write_bytes(b'x'); (o / 'plan.md').write_text('# Plan', encoding='utf-8')
 
     def test_nine_versions_and_scratch_are_one_file_and_eight_earlier(self):
-        made, working = outputs.deliverables(outputs.listing(self.tid))
-        self.assertEqual([r['name'] for r in made], ['pricing comparison v9.xlsx', 'summary.pdf'])
-        self.assertEqual(len(made[0]['earlier']), 8)
-        self.assertEqual(made[0]['earlier'][0]['name'], 'pricing comparison v8.xlsx')
-        self.assertEqual(sorted(r['path'] for r in working), ['build_sheet.py', 'run.log', 'tmp/rates.csv'])
+        made = outputs.deliverables(outputs.listing(self.tid))
+        self.assertEqual(sorted(r['path'] for r in made), ['build_sheet.py', 'pricing comparison v9.xlsx', 'run.log', 'summary.pdf', 'tmp/rates.csv'])
+        v9 = next(r for r in made if r['name'] == 'pricing comparison v9.xlsx')
+        self.assertEqual(len(v9['earlier']), 8)
+        self.assertEqual(v9['earlier'][0]['name'], 'pricing comparison v8.xlsx')
 
-    def test_a_script_that_is_all_it_made_is_what_it_made_and_reads_as_text(self):
+    def test_a_script_is_what_it_made_alone_or_beside_a_workbook_and_reads_as_text(self):
         # the owner, 2026-11-15: he asked for a query to review, the agent saved it as a file, and nothing of it stood in the chat
         t = self.store.create_task({'Title': 'Clear three columns on three rows', 'Kind': 'general'}, 'owner'); d = outputs.folder(t); d.mkdir(parents=True, exist_ok=True)
         (d / 'clear_columns.sql').write_text('BEGIN;\nUPDATE facilities SET fax = NULL WHERE id IN (14, 22, 31);\nCOMMIT;\n', encoding='utf-8')
-        made, working = outputs.deliverables(outputs.listing(t))
-        self.assertEqual(([r['name'] for r in made], working), (['clear_columns.sql'], []))
+        made = outputs.deliverables(outputs.listing(t))
+        self.assertEqual([r['name'] for r in made], ['clear_columns.sql'])
         self.assertEqual(made[0]['preview'], 'text')                    # ...by its bytes: no list of extensions says what can be read
         (d / 'blob.bin').write_bytes(bytes([0, 1, 2, 255]) * 40)
         self.assertIsNone(next(r for r in outputs.listing(t) if r['name'] == 'blob.bin')['preview'])
-        # ...beside a workbook the helper still folds away, unless its words name it
+        # ...and beside a workbook it is still in the list: nothing an agent made is hidden for its kind
         (d / 'rates.xlsx').write_bytes(b'x')
-        self.assertEqual(sorted(r['name'] for r in outputs.deliverables(outputs.listing(t))[1]), ['clear_columns.sql'])
-        self.assertEqual(outputs.deliverables(outputs.listing(t), named=['clear_columns.sql'])[1], [])
+        self.assertEqual(sorted(r['name'] for r in outputs.deliverables(outputs.listing(t))), ['blob.bin', 'clear_columns.sql', 'rates.xlsx'])
 
     def test_a_family_is_one_name_without_its_version_marks(self):
         one = {outputs.family(n) for n in ('Vendor pricing v9.xlsx', 'vendor_pricing_final.xlsx', 'vendor pricing (2).xlsx',
@@ -211,7 +212,8 @@ class OneOfEachTests(unittest.TestCase):
 
     def test_the_phone_offers_each_thing_once(self):
         from taskuary import remote_assistant
-        self.assertEqual([r['name'] for r in remote_assistant.task_files(self.store, {'tid': self.tid})], ['pricing comparison v9.xlsx', 'summary.pdf'])
+        self.assertEqual(sorted(r['name'] for r in remote_assistant.task_files(self.store, {'tid': self.tid})),
+                         ['build_sheet.py', 'pricing comparison v9.xlsx', 'rates.csv', 'run.log', 'summary.pdf'])
 
     def test_every_worker_hears_one_final_file(self):
         from taskuary import terminal
@@ -230,7 +232,8 @@ class OneOfEachTests(unittest.TestCase):
         meaning = fake_embed.meaning({'pricing': ['pricing'], 'snag': ['snag']})
         meaning.__enter__(); self.addCleanup(meaning.__exit__, None, None, None)
         hits = outputs.find(self.store, 'vendor pricing', 'xlsx')
-        self.assertEqual([(h['tid'], h['name']) for h in hits], [(self.tid, 'pricing comparison v9.xlsx')])
+        # ...every sheet it made on that task, the table under tmp/ too (nothing it made is hidden, 2026-11-15) - the workbook once, its newest
+        self.assertEqual(sorted((h['tid'], h['name']) for h in hits), [(self.tid, 'pricing comparison v9.xlsx'), (self.tid, 'rates.csv')])
         said = concierge.read_op(self.store, 'outputs.find', {'query': 'the excel on the task about vendor pricing', 'kind': 'xlsx'})
         self.assertIn('pricing comparison v9.xlsx', said)
         self.assertIn(f'/api/task-outputs/{self.tid}/pricing%20comparison%20v9.xlsx', said)

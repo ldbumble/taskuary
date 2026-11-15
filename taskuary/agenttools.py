@@ -17,6 +17,7 @@ import json, re
 from loguru import logger
 
 from . import words
+from .selfclose import SHOW_WHAT
 
 SERVER = 'taskuary'
 CAP = 12000                                         # one result; past it the agent is told to narrow, never handed half silently
@@ -93,9 +94,9 @@ TOOLS = {
                      "never the same table or list again in text. `elements` maps an id to {type, props, children?}; `root` is drawn "
                      "first. Types: grid, stats, chart, table, checklist, list, steps, text, note, badge, button - their props and a "
                      "worked example are the guide tool's `show` topic: read it before your first view. A button only lights or opens"
-                     " - it never sends, pays or closes. A bad spec comes back saying what to fix. `files`: full paths of pictures, PDFs"
-                     " or pages you made (.png .jpg .gif .webp .svg .pdf .html .md .csv) - each is copied onto the task and drawn in this "
-                     "chat as it is, a picture as the picture. It is the only way to put a file in front of the owner: never open a viewer,"
+                     " - it never sends, pays or closes. A bad spec comes back saying what to fix. `files`: full paths of files you made - a picture,"
+                     " a PDF, a page, or any file that is text - each is copied onto the task and drawn in this "
+                     f"chat as it is, a picture as the picture. {SHOW_WHAT} It is the only way to put a file in front of the owner: never open a viewer,"
                      " a browser or an app on the computer, and never say something is on their screen unless this tool said it was shown.",
              _S({'title': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': {'type': 'object'}},
                  'files': {'type': 'array', 'items': _STR}}),

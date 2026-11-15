@@ -62,11 +62,13 @@ SHOWN_MAX = 16 * 1024 * 1024
 def shown(store, tid: int, src: Path, actor='assistant', name: str = None) -> dict:
     """Copy a file the agent chose to show onto the task - its own copy, so the chat keeps it after the scratch folder is cleared.
     `name`: the caption the chat draws over it, where the file's own name says nothing (browserview.keep_last)."""
-    kind = SHOWN_TYPES.get(src.suffix.lower())
-    if not kind: raise ValueError(f'{src.suffix or "a file with no extension"} cannot be shown - only {" ".join(sorted(SHOWN_TYPES))}')
+    # ...and any other file that is plain text - a query, a script, a config - is shown as text: by its bytes, no list of kinds (outputs.reads_as_text)
+    from .outputs import reads_as_text
+    kind = SHOWN_TYPES.get(src.suffix.lower()) or ('text/plain' if src.is_file() and reads_as_text(src) else None)
+    if not kind: raise ValueError(f'{src.suffix or "a file with no extension"} cannot be shown - only a text file or {" ".join(sorted(SHOWN_TYPES))}')
     if src.stat().st_size > SHOWN_MAX: raise ValueError('it is over 16 MB')
     folder = root() / str(int(tid)); folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"shown-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{_safe(src.stem)}{src.suffix.lower()}"
+    path = folder / f"shown-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{_safe(src.stem)}{_safe(src.suffix.lower().lstrip('.')) and '.' + _safe(src.suffix.lower().lstrip('.'))}"
     path.write_bytes(src.read_bytes())
     aid = store.add_task_artifact({'TaskId': tid, 'Name': name or src.name, 'ContentType': kind, 'Size': path.stat().st_size,
                                    'Path': str(path), 'Kind': 'shown', 'CreatedBy': actor})

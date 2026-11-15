@@ -145,7 +145,7 @@ test("a turn's On you steps are said under its words, never twice", () => {
   assert.equal(turnOnYou(sum, "Compared three. **Decide whether to offer same-day pay** - your call."), "For you to do: Say if I should ask Payworth for terms.");
   assert.equal(turnOnYou({ did: "x" }, "x"), "");
   assert.equal(turnOnYou(null, "x"), "");
-  assert.match(read("GeneralWorkspace.jsx"), /const onYou = !live && sum \? turnOnYou\(sum, words\) : ""/);
+  assert.match(read("GeneralWorkspace.jsx"), /const onYou = !live && sum && !ask \? turnOnYou\(sum, words\) : ""/);
   assert.match(read("GeneralWorkspace.jsx"), /\{!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}>/);
 });
 

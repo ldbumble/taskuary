@@ -374,6 +374,10 @@ class LiveSocketTests(unittest.TestCase):
             stamped = live._pending['feed-changed']['seq']
             self.assertGreater(stamped, before)
             self.assertGreaterEqual(live.seq(), stamped, 'a read begun now has seen it')
+            # ...AND A STAMP NEVER GOES BACK ACROSS A RESTART (2026-11-15): the count began again at 1, so a page open through one held a
+            # rail "newer" than every wake-up of the new process and did not read again - the count begins at the clock
+            import time
+            self.assertGreater(before, (time.time() - 7 * 86400) * 1000, 'a stamp of this process is newer than any an earlier one handed out')
             live.emit('feed-changed', message_id=2, seq=None)                # unstampable (store._poke inside a transaction)
             self.assertNotIn('seq', live._pending['feed-changed'], 'one unstamped write leaves the window uncovered')
             live.flush()

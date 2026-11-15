@@ -19,8 +19,8 @@ def _free_port():
 class FakeScreencast:
     """agent-browser's stream socket, minus the browser: greets a client with a frame and a url,
     remembers everything the client sends, and notes the query string it was asked with."""
-    def __init__(self):
-        self.port, self.got, self.paths, self.origins = _free_port(), [], [], []
+    def __init__(self, greet=None):
+        self.port, self.got, self.paths, self.origins, self.greet = _free_port(), [], [], [], greet
         self.loop = asyncio.new_event_loop(); self.ready = threading.Event()
         threading.Thread(target=self._run, daemon=True).start(); self.ready.wait(5)
     def _run(self):
@@ -28,6 +28,10 @@ class FakeScreencast:
         async def handle(ws):
             self.paths.append(ws.request.path); self.origins.append(ws.request.headers.get('Origin'))
             await ws.send(json.dumps({'type': 'status', 'connected': True}))
+            if self.greet is not None:
+                for m in self.greet: await ws.send(json.dumps(m))
+                async for m in ws: self.got.append(json.loads(m))
+                return
             # data FIRST, type last: the order agent-browser 0.38.2 actually sends (2026-10-02)
             await ws.send(json.dumps({'data': JPEG, 'metadata': {'deviceWidth': 1280, 'deviceHeight': 720}, 'seq': 7, 'type': 'frame'}))
             await ws.send(json.dumps({'type': 'url', 'url': 'https://example.test/login'}))
@@ -174,6 +178,34 @@ class RelayTests(unittest.TestCase):
         bv.remember('r1', json.dumps({'type': 'url', 'url': 'https://other.example/check?app=1'}))
         os.utime(t, (time.time() + 9, time.time() + 9))
         self.assertEqual(bv.state('r1', fresh=True)['url'], 'https://other.example/check?app=1')
+
+    def test_the_view_opens_on_the_page_as_it_is_now_not_on_the_last_picture_it_showed(self):
+        """agent-browser greets a new viewer with the frame it last sent anyone - a minute old, of the page before - and only then the page
+        as it is. Handed a human check, the owner saw the account page of the site before under "Your turn ... on <this site>" for a beat
+        (recorded, the browser round 2026-11-14). The old picture is dropped, and acked so the stream goes on; and the tabs it greets with
+        say where the page is, query and all, before anything moves."""
+        self.fake.stop()
+        old, new = int((time.time() - 60) * 1000), int(time.time() * 1000)
+        self.fake = FakeScreencast(greet=[
+            {'type': 'status', 'connected': True, 'screencasting': False},
+            {'type': 'tabs', 'tabs': [{'active': False, 'url': 'https://example.test/other'}, {'active': True, 'url': 'https://example.test/check?app=1'}]},
+            {'data': 'T0xE', 'metadata': {'deviceWidth': 980, 'timestamp': old}, 'seq': 39, 'type': 'frame'},
+            {'data': JPEG, 'metadata': {'deviceWidth': 980, 'timestamp': new}, 'seq': 40, 'type': 'frame'}])
+        (self.tmp / 'tq-r1.stream').write_text(str(self.fake.port)); bv._CACHE.clear()
+        with c.websocket_connect('/api/terminals/r1/browser/ws') as ws:
+            got = [ws.receive_json() for _ in range(3)]
+            end = time.time() + 5
+            while time.time() < end and not self.fake.got: time.sleep(.05)
+            got = got + [ws.receive_json()]
+        self.assertEqual([(m['type'], m.get('seq')) for m in got], [('status', None), ('status', None), ('tabs', None), ('frame', 40)])
+        self.assertEqual(self.fake.got[0], {'type': 'ack', 'seq': 39})
+        self.assertEqual((bv._frame(bv.LAST['r1']['frame']), bv.state('r1', fresh=True)['url']), (JPEG, 'https://example.test/check?app=1'))
+        # ...a still page someone else is already watching sends no newer picture: the one it greets with is the page, and is shown
+        self.fake.stop(); self.fake = FakeScreencast(greet=[{'type': 'status', 'connected': True, 'screencasting': True},
+                                                            {'data': JPEG, 'metadata': {'timestamp': old}, 'seq': 39, 'type': 'frame'}])
+        (self.tmp / 'tq-r1.stream').write_text(str(self.fake.port)); bv._CACHE.clear()
+        with c.websocket_connect('/api/terminals/r1/browser/ws') as ws:
+            self.assertEqual([ws.receive_json().get('seq') for _ in range(3)][-1], 39)
 
     def test_a_frame_held_back_for_a_sign_in_is_acked_by_the_relay_so_the_view_comes_back(self):
         """While Taskuary types a sign-in no frame reaches the page - and under ack pacing a frame nobody acks is the last one sent: the

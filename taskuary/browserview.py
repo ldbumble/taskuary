@@ -59,8 +59,13 @@ FILLING = set()
 # never held one, and Snapshot said "no frame yet" over a page that was plainly painting (2026-10-02). A
 # search finds the key in any order, and it cannot be fooled by the payload: base64 holds no quote, and a
 # url that spells `"type":"frame"` inside its string arrives with those quotes escaped.
-_KIND = re.compile(r'"type"\s*:\s*"(frame|url)"')
+_KIND = re.compile(r'"type"\s*:\s*"(frame|url|tabs)"')
 _SEQ, _ACK = re.compile(r'"seq"\s*:\s*(\d+)'), re.compile(r'"type"\s*:\s*"ack"')
+# WHEN A FRAME WAS TAKEN (its metadata, epoch ms). agent-browser greets a new viewer with the frame it last sent ANYONE, then the page as
+# it is: a view reopened for a human check drew the account page of the site before for a beat, under "Your turn ... on <this site>"
+# (recorded, the browser round 2026-11-14). A greeting frame older than this many seconds is not shown (relay).
+_TAKEN, STALE = re.compile(r'"timestamp"\s*:\s*(\d+(?:\.\d+)?)'), 2.0
+_CASTING = re.compile(r'"screencasting"\s*:\s*(true|false)')
 
 
 def installed() -> bool:
@@ -205,8 +210,11 @@ def remember(sid: str, raw: str):
     if not k or (k.group(1) == 'frame' and sid in FILLING): return
     cur = LAST.setdefault(sid, {'frame': '', 'url': '', 'at': 0})
     if k.group(1) == 'frame': cur.update(frame=raw, at=time.time()); return
-    try: u = json.loads(raw).get('url')
-    except (ValueError, AttributeError): return
+    try: m = json.loads(raw)
+    except ValueError: return
+    if not isinstance(m, dict): return
+    # ...the tabs a viewer is greeted with say where the page is NOW, before anything moves - the active one's address, whole
+    u = m.get('url') if k.group(1) == 'url' else next((t.get('url') for t in m.get('tabs') or [] if isinstance(t, dict) and t.get('active')), None)
     if u: cur['url'], cur['url_at'] = u, time.time()
 
 
@@ -239,8 +247,19 @@ async def _relay(ws, sid: str, url: str):
         # agent-browser only admits browser Origins from localhost; a client with none is a tool
         async with websockets.connect(url, origin='http://localhost', max_size=MAX_FRAME) as up:
             async def down():
+                since, fresh, idle = time.time(), False, False
                 async for m in up:
                     m = m if isinstance(m, str) else m.decode('utf-8', 'replace')
+                    # the greeting's old picture is not the page (STALE): dropped, and acked as a frame held for a sign-in is. Only where
+                    # the browser says it was sending nobody frames - it then takes a new one for this viewer; a still page another viewer
+                    # is already on sends no more, and its last picture IS the page
+                    if not fresh and len(m) < 2000 and (c := _CASTING.search(m)): idle = c.group(1) == 'false'
+                    if not fresh and (k := _KIND.search(m)) and k.group(1) == 'frame':
+                        t = float(g.group(1)) if (g := _TAKEN.search(m[-400:]) or _TAKEN.search(m[:400])) else 0
+                        if idle and t and since - (t / 1000 if t > 1e11 else t) > STALE:
+                            if q := _SEQ.search(m): await up.send(json.dumps({'type': 'ack', 'seq': int(q.group(1))}))
+                            continue
+                        fresh = True
                     # a sign-in is going in: the frame is dropped - AND ACKED HERE, for the page never will. Under ack pacing one frame is
                     # in flight at a time, so a frame nobody acked was the last the pane ever got: after "Sign in here" the view stood
                     # frozen on the sign-in form for good, the agent signed in and working on a page the owner could not see (2026-11-03)

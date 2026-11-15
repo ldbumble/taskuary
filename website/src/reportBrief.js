@@ -21,7 +21,11 @@ export function briefItem(line) {
   return { src, status, who, what, gist: gist.join(" — "), text: t.slice(lead.length).trim() };
 }
 
+// ...and only that shape (2026-11-15, a GitHub Trending report): its title "Morning Report: GitHub Trending" read as a roll-up, so a markdown
+// table under it was laid out a line per box. A table or a fenced block is never the brief's, nor are more loose lines than its note and closing
+const NOT_A_BRIEF = /^\s*(?:\|.*\||```)/m, LOOSE = 3;
 export function briefOf(text) {
+  if (NOT_A_BRIEF.test(String(text || ""))) return null;
   const lines = String(text || "").split(/\r?\n/), out = { notes: [], rollups: [], groups: [], closing: [] };
   let group = null, pending = null;
   for (const raw of lines) {
@@ -35,5 +39,5 @@ export function briefOf(text) {
     group = null; pending = l;
   }
   if (pending) out[out.groups.length ? "closing" : "notes"].push(plain(pending));
-  return out.rollups.length && out.groups.length ? out : null;
+  return out.rollups.length && out.groups.length && out.notes.length + out.closing.length <= LOOSE ? out : null;
 }

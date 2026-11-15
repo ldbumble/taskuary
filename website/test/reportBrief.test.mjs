@@ -50,3 +50,24 @@ test("a report of words with the shape is drawn as the brief, on the table only"
   assert.match(ac, /const brief = report && !morning && !rows && briefOf\(text\);/);
   assert.match(ac, /if \(brief\) return <ReportBrief brief=\{brief\}/);
 });
+
+// 2026-11-15: a trending report whose title line looks like a roll-up ("Morning Report: ...") was laid out a line per box, its
+// markdown table cut into rows of pipes. A table, a fenced block, or a page of loose lines is markdown, never the brief.
+test("a report with a markdown table is never read as a brief", () => {
+  const trending = `Morning Report: Repo Trending, 2026-11-15
+
+Top 5 (daily), stars today
+
+| # | Repo | Stars today |
+|---|---|---|
+| 1 | [org/app](https://github.example/org/app) | 1,041 |
+| 2 | [northwind/ledger](https://github.example/northwind/ledger) | 393 |
+
+Themes:
+- agent tooling
+- code review`;
+  assert.equal(briefOf(trending), null);
+  assert.equal(briefOf("Status: fine\n\n```\nlog\n```\n- one"), null);
+  assert.equal(briefOf("Status: fine\nline a\n\nline b\n\nline c\n\nline d\n\nline e\n- one"), null);
+  assert.ok(briefOf(EOD), "the End of day checkup's own shape still reads as one");
+});

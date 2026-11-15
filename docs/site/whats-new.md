@@ -2,6 +2,19 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.6 - 2026-11-14
+
+- The browser view names the page the agent is on now, not the one it last showed
+- Trust names the address and can be taken back; the day's AI limit is a setting beside today's usage; a blank Anthropic card reads mail on its light model
+- The help pages say what the app does now
+- The browser view opens on the page as it is now, never on the last picture it showed
+- While a saved sign-in is typed, the answer that handed it over is already a step
+- The browser view opens without a black beat, at its shape, on its own address
+- A kept conversation's instructions never change: what changed leads the next turn, once
+- Taking back a trust is named owner-only, and the settings copy and built docs carry the new knob and pages
+- An opening browser view asks for its shape as it connects, and says what it waits for
+- The Assistant's chat keeps its first instructions: a memory kept or a document changed leads its next turn, once
+
 ## 0.4.0.5 - 2026-11-13
 
 - Teams: a late chat message is read from the chat list, not only said to be behind

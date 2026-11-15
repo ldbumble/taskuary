@@ -308,21 +308,6 @@ def _everywhere(store, pick: str, cli: str = ''):
     if cli: store.set_setting('default_brain', cli, 'owner')
 
 
-# EACH JOB ON THE MODEL THAT FITS IT, from an organisation's AI card (HIPAA AI): its gateway lists what it offers, and the
-# fastest, cheapest takes the many small calls - triage, the Assistant - while the general agent gets Sonnet (the owner,
-# 2026-10-16: "use lowest quickest for triage/assistant/advisor ... sonnet default for agent work"). Opus is just another
-# choice in that model menu. Read off the names: a gateway's list carries no prices.
-FAST = ('lite', 'flash', 'haiku', 'nano', 'mini')
-AGENT = ('sonnet', 'pro', 'opus')
-
-
-def pick_models(models) -> tuple:
-    """(fast, agent) from a gateway's model ids - '' where nothing fits."""
-    real = [str(m) for m in models or [] if str(m) and str(m) != 'hipaa-ai']
-    by = lambda keys: next((m for k in keys for m in real if k in m.lower()), '')
-    return by(FAST), by(AGENT)
-
-
 # THREE TIERS ON EVERY AI CARD (the owner, 2026-11-09): a card set up with its model boxes blank ran everything on the gateway's
 # default alias and never stepped up. Set up or tested, each EMPTY box is filled from the models the card lists - read off the
 # names' family words, never a price list: the top family is the strong tier, the mid one normal, the quick cheap one light. Claude
@@ -345,17 +330,40 @@ def tier_models(models, alias: str = '') -> dict:
     return {'model': model, 'light_model': '' if light == model else light, 'strong_model': '' if strong == model else strong}
 
 
-def fill_tiers(store, cid: int, models=None) -> dict:
-    """Fill the card's EMPTY model boxes from what it lists; returns what was written."""
+# ...AND THE AGENT'S MODEL IS ONE THAT ANSWERS (the owner, 2026-11-15: agents on 2.5 Pro where Claude does not answer, Flash for the quick
+# work): a gateway lists Claude whether or not its quota lets it answer - LiteLLM then answers with another model under Claude's name. The
+# model and strong tiers are each asked once (answers); one that fails, or that another model answers for, is passed over for the next
+def answers(c: dict, conf: dict, model: str) -> bool:
+    "Does `model` on card `c` answer, itself - not an error, not another model the gateway fell back to?"
+    from . import llm
+    try:
+        with llm.hearing() as box: llm.make_llm(c['Type'], {**conf, TIER_BOX.get(c['Type'], 'model'): model}, c.get('Secret') or '')('Reply with: ok', 'ok?', max_tokens=16)
+    except Exception as e: logger.info(f'{c["Type"]}: {model} did not answer - {str(e)[:200]}'); return False
+    return not box.get('fell')
+
+
+def card_tiers(store, cid: int, models=None) -> tuple:
+    """(the card, its config, its tiers from what it lists - the model and strong ones each a model that answers); tiers None with no list."""
     from . import llm
     c = store.get_connector(cid, with_secret=True) or {}
-    if c.get('Type') not in llm.AI_TYPES: return {}
     try: conf = json.loads(c.get('ConfigJson') or '{}') or {}
     except ValueError: conf = {}
+    if c.get('Type') not in llm.AI_TYPES: return c, conf, None
     if models is None:
         try: models = llm.list_models(c['Type'], conf, c.get('Secret') or '')
-        except Exception as e: logger.info(f'{c["Type"]}: no model list to fill its tiers from - {e}'); return {}
-    tiers = tier_models(models, (llm.OPENAI_COMPATIBLE.get(c['Type']) or ('', ''))[1])
+        except Exception as e: logger.info(f'{c["Type"]}: no model list to fill its tiers from - {e}'); return c, conf, None
+    alias, models, said = (llm.OPENAI_COMPATIBLE.get(c['Type']) or ('', ''))[1], list(models or []), {}
+    while True:
+        tiers = tier_models(models, alias)
+        dead = next((m for m in (tiers['model'], tiers['strong_model']) if m and not said.setdefault(m, answers(c, conf, m))), None)
+        if not dead: return c, conf, tiers
+        models.remove(dead)
+
+
+def fill_tiers(store, cid: int, models=None) -> dict:
+    """Fill the card's EMPTY model boxes from what it lists; returns what was written."""
+    c, conf, tiers = card_tiers(store, cid, models)
+    if not tiers: return {}
     tiers[TIER_BOX.get(c['Type'], 'model')] = tiers.pop('model')
     put = {k: v for k, v in tiers.items() if v and not str(conf.get(k) or '').strip()}
     if put: store.merge_connector_config(cid, put); store.audit('connector', cid, 'fill_tiers', 'system', detail=put)
@@ -363,15 +371,13 @@ def fill_tiers(store, cid: int, models=None) -> dict:
 
 
 def models_by_job(store, cfg: dict, cid: int, only_blank: bool = False) -> dict:
-    """Point triage and the Assistant at the card's fastest model and the general agent at its Sonnet. `only_blank`: the Connections
-    page - a job the owner pointed somewhere, or one a brain already runs, keeps it; setup's pick sets them all."""
+    """Point triage and the Assistant at the card's light tier and the general agent at its model tier (card_tiers: Claude where it
+    answers, else the strongest that does - the owner, 2026-10-16 and 2026-11-15). `only_blank`: the Connections page - a job the owner
+    pointed somewhere, or one a brain already runs, keeps it; setup's pick sets them all."""
     from . import agents, aidefaults, llm
-    c = store.get_connector(cid, with_secret=True) or {}
-    try: conf = json.loads(c.get('ConfigJson') or '{}')
-    except ValueError: conf = {}
-    try: fast, agent = pick_models(llm.list_models(c.get('Type'), conf, c.get('Secret') or ''))
-    except Exception as e:
-        logger.info(f'{c.get("Type")}: no model list from its gateway - {e}'); fast, agent = '', ''
+    c, conf, tiers = card_tiers(store, cid)
+    agent = (tiers or {}).get('model') or ''
+    fast = (tiers or {}).get('light_model') or agent
     pick = f'connector:{cid}'
     # A BLANK JOB IS NOT AN UNPOINTED ONE (2026-11-09: the card switched on in Connections took the general agent off the owner's own
     # Claude Code, which the blank slot already ran on, and wrote it as the owner's pick - "who decided this"). From Connections it takes only
@@ -385,6 +391,37 @@ def models_by_job(store, cfg: dict, cid: int, only_blank: bool = False) -> dict:
         if model and free(slot): aidefaults.apply(store, cfg, slot, pick, None if slot == 'triage_ai' and light else model,
                                                   actor='migration' if only_blank else 'owner')
     return {'fast': fast, 'agent': agent}
+
+
+# ...AND AN INSTALL FROM BEFORE IT, ONCE (the owner, 2026-11-15): a card whose agents still run its untouched default - the gateway's
+# alias, a blank box, a quick model Taskuary saved for them - moves to the model tier above; a model the owner chose by hand is never changed.
+# Untouched: a blank box or the card's default where that default is a gateway's alias or a quick model - and the agents' model where
+# Taskuary saved the alias or a quick one, never the owner
+AGENT_TIER_DONE = 'agent_tier_moved'
+def move_agent_tier(store, cfg: dict) -> list:
+    "Once per install, each active AI card's untouched agent model to its model tier; [(card, from, to)]. Not marked done where a card could not be read."
+    from . import llm
+    if store.get_setting(AGENT_TIER_DONE): return []
+    moved, unread = [], False
+    for row in store.list_connectors():
+        if row['Type'] not in llm.AI_TYPES or not row['Active'] or not row.get('HasSecret'): continue
+        cid, box = row['ConnectorId'], TIER_BOX.get(row['Type'], 'model')
+        c, conf, tiers = card_tiers(store, cid)
+        if tiers is None: unread = True; continue
+        alias, now, new = (llm.OPENAI_COMPATIBLE.get(row['Type']) or ('', ''))[1], str(conf.get(box) or '').strip(), tiers['model']
+        if not new or _tier(new) == 'light': continue
+        # ...only where the blank box runs a gateway's alias (no model family in its name) or a quick model: a provider's own default
+        # model is a choice its card says
+        if now in ('', alias) and new != now and alias and (not llm._FAMILY.search(alias) or _tier(alias) == 'light'):
+            store.merge_connector_config(cid, {box: new}); store.audit('connector', cid, 'agent_tier', 'migration', detail={box: new, 'was': now})
+            moved.append((cid, now, new))
+        # ...and the agents' own model, where Taskuary saved one for this card (never the owner's own pick)
+        pick, m = f'connector:{cid}', str(store.get_setting('assistant_model') or '').strip()
+        if store.get_setting('assistant_ai') == pick and m and store.setting_writer('assistant_model') != 'owner' and (m == alias or _tier(m) == 'light'):
+            from . import aidefaults
+            aidefaults.apply(store, cfg, 'assistant_ai', None, new, actor='migration'); moved.append((cid, m, new))
+    if not unread: store.set_setting(AGENT_TIER_DONE, '1', 'migration')
+    return moved
 
 
 def choose_cli(store, cfg: dict, name: str) -> dict:

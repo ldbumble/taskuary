@@ -11,6 +11,16 @@ from taskuary import brainroute, llm
 from taskuary.store import MemoryStore
 
 
+@pytest.fixture(autouse=True)
+def _every_model_answers():
+    "A gateway here answers for every model it lists, unless a test says otherwise (firstrun.answers asks each agent tier once)."
+    with mock.patch('taskuary.firstrun.answers', return_value=True): yield
+
+
+from taskuary import firstrun as _fr
+ANSWERS = _fr.answers               # the real one, for the test that drives it
+
+
 class HipaaAiTests(unittest.TestCase):
     def test_it_is_an_ai_card_in_the_catalogue_and_on_every_install(self):
         self.assertIn('hipaa_ai', llm.AI_TYPES)
@@ -42,9 +52,52 @@ class ModelsByJobTests(unittest.TestCase):
 
     def test_the_fastest_model_for_triage_and_the_assistant_and_sonnet_for_the_agent(self):
         from taskuary import firstrun
-        self.assertEqual(firstrun.pick_models(self.MODELS), ('gemini-3.8-flash', 'claude-sonnet-5-5'))
-        self.assertEqual(firstrun.pick_models(['x-pro', 'x-flash-lite', 'x-flash']), ('x-flash-lite', 'x-pro'))
-        self.assertEqual(firstrun.pick_models([]), ('', ''))
+        tiers = lambda ms: (lambda t: (t['light_model'] or t['model'], t['model']))(firstrun.tier_models(ms, 'hipaa-ai'))
+        self.assertEqual(tiers(self.MODELS), ('gemini-3.8-flash', 'claude-sonnet-5-5'))
+        self.assertEqual(tiers(['x-pro', 'x-flash']), ('x-flash', 'x-pro'))
+        self.assertEqual(tiers([]), ('', ''))
+
+    def test_where_claude_does_not_answer_the_agents_get_2_5_pro_and_flash_keeps_the_quick_work(self):
+        """The owner, 2026-11-15: agents on a HIPAA AI card default to Gemini 2.5 Pro, Flash stays for triage and the Assistant. The gateway lists
+        Claude whether or not its quota lets it answer (LiteLLM then answers with Gemini under Claude's name): each agent tier is asked once."""
+        from taskuary import firstrun
+        s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1, 'ConfigJson': json.dumps({'base_url': 'https://ai.northwind.example/v1'})}, 'owner')
+        asked = []
+        def answers(c, conf, m): asked.append(m); return 'claude' not in m
+        with mock.patch('taskuary.llm.list_models', return_value=self.MODELS), mock.patch('taskuary.firstrun.answers', side_effect=answers):
+            firstrun.fill_tiers(s, cid); out = firstrun.models_by_job(s, {}, cid)      # as setup does: its boxes, then its jobs
+        self.assertEqual(out, {'fast': 'gemini-3.8-flash', 'agent': 'gemini-2.5-pro'})
+        self.assertEqual(s.get_setting('assistant_model'), 'gemini-2.5-pro'); self.assertEqual(s.get_setting('concierge_model'), 'gemini-3.8-flash')
+        conf = json.loads(s.get_connector(cid)['ConfigJson']); self.assertEqual((conf['model'], conf['light_model']), ('gemini-2.5-pro', 'gemini-3.8-flash'))
+        self.assertEqual(len(asked), len(set(asked)) * 2, 'each model asked once a pass, never again within it')
+        # ...and a fallback the gateway made is not an answer: another model answered under the one asked for
+        def post(url, headers=None, json=None, timeout=None):
+            r = mock.Mock(status_code=200, headers={'x-litellm-attempted-fallbacks': '1'})
+            r.json.return_value = {'model': 'gemini-2.5-pro', 'choices': [{'message': {'content': 'ok'}}]}; return r
+        with mock.patch.object(firstrun, 'answers', ANSWERS), mock.patch('taskuary.llm.requests.post', side_effect=post):
+            self.assertFalse(firstrun.answers(s.get_connector(cid, with_secret=True), {'base_url': 'https://ai.northwind.example/v1'}, 'claude-sonnet-5-5'))
+
+    def test_an_install_from_before_moves_its_untouched_agent_model_once_and_never_the_owners(self):
+        from taskuary import firstrun
+        for box, writer, moved in (('', None, True), ('hipaa-ai', None, True), ('gemini-3.8-flash', None, False)):
+            s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+            s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1,
+                              'ConfigJson': json.dumps({'base_url': 'https://ai.northwind.example/v1', 'model': box})}, 'owner')
+            s.set_setting('assistant_ai', f'connector:{cid}', 'migration')
+            with mock.patch('taskuary.llm.list_models', return_value=['hipaa-ai', 'gemini-2.5-pro', 'gemini-3.8-flash']):
+                firstrun.move_agent_tier(s, {})
+                self.assertEqual(json.loads(s.get_connector(cid)['ConfigJson'])['model'], 'gemini-2.5-pro' if moved else box, box)
+                s.merge_connector_config(cid, {'model': 'hipaa-ai'})
+                self.assertEqual(firstrun.move_agent_tier(s, {}), [], 'once')
+        # ...and the agents' own model: a quick one Taskuary saved moves, the one the owner picked by hand stays
+        for writer, want in (('migration', 'gemini-2.5-pro'), ('owner', 'gemini-3.8-flash')):
+            s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+            s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1,
+                              'ConfigJson': json.dumps({'base_url': 'https://ai.northwind.example/v1', 'model': 'gemini-2.5-pro'})}, 'owner')
+            s.set_setting('assistant_ai', f'connector:{cid}', writer); s.set_setting('assistant_model', 'gemini-3.8-flash', writer)
+            with mock.patch('taskuary.llm.list_models', return_value=['gemini-2.5-pro', 'gemini-3.8-flash']): firstrun.move_agent_tier(s, {})
+            self.assertEqual(s.get_setting('assistant_model'), want, writer)
 
     def test_turning_it_on_sets_each_job_and_only_blank_ones_when_asked(self):
         from taskuary import firstrun, aidefaults

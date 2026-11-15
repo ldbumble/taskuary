@@ -12,6 +12,13 @@ from unittest import mock
 from taskuary import brainroute, llm
 from taskuary.store import MemoryStore
 from taskuary.testing import Factory
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _agent_tiers_answer():
+    "A gateway here answers for every model it lists (firstrun.answers asks each agent tier once)."
+    with mock.patch('taskuary.firstrun.answers', return_value=True): yield
 
 BASE, CODE = 'https://ai.northwind.example/v1', 'hai-code-1234567890'
 FLASH, SONNET, OPUS, PRO = 'gemini-3.8-flash', 'claude-sonnet-5-5', 'claude-opus-5-5', 'gemini-2.5-pro'

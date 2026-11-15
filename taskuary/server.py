@@ -11228,6 +11228,14 @@ def _heal_ended():
     except Exception as e: logger.warning(f'ended-item heal skipped: {e}')
 
 
+def _agent_tier():
+    "A card's untouched agent model to its model tier, once (firstrun.move_agent_tier) - it asks the gateway, so behind the start, never in it."
+    from . import firstrun
+    try:
+        if (moved := firstrun.move_agent_tier(store, cfg)): logger.info(f'agents moved to the model tier: {moved}')
+    except Exception as e: logger.warning(f'agent tier not moved: {e}')
+
+
 def catch_up_on_startup():
     """Whatever arrived while the app was closed was polled by nobody, and Taskuary is not a
     service - it is a window you open. So opening it reaches back past the watermark - but only
@@ -11236,7 +11244,7 @@ def catch_up_on_startup():
     try: days = int(store.get_setting('startup_sync_days') or 0)
     except ValueError: days = 0
     if days <= 0:
-        t = threading.Thread(target=lambda: (_walk_settled(), _heal_ended(), report_pass(startup=True)), daemon=True)
+        t = threading.Thread(target=lambda: (_walk_settled(), _heal_ended(), _agent_tier(), report_pass(startup=True)), daemon=True)
         t.start()
         return t
     hours = _catchup_hours(days)
@@ -11253,6 +11261,7 @@ def catch_up_on_startup():
         # WhatsApp poll waits now, and only for a bridge this launch started (messengers.poll_whatsapp -> wabridge.ready).
         _walk_settled()
         _heal_ended()
+        _agent_tier()
         # EVERYTHING IN FIRST. A report is not the mail, and running the due ones inside this
         # pass charged their minutes to the catch-up: 27 hours of mail was 91 s of a 264 s
         # startup and six reports were the other 165 s, all of it behind one 'catching up on

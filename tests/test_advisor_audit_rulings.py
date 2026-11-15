@@ -74,7 +74,7 @@ def test_how_you_work_arrives_however_many_care_lines_there_are():
     assert work in got and got.index(lc.SECTIONS['work']) < got.index(lc.SECTIONS['care']), got[:300]
     assert len(got) > 2000, 'the budget is no longer spent at 2000'
     # ...every other reader keeps what it cares about first
-    assert work not in lc.for_reader(s, 'assistant', {'domain': 'vendor.example'})
+    assert work not in lc.for_reader(s, 'agents', {'domain': 'vendor.example'})        # (the Assistant's budget is the memory whole)
 
 
 # ── 5. a line that cites a memory without saying it is not shown ──────────────────────────────────────────────────────────────────────

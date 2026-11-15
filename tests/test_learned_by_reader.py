@@ -396,3 +396,54 @@ def test_voice_line_stays_in_budget():
     for h, head in (('p', learned_cut.PEOPLE), ('w', learned_cut.WORK)): doc = put(doc, head, *[mk(h, i) for i in range(40)])
     s.save_doc('learned', doc, 'reflect')
     assert len(responder.voice_line(s, ['gail@northwind.example'])) <= 600 + len(responder.PEOPLE_HEAD) + 200
+
+
+def test_what_was_just_told_makes_the_cut_on_the_task_it_bears_on_sixty_lines_in():
+    """The memory round, 2026-11-14 ("if the user tells you something, they should not have to say it again"): a fact told is the LAST line
+    of its section, and ties fell in the document's order - so with sixty lines kept, the Assistant read the oldest and never the one just
+    said, and the agent on a vendor's payroll question read thirty lines about parking and none about payroll - least of all one filed
+    under Your people, which an agent reads only for the people ON its task."""
+    from taskuary import concierge, general, memoryedit
+    s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+    for i in range(60):
+        memoryedit.remember(s, f"Mail about {('parking permits', 'badge reprints', 'toner orders', 'the holiday rota')[i % 4]} at site {i} is "
+                               f"{('Paula Vance', 'Marcus Reed', 'Omar Keller')[i % 3]}'s to handle, not yours - no task unless they ask you directly")
+    memoryedit.remember(s, 'Paula Vance (paula@northwind.example) prefers a call to a long mail')
+    memoryedit.remember(s, 'Erin left the company; send payroll questions to Gail now', about='Erin Blake')      # ...filed under Your people
+    assert 'send payroll questions to Gail' in learned_cut.section(s.get_doc('learned'), learned_cut.PEOPLE)
+    # the Assistant reads the memory whole - Your people too, which sixty lines of What you care about had filled its budget before
+    told = concierge._system(s)
+    assert 'send payroll questions to Gail' in told and 'prefers a call' in told and 'memory.list reads all of it' not in told
+    # ...and past its budget the newest word is never the one left out, and it is told where the rest is
+    for i in range(140): memoryedit.remember(s, f'Site {i} sends its own weekly cleaning rota to the regional office and none of it is yours to chase or answer')
+    memoryedit.remember(s, 'Ray Colton covers the warehouse audits from now on')
+    told = concierge._system(s)
+    assert len(s.get_doc('learned')) > learned_cut.BUDGET['assistant'] and 'Ray Colton covers the warehouse audits' in told and 'memory.list reads all of it' in told
+    # an agent on a vendor's payroll question: the line about payroll, of sixty-two, in its 1,500 characters - nobody on the task is named in it
+    tid = s.create_task({'Title': 'Payroll question from Payworth', 'Summary': 'Their support asks who answers payroll questions at Northwind now',
+                         'Kind': 'general', 'Status': 'open'}, 'triage')
+    s.add_message({'TaskId': tid, 'ExternalId': 'v1', 'Channel': 'email', 'FromName': 'Payworth Support', 'FromEmail': 'support@vendor.example',
+                   'Subject': 'Payroll question', 'BodyText': 'Who should we send payroll questions to?', 'Status': 'routed'})
+    block = general.learned_block(s, tid)
+    assert 'send payroll questions to Gail' in block and len(block) < general.LEARNED_CHARS + 600
+    assert 'prefers a call' not in block, "the notes on people who are not on the task, and not about its subject, stay out"
+    # ...nor the lines that only share everyday words with it, or the company's own address: two about its subject at most
+    for who in ('Ray Colton', 'Omar Keller', 'Marcus Reed'): memoryedit.remember(s, f'{who} ({who.split()[0].lower()}@northwind.example) asks about support rotas at Northwind first')
+    assert sum(l.count('@northwind.example') for l in general.learned_block(s, tid).splitlines()) <= learned_cut.NEAR_PEOPLE
+    # ...and an agent on Paula's own mail reads how the owner deals with her in its brief, once - and not the payroll line, which is not this task's
+    t2 = s.create_task({'Title': 'Lobby repaint dates', 'Summary': 'Paula asks which week suits', 'Kind': 'general', 'Status': 'open'}, 'triage')
+    s.add_message({'TaskId': t2, 'ExternalId': 'p1', 'Channel': 'email', 'FromName': 'Paula Vance', 'FromEmail': 'paula@northwind.example',
+                   'Subject': 'Lobby repaint', 'BodyText': 'Which week suits you?', 'Status': 'routed'})
+    from taskuary import context
+    b2 = general.learned_block(s, t2) + context.for_prompt(s, t2)
+    assert b2.count('prefers a call') == 1 and 'payroll' not in b2
+
+
+def test_a_word_and_its_plural_are_one_word_to_the_ranking_and_a_rare_shared_word_counts_for_more():
+    about = {'topic': 'Payroll question from Payworth'}
+    assert learned_cut.rank('- Send payroll questions to Gail', 'k', about) == 2            # "question" / "questions"
+    ls = [('- Payworth mail about parking is not yours', 'a', 'care'), ('- Payroll is checked on Fridays', 'b', 'care'), ('- Mail about toner is not yours', 'c', 'care'),
+          ('- Payworth mail about toner is not yours', 'd', 'care')]
+    near = learned_cut.nearness(ls, about)
+    assert near[1] > near[0] > near[2] == 0, 'payroll is in one line, Payworth in two: the rarer word is the nearer line'
+    assert learned_cut.cut(ls, 40, about)[0] == ['- Payroll is checked on Fridays']

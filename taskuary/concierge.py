@@ -2431,8 +2431,10 @@ def _system(store, llm=None) -> str:
     from . import learned_cut
     try: mem = learned_cut.for_reader(store, 'assistant', target='chat')
     except Exception: mem = ''
+    # ...and where the rest is, when not all of it fits: a line it was not shown is one it would ask the owner to say again
+    more = ' - the newest and nearest lines; memory.list reads all of it' if mem and learned_cut.left_out(store, 'assistant') else ''
     if mem: who += ("WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (their memory, LEARNED.md - what they care about and what they do not, their "
-                    f"people, their rhythm, their promises; weigh it, the documents above outrank it):\n{mem}\n\n")
+                    f"people, their rhythm, their promises; weigh it, the documents above outrank it{more}):\n{mem}\n\n")
     # ...and the documents that are NOT here, by name: the tool index says docs.search is "how Taskuary itself works", so "how do I usually
     # sign off?" and "what rules do the agents work under" had no road to STYLE.md or AGENT.md the model could see (2026-11-02)
     who += ('THEIR OTHER DOCUMENTS are not above - STYLE.md (how they write: greeting, sign-off, tone), AGENT.md (the rules every agent '

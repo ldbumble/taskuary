@@ -36,11 +36,15 @@ def reads_label(slug: str) -> str:
 
 
 TITLE = {'people': 'Your people', 'care': 'What you care about', 'work': 'How you work', 'promises': 'Promises', 'bring': 'What to bring up'}
-BUDGET = {'triage': 1500, 'drafter': 600, 'agents': 3500, 'assistant': 4000, 'advisor': 6000}
+# ...the Assistant's is the memory whole, short of the lines about one other sender or topic (LEARNED.md's own head says "the Assistant all
+# of it"): at 4,000 it read the first forty lines of What you care about and no line of Your people - nor the fact just told it there
+# (2026-11-14). Its instructions are written once per chat and cached (concierge.turn_system)
+BUDGET = {'triage': 1500, 'drafter': 600, 'agents': 3500, 'assistant': 16_000, 'advisor': 6000}
 # ...and the section a reader takes FIRST, after the lines about the people on the item: what the owner cares about, except the Advisor's,
 # which is how they work - its 2000 characters filled with what-becomes-a-task lines and How you work never arrived (the Advisor audit,
 # 2026-10-28); a line saying how the owner handles a thing is what a lit button rests on
 FIRST = {'advisor': 'work'}
+NEAR_PEOPLE = 2                       # the people lines about an item's SUBJECT a reader takes, beside those about the people on it
 OVER = 'learned_over_budget'          # {reader: [keys]} - the lines a reader's budget left out on its last read
 USE_KEEP = 20_000                     # memory_use rows kept; the oldest go past it
 _PLACEHOLDER = re.compile(r'_\([^)]*\)_', re.S)
@@ -90,6 +94,10 @@ def lines(doc: str, head: str) -> list:
 
 
 _TOPIC = re.compile(r'[a-z0-9][a-z0-9-]{3,}')
+# ...a word and its plural or tense are one word here ("payroll question" and "payroll questions" shared one word, and the line about
+# payroll was ranked with the lines about parking - 2026-11-14): the first six letters, a way of matching spellings, never a list of words
+# ...and an address is who, not what about: every colleague's line shared "northwind" and "example" with a summary that named the company
+def stems(text: str) -> set: return {w[:6] for w in _TOPIC.findall(_ADDR.sub(' ', str(text or '').lower()))}
 def rank(raw: str, key: str, about: dict) -> int:
     """0 this sender, 1 someone else on the item (by address or full name), 2 the item's own subject, 3 their domain or repository,
     4 general. FACTS the app keeps about the item - its sender, the people on it, its title, its domain or repository - against the line,
@@ -104,7 +112,7 @@ def rank(raw: str, key: str, about: dict) -> int:
     from .memorylines import scope_of
     if scope_of(raw)[0] == 'sender': return 5
     # ...the subject as two of its own longer words in the line: a ranking, so a near miss costs an order, never a read
-    if len(set(_TOPIC.findall(s.get('topic', ''))) & set(_TOPIC.findall(t))) >= 2: return 2
+    if len(stems(s.get('topic', '')) & stems(t)) >= 2: return 2
     if any(s.get(f) and s[f] in t for f in ('domain', 'repo', 'scope')): return 3
     # ...and a line about one OTHER sender, domain or topic (memorylines' `(about: ...)` - the owner's verdicts, a line each) comes after
     # every general line: there are hundreds of them, and the one about someone else says least about this item (2026-10-27)
@@ -136,18 +144,36 @@ def about_mail(msg: dict) -> dict:
 # ones. The lines about the people on this very item still come first: there are few of them, and triage weighs the priority by them.
 
 
-def cut(ls: list, budget: int, about: dict = None, first: str = 'care') -> tuple:
-    """(lines that fit, keys that did not) - whole lines, closest scope first; the doc's own order breaks ties. Lines may carry their
-    section slug as a third item: then care lines go before others of the same scope, and the owner's own (untagged) lines before
-    learned ones. A `first` other than care leads from scope 2 on: its lines go before every topic, domain and general line of the
-    others, so the budget never fills before it is read."""
+def nearness(ls: list, about: dict = None, sims: dict = None) -> list:
+    """How near each line is to the item's subject, for ordering lines of one scope - a ranking, never a verdict. By meaning where an
+    embedder says (`sims`: {key: similarity}, textsim); else by the words the line shares with the item's title and summary, a rare one
+    counting for more than one half the lines carry. All zero for a reader with no item."""
+    import math
+    if sims is not None: return [round(float(sims.get(k, 0.0)), 3) for _raw, k, *_ in ls]
+    want = stems((about or {}).get('topic'))
+    if not want: return [0.0] * len(ls)
+    have = [stems(said(raw)) for raw, *_ in ls]
+    df = {w: sum(w in h for h in have) for w in want}
+    return [round(sum(math.log(1 + len(ls) / df[w]) for w in h & want), 3) for h in have]
+
+
+def cut(ls: list, budget: int, about: dict = None, first: str = 'care', sims: dict = None) -> tuple:
+    """(lines that fit, keys that did not) - whole lines, closest scope first. Lines may carry their section slug as a third item: then
+    care lines go before others of the same scope, and the owner's own (untagged) lines before learned ones. A `first` other than care
+    leads from scope 2 on: its lines go before every topic, domain and general line of the others, so the budget never fills before it
+    is read.
+    ...IN ONE SCOPE, THE LINE NEAREST THIS ITEM FIRST, AND THE OWNER'S NEWEST WORD BEFORE THEIR OLDER (the owner, 2026-11-14: "if the user
+    tells you something, they should not have to say it again"): ties fell in the document's order, where a fact just told is the LAST
+    line of its section - sixty lines in, the one about payroll was the one the budget left out, on the very task about payroll."""
     from .learnedgraph import TAG
+    near = nearness(ls, about, sims)
     def key(il):
         i, (raw, k, *s) = il
         s = s[0] if s else ''
         r = rank(raw, k, about)
         if first != 'care' and r >= 2 and r != 5: r = 2 if s == first else r + 0.5
-        return (r, bool(s) and s != first, bool(s) and bool(TAG.match(raw)), i)
+        own = not TAG.match(raw)
+        return (r, -near[i], bool(s) and s != first, bool(s) and not own, -i if own else i)
     used, keep, over = 0, [], []
     for _, (raw, k, *_s) in sorted(enumerate(ls), key=key):
         n = len(said(raw)) + 1                  # ...what the reader is given, not the tag it never sees
@@ -220,7 +246,21 @@ def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: 
     doc = store.doc('learned') if doc is None else doc
     want = [s for s in READS[reader] if sections is None or s in sections]
     who = None if people is None else {str(p).lower() for p in people if p}
-    ls = [(raw, k, s) for s in want for raw, k in lines(doc or '', SECTIONS[s]) if s != 'people' or who is None or names(raw) & who]
+    every = [(raw, k, s) for s in want for raw, k in lines(doc or '', SECTIONS[s])]
+    sims = None
+    if str((about or {}).get('topic') or '').strip() and every:
+        try:
+            from . import textsim
+            got = textsim.rank(store, about['topic'], [(f'learned:{k}', said(raw)) for raw, k, _ in every], least=0.0)
+            sims = None if got is None else {k[8:]: v for k, v in got}
+        except Exception: sims = None
+    # ...or the people lines nearest this item's own SUBJECT (NEAR_PEOPLE of them: "send payroll questions to Gail now" on a vendor's
+    # payroll question, where Gail is nobody on the mail and the line reached no agent - 2026-11-14): what bears on the work, still
+    # never the notes on everyone else
+    near = dict(zip((k for _, k, _ in every), nearness(every, about, sims)))
+    off = [(raw, k) for raw, k, s in every if s == 'people' and who is not None and not names(raw) & who and rank(raw, k, about) == 2 and near[k] > 0]
+    by_subject = {k for _, k in sorted(off, key=lambda x: -near[x[1]])[:NEAR_PEOPLE]}
+    ls = [(raw, k, s) for raw, k, s in every if s != 'people' or who is None or names(raw) & who or k in by_subject]
     # ...and a line about one OTHER sender, domain or topic (memorylines' `(about: ...)`: a verdict, a line each) is not this reader's:
     # it reaches the readers of the mail it is about, by what it is about (ingest.applicable_notes) - hundreds of them, about everyone
     # else, would be the whole budget
@@ -231,7 +271,7 @@ def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: 
         try: other = {r['Key'] for r in store._rows("SELECT Key FROM learned_line WHERE IFNULL(Workstream,'') NOT IN ('', ?)", (ws,))}
         except Exception: other = set()
         ls = [x for x in ls if x[1] not in other]
-    keep, over = cut(ls, budget or BUDGET[reader], about, FIRST.get(reader, 'care'))
+    keep, over = cut(ls, budget or BUDGET[reader], about, FIRST.get(reader, 'care'), sims)
     at = {raw: i for i, raw in enumerate(keep)}
     try: _note_over(store, reader, over)
     except Exception: pass
@@ -274,6 +314,12 @@ def whole(store, reader: str = 'triage', target: str = '', doc: str = None, cap:
     except Exception: pass
     receipt(store, reader, target, keys)
     return '\n\n'.join(out)
+
+
+def left_out(store, reader: str) -> int:
+    "How many lines `reader`'s budget left out on its last read - so its block can say the rest is one read away."
+    try: return len((json.loads(store.get_setting(OVER) or '{}') or {}).get(reader) or [])
+    except ValueError: return 0
 
 
 def over_budget(store) -> dict:

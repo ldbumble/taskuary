@@ -1727,18 +1727,24 @@ WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: a turn that asks still does 
 # ...down the ONE road every reader takes (learned_cut.for_reader, 2026-11-12): it was a second one - every bullet of the document in its own
 # order wherever no embedder ranked them, so the first 1,500 characters were the people lines about EVERYONE (the owner, 2026-10-25: an
 # agent reads how the owner deals with the people on its own task, never the rest) and the verdict lines about other senders. The people
-# on this task come in its brief (context.build); this is the rest - what the owner cares about, how they work, promises - nearest first
+# on this task come in its brief (context.build); this is the rest - what bears on its subject first, then what the owner cares about,
+# how they work, promises
 LEARNED_CHARS = 1_500
 def learned_block(store, tid: int, budget: int = LEARNED_CHARS) -> str:
     from . import learned_cut
     from .workstreams import of_task
     try:
         t = store.get_task(tid) or {}
-        who = next((str(m.get('FromEmail') or '').lower() for m in reversed(store.list_messages(tid))
-                    if m.get('FromEmail') and str(m.get('Direction') or 'in') != 'out'), '')
-        about = {'sender': who, 'domain': who.rsplit('@', 1)[-1] if '@' in who else '', 'workstream': of_task(store, tid),
-                 'topic': f"{t.get('Title') or ''} {t.get('Summary') or ''}"}
-        got = learned_cut.for_reader(store, 'agents', about, budget=budget, target=f'task:{tid}', sections=('care', 'work', 'promises', 'bring'))
+        ms = store.list_messages(tid)
+        last = next((m for m in reversed(ms) if m.get('FromEmail') and str(m.get('Direction') or 'in') != 'out'), {})
+        who = str(last.get('FromEmail') or '').lower()
+        # ...the people ON this task are its brief's (context.build), so they are named here only to be left out; of Your people this block
+        # takes the one line about the task's own SUBJECT - "send payroll questions to Gail now" on a vendor's payroll question, where
+        # Gail is nobody on the mail and the line reached no agent at all (2026-11-14)
+        on_it = sorted(set().union(*(learned_cut.people_of(m) for m in ms))) if ms else []
+        about = {'sender': who, 'people': on_it, 'domain': who.rsplit('@', 1)[-1] if '@' in who else '',
+                 'workstream': of_task(store, tid), 'topic': f"{t.get('Title') or ''} {t.get('Summary') or ''}"}
+        got = learned_cut.for_reader(store, 'agents', about, budget=budget, target=f'task:{tid}', people=())
     except Exception as e: logger.debug(f'learned block: {e}'); return ''
     out = [l for l in got.splitlines() if l.startswith('- ')]
     if not out: return ''

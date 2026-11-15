@@ -23,7 +23,7 @@ Taskuary 把邮件、聊天、工单和报表汇成一个列表。智能体逐�
     alt="阅读文档"></a>
 </p>
 
-![一个任务就是一段对话：右边是来信，左边是智能体这一轮做了什么、下一步是什么。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=chat)
+![游戏视图：每个任务、消息和智能体都是办公室里的一个人物——智能体工作区、等你回复的会议室、记忆档案馆和助手核心。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.webp?v=smooth)
 
 ## 安装
 
@@ -42,19 +42,39 @@ taskuary            # 打开 http://127.0.0.1:7787
 
 ## 它能做什么
 
-**所有要你处理的事，一个列表。** 邮件（Gmail、Outlook）、聊天（Slack、Teams、WhatsApp、Telegram）、GitHub、告警和定时报表汇到一处，分成要做的、可以晚点的、只需知道的。不用再挨个打开六个应用。
+### 1. 所有事情汇成一个列表
+
+邮件（Gmail、Outlook）、聊天（Slack、Teams、WhatsApp、Telegram）、GitHub、告警和定时报表汇到一处，分成要做的、可以晚点的、只需知道的。不用再挨个打开六个应用。
 
 ![工作栏把一天的事项分成 Tasks、Reports 和 FYI，旁边是早晨的概览卡片。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=chat)
 
-**智能体把活干完，而不只是写摘要。** 它读邮件往来、查资料、用你连接的系统和真实浏览器，交回做好的东西：附好表格的回复、配好图的帖子、在供应商页面上填好的付款。编程工作交给 Claude Code、Codex 或 Gemini；也可以通过 OpenCode 使用 DeepSeek、GLM、MiniMax，或连接 Qwen Code、Kimi Code（[设置说明](docs/chinese-coding-clis.md)）。
+### 2. 每个任务就是一段对话
+
+右边是来信，左边是智能体的每一轮：做了什么、结果、下一步。在输入框里接着说就行。
+
+![一个任务就是一段对话：右边是来信，左边是智能体这一轮做了什么、下一步是什么。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=chat)
+
+### 3. 智能体把活干完，而不只是写摘要
+
+它读邮件往来、查资料、用你连接的系统和真实浏览器，交回做好的东西：配好图的帖子、附好表格的回复、在供应商页面上填好的付款。编程工作交给 Claude Code、Codex 或 Gemini；也可以通过 OpenCode 使用 DeepSeek、GLM、MiniMax，或连接 Qwen Code、Kimi Code（[设置说明](docs/chinese-coding-clis.md)）。
 
 ![智能体这一轮：做了什么，以及一条配好图表、只等你按一下的 LinkedIn 帖子。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=chat)
 
-**最后一下由你来按。** 每封邮件、每条帖子、每次推送和付款都以卡片形式等你。可以修改、发送，或者拒绝。
+### 4. 最后一下由你来按
 
-**它会记住。** 说一次（"账本现在归 Ray 管"），之后每个智能体都知道。你对草稿的修改会教它你的写法。
+每封邮件、每条帖子、每次推送和付款都以卡片形式等你。可以修改、发送，或者拒绝。你不按，什么都不会发出去。
 
-**还有：** 用手机通过 WhatsApp 或 Telegram 处理列表，定时报表和看板，例行任务，以及智能体能用、却永远看不到密码的已保存登录。
+![附好表格、等你按 Send 的回复。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-next-steps.png?v=chat)
+
+### 5. 它会记住
+
+说一次（"账本现在归 Ray 管"），之后每个智能体都知道。你对草稿的修改会教它你的写法。
+
+![LEARNED.md：Taskuary 学到的你的工作方式，每条都附带依据。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=chat)
+
+### 6. 手机上也能用
+
+通过 WhatsApp 或 Telegram 处理列表，按钮和电脑上一样。还有定时报表和看板、例行任务，以及智能体能用、却永远看不到密码的已保存登录。
 
 **[看看用 Taskuary 的完整一天（英文）→](https://taskuary.com/docs/tour)**
 
@@ -77,14 +97,5 @@ Taskuary 会读陌生人写的文字，所以它默认其中一些是专门写�
 ## 安装量
 
 ![PyPI 每日安装量，不含镜像流量。](https://raw.githubusercontent.com/ldbumble/taskuary/stats/downloads.svg)
-
-## 文档
-
-[taskuary.com/docs](https://taskuary.com/docs/)（英文）：[入门](https://taskuary.com/docs/)、
-[工作原理](https://taskuary.com/docs/how-it-works)、[连接](https://taskuary.com/docs/connections)、
-[任务与智能体](https://taskuary.com/docs/tasks-and-agents)、[安全](https://taskuary.com/docs/security)、
-[手机端](https://taskuary.com/docs/phone)、[设置](https://taskuary.com/docs/settings)、
-[故障排查](https://taskuary.com/docs/troubleshooting)、[路线图](docs/roadmap.md)、
-[参与贡献](CONTRIBUTING.md)。
 
 MIT 许可证。欢迎提交 Issue 和 Pull Request；安全问题请按 [SECURITY.md](SECURITY.md) 报告。

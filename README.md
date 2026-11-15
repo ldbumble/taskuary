@@ -27,7 +27,7 @@ model). Early: **v0.4.0.9**, breaking changes possible before 1.0.
     alt="Read the documentation"></a>
 </p>
 
-![A task as one chat: the request on the right, the agent's turn on the left with what it did and the next step.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=chat)
+![The Game view: an office where every task, message and agent is a figure - the Agent Floor, the Meeting Room where people wait on you, the Memory Archive and the Assistant Core.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.webp?v=smooth)
 
 ## Install
 
@@ -46,24 +46,44 @@ The first run asks for an AI and at least one inbox, and tests each connection b
 
 ## What it does
 
-**One list for everything that needs you.** Mail (Gmail, Outlook), chats (Slack, Teams, WhatsApp, Telegram),
-GitHub, alerts and scheduled reports land in one place, sorted into what needs work, what can wait, and what is
-just for your information. No more checking six apps.
+### 1. Everything lands in one list
+
+Mail (Gmail, Outlook), chats (Slack, Teams, WhatsApp, Telegram), GitHub, alerts and scheduled reports arrive on one
+rail, sorted into what needs work, what can wait, and what is just for your information. No more checking six apps.
 
 ![The work rail sorting the day into Tasks, Reports and FYI, beside the morning card.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=chat)
 
-**An agent does the work, not just the summary.** It reads the thread, looks things up, uses your systems and a
-real browser, and comes back with the finished thing: the reply with the spreadsheet attached, the post with its
-chart, the payment filled in on the vendor's page. Coding work goes to Claude Code, Codex or Gemini.
+### 2. Every task is one chat
+
+What came in sits on the right, the agent's turns on the left: what it did, the result, and the next step. Type in
+the box to keep going.
+
+![A task as one chat: the request on the right, the agent's turn on the left with what it did and the next step.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/02-task.png?v=chat)
+
+### 3. The agent does the work, not just the summary
+
+It reads the thread, looks things up, uses your systems and a real browser, and comes back with the finished thing:
+the post with its chart, the reply with the spreadsheet attached, the payment filled in on the vendor's page. Coding
+work goes to Claude Code, Codex or Gemini.
 
 ![The agent's turn: what it did, and a LinkedIn post with its chart waiting for one press.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=chat)
 
-**You press the last button.** Every email, post, push and payment waits as a card. Edit it, send it, or say no.
+### 4. You press the last button
 
-**It remembers.** Tell it once ("Ray owns the ledger now") and every agent knows from then on. Your edits to its
-drafts teach it how you write.
+Every email, post, push and payment waits as a card. Edit it, send it, or say no. Nothing leaves until you press.
 
-**And more:** run your list from your phone over WhatsApp or Telegram, scheduled reports and dashboards, routines,
+![A reply with its workbook attached, waiting on Send.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/04-next-steps.png?v=chat)
+
+### 5. It remembers
+
+Tell it once ("Ray owns the ledger now") and every agent knows from then on. Your edits to its drafts teach it how
+you write.
+
+![LEARNED.md: what Taskuary learned about how you work, each lesson with its evidence.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=chat)
+
+### 6. From your phone, too
+
+Work your list over WhatsApp or Telegram, with the same buttons. Plus scheduled reports and dashboards, routines,
 and saved sign-ins the agent uses without ever seeing the password.
 
 **[See a full day with Taskuary →](https://taskuary.com/docs/tour)**
@@ -95,14 +115,5 @@ nothing leaves. Details: [Privacy](docs/PRIVACY.md).
 ## Installs
 
 ![Daily installs of taskuary from PyPI, mirror traffic excluded](https://raw.githubusercontent.com/ldbumble/taskuary/stats/downloads.svg)
-
-## Documentation
-
-[taskuary.com/docs](https://taskuary.com/docs/): [start here](https://taskuary.com/docs/),
-[how it works](https://taskuary.com/docs/how-it-works), [connections](https://taskuary.com/docs/connections),
-[tasks and agents](https://taskuary.com/docs/tasks-and-agents), [security](https://taskuary.com/docs/security),
-[on your phone](https://taskuary.com/docs/phone), [settings](https://taskuary.com/docs/settings),
-[troubleshooting](https://taskuary.com/docs/troubleshooting), [roadmap](docs/roadmap.md),
-[contributing](CONTRIBUTING.md).
 
 MIT licensed. Issues and pull requests welcome; security reports go to [SECURITY.md](SECURITY.md).

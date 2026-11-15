@@ -43,6 +43,19 @@ class ApiWorkerSignals(unittest.TestCase):
         with mock.patch.object(general.llm_mod, 'build_llm', return_value=brain):
             return sess, sess.send_prompt(text)
 
+    def test_a_session_at_rest_does_not_wait_on_him_while_an_input_is_handed_to_it(self):
+        """Recorded on the real CLI, 2026-11-15: the agent's turn ended handing a saved sign-in to Taskuary, and for the ~3 s it was typed the
+        task was at work by the server's word (general.hand) while the session it sent the page said `waiting` - the header read "agent
+        waiting on you" over a chat that said it was working. The session's own word is the task's: an input on its way is no wait on him."""
+        sess, _ = self.turn('Signing in now.')
+        self.assertTrue(sess.info(details=False)['waiting'])
+        general.hand(self.tid)
+        try:
+            self.assertFalse(sess.info(details=False)['waiting'], 'an input on its way to the agent: at work, as general.working says')
+            self.assertTrue(general.working(self.s, self.tid))
+        finally: general.hand(self.tid, -1)
+        self.assertTrue(sess.info(details=False)['waiting'])
+
     def test_a_turn_records_turn_end_and_an_ask_records_input_needed(self):
         sess, reply = self.turn('Two options.\n[[TASKUARY-ASK]] Which vendor? | Acme | Globex')
         self.assertNotIn('TASKUARY-ASK', reply)

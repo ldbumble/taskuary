@@ -2504,7 +2504,9 @@ class GeneralSession:
     def phase(self): return 'working' if self.busy else 'parked'
     # ...and a session OPENED for a turn that has not taken yet is not waiting either (OPENING): the header read "answered / waiting on
     # you" eight seconds into a start, while the run was only about to begin (email walk 2026-10-29)
-    def waiting(self): return self.alive and not self.busy and (self.spoke or self.task_id not in OPENING)
+    # ...and never while an input is handed to it (hand: a mail's hand-over, a saved sign-in typed) - the task is at work by general.working,
+    # and the page took this word for "agent waiting on you" over a chat that said it was working (real CLI, 2026-11-15)
+    def waiting(self): return self.alive and not self.busy and (self.spoke or self.task_id not in OPENING) and not HANDED.get(self.task_id)
     # ...a turn he STOPPED that has not let go yet (its CLI takes seconds to end): busy, but no longer at work for him (take_line)
     def letting_go(self): return self.busy and self._cancel is not None and self._cancel.is_set()
     def tail(self, n=3):

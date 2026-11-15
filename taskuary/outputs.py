@@ -105,10 +105,23 @@ def rel(tid: int, p: Path) -> str:
     "`p`'s name in the folder. Both sides resolved: a home given by its 8.3 short form (C:/Users/ABCDEF~1) resolves to the long one."
     return Path(p).resolve().relative_to(folder(tid).resolve()).as_posix()
 
+# WHAT IT MADE IS READ WHERE IT IS (the owner, 2026-11-15: he asked for a query to review, the agent saved it as a file, and the chat held only
+# "it is ready for you to review"): a file of a kind with no viewer of its own - a query, a script, a config - that is plain text reads as text.
+# By its bytes, never its name: no list of extensions decides what can be read
+def reads_as_text(p: Path) -> bool:
+    try:
+        with open(p, 'rb') as f: head = f.read(4096)
+    except OSError: return False
+    if not head or b'\0' in head: return False
+    try: head.decode('utf-8')
+    except UnicodeDecodeError as e: return e.start >= len(head) - 3          # a character cut by the read, not bytes that are no text
+    return True
+
+
 def row(tid: int, p: Path, rel: str) -> dict:
     "One file as the page draws it - the same shape as a shown page (page_row), so one list draws both."
     from urllib.parse import quote
-    ext, sheet = p.suffix.lower(), PREVIEW.get(p.suffix.lower())
+    ext, sheet = p.suffix.lower(), PREVIEW.get(p.suffix.lower()) or ('text' if reads_as_text(p) else None)
     if sheet == 'sheet' and not can_sheet(): sheet = None
     st = p.stat()
     return {'id': f'output:{rel}', 'name': p.name, 'path': rel, 'kind': 'output', 'content_type': content_type(p.name),
@@ -217,8 +230,11 @@ def listing(tid: int) -> list:
 # taskOutputs.deliverables is the same rule for the page: keep the two alike.
 _VER = re.compile(r'(?:[ _.-]+(?:v|ver|version|rev)[ _.-]?\d+|[ _.-]+(?:final|draft|copy|old|new|latest|updated|edited|revised)'
                   r'|[ _.-]*\(\d+\)|[ _.-]+\d{8}(?:[ _T-]?\d{4,6})?|[ _.-]+\d{4}-\d\d-\d\d(?:[ _T-]?\d\d[-.]?\d\d(?:[-.]?\d\d)?)?)+$', re.I)
-_WORK_EXT = {'.log', '.tmp', '.temp', '.bak', '.pyc', '.cache', '.lock', '.swp', '.part', '.crdownload',
-             '.py', '.ps1', '.sh', '.bat', '.cmd', '.js', '.mjs', '.ts', '.sql', '.r', '.ipynb'}
+_WORK_EXT = {'.log', '.tmp', '.temp', '.bak', '.pyc', '.cache', '.lock', '.swp', '.part', '.crdownload'}
+# ...A SCRIPT IS A WORKING FILE ONLY BESIDE SOMETHING ELSE IT MADE (the owner, 2026-11-15: "The sql is hidden behind the 6 steps. if it returns
+# something you need to see it"): the helper that built a workbook folds away under it; a query or a script that is all the agent made, or one
+# its words name, IS what it made
+_SCRIPT_EXT = {'.py', '.ps1', '.sh', '.bat', '.cmd', '.js', '.mjs', '.ts', '.sql', '.r', '.ipynb'}
 _WORK_DIR = re.compile(r'(?:^|/)(?:tmp|temp|scratch|cache|__pycache__|work|working|intermediate|drafts?)/', re.I)
 _WORK_NAME = re.compile(r'^(?:tmp|temp|scratch|debug)(?:[ _.-]|$)', re.I)
 
@@ -230,18 +246,26 @@ def family(name: str) -> str:
     return re.sub(r'[ _.-]+', ' ', stem) + p.suffix
 
 
-def is_working(rel: str) -> bool:
-    "The agent's own working file - a script, a log, a temp or cache file, anything in a tmp/ or scratch/ folder - not a deliverable."
+def _base(rel) -> str: return str(rel or '').replace('\\', '/').rsplit('/', 1)[-1]
+def _scratch(rel: str) -> bool:
     rel = str(rel or '').replace('\\', '/')
-    return Path(rel).suffix.lower() in _WORK_EXT or bool(_WORK_DIR.search(rel)) or bool(_WORK_NAME.match(rel.rsplit('/', 1)[-1]))
+    return Path(rel).suffix.lower() in _WORK_EXT or bool(_WORK_DIR.search(rel)) or bool(_WORK_NAME.match(_base(rel)))
+def _script(rel: str) -> bool: return Path(_base(rel)).suffix.lower() in _SCRIPT_EXT
+def is_working(rel: str, beside: bool = True) -> bool:
+    """The agent's own working file, not a deliverable: a log, a temp or cache file, anything in a tmp/ or scratch/ folder - and a script
+    `beside` something else it made."""
+    return _scratch(rel) or beside and _script(rel)
 
 
-def deliverables(rows: list) -> tuple:
+def deliverables(rows: list, named=()) -> tuple:
     """(made, working): each family once - its newest row, the older ones on it as `earlier`, newest first - and the working files apart.
-    A row that is not a file in the folder (a page the agent showed or published) is never a working file: it chose to show it."""
-    made, by, working = [], {}, []
+    A row that is not a file in the folder (a page the agent showed or published) is never a working file: it chose to show it. Nor is a
+    file its words name (`named`), nor a script where scripts are all it made."""
+    made, by, working, said = [], {}, [], {_base(n) for n in named}
+    of = lambda r: r.get('path') or r.get('name')
+    beside = any(r.get('kind') != 'output' or not (_scratch(of(r)) or _script(of(r))) for r in rows or [])
     for r in sorted(rows or [], key=lambda r: str(r.get('at') or r.get('created_at') or ''), reverse=True):
-        if r.get('kind') == 'output' and is_working(r.get('path') or r.get('name')): working.append(r); continue
+        if r.get('kind') == 'output' and _base(of(r)) not in said and is_working(of(r), beside): working.append(r); continue
         k = family(r.get('name') or r.get('path'))
         if k in by: by[k].setdefault('earlier', []).append(r)
         else: by[k] = dict(r); made.append(by[k])

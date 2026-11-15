@@ -132,6 +132,21 @@ test("v1..v9 and scratch files list once, with 8 earlier versions", () => {
   assert.ok(!isWorking("summary.pdf") && isWorking("cache/x.json"));
 });
 
+// WHAT IT MADE FOR HIM IS IN THE TURN (the owner, 2026-11-15: he asked for a query to review; the agent saved it as a file and said only that it
+// was ready - "The sql is hidden behind the 6 steps"): a script is a working file only beside something else the agent made
+test("a script that is all the turn made, or that its words name, is drawn in the turn", () => {
+  const out = (name, at = "2026-11-15 07:40:00") => ({ kind: "output", name, path: name, at, after: "comment-9", preview: "text" });
+  const two = [out("clear_columns_up.sql"), out("clear_columns_down.sql", "2026-11-15 07:40:05")];
+  assert.deepEqual(turnFiles({ listed: two, id: "comment-9", words: "The SQL is ready for you to review. I haven't run it.", tid: 17 }).map((f) => f.name), ["clear_columns_down.sql", "clear_columns_up.sql"]);
+  // ...beside the workbook it built, the helper still folds away - unless the agent's words hand it over by name
+  const mixed = [out("rates.xlsx"), out("build_rates.py", "2026-11-15 07:39:00")];
+  assert.deepEqual(turnFiles({ listed: mixed, id: "comment-9", words: "The workbook is ready.", tid: 17 }).map((f) => f.name), ["rates.xlsx"]);
+  assert.deepEqual(turnFiles({ listed: mixed, id: "comment-9", words: "The workbook is ready, and build_rates.py rebuilds it each month.", tid: 17 }).map((f) => f.name), ["rates.xlsx", "build_rates.py"]);
+  // ...a log or a temp file is never what it made, alone or not
+  assert.deepEqual(turnFiles({ listed: [out("run.log")], id: "comment-9", words: "Done.", tid: 17 }), []);
+  assert.ok(isWorking("build.py") && !isWorking("build.py", false) && isWorking("run.log", false));
+});
+
 test("an older version of a file a turn made is that file's history, not one more file in the turn", () => {
   const listed = [{ ...outputRow(17, "plan_v2.md"), after: "comment-3", at: "2026-11-13 10:02:00" }, { ...outputRow(17, "plan_v1.md"), after: "comment-3", at: "2026-11-13 10:01:00" }];
   const made = turnFiles({ listed, id: "comment-3", words: `Done: ${HOME}/TQ-0017/plan_v2.md`, tid: 17 });

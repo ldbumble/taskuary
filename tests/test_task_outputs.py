@@ -187,6 +187,20 @@ class OneOfEachTests(unittest.TestCase):
         self.assertEqual(made[0]['earlier'][0]['name'], 'pricing comparison v8.xlsx')
         self.assertEqual(sorted(r['path'] for r in working), ['build_sheet.py', 'run.log', 'tmp/rates.csv'])
 
+    def test_a_script_that_is_all_it_made_is_what_it_made_and_reads_as_text(self):
+        # the owner, 2026-11-15: he asked for a query to review, the agent saved it as a file, and nothing of it stood in the chat
+        t = self.store.create_task({'Title': 'Clear three columns on three rows', 'Kind': 'general'}, 'owner'); d = outputs.folder(t); d.mkdir(parents=True, exist_ok=True)
+        (d / 'clear_columns.sql').write_text('BEGIN;\nUPDATE facilities SET fax = NULL WHERE id IN (14, 22, 31);\nCOMMIT;\n', encoding='utf-8')
+        made, working = outputs.deliverables(outputs.listing(t))
+        self.assertEqual(([r['name'] for r in made], working), (['clear_columns.sql'], []))
+        self.assertEqual(made[0]['preview'], 'text')                    # ...by its bytes: no list of extensions says what can be read
+        (d / 'blob.bin').write_bytes(bytes([0, 1, 2, 255]) * 40)
+        self.assertIsNone(next(r for r in outputs.listing(t) if r['name'] == 'blob.bin')['preview'])
+        # ...beside a workbook the helper still folds away, unless its words name it
+        (d / 'rates.xlsx').write_bytes(b'x')
+        self.assertEqual(sorted(r['name'] for r in outputs.deliverables(outputs.listing(t))[1]), ['clear_columns.sql'])
+        self.assertEqual(outputs.deliverables(outputs.listing(t), named=['clear_columns.sql'])[1], [])
+
     def test_a_family_is_one_name_without_its_version_marks(self):
         one = {outputs.family(n) for n in ('Vendor pricing v9.xlsx', 'vendor_pricing_final.xlsx', 'vendor pricing (2).xlsx',
                                            'vendor-pricing-20261027-1530.xlsx', 'Vendor Pricing_v2_final.xlsx', 'drafts/vendor pricing draft.xlsx')}

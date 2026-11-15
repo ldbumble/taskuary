@@ -219,3 +219,14 @@ test("a chat paints a held list only if it was read a moment ago - an older one 
   assert.equal(paintable(old, recent, now), recent);               // read ahead for Next: painted
   assert.equal(paintable(null, null, now), null);
 });
+
+// WHAT IT WROTE OUT FOR HIM IS NEVER FOLDED WITH ITS STEPS (the owner, 2026-11-15: he asked for a query to review - the turn read "6 steps ▸" and
+// "The SQL is ready for you to review", the query itself behind the fold): a message of the turn that holds a block stays in the turn
+test("a block the agent wrote out on its way is not folded behind the steps", async () => {
+  const { isMade } = await import("../src/chatStream.js");
+  assert.ok(isMade("Here is the script:\n\n```sql\nUPDATE facilities SET fax = NULL WHERE id IN (14, 22, 31);\n```"));
+  assert.ok(isMade("| id | fax |\n|---|---|\n| 14 | 555-0100 |"));
+  assert.ok(!isMade("Let me look at the folder first.") && !isMade("I'll use `psql` for this.") && !isMade(""));
+  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /p\.type === "said" && \(!ended \|\| isMade\(p\.text\)\)/);
+});

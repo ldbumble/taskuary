@@ -168,8 +168,11 @@ export const placeMade = (listed, turns) => {
 // its version marks off (v2, _final, (1), a timestamp) and only its newest is listed, the rest `earlier` on it; the agent's own working
 // files (scripts, logs, temp and cache, anything under tmp/ or scratch/) are `working`, folded under one line. Never dropped: reachable.
 const VER = /(?:[ _.-]+(?:v|ver|version|rev)[ _.-]?\d+|[ _.-]+(?:final|draft|copy|old|new|latest|updated|edited|revised)|[ _.-]*\(\d+\)|[ _.-]+\d{8}(?:[ _T-]?\d{4,6})?|[ _.-]+\d{4}-\d\d-\d\d(?:[ _T-]?\d\d[-.]?\d\d(?:[-.]?\d\d)?)?)+$/i;
-const WORK_EXT = new Set(["log", "tmp", "temp", "bak", "pyc", "cache", "lock", "swp", "part", "crdownload",
-  "py", "ps1", "sh", "bat", "cmd", "js", "mjs", "ts", "sql", "r", "ipynb"]);
+const WORK_EXT = new Set(["log", "tmp", "temp", "bak", "pyc", "cache", "lock", "swp", "part", "crdownload"]);
+// ...A SCRIPT IS A WORKING FILE ONLY BESIDE SOMETHING ELSE IT MADE (the owner, 2026-11-15: "The sql is hidden behind the 6 steps. if it returns
+// something you need to see it"): the helper that built a workbook folds away under it; a query or a script that is all the agent made, or one
+// its words name, IS what it made
+const SCRIPT_EXT = new Set(["py", "ps1", "sh", "bat", "cmd", "js", "mjs", "ts", "sql", "r", "ipynb"]);
 const WORK_DIR = /(?:^|\/)(?:tmp|temp|scratch|cache|__pycache__|work|working|intermediate|drafts?)\//i;
 const WORK_NAME = /^(?:tmp|temp|scratch|debug)(?:[ _.-]|$)/i;
 
@@ -177,15 +180,15 @@ export function family(name) {
   const b = baseName(name).toLowerCase(), i = b.lastIndexOf("."), stem = i > 0 ? b.slice(0, i) : b, x = i > 0 ? b.slice(i) : "";
   return (stem.replace(VER, "").replace(/^[ _.-]+|[ _.-]+$/g, "") || stem).replace(/[ _.-]+/g, " ") + x;
 }
-export const isWorking = (rel) => {
-  const p = String(rel || "").replace(/\\/g, "/");
-  return WORK_EXT.has(ext(baseName(p))) || WORK_DIR.test(p) || WORK_NAME.test(baseName(p));
-};
-// {made, working}, newest first; a shown or published page is never working - the agent chose to show it
-export const deliverables = (rows) => {
-  const by = new Map(), made = [], working = [], at = (r) => String(r?.at || r?.created_at || "");
+const isScratch = (rel) => { const p = String(rel || "").replace(/\\/g, "/"); return WORK_EXT.has(ext(baseName(p))) || WORK_DIR.test(p) || WORK_NAME.test(baseName(p)); };
+const isScript = (rel) => SCRIPT_EXT.has(ext(baseName(rel)));
+export const isWorking = (rel, beside = true) => isScratch(rel) || (beside && isScript(rel));
+// {made, working}, newest first; a shown or published page is never working - the agent chose to show it - nor is a file its words name (`named`)
+export const deliverables = (rows, named = []) => {
+  const by = new Map(), made = [], working = [], at = (r) => String(r?.at || r?.created_at || ""), of = (r) => r.path || r.name, said = new Set(named.map(baseName));
+  const beside = (rows || []).some((r) => r.kind !== "output" || !(isScratch(of(r)) || isScript(of(r))));
   for (const r of [...(rows || [])].sort((a, b) => at(b).localeCompare(at(a)))) {
-    if (r.kind === "output" && isWorking(r.path || r.name)) { working.push(r); continue; }
+    if (r.kind === "output" && !said.has(baseName(of(r))) && isWorking(of(r), beside)) { working.push(r); continue; }
     const k = family(r.name || r.path), kept = by.get(k);
     if (kept) kept.earlier.push(r);
     else { const n = { ...r, earlier: [] }; by.set(k, n); made.push(n); }
@@ -209,6 +212,7 @@ export const forTurn = (listed, versions, id) => {
 export const turnFiles = ({ listed = [], id, words = "", did = "", tid, skip = [] } = {}) => {
   const no = new Set((skip || []).map(baseName)), by = new Map();
   for (const r of (listed || []).filter((x) => x?.after != null && x.after === id)) by.set(r.path, r);
-  for (const rel of outputRefs(`${words || ""}\n${did || ""}`, tid, listed).files) if (!by.has(rel)) by.set(rel, outputRow(tid, rel, listed));
-  return deliverables([...by.values()].filter((r) => !no.has(baseName(r.path || r.name)) && !r.missing)).made;
+  const named = outputRefs(`${words || ""}\n${did || ""}`, tid, listed).files;
+  for (const rel of named) if (!by.has(rel)) by.set(rel, outputRow(tid, rel, listed));
+  return deliverables([...by.values()].filter((r) => !no.has(baseName(r.path || r.name)) && !r.missing), named).made;
 };

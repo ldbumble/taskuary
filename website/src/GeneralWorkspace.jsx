@@ -18,7 +18,7 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, placesLoose } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isMade, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, placesLoose } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
@@ -301,7 +301,8 @@ const TurnWorkView = ({ data, now, ended, k }) => {
   // summary sums up folds whole - its summary says the words
   if (level === "summary") {
     // ...and a view the agent showed is what it chose to put in front of the owner: never folded away
-    const out = (p) => p.type === "view" || p.type === "files" || (!ended && p.type === "said"), said = parts.filter(out), rest = parts.filter((p) => !out(p));
+    // ...nor is a block it wrote out on its way - a query, a table (chatStream.isMade): the summary under it may say only "it is ready"
+    const out = (p) => p.type === "view" || p.type === "files" || (p.type === "said" && (!ended || isMade(p.text))), said = parts.filter(out), rest = parts.filter((p) => !out(p));
     return <>{rest.some((p) => p.type !== "said") && <WorkFold k={`${key}:all`} quiet parts={rest} draw={draw} />}
       {said.map((p, i) => draw(p, i, "everything"))}</>;
   }

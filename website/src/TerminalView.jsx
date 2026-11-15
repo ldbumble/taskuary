@@ -783,6 +783,11 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   slow.current = idle && !browser.open;
   const wasIdle = useRef(idle);
   useEffect(() => { if (wasIdle.current && !idle) kick.current?.(); wasIdle.current = idle; }, [idle]);
+  // ...AND THE PAGE HANDED TO HIM IS READ AFRESH as it is handed (the browser audit, 2026-11-15): a saved sign-in that went in and met a code
+  // step drew the page his with the read taken while it was typed - "Taskuary is signing in ... the picture resumes in a moment" over the code
+  // box that was his to fill, for up to a poll. A step of his is raised only once any typing of Taskuary's has ended (signin._auto), so that
+  // read's `filling` is over; set before the paint, then asked again at once
+  React.useLayoutEffect(() => { if (!(need || yourTurn)) return; setBrowser((b) => (b.filling ? { ...b, filling: false } : b)); kick.current?.(); }, [need, yourTurn]);
   useEffect(() => {
     // ...drawn for the new width in the frame that has it (flushSync: the observer runs before that frame's paint) - set a beat later, the
     // pane that had just been given the task list's room drew one frame with the chat at its old share of it (479px, then 655)

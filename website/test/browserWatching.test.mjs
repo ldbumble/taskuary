@@ -47,3 +47,10 @@ test("a step handed over has one I'm done, and the chat's pane says why it went"
   assert.match(term, /const closedLine = !!sid && \(quiet \? lent && !showingBrowser : seen && !browser\.open && !ended\) && \(/);
   assert.match(term, /"The browser is put away - nothing waits on you there now\. It shows here again when the agent needs you\."/);
 });
+
+// THE BROWSER AUDIT, 2026-11-15: the saved sign-in went in and the site asked a code - the page drew as his with the read taken while the
+// sign-in was typed, "Taskuary is signing in ... the picture resumes in a moment" over the code box that was his, until the next poll
+test("a page handed to him is read afresh as it is handed, never under a stale 'signing in'", () => {
+  const term = src("TerminalView.jsx");
+  assert.match(term, /React\.useLayoutEffect\(\(\) => \{ if \(!\(need \|\| yourTurn\)\) return; setBrowser\(\(b\) => \(b\.filling \? \{ \.\.\.b, filling: false \} : b\)\); kick\.current\?\.\(\); \}, \[need, yourTurn\]\);/);
+});

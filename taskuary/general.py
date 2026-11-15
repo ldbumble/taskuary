@@ -72,6 +72,11 @@ def is_brief(c) -> bool: return c.get('ActorType') == USER_TYPE and c.get('Actor
 # the task, the time it was typed its stamp, {text, files} its body - never a chat turn until a turn takes it (send_prompt), so the
 # conversation the agent continues stays in the order it read it. The page draws these as waiting for the agent (waiting_lines)
 WAITING_TYPE = 'assistant_waiting'
+def owner_spoke(store, tid: int) -> bool:
+    """Whether the owner's own words are on this task: a line they typed in its chat, or the task itself where no mail made it. What goes
+    into their memory from a task is only theirs (the remember tool) - a sender's mail on a task they never spoke on is not."""
+    if any(c.get('ActorType') in (USER_TYPE, WAITING_TYPE) and not is_brief(c) for c in store.list_comments(tid, internal=True)): return True
+    return not any(str(m.get('Direction') or 'in') != 'out' for m in store.list_messages(tid))
 def _line_of(body) -> dict:
     try: got = json.loads(body or '{}')
     except ValueError: got = {'text': str(body or '')}
@@ -1522,7 +1527,7 @@ ASK_AFTER = ("SEARCH BEFORE YOU ASK: before asking the owner for a fact - a vend
 HISTORY_LINE = ("THE OWNER'S HISTORY IS IN TASKUARY - SEARCH IT FIRST. For anything about the owner's mail, messages, tasks or people, "
                 'run `taskuary --search "words" --from "name or address" --subject "..." --since YYYY-MM-DD --until YYYY-MM-DD` '
                 '(any of them; each hit prints its id, when, who, subject, thread and a snippet), then `taskuary --message ID` for one '
-                'in full with its thread; `taskuary --memory` prints what Taskuary has learned about the owner. That is the way in: never write scripts or code to read a mailbox, mail files or '
+                'in full with its thread; `taskuary --memory` prints what Taskuary has learned about the owner, and `taskuary --remember "fact"` keeps one they tell you. That is the way in: never write scripts or code to read a mailbox, mail files or '
                 "Taskuary's database, and never go around it. If the search finds nothing, say so and say what you searched for.\n"
                 + ASK_AFTER.format(where='`taskuary --search "words"` (or the search_tasks tool) lists WHAT EARLIER TASKS SETTLED under the mail'))
 # ...AND A BRAIN WITH NO SEARCH OF ITS OWN IS HANDED IT (the owner, 2026-10-28: "why is prior mail not available"): an API card, or a CLI

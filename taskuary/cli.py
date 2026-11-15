@@ -110,7 +110,8 @@ AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 't
               'sign_form',                          # ...and the owner's signature, which never goes on a stranger's form
               'check_back',                         # ...and a wake of its own later, which a stranger's words never schedule
               'use_repo',                           # ...and which of the owner's checkouts it works in (repochoice)
-              'browser')                            # ...and its browser opened on a page, which a link in a stranger's mail never is
+              'browser',                            # ...and its browser opened on a page, which a link in a stranger's mail never is
+              'remember')                           # ...and a fact kept in the owner's memory, which a stranger's words never write
 STRANGER_ACTS = AGENT_ACTS[:13]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
 OWNER_ACTS = ('prompts', 'backfill_asks', 'evalset', 'demo', 'link')
 NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - Taskuary's own is the owner's, and a "
@@ -373,6 +374,8 @@ def main():
     # ...and its own follow-up on the task (checkback.py, the owner 2026-11-05): woken then with the note as its next turn
     ap.add_argument('--check-back', nargs=2, metavar=('WHEN', 'WHAT'), help='wake this task\'s agent at WHEN ("tomorrow 9am", "in 2 days", '
                     '"2026-11-12") to verify WHAT - a payment that should clear, a reply due by a date; one per task, a new one replaces it')
+    ap.add_argument('--remember', metavar='FACT', help="keep a fact the owner told you in this chat that holds beyond this task (who handles "
+                    'what now, what they care about), in their words - in their memory at once, for triage, every agent and the Assistant')
     # ...and the checkout it works in, for a CLI without the use_repo tool (repochoice.py, the owner 2026-11-06)
     ap.add_argument('--use-repo', nargs='+', metavar=('NAME_OR_PATH', 'WHY'), help="work this task in that git checkout - a repository from "
                     'your REPOSITORIES list or a folder - and say why in a few words; the task records it')
@@ -519,6 +522,17 @@ def main():
         r, out = got
         print(f"the browser is open on {out.get('url')} - go on with agent-browser (snapshot -i -c, click, read); do not open it again" if out.get('ok')
               else f"the browser did not open: {out.get('detail') or r.text[:200]}")
+        return
+    if args.remember:
+        import os, sys
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        tid = os.environ.get('TASKUARY_TASK')
+        if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task the owner told you this on'); return
+        got = _post('/api/agent/remember', {'task_id': int(tid), 'note': args.remember, 'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger)
+        if not got: return
+        r, out = got
+        print(out.get('says') if out.get('ok') else out.get('detail') or f'not kept: {r.text[:200]}')
         return
     if args.check_back:
         import os, sys

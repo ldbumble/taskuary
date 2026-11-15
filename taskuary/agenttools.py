@@ -58,10 +58,21 @@ TOOLS = {
                          _S({'text': _STR}, ('text',)), ('GET', '/api/knowledge/search')),
     'owner_memory': ('read', "What Taskuary has learned about the owner (LEARNED.md): their people, what they care about, how they "
                              "work, their promises, what to bring up. Read it when the work turns on what they would want; `section` "
-                             "(people, care, work, promises, bring) narrows it. Read-only: a way of working the owner asks you "
-                             "to keep (a playbook, a standing rule) is set up with `propose` write_playbook for their Approve, "
-                             "never written to a file of your own.",
+                             "(people, care, work, promises, bring) narrows it. Read-only: a fact they tell you is kept with "
+                             "`remember`; a way of working they ask you to keep (a playbook, a standing rule) is set up with "
+                             "`propose` write_playbook for their Approve, never written to a file of your own.",
                      _S({'section': _STR}), ('GET', '/api/agent/memory')),
+    # WHAT THE OWNER TELLS ONE AGENT, EVERY READER KNOWS (the owner, 2026-11-14: "if the user tells you something, they should not have to say
+    # it again"): told "Erin left the company; send payroll questions to Gail now", the task's agent answered "I can't write to Taskuary's
+    # memory from this task" - its only road was a correction of its own reading, into a section nobody reads. The Assistant's road
+    # (memoryedit.remember), on the agent's own task: one line, in use at once for triage, every agent and the Assistant, and never drawn
+    'remember': ('own', "Keep a fact the owner tells you in this chat that holds beyond this task - who handles what now, who left or "
+                        "moved, what they do or do not care about, how they want a kind of work done - in their memory, at once: triage, "
+                        "every agent and the Assistant read it from then on, so they never say it twice. `note`: the fact, in their "
+                        "words. `about`: the person it is about (name or address). `replaces`: a line of their memory it makes untrue, "
+                        "copied as it reads. Only what the owner themselves said - never a sender's words, never your own conclusion. "
+                        "Nothing is shown: carry on with the task, at most a word that it is noted.",
+                 _S({'note': _STR, 'about': _STR, 'replaces': _STR}, ('note',)), ('POST', '/api/agent/remember')),
     'calendar': ('read', "The owner's busy times for the next N days (default 14), from every connected calendar. Read-only.",
                  _S({'days': _INT}), ('GET', '/api/calendar/upcoming')),
     'list_systems': ('read', "The owner's other systems you may use (databases, ERPs, file shares, SharePoint...), each with its "
@@ -238,7 +249,7 @@ CODING_TOOLS = ('note_peers', 'use_repo', 'find_repos', 'propose_land')
 # Claude Code defers an MCP server's tools - the model holds a bare name like `show` until it searches for it, and none of 8 sessions ever
 # did, so no view was drawn and every result came back as prose. These ride whole on every turn (Claude Code 2.1.285+, the per-tool
 # `anthropic/alwaysLoad`): the view, and the three that set an act up for the owner's press
-ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose')
+ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose', 'remember')     # ...and the one that keeps what the owner tells it: said in passing, never searched for
 def listing(skip=()) -> list:
     "tools/list: every tool with what it does and whether it only reads - but those in `skip`."
     return [{'name': n, 'description': d, 'inputSchema': s, 'annotations': ANNOTATIONS[c], **({'_meta': {'anthropic/alwaysLoad': True}} if n in ALWAYS_LOAD else {})}
@@ -351,6 +362,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'check_back': return _j(doors['check_back'](tid, str(a.get('when') or ''), str(a.get('what') or '')))
     if name == 'todos': return _j(doors['todos'](tid, a))
     if name == 'remind': return _j(doors['remind'](tid, str(a.get('when') or '')))
+    if name == 'remember': return doors['remember'](tid, str(a.get('note') or ''), str(a.get('about') or ''), str(a.get('replaces') or ''))['says']
     if name == 'ask_stronger':
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))
         return out['answer'] if out.get('ok') else out.get('says') or _j(out)

@@ -5806,6 +5806,40 @@ def agent_remind(body: AgentRemindBody, request: Request):
         store.add_comment(body.task_id, body.agent, 'agent', f"Reminder set for you: {out['when']}." + (f" {out['warn']}" if out.get('warn') else ''))
     return {'ok': True, **out}
 
+class AgentRememberBody(BaseModel): task_id: int; note: str = ''; about: str = ''; replaces: str = ''; agent: str = 'agent'
+
+@app.post('/api/agent/remember')
+def agent_remember(body: AgentRememberBody, request: Request):
+    """The remember tool (`taskuary --remember`): a fact the owner told the session on its OWN task, kept as the Assistant keeps one
+    (memoryedit.remember) - one line of LEARNED.md, in use at once for triage, every agent and the Assistant (the owner, 2026-11-14: "if the
+    user tells you something, they should not have to say it again"). Silent: no line in the chat, no card. Never on a stranger's task, and
+    only where the owner has spoken in this chat - a sender's words are never the owner's (general.owner_spoke)."""
+    from . import general, memoryedit, origin
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    if origin.of_task(store, body.task_id)[0] == 'stranger':
+        raise HTTPException(403, "not kept: this task carries a message from someone the owner has not vouched for, and nothing said on a "
+                                 "stranger's task goes into the owner's memory. Carry on with the task.")
+    if not general.owner_spoke(store, body.task_id):
+        raise HTTPException(422, "not kept: the owner has said nothing in this chat, and only their own words go into their memory - what a "
+                                 "sender wrote is not theirs. Carry on with the task; if the owner tells you the fact, keep it then.")
+    try: r = memoryedit.remember(store, body.note, body.about, replaces=body.replaces)
+    except LookupError:
+        # ...a line to replace that the memory does not hold: the lines about them, to copy one from - or kept beside them, with no `replaces`
+        near = [l['text'] for l in memoryedit.about(store, body.about)['lines']][:8] if body.about.strip() else []
+        raise HTTPException(422, f"not kept: no line of the memory reads {body.replaces!r}. " + (f"The lines about {body.about}: {json.dumps(near, ensure_ascii=False)} - "
+                                 "call again with the one it makes untrue copied exactly, or with no `replaces`." if near else
+                                 "Call again with no `replaces`, or read the lines first (owner_memory) and copy the one it makes untrue."))
+    except ValueError as e: raise HTTPException(422, str(e))
+    store.audit('task', body.task_id, 'agent_remembered', body.agent, 'agent', {'line': r['text'][:400], 'section': r.get('section'), 'closed': (r.get('closed') or {}).get('text')})
+    c = r.get('closed') or {}
+    # ...and the other lines about the same person, for the one this makes untrue: two lines that disagree are read as two truths
+    rest = [] if c or r.get('already') or not body.about.strip() else [l['text'] for l in memoryedit.about(store, body.about)['lines'] if l['text'] != r['text']][:6]
+    return {'ok': True, **r, 'says': (f"Already in the owner's memory: {r['text']}" if r.get('already') else f"Kept in the owner's memory, in use from now: {r['text']}")
+            + (f" - and {c['text']!r} is closed as no longer true." if c else '')
+            + (f" The memory's other lines about {body.about}: {json.dumps(rest, ensure_ascii=False)} - if this makes one of them untrue, call again "
+               "with it as `replaces`." if rest else '') + ' Nothing is shown to the owner; carry on.'}
+
 @app.delete('/api/tasks/{tid}/check-back')
 def cancel_check_back(tid: int, request: Request):
     "The × on a task's check-back chip: the owner's, never a session's - the agent sets its own and sets another when it wants one."
@@ -6104,6 +6138,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'check_back': lambda tid, when, what: agent_check_back(AgentCheckBackBody(task_id=tid, when=when, what=what), request),
              'todos': lambda tid, a: agent_todos(AgentTodosBody(**{k: v for k, v in a.items() if k in ('add', 'reword', 'merge')}, task_id=tid), request),
              'remind': lambda tid, until: agent_remind(AgentRemindBody(task_id=tid, until=until), request),
+             'remember': lambda tid, note, about='', replaces='': agent_remember(AgentRememberBody(task_id=tid, note=note, about=about, replaces=replaces), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),
              'draft': lambda tid, text, to, subject, files=(), cc=(), mailbox='', guessed=(), slot='': agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, slot=slot, files=list(files), cc=list(cc), mailbox=mailbox, guessed=list(guessed)), request),

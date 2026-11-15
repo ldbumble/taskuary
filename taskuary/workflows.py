@@ -21,6 +21,7 @@ from loguru import logger
 
 from . import kinds as task_kinds
 from .store import task_ref
+from .kinds import ASSISTANT
 
 WORKFLOW_TYPES = ('agent', 'zoho_monthly_invoices')
 
@@ -147,7 +148,7 @@ def brief(defn: dict, trigger: str, when: str, context: dict = None) -> str:
 # WHO STARTED THIS RUN, kept on the task it made (the owner, 2026-10-16: "what does it show triggered it in the task card?"): a
 # workflow task has no message behind it and nobody triaged it, so this tag is the only thing that can say where it came from
 TRIGGER_TAG = 'workflow-trigger:'
-STARTED_BY = {'schedule': 'its schedule', 'manual': 'you (Run now)', 'assistant': 'the assistant', 'phone': 'you, from your phone',
+STARTED_BY = {'schedule': 'its schedule', 'manual': 'you (Run now)', 'assistant': ASSISTANT, 'phone': 'you, from your phone',
               'mail': 'a mail that arrived'}
 _STARTING, _LOCK = set(), threading.Lock()      # runs whose worker is on its way: no session yet, and no queue row
 

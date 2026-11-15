@@ -28,11 +28,11 @@ export const byPerson = (ls) => {
 
 // the five as an older server (or the demo's recorded page) names none: the same words learned_cut.reads_label says
 export const SECTIONS = [
-  { slug: "people", title: "Your people", reads: "read by triage (priority only) · drafts · the Advisor · the Assistant · agents" },
-  { slug: "care", title: "What you care about", reads: "read by triage · the Advisor · the Assistant · agents" },
-  { slug: "work", title: "How you work", reads: "read by triage · drafts · the Advisor · the Assistant · agents" },
-  { slug: "promises", title: "Promises", reads: "read by triage · the Advisor · the Assistant · agents" },
-  { slug: "bring", title: "What to bring up", reads: "read by triage · the Assistant · agents" },
+  { slug: "people", title: "Your people", reads: "read by triage (priority only) · drafts · the Advisor · Taskuary · agents" },
+  { slug: "care", title: "What you care about", reads: "read by triage · the Advisor · Taskuary · agents" },
+  { slug: "work", title: "How you work", reads: "read by triage · drafts · the Advisor · Taskuary · agents" },
+  { slug: "promises", title: "Promises", reads: "read by triage · the Advisor · Taskuary · agents" },
+  { slug: "bring", title: "What to bring up", reads: "read by triage · Taskuary · agents" },
 ];
 
 // [{slug, title, reads, lines, people?}] - the five subjects in the document's order, then Watching and Proposed

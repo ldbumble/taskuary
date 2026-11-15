@@ -513,7 +513,7 @@ def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
     if typ == 'hipaa_ai':
         if m['fast']:
             # the jobs said, not the model names behind them - Settings has those for whoever wants them
-            return {'ok': True, 'why': "Your access code works - a quick model sorts what comes in and runs the Assistant"
+            return {'ok': True, 'why': "Your access code works - a quick model sorts what comes in and answers you in the chat"
                                        + (', a stronger one does the agent work.' if m['agent'] else '.')}
     name = c.get('Name') or typ.capitalize()
     return {'ok': True, 'why': f"Your {name} key works - it will sort what comes in." if secret else f"{name} works - it will sort what comes in."}

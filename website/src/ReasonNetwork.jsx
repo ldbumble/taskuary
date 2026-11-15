@@ -73,7 +73,7 @@ export default function ReasonPanel({ conn, reload }) {
           onChange={(e) => act("gate", () => api.post("/api/reason/gate", { on: e.target.checked }))} />
         <Box>
           <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>Only people you trust reach your agents</Typography>
-          <Typography variant="caption" sx={{ color: DIM }}>{gateWords(st.gate)} Turning it on also keeps the Assistant's own folder off the network.</Typography>
+          <Typography variant="caption" sx={{ color: DIM }}>{gateWords(st.gate)} Turning it on also keeps Taskuary's own chat folder off the network.</Typography>
         </Box>
       </Row>
 
@@ -138,7 +138,7 @@ export default function ReasonPanel({ conn, reload }) {
 
       <Section title="Off the network">
         <Row>
-          <Typography variant="body2" sx={{ color: INK, flex: 1 }}>The Assistant's own folder</Typography>
+          <Typography variant="body2" sx={{ color: INK, flex: 1 }}>Taskuary's own chat folder</Typography>
           <Typography variant="caption" sx={{ color: DIM }}>{st.assistant_off ? "off the network" : "not yet off - turn on the trust gate above"}</Typography>
         </Row>
         {(st.folders || []).length === 0 && <Typography variant="body2" sx={{ color: DIM, mt: 1 }}>No repository checkouts are set up for your agents yet.</Typography>}

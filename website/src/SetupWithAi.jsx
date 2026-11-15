@@ -78,7 +78,7 @@ export default function SetupWithAi({ kind = "report", words = "", refId = null,
 
   const button = (
     <Button size="small" variant="outlined" disableElevation data-tq-setup-ai={kind} data-tq-view-skip="" startIcon={<AutoAwesomeIcon sx={{ fontSize: 15 }} />}
-      title={`The Assistant sets up this ${NOUN[kind]} here - it drafts, checks and saves it, and asks you only what it cannot know`}
+      title={`Taskuary sets up this ${NOUN[kind]} here - it drafts, checks and saves it, and asks you only what it cannot know`}
       onClick={() => (onOpen ? (handTo(kind, words), onOpen()) : noWords ? go("") : setOpen(true))} sx={{ alignSelf: "flex-start" }}>
       Set up with AI
     </Button>);
@@ -89,7 +89,7 @@ export default function SetupWithAi({ kind = "report", words = "", refId = null,
     <Box data-tq-build={v?.id || ""} sx={{ border: "1px solid var(--tq-line, #e2ddd3)", borderRadius: 2, p: 1.5, display: "flex", flexDirection: "column",
       gap: 1, maxWidth: 820, bgcolor: "var(--tq-panel, #fff)", ...sx }}>
       <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK, display: "flex", alignItems: "center", gap: 0.75 }}>
-        <AutoAwesomeIcon sx={{ fontSize: 15, color: DIM }} /> The Assistant sets up this {NOUN[kind]}
+        <AutoAwesomeIcon sx={{ fontSize: 15, color: DIM }} /> Taskuary sets up this {NOUN[kind]}
       </Typography>
       {!v && first == null && !noWords && <>
         <TextField size="small" multiline minRows={2} autoFocus fullWidth value={said} onChange={(e) => setSaid(e.target.value)}

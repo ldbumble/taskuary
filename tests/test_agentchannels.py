@@ -187,7 +187,7 @@ def test_whatsapp_owner_needs_no_id_and_the_assistant_chat_is_not_bindable(w):
     assert w.typed[-1].endswith('owner here') or 'owner here' in w.typed[-1]
     wa = w.s.connectors_by_type('whatsapp')[0]
     w.s.merge_connector_config(wa['ConnectorId'], {'assistant_chat': '15550001111@s.whatsapp.net'})
-    with pytest.raises(ValueError, match='Assistant chat'): ac.bind(w.s, 'whatsapp', '15550001111@s.whatsapp.net', w.tid, members=[])
+    with pytest.raises(ValueError, match='your Taskuary chat'): ac.bind(w.s, 'whatsapp', '15550001111@s.whatsapp.net', w.tid, members=[])
 
 
 # ── what reaches the chat ──────────────────────────────────────────────────────────────────────────────────────────────

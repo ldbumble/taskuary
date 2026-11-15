@@ -596,7 +596,7 @@ ${fix.detail || ""}`, screen: "Setup",
       : litCard.state === "on" ? `${litCard.title} is connected here - pick ${litCard.title} to make it your AI`
       : litCard.state === "failing" ? `${litCard.title} didn't work last time - pick ${litCard.title} to try again, or pick another`
       : `Pick its card - ${litCard.title} if that is the one you pay for`}. Taskuary checks it works, then uses it to sort what comes in.`
-      : `Your AI is ${st.brain?.name || "set"} - it sorts what comes in and runs the Assistant. Pick another here to switch, or press ${VERB.next.label}.`),
+      : `Your AI is ${st.brain?.name || "set"} - it sorts what comes in and answers you in the chat. Pick another here to switch, or press ${VERB.next.label}.`),
     // a brain failing on the real mail is said on every step past the AI, with Change AI in the row - "no need to wait" over mail
     // that was not being sorted at all was the opposite of true (the Advisor audit, 2026-10-15)
     mail: aiErr ? `${aiErr} Change AI picks one that does.` : doneOf(st, "mail") ? `Your main source is connected.${sortingLine} Another source can be added the same way - a second one of the same kind is Add another on its card - or press ${VERB.next.label}.`

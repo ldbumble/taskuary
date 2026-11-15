@@ -358,7 +358,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 : !tasks.length ? "No tasks yet — they arrive on your work rail as work comes in, or start one with New."
                 : filter === "upcoming" ? "Nothing put away. Remind me on a task puts it here until that day."
                 : filter === "done" ? "Nothing finished yet. Mark done on a task puts it here."
-                : "Nothing in progress. New starts one, or the Assistant hands you work as it comes in."}</Empty> : shown.map((task) => {
+                : "Nothing in progress. New starts one, or Taskuary hands you work as it comes in."}</Empty> : shown.map((task) => {
               const st = stateOf(task), sel = selected === task.TaskId;
               const list = rowChecklist(task), nDone = list.filter((i) => i.done).length;
               const asked = askedAgo(task), worker = assignedAgent(task.Assignee);

@@ -12,7 +12,7 @@ test("the Settings page lists what the assistant changed, with no undo", () => {
   const view = read("../src/SettingsView.jsx");
   assert.match(view, /api\.get\("\/api\/audit\/assistant"/);
   assert.match(view, /<AssistantChanges \/>/);
-  assert.match(view, /What the assistant changed/);
+  assert.match(view, /What Taskuary changed/);
   assert.doesNotMatch(view, /Undo the last change|\/api\/operations\/\$\{undo\.id\}/);
   const server = read("../../taskuary/server.py");
   assert.match(server, /@app\.get\('\/api\/audit\/assistant'\)/);

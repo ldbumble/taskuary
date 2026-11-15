@@ -266,7 +266,7 @@ def _known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = 
     from .store import OWN_CHANNELS
     ch = msg.get('channel') or ''
     if ch in OWN_CHANNELS:                                                                # X3: never "a chat you control"
-        return True, _said('Taskuary wrote this report.' if ch == 'report' else "Taskuary's assistant wrote this.")
+        return True, _said('Taskuary wrote this report.' if ch == 'report' else 'Taskuary wrote this.')
     from .ingest import CHAT_CHANNELS
     if ch.lower() in CHAT_CHANNELS: return _chat_known(store, msg, ch.lower(), exclude_mid, on('trust_non_email'), memo)
     if ch in ALERTS or ch in TRACKERS: return _item_known(store, msg, ch, on('trust_trackers'), memo)

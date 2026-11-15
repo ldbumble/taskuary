@@ -400,7 +400,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     } else if (e.type === "start" && keepStart) {
       steps.push({ id: `start-${steps.length}`, kind: "note", summary: `Started ${e.session?.provider || "the selected agent"}`, detail: "", status: "done" });
     } else if (e.type === "error") {
-      steps.push({ id: `error-${steps.length}`, kind: "error", summary: `⚠ ${e.detail?.result || e.error || "The assistant could not answer."}`, detail: "", status: "error" });
+      steps.push({ id: `error-${steps.length}`, kind: "error", summary: `⚠ ${e.detail?.result || e.error || "Taskuary could not answer."}`, detail: "", status: "error" });
     }
   }
   // what it said that the answer says again is the answer: a CLI's final text streams in as progress too

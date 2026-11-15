@@ -26,6 +26,7 @@ from . import buttons, devphone, lanes
 from .inboxes import NAMES as INBOX_NAMES
 # the row's words (who, state, your move) and when a For later row comes back are worked out ONCE, in funnel_presentation
 from .funnel_presentation import back_in as _back_in, is_own, move_of as move_title, shows, story_who
+from .kinds import ASSISTANT
 
 
 CHANNELS = ('whatsapp', 'telegram')
@@ -199,13 +200,13 @@ def use_chat(store, channel: str, chat: str) -> dict:
     if not c: raise ValueError(f'no {channel} connection is switched on')
     chat = str(chat or '').strip()
     if chat and not any(o['to'] == chat for o in candidates(store, c)):
-        raise ValueError(f'{chat} is not a chat you are alone in - the assistant can only live in one of those')
+        raise ValueError(f'{chat} is not a chat you are alone in - {ASSISTANT} can only live in one of those')
     cfg = _config(c)
     store.merge_connector_config(c['ConnectorId'], {'assistant_chat': chat})
     return {'channel': channel, 'chat': chat}
 
 
-PICKED = 'Connected - this is your Assistant chat now.'
+PICKED = f'Connected - this is your {ASSISTANT} chat now.'
 GREET_EVERY = 6 * 3600                  # one fixed line per unchosen chat in this long, so a stranger cannot make the bot talk
 
 
@@ -234,7 +235,7 @@ def greet_unchosen(store, connector, chat: str) -> bool:
     if time.time() - last < GREET_EVERY: return False
     store.set_setting(key, str(time.time()), 'telegram-poll')
     mine = chat_of(connector) == str(chat)
-    text = (f'This is your Assistant chat. To walk here, press "Walk me through them in Telegram" on the desktop, or let it listen any time '
+    text = (f'This is your {ASSISTANT} chat. To walk here, press "Walk me through them in Telegram" on the desktop, or let it listen any time '
             f'under {words.name("phone")}.' if mine else
             f'To talk to Taskuary here, choose this chat on the desktop: {words.name("phone")}.')
     try: messengers.tg_send(store, str(chat), text, connector_id=connector.get('ConnectorId'))
@@ -306,9 +307,9 @@ def start_handoff(store, channel: str, actor: str = 'owner') -> dict:
     """Send the walk to the phone: the opening turn goes to the chat. The owner pressed for exactly that, so the press opens the
     conversation there (owner_spoke) - and the desktop keeps working, following the walk (no lock, 2026-10-23)."""
     from . import concierge, general
-    if channel not in CHANNELS: raise ValueError(f'{channel} is not a chat the assistant can be handed to')
+    if channel not in CHANNELS: raise ValueError(f'{channel} is not a chat {ASSISTANT} can be handed to')
     c = doorway(store, channel)
-    if not c: raise ValueError(f'no {LABELS[channel]} card names an Assistant chat to walk you through it in')
+    if not c: raise ValueError(f'no {LABELS[channel]} card names a {ASSISTANT} chat to walk you through it in')
     chat, cid = chat_of(c), c['ConnectorId']
     live = {'channel': channel, 'chat': chat, 'connector_id': cid, 'at': _now()}
     task, _ = general.dock_task(store, actor)
@@ -3039,7 +3040,7 @@ def acts_for(store, channel: str, chat: str) -> dict:
     except ValueError: return {}
 
 
-ASK_SOMETHING = 'Ask the assistant something'
+ASK_SOMETHING = f'Ask {ASSISTANT} something'
 POLL_LABEL = 100                               # WhatsApp's option length, in UTF-16 units (whatsapp/poll.mjs)
 
 

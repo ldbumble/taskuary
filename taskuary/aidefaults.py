@@ -22,6 +22,7 @@ import json, re
 from loguru import logger
 
 from . import climodels
+from .kinds import ASSISTANT
 
 # One row per default. `gear` says WHICH of a CLI profile's two models this slot sets, and is
 # the reason a coding brain and a triage brain can be the same agent without fighting over one field.
@@ -49,7 +50,7 @@ SLOTS = [
     {'key': 'default_brain', 'label': 'Coding agent', 'pick': 'cli', 'gear': 'main',
      'desc': 'Works the coding tasks. Start session, Send to coding agent and auto-dispatch all use this one - a CLI, or an AI card.',
      'why': 'This is the expensive, capable gear: it reads your repository and writes code.'},
-    {'key': 'concierge_ai', 'label': 'Assistant', 'pick': 'brain', 'gear': 'light',
+    {'key': 'concierge_ai', 'label': ASSISTANT, 'pick': 'brain', 'gear': 'light',
      'model_setting': 'concierge_model',
      'desc': 'Speaks in the chat here and on your phone (WhatsApp, Telegram), and walks you through what is waiting.',
      'why': 'Turn by turn and conversational, so it rides the same quick gear as triage.'},
@@ -308,7 +309,7 @@ def _resolve(store, cfg, slot_key: str) -> dict:
         # a blank box runs the gear's default model, so its efforts and version are that model's
         seen = model or ('' if dflt.startswith('effort:') else dflt)
         out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, seen), resolved=_resolved(cat, seen),
-                   default_hint=said if slot_key == 'assistant_ai' else f"{said} - the {'Assistant' if slot_key == 'concierge_ai' else 'light'} default",
+                   default_hint=said if slot_key == 'assistant_ai' else f"{said} - the {ASSISTANT if slot_key == 'concierge_ai' else 'light'} default",
                    owner=owner, owner_link='' if owner == 'this page' else 'ai_apps', cli=cli)
         if not light and not dflt: out['note'] = f'no light model set - this runs on the {cli} coding model, which is the expensive gear'
         from .agents import runs_here

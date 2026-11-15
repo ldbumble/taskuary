@@ -3,10 +3,12 @@
 // sections - the owner's private Assistant chat (remote_assistant.py), and in Developer mode the chats bound to coding agents (agentchannels.py).
 // The decisions are here, so node --test holds them without a DOM; PhoneChats.jsx draws them.
 
+import { ASSISTANT_NAME } from "./kinds.js";
+
 // the schema group whose knobs (phone_assistant, phone_walk_channel, phone_morning_line...) sit on this page rather than under Configuration
 export const PHONE_GROUP = "Assistant on your phone";
 export const PHONE_PAGE = "phone";
-export const SECTION_TITLE = { assistant: "The Assistant from your phone", agents: "Agent channels" };
+export const SECTION_TITLE = { assistant: `${ASSISTANT_NAME} from your phone`, agents: "Agent channels" };
 // Agent channels are a developer's: with Developer mode off the section is not drawn at all - no heading, no "turn it on" teaser
 export const phoneSections = ({ devMode = false } = {}) => ["assistant", ...(devMode ? ["agents"] : [])];
 
@@ -15,9 +17,9 @@ export const ASSISTANT_LINE = "Walk through your tasks, answer and approve from 
 // how a chat that is not set yet gets set - the chat is offered once Taskuary has SEEN it, so the first step is always the owner's message
 export const SETUP_STEPS = {
   whatsapp: ["On your phone, open WhatsApp and send yourself a message (the “Message yourself” chat).", "Press Look again here.",
-    "Pick that chat in the box - it becomes your Assistant chat."],
+    `Pick that chat in the box - it becomes your ${ASSISTANT_NAME} chat.`],
   telegram: ["In Telegram, send your Taskuary bot a direct message.", "Press Look again here.",
-    "Pick that chat in the box - it becomes your Assistant chat."],
+    `Pick that chat in the box - it becomes your ${ASSISTANT_NAME} chat.`],
 };
 
 // One channel's row, in words: {state, line}. `r` is a doorway_state row; `handoff` the live hand-over ({channel, chat}) or null.

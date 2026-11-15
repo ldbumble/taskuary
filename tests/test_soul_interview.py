@@ -87,7 +87,7 @@ class AdaptiveQuestionTests(unittest.TestCase):
 
     def test_it_requires_an_assistant_instead_of_falling_back_to_fixed_questions(self):
         with mock.patch('taskuary.interview._brain', return_value=None):
-            with self.assertRaisesRegex(ValueError, 'AI assistant'):
+            with self.assertRaisesRegex(ValueError, 'Connect an AI first'):
                 interview.next_question(MemoryStore(), [])
 
 

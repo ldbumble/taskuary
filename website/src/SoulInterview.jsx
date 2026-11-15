@@ -40,7 +40,7 @@ export default function SoulInterview({ open, onClose, onWritten }) {
     if (!question) return;
     const next = [...answers, { q: question.q, a: skip ? "" : answer.trim() }];
     if (next.length >= total && !next.some((row) => row.a)) {
-      setErr("Answer at least one question so the assistant has something true to write from.");
+      setErr("Answer at least one question so Taskuary has something true to write from.");
       return;
     }
     setBusy(next.length >= total ? "write" : "question"); setErr("");
@@ -52,7 +52,7 @@ export default function SoulInterview({ open, onClose, onWritten }) {
         const { data } = await api.post("/api/soul/interview/next", { answers: next });
         setAnswers(next); setQuestion(data.question); setAnswer("");
       }
-    } catch (e) { setErr(e?.response?.data?.detail || "The assistant could not continue the interview"); }
+    } catch (e) { setErr(e?.response?.data?.detail || "Taskuary could not continue the interview"); }
     setBusy("");
   };
 
@@ -60,7 +60,7 @@ export default function SoulInterview({ open, onClose, onWritten }) {
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ pb: 0.5 }}>
-        Shape SOUL.md with the assistant
+        Shape SOUL.md with Taskuary
         <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
           Seven questions, one at a time. Each new question follows what you have already said.
         </Typography>
@@ -71,7 +71,7 @@ export default function SoulInterview({ open, onClose, onWritten }) {
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 2 }}>{err}</Alert>}
         {!question && busy === "question" ? (
           <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", color: DIM, py: 4, justifyContent: "center" }}>
-            <CircularProgress size={18} /><Typography variant="body2">The assistant is choosing the first question…</Typography>
+            <CircularProgress size={18} /><Typography variant="body2">Taskuary is choosing the first question…</Typography>
           </Box>
         ) : question && (
           <>
@@ -90,7 +90,7 @@ export default function SoulInterview({ open, onClose, onWritten }) {
             {!!answers.length && (
               <Box sx={{ mt: 2, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25 }}>
                 <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>
-                  The assistant is carrying forward {plural(answers.filter((row) => row.a).length, "answer")} from the earlier questions.
+                  Taskuary is carrying forward {plural(answers.filter((row) => row.a).length, "answer")} from the earlier questions.
                 </Typography>
               </Box>
             )}

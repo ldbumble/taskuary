@@ -274,7 +274,7 @@ export default function SkillImport({ onClose, onImported }) {
       <Confirm open={overwrite !== null} confirmLabel="Overwrite" onClose={() => setOverwrite(null)}
         title={rows[overwrite]?.clash?.doc ? `Overwrite ${rows[overwrite].clash.doc.toUpperCase()}.md?` : `Overwrite the "${rows[overwrite]?.name}" profile?`}
         text={rows[overwrite]?.clash?.doc
-          ? "That is an operator document the assistant reads on every message, not a worker profile. Its current text has no history to restore from, so this cannot be undone. Rename the import instead unless you mean it."
+          ? "That is an operator document Taskuary reads on every message, not a worker profile. Its current text has no history to restore from, so this cannot be undone. Rename the import instead unless you mean it."
           : "Its kind and its whole rules document are replaced by this skill's. A profile's document has no history to restore from, so this cannot be undone."}
         onConfirm={() => { setRow(overwrite, { replace: true, clash: null }); }} />
     </Dialog>

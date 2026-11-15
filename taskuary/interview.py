@@ -110,10 +110,10 @@ def _json_object(raw: str) -> dict:
     try: return json.loads(text)
     except (TypeError, ValueError):
         match = re.search(r'\{.*\}', text, re.S)
-        if not match: raise ValueError('The assistant did not return a question. Try again.')
+        if not match: raise ValueError('Taskuary did not return a question. Try again.')
         try: return json.loads(match.group(0))
         except (TypeError, ValueError) as exc:
-            raise ValueError('The assistant returned an unreadable question. Try again.') from exc
+            raise ValueError('Taskuary returned an unreadable question. Try again.') from exc
 
 
 def next_question(store, answers, llm=None) -> dict:
@@ -122,17 +122,17 @@ def next_question(store, answers, llm=None) -> dict:
     if len(prior) >= TOTAL_QUESTIONS: raise ValueError('All seven questions have already been asked.')
     brain = _brain(store, llm)
     if not brain:
-        raise ValueError('Set up an AI assistant first so the interview can adapt to your answers.')
+        raise ValueError('Connect an AI first so the interview can adapt to your answers.')
     number = len(prior) + 1
     prompt = (f"MODE: NEXT_QUESTION\nQUESTION NUMBER: {number} OF {TOTAL_QUESTIONS}\n\n"
               f"{_known(context(store))}\n\nINTERVIEW SO FAR:\n{_transcript(prior)}\n\n"
               "Return the single next question as the JSON object required by the skill. Do not write SOUL.md yet.")
     data = _json_object(brain(skill_text(), prompt, max_tokens=350))
     question = str(data.get('q') or '').strip()
-    if not question: raise ValueError('The assistant did not return a question. Try again.')
+    if not question: raise ValueError('Taskuary did not return a question. Try again.')
     if '?' not in question: question = question.rstrip('.') + '?'
     return {'number': number, 'total': TOTAL_QUESTIONS, 'q': question[:500],
-            'why': str(data.get('why') or 'This fills in an important part of how the assistant should work for you.').strip()[:500],
+            'why': str(data.get('why') or 'This fills in an important part of how Taskuary should work for you.').strip()[:500],
             'placeholder': str(data.get('placeholder') or '').strip()[:500]}
 
 
@@ -163,14 +163,14 @@ def draft(store, answers, llm=None) -> str:
     brain = _brain(store, llm)
     if not brain:
         if isinstance(answers, dict): return _plain(answers, ctx)
-        raise ValueError('The AI assistant used for the interview is no longer available.')
+        raise ValueError('The AI used for the interview is no longer available.')
     prompt = (f"MODE: WRITE_SOUL\n\n{_known(ctx)}\n\nCOMPLETE SEVEN-QUESTION INTERVIEW:\n"
               f"{_transcript(transcript)}")
     out = str(brain(skill_text(), prompt, max_tokens=1800) or '').strip()
     out = out.removeprefix('```markdown').removeprefix('```').removesuffix('```').strip()
     if out: return out
     if isinstance(answers, dict): return _plain(answers, ctx)
-    raise ValueError('The assistant did not produce SOUL.md. Try writing it again.')
+    raise ValueError('Taskuary did not produce SOUL.md. Try writing it again.')
 
 
 def write(store, answers, actor: str = 'owner', llm=None) -> str:

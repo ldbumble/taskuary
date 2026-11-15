@@ -48,6 +48,7 @@ import { adviceKeyFor, adviceShown, nothingToAdd, stripWord, taskNote } from "./
 import { Md, looksMd } from "./md.jsx";
 import { chatMd, refParts, refNumber } from "./mdText.js";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
+import { ASSISTANT_NAME } from "./kinds.js";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
 // taskuary logo ... at least how it shows in the assistant"): its six-point star drawn in Taskuary's sage, outlined like
 // the avatars on its cards - the bright tile repeated on every line shouted over the card it introduced
@@ -1531,7 +1532,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if ([404, 405, 501].includes(res.status)) return plain();
       let payload = null;
       try { payload = await res.json(); } catch { /* retain the HTTP status */ }
-      const error = new Error(typeof payload?.detail === "string" ? payload.detail : `Assistant request failed (${res.status})`);
+      const error = new Error(typeof payload?.detail === "string" ? payload.detail : `${ASSISTANT_NAME} could not take that (${res.status})`);
       error.response = { status: res.status, data: payload || {} };
       throw error;
     }
@@ -1543,7 +1544,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (ev.type === "steps") { setSteps(Array.isArray(ev.detail?.steps) ? ev.detail.steps : []); return; }
       if (ev.type === "error") {
         setWords("");
-        const error = new Error(ev.error || "The assistant could not answer.");
+        const error = new Error(ev.error || `${ASSISTANT_NAME} could not answer.`);
         error.code = ev.code; error.detail = ev.detail;
         throw error;
       }
@@ -1558,7 +1559,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     });
     setWords(""); setSteps([]);
     if (answer) { setWork([]); return answer; }
-    throw new Error("The assistant stopped without an answer.");
+    throw new Error(`${ASSISTANT_NAME} stopped without an answer.`);
   }, []);
   // ...answered, refused or stopped, a turn can change what the sync caption shows (wrote.js)
   const turn = useCallback(body => turnOnce(body).finally(noteWrite), [turnOnce]);
@@ -3752,7 +3753,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     {/* THE MODEL PICKER, bottom right (the owner, 2026-10-29: a modern chat composer): the brain this chat speaks on, the Assistant's default
         until another is chosen here - for this chat only, Settings stay as they are. A press opens its list, never the chat window */}
     {chatApart && !!state && <button type="button" className="tq-model-pick" data-tq-model-pick="" aria-haspopup="menu" aria-expanded={!!modelEl}
-      title={state?.chatPick ? "This chat's own AI - Settings stay as they are" : "The Assistant's default AI - choose another for this chat"}
+      title={state?.chatPick ? "This chat's own AI - Settings stay as they are" : `${ASSISTANT_NAME}'s default AI - choose another for this chat`}
       onMouseDown={(e) => e.preventDefault()} onFocus={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setModelEl(e.currentTarget); }}>
       <span>{state?.providers?.length ? state?.provider || "AI" : state?.scripted ? "Scripted demo" : "No AI connected"}</span> ▾</button>}
     </div>
@@ -3772,7 +3773,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       <div className="tq-chat-head">
         {/* no mark here: the top bar already carries the logo (the owner, 2026-10-06: "don't need it on top of the assistant") */}
         {canBack && !!placeHash && !old && !firstRun && <Tooltip title="Back (Alt+←)"><IconButton size="small" aria-label="Back" onClick={() => window.history.back()} sx={{ ml: -0.75, mr: 0.25 }}><ArrowBackIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}
-        <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>
+        <div className="who" style={{ minWidth: 0 }}><b>{ASSISTANT_NAME}</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>
         <div className="grow" />
         <Tooltip title="Your work"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         {/* ONE AI PICKER, THE COMPOSER'S (the owner, 2026-10-29): the header's own AI popover is gone - the model picker at the foot of
@@ -3921,12 +3922,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               under it as its floor (the box is the panel's last band, assistantView.css). Shut, it stays mounted: the last line's chips are
               on the row either way, and opened again it is the same conversation */}
           {winOn && (
-            <div className="tq-chat-pop" data-tq-chat-pop="" data-tq-chat-win="" data-tq-mini={popOpen && isMini ? "" : undefined} role={popOpen ? "dialog" : undefined} aria-label="Chat with Taskuary"
+            <div className="tq-chat-pop" data-tq-chat-pop="" data-tq-chat-win="" data-tq-mini={popOpen && isMini ? "" : undefined} role={popOpen ? "dialog" : undefined} aria-label={`Chat with ${ASSISTANT_NAME}`}
               ref={popRef} hidden={!popOpen} style={{ height: isMini ? Math.round(popH / 2) : popH }} onKeyDown={escShut}>
               {/* ...folded, the head is all there is - and a press anywhere on it brings the window back */}
               <div className="tq-chat-pop-head" onClick={isMini ? expand : undefined} title={isMini ? "Open the chat" : undefined}>
                 {/* ...a page over the task is what the chat is about, and the task under it is not named (the owner, 2026-11-05) */}
-                <TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && !browsing && <span>{`· ${currentItem.ref}`}</span>}
+                <TaskuaryMark size={16} /><b>{ASSISTANT_NAME}</b>{currentItem?.ref && !browsing && <span>{`· ${currentItem.ref}`}</span>}
                 {isMini && unseen > 0 && <i className="tq-chat-unseen in-head" data-tq-unseen={unseen} aria-label={`${unseen} new in the chat`}>{unseen}</i>}<span style={{ flex: 1 }} />
                 {!isMini && <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={openChats}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>}
                 {isMini

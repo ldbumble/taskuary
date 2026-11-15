@@ -29,11 +29,11 @@ test("a page over the item: the box says it is under the page, not in view", () 
   const shown = tableWords(tableOf({ current: "task:3" }), "TQ-0003");
   assert.match(shown.box, /^Ask about this one/);
   // ...the open box over a task, and a phone's: "Talk to Taskuary…" (the owner, 2026-10-28), the resting pill still "Ask…"
-  assert.equal(shown.phone, "Ask the Assistant…", "the pill is the Assistant (the owner, 2026-11-06)");
-  assert.equal(shown.name, "Tell the Assistant what to do with TQ-0003", "the pill names the task its words do not");
-  assert.equal(under.name, "Ask the Assistant about this page");
+  assert.equal(shown.phone, "Ask Taskuary…", "the pill is the Assistant (the owner, 2026-11-06) - by its name, Taskuary (2026-11-15)");
+  assert.equal(shown.name, "Tell Taskuary what to do with TQ-0003", "the pill names the task its words do not");
+  assert.equal(under.name, "Ask Taskuary about this page");
   assert.match(tableWords(tableOf({ cardKey: "task:9" })).box, /^Ask about this one/, "a task opened by name is on the table too");
-  assert.match(tableWords(tableOf({ browsing: "b1" })).box, /^Ask the Assistant/, "a page with nothing under it");
+  assert.match(tableWords(tableOf({ browsing: "b1" })).box, /^Ask Taskuary/, "a page with nothing under it");
   assert.doesNotMatch(src, /tableSays\.tag|tq-pile-now/, "no \"on the table\" tag under the ringed row (audit 2026-11-05)");
   // ...and the box its words - but the one-row bar's pill, at rest and widened, its own short ones (2026-10-26)
   // ...and the pill at rest with no task on the table the short hint, the long one ran on under its send button (2026-10-26)
@@ -91,4 +91,28 @@ test("the Assistant's own icons: in the head on the home screen, in the pill onl
   assert.match(src, /const iconsInPill = chatApart && overChat\(table\)/);
   assert.match(src, /\{iconsInPill && <span className="tq-compose-own">\{ownIcons\}<\/span>\}/);
   assert.match(src, /\{!iconsInPill && ownIcons\}/, "never both at once");
+});
+
+// ONE NAME FOR THE ASSISTANT, AND IT IS TASKUARY (the owner, 2026-11-15): its window was titled "Taskuary" over a box that said "Ask the
+// Assistant…", and the bell said "Ask the assistant". The name is kinds.json's `assistant`, read by the page (kinds.js ASSISTANT_NAME) and
+// the server (kinds.py ASSISTANT); the box, the bell, the window and the phone's own words call it - none types a name of its own
+test("the Assistant is named once, Taskuary, and its box, bell, window and phone words read that name", async () => {
+  const fs = await import("node:fs"), src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"), py = (f) => fs.readFileSync(new URL(`../../taskuary/${f}`, import.meta.url), "utf8");
+  const { ASSISTANT_NAME, ASK_ASSISTANT } = await import("../src/kinds.js");
+  assert.equal(JSON.parse(py("kinds.json")).assistant, "Taskuary");
+  assert.equal(ASSISTANT_NAME, "Taskuary"); assert.equal(ASK_ASSISTANT, "Ask Taskuary…");
+  const none = tableWords(tableOf({}));
+  assert.equal(none.box, "Ask Taskuary — a name or a subject pulls it in…"); assert.equal(none.phone, "Ask Taskuary…"); assert.equal(none.name, "Ask Taskuary");
+  assert.match(src("TaskHubPage.jsx"), />Ask \{ASSISTANT_NAME\}<\/Button>/, "the bell");
+  assert.match(src("AssistantView.jsx"), /<TaskuaryMark size=\{16\} \/><b>\{ASSISTANT_NAME\}<\/b>/, "the window's title is the same name its box says");
+  assert.match(src("phoneChats.js"), /assistant: `\$\{ASSISTANT_NAME\} from your phone`/);
+  assert.match(py("kinds.py"), /^ASSISTANT = _J\['assistant'\]/m);
+  assert.match(py("remote_assistant.py"), /ASK_SOMETHING = f'Ask \{ASSISTANT\} something'/);
+  // ...and no surface the owner reads still names it the old way: a quoted or drawn "Ask the Assistant" / "your Assistant chat" anywhere on the page
+  for (const f of fs.readdirSync(new URL("../src/", import.meta.url)).filter((x) => /\.jsx?$/.test(x))) {
+    const code = src(f).replace(/\/\*[\s\S]*?\*\//g, "").split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*|\{\/\*)/.test(l)).join("\n").replace(/\s\/\/ .*$/gm, "");
+    assert.doesNotMatch(code, /Ask the [Aa]ssistant|[Yy]our Assistant\b|Assistant chat\b/, `${f} still names the Assistant to the owner`);
+  }
+  // ...nor a setting's own words (its group names are link keys, and stay)
+  for (const [k, m] of Object.entries(JSON.parse(py("settings_schema.json")).knobs)) assert.doesNotMatch(`${m.label} ${m.desc || ""} ${m.help || ""}`, /[Tt]he Assistant\b|Assistant chat/, `setting ${k}`);
 });

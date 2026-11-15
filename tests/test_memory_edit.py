@@ -106,8 +106,8 @@ def test_visualize_gets_the_five_subjects_with_their_real_readers_and_your_own_l
     g = learnedgraph.graph(s)
     assert [x['slug'] for x in g['sections']] == list(lc.SECTIONS)
     reads = {x['slug']: x['reads'] for x in g['sections']}
-    assert reads['people'] == 'read by triage (priority only) · drafts · the Advisor · the Assistant · agents'
-    assert reads['bring'] == 'read by triage · the Assistant · agents'      # triage reads all of it, agents on demand (the owner, 2026-10-27)
+    assert reads['people'] == 'read by triage (priority only) · drafts · the Advisor · Taskuary · agents'
+    assert reads['bring'] == 'read by triage · Taskuary · agents'      # triage reads all of it, agents on demand (the owner, 2026-10-27)
     by = {l['key']: l for l in g['lines']}
     assert by['erin manager hour']['subject'] == 'erin@northwind.example' and by['erin manager hour']['section_slug'] == 'people'
     mine = [l for l in g['lines'] if l.get('own')]

@@ -50,6 +50,7 @@ import { label as btnLabel } from "./buttons.js";
 import CloseIcon from "@mui/icons-material/Close";
 import { REPORT_EVENT, bellError, openBugReport } from "./bugReportOpen.js";
 import { plural } from "./timeWords.js";
+import { ASSISTANT_NAME } from "./kinds.js";
 const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 
 // The strip reads left to right as the day does: what arrived (Timeline), what is being worked
@@ -149,8 +150,8 @@ function Bell({ onGo, onAsk }) {
                 sx={{ fontSize: 11, whiteSpace: "nowrap" }} onClick={() => restart(p)}>
                 {busy === `restart:${p.key}` ? "Restarting…" : "Restart bridge"}</Button>}
               {/* the chat looks into it: reads the app's own health, does the simple repair or says why (troubleshoot.py) */}
-              <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }} aria-label={`Ask the assistant: ${p.title}`}
-                onClick={() => { setEl(null); onAsk(p); }}>Ask the assistant</Button>
+              <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }} aria-label={`Ask ${ASSISTANT_NAME}: ${p.title}`}
+                onClick={() => { setEl(null); onAsk(p); }}>Ask {ASSISTANT_NAME}</Button>
               {/* Reading it, not fixing it. It holds until this failure ends, and comes back if it fails again after
                   working (problems.signature), so this quiets something you have decided to live with. */}
               <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }} aria-label={`Dismiss: ${p.title}`}
@@ -261,7 +262,7 @@ function StaleBuild() {
 
 const SWITCH_VIEWS = [
   { k: "chat", label: "Chat", icon: (on) => <TaskuaryMark size={17} sx={{ borderRadius: 1, ...(on ? { boxShadow: "0 0 0 1.5px #fff" } : {}) }} />,
-    title: "The Assistant - it walks you through what is waiting, one item at a time" },
+    title: `${ASSISTANT_NAME} - it walks you through what is waiting, one item at a time` },
   { k: "board", label: "Board", icon: () => <GridViewIcon sx={{ fontSize: 18 }} />, title: "Every agent and its session, full screen" },
   { k: "game", label: "Game", icon: () => <SportsEsportsIcon sx={{ fontSize: 19 }} />,
     title: "The same items as an office you walk around - people in the lobby, fyi's in the coffee room" },

@@ -48,12 +48,12 @@ export default function NewPlaybookDialog({ connectorType = "", initialText = ""
         onDone={(v) => { onClose?.(); openAppLink(v.link); }} />
     </DialogContent> : <DialogContent>
       <Typography sx={{ color: "text.secondary", mb: 2 }}>
-        A playbook teaches your assistant how to handle a recurring request. Start with an example, or describe what you need.
+        A playbook teaches Taskuary how to handle a recurring request. Start with an example, or describe what you need.
       </Typography>
       {connectorType && <Alert severity="info" sx={{ mb: 2 }}>For your {connectorType} connection</Alert>}
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.5, mb: 2 }}>
         {[{ value: "email", title: "Use a past email", detail: "Choose a request you have received.", icon: <MailOutlineIcon /> },
-          { value: "scratch", title: "Start from scratch", detail: "Tell the assistant what should happen.", icon: <AutoAwesomeIcon /> }].map((choice) =>
+          { value: "scratch", title: "Start from scratch", detail: "Tell Taskuary what should happen.", icon: <AutoAwesomeIcon /> }].map((choice) =>
           <Button key={choice.value} variant={mode === choice.value ? "contained" : "outlined"} aria-pressed={mode === choice.value}
             disabled={busy} onClick={() => { setMode(choice.value); setError(""); }}
             sx={{ alignItems: "flex-start", flexDirection: "column", textAlign: "left", textTransform: "none", p: 2, gap: 0.75 }}>
@@ -88,7 +88,7 @@ export default function NewPlaybookDialog({ connectorType = "", initialText = ""
         placeholder="When someone asks for updated item numbers, gather the latest data and prepare a summary for my review."
         value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />}
       {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
-      {mode && <Typography sx={{ color: "text.secondary", fontSize: 12, mt: 1.5 }}>The assistant will help you define the steps, connections, and what needs your approval.</Typography>}
+      {mode && <Typography sx={{ color: "text.secondary", fontSize: 12, mt: 1.5 }}>Taskuary will help you define the steps, connections, and what needs your approval.</Typography>}
     </DialogContent>}
     <ButtonBar>
       {building ? <Button onClick={onClose}>Close</Button> : <>

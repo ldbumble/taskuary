@@ -8015,7 +8015,7 @@ def reason_folder(payload: dict):
     rn, c = _reason_card()
     path, off = str(payload.get('path') or ''), payload.get('off') is not False
     if path not in set(rn.checkouts(store).values()) | {rn.assistant_folder()}:
-        raise HTTPException(422, "only a repository's checkout Taskuary knows, or the Assistant's folder")
+        raise HTTPException(422, "only a repository's checkout Taskuary knows, or Taskuary's own chat folder")
     said = _reason(lambda: rn.folder(path, off))
     cur = rn.settings(c)['off']
     rn.save_settings(store, c, ACTOR, off=[*cur, path] if off and path not in cur else [p for p in cur if p != path or off])

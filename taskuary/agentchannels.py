@@ -24,6 +24,7 @@ import json, os, re, threading, time
 from loguru import logger
 
 from .store import task_ref
+from .kinds import ASSISTANT
 
 KINDS = ('whatsapp', 'telegram', 'slack', 'teams')
 LABEL = {'whatsapp': 'WhatsApp', 'telegram': 'Telegram', 'slack': 'Slack', 'teams': 'Teams'}
@@ -187,7 +188,7 @@ def bind(store, kind: str, chat: str, task_id=None, repo: str = '', members: lis
     if kind in ('whatsapp', 'telegram'):
         from . import remote_assistant
         if str(remote_assistant.chat_of(store.get_connector(c['ConnectorId'], with_secret=True) or c) or '') == chat:
-            raise ValueError('that chat is your Assistant chat - it already reaches the coding agents (Developer mode)')
+            raise ValueError(f'that chat is your {ASSISTANT} chat - it already reaches the coding agents (Developer mode)')
     if bound(store, kind, chat) or any(r['Kind'] == kind and r['Chat'] == chat for r in store.agent_channels()):
         raise ValueError('that chat already talks to an agent - one agent per chat')
     tid = int(task_id) if str(task_id or '').strip() else None
@@ -252,7 +253,7 @@ def view(store, task_id=None) -> dict:
             'repo': cwd_of(store, task_id) if task_id else ''}
 
 
-ASSISTANT_CHAT = 'your Assistant chat - it already reaches the coding agents'
+ASSISTANT_CHAT = f'your {ASSISTANT} chat - it already reaches the coding agents'
 
 
 def choices(store, kind: str) -> list:

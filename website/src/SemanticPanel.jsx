@@ -174,7 +174,7 @@ export default function SemanticPanel() {
   return (
     <Box sx={{ p: 1.25, overflowY: "auto", height: "100%" }}>
       <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1, lineHeight: 1.5 }}>
-        What the assistant may state as fact about our own numbers. Every system is configured differently,
+        What Taskuary may state as fact about our own numbers. Every system is configured differently,
         so a query written from the API alone is plausible and wrong — a definition here is only certified
         while it still matches {minFixtures} or more numbers you already knew were right. Work them out in the
         chat; this is where you see what it now believes.
@@ -184,7 +184,7 @@ export default function SemanticPanel() {
         <Box sx={{ border: `1px dashed ${BORDER}`, borderRadius: 1.5, p: 2, textAlign: "center" }}>
           <Typography variant="body2" sx={{ color: DIM }}>No number has been proved yet.</Typography>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-            Ask the assistant for one in the chat — name a figure you already report on and the period you
+            Ask Taskuary for one in the chat — name a figure you already report on and the period you
             want it for. It will look at the real schema, propose a definition, and ask you for a few cases
             whose numbers you already know. Once they reconcile, the metric appears here and every later
             run uses it.

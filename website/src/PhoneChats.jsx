@@ -35,7 +35,7 @@ export default function PhoneChats({ devMode = false, head = (name) => name, ass
           {head(SECTION_TITLE.agents)}
           <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
             A WhatsApp, Telegram, Slack or Teams chat that talks straight to your coding agents - one task's agent, with teammates if you
-            like, or all of them by their TQ number. Your Assistant chat above reaches the coding agents too, while Developer mode is on.</Typography>
+            like, or all of them by their TQ number. Your Taskuary chat above reaches the coding agents too, while Developer mode is on.</Typography>
           <Box component="ul" sx={{ m: 0, mb: 1.75, pl: 2.25, color: FAINT, fontSize: 12.5, lineHeight: 1.6 }}>
             {RULES.map((r) => <li key={r}>{r}</li>)}
           </Box>

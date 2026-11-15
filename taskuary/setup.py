@@ -139,7 +139,7 @@ def state(store, first: dict = None) -> dict:
          # rather than the truth ("2 read" on an install holding thousands)
          'done': bool(inbox), 'detail': 'your first items are ready to review' if inbox else '',
          'action': 'sync', 'enabled': bool(who and who != 'the owner' and rail['ai']['done'] and inbound),
-         'goto': {'tab': 'Assistant', 'hash': '', 'label': 'Open the Assistant'}},
+         'goto': {'tab': 'Assistant', 'hash': '', 'label': 'Open the chat'}},
     ]
     done = sum(1 for s in steps if s['done'])
     return {'steps': steps, 'done': done, 'total': len(steps), 'complete': done == len(steps),

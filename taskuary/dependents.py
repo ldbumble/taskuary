@@ -8,9 +8,10 @@ still acts at once - this is a line to read, not a question to answer."""
 import json
 
 from . import flow, playbooks, reports, settings_schema, workflows
+from .kinds import ASSISTANT
 
 # the settings a brain is picked on, in the words their own pages use (settings_schema labels the rest)
-BRAIN_WORDS = {'triage_ai': 'AI that sorts your mail', 'triage_backup_ai': 'backup AI that sorts your mail', 'concierge_ai': 'AI for the Assistant',
+BRAIN_WORDS = {'triage_ai': 'AI that sorts your mail', 'triage_backup_ai': 'backup AI that sorts your mail', 'concierge_ai': f'AI for {ASSISTANT}',
                'assistant_ai': 'AI for general agents', 'judge_ai': 'AI that decides where reports go'}
 ORDER = ('workflow', 'report', 'brain', 'card', 'draft', 'rule', 'playbook', 'source')
 

@@ -482,7 +482,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           )}
           {kind === "playbook" && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-              It opens under Reports → Playbooks, where your assistant drafts the steps with you — Approve there saves it.
+              It opens under Reports → Playbooks, where Taskuary drafts the steps with you — Approve there saves it.
             </Typography>
           )}
         </Box>}

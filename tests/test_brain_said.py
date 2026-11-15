@@ -33,7 +33,7 @@ class BrainSaidTests(unittest.TestCase):
         s = MemoryStore()
         s.set_setting('concierge_ai', 'cli:claude', 't')
         with mock.patch.object(aidefaults, 'said', lambda st, k, cfg=None: f'said {k}'):
-            self.assertIn('assistant: said concierge_ai', appfacts.brains(s))
+            self.assertIn('taskuary: said concierge_ai', appfacts.brains(s))
         self.assertIn('#settings=config&group=How%20mail%20is%20sorted', concierge.pages_block(s))
 
 

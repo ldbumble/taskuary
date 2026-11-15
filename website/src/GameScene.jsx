@@ -123,7 +123,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
-    renderer.domElement.setAttribute("aria-label", "Interactive 3D office: the agents at their desks, your tasks in the gym, people waiting in the meeting room, fyi's in the coffee room, the memory archive and the assistant core");
+    renderer.domElement.setAttribute("aria-label", "Interactive 3D office: the agents at their desks, your tasks in the gym, people waiting in the meeting room, fyi's in the coffee room, the memory archive and the Taskuary core");
     renderer.domElement.tabIndex = 0;
     host.prepend(renderer.domElement);
 
@@ -1109,7 +1109,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
         </Box>
       ))}
 
-      {[["floor", "🖥 Agent Floor"], ["gym", "🏋 The Gym"], ["meeting", "🗓 Meeting Room"], ["coffee", "☕ Coffee Room"], ["hq", "✦ Assistant Core"], ["archive", "🗄 Memory Archive"]].map(([zone, name]) => (
+      {[["floor", "🖥 Agent Floor"], ["gym", "🏋 The Gym"], ["meeting", "🗓 Meeting Room"], ["coffee", "☕ Coffee Room"], ["hq", "✦ Taskuary Core"], ["archive", "🗄 Memory Archive"]].map(([zone, name]) => (
         <Box key={zone} ref={tagRef(`zone:${zone}`)} onClick={() => onZone?.(zone)}
           sx={{ ...pinned, px: 1.2, py: 0.45, borderRadius: 99, cursor: "pointer", whiteSpace: "nowrap",
             bgcolor: focus === zone ? "#f0c05a" : "rgba(24,28,34,.82)", color: focus === zone ? "#1c1f24" : "#fff",
@@ -1121,7 +1121,7 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
 
       <Box ref={tagRef("near")} sx={{ ...pinned, transform: "translate(-50%, 10px)", pointerEvents: "none", px: 1, py: 0.3, borderRadius: "7px", bgcolor: "#1c1f24",
         color: "#f0c05a", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", border: "1px solid #f0c05a", zIndex: 5 }} />
-      <Box ref={tagRef("door")} onClick={() => onExit?.()} title="Walk out through the door (or click) - back to the Assistant's chat"
+      <Box ref={tagRef("door")} onClick={() => onExit?.()} title="Walk out through the door (or click) - back to Taskuary's chat"
         sx={{ ...pinned, px: 1, py: 0.35, borderRadius: "7px", cursor: "pointer", whiteSpace: "nowrap", bgcolor: "#1c1f24", color: "#f3f1ec",
           fontSize: 11, fontWeight: 600, border: "1px solid rgba(255,255,255,.25)", "&:hover": { borderColor: "#f0c05a", color: "#f0c05a" } }}>🚪 Back to chat</Box>
       <Box ref={tagRef("you")} sx={{ ...pinned, pointerEvents: "none", px: 0.8, py: 0.15, borderRadius: 99, bgcolor: "#f0c05a",

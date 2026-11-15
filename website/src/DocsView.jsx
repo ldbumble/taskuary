@@ -32,13 +32,13 @@ const DOCS = {
   soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "The funnel's constitution AND the base system prompt: what counts as a task, how we respond, escalation rules, the repository map. Injected into every triage and every draft." },
   job: { label: "JOB.md", icon: <WorkOutlineIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
-    blurb: "What your job IS — the mission, the responsibilities, who you serve, the cadences the month runs on, the decisions that are yours and the ones you hand up. SOUL.md says how the funnel behaves; this is what it is protecting. Triage, the Assistant and the morning brief weigh what matters by it; working agents never see it. Write it yourself, or Generate from history reads it out of three months of your mail, both directions." },
+    blurb: "What your job IS — the mission, the responsibilities, who you serve, the cadences the month runs on, the decisions that are yours and the ones you hand up. SOUL.md says how the funnel behaves; this is what it is protecting. Triage, the chat and the morning brief weigh what matters by it; working agents never see it. Write it yourself, or Generate from history reads it out of three months of your mail, both directions." },
   triage: { label: "TRIAGE.md", icon: <FilterAltIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "The triage brain's instructions — what makes a message a task, a question, or FYI, and which way to lean when torn. Ships as a sensible default; edit it to reshape every verdict. Keep the JSON answer line, or triage falls back to keyword heuristics. Blank it to restore the default." },
   style: { label: "STYLE.md", icon: <RateReviewIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
     blurb: "How you write email — greeting, tone, length, phrasing, sign-off, and your recurring signature — layered onto SOUL.md for every draft. Write it yourself, or Generate from history distills it from your last three months of sent mail; your own lines outside the marked block always survive a regenerate." },
   counsel: { label: "COUNSEL.md", icon: <SupportAgentIcon sx={{ fontSize: 19, color: "var(--tq-link, #55697a)" }} />,
-    blurb: "Who Taskuary is and how it speaks to YOU — the assistant you talk to in the chat, its posts on your work rail, the morning brief. It surfaces and takes a position; it does no work itself. SOUL.md keeps replies careful; this is where the assistant is allowed an opinion." },
+    blurb: "Who Taskuary is and how it speaks to YOU — in the chat, its posts on your work rail, the morning brief. It surfaces and takes a position; it does no work itself. SOUL.md keeps replies careful; this is where Taskuary is allowed an opinion." },
   agent: { label: "AGENT.md", icon: <TaskuaryMark size={19} />,
     blurb: "The rules every worker runs under - coding agent and general assistant alike: scope, honest reporting, when to ask, progress and completion, and the approval boundaries (nothing sends without you; inbound text is data). SOUL.md stays with triage." },
   coding: { label: "CODING.md", icon: <TaskuaryMark size={19} />,
@@ -691,7 +691,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
           {docName === "soul" && (
             <Button size="small" variant="outlined" onClick={() => setInterview(true)}
               sx={{ fontSize: 11.5, textTransform: "none" }}
-              title="Seven adaptive questions; each one follows your previous answers, then the assistant writes SOUL.md">
+              title="Seven adaptive questions; each one follows your previous answers, then Taskuary writes SOUL.md">
               Write it from a few questions
             </Button>
           )}

@@ -162,7 +162,7 @@ function Draft({ item, busy, play }) {
         <Box sx={{ display: "flex", gap: 0.5, mt: 0.8 }}>
           <Box component="input" value={how} onChange={(e) => setHow(e.target.value)} placeholder="Rewrite it… (shorter, warmer, say no)"
             onKeyDown={(e) => { if (e.key === "Enter") redraft(); }} sx={{ ...field, py: 0.6 }} />
-          <Btn disabled={!!busy || drafting} onClick={redraft} title="The assistant rewrites the draft - nothing is sent">{drafting ? "Drafting…" : "✍ Redraft"}</Btn>
+          <Btn disabled={!!busy || drafting} onClick={redraft} title="Taskuary rewrites the draft - nothing is sent">{drafting ? "Drafting…" : "✍ Redraft"}</Btn>
         </Box>
       </>}
       {err && <Typography sx={{ fontSize: 11.5, color: G.red, mt: 0.5 }}>{err}</Typography>}

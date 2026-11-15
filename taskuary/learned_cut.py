@@ -9,6 +9,7 @@ budget is spent. What does not fit is recorded as over budget (OVER), never drop
 receipt (memory_use) of the lines it was given for which item."""
 import json, re, zlib
 from datetime import datetime
+from .kinds import ASSISTANT
 
 # the five subjects, in the document's order: slug -> heading
 SECTIONS = {'people': '## Your people', 'care': '## What you care about', 'work': '## How you work', 'promises': '## Promises',
@@ -26,7 +27,7 @@ PEOPLE, CARE, WORK, PROMISES, BRING = SECTIONS.values()
 READS = {'triage': tuple(SECTIONS), 'drafter': ('people', 'work'), 'advisor': ('people', 'work', 'care', 'promises'), 'assistant': tuple(SECTIONS),
          'agents': tuple(SECTIONS)}
 # who reads a section, as the owner reads it - triage takes the people lines for a task's PRIORITY only (the owner, 2026-10-25)
-READER_WORDS = {'triage': 'triage', 'drafter': 'drafts', 'advisor': 'the Advisor', 'assistant': 'the Assistant', 'agents': 'agents'}
+READER_WORDS = {'triage': 'triage', 'drafter': 'drafts', 'advisor': 'the Advisor', 'assistant': ASSISTANT, 'agents': 'agents'}
 
 
 def reads_label(slug: str) -> str:

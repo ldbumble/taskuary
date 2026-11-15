@@ -21,6 +21,7 @@ import re, threading, weakref
 from datetime import datetime, timedelta
 from typing import NamedTuple
 from loguru import logger
+from .kinds import ASSISTANT
 
 # What a call is FOR. Closed: a new call site picks one of these, and an AST test fails a build_llm without it.
 JOBS = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'assistant', 'general', 'coding', 'judge', 'report', 'quick_work')
@@ -29,7 +30,7 @@ ONE_SHOT = ('triage', 'draft', 'summary', 'advisor', 'memory', 'rank', 'judge', 
 # ...of which these may be asked again of a strong model (a report may research with tools, so it is not one of them)
 ESCALATES = ('triage', 'draft', 'summary', 'judge', 'advisor', 'rank', 'memory')
 JOB_WORDS = {'triage': 'triage', 'draft': 'a redraft', 'summary': 'a summary', 'advisor': 'the Advisor', 'memory': 'memory',
-             'rank': 'ranking', 'assistant': 'the Assistant', 'general': 'general work', 'coding': 'coding',
+             'rank': 'ranking', 'assistant': ASSISTANT, 'general': 'general work', 'coding': 'coding',
              'quick_work': 'quick general work', 'judge': 'a judgement', 'report': 'a report'}
 
 
@@ -645,7 +646,7 @@ def cap_left(store) -> bool:
 
 # ── what Settings shows: the mode line, the rules as sentences, the cap line, the recent routes ───────────────────────────────
 PLURAL = {'triage': 'triage', 'draft': 'redrafts', 'summary': 'summaries', 'advisor': 'the Advisor', 'memory': 'memory', 'rank': 'ranking',
-          'assistant': 'the Assistant', 'general': 'general work', 'coding': 'coding', 'quick_work': 'quick general work', 'judge': 'judgements', 'report': 'reports'}
+          'assistant': ASSISTANT, 'general': 'general work', 'coding': 'coding', 'quick_work': 'quick general work', 'judge': 'judgements', 'report': 'reports'}
 USE_WORDS = {'light': 'the quick model', 'standard': "the card's own model", 'strong': 'the strong model'}
 
 

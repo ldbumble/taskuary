@@ -14,6 +14,7 @@ import base64, json, os, re, time
 from urllib.parse import urlparse
 from loguru import logger
 from . import net as requests     # pooled Session + (connect, read) timeouts, same call shape
+from .kinds import ASSISTANT
 
 TG_API = 'https://api.telegram.org'
 TG_LIMIT = 25                # messages per poll, like the other channels
@@ -791,7 +792,7 @@ def wa_jid(chat) -> str:
     if '@' in j: return j
     digits = re.sub(r'[\s()+.-]', '', j)
     if digits.isdigit() and len(digits) >= 7: return f'{digits}@s.whatsapp.net'
-    raise RuntimeError(f'{j!r} is not a WhatsApp chat - pick the Assistant chat again on the WhatsApp card')
+    raise RuntimeError(f'{j!r} is not a WhatsApp chat - pick the {ASSISTANT} chat again on the WhatsApp card')
 
 
 def wa_send(store, jid: str, body: str, connector_id=None, poll: list = None, quote: dict = None) -> dict:

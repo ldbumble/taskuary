@@ -18,6 +18,7 @@ Action 'said', Actor 'verdict:<kind>') carries the id of what the verdict was gi
 reflection cites and what an Undo finds the line by (`untaught`)."""
 import re
 from . import learned_cut as lc
+from .kinds import ASSISTANT
 
 ABOUT = re.compile(r'\s*\(about: (?P<a>[^()]+)\)\s*$')
 # an older verdict line names its verdict in capitals ("- NOT OURS:", "- FILE IT:", "- A CONVERSATION, not a project" - written before
@@ -123,7 +124,7 @@ WORDS = {'not_ours': "Not ours - the owner said it is other people's work: no ta
          'not_for_agent': "Not for the agent - real work, but the owner's own: kept on their list, no agent on it",
          'made_task': 'Made a task - triage had filed it as nothing to do; the owner made it real work',
          'road_fyi': 'Nothing to do - the owner moved it to FYI', 'road_reply': 'A reply only - answering it is the work',
-         'road_coding': 'Agent work - an agent should work it', 'road_general': 'A conversation with the Assistant, not a project',
+         'road_coding': 'Agent work - an agent should work it', 'road_general': f'A conversation with {ASSISTANT}, not a project',
          'road_task': "The owner's own task - real work, not an agent's",
          'routing': 'The owner corrected how a task was routed', 'judged': 'The owner corrected how a task was judged',
          'priority': 'The owner changed how urgent it is', 'watch': "Watch it - someone else's to handle; the owner keeps it in sight",

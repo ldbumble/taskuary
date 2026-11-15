@@ -1744,7 +1744,7 @@ export function SetupCard({ card, onNavigate, onHandOff }) {
   const [text, setText] = useState("");
   return (
     <CardShell card={{ ...card, lane: "report" }} kicker="set something up" title="What should it do?"
-      sub="A report that pulls last month's Zoho invoices, a connection to a new system, an alert when a job fails - in your words. The assistant walks you through it and can navigate a browser beside the conversation.">
+      sub="A report that pulls last month's Zoho invoices, a connection to a new system, an alert when a job fails - in your words. Taskuary walks you through it and can navigate a browser beside the conversation.">
       <TextField fullWidth multiline minRows={2} maxRows={6} value={text} onChange={(e) => setText(e.target.value)}
         placeholder="Set up a report that…" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onHandOff?.(text); setText(""); } }}
         sx={{ mt: 1, "& textarea": { fontSize: 12.5 } }} />

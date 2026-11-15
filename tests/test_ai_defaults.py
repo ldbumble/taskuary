@@ -237,7 +237,7 @@ class ApiTests(unittest.TestCase):
         # "drafting which the agent does now no more drafting ai ... where is general agent??"): the task's agent writes every
         # reply, so the General agent's card stands second, beside the Coding agent's, and nothing reads a drafting AI
         self.assertEqual([s['key'] for s in j['slots']], ['triage_ai', 'assistant_ai', 'default_brain', 'concierge_ai', 'judge_ai'])
-        self.assertEqual([s['label'] for s in j['slots']][:4], ['Triage', 'General agent', 'Coding agent', 'Assistant'])
+        self.assertEqual([s['label'] for s in j['slots']][:4], ['Triage', 'General agent', 'Coding agent', 'Taskuary'])
         from taskuary import agents, aidefaults
         self.assertFalse({'draft_ai', 'draft_model'} & ({*aidefaults.SLOT, *aidefaults.MODEL_OF, *agents.HEALED, *agents.BRAIN_SETTINGS}))
         # ...and each card's RUNS line is the router's own answer for its job (brainroute.runs), with where the choice came from
@@ -259,7 +259,7 @@ class AssistantModelTests(unittest.TestCase):
         """It said "the coding model, the expensive gear" while every turn ran on haiku (2026-09-24)."""
         s = _store(); s.set_setting('concierge_ai', 'cli:claude', 'owner')
         r = aidefaults.resolve(s, _cfg(), 'concierge_ai')
-        self.assertEqual(r['default_hint'], 'sonnet - the Assistant default'); self.assertEqual(r['note'], '')
+        self.assertEqual(r['default_hint'], 'sonnet - the Taskuary default'); self.assertEqual(r['note'], '')
         s.set_setting('concierge_model', 'sonnet', 'owner')
         self.assertEqual(aidefaults.resolve(s, _cfg(), 'concierge_ai')['model'], 'sonnet')
 

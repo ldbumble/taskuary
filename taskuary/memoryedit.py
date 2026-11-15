@@ -17,6 +17,7 @@ import re
 from datetime import datetime
 from . import learned_cut as lc
 from .learnedgraph import TAG, fmt, lines as tagged, walk
+from .kinds import ASSISTANT
 
 DOC, HOW = 'learned', ('keep', 'wrong', 'forget')
 YOURS = "That line is yours - you wrote it, so it is not something Taskuary learned wrong. Forget takes it out."
@@ -126,7 +127,7 @@ TOLD_DOCS = ('soul', 'counsel')  # ...and the two documents the chat appends to,
 TOLD = '## Told to the Assistant'
 TOLD_INTRO = '<!-- what you told the Assistant to keep here, in your words; yours to edit or delete -->'
 # who reads each document the chat may write, said with every save (the design's routing table, 2026-10-28)
-DOC_READS = {'soul': 'read by triage · drafts · the Assistant · agents · the digest', 'counsel': 'read by the Assistant · the morning brief',
+DOC_READS = {'soul': f'read by triage · drafts · {ASSISTANT} · agents · the digest', 'counsel': f'read by {ASSISTANT} · the morning brief',
              'style': 'read by every draft', 'style_for': 'read by the drafts to them'}
 
 

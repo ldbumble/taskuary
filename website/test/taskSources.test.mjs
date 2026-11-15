@@ -170,7 +170,7 @@ test("a workflow run's header names the workflow and who started it, never Triag
   assert.deepEqual(facts.pills.slice(2).map((p) => p.value), ["an agent", "ap", "regular"]);
   // the list row has no detail: the tag alone still says who started it, and the run's own title still names the workflow
   assert.equal(startedBy({ Tags: "needs:browser,workflow-trigger:manual" }), "you (Run now)");
-  assert.equal(startedBy({ Tags: "workflow-trigger:assistant" }), "the assistant");
+  assert.equal(startedBy({ Tags: "workflow-trigger:assistant" }), "Taskuary");
   assert.equal(startedBy({ Tags: "workflow-trigger:phone" }), "you, from your phone");
   assert.equal(startedBy({ Tags: "workflow-trigger:schedule" }), "its schedule", "no clock to name without the detail");
   assert.equal(workflowTitle({ Title: "Vendor bill sweep - 2026-10-12 08:00" }), "Vendor bill sweep");

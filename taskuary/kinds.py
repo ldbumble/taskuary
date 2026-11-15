@@ -11,6 +11,7 @@ AGENT = tuple(k for k, v in KIND.items() if v['agent'])      # general, coding: 
 TRIAGE = tuple(k for k, v in KIND.items() if v['triage'])    # what triage (or the owner's "make it a task") may name
 
 
+ASSISTANT = _J['assistant']                                  # the Assistant's name wherever the owner reads it: Taskuary (kinds.json `assistant_`)
 SHOWN = _J['shown']                                          # who the owner sees at work: Taskuary, never the profile (kinds.json `shown_`)
 
 

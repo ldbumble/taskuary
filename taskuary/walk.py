@@ -20,6 +20,7 @@ from loguru import logger
 
 from . import setup
 from .timewords import plural
+from .kinds import ASSISTANT
 
 AT = 'setup_walk_at'                 # where the owner stopped; a setting, so a reload resumes
 
@@ -61,7 +62,7 @@ STOPS = [
               'or choose separate models after you have reviewed your first result.',
      'goto': _goto('Settings', 'settings=config&group=How%20mail%20is%20sorted'), 'can': [
         _can('choose which AI sorts your mail', 'Settings', 'settings=config&group=How%20mail%20is%20sorted'),
-        _can('choose a different AI for the assistant or the agents', 'Settings', 'settings=config&group=How%20mail%20is%20sorted'),
+        _can(f'choose a different AI for {ASSISTANT} or the agents', 'Settings', 'settings=config&group=How%20mail%20is%20sorted'),
         _can('keep the current defaults and continue')]},
 
     {'key': 'connections', 'title': 'Connections', 'image': '/walk/connections.png',
@@ -86,7 +87,7 @@ STOPS = [
         _can('generate STYLE.md from the messages you have sent', 'Settings', 'settings=docs'),
         _can('generate TRIAGE.md from what you answered and what you let sit', 'Settings', 'settings=docs'),
         _can('generate JOB.md - what your job actually is - from three months of your mail', 'Settings', 'settings=docs'),
-        _can('read COUNSEL.md, which is the voice the assistant speaks in', 'Settings', 'settings=docs')]},
+        _can(f'read COUNSEL.md, which is the voice {ASSISTANT} speaks in', 'Settings', 'settings=docs')]},
     {'key': 'settings', 'title': 'Settings', 'image': '/walk/settings.png',
      'blurb': 'The knobs. Most people change three and never come back: what drafts automatically, '
               'how finished work lands, and what reaches them.',
@@ -126,7 +127,7 @@ STOPS = [
         _can('build a workflow that writes back to a system', 'Reports'),
         _can('say whether a run reaches you every time, or only when it is wrong', 'Reports'),
         _can('preview one before it is saved', 'Reports')]},
-    {'key': 'assistant', 'title': 'The Assistant', 'image': '/walk/assistant.png',
+    {'key': 'assistant', 'title': f'Chat with {ASSISTANT}', 'image': '/walk/assistant.png',
      'blurb': 'Where you actually work. Everything that arrived is a pile, oldest pressure first, '
               'and Next takes you through it one item at a time. This walk is happening in it.',
      'goto': _goto('Assistant'), 'can': [

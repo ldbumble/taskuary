@@ -147,23 +147,23 @@
     },
     "concierge_ai": {
       "group": "How mail is sorted",
-      "label": "AI for the Assistant",
+      "label": "AI for Taskuary",
       "type": "brain",
-      "desc": "Which AI speaks in the Assistant's chat here and in your phone chat - the Assistant's own brain. auto = your default coding agent, on its faster, lighter model.",
+      "desc": "Which AI speaks in Taskuary's chat here and in your phone chat - Taskuary's own brain. auto = your default coding agent, on its faster, lighter model.",
       "help": "THREE DEFAULTS, side by side in How mail is sorted: the triage brain, the default coding CLI, and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks."
     },
     "concierge_model": {
       "group": "How mail is sorted",
-      "label": "Model for the Assistant",
+      "label": "Model for Taskuary",
       "type": "text",
-      "desc": "A different model for the Assistant, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.",
+      "desc": "A different model for Taskuary, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.",
       "help": "For a CLI this is its --model, and model@effort sets its reasoning effort (Claude --effort, Codex model_reasoning_effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation."
     },
     "assistant_ai": {
       "group": "How mail is sorted",
       "label": "AI for general agents",
       "type": "brain",
-      "desc": "Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble. Your phone talks to the Assistant, not this.",
+      "desc": "Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble. Your phone talks to Taskuary, not this.",
       "help": "Normally set on the General agent card at the top of this tab; this row is the fallback if that panel cannot load. A CLI here can run tools, drive a browser and post to the wall; an API connector has no shell, so it can only read and write - quicker, and enough for chat. Blank = the first active API connector, else the default agent."
     },
     "judge_ai": {
@@ -514,36 +514,36 @@
     },
     "phone_assistant": {
       "group": "Assistant on your phone",
-      "label": "Chat with the assistant in WhatsApp or Telegram",
+      "label": "Chat with Taskuary in WhatsApp or Telegram",
       "type": "switch",
       "desc": "The default for a channel that has never been asked. Each channel above answers for itself once you set it.",
-      "help": "Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.\n\nIt is the SAME walk the desktop runs, on the same conversation and the same list of work: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as a poll on WhatsApp and as buttons on Telegram; typing a choice's number works on both.\n\nThis switch is the standing permission. The Assistant's own \"in WhatsApp\" button on the desktop hands the walk over for a session whether or not it is on; the desktop keeps working beside it.\n\nThe chat only ever answers you: Taskuary writes to it only while you are talking to it there (your last message within 30 minutes, until you say stop) - never a reminder, a follow-up or a summary on its own, and not an urgent item either unless you turn on \"Text me urgent items even when I haven't written\".\n\nBecause answers can contain private workspace information, use a chat only you can read — WhatsApp's Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before."
+      "help": "Name the Taskuary chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Taskuary chat is not subscribed to ordinary Taskuary alerts.\n\nIt is the SAME walk the desktop runs, on the same conversation and the same list of work: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as a poll on WhatsApp and as buttons on Telegram; typing a choice's number works on both.\n\nThis switch is the standing permission. Taskuary's own \"in WhatsApp\" button on the desktop hands the walk over for a session whether or not it is on; the desktop keeps working beside it.\n\nThe chat only ever answers you: Taskuary writes to it only while you are talking to it there (your last message within 30 minutes, until you say stop) - never a reminder, a follow-up or a summary on its own, and not an urgent item either unless you turn on \"Text me urgent items even when I haven't written\".\n\nBecause answers can contain private workspace information, use a chat only you can read — WhatsApp's Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before."
     },
     "phone_urgent_unasked": {
       "group": "Assistant on your phone",
       "label": "Text me urgent items even when I haven't written",
       "type": "switch",
-      "desc": "Off (default): the Assistant chat stays quiet until you write to it, however urgent something is. On: urgent items may reach it anyway.",
+      "desc": "Off (default): the Taskuary chat stays quiet until you write to it, however urgent something is. On: urgent items may reach it anyway.",
       "help": "Taskuary writes to your own WhatsApp or Telegram chat only while you are talking to it there. Off (the default), that holds for urgent items too: they are shaded on the desktop and wait there.\n\nOn: an urgent item may reach the chat even when you have not written - a move on a task marked urgent, an urgent by-the-way while the walk is handed to the chat, and a report's alert aimed at your own chat. Nothing else changes: reminders, follow-ups, the morning line and summaries still wait until you write. Replies to other people are not affected by this switch."
     },
     "phone_walk_channel": {
       "group": "Assistant on your phone",
-      "label": "Which chat the Assistant offers",
+      "label": "Which chat Taskuary offers",
       "type": "select",
       "options": [
         "both",
         "whatsapp",
         "telegram"
       ],
-      "desc": "The \"Walk me through them in ...\" button in the Assistant's chat: WhatsApp, Telegram, or both.",
-      "help": "both (default) = a button for each chat that is connected and has an Assistant chat named. whatsapp or telegram = only that one. A chat is offered only once its card under Connections names an Assistant chat, so choosing Telegram before setting it up shows no button until you do."
+      "desc": "The \"Walk me through them in ...\" button in Taskuary's chat: WhatsApp, Telegram, or both.",
+      "help": "both (default) = a button for each chat that is connected and has a Taskuary chat named. whatsapp or telegram = only that one. A chat is offered only once its card under Connections names a Taskuary chat, so choosing Telegram before setting it up shows no button until you do."
     },
     "phone_morning_line": {
       "group": "Assistant on your phone",
       "label": "A morning line in the chat",
       "type": "switch",
-      "desc": "Once a day, the assistant's chat says what is waiting and offers the two ways in: walk me through my tasks, set up a report.",
-      "help": "Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count of what is waiting and how many are on you, then the two scripts as numbered options, so one reply starts the walk there. Quiet on a day nothing is waiting; never twice in a day.\n\nEven on, it goes only into a conversation you started there in the last 30 minutes: the chat never speaks first."
+      "desc": "Once a day, Taskuary's chat says what is waiting and offers the two ways in: walk me through my tasks, set up a report.",
+      "help": "Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Taskuary chat on every channel that has one - the count of what is waiting and how many are on you, then the two scripts as numbered options, so one reply starts the walk there. Quiet on a day nothing is waiting; never twice in a day.\n\nEven on, it goes only into a conversation you started there in the last 30 minutes: the chat never speaks first."
     },
     "vision_enabled": {
       "group": "Attachments & images",
@@ -604,12 +604,12 @@
       "desc": "The zone the app's clock speaks. Blank = this machine's local time.",
       "help": "Timestamps are stored in the server machine's local time. Name that zone here and every displayed time wears its label (2:44 PM EDT) — and a browser opened from another timezone still reads the stamps correctly instead of silently reinterpreting them in its own zone.\n\nUse an IANA name (America/New_York, Europe/London, Asia/Jerusalem). Takes effect on the next page load."
     },
-    "concierge_fast": {"group": "Assistant", "label": "Fast mode", "type": "select", "options": ["auto", "on", "off"], "optionLabels": {"auto": "on for Codex, off for Claude", "on": "on", "off": "off"}, "desc": "Runs the Assistant's CLI on its provider's fast tier: Codex's fast service tier, Claude Code's fast mode. By default on for Codex and off for Claude.", "help": "Claude bills fast mode as extra usage, outside your subscription, and runs it only when extra usage is turned on in your Claude account; Codex spends your plan's credits faster. Coding and general agents are not changed."},
+    "concierge_fast": {"group": "Assistant", "label": "Fast mode", "type": "select", "options": ["auto", "on", "off"], "optionLabels": {"auto": "on for Codex, off for Claude", "on": "on", "off": "off"}, "desc": "Runs Taskuary's CLI on its provider's fast tier: Codex's fast service tier, Claude Code's fast mode. By default on for Codex and off for Claude.", "help": "Claude bills fast mode as extra usage, outside your subscription, and runs it only when extra usage is turned on in your Claude account; Codex spends your plan's credits faster. Coding and general agents are not changed."},
     "funnel_hours": {
       "group": "Assistant",
       "label": "How far back your list reaches (hours)",
       "type": "number",
-      "desc": "How far back ordinary mail, reports and fyi enter the list the Assistant walks you through. Drafts waiting for your yes and agents waiting on you always enter.",
+      "desc": "How far back ordinary mail, reports and fyi enter the list Taskuary walks you through. Drafts waiting for your yes and agents waiting on you always enter.",
       "help": "A first launch must not surface a year of never-triaged mail. Twelve hours is a working day; set it to 48 after a long weekend."
     },
     "funnel_max": {
@@ -635,7 +635,7 @@
       "group": "Assistant",
       "label": "FYI read together",
       "type": "number",
-      "desc": "How many fyi the assistant puts in front of you at once. 1 to 10. Until you set it, it follows the screen: six on a large one, four on a laptop or a phone.",
+      "desc": "How many fyi Taskuary puts in front of you at once. 1 to 10. Until you set it, it follows the screen: six on a large one, four on a laptop or a phone.",
       "help": "An fyi needs no action, so they come in a batch rather than one at a time. Left alone, the batch is sized to the screen that asks - six where they fit without scrolling, four on a screen under 800 pixels tall or a phone. A number you set here is used on every screen. At 1 they arrive singly, which is the slow read-everything walk; at 10 you clear the noise in one card. Anything outside 1-10 is clamped - a 0 would take the fyi lane out of the walk entirely."
     },
     "chat_keep_days": {

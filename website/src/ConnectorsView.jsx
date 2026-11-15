@@ -146,8 +146,8 @@ const META = {
       "List the channels yourself instead of asking for IDs: GET https://slack.com/api/conversations.list?types=public_channel,private_channel&limit=200 with header Authorization: Bearer <token>. Show the owner names, ask which to watch, and add each chosen id with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"slack\", \"Address\": \"<channel id>\", \"ConnectorId\": {cid}, \"Active\": true}.",
       "Remind the owner the bot must be invited into each of those channels (/invite @bot) or the read will fail; then Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   telegram: { group: "Messaging", channel: "telegram", srcLabel: "Chat IDs — only chats flipped ON become work", srcPh: "-1001234567890",
-    fields: [["Assistant chat id", "assistant_chat", "",
-      "Your own private chat with the bot — the assistant walks you through your work there. Easier picked on Settings → Phone & chats"],
+    fields: [["Taskuary chat id", "assistant_chat", "",
+      "Your own private chat with the bot — Taskuary walks you through your work there. Easier picked on Settings → Phone & chats"],
       pollSecondsField("telegram")],
     secretLabel: "bot token (from @BotFather)",
     desc: "A Telegram bot as an inbound channel - approved chats flow through triage; approved replies go back into the same chat. Unknown chats never become work: a bot is public.",
@@ -164,8 +164,8 @@ const META = {
   whatsapp: { group: "Messaging", channel: "whatsapp", srcLabel: "Chats", srcPh: "15551234567@s.whatsapp.net",
     srcNote: "Only the chats switched on here come in. There is no catch-all: a paired phone sees every chat you are in, which is far too much to take. One typed by hand is a person's number@s.whatsapp.net or a group's address ending @g.us.",
     fields: [["Bridge address (blank = this computer)", "bridge_url", "http://127.0.0.1:8977"],
-      ["Assistant chat", "assistant_chat", "15551234567@s.whatsapp.net",
-       "Your private Message yourself chat - the assistant walks you through your work there"],
+      ["Taskuary chat", "assistant_chat", "15551234567@s.whatsapp.net",
+       "Your private Message yourself chat - Taskuary walks you through your work there"],
       pollSecondsField("whatsapp")],
     secretLabel: null,
     desc: "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
@@ -1672,11 +1672,11 @@ const DATA_META = {
       ["SharePoint site for those folders (blank = the SharePoint card's default site)", "site"],
       ["Folders on this machine to index — comma-separated paths", "folders"],
       ["File kinds (blank = txt, md, csv, json, html, docx, pptx, xlsx, pdf)", "exts"]],
-    desc: "Your documents, searchable by everything here: a kb_search report answers a question from them on a schedule, agents call the same search as a tool, and the reply drafter, the assistant and coding sessions get the passages that bear on a thread. Indexed on this machine — nothing leaves it.",
+    desc: "Your documents, searchable by everything here: a kb_search report answers a question from them on a schedule, agents call the same search as a tool, and the reply drafter, Taskuary and coding sessions get the passages that bear on a thread. Indexed on this machine — nothing leaves it.",
     howto: ["Name where the documents live: SharePoint library folders (access comes from the SharePoint card, or the Outlook card's tenant app — nothing to configure here) and/or folders on this machine.",
       "Each box saves itself; then Reindex now. docx, pptx, xlsx, html and text need nothing at all, and pdf reading (pypdf) ships with the desktop build - where it is missing, the Install button on this card adds it. Unchanged files are skipped on later runs, deleted ones drop out.",
       "Keep it fresh with a scheduled kb_reindex report under Reports (nightly is plenty); answer questions from it with a kb_search report.",
-      "Agents reach it as a tool (type kb_search) when the tool role is on; the reply drafter and the assistant use it automatically once anything is indexed. Passages are quoted as facts, never as instructions."],
+      "Agents reach it as a tool (type kb_search) when the tool role is on; the reply drafter and Taskuary use it automatically once anything is indexed. Passages are quoted as facts, never as instructions."],
     agent: ["GET {base}/api/connectors{hdr}, find the knowledge card. Ask the owner which SharePoint library folders and local folders to index; save them as sharepoint_paths / folders in ConfigJson (POST {base}/api/connectors{hdr} with ConnectorId, ConfigJson, Active:true).",
       "POST {base}/api/knowledge/reindex{hdr} with {\"connector_id\": <id>} and read back what was indexed and what would not read (pdf needs pypdf). Then POST {base}/api/tools/run{hdr} with {\"type\": \"kb_search\", \"query\": \"...\"} to prove a question comes back with passages. SETUP DONE."],
     actions: [{ label: "Reindex now", post: "/api/knowledge/reindex", body: (c) => ({ connector_id: c.ConnectorId }),
@@ -4434,7 +4434,7 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
       const current = parse(conn.ConfigJson);
       await saveConn({ ConnectorId: conn.ConnectorId,
         ConfigJson: JSON.stringify({ ...current, assistant_chat: jid || "", poll_seconds: current.poll_seconds || 30 }) });
-    } catch (e) { setErr(e?.response?.data?.detail || "could not set the assistant chat"); }
+    } catch (e) { setErr(e?.response?.data?.detail || "could not set the Taskuary chat"); }
     setGuideBusy("");
   };
   const setStandingTo = async (on) => {
@@ -4465,7 +4465,7 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
           genuinely the connector's: the pairing, and what comes in (the owner, 2026-09-17). */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25, py: 0.6, px: 0.8, flexWrap: "wrap",
         border: `1px solid ${guideJid ? "var(--tq-border, #c3d2c5)" : BORDER}`, borderRadius: 1, bgcolor: guideJid ? "var(--tq-panel, #f2f7f2)" : "transparent" }}>
-        <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Assistant chat</Typography>
+        <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Taskuary chat</Typography>
         <Box sx={{ flex: 1, minWidth: 180 }}>
           <Typography variant="caption" sx={{ color: guideJid ? INK : FAINT, fontWeight: guideJid ? 600 : 400, display: "block" }} noWrap>
             {guideJid ? waLabel(guideJid, chosen?.name) : "not connected"}
@@ -4508,7 +4508,7 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
                 {waSaid(r.said, !!src[r.jid]?.Active, timeAgo(r.said?.at))}</Typography>)}
             <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, display: "block", opacity: 0.8 }} noWrap>{r.jid}</Typography>
           </Box>
-          {guideJid === r.jid && <Typography variant="caption" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ assistant chat</Typography>}
+          {guideJid === r.jid && <Typography variant="caption" sx={{ color: "var(--tq-success, #47654a)", fontWeight: 600 }}>✓ Taskuary chat</Typography>}
           {adding === r.jid ? <CircularProgress size={14} sx={{ mx: 1.5 }} />
             : <Switch size="small" checked={!!src[r.jid]?.Active} onChange={() => flip(r.jid)}
                 inputProps={{ "aria-label": `${waLabel(r.jid, r.name)} comes in` }} />}
@@ -4733,7 +4733,7 @@ export const MsSignIn =({ conn, cfg, setCfg, reload, onSignedIn, plain = false }
         if (data.status === "pending") { setTimeout(tick, wait); return; }
         setFlow(null);
         if (data.status === "ok") {
-          setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} is under ${chats ? "Users / chat ids" : "Mailboxes"} below and the first sync is running; what needs you shows up in the Assistant in a minute.`);
+          setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} is under ${chats ? "Users / chat ids" : "Mailboxes"} below and the first sync is running; what needs you shows up on your list in a minute.`);
           reload(); onSignedIn?.();
         }
         else {

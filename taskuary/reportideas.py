@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 from . import bugreport
 from .timewords import plural
+from .kinds import ASSISTANT
 
 DAYS, AFTER_DAYS, BEFORE_DAYS = 7, 14, 30   # the window counted; how long after an update a new failure is "since the update"; before it
 N_SAME, N_TASKS, N_SINCE, N_GAVE_UP = 3, 2, 2, 2
@@ -110,7 +111,7 @@ def gave_up(store, now: datetime) -> list:
                 by.setdefault(rep['route'], []).append(rep)
     return [_idea(_key('gave-up', route), f"The fix-it check could not repair {route[len('connector '):]} {len(reps)} times in two weeks.",
                   'it found nothing it or you could fix, each time - that is a fault in Taskuary to report',
-                  {'trying': f"get {route[len('connector '):]} working again from the Assistant", 'happened': f'the check could not repair it, {len(reps)} times',
+                  {'trying': f"get {route[len('connector '):]} working again from {ASSISTANT}", 'happened': f'the check could not repair it, {len(reps)} times',
                    'message': str(reps[-1].get('message') or '')[:2000], 'route': route})
             for route, reps in by.items() if len(reps) >= N_GAVE_UP]
 

@@ -387,6 +387,29 @@ class TheList(unittest.TestCase):
         self.assertEqual(cards(end), {wrote['id']: [(ray, 'approved'), (erin, 'approved')]}, 'where they stood, for good')
         self.assertEqual(conversation.flow_breaks(end, sent), [])
 
+    def test_the_email_still_waiting_stays_on_screen_while_the_turn_his_send_woke_is_at_work(self):
+        """Recorded on the real CLI, 2026-11-15 (the owner, 2026-11-13: "never close action boxes"): two emails waited, he sent one, and the
+        agent was woken to hear it. For the eleven seconds that turn worked the other email was off the screen - the list named the turn at
+        work as the block's place, and a turn at work shows no block - then it came back under the new turn. While a later turn works, the
+        block stays where it stood."""
+        import json, threading
+        s, tid = self.s, self.tid
+        mail = lambda to, words: s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'DraftText': words, 'Reason': 'assistant wrote this email - approve to send',
+                                               'Deliver': json.dumps({'channel': 'email', 'to': [to], 'cc': [], 'subject': 'Offsite', 'slot': to})})
+        self.brain.delay = 0.5; self.say('Ask Ray for a bus quote and Erin for the budget.', 'l-two', wait=False); self.assertTrue(until(lambda: self.list()['working']))
+        ray, erin = mail('ray@northwind.example', 'Ray - a quote for a bus for 40? Alex'), mail('erin@northwind.example', 'Erin - can you approve the budget? Alex')
+        self.brain.delay = 0; self.rest()
+        was = self.list(); wrote = [x for x in was['items'] if x['kind'] == 'turn'][-1]
+        self.assertEqual(was['letters'], wrote['id'])
+        s.decide_review(erin, 'approved', None, 'owner')
+        t = time.time(); until(lambda: time.time() >= t + 1.1)                                  # (a stamp is a whole second)
+        self.brain.delay = 0.6                                                                  # ...and Taskuary wakes its agent with what went: no line of his
+        threading.Thread(target=lambda: general.session_for(tid).send_prompt("You sent Erin's email.", brief=True), daemon=True).start()
+        self.assertTrue(until(lambda: self.list()['working']))
+        now = self.list()
+        self.assertEqual(now['letters'], wrote['id'], 'the waiting email keeps its place while the woken turn works')
+        self.brain.delay = 0; self.rest()
+
     def test_an_email_the_agent_wrote_greys_where_it_stood_when_he_writes_past_it_as_a_reply_does(self):
         """Recorded on the real CLI, 2026-11-13: the agent's email waited beside its reply; he typed a new line - the reply greyed, the email
         stood lit above his line with its Send. The owner, 2026-11-10: "the second you write prompt on email action it should go gray and

@@ -775,7 +775,10 @@ def items(store, tid: int) -> dict:
     order = {x['id']: i for i, x in enumerate(out)}
     def run_end(t):
         i = order.get((t or {}).get('id'), -1)
-        while 0 <= i < len(out) - 1 and out[i + 1]['kind'] == 'turn': i += 1
+        # ...never into a turn at work (recorded on the real CLI, 2026-11-15; the owner, 2026-11-13: "never close action boxes"): he sent one of
+        # two emails, the agent was woken, and for the eleven seconds its turn worked the other email was off the screen - a turn at work
+        # shows no block. It keeps its place until that turn has ended, then stands under its words
+        while 0 <= i < len(out) - 1 and out[i + 1]['kind'] == 'turn' and (i < 0 or out[i + 1]['state'] not in LIVE or out[i]['state'] in LIVE): i += 1
         return out[i] if i >= 0 else None
     # ...an email is written INSIDE its turn: of two turns a whole-second stamp cannot tell apart, the later one wrote it (the one before had ended)
     wrote = lambda at: next((x for x in reversed(out) if x['kind'] == 'turn' and (x.get('started') or 0) <= at and (x.get('ended') is None or x['ended'] + 1 >= at - 0.999)), None)

@@ -340,7 +340,8 @@ class AgentTicksRoad(unittest.TestCase):
         first = s.task_checklist(tid)[0]['id']
         with Gateway(lambda b: f'Pulled the numbers.\n[[TASKUARY-TICK: {first}]]\n' + SUMMARY) as g:
             reply = general.GeneralSession(s, tid).send_prompt('Pull the numbers')
-        self.assertIn(selfclose.TICK_CHAT_LINE, g.said()['messages'][0]['content'])
+        system = g.said()['messages'][0]['content']          # ...in blocks for a Claude model, its stable part marked for the cache (llm.cache_mode)
+        self.assertIn(selfclose.TICK_CHAT_LINE, system if isinstance(system, str) else ''.join(b['text'] for b in system))
         self.assertNotIn('TASKUARY-TICK', reply)
         self.assertEqual([bool(i.get('done')) for i in s.task_checklist(tid)][:2], [True, False])
 

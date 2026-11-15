@@ -651,6 +651,17 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
         for kind in ('email', 'linkedin', 'teams', 'whatsapp', 'github'): self.assertIsNone(outbound.connect_fix(s, kind), kind)
 
 
+class DemoNeverPollsTests(unittest.TestCase):
+    def test_opening_a_chat_task_reads_no_channel_and_leaves_its_card_connected(self):
+        # opening a Teams or WhatsApp task refreshed its channel: the prop card then read "last test failed", and the WhatsApp read went to
+        # whatever bridge was listening on this computer (the walk, 2026-11-15)
+        from taskuary import channels
+        s = MemoryStore(); demo.seed(s)
+        with on(), mock.patch.object(channels, '_poll_jobs', side_effect=AssertionError('the demo read a channel')):
+            self.assertEqual(channels.poll_channels(s, only=['teams', 'whatsapp']), 0)
+        self.assertFalse([c['Type'] for c in s.list_connectors() if c.get('LastError')])
+
+
 class DemoCalendarTests(unittest.TestCase):
     def test_the_demo_reads_its_own_week_and_never_reaches_microsoft(self):
         # the demo's Outlook card is a prop: read, it went to Microsoft and drew a real sign-in refusal on the day card (2026-11-12)

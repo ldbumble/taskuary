@@ -2491,6 +2491,10 @@ def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) ->
 
     Independent HTTP waits overlap. SQLite writes hop onto one writer thread. Drain of
     the same conversation stays sequential - that is a later pass, not this one."""
+    # THE DEMO NEVER POLLS (server.lifespan says so; opening a chat task's row still refreshed its channel): its cards are props, and a read of
+    # one failed onto the card as "last test failed" - or reached whatever bridge listened on this computer
+    from . import demo
+    if demo.enabled(): return 0
     from .llm import build_llm
     from .ingest import _deferring
     # ...and no brain at all for a DEFERRED poll - the chat doorway's once-a-second read (server._poll_quick): what it reads is stored

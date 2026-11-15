@@ -95,9 +95,10 @@ def lines(doc: str, head: str) -> list:
 
 _TOPIC = re.compile(r'[a-z0-9][a-z0-9-]{3,}')
 # ...a word and its plural or tense are one word here ("payroll question" and "payroll questions" shared one word, and the line about
-# payroll was ranked with the lines about parking - 2026-11-14): the first six letters, a way of matching spellings, never a list of words
+# payroll was ranked with the lines about parking - 2026-11-14): the first five letters less a plural's s, a way of matching spellings,
+# never a list of words
 # ...and an address is who, not what about: every colleague's line shared "northwind" and "example" with a summary that named the company
-def stems(text: str) -> set: return {w[:6] for w in _TOPIC.findall(_ADDR.sub(' ', str(text or '').lower()))}
+def stems(text: str) -> set: return {w[:5].rstrip('s') or w[:5] for w in _TOPIC.findall(_ADDR.sub(' ', str(text or '').lower()))}
 def rank(raw: str, key: str, about: dict) -> int:
     """0 this sender, 1 someone else on the item (by address or full name), 2 the item's own subject, 3 their domain or repository,
     4 general. FACTS the app keeps about the item - its sender, the people on it, its title, its domain or repository - against the line,

@@ -204,6 +204,38 @@ class OneConversationNotTwentyTests(unittest.TestCase):
         self.assertIn('and what about the chat', seen[1]['user'])
         self.assertLess(len(seen[1]['user']), len(seen[0]['user']))
 
+    def test_a_memory_line_changed_mid_conversation_leads_its_next_turn_whichever_session_picks_it_up(self):
+        """The real CLI, 2026-11-14: an agent drafted "laptop faults go to Marcus"; the owner then told the Assistant Marcus had moved and
+        they go to Omar; asked only to shorten the reply, the agent wrote Marcus again. Its conversation was picked up by another session
+        object (the quick agent's, by the full agent - as after any restart), which knew nothing of what it had been told: the system was
+        written afresh, the changed line swapped in silently among fifteen. Now the conversation keeps the system it began with, and its
+        next turn opens on the new line and on the one taken back."""
+        from taskuary import memoryedit
+        self.s.update_task(self.tid, {'Title': 'Laptop fault for Paula', 'Summary': 'Paula asks who fixes laptop faults'}, 'o')
+        memoryedit.remember(self.s, 'Laptop and badge faults go to Marcus Reed')
+        memoryedit.remember(self.s, 'You batch expense approvals on Monday mornings')
+        brain, seen = self._brain()
+        self._run(['draft the reply'], brain)
+        self.assertIn('faults go to Marcus Reed', seen[0]['system'])
+        memoryedit.remember(self.s, 'Marcus Reed moved to security: laptop and badge faults go to Omar Keller now', replaces='Laptop and badge faults go to Marcus Reed')
+        self.sess = general.GeneralSession(self.s, self.tid)                 # ...another object picks the conversation up
+        self.sess.pick, self.sess.provider, self.sess.cli_sid = 'cli:claude', 'coding', 'sess-1'
+        self.sess._remember_session(); self.assertIsNone(self.sess.frozen)
+        self._run(['make it half as long', 'and warmer'], brain)
+        self.assertEqual([x['resume'] for x in seen], [None, 'sess-1', 'sess-1'])
+        self.assertEqual(seen[1]['system'], seen[0]['system'], 'the instructions it began with, byte for byte')
+        said = seen[1]['user']
+        self.assertTrue(said.startswith(general.UPDATED), said[:200])
+        self.assertIn('faults go to Omar Keller now', said)
+        self.assertIn(general.UNLEARNED + '\n- Laptop and badge faults go to Marcus Reed', said, 'and the line taken back, named as taken back')
+        self.assertNotIn('expense approvals', said, 'only what changed: the lines it knows are not said again')
+        self.assertEqual(seen[2]['system'], seen[0]['system']); self.assertNotIn(general.UPDATED, seen[2]['user'], 'said once')
+        # ...and a line the owner Forgets is taken back the same way, with nothing new beside it
+        memoryedit.mark(self.s, 'You batch expense approvals on Monday mornings', 'forget')
+        self._run(['thanks'], brain)
+        self.assertIn('- You batch expense approvals on Monday mornings', seen[3]['user'].split(general.UNLEARNED)[1])
+        self.assertNotIn('Marcus', seen[3]['user'], 'the one it was already told is taken back is not said again')
+
     def test_a_cli_that_cannot_resume_starts_over_rather_than_failing(self):
         """Its history was cleared, or the id aged out: say the whole thing again, once."""
         brain, seen = self._brain(fail_on_resume=True)

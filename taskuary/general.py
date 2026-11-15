@@ -1755,7 +1755,7 @@ def learned_block(store, tid: int, budget: int = LEARNED_CHARS) -> str:
     if not out: return ''
     # ...and how to lean on them (2026-11-09, after the Model Spec's ladder): silently when little rides on it, named when it decides money,
     # a recipient or a date - and never over the thread, which is newer than anything learned
-    return ('WHAT TASKUARY HAS LEARNED ABOUT THE OWNER - the lines nearest this task (`taskuary --memory` prints all of it). Use them '
+    return (f'{LEARNED_HEAD} - the lines nearest this task (`taskuary --memory` prints all of it). Use them '
             'without comment when little rides on them; when one decides money, a recipient or a date, name it ("going on your note that '
             'Payworth bills go to Gail") so the owner can correct it. Where the thread says otherwise, the thread wins:\n'
             + '\n'.join(out))
@@ -1914,15 +1914,42 @@ def with_late(system: str, late) -> str: return '\n\n'.join([system, *(x for x i
 # began with is sent unchanged; a late line it has not heard rides the head of the next turn, once. Only a change to the head itself (his
 # JOB.md, the browser handed to it, another AI) is a new system - rare, and real.
 UPDATED = 'SINCE THIS CONVERSATION BEGAN (these replace what your instructions said on the same point):'
-def freeze(s, head: str, late, kept: bool) -> tuple[str, str]:
-    "(the system to send, the lines to lead this turn with) for session `s` - see above. `kept`: the conversation goes on."
+def freeze(s, head: str, late, kept: bool, by_line: bool = False) -> tuple[str, str]:
+    """(the system to send, the lines to lead this turn with) for session `s` - see above. `kept`: the conversation goes on.
+    `by_line`: a block it has heard under the same first line is said as that line and its NEW lines alone - one changed memory line among
+    fifteen it knows was the whole block again, and the agent shortening a reply never saw which one had changed (the real CLI, 2026-11-14).
+    ...and where the head itself changed under a kept conversation, the new system is sent AND what the conversation has not heard still
+    leads the turn: swapped in silently, the system said one thing and everything the agent had written said the other."""
     late = [x for x in late if x]
-    if kept and s.frozen and s.frozen[0] == head:
-        new = [x for x in late if x not in s.frozen[2]]
-        s.frozen = (head, s.frozen[1], s.frozen[2] | set(new))
+    if kept and s.frozen:
+        heard = {}                           # a block's first line -> the lines the conversation has read under it
+        for x in s.frozen[2] if by_line else ():
+            heard.setdefault(x.split('\n', 1)[0], set()).update(x.splitlines()[1:])
+        def fresh(x):
+            ls = x.splitlines()
+            if len(ls) < 2 or ls[0] not in heard: return x
+            return '\n'.join([ls[0], *more]) if (more := [l for l in ls[1:] if l not in heard[ls[0]]]) else ''
+        new = [n for x in late if x not in s.frozen[2] and (n := fresh(x))]
+        s.frozen = (head, s.frozen[1], s.frozen[2] | set(late)) if s.frozen[0] == head else (head, with_late(head, late), set(late) | s.frozen[2])
         return s.frozen[1], '\n\n'.join([UPDATED, *new]) if new else ''
     s.frozen = (head, with_late(head, late), set(late))
     return s.frozen[1], ''
+
+
+# WHAT THE OWNER TOOK BACK, A KEPT CONVERSATION IS TOLD (the memory round, 2026-11-14: "Wrong/Forget undoes it", "nobody reads both as true"):
+# a line Forgotten, marked Wrong or replaced by a newer fact simply left the block, and a conversation that had read it went on believing
+# it. Plain reading: the memory lines this conversation was told that LEARNED.md no longer holds - never one the budget merely left out
+LEARNED_HEAD = 'WHAT TASKUARY HAS LEARNED ABOUT THE OWNER'
+UNLEARNED = "NO LONGER IN THE OWNER'S MEMORY - taken back or replaced since you read them; do not go on these, and correct what you wrote from them:"
+def unlearned(store, frozen) -> str:
+    if not frozen: return ''
+    from . import learned_cut as lc
+    told = {l for x in frozen[2] if x.startswith(LEARNED_HEAD) for l in x.splitlines()[1:] if l.startswith('- ')}
+    if not told: return ''
+    doc = store.doc('learned') or ''
+    now = {lc.said(raw) for h in lc.SECTIONS.values() for raw, _ in lc.lines(doc, h)}
+    gone = sorted(told - now)
+    return '\n'.join([UNLEARNED, *gone]) if gone else ''
 
 
 def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
@@ -2376,6 +2403,18 @@ class GeneralSession:
         from . import continuity
         self.store.save_session(self.task_id, self.pick, self.model, self.cli_sid,
                                 continuity.context_key(self.store, self.pick, self.model))
+        # ...and WHAT THAT CONVERSATION WAS TOLD, kept with its id (the memory round, 2026-11-14): `frozen` lived in this object alone, so a
+        # conversation picked up by another one - the quick agent's by the full agent, any after a restart or an idle shutdown - was sent
+        # a system written afresh (the whole conversation at full price again) with nothing saying which line of it had changed
+        if self.cli_sid and self.frozen:
+            try: self.store.save_frozen(self.task_id, json.dumps([self.cli_sid, self.frozen[0], self.frozen[1], sorted(self.frozen[2])]))
+            except Exception as e: logger.debug(f'task {self.task_id}: what its conversation was told was not kept - {e}')
+
+    def _told(self):
+        "The kept conversation's `frozen`, read back where this object never held it (see _remember_session) - None for any other conversation."
+        try: sid, head, system, late = json.loads((self.store.saved_session(self.task_id) or {}).get('Frozen') or 'null')
+        except (TypeError, ValueError): return None
+        return (head, system, set(late)) if sid and sid == self.cli_sid else None
 
     def _unusable(self, e):
         """A CLI that is not signed in failed its test, as far as a brain nobody chose is concerned: it is recorded, a brain saved
@@ -2884,7 +2923,9 @@ class GeneralSession:
                     if self.browser_wanted and not apiagent.can(brain): self._remember_trace('progress', 'browser', NO_BROWSER_LINE)     # true of a card that takes no tools, and only of it
                     system = f'{system}\n\n{apiagent.no_browser_line() if apiagent.can(brain) else apiagent.no_tools_line()}'
             kept_conv = bool(self.cli_sid or (looped and self.card_msgs))
-            head, system, news = system, *freeze(self, system, late, kept_conv)
+            if kept_conv and self.frozen is None: self.frozen = self._told()
+            head, system, news = system, *freeze(self, system, [*late, unlearned(self.store, self.frozen)] if kept_conv else late, kept_conv, by_line=True)
+            if self.cli_sid and news: self._remember_session()
             if turn_said and not kept_conv: user = f'{turn_said}\n\n{user}'
             whole = user                 # the conversation said in full: what a fresh one hears where this one cannot be picked back up
             if kept_conv:

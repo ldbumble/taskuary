@@ -516,7 +516,7 @@ CREATE TABLE IF NOT EXISTS attachment (AttachmentId INTEGER PRIMARY KEY, Message
 CREATE TABLE IF NOT EXISTS transcript (TranscriptId INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT,
   Agent TEXT, Cwd TEXT, Text TEXT, CreatedAt TEXT, ExtId TEXT);
 CREATE TABLE IF NOT EXISTS session_resume (TaskId INTEGER PRIMARY KEY, Pick TEXT, Model TEXT,
-  NativeId TEXT, ContextKey TEXT, UpdatedAt TEXT);
+  NativeId TEXT, ContextKey TEXT, UpdatedAt TEXT, Frozen TEXT);
 CREATE TABLE IF NOT EXISTS task_artifact (ArtifactId INTEGER PRIMARY KEY, TaskId INTEGER, Name TEXT,
   ContentType TEXT, Size INTEGER, Path TEXT, Kind TEXT, CreatedBy TEXT, CreatedAt TEXT, Url TEXT, ExtId TEXT, Version TEXT);
 CREATE TABLE IF NOT EXISTS route (RouteId INTEGER PRIMARY KEY, MessageId INTEGER, TaskId INTEGER,
@@ -1228,6 +1228,9 @@ class SQLiteStore:
             # a rule meant for one mailbox names it (policy.matches): blank, as every rule before it, is every mailbox
             if 'Mailbox' not in {r[1] for r in self.cx.execute('PRAGMA table_info(policy)')}:
                 self.cx.execute('ALTER TABLE policy ADD COLUMN Mailbox TEXT')
+            # ...and what a kept conversation was told (general.freeze), beside the id it is picked back up by
+            if 'Frozen' not in {r[1] for r in self.cx.execute('PRAGMA table_info(session_resume)')}:
+                self.cx.execute('ALTER TABLE session_resume ADD COLUMN Frozen TEXT')
             routecols = {r[1] for r in self.cx.execute('PRAGMA table_info(route)')}
             if 'RawOutput' not in routecols:
                 self.cx.execute('ALTER TABLE route ADD COLUMN RawOutput TEXT')
@@ -4894,6 +4897,10 @@ class SQLiteStore:
                    'ON CONFLICT(TaskId) DO UPDATE SET Pick=excluded.Pick, Model=excluded.Model, '
                    'NativeId=excluded.NativeId, ContextKey=excluded.ContextKey, UpdatedAt=excluded.UpdatedAt',
                    (task_id, pick, model, native_id or '', context_key, _now()))
+
+    def save_frozen(self, task_id, frozen: str):
+        "What the task's kept conversation was told - its instructions and the late lines it has heard (general.freeze)."
+        self._exec('UPDATE session_resume SET Frozen=? WHERE TaskId=?', (frozen, task_id))
 
     def previous_work(self):
         """Existing work records for the welcome card; no summaries or new AI jobs."""

@@ -92,6 +92,11 @@ export function normalise(spec) {
   return title === null ? null : { title, root: spec.root, elements: out };
 }
 
+// A VIEW WRITTEN IN AN ANSWER (the owner, 2026-11-15: "of course chart should be in chat"): a fenced block in an agent's or the Assistant's
+// words that parses as a spec this same check passes is drawn as a `show` call's is (md.jsx's Pre); anything else stays the code block it was
+export const fencedView = (code) => { const s = String(code || "").trim(); if (!s.startsWith("{")) return null;
+  try { return normalise(JSON.parse(s)); } catch { return null; } };
+
 // A NUMBER IN ITS FORMAT: money in dollars, a count grouped, a percent as written (12.5 -> 12.5%). `p` is the decimals, one count for a
 // whole column so its figures line up; money has none or two, never one ($13.50, not $13.5)
 export const placesOf = (ns, format) => { const frac = (n) => (String(n).split(".")[1] || "").length, p = Math.min(2, Math.max(0, ...ns.filter(Number.isFinite).map(frac)));

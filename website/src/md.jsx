@@ -13,6 +13,8 @@ import { appLink, linkRoad, openAppLink, ownPath } from "./appLinks.js";
 import { codeLocalPaths, localFile, plainCitations } from "./taskOutputs.js";
 import CopyCorner from "./CopyCorner.jsx";
 import { attUrl, isPdf, PdfView, saveFile } from "./Attachments.jsx";
+import ViewSpec from "./ViewSpec.jsx";
+import { fencedView } from "./viewSpec.js";
 export { looksMd };
 
 const TASK_LINK = /#task=(\d+)/;
@@ -143,8 +145,11 @@ const keepRefs = (kids) => React.Children.map(kids, (k) => typeof k !== "string"
   : refParts(k).map((p, i) => i % 2 ? <span key={i} className="ref">{p}</span> : p));
 const Td = ({ children, node, ...rest }) => <td {...rest}>{keepRefs(children)}</td>;
 
-// ...a code block - a command, a prompt to paste somewhere - copies at its corner (CopyCorner)
-const Pre = ({ children, node, ...rest }) => { const box = React.useRef(null);
+// ...a code block - a command, a prompt to paste somewhere - copies at its corner (CopyCorner); one that is a view (viewSpec.fencedView) is
+// drawn by the view's own renderer, the road a `show` call takes, so a chart in an answer is a chart wherever answers are drawn
+const textOf = (n) => (n?.type === "text" ? n.value : (n?.children || []).map(textOf).join(""));
+const Pre = ({ children, node, ...rest }) => { const box = React.useRef(null), src = textOf(node), view = React.useMemo(() => fencedView(src), [src]);
+  if (view) return <ViewSpec spec={view} />;
   return <div className="tq-copy-host"><pre ref={box} {...rest}>{children}</pre><CopyCorner text={() => box.current?.innerText || ""} /></div>; };
 
 // ...and one line of it, inline: a brief's bullet keeps its bold and its links without a paragraph around them (ReportBrief)

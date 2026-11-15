@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { MARK, buttonOf, fmtAs, labels, normalise, placesOf, specIn, verbOf, viewOf } from "../src/viewSpec.js";
+import { MARK, buttonOf, fencedView, fmtAs, labels, normalise, placesOf, specIn, verbOf, viewOf } from "../src/viewSpec.js";
 import { eventsOf, turnParts } from "../src/chatStream.js";
 
 const SPEC = {
@@ -141,4 +141,19 @@ test("a table's words wrap in their cell, its numbers stay on one line", () => {
   const css = readFileSync(new URL("../src/viewSpec.css", import.meta.url), "utf8"), td = css.match(/\.tq-view-table td \{([^}]*)\}/)[1];
   assert.doesNotMatch(td, /text-overflow: ellipsis|white-space: nowrap/, "a word cell is never cut short");
   assert.match(css, /\.tq-view-table td\.n \{[^}]*white-space: nowrap/, "a number keeps its figures together");
+});
+
+// the owner, 2026-11-15: "of course chart should be in chat, wasn't that the whole idea of the json render?" - an agent that writes its chart
+// as a fenced spec in its answer, not through `show`, had it drawn as a code block. Same check, same renderer; anything else stays code
+test("a fenced block in an answer that is a view is the view the show road draws; anything else stays its code", () => {
+  const chart = { root: "c", elements: { c: { type: "chart", props: { kind: "bar", title: "Signups by month",
+    points: [{ label: "Jan", value: 120 }, { label: "Feb", value: 145 }, { label: "Mar", value: 98 }] } } } };
+  assert.deepEqual(fencedView(`\n${JSON.stringify(chart, null, 2)}\n`), normalise(chart));
+  assert.deepEqual(fencedView(JSON.stringify(SPEC)), normalise(SPEC));
+  for (const code of ["npm run build", '{"name": "Erin Blake", "age": 41}', "[1, 2, 3]", '{"root": "c", "elements": {"c": {"type": "chart"', "",
+    JSON.stringify({ root: "c", elements: { c: { type: "pie", props: {} } } })]) assert.equal(fencedView(code), null, code);
+  // ...and the chat's markdown draws it through the view's own renderer, at the code block's place
+  const md = readFileSync(new URL("../src/md.jsx", import.meta.url), "utf8");
+  assert.match(md, /const Pre = [^\n]*fencedView\(/);
+  assert.match(md, /if \(view\) return <ViewSpec spec=\{view\} \/>;/);
 });

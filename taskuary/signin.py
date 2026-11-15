@@ -424,9 +424,13 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) ->
                 # later - for those 2-3 s the task read "agent waiting on you" over a turn with no words, the rail "Finished ...; nothing
                 # since". Held until that turn is at work or the sign-in is the owner's to do (its ask is up), never past HANDED_ON seconds
                 end = time.time() + HANDED_ON
-                # (...a session that can say its own phase: one that cannot never reads at work, and would be waited out whole)
-                while (time.time() < end and callable(getattr(s := general._live_of(tid), 'phase', None)) and not general._at_work(s)
-                       and not pending(store, tid)): time.sleep(.1)
+                # ...which is exactly while "signed in" is the last thing its record holds (_continue's `answered`): the turn that hears it
+                # writes the next line, and a turn that ran inside the telling has ended already - held past it, the task read "agent
+                # waiting on you" for six seconds after the agent had finished (watched on the real CLI, 2026-11-15)
+                # (...on a session that can say its own phase: a stand-in that cannot writes no line of its own, and would be waited out whole)
+                from . import workerstate as ws
+                told = lambda: (evs := ws.events(store, tid, sid)) and evs[-1]['Kind'] == 'answered'
+                while time.time() < end and callable(getattr(general._live_of(tid), 'phase', None)) and told(): time.sleep(.1)
                 general.hand(tid, -1)
         general.hand(tid)
         threading.Thread(target=typed, args=(store, tid, sid, site, rid, fill or type_in, ask), daemon=True, name=f'signin-{tid}').start()

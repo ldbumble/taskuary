@@ -2,6 +2,20 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.7 - 2026-11-14
+
+- What the owner just said is never the line a reader's budget leaves out
+- A fact the owner tells one task's agent is one memory line that triage, every agent and the Assistant read
+- A memory line changed mid-conversation opens that conversation's next turn, whichever session picks it up
+- A line typed to a task's agent is the agent's to hear: the Assistant does not react to it
+- A sign-in hand-over ends when the sign-in is through, never when one step gives way to the next
+- A sign-in the owner set aside in words is not put back in front of him by itself
+- A kept conversation with no record of what it was told is told what holds now, once
+- His line that waits stands directly under the turn at work, not by the box across a gap
+- A lesson a press taught reads as learned from the verdict, takes Wrong, and is taken back whole
+- Memory is silent and stays small: a fact kept is answered in a few words, and said again it is not kept twice
+- A lesson pressed "from now on" is always taught, and never wider than what was pressed
+
 ## 0.4.0.6 - 2026-11-14
 
 - The browser view names the page the agent is on now, not the one it last showed

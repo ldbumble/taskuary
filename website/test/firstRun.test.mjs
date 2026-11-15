@@ -139,3 +139,38 @@ test("the setup canvas has one quiet Set up later, on the existing dismiss", () 
   assert.match(fr, /api\.post\("\/api\/setup\/dismiss", \{ dismissed: true \}\)/);
   assert.match(fr, /onFinish && q !== "done" && <Typography component="button"[^>]*data-tq-setup-later=""/);
 });
+
+// THE FIRST RUN, READ BY AN OFFICE MANAGER (the real-CLI audit, 2026-11-15, 5c / 5f / 5h)
+test("the line before the Outlook card says what it takes, not 'one sign-in'", () => {
+  const fr = read("FirstRun.jsx"), py = readFileSync(new URL("../../taskuary/firstrun.py", import.meta.url), "utf8");
+  for (const s of [fr, py]) {
+    assert.doesNotMatch(s, /is one sign-in/, "the card under it asks for an app registered with Microsoft first");
+    assert.match(s, /takes a one-time Microsoft set-up, (?:"\s*")?then one sign-in/);
+  }
+});
+
+test("Back on an opened source card is the list of sources, not the step before", () => {
+  const fr = read("FirstRun.jsx");
+  assert.match(fr, /back: \{ label: "Back", tone: "s", run: \(\) => \(open \? shutCard\(\) : go\(prevOf\(view, st\)\)\), title: open \? "Back to the list" : "The step before" \}/);
+  assert.match(fr, /const shutCard = \(\) => \{ setOpen\(null\); reload\(\); \};/);
+  assert.match(fr, /onBack=\{shutCard\} onConnected=\{reload\}/, "the card's own Back and the row's are one road");
+});
+
+test("a catalogue card and its section say themselves in plain words", async () => {
+  const { cardState, cardStatus, sectionName } = await import("../src/connectorCatalog.js");
+  const blank = cardStatus({ Active: 0 }, { roles: ["trigger", "tool"], srcs: [], label: "Mailboxes" });
+  assert.equal(blank, "not set up · brings in work, agents can use it · no mailboxes yet", 'it read "off · trigger + tool · 0/0 mailboxes"');
+  assert.equal(cardStatus({ Active: 1, HasSecret: 1, LastSyncAt: "2026-11-15" }, { roles: ["trigger"], srcs: [{ Active: 1 }, { Active: 0 }], label: "Chat IDs — only chats flipped ON become work", checked: "5m ago" }),
+    "on · brings in work · 1 of 2 chat ids on · checked 5m ago");
+  assert.equal(cardStatus({ Active: 0, HasSecret: 1 }, { roles: ["tool"], keyNote: "key saved" }), "switched off · agents can use it · key saved");
+  assert.equal(cardStatus({ Active: 1, LastError: "401" }, { roles: ["tool"], keyNote: "key saved" }), "on · agents can use it · key saved · last test failed");
+  for (const w of ["trigger", "tool", "0/0"]) assert.doesNotMatch(blank, new RegExp(w));
+  // ...and the card's state is said beside the words, never read back out of them
+  const cv = read("ConnectorsView.jsx");
+  assert.match(cv, /\[c\.LastError \? "failing" : c\.Active \? "on" : "off", status\]/);
+  assert.equal(cardState({ state: "off", desc: blank }), "off");
+  assert.equal(sectionName("Observability"), "Monitoring & alerts"); assert.equal(sectionName("Agentic web"), "Web search & reading"); assert.equal(sectionName("Email"), "Email");
+  assert.equal((cv.match(/label: sectionName\(g\.title\)/g) || []).length, 2, "the rail and the first run's chips"); assert.match(cv, /: sectionName\(shown\.title\)\}/);
+  assert.match(cv, /sections: groups\.map\(\(g\) => \(\{ key: g\.title,/, "the catalogue's own group stays the key a link names");
+  assert.doesNotMatch(read("assistantCards.jsx"), /calendar-capable/);
+});

@@ -48,6 +48,21 @@ export const matchCards = (groups, q) => {
 export const cardState = (c) => (c.state || (c.planned ? "planned" : c.guide ? "guide"
   : /failing|test failed/.test(c.desc) ? "failing"
     : /^on\b|^added\b|connection ✓/.test(c.desc || "") ? "on" : "off"));
+// A SECTION BY THE NAME AN OFFICE MANAGER READS (the audit, 2026-11-15: "Observability" and "Agentic web" on the first run's More
+// connections). The catalogue's own group stays the key - links, the rail's pick and connectorcatalog.json name it - and only what is drawn changes
+const SECTION_SAID = { Observability: "Monitoring & alerts", "Agentic web": "Web search & reading" };
+export const sectionName = (group) => SECTION_SAID[group] || group;
+// WHAT A CARD DOES, in its status line: the roles' shorthand ("trigger + tool") was the catalogue's own vocabulary
+const ROLE_SAID = { trigger: "brings in work", feed: "shows new items", report: "feeds reports", tool: "agents can use it" };
+// ...and the line itself, in plain words (same audit: "off · trigger + tool · 0/0 mailboxes"): whether it is on, what it does, how many of
+// its mailboxes (chats, tables) are on, and its last check. `c`: the connector's row; `srcs`: its own sources, or null where it has none
+export function cardStatus(c, { roles = [], srcs = null, label = "sources", keyNote = "", read = "", checked = "" } = {}) {
+  const on = (srcs || []).filter((s) => s.Active).length, unit = String(label).split(" — ")[0].toLowerCase();
+  return [c.Active ? "on" : c.HasSecret || (srcs || []).length ? "switched off" : NOT_SET_UP,
+    roles.map((r) => ROLE_SAID[r] || r).join(", "),
+    srcs ? (srcs.length ? `${on} of ${srcs.length} ${unit} on` : `no ${unit} yet`) : keyNote,
+    c.LastError ? "last test failed" : c.LastSyncAt ? `${read ? `${read} · ` : ""}checked ${checked}` : ""].filter(Boolean).join(" · ");
+}
 // ...and the state a card that is not set up says, one wording for every kind (an MCP card said "not added", a data card "not set up")
 export const NOT_SET_UP = "not set up";
 

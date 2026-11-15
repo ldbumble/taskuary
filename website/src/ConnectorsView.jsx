@@ -38,7 +38,7 @@ import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import BrowserPane from "./BrowserPane.jsx";
 import { WAITING_META, waitingIn } from "./waitingMeta.js";
-import { browseSummary, CATALOGUE, NOT_SET_UP, PRESETS, cardState, matchCards, onceEach, oneCardPerSystem, oneOf, plannedFor, presetBody, presetOf, presetsLeft, repliesOf, repliesOn, WAY_NAMES, WAYS, waysOf, wayState } from "./connectorCatalog.js";
+import { browseSummary, CATALOGUE, NOT_SET_UP, PRESETS, cardState, cardStatus, sectionName, matchCards, onceEach, oneCardPerSystem, oneOf, plannedFor, presetBody, presetOf, presetsLeft, repliesOf, repliesOn, WAY_NAMES, WAYS, waysOf, wayState } from "./connectorCatalog.js";
 import { settingsOf } from "./actionCard.js";
 import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
@@ -1904,14 +1904,10 @@ export const connCardOf = (c, sources, go, plain = false) => {
     ? sources.filter((s) => s.ConnectorId === c.ConnectorId) : null;   // owned, never channel-shared
   // 'notify' is retired (2026-10-02): a card saved with it still loads, it is just not a role any more
   const roles = String(c.Roles || "").split(",").filter((r) => r && r !== "notify");
-  const status = `${c.Active ? "on" : "off"}`
-    + (roles.length ? ` · ${roles.join(" + ")}` : "")
-    + (srcs ? ` · ${srcs.filter((s) => s.Active).length}/${srcs.length} ${(m.srcLabel || "sources").toLowerCase()}`
-      : c.HasSecret ? " · key saved"
-        : ["ollama", "local_whisper"].includes(c.Type) ? " · local — no key needed"
-        : c.Type === "stt_server" ? " · your server — key optional" : " · no key yet")
-    + (c.LastError ? " · last test failed" : c.LastSyncAt ? `${firstRead(c)} · ok ${timeAgo(c.LastSyncAt)}` : "");
-  const [state, said] = plain ? plainState(c, srcs) : [undefined, status];
+  // ...the catalogue's own line, in plain words too (connectorCatalog.cardStatus) - and its state said, not read back out of those words
+  const status = cardStatus(c, { roles, srcs, label: m.srcLabel || "sources", read: firstRead(c).replace(/^ · /, ""), checked: c.LastSyncAt ? timeAgo(c.LastSyncAt) : "",
+    keyNote: c.HasSecret ? "key saved" : ["ollama", "local_whisper"].includes(c.Type) ? "local — no key needed" : c.Type === "stt_server" ? "your server — key optional" : "no key yet" });
+  const [state, said] = plain ? plainState(c, srcs) : [c.LastError ? "failing" : c.Active ? "on" : "off", status];
   // the product's own logo wins over the channel glyph: five AI cards sharing one sparkle,
   // or Jira and Linear both wearing 'boards', tells you nothing about which is which
   return { key: `c${c.ConnectorId}`, type: c.Type, title: c.Name, desc: said, state, plain,
@@ -2411,7 +2407,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     return browse({
       title: "Connections",
       summary: browseSummary(connected, all),
-      sections: groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.length || null })),
+      sections: groups.map((g) => ({ key: g.title, label: sectionName(g.title), n: g.cards.length || null })),
       section: q ? "" : browseState.section ?? null,
       onSection: (key) => { setQ(""); setOpen(null); onBrowseState?.({ section: key, open: null }); },
       note: err || (q ? "" : groups.find((g) => g.title === browseState.section)?.note || ""),
@@ -2436,14 +2432,14 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   return (
     <SideRail title="Connections" q={q} setQ={search}
       placeholder="Search connectors…"
-      items={groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.length || null }))}
+      items={groups.map((g) => ({ key: g.title, label: sectionName(g.title), n: g.cards.length || null }))}
       value={group} onChange={setGroup}
       note="Keys and connection settings are stored locally, in the same SQLite file as your tasks.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <UndoLine kinds={["connection"]} onRestored={load} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2 }}>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
-          {q ? `Matches for “${q}”` : shown.title}
+          {q ? `Matches for “${q}”` : sectionName(shown.title)}
         </Typography>
         <Button size="small" variant="contained" disableElevation onClick={syncNow} disabled={syncing}
           startIcon={syncing ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 15 }} />}>

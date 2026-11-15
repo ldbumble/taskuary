@@ -233,11 +233,14 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
     catch (e) { setErr(errText(e)); }
     await reload(); setDevBusy(false);
   };
+  const shutCard = () => { setOpen(null); reload(); };   // an opened card back to the list it was picked from: its own Back, and the row's
   const fix = st?.fix;
   const fixed = fix && (st.ais.find((a) => a.name === fix.name) || { name: fix.name, title: fix.title, installed: true });
   const nav = navMoves(st, view, reopened);
   const VERB = {
-    back: { label: "Back", tone: "s", run: () => go(prevOf(view, st)), title: "The step before" },
+    // ...WITH A CARD OPEN, BACK IS THE LIST IT CAME FROM (the audit, 2026-11-15: Back on an opened source card went to step 1 - the AI - and
+    // the sources she was choosing from were two presses away): the card's own way back (shutCard), then the step before
+    back: { label: "Back", tone: "s", run: () => (open ? shutCard() : go(prevOf(view, st))), title: open ? "Back to the list" : "The step before" },
     // ...past the optional steps, a first run lands on Setup complete before More connections (afterAbout)
     next: { label: "Next", tone: "p", run: () => { const n = nextOf(view, st); go(firstPass.current && n === "other" ? "done" : n); }, title: "The next step" },
     walk: { label: btnLabel("walk"), tone: "p", run: finishThen(onWalk), title: "Everything waiting, most important first" },
@@ -492,7 +495,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   const detail = conn && (
     <Box sx={{ mt: 0.5 }}>
       <ChannelDetail key={conn.ConnectorId} conn={conn} sources={sources} reload={reload} simple={open.simple}
-        onBack={() => { setOpen(null); reload(); }} onConnected={reload}
+        onBack={shutCard} onConnected={reload}
         onCreated={(id) => { setOpen({ id, simple: open.simple }); reload(); }} />
     </Box>
   );
@@ -605,7 +608,11 @@ ${fix.detail || ""}`, screen: "Setup",
       : st.mail_error ? (litCard ? `${st.mail_error} Pick ${litCard.title} to fix it - or pick a different source.`
         : `${st.mail_error} Fix it in the card and press Connect again - or pick a different source.`)
       : `Where does your work come in? Connect your email, chat or task system - ${!litCard ? "pick its card" : oneSignIn
-        ? `email is the usual one: ${litCard.title} is one sign-in` : `email is the usual one: start with ${litCard.title} if that is yours`}.`,
+        // ...AND TRUE (the audit, 2026-11-15: it promised a single sign-in over a card that first asks for an app registered with
+        // Microsoft - each company brings its own, Taskuary ships none): what it takes, said before the card is opened
+        // ...in the row's one line: the sentence is cut with an ellipsis past ~140 characters
+        ? `${litCard.title} takes a one-time Microsoft set-up, then one sign-in`
+        : `email is the usual one: start with ${litCard.title} if that is yours`}.`,
     about: aiErr ? `${aiErr} Change AI picks one that does.` : aboutLine || "A few questions about your work - filled in from your email where I can.",
     done: aiErr ? `${aiErr} Change AI picks one that does.` : "You're set up. Anything else you connect is optional - Connections has it all, any time.",
     other: aiErr ? `${aiErr} Change AI picks one that does.` : connSug ? (connLine || (connSug.failed ? "I couldn't suggest connections just now - pick a section below, or skip it: nothing more is needed."

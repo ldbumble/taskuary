@@ -23,7 +23,7 @@ PLAIN = {'claude': ('Claude', 'Claude Code - if you pay for Claude'), 'codex': (
          'gemini': ('Gemini CLI', "Google's coding tool - free with a Google account"), 'copilot': ('Copilot', "GitHub's coding tool - if you pay for Copilot")}
 KEYS = (('anthropic', 'Claude API key', 'console.anthropic.com → API Keys'),
         ('openai', 'OpenAI API key', 'platform.openai.com → API keys'))
-MAIL = (('outlook', 'Microsoft 365 / Outlook', 'Work email or Outlook.com - one sign-in, no password here'),
+MAIL = (('outlook', 'Microsoft 365 / Outlook', 'Work email or Outlook.com - a one-time Microsoft set-up, then one sign-in; no password here'),
         ('gmail', 'Gmail', 'Your Gmail address and a Google App Password'),
         ('imap', 'Other email', 'Any other mailbox: address, server and password'))
 MAIL_TYPES = tuple(t for t, _l, _s in MAIL)
@@ -198,7 +198,8 @@ def state(store) -> dict:
                     # the card by the title it wears on the shelf: "Microsoft 365" named a card that read "Outlook mail" (2026-10-19)
                     # ...and any source of incoming work, email the usual one (the owner, 2026-10-21)
                     else f"{name or 'Your AI'} is ready. Where does your work come in? Connect your email, chat or task system - "
-                         f"email is the usual one: {(store.get_connector_by_type('outlook') or {}).get('Name') or 'Outlook mail'} is one sign-in.",
+                         f"email is the usual one: {(store.get_connector_by_type('outlook') or {}).get('Name') or 'Outlook mail'} takes a one-time Microsoft set-up, "
+                         "then one sign-in.",
            'reading': (f"{name or 'Your AI'} isn't sorting what comes in - {ai_error}. Change AI picks one that does." if ai_error
                        else "Connected - nothing new to sort yet. Any other connection you'd like to set up?" if empty
                        else f"Sorting {plural(sorting, 'item')} now. Any other connection you'd like to set up while it reads?"

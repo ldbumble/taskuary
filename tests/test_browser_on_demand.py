@@ -162,6 +162,15 @@ class TheAgentAsksForIt(unittest.TestCase):
     def test_the_agent_is_told_of_it_in_one_sentence_where_it_is_told_its_browser(self):
         self.assertIn('taskuary --browser <url>', bv.offer()); self.assertEqual(bv.offer().count('taskuary --browser'), 1)
 
+    def test_an_agent_with_no_hook_is_told_that_road_alone_and_never_to_launch_from_its_shell(self):
+        """Recorded on Codex (the browser audit, 2026-11-15): told "if agent-browser open cannot launch ...", it ran `agent-browser open`
+        first on every task, died in its sandbox, and "Auto-launch failed: CDP response channel closed" stood among the owner's steps."""
+        for told in (bv.offer(held=False), bv.brief(held=False, open_now=False)):
+            self.assertIn('run `taskuary --browser <url>` and Taskuary opens it for you', told)
+            self.assertNotIn('run `agent-browser open', told)
+            self.assertNotIn('If `agent-browser open` cannot launch', told)
+        self.assertIn('run `agent-browser open <url>` and it opens for you', bv.offer(held=True))     # a CLI with the hook keeps its road
+
 
 class YourTurnNeedsAPage(unittest.TestCase):
     def test_a_hand_over_with_no_page_is_a_question_in_words(self):

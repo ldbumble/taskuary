@@ -258,9 +258,9 @@ class ALeftOverBrowserIsClosedTests(unittest.TestCase):
         with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'popen'), \
              mock.patch.object(browserview, 'state', return_value={'open': False}), mock.patch.object(browserview, 'LAUNCH_WAIT', 0):
             browserview.start('run-a', 'https://portal.example/')
-        self.assertEqual(browserview._listed(), ['run-a'])
+        self.assertEqual(browserview._listed(), {'run-a': None})
         with mock.patch.object(browserview, 'program', return_value=''): browserview.close('run-a')
-        self.assertEqual(browserview._listed(), [])
+        self.assertEqual(browserview._listed(), {})
 
     def test_the_next_start_closes_what_the_last_run_left_and_only_that(self):
         browserview.listed('run-a', True); browserview.listed('run-b', True)
@@ -268,7 +268,43 @@ class ALeftOverBrowserIsClosedTests(unittest.TestCase):
         with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'run') as run:
             self.assertEqual(browserview.close_orphans(), 1)
         self.assertEqual([c.args[0] for c in run.call_args_list], [['agent-browser', '--session', 'tq-run-a', 'close']])
-        self.assertEqual(browserview._listed(), [])
+        self.assertEqual(browserview._listed(), {})
+
+    def test_the_helper_its_launch_started_ends_with_the_browser_and_only_that_one(self):
+        """The browser audit, 2026-11-15: fourteen agent-browser helpers ran on with no Chrome under them a day after their browsers had
+        gone - a Chrome that died, a killed Taskuary. The pid its launch recorded is ended on close and at the next start; a pid now running
+        something else is left alone."""
+        (self.dir / 'tq-run-a.pid').write_text('4242')
+        with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'popen'),              mock.patch.object(browserview, 'state', return_value={'open': True}), mock.patch.object(browserview, 'LAUNCH_POLL', .001),              mock.patch.object(browserview, 'LAUNCH_WAIT', 1):
+            # ...the first look says it is not up yet, the next that it is
+            with mock.patch.object(browserview, 'state', side_effect=[{'open': False}, {'open': True}]): self.assertTrue(browserview.start('run-a', 'https://portal.example/'))
+        self.assertEqual(browserview._listed(), {'run-a': 4242})
+        helpers = {4242}
+        with mock.patch.object(browserview, '_is_helper', side_effect=lambda pid: pid in helpers), mock.patch.object(browserview.os, 'kill') as kill,              mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'run'):
+            browserview.close('run-a')                                     # its Chrome is gone (no stream file): the helper is ended all the same
+            self.assertEqual([c.args[0] for c in kill.call_args_list], [4242])
+            kill.reset_mock(); browserview.listed('run-b', True, 5151); browserview.listed('run-c', True, 6161)
+            helpers = {5151}                                               # run-c's pid now runs something else
+            self.assertEqual(browserview.close_orphans(), 1)
+            self.assertEqual([c.args[0] for c in kill.call_args_list], [5151])
+        self.assertEqual(browserview._listed(), {})
+
+
+    def test_a_new_browser_starts_signed_in_where_another_task_is_signed_in_now(self):
+        """The browser audit, 2026-11-15: cookies were kept only when a browser closed, so a second task opened while the first task's
+        browser was still up signed in again from the vault - on a site that asks a code, a new code each time. The new session is seeded,
+        once, from the kept states and the live browsers, the live winning; one with its own state keeps it. Invented site."""
+        import json
+        sessions = self.dir / 'sessions'; sessions.mkdir()
+        old = {'name': 'sess', 'value': 'old', 'domain': 'portal.example', 'path': '/'}
+        (sessions / 'taskuary-tq-run-0.json').write_text(json.dumps({'cookies': [old, {'name': 'pref', 'value': 'dark', 'domain': 'news.example', 'path': '/'}]}))
+        browserview.listed('run-a', True, 11)
+        live = {'name': 'sess', 'value': 'live', 'domain': 'portal.example', 'path': '/'}
+        with mock.patch.object(browserview, 'state', side_effect=lambda sid, fresh=False: {'open': sid == 'run-a'}),              mock.patch.object(browserview, '_live_cookies', side_effect=lambda sid: [live] if sid == 'run-a' else []):
+            self.assertEqual(browserview.seed('run-b'), 2)
+            got = {c['name']: c['value'] for c in json.loads((sessions / 'taskuary-tq-run-b.json').read_text())['cookies']}
+            self.assertEqual(got, {'sess': 'live', 'pref': 'dark'})
+            self.assertEqual(browserview.seed('run-b'), 0)                 # once: a restarted session keeps its own
 
 
 if __name__ == '__main__':

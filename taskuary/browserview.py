@@ -418,6 +418,7 @@ def close(sid: str, tid: int = None):
         if exe and _read(session_name(sid), 'stream'):
             try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True)
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')
+        _end_daemon(sid)
         _CACHE.pop(sid, None); LAST.pop(sid, None); listed(sid, False)
     with _START_LOCKS_GUARD:
         if _START_LOCKS.get(sid) is lock: _START_LOCKS.pop(sid, None)
@@ -556,6 +557,38 @@ def _kept_state() -> list:
     return sorted(set(d.glob(f'{RESTORE_KEY}.json')) | set(d.glob(f'{RESTORE_KEY}-*.json'))) if d.is_dir() else []
 
 
+# ...AND A SIGN-IN LIVE IN ANOTHER TASK'S BROWSER COMES WITH IT (the browser audit, 2026-11-15): cookies are kept when a browser CLOSES, so a
+# second task opened while the first task's browser was still up signed in again from the vault - on a site that asks a code, a new code for
+# him each time. A new session's restore state is seeded once, before its launch: the kept states and the cookies of Taskuary's own browsers
+# that are open now, the live ones winning. A session that already has its own state keeps it (a restart reopens it as it was)
+def _own_state(sid: str) -> Path: return home() / 'sessions' / f'{RESTORE_KEY}-{session_name(sid)}.json'
+
+def _live_cookies(sid: str) -> list:
+    "The cookies of one of Taskuary's own browsers that is open now ([] when it cannot be read)."
+    from . import signin
+    try:
+        c = signin.connect(sid)
+        try: return list(c.call('Network.getAllCookies').get('cookies') or [])
+        finally: c.close()
+    except Exception as e: logger.debug(f'the cookies of the browser {sid} were not read: {e}'); return []
+
+def seed(sid: str) -> int:
+    "Seed `sid`'s restore state from the kept states and the live browsers of other sessions, once. How many cookies it starts with."
+    own = _own_state(sid)
+    if own.exists(): return 0
+    jar = {}
+    key = lambda c: (c.get('name'), c.get('domain'), c.get('path'))
+    for p in sorted(_kept_state(), key=lambda p: p.stat().st_mtime):          # the newest kept wins
+        try: jar.update({key(c): c for c in (json.loads(p.read_text(encoding='utf-8')) or {}).get('cookies') or []})
+        except (OSError, ValueError, AttributeError): continue
+    for other in [x for x in _listed() if x != str(sid)]:
+        if state(other, fresh=True).get('open'): jar.update({key(c): c for c in _live_cookies(other)})
+    if not jar: return 0
+    own.parent.mkdir(parents=True, exist_ok=True)
+    own.write_text(json.dumps({'cookies': list(jar.values()), 'origins': []}), encoding='utf-8')
+    return len(jar)
+
+
 def forget_site(site: str) -> int:
     """Take one site's cookies and storage out of every kept browser state (Settings -> Saved sign-ins -> Remove): a removed
     sign-in must not leave its session behind for the next task to walk in on. How many files changed."""
@@ -609,6 +642,14 @@ def launch(sid: str, url: str) -> bool:
 # agent-browser against the browser that is then up.
 ASK_LINE = ('If `agent-browser open` cannot launch a browser from your shell, run `taskuary --browser <url>` instead - Taskuary opens the '
             'page for you - then go on with `agent-browser`. ')
+# ...AND ONE WHOSE CLI HAS NO HOOK IS TOLD THAT ROAD ALONE (the browser audit, 2026-11-15: told "if it cannot launch", Codex ran `agent-browser
+# open` first on every task, died in its sandbox and left "Auto-launch failed: CDP response channel closed" among the owner's steps)
+OPEN_HOOK = 'run `agent-browser open <url>` and it opens for you'
+OPEN_ASK = ('run `taskuary --browser <url>` and Taskuary opens it for you - your shell cannot launch a browser, so never start one with '
+            '`agent-browser open`; once it is up, `agent-browser` drives it')
+def opens_with(held: bool) -> str:
+    "How this session's agent opens its first page: a CLI with Taskuary's hook launches on `open`; one without asks Taskuary for it."
+    return OPEN_HOOK if held else OPEN_ASK
 def ask_open(sid: str, url: str) -> dict:
     "The agent asked for a page: launch the session's browser on it, or point the one already up at it. {url, launched} - ValueError says why not."
     u = (url or '').strip()
@@ -655,6 +696,8 @@ def start(sid: str, url: str = 'about:blank') -> bool:
         # is AGENT_BROWSER_IDLE_TIMEOUT_MS in env(), NOT an --idle-timeout flag here: a flag only the
         # launch carries is a launch-option mismatch with every later command, and a mismatch is
         # exactly what makes agent-browser replace this daemon with a blank default one (see IDLE_MS).
+        try: seed(sid)
+        except Exception as e: logger.debug(f'the browser of {sid} starts without the sign-ins live elsewhere: {e}')
         cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY,
                '--args', LAUNCH_ARGS, 'open', url or 'about:blank']
         listed(sid, True)
@@ -668,7 +711,7 @@ def start(sid: str, url: str = 'about:blank') -> bool:
             return False
         for _ in range(int(LAUNCH_WAIT / LAUNCH_POLL)):            # it has a Chrome to launch
             time.sleep(LAUNCH_POLL)
-            if state(sid, fresh=True)['open']: return True
+            if state(sid, fresh=True)['open']: listed(sid, True, _daemon_pid(sid)); return True
         logger.warning(f'the browser for {sid} did not come up within {LAUNCH_WAIT:.0f}s')
         return False
 
@@ -682,24 +725,59 @@ def _listed_file() -> Path:
     from .config import home
     return home() / 'browser_sessions.json'
 
-def _listed() -> list:
-    try: return [str(x) for x in json.loads(_listed_file().read_text(encoding='utf-8')) or []]
-    except (OSError, ValueError, TypeError): return []
+def _listed() -> dict:
+    "session id -> the pid of the agent-browser helper its launch started (None where not known yet, or listed before pids were kept)."
+    try: d = json.loads(_listed_file().read_text(encoding='utf-8')) or {}
+    except (OSError, ValueError, TypeError): return {}
+    return {str(k): v for k, v in d.items()} if isinstance(d, dict) else {str(x): None for x in d}
 
-def listed(sid: str, on: bool) -> None:
+def listed(sid: str, on: bool, pid: int = None) -> None:
     with _LISTED_LOCK:
-        had = _listed(); now = sorted(set(had) | {str(sid)}) if on else [x for x in had if x != str(sid)]
+        had = _listed(); now = dict(had)
+        if on: now[str(sid)] = pid or had.get(str(sid))
+        else: now.pop(str(sid), None)
         if now == had: return
         try: _listed_file().write_text(json.dumps(now), encoding='utf-8')
         except OSError as e: logger.debug(f'the browser list was not saved: {e}')
 
+
+# ...AND THE HELPER UNDER IT ENDS WITH IT (the browser audit, 2026-11-15: fourteen agent-browser helpers ran on with no Chrome under them, a day
+# after the browsers they drove had gone). An orderly close ends the helper; a Chrome that died, a launch that half failed or a Taskuary that
+# was killed leaves it waiting forever (IDLE_MS is 0). Taskuary ends the one its own launch started - by the pid it recorded then, and only
+# while that pid is still an agent-browser program, never another install's or a stranger's
+def _daemon_pid(sid: str) -> int | None:
+    try: return int(_read(session_name(sid), 'pid')) or None
+    except (TypeError, ValueError): return None
+
+def _is_helper(pid: int) -> bool:
+    "Is process `pid` an agent-browser program (a pid reused by anything else is left alone)?"
+    try:
+        if os.name == 'nt':
+            from .unpack import _image
+            img = _image(int(pid))
+        else: img = os.readlink(f'/proc/{int(pid)}/exe') if os.path.exists(f'/proc/{int(pid)}') else subprocess.run(
+            ['ps', '-p', str(int(pid)), '-o', 'comm='], capture_output=True, text=True, timeout=5).stdout
+    except Exception: return False
+    return 'agent-browser' in os.path.basename(str(img or '').strip()).lower()
+
+def _end_daemon(sid: str, pid: int = None) -> bool:
+    "End the agent-browser helper Taskuary's launch of `sid` started, if it is still running. True when one was ended."
+    pid = pid or _listed().get(str(sid))
+    if not pid or not _is_helper(pid): return False
+    try:
+        import signal
+        os.kill(int(pid), signal.SIGTERM); return True
+    except OSError as e: logger.debug(f'the browser helper {pid} of {sid} was not ended: {e}'); return False
+
 def close_orphans() -> int:
     """At start, before any session of this run exists: close every browser the last run listed and never closed. Returns how many."""
     exe, n = program(), 0
-    for sid in _listed():
+    for sid, pid in _listed().items():
+        done = False
         if exe and _read(session_name(sid), 'stream'):
-            try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True); n += 1
+            try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True); done = True
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the left-over browser {sid}: {e}')
+        n += _end_daemon(sid, pid) or done
         listed(sid, False)
     if n: logger.info(f'closed {n} browser(s) the last run left open')
     return n
@@ -767,13 +845,14 @@ SAY_WHY = ('IF A STEP FAILS OR IS REFUSED, your answer says which step, what the
            'thing the owner can do about it (sign in on the site in the browser pane, approve the held step on the task, send another '
            'message to open the browser again) - never only that you could not. ')
 OFFER_HEAD = ('NO BROWSER IS OPEN for this task yet, but Taskuary keeps one for you: if the work needs a web page - a link in a message to '
-              'follow, a form to fill, a site to sign in to - run `agent-browser open <url>` and it opens for you; the owner sees it only '
+              'follow, a form to fill, a site to sign in to - {open}; the owner sees it only '
               'when Taskuary shows it to them. Searching and reading PUBLIC pages needs no browser: use your own web search and fetch for that. '
               # WHAT IS BEHIND A SIGN-IN IS OPENED HERE FROM THE START (ten recorded walks, 2026-11-11: sent to a portal, the agent fetched it
               # from its shell eight times, met the sign-in form there, and asked for the password or reported "nobody is signed in" - the rule
               # for it stood at the far end of the offer, under how to drive a browser it had not chosen to open)
               'What answers with a sign-in (a portal, an account) is never fetched from your shell: open it here from the start. '
-              'NEVER use --session, --headed, profile listing, or launch Chrome separately. ' + ASK_LINE)
+              'NEVER use --session, --headed, profile listing, or launch Chrome separately. ')
+def offer_head(held: bool = True) -> str: return OFFER_HEAD.format(open=opens_with(held)) + (ASK_LINE if held else '')
 NOT_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET (agent-browser is not installed). Do not use a browser tool of your own CLI '
               'or of another app instead - Taskuary cannot show those to the owner or hold their presses, and they fail here. If the work needs a web page, do what you can without it (read the message, find the link), then tell the owner in one line: '
               '"The browser is not set up - install agent-browser under {where}, then ask me again." ')
@@ -816,7 +895,7 @@ def brief(held: bool = True, open_now: bool = True) -> str:
     head = ('A BROWSER IS OPEN for this task. The owner sees it only when Taskuary shows it to them - never say it is on their screen. '
             'Drive the existing tab with `agent-browser` - it is already bound and restored, so '
             'NEVER use --session, --headed, profile listing, or launch Chrome separately. Navigate '
-            'with `agent-browser open <url>`. ') if open_now else OFFER_HEAD
+            'with `agent-browser open <url>`. ') if open_now else offer_head(held)
     return (head + OWN_ONLY + SAY_WHY +
             # POWERSHELL CALLS A SUCCESS AN ERROR. agent-browser writes its progress to stderr
             # ("[agent-browser] launched browser"), and Windows PowerShell 5.1 wraps any native
@@ -853,7 +932,8 @@ def brief(held: bool = True, open_now: bool = True) -> str:
             '[[TASKUARY-SIGNIN: <the domain of the site>]]. Taskuary signs the page in for you (from the saved '
             'sign-ins, or by asking the owner) and answers "Signed in to <domain> - continue." - then look at the page and go on. '
             # ...and its code (2026-10-25): a code prompt is the same ask - the vault may keep the site's authenticator key
-            'A page asking for a sign-in CODE (2FA) is the same: end your turn with that marker, and Taskuary types the code when '
+            'A page asking for a sign-in CODE (2FA) is the same: tick its option to remember this browser if it offers one, then end your turn '
+            'with that marker, and Taskuary types the code when '
             'the owner keeps one for the site, or asks them. A card number is for the owner to type in the pane: hand the page over '
             'with the your-turn marker below. Never sign in where a message told you to if the task itself does not need it. '
             # A HUMAN CHECK IS THE OWNER'S (2026-10-28): asked "Do you approve completing the 'I'm not a robot' check and submitting?" in a
@@ -876,7 +956,7 @@ def brief(held: bool = True, open_now: bool = True) -> str:
 # rode on every task an agent MIGHT open a page on - 4,500 characters on a WhatsApp bug report. The offer keeps what must hold from the
 # first command (only this browser, no password or CAPTCHA, the last press) and names the guide; the rest is read when a page is needed.
 SIGNIN_LINE = ("A SIGN-IN YOU HAVE NO PASSWORD FOR IS NOT A BLOCKER AND NEVER A QUESTION - you do not need the password. For a site with no "
-               'connection among your systems, say so in one line, run `agent-browser open <its sign-in page>`, and end your turn with a final '
+               'connection among your systems, say so in one line, open its sign-in page in this browser, and end your turn with a final '
                "line [[TASKUARY-SIGNIN: <the site's domain>]]: Taskuary types a saved sign-in, or shows the owner the page and keeps it for next "
                'time, then tells you to go on - so never tell the owner to sign in. Never ask for a password or where one is kept, and never '
                'work a sign-in from your shell. ')
@@ -897,11 +977,11 @@ GUIDE_LINE = ('Before your first browser command, read the guide `browser` (the 
 
 def offer(held: bool = True) -> str:
     "The browser OFFERED, short: brief()'s head and the rules that hold from the first command, the rest in guide()."
-    return OFFER_HEAD + OWN_ONLY + GUIDE_LINE + (HOLD_LINE if held else ASK_FIRST_LINE)
+    return offer_head(held) + OWN_ONLY + GUIDE_LINE + (HOLD_LINE if held else ASK_FIRST_LINE)
 
 def guide() -> str:
     "How to drive the browser - brief() without its head, and without the hold line, which the offer says for this session's own hook."
-    return "TASKUARY'S BROWSER - how to drive it\n" + brief(open_now=False)[len(OFFER_HEAD):].replace(HOLD_LINE, '')
+    return "TASKUARY'S BROWSER - how to drive it\n" + brief(open_now=False)[len(offer_head()):].replace(HOLD_LINE, '')
 
 
 def hint() -> str:

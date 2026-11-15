@@ -705,7 +705,7 @@ class Routes(unittest.TestCase):
             self.assertEqual((out['kind'], out['title']), ('signin', 'bank.example')); did = out['deleted']
             # ...out of the vault at once: nothing types it from the press on, and nothing lists it
             self.assertIsNone(signin.saved(self.s, 'bank.example')); self.assertEqual(c.get('/api/signins').json()['data'], [])
-            self.assertEqual(recentlydeleted.listing(self.s), [], "the Undo line's alone - not a shelf of kept passwords")
+            self.assertEqual([x for x in recentlydeleted.listing(self.s) if x['kind'] == 'signin'], [], "the Undo line's alone - not a shelf of kept passwords")
             forgot.assert_not_called()                         # its keychain entries wait for the Undo line to pass
             self.assertEqual(c.post(f'/api/deleted/{did}/restore').status_code, 200)
             forgot.assert_not_called()

@@ -67,6 +67,10 @@ class TickTests(unittest.TestCase):
 
     def test_the_one_road_refuses_what_the_door_refuses(self):
         self.assertEqual(agent_tick(self.s, self.tid, 'nope1234')[1][0], 404)
+        # ...and an id that is gone is the agent's to drop, never the owner's to hear of: "I could not tick the checklist item: Taskuary
+        # does not recognise the to-do id" stood in his chat (the real CLI, 2026-11-15) - a step of an earlier turn's summary, rewritten since
+        why = agent_tick(self.s, self.tid, 'nope1234')[1][1]
+        self.assertIn('needs no tick', why); self.assertIn('do not mention this to the owner', why)
         self.assertEqual(agent_tick(self.s, self.tid, self.ids['Confirm the renewal with the vendor'])[1][0], 422)
         box, err = agent_tick(self.s, self.tid, f" {self.ids['Check the seat count']} ")
         self.assertIsNone(err); self.assertTrue({x['id']: x for x in self.s.task_checklist(self.tid)}[box['id']]['done'])

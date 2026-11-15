@@ -292,7 +292,11 @@ def agent_tick(store, tid, item, done: bool = True, actor: str = 'agent') -> tup
     """THE ONE TICK ROAD for a session (`taskuary --tick`, the MCP tick tool, a shell-less chat's TICK mark): (box, None) once moved, or
     (None, (status, why)) - 404 for an id not on this task, 422 for a box that ticks itself. Only the box's state, never its words."""
     hit = next((i for i in store.task_checklist(tid) if i['id'] == str(item or '').strip()), None)
-    if not hit: return None, (404, f'no to-do {item} on this task - the id is in brackets after it in your checklist')
+    # ...said so the agent does not carry it to the owner (recorded on the real CLI, 2026-11-15: "I could not tick the checklist item:
+    # Taskuary does not recognise the to-do id" in his chat): the steps a turn leaves on him are rewritten from each turn's summary
+    # (set_on_you), so an id from an earlier turn is simply gone with its step
+    if not hit: return None, (404, f'no to-do {item} on this task now - the ids are in brackets in your checklist as it stands. A step from an '
+                                   'earlier turn that is no longer listed needs no tick: carry on, and do not mention this to the owner')
     if not agent_tickable(hit): return None, (422, f"\"{hit['text']}\" ticks itself - when its email goes, or its task closes")
     store.tick_checklist_item(tid, hit['id'], done, actor)
     return hit, None

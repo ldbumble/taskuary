@@ -30,6 +30,7 @@ const day = (d) => { const t = new Date(String(d || "").replace(" ", "T")); retu
 // "learned Oct 3 from your verdicts" - the first evidence's date, else when it was last seen; "you wrote this" for the owner's own line
 export const provenance = (l) => {
   if (!l) return "";
+  if (l.own && l.taught) return ["learned", day(l.taught), "from your verdict"].filter(Boolean).join(" ");
   if (l.own) return "you wrote this";
   const first = (l.evidence || []).map((e) => e?.date).filter(Boolean).sort()[0] || l.seen, when = day(first), where = fromWhere(l.evidence);
   return when || where ? ["learned", when, where && `from ${where}`].filter(Boolean).join(" ") : "";

@@ -144,7 +144,7 @@ export default function LearnedView({ onChanged, onPerson, people = [] }) {
           boxShadow: isPinned ? "0 1px 4px rgba(30,50,38,.14)" : "none" }}>
         <Box onClick={() => !l.own && pin(l.key)} sx={{ cursor: l.own ? "default" : "pointer" }} title={l.own ? undefined : isPinned ? "Click to unpin" : "Click to keep this open"}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.4 }} data-tq-learned-line={l.key}>
-            {l.own ? <Typography variant="caption" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 600 }}>YOURS · as you wrote it</Typography> : <>
+            {l.own ? <Typography variant="caption" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 600 }}>{l.taught ? "FROM YOUR VERDICT" : "YOURS · as you wrote it"}</Typography> : <>
               <Score s={l.score} eff={l.effective} color={st.color} />
               <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}
                 title={l.effective !== l.score ? `Nothing has confirmed this since ${l.seen}, so it counts as s:${l.effective}` : ""}>seen {l.seen}</Typography>

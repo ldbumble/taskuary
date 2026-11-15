@@ -37,6 +37,7 @@ test("under it, faint: when it was learned and from what - or that the owner wro
   const l = { evidence: [{ kind: "verdict", date: "2026-10-09 10:00:00" }, { kind: "review", date: "2026-10-03 08:00:00" }, { kind: "verdict", date: null }] };
   assert.match(provenance(l), /^learned Oct 3 from your verdicts and your reviews$/);
   assert.equal(provenance({ own: true }), "you wrote this");
+  assert.match(provenance({ own: true, taught: "2026-11-14 22:41:00" }), /^learned Nov 14 from your verdict$/, "the model's words for a press are never 'you wrote this'");
   assert.equal(provenance({ evidence: [], seen: "" }), "");
   assert.equal(fromWhere([{ kind: "message" }, { kind: "task" }, { kind: "idea" }, { kind: "message" }]), "mail you answered, what you did on tasks and more");
 });

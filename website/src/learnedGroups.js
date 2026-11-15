@@ -12,7 +12,8 @@ const PUT_DOWN = new Set(["wrong", "forgotten", "closed", "retired"]);
 
 // the moves a line takes: your own line only Forget (it is not something Taskuary learned wrong); a learned one all three - and one you
 // Kept no Keep again: Visualize was pixel-identical after Keep (the Advisor audit's judge, F6, 2026-10-26), so it says Kept instead
-export const marksFor = (l) => (!l?.key ? [] : l.own ? ["forget"] : l.kept ? ["wrong", "forget"] : ["keep", "wrong", "forget"]);
+// ...and a line one of your verdicts taught (`taught`) is the model's words for what you pressed, not yours: Wrong and Forget, as memoryedit.mark takes
+export const marksFor = (l) => (!l?.key ? [] : l.own ? (l.taught ? ["wrong", "forget"] : ["forget"]) : l.kept ? ["wrong", "forget"] : ["keep", "wrong", "forget"]);
 // ...and a What changed row carries them once, on the newest row of a line that is not already put down
 // (an owner's own line - standing "own" - Forget alone; one no longer anywhere - "gone" - nothing)
 export const changeMarks = (r) => (!r?.key || !r.newest || PUT_DOWN.has(r.standing) || r.standing === "gone" ? []

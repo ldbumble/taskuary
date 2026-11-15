@@ -255,8 +255,12 @@ def graph(store) -> dict:
              for v in lessons(store) if v['ev'] and v['ev'] not in used][:12]
     # THE OWNER'S OWN LINES, beside what was learned (slice 6, 2026-10-25): what they typed - or a person's page gave - is in use as written
     from .learned_cut import SECTIONS, lines as section_lines, subject_of, reads_label, TITLE
+    # ...and A LINE A VERDICT TAUGHT IS NOT ONE THE OWNER WROTE (the memory round, 2026-11-14): untagged like theirs, it read "you wrote this"
+    # with Forget alone - of words the model wrote from a press, and with no Wrong on the one line that most needs it. `taught`: when
+    taught = {str(r['Text'] or '').strip(): r['At'] for r in store._rows("SELECT Text, At FROM learned_history WHERE Action='said' AND Actor LIKE 'verdict:%' ORDER BY Id")}
     own = [{'key': k, 'text': named(raw.strip()[2:].strip() if raw.strip().startswith(('- ', '* ')) else raw.strip()), 'own': True, 'status': 'live',
-            'section_slug': slug, 'subject': subject_of(raw), 'evidence': [], 'steps': [], 'score': None, 'effective': None, 'seen': ''}
+            'section_slug': slug, 'subject': subject_of(raw), 'evidence': [], 'steps': [], 'score': None, 'effective': None, 'seen': '',
+            **({'taught': taught[raw.strip()]} if raw.strip() in taught else {})}
            for slug, head in SECTIONS.items() for raw, k in section_lines(doc, head) if not TAG.match(raw)]
     for l in out: l['subject'] = subject_of(l.get('text'))
     from .capabilities import has_ai

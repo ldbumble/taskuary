@@ -125,6 +125,37 @@ def test_one_topic_keeps_the_newest_word_and_a_lesson_in_other_spacing_is_said_o
                              llm=teacher('ledger  export failures are yours to fix -  real work.')) == '', 'said once'
 
 
+def test_the_memory_page_says_a_verdicts_line_was_learned_from_a_verdict_never_that_the_owner_wrote_it():
+    """The real page, 2026-11-14: "Make it a task" taught "You book vendor account reviews yourself", and the Memory page listed it as "you wrote
+    this" with Forget alone - no Wrong on the one kind of line the owner most needs it for. The graph says which lines a verdict taught."""
+    s = MemoryStore()
+    from taskuary import memoryedit
+    raw = memorylines.teach(s, 'made_task', 'msg7', 'A vendor asks you to book the quarterly account review', llm=teacher('You book vendor account reviews yourself', only_this=False))
+    mine = memoryedit.remember(s, 'Ray Colton covers the warehouse audits')['text']
+    ls = {l['text']: l for l in learnedgraph.graph(s)['lines']}
+    assert raw and ls['You book vendor account reviews yourself'].get('taught') and ls['You book vendor account reviews yourself']['own']
+    assert 'taught' not in ls[mine]
+    assert memoryedit.mark(s, ls['You book vendor account reviews yourself']['key'], 'wrong')['ok'] and 'account reviews' not in s.get_doc('learned')
+
+
+def test_a_lesson_marked_wrong_is_no_longer_shown_to_triage_as_a_correction_either():
+    """The real page, 2026-11-14: "Make it a task" on a filed vendor mail wrote a memory line AND a correction row; Wrong on the Memory page took
+    the line out, and the next mail like it was made a task all the same - triage was still handed "the owner made it task" as evidence."""
+    from taskuary import memoryedit, operations
+    s = MemoryStore()
+    mid = s.add_message({'ExternalId': 'v1', 'Channel': 'email', 'FromName': 'Trainly', 'FromEmail': 'success@vendor.example',
+                         'Subject': 'Your quarterly account review - please book a slot', 'BodyText': 'Two times that suit you?', 'Status': 'filed'})
+    s.add_correction({'OpId': 'op1', 'MessageId': mid, 'Sender': 'success@vendor.example', 'Topic': 'your quarterly account review', 'Verdict': 'fyi',
+                      'Change': 'task', 'ContextJson': json.dumps({'subject': 'Your quarterly account review - please book a slot'})})
+    raw = memorylines.teach(s, 'made_task', f'msg{mid}', 'A vendor asks you to book the quarterly account review',
+                            llm=teacher('You book vendor account reviews yourself', only_this=False))
+    nxt = {'from_email': 'success@vendor.example', 'subject': 'Booking your next account review'}
+    assert raw and any('the owner made it task' in l for l in operations.evidence_lines(s, nxt))
+    key = next(k for r, k in lc.lines(s.get_doc('learned'), lc.CARE) if r.strip() == raw)
+    memoryedit.mark(s, key, 'wrong')
+    assert operations.evidence_lines(s, nxt) == [] and raw not in lines(s)
+
+
 def test_wrong_takes_a_verdicts_line_out_and_it_is_not_taught_back():
     """A line a verdict taught has no tag, so Wrong answered "That line is yours - you wrote it" - untrue, and the owner could only Forget the
     model's words (2026-11-12). Wrong now takes it out for good; a line he typed himself still is his to Forget, not Wrong."""

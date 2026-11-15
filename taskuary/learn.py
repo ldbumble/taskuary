@@ -764,6 +764,11 @@ def withdraw(store, ev) -> list:
     try:
         ev = f'mem{int(ev)}' if str(ev).isdigit() else str(ev or '')
         if not ev: return []
+        # ...and THE CORRECTION TRIAGE IS SHOWN AS EVIDENCE GOES WITH IT (the memory round, 2026-11-14, the real page: the owner marked a
+        # "Make it a task" lesson Wrong, the line left LEARNED.md, and the next mail like it was a task again - "the owner corrected that
+        # one to a task", read from the correction row the same press had written). One lesson, taken back once
+        if (on := re.fullmatch(r'(msg|task)(\d+)', ev)):
+            store._exec(f"DELETE FROM correction WHERE {'MessageId' if on.group(1) == 'msg' else 'TaskId'}=?", (int(on.group(2)),))
         doc, said, touched = store.get_doc(DOC) or '', _said(store) - {ev}, []
         new = doc
         for raw, l in lg.walk(doc):

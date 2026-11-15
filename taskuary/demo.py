@@ -214,8 +214,7 @@ def refuse_verdict(verb: str, kind: str = 'action') -> str:
 # SEND IS PLAYED, NOT REFUSED (the owner, 2026-11-15, of the tour's "press Send - nothing leaves the demo": the press drew a red error on the
 # card and "Failed:" on the rail): the letter's own road runs to its end - the card settles, the press is a line in the chat, the task moves
 # on - and the one thing that does not happen is the delivery (verdicts._send_snapshot hands the approved letter here instead of to a
-# mailbox). What the card then says is SENT, and a recorded line of the agent's follows it (after_send): nothing here is a real agent
-SENT = 'Sent - in the demo, nothing left this computer'
+# mailbox). What the card then says is the page's own line (sentLine.DEMO_SENT), and a recorded line of the agent's follows it (after_send): nothing here is a real agent
 AFTER_SEND = ("That is where your part ends. In your own Taskuary the reply is on its way now, I am told it went, and I watch the "
               "thread for the answer. Here in the demo nothing left this computer.")
 def pretend_sent(snapshot: dict) -> dict:

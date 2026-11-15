@@ -284,6 +284,34 @@ class Asking(unittest.TestCase):
             self.wait_for(lambda: [st['text'] for st in last()['steps']][-1] == 'Signed in to bank.example with the saved sign-in.', secs=15)
         self.assertEqual(last()['text'], '')
 
+    def test_while_the_saved_sign_in_is_typed_the_task_is_at_work_not_done(self):
+        """Seen in the browser round (2026-11-14): for the seconds a saved sign-in was typed the agent's turn had ended and nothing of its
+        own was at work, so the header read "agent done" with Mark done lit. Something IS doing the next step: the task reads at work from
+        the moment the typing starts until it has handed on - to the agent's next turn, or to the owner where it did not go in."""
+        import threading
+        from taskuary import general
+        signin.save(self.s, 'bank.example', USER, PW)
+        class Chat:
+            sid, alive, task_id = 'sess1', True, self.tid
+            def __init__(self): self.said, self.during = [], None
+            def send_prompt(s, text, as_owner=True): s.said.append(text)
+        sess, typing, go = Chat(), threading.Event(), threading.Event()
+        def fill(*a, **k): typing.set(); go.wait(10)
+        self.assertFalse(general.starting(self.tid))
+        with on_page('https://login.bank.example/'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+            self.assertTrue(signin.needs(self.s, self.tid, 'sess1', 'bank.example', fill=fill)['auto'])
+            self.assertTrue(typing.wait(10))
+            self.assertTrue(general.starting(self.tid), 'at work while the saved sign-in is typed')
+            self.assertTrue(general.working(self.s, self.tid))
+            go.set(); self.wait_for(lambda: sess.said)
+            self.wait_for(lambda: not general.starting(self.tid), secs=15)
+        # ...and one that does not go in hands on to the owner: nothing is left reading at work
+        def boom(*a, **k): raise signin.NotAccepted('bank.example kept its sign-in form up')
+        signin._TRIED.clear()
+        with on_page('https://login.bank.example/'): signin.needs(self.s, self.tid, self.sid, fill=boom, watch=None)
+        self.wait_for(lambda: signin.pending(self.s, self.tid), secs=15)
+        self.wait_for(lambda: not general.starting(self.tid), secs=15)
+
     def test_a_saved_sign_in_that_does_not_go_in_asks_the_owner_after_all(self):
         signin.save(self.s, 'bank.example', USER, PW)
         def boom(*a, **k): raise signin.NotAccepted('bank.example kept its sign-in form up')

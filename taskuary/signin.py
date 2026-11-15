@@ -413,7 +413,14 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) ->
     # fill fails, and then the owner is the way on.
     if row and _now() - last >= AGAIN:
         _TRIED[(tid, site)] = _now()
-        threading.Thread(target=_auto, args=(store, tid, sid, site, rid, fill or type_in, ask), daemon=True, name=f'signin-{tid}').start()
+        # ...AND THE TASK IS AT WORK WHILE IT IS TYPED, as it is from a mail's hand-over to its pass (general.hand - the one mark): the agent's
+        # turn had ended and nothing of its own ran, so for those seconds the header read "agent done" with Mark done lit (2026-11-14)
+        from . import general
+        def typed(*a):
+            try: _auto(*a)
+            finally: general.hand(tid, -1)
+        general.hand(tid)
+        threading.Thread(target=typed, args=(store, tid, sid, site, rid, fill or type_in, ask), daemon=True, name=f'signin-{tid}').start()
         return {'site': site, 'auto': True}
     ask()
     if row:

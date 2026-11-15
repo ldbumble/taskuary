@@ -59,3 +59,8 @@ test("signed in it is one quiet line; a lapsed or read-only sign-in is the serve
 test("a Gmail card signed in with Google ticks Credentials without an App Password", () => {
   assert.match(src("ConnectorsView.jsx"), /\(!!conn\.HasSecret \|\| \(conn\.Type === "gmail" && savedOn\(conn, "google_refresh_token"\)\)\) && !!conn\.LastSyncAt && !conn\.LastError\)/);
 });
+
+test("the client's steps link to Google Cloud in the app's own link colour, not the browser's blue", () => {
+  // the Gmail card rendered in its four states (2026-11-15): the five step links stood in default #0000EE blue in a quiet card
+  assert.match(src("GoogleCalendar.jsx"), /data-tq-google-steps=""[^>]*\n[^>]*"& a": \{ color: "var\(--tq-link, #55697a\)"/);
+});

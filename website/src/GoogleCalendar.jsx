@@ -17,7 +17,9 @@ const A = ({ to, children }) => <a href={`${CLOUD}${to}`} target="_blank" rel="n
 
 // the five minutes in Google Cloud, in the order its pages ask for them
 const ClientSteps = () => (
-  <Box component="ol" data-tq-google-steps="" sx={{ m: 0, pl: 2.5, color: DIM, fontSize: 12.5, lineHeight: 1.6, "& li": { mb: 0.25 } }}>
+  // ...its links in the app's own link colour, not the browser's default blue (the Gmail card's look, 2026-11-15)
+  <Box component="ol" data-tq-google-steps="" sx={{ m: 0, pl: 2.5, color: DIM, fontSize: 12.5, lineHeight: 1.6, "& li": { mb: 0.25 },
+    "& a": { color: "var(--tq-link, #55697a)", fontWeight: 600, textUnderlineOffset: 2 } }}>
     <li>Open <A to="/projectcreate">Google Cloud → New project</A>, name it Taskuary → Create. It is free.</li>
     <li>Enable three APIs in that project: <A to="/apis/library/gmail.googleapis.com">Gmail API</A>,{" "}
       <A to="/apis/library/calendar-json.googleapis.com">Google Calendar API</A> and <A to="/apis/library/people.googleapis.com">People API</A> → Enable on each.</li>

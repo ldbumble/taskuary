@@ -152,5 +152,5 @@ test("Back never lands on a locked step, and no move does", async () => {
   assert.equal(landOn(null, "about"), "about", "before the state is read nothing is refused");
   const fr = read("FirstRun.jsx");
   assert.match(fr, /const go = useCallback\(\(v\) => \{ setView\(landOn\(stRef\.current, v\)\);/, "go() is the one road onto the canvas");
-  assert.match(fr, /run: \(\) => go\(prevOf\(view, st\)\)/);
+  assert.match(fr, /run: \(\) => \(open \? shutCard\(\) : go\(prevOf\(view, st\)\)\)/);   // ...an opened card first, back to its list (2026-11-15)
 });

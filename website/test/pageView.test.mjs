@@ -74,7 +74,7 @@ test("Search, the Hub's Write one and the bell are views, each press named by wh
     assert.ok(hub.includes(`aria-label={${b}}`), b);
   // the bell: a view while open, and each problem's buttons named by the problem
   assert.match(bell, /<Popover open=\{!!el\} anchorEl=\{el\} onClose=\{\(\) => setEl\(null\)\} data-tq-view="bell"/);
-  for (const b of ["`Dismiss: ${p.title}`", "`Got it: ${p.title}`", "`Ask the assistant: ${p.title}`"]) assert.ok(bell.includes(`aria-label={${b}}`), b);
+  for (const b of ["`Dismiss: ${p.title}`", "`Got it: ${p.title}`", "`Ask ${ASSISTANT_NAME}: ${p.title}`"]) assert.ok(bell.includes(`aria-label={${b}}`), b);
 });
 
 test("a Hub post removed is under Recently deleted on the Hub, read again after a press on a post", () => {

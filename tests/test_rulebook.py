@@ -269,6 +269,10 @@ def test_a_dashboard_is_named_so_and_share_is_on_its_row_for_the_model_to_see(s)
     dash = {**rep, 'dashboard': True}
     have = [b['verb'] for b in concierge.row_buttons(s, dash)]
     assert 'share_result' in have and 'share_result' in [b['verb'] for b in concierge.row_buttons(s, rep)]
+    # ...and its pause names it: a dashboard's button read "Pause this report" (the walk, 2026-11-15)
+    from taskuary import buttons
+    assert buttons.label('report_off', 'dashboard') == 'Pause this dashboard' and buttons.label('report_off') == 'Pause this report'
+    assert 'dashboard' in buttons.hint('report_off', 'dashboard')
     assert 'share_result' not in [b['verb'] for b in concierge.row_buttons(s, {**rep, 'bad': True})], 'a failed run has nothing to share'
     assert 'share_result' in [v['verb'] for v in advisor.offered(s, dash)], 'the Advisor sees the row has Share'
     assert rulebook.facts(s, dash, _verbs(*have)) == {'state': 'dashboard', 'line': ''}

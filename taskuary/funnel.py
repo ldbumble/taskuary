@@ -393,7 +393,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                 out.append(_item(f"report:{r['MessageId']}", 'report', 'broken' if bad else 'report', subj, bad=bad, source_id=sid,
                                  brief_today=brief, **dash,
                                  why='your brief for today - what is going on, and what is pressing' if brief
-                                     else ('the check failed - the cause is in it' if bad else 'a report you set up landed'), **base))
+                                     else ('the check failed - the cause is in it' if bad else 'a dashboard you set up refreshed' if dash else 'a report you set up landed'), **base))
                 if group and threads.get(group) is None: threads[group] = out[-1]
                 continue
         cat = r.get('Category') or ''

@@ -270,6 +270,9 @@ export function triageLine({ route = null, verdict = null, task = {}, messages =
   const facts = headerFacts({ verdict, route, task });
   const head = routeHead(route.Reason, { intent: String(verdict?.intent || ""), kind: task?.Kind || "",
     repo: facts.pills.find((p) => p.key === "repo")?.value || "" });
-  const why = oneLine(verdict?.why || routeWhy(route.Reason).split(" · ")[0]);
+  // ...and HIS OWN PRESS IS SAID TO HIM AS HIS (ingest.task_from_message's own marker): the record's "promoted by the owner - to hand it to
+  // an agent" stood on his task page, about him in the third person (the walk, 2026-11-15)
+  const why = oneLine(verdict?.why || routeWhy(route.Reason).split(" · ")[0])
+    .replace(/^promoted by the owner - (theirs to do|to hand it to an agent)/, (_, w) => (w === "theirs to do" ? "you made it a task - yours to do" : "you made it a task - to hand to an agent"));
   return { later, head, why: /^triage:/i.test(why) ? "" : why, at: route.CreatedAt || "" };   // a head with no reason after it says no why
 }

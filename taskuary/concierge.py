@@ -1131,6 +1131,8 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         elif v == 'mine' and item.get('kind') == 'fyi': out.append(buttons.chip(v, 'fyi'))
         # nothing drafted yet: there is nothing to RE-draft, and the card's own button already says Draft with AI
         elif v == 'redraft' and not item.get('draft'): out.append(buttons.chip(v, 'none') | {'hint': 'Writes a reply for you to check - nothing goes out until you say so'})
+        # ...and a dashboard is paused as a dashboard: its button read "Pause this report" (the walk, 2026-11-15)
+        elif v == 'report_off' and item.get('dashboard'): out.append(buttons.chip(v, 'dashboard'))
         else: out.append(buttons.chip(v))
     return out
 
@@ -1293,7 +1295,7 @@ def row_buttons(store, it: dict, known: dict = None) -> list:
     # that failed has nothing to share. Seen here so the Advisor knows the row has it; no rule lights it (rulebook: report_ok, dashboard)
     if it.get('kind') == 'report' and it.get('mid') and not it.get('bad'): out.append({'verb': 'share_result', 'label': buttons.label('share_result')})
     # ...and Pause this report on a report run drawn as its task's view too, so the Advisor may light it there (the owner, 2026-10-27)
-    if it.get('kind') == 'report' and not cannot(it, 'report_off', store): out.append({'verb': 'report_off', 'label': buttons.label('report_off')})
+    if it.get('kind') == 'report' and not cannot(it, 'report_off', store): out.append({'verb': 'report_off', 'label': buttons.label('report_off', 'dashboard' if it.get('dashboard') else None)})
     if it.get('closeout'): out.insert(0, {'verb': 'approve', 'label': closeout_label(it)})
     # ...a step held for the owner's yes on a row with no draft is Approved, never Sent (cannot lets it on) - and so is the step that
     # IS the row: a task with no mail of its own wears its held step as its card (kind `action`), and its row read Send over a command

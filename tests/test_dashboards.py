@@ -116,6 +116,7 @@ def test_a_run_asks_no_ai_keeps_the_rows_and_files_one_row_that_opens_the_dashbo
     msg = s.get_message(out['message_id'])
     assert msg['Channel'] == 'report' and msg['ConversationId'] == f"report:{src['SourceId']}"
     assert item['kind'] == 'report' and item['dashboard'] is True
+    assert item['why'] == 'a dashboard you set up refreshed', 'its row says what it is - it read "a report you set up landed"'
     assert not any(i.get('dashboard') for i in items if i is not item)
 
 

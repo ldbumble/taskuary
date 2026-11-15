@@ -56,7 +56,8 @@ const Label = ({ children }) => (
 );
 
 /* ── one entry, with its thread ─────────────────────────────────────────────── */
-const byOwner = (author) => /^(owner|you|dana whitfield)$/i.test(String(author || "").trim());
+// ...by the author the server stores for the owner's own hand (hub.post's actor) - never a person's name: the demo owner's stood here
+const byOwner = (author) => /^(owner|you)$/i.test(String(author || "").trim());
 // onOpen (the assistant canvas): its thread opens as the one card on the canvas instead of inline; defaultOpen draws it open
 const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen = false }) => {
   const [open, setOpen] = useState(defaultOpen);

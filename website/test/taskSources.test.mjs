@@ -122,6 +122,10 @@ test("the triage line leads with whose it is, in the new wording and the old", (
   assert.equal(triageLine({ route, verdict: { why: "the verdict's own words" }, task: {} }).why, "the verdict's own words");
   assert.equal(triageLine({ route: { Reason: "triage: task" }, task: {} }).why, "", "a head alone has no why");
   assert.deepEqual(triageLine({ task: {} }), { later: 0, head: "", why: "", at: "" });
+  // ...and his own press is said to him as his, never "the owner" on his own page
+  assert.equal(triageLine({ route: { Reason: "promoted by the owner - to hand it to an agent; triage had filed it: a nightly report" }, task: {} }).why,
+    "you made it a task - to hand to an agent; triage had filed it: a nightly report");
+  assert.equal(triageLine({ route: { Reason: "promoted by the owner - theirs to do" }, task: {} }).why, "you made it a task - yours to do");
   // a route that created the task, from before the heads: triage still decided it, and the line says whose it made it
   const old = { MessageId: 1, Decision: "create", Reason: "a request with a list and a date", CreatedAt: "2026-10-16 09:00:00" };
   assert.equal(headerFacts({ route: old, task: { Kind: "general" } }).triaged, true);

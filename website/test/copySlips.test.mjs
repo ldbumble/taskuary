@@ -11,7 +11,7 @@ test("Reports says routines, a data card has no template line, profiles live in 
   assert.doesNotMatch(cv, /\{meta\.desc\} The connection only/); assert.doesNotMatch(cv, /ships at authority READ/);
   assert.match(src("AgentsPanel.jsx"), />Manage profiles in Settings</);
   const hub = src("HubView.jsx");
-  assert.doesNotMatch(hub, /`agent \$\{p\.Author/); assert.match(hub, /byOwner\(p\.Author\) \? \(\s*<Typography[^>]*>posted by hand/);
+  assert.doesNotMatch(hub, /`agent \$\{p\.Author/); assert.doesNotMatch(hub, /whitfield/i, "no person's name decides whose a post is"); assert.match(hub, /byOwner\(p\.Author\) \? \(\s*<Typography[^>]*>posted by hand/);
 });
 
 test("What the assistant changed lists only what it changed - a setting, a report, a connection", () => {

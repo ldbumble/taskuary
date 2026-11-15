@@ -19,6 +19,8 @@
     "agents":            {"name": "Settings → Agents", "href": "#settings=config&group=Agents"},
     "code":              {"name": "Connections → GitHub", "href": "#connector=github"},
     "agent_permissions": {"name": "Settings → Agent permissions", "href": "#settings=config&group=Agent%20permissions"},
+    "signins":           {"name": "Settings → Agent permissions → Saved sign-ins", "href": "#settings=config&group=Agent%20permissions&key=panel%3Asignins",
+                          "does": "the saved sign-ins - each website an agent signs into in its own browser, with the user name and password Taskuary keeps sealed and types there itself, so no agent ever sees them: when each was saved and last used, Add a sign-in, Remove. A website's sign-in, never a connection: a connected system's own keys are on its card under Connections"},
     "rules":             {"name": "Settings → Mail rules", "href": "#settings=policies",
                           "does": "the routing rules that decide where mail goes before anything reads it"},
     "about":             {"name": "About you → You", "href": "#about=you",

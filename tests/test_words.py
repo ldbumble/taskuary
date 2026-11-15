@@ -25,7 +25,7 @@ def strings(f: Path):
 class PlacesTests(unittest.TestCase):
     def test_every_link_is_one_the_page_opens(self):
         pages = re.search(r'SETTINGS_PAGES = \[([^\]]*)\]', CANVAS).group(1)
-        groups = json.loads((ROOT / 'taskuary' / 'settings_schema.json').read_text(encoding='utf-8'))['groups']
+        schema = json.loads((ROOT / 'taskuary' / 'settings_schema.json').read_text(encoding='utf-8')); groups = schema['groups']
         sections = set(re.findall(r'^    \{ title: "([^"]+)"', (SRC / 'ConnectorsView.jsx').read_text(encoding='utf-8'), re.M))   # its shelves
         for pid, p in words.PLACES.items():
             h = p['href']
@@ -33,10 +33,12 @@ class PlacesTests(unittest.TestCase):
             if h == '#setup': self.assertIn('"#setup"', APP, pid); continue
             head = re.match(r'#([\w-]+=?)', h).group(1)
             self.assertIn(head, CANVAS, f'{pid}: {h} is no link canvasLinks.js knows')
-            m = re.match(r'#settings=([^&]*)(?:&group=(.*))?$', h)
+            # ...a group's own PANEL too (&key=panel:<id>, settings_schema.json `panels`): the panel is one of that group's
+            m = re.match(r'#settings=([^&]*)(?:&group=([^&]*))?(?:&key=(panel[^&]*))?$', h)
             if m:
                 self.assertIn(f'"{m.group(1)}"', pages, pid)
                 if m.group(2): self.assertIn(unquote(m.group(2)), groups, pid)
+                if m.group(3): self.assertEqual(schema['panels'][unquote(m.group(3))]['group'], unquote(m.group(2)), pid)
             m = re.match(r'#connections=(.*)$', h)
             if m: self.assertIn(unquote(m.group(1)), sections, pid)
 

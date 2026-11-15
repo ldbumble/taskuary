@@ -639,7 +639,7 @@ WATCH_EVERY = 1.0
 # password page, and when the owner did sign in nothing was watching any more). This many readings in a row, ~4.5 s at WATCH_EVERY
 PAST_STEADY = 3
 _TYPED = {}                     # tid -> {'user', 'pw', 'site'}: what the owner sent on the page, until the sign-in is past - memory only
-SAVED_LINE = 'Saved your {site} sign-in to the vault - remove it under {where}, Saved sign-ins.'
+SAVED_LINE = 'Saved your {site} sign-in to the vault - remove it under {where}.'
 
 
 def heard(tid, site: str, raw) -> bool:
@@ -675,7 +675,7 @@ def keep_typed(store, tid, site) -> bool:
     try: save(store, site, t.get('user') or '', t['pw'], by='owner', extra=t.get('extra') or None)
     except ValueError as e:
         store.add_comment(tid, 'taskuary', 'agent', f'Your {site} sign-in was not saved: {e}.'); return False
-    store.add_comment(tid, 'taskuary', 'agent', SAVED_LINE.format(site=site, where=words.name('agent_permissions')))
+    store.add_comment(tid, 'taskuary', 'agent', SAVED_LINE.format(site=site, where=words.name('signins')))
     return True
 
 

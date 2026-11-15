@@ -52,6 +52,31 @@ class TheIndexFindsUpdatesByAnyWordsForIt(unittest.TestCase):
         self.assertRegex(knob.splitlines()[0], r'at their desk: Settings → Notifications → ')
 
 
+class TheSavedSignInsAreAPageOfTheirOwn(unittest.TestCase):
+    """Recorded on the real CLI, 2026-11-15: "show me my saved sign-ins" was answered about connections and opened a connection's card. The
+    screens the Assistant is told of named no Saved sign-ins at all - only "a connection: #connector=<its type>" came near the words. The
+    model reads the ask; what it reads from has to hold the page, said by what it holds. No rule for the words decides anything."""
+    def setUp(self): self.s = Q._world()
+
+    def test_the_desk_and_the_phone_are_told_the_page_by_what_it_holds(self):
+        p = words.PLACES['signins']
+        self.assertIn(f"{p['href']} - {p['name']}: {p['does']}", concierge.pages_block(self.s))
+        self.assertIn(f"{p['name']}: {p['does']}", concierge.phone_screens())
+        self.assertIn('never a connection', p['does'])              # ...and told apart from the cards its words sit nearest
+
+    def test_its_link_opens_the_saved_sign_ins_panel_the_one_the_index_and_search_open(self):
+        from urllib.parse import parse_qs
+        from taskuary import settings_schema
+        q = parse_qs(words.href('signins').lstrip('#'))
+        panel = settings_schema.panels()[q['key'][0]]
+        self.assertEqual((q['settings'], q['group'], panel['title']), (['config'], [panel['group']], 'Saved sign-ins'))
+        # ...one row for it in the index, by that same link - never the page twice under two names
+        hits = [h for h in search.places(self.s, 'saved sign-ins') if h['href'] == words.href('signins')]
+        self.assertEqual([h['title'] for h in hits], ['Saved sign-ins'])
+        self.assertEqual(search.places(self.s, 'saved sign-ins')[0]['href'], words.href('signins'))
+        self.assertIn(f"]({words.href('signins')})", concierge.read_op(self.s, 'app.find', {'query': 'my saved sign-ins'}).splitlines()[0])
+
+
 class UpdateTaskuaryEndToEnd(unittest.TestCase):
     """The deterministic road under a good answer: the desk opens Updates with its button lit; the phone says where, with no link and no agent."""
     def turn(self, phone: bool): return Q.ideal_turn(next(q for q in Q.CASES if q.text == 'update taskuary' and q.phone == phone))

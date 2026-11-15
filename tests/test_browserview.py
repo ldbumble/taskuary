@@ -160,6 +160,21 @@ class RelayTests(unittest.TestCase):
         self.assertEqual((bv._frame(bv.LAST['r1']['frame']), bv.LAST['r1']['url']), (JPEG, 'https://example.test/login'))
         self.assertEqual(bv.state('r1', fresh=True)['url'], 'https://example.test/login')
 
+    def test_a_page_the_agent_went_to_after_the_view_closed_is_the_page_named(self):
+        """The view was shown for a sign-in and closed; the agent then went to ANOTHER site, with no relay to hear it. The address the view
+        last heard outlived it: handed a human check there, the owner read "Your turn in the browser on <the first site>" over the second
+        site's page, its address bar naming the first (the browser round, 2026-11-14). agent-browser's own word, written since, is the page."""
+        with c.websocket_connect('/api/terminals/r1/browser/ws') as ws:
+            for _ in range(3): ws.receive_json()
+        self.assertEqual(bv.state('r1', fresh=True)['url'], 'https://example.test/login')      # the owner's own click moved it: the view's word stands
+        t = self.tmp / 'tq-r1.target'
+        t.write_text(json.dumps({'url': 'https://other.example/check'})); os.utime(t, (time.time() + 5, time.time() + 5))
+        self.assertEqual(bv.state('r1', fresh=True)['url'], 'https://other.example/check')
+        # ...the same page with its query cut off is no other page: the view's fuller word for it is kept (page_url)
+        bv.remember('r1', json.dumps({'type': 'url', 'url': 'https://other.example/check?app=1'}))
+        os.utime(t, (time.time() + 9, time.time() + 9))
+        self.assertEqual(bv.state('r1', fresh=True)['url'], 'https://other.example/check?app=1')
+
     def test_a_frame_held_back_for_a_sign_in_is_acked_by_the_relay_so_the_view_comes_back(self):
         """While Taskuary types a sign-in no frame reaches the page - and under ack pacing a frame nobody acks is the last one sent: the
         view stood frozen on the sign-in form for good after the fill. The relay acks what it drops; the page's own ack still goes

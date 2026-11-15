@@ -145,6 +145,13 @@ def _read(name: str, ext: str) -> str:
     try: return (home() / f'{name}.{ext}').read_text(encoding='utf-8', errors='replace').strip()
     except OSError: return ''
 
+def _written(name: str, ext: str) -> float:
+    try: return (home() / f'{name}.{ext}').stat().st_mtime
+    except OSError: return 0.0
+def _same_place(a: str, b: str) -> bool:
+    cut = lambda u: str(u or '').split('#')[0].split('?')[0].rstrip('/')
+    return cut(a) == cut(b)
+
 def _listening(port: int, timeout: float = .25) -> bool:
     try:
         with socket.create_connection(('127.0.0.1', port), timeout=timeout): return True
@@ -168,6 +175,12 @@ def state(sid: str, fresh: bool = False) -> dict:
     # old address over a blank white page, and that hid the "an empty tab" note (2026-10-25). Kept only for the port that sent it.
     last = LAST.get(sid) or {}
     if last.get('port') and last['port'] != port: last.pop('url', None); last['port'] = port
+    # ...AND A PAGE THE AGENT WENT TO SINCE THE VIEW CLOSED IS NOT THE ONE THE VIEW LAST HEARD OF: with no relay attached nothing hears the
+    # page move, so after a sign-in shown and done on one site, a human check on the next was handed over as "Your turn in the browser on
+    # <the first site>", its address bar naming the first over the second's page (the browser round, 2026-11-14). agent-browser's own word,
+    # written since and naming another page, is the page; the same page with its query cut off (.target keeps none) is not another.
+    if last.get('url') and url and not last.get('relays') and not _same_place(last['url'], url) and _written(name, 'target') > last.get('url_at', 0):
+        last.pop('url', None)
     st = {'open': bool(port) and _listening(port), 'url': last.get('url') or url, 'port': port}
     _CACHE[sid] = (now, st)
     return _with_fill(sid, st)
@@ -194,7 +207,7 @@ def remember(sid: str, raw: str):
     if k.group(1) == 'frame': cur.update(frame=raw, at=time.time()); return
     try: u = json.loads(raw).get('url')
     except (ValueError, AttributeError): return
-    if u: cur['url'] = u
+    if u: cur['url'], cur['url_at'] = u, time.time()
 
 
 def _frame(raw: str) -> str:
@@ -207,12 +220,21 @@ async def relay(ws, sid: str):
     """Pipe the session's screencast to one page and that page's input back. `ws` is the FastAPI
     socket, not yet accepted - a session with no browser is refused with 4404 the way a missing
     terminal is."""
-    import asyncio, websockets
     st = state(sid, fresh=True)
     if not st['open']: return await ws.close(code=4404)
     await ws.accept()
-    LAST.setdefault(sid, {'frame': '', 'url': '', 'at': 0})['port'] = st['port']      # whose url LAST holds (state)
+    cur = LAST.setdefault(sid, {'frame': '', 'url': '', 'at': 0}); cur['port'] = st['port']      # whose url LAST holds (state)
+    cur['relays'] = cur.get('relays', 0) + 1                                                    # ...and whether anything hears it move
     url = f"ws://127.0.0.1:{st['port']}/?pacing=ack&maxFps={MAX_FPS}"
+    try: await _relay(ws, sid, url)
+    finally:
+        if (now := LAST.get(sid)) is cur: cur['relays'] = max(0, cur.get('relays', 1) - 1)
+    try: await ws.close()
+    except Exception: pass
+
+
+async def _relay(ws, sid: str, url: str):
+    import asyncio, websockets
     try:
         # agent-browser only admits browser Origins from localhost; a client with none is a tool
         async with websockets.connect(url, origin='http://localhost', max_size=MAX_FRAME) as up:
@@ -246,8 +268,6 @@ async def relay(ws, sid: str):
                     logger.debug(f'browser relay {sid} ended: {exc!r}')
     except (OSError, websockets.WebSocketException) as e:
         logger.debug(f'browser relay {sid} could not attach to {url}: {e}')
-    try: await ws.close()
-    except Exception: pass
 
 
 def snapshot(store, sid: str, actor: str, tid: int = None) -> dict:

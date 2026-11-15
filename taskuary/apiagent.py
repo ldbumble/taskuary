@@ -418,10 +418,10 @@ def tools_for(tid: int, sid: str, browser: bool, stranger: bool = False, post=No
 # much as possible to use ai"): the whole toolbox's schemas - 44 tools, ~24,000 characters - rode on every step of every turn. The tools a turn
 # reaches for are offered whole; the rest are NAMED in load_tools' own description, and a call to it adds their schemas to the end of the
 # list for the rest of the turn (never reordered: what goes before stays the same bytes for the provider's cache). Named here is every tool a
-# measured turn did not reach for; anything not named stays in the core, so a new tool is offered whole until someone moves it
+# measured turn did not reach for; anything not named stays in the core, so a new tool is offered whole until someone moves it. ...but never
+# file_write / file_edit (an invoice to fill, 2026-11-15): a model shown only their names said it had no way to make the file, and stopped
 LATER = frozenset({'read_attachment', 'search_knowledge', 'owner_memory', 'calendar', 'list_systems', 'run_system', 'remind', 'ask_stronger',
-                   'note_peers', 'use_repo', 'find_repos', 'propose_land', 'withdraw_draft', 'sign_form', 'answer_invite', 'set_up_meeting', 'share',
-                   'file_write', 'file_edit'})
+                   'note_peers', 'use_repo', 'find_repos', 'propose_land', 'withdraw_draft', 'sign_form', 'answer_invite', 'set_up_meeting', 'share'})
 LOAD = 'load_tools'
 DEFERRED = {}                  # (tid, sid) -> {name: schema} of the tools this turn named but has not loaded
 def _gist(t) -> str: return re.split(r'(?<=[a-z)])[.:;] ', str(t['function'].get('description') or ''), maxsplit=1)[0][:90]

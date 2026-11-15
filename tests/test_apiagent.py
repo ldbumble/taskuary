@@ -540,6 +540,13 @@ class TheHandsTests(unittest.TestCase):
         self.assertEqual([ws['A4'].value, ws['B4'].value, ws['C4'].value, ws['D4'].value], ['2026-10-03', 2, 30, '=B4*C4'])
         self.assertEqual([ws['C5'].value, ws['D5'].value], ['Total', '=SUM(D2:D4)'])
 
+    def test_the_file_tools_are_offered_whole_not_behind_load_tools(self):
+        "A model never shown file_write said it had no way to make the file (the same ask, on a card): making one is the hands' first job."
+        with mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
+            names = [t['function']['name'] for t in apiagent.tools_for(self.tid, 'sid-h', browser=False)]
+        self.assertTrue({'file_write', 'file_edit'} <= set(names))
+        apiagent.forget(self.tid, 'sid-h')
+
     def test_a_command_the_cli_would_run_runs_now_in_the_working_folder(self):
         class Done:
             pid, returncode = 4242, 0

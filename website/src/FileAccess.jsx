@@ -20,7 +20,7 @@ export function AllowFiles({ checked, onChange, disabled = false, hint }) {
 // the Gmail card's: a consent round of the card's own OAuth client, opened in a new tab; the server keeps the new token on its return
 export function GoogleFiles({ conn, cfg, reload }) {
   const [err, setErr] = useState(""), [went, setWent] = useState(false);
-  // a Google sign-in to widen: the calendar's, on Taskuary's own client or the card's (googlecal.client)
+  // a Google sign-in to widen: the card's own, on the install's Google client (googlecal.client)
   const can = (conn.ConfigSaved || []).includes("google_refresh_token") || !!cfg.google_refresh_token;
   // no Google sign-in to widen and nothing chosen: a panel holding only a disabled checkbox is not drawn (the setup sweep, 2026-10-28) -
   // it comes once the calendar's sign-in is on the card
@@ -33,7 +33,7 @@ export function GoogleFiles({ conn, cfg, reload }) {
   return (
     <Box data-tq-google-files="" sx={{ mb: 2, p: 1.25, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 0.5 }}>
       <AllowFiles checked={cfg.allow_files} onChange={flip} disabled={!can}
-        hint={can ? G_FILES_HINT : "Needs the Google sign-in first - Sign in with Google for the calendar, above"} />
+        hint={can ? G_FILES_HINT : "Needs the Google sign-in first - Sign in with Google, above"} />
       {went && <Typography variant="caption" sx={{ color: DIM }}>Finish in the Google tab, then come back - this card reads it again.
         <Box component="button" type="button" onClick={() => { setWent(false); reload?.(); }} sx={{ ml: 0.75, border: 0, background: "none", color: "var(--tq-link, #55697a)", cursor: "pointer", font: "inherit", p: 0 }}>Read it again</Box></Typography>}
       {err && <Typography variant="caption" role="alert" sx={{ color: "var(--tq-danger, #6b2733)" }}>{err}</Typography>}

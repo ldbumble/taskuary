@@ -198,19 +198,21 @@ const META = {
       "Ask whether every chat should come in or only some; for some, add chat ids as sources (POST {base}/api/sources{hdr}, Channel imessage). Ask if they want history: lookback_days in ConfigJson reads that many days on the first sync; blank is from now on. Turn the connector on, SETUP DONE - and tell them the first reply will make macOS ask for Automation permission, which they should allow."] },
   gmail: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@gmail.com",
     fields: [["Email address", "address"],
-      ["Google OAuth client id (your own app - blank uses Taskuary's)", "google_client_id", "", "An admin's road: a Desktop OAuth client of your own, with the Calendar API enabled. Sign in with Google for the calendar needs none of this"],
-      ["Google OAuth client secret (your own app)", "google_client_secret"],
-      ["Google refresh token (your own app)", "google_refresh_token", "", "Pasted from your own client's consent round - with scope calendar.events, invites are answered from Taskuary too"]],
-    secretLabel: "App Password (16 characters)",
-    desc: "A Gmail or Google Workspace mailbox - IMAP in through triage, replies back over Gmail's own SMTP, in-thread. Optional OAuth fields add the calendar.",
-    howto: ["Turn on 2-Step Verification for the Google account (App Passwords require it).",
-      "Create an App Password: myaccount.google.com -> Security -> App passwords -> app: Mail.",
-      "Enter the mailbox address under Credentials and paste the 16-character App Password (write-only).",
-      "Test logs in and adds the mailbox as a source; new mail flows in on the next sync.",
-      "Replies you approve are sent from this same address over SMTP, threaded into the conversation."],
+      // the install's own Google client: drawn in the card's Sign in with Google box (G_APP_KEYS), never under Credentials
+      ["Client ID", "google_client_id", "", "From your Desktop client in Google Cloud - it ends .apps.googleusercontent.com"],
+      ["Client secret", "google_client_secret", "", "From the same client."]],
+    secretLabel: "App Password - or Sign in with Google, above",
+    desc: "A Gmail or Google Workspace mailbox - IMAP in through triage, replies back over Gmail's own SMTP, in-thread. Sign in with Google for the mail, calendar and contacts together, or use an App Password for the mail alone.",
+    howto: ["Two ways in. Sign in with Google brings the mail, the calendar and the contacts; an App Password brings the mail alone. Enter the mailbox address under Credentials either way.",
+      "Sign in with Google needs a Google client of your own - the box at the top of this card lists the steps: a Google Cloud project, the Gmail, Calendar and People APIs enabled, the consent screen with yourself as a test user, and a Desktop app client whose ID and secret go into the box.",
+      "Then press Sign in with Google and leave Google's boxes ticked. With no App Password saved, mail comes in and replies go out through that sign-in; invites are accepted and declined, and meetings set up, on the same one.",
+      "Or an App Password: turn on 2-Step Verification, then myaccount.google.com -> Security -> App passwords -> app: Mail, and paste the 16 characters under Credentials (write-only). While one is saved the mail uses it.",
+      "Test logs in and adds the mailbox as a source; new mail flows in on the next sync. Replies you approve are sent from this same address over SMTP, threaded into the conversation.",
+      "If Google signs you out every week, the client is still in Testing: Google Auth Platform -> Audience -> Publish app. The card says when a sign-in has lapsed, with Sign in again."],
     agent: ["Ask for the Gmail address and save it as address in ConfigJson.",
-      "The App Password is the owner's to create (myaccount.google.com > Security > 2-Step Verification on, then App passwords > Mail). Ask them to paste the 16 characters here, save it as Secret, and never echo it back.",
-      "Test (POST {base}/api/connectors/{cid}/test{hdr}) logs in and adds the mailbox as a source. Turn the connector on, SETUP DONE. The Google calendar fields are optional and rarely wanted - skip them unless asked."] },
+      "Ask which way in the owner wants. Sign in with Google (mail, calendar, contacts) is theirs to do on the card: its box lists the steps to make a Desktop client in Google Cloud, takes the client ID and secret, and the Sign in with Google press opens Google - you cannot press it or approve for them. Wait until GET {base}/api/connectors/{cid}/google/calendar{hdr} answers connected true.",
+      "Or the App Password, mail only, which is also theirs to create (myaccount.google.com > Security > 2-Step Verification on, then App passwords > Mail). Ask them to paste the 16 characters here, save it as Secret, and never echo it back.",
+      "Test (POST {base}/api/connectors/{cid}/test{hdr}) logs in and adds the mailbox as a source. Turn the connector on, SETUP DONE."] },
   imap: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@yourdomain.com",
     fields: [["Email address", "address"], ["IMAP host (e.g. imap.yourdomain.com)", "imap_host"],
              ["SMTP host (blank = imap host with imap->smtp)", "smtp_host"],
@@ -2828,10 +2830,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const [adminFields, setAdminFields] = useState(!MS_SIGNIN.includes(conn.Type) || (!!cfg.client_id && !!conn.HasSecret && cfg.auth !== "user"));
   // ...only the tenant app's own fields fold: a Teams card's chat clock is the signed-in person's setting too (PW-003), and folding
   // it with tenant_id and client_id hid it behind "Admin?" the moment Teams signed in like Outlook
-  // ...and the Gmail card's Google client fields fold the same way: the calendar signs in on Taskuary's own client (googlecal.py; the
-  // owner, 2026-10-26: "don't want to create my own google client, want to use their own"), so a client of one's own is an admin's road
-  const [gOwn, setGOwn] = useState(!!cfg.google_client_id);
-  const appKeys = MS_SIGNIN.includes(conn.Type) ? MS_APP_KEYS : conn.Type === "gmail" && !gOwn ? G_APP_KEYS : [];
+  // ...and the Gmail card's Google client is its Sign in with Google box's own (GoogleCalendar.jsx), as a Microsoft card's ids are
+  const appKeys = MS_SIGNIN.includes(conn.Type) ? MS_APP_KEYS : conn.Type === "gmail" ? G_APP_KEYS : [];
   const ownFields = m.fields.filter(([, key]) => !appKeys.includes(key));
   // REQUIRED FIRST, THEN THE KEY, THEN WHAT HAS A DEFAULT (the setup sweep, 2026-10-28): optional model and language boxes stood
   // before the one key the card cannot run without; a chat card's fast clock folds under Advanced, after the token
@@ -2868,11 +2868,6 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           <Button size="small" variant="text" onClick={() => setAdminFields(true)}
             sx={{ alignSelf: "flex-start", fontSize: 12, color: DIM, px: 0.5 }}>
             Admin? Use a tenant app registration instead →
-          </Button>
-        )}
-        {conn.Type === "gmail" && !gOwn && (
-          <Button size="small" variant="text" onClick={() => setGOwn(true)} sx={{ alignSelf: "flex-start", fontSize: 12, color: DIM, px: 0.5 }}>
-            Admin? Use your own Google OAuth client instead →
           </Button>
         )}
         {conn.Type === "imap" && /@(outlook|hotmail|live|msn)\.|office365|outlook\.office/i.test(`${cfg.address || ""} ${cfg.imap_host || ""}`) && (
@@ -3102,7 +3097,10 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       {MS_SIGNIN.includes(conn.Type) && !(conn.Type === "teams" && cfg.account_type === "personal")
         && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} setCfg={setCfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
-      {conn.Type === "gmail" && <GoogleCalendar conn={conn} cfg={cfg} reload={reload} />}
+      {conn.Type === "gmail" && <GoogleCalendar conn={conn} cfg={cfg} reload={reload} flush={boxes.flush} onSignedIn={() => setStep(1)}>
+        {m.fields.filter(([, key]) => G_APP_KEYS.includes(key)).map((f) => <ConfigField key={f[1]} size="small" conn={conn} field={f} cfg={cfg} setCfg={setCfg} tick={boxes.tick(f[1])} onBlur={boxes.flush}
+          sx={{ "& .MuiInputBase-root": { bgcolor: "var(--tq-panel, #fff)" }, "& .MuiFormHelperText-root": { mx: 0 } }} />)}
+      </GoogleCalendar>}
       {conn.Type === "gmail" && <GoogleFiles conn={conn} cfg={cfg} reload={reload} />}
       {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} onStatus={setWaSt} onTurnedAway={openPicker} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
@@ -4027,7 +4025,7 @@ const MAIL_CARDS = ["outlook", "gmail", "imap"];
 const MS_SIGNIN = ["outlook", "teams"];
 const NO_AI_WALK = ["whatsapp", ...MS_SIGNIN, "gmail"];      // the cards with no Get AI to set it up
 const MS_APP_KEYS = ["tenant_id", "client_id"];      // a tenant app registration's fields - an admin's road (adminFields)
-const G_APP_KEYS = ["google_client_id", "google_client_secret", "google_refresh_token"];   // the Gmail card's own Google client (gOwn)
+const G_APP_KEYS = ["google_client_id", "google_client_secret"];   // the install's own Google client: the two boxes in the Gmail card's sign-in box
 // ...and a card that reads more than one mailbox (a shared one on the same sign-in) is more than one hat: one field per
 // address, saved under `signatures`, until it is edited showing the card's own one that signs it today (TQ-1191)
 function MailSignature({ conn, addresses = [], reload }) {
@@ -4233,7 +4231,8 @@ const MailFolders = ({ conn, s, reload }) => {
 // phone was paired (the UX walk, 2026-10-22). ChatGPT's proof is the sign-in's token; WhatsApp's is a clean read through the pairing
 const credsDone = (conn, cfg, m) => conn.Type === "chatgpt" ? cfg?.auth === "user" && !!conn.HasSecret
   : conn.Type === "whatsapp" ? !!conn.LastSyncAt && !conn.LastError
-    : !m.secretLabel || (!!conn.HasSecret && !!conn.LastSyncAt && !conn.LastError);
+    // ...and a Gmail card signed in with Google has no App Password to save: its sign-in is its key
+    : !m.secretLabel || ((!!conn.HasSecret || (conn.Type === "gmail" && savedOn(conn, "google_refresh_token"))) && !!conn.LastSyncAt && !conn.LastError);
 
 /* ── WhatsApp pairing: three steps that drive themselves. 1 Node on the machine (the only thing the
    owner installs - the box says how and re-checks on its own); 2 the bridge, which the box starts the

@@ -59,5 +59,5 @@ test("a card whose sign-in predates contacts says what the search skips, and how
   const g = fs.readFileSync(new URL("../src/GoogleCalendar.jsx", import.meta.url), "utf8");
   assert.match(cv, /\{!!conn\.PeopleMissing\?\.length && \(\s*<Typography variant="caption"/);
   assert.match(cv, /Sign out and sign in again to add them\./);
-  assert.match(g, /if \(signedIn && !detail && conn\.PeopleMissing\?\.length\)\s*return <Typography data-tq-google-people=""/);
+  assert.match(g, /\{!!conn\.PeopleMissing\?\.length && <Typography data-tq-google-people="" variant="caption"/);
 });

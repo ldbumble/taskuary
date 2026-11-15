@@ -178,7 +178,7 @@ usually <code>report</code> and <code>tool</code>.</p>
 </tr>
 <tr>
 <td><strong>Gmail and IMAP</strong></td>
-<td>Any IMAP mailbox. Approved replies go back through the provider&#39;s SMTP, in-thread. A Gmail card can also sign in with Google, which adds the calendar and contacts</td>
+<td>Any IMAP mailbox. Approved replies go back through the provider&#39;s SMTP, in-thread. A Gmail card signs in with Google - mail, calendar and contacts on one sign-in - or takes an App Password for the mail alone</td>
 </tr>
 </tbody></table>
 <h3 id="how-microsoft-sign-in-works">How Microsoft sign-in works<a class="anchor" href="#how-microsoft-sign-in-works" aria-label="Link to this section">#</a></h3>
@@ -299,7 +299,56 @@ history</strong> learns your writing voice from.</p>
 <div class="callout note"><p class="eyebrow">A shared mailbox needs saying so</p><p>If the mailbox is shared, mail addressed to the team reads as mail addressed to you unless
 Taskuary knows otherwise. Name your own addresses in <code>SOUL.md</code> so triage can tell &quot;someone asked
 me&quot; from &quot;someone asked the team&quot;.</p>
-</div><h3 id="finding-people-the-permissions-it-asks-for">Finding people: the permissions it asks for<a class="anchor" href="#finding-people-the-permissions-it-asks-for" aria-label="Link to this section">#</a></h3>
+</div><h3 id="gmail-sign-in-with-google-or-an-app-password">Gmail: Sign in with Google, or an App Password<a class="anchor" href="#gmail-sign-in-with-google-or-an-app-password" aria-label="Link to this section">#</a></h3>
+<p>A Gmail card has two ways in, and you can use either.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Brings</th>
+<th>Needs</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Sign in with Google</strong></td>
+<td>Mail in and replies out, the calendar (read, accept and decline invites, set up meetings) and your contacts</td>
+<td>A Google client of your own, made once in Google Cloud</td>
+</tr>
+<tr>
+<td><strong>App Password</strong></td>
+<td>Mail in and replies out, nothing else</td>
+<td>2-Step Verification on the account, then <a href="https://myaccount.google.com/apppasswords">myaccount.google.com/apppasswords</a></td>
+</tr>
+</tbody></table>
+<p><strong>Taskuary ships no Google client</strong>, as it ships no Microsoft app: the sign-in runs through one you
+make, so Google&#39;s consent page carries your name and nothing passes through anybody else&#39;s project.
+The card lists the steps where you paste the result. They take about five minutes, once:</p>
+<ol>
+<li>Open <a href="https://console.cloud.google.com/projectcreate">console.cloud.google.com</a>, create a
+project and name it Taskuary. It is free.</li>
+<li>In that project enable three APIs: <strong>Gmail API</strong>, <strong>Google Calendar API</strong> and <strong>People API</strong>
+(APIs &amp; Services → Library → search each → Enable).</li>
+<li><strong>Google Auth Platform → Get started</strong>: app name Taskuary, your own email. Audience:
+<strong>Internal</strong> on a Google Workspace account. On a personal Gmail account choose <strong>External</strong>,
+then <strong>Audience → Test users → Add users</strong> and add your own address.</li>
+<li><strong>Clients → Create client</strong> → Application type <strong>Desktop app</strong> → Create. No redirect address
+is needed: a Desktop client may come back to any port on this computer.</li>
+<li>On the Gmail card, paste the <strong>Client ID</strong> and <strong>Client secret</strong> into the Sign in with Google
+box (each saves itself) and press <strong>Sign in with Google</strong>. Google says the app is not
+verified, because it is yours and nobody reviewed it: <strong>Advanced → Go to Taskuary</strong>, and leave
+the boxes ticked.</li>
+</ol>
+<p>Which one carries the mail: while an App Password is saved on the card, the mail uses it, and the
+sign-in adds the calendar and contacts. With no App Password, the mail comes in and goes out
+through the sign-in - the same IMAP and SMTP, signed in to with Google&#39;s token. The card says which
+it is.</p>
+<p>A sign-in from before Taskuary could answer invites only reads the calendar. The card says so with
+<strong>Sign in again</strong>, which asks Google for the calendar itself.</p>
+<p><strong>If Google signs you out every week</strong>, the client is an External one still in <em>Testing</em>: Google
+ends those sign-ins after 7 days. <strong>Google Auth Platform → Audience → Publish app</strong> stops it - for
+your own use no review is needed, and the &quot;not verified&quot; page stays. When a sign-in has lapsed the
+card says so, mail polling says why instead of going quiet, and <strong>Sign in again</strong> fixes it.</p>
+<h3 id="finding-people-the-permissions-it-asks-for">Finding people: the permissions it asks for<a class="anchor" href="#finding-people-the-permissions-it-asks-for" aria-label="Link to this section">#</a></h3>
 <p>To, Cc and the other recipient boxes search everyone Taskuary knows by name, company or any part
 of an address. Each sign-in also asks for read-only access to the people the account knows:</p>
 <table>
@@ -321,14 +370,14 @@ of an address. Each sign-in also asks for read-only access to the people the acc
 <td>Your organisation&#39;s people, not only the chats already seen here. Picking one sends into your one-to-one chat with them, and opens that chat if you don&#39;t have one yet</td>
 </tr>
 <tr>
-<td><strong>Gmail</strong> (Sign in with Google for the calendar)</td>
+<td><strong>Gmail</strong> (Sign in with Google)</td>
 <td><code>contacts.readonly</code>, <code>contacts.other.readonly</code>, <code>directory.readonly</code></td>
 <td>Your Google contacts, the addresses Gmail saved for you, and your Workspace directory</td>
 </tr>
 </tbody></table>
 <p>Microsoft lets each person consent to these themselves, without an admin, unless your
 organisation limits user consent. In that case <strong>Get the admin link</strong> on the card asks for them
-as well. On Google&#39;s consent page each one is its own box, and only the calendar is required.</p>
+as well. On Google&#39;s consent page each one is its own box; the sign-in is kept as long as the mail or the calendar is ticked.</p>
 <p>A sign-in made before Taskuary asked for these still works. The search skips what that sign-in
 can&#39;t read, and the card says so. To add them on the Outlook or Teams card, sign out and sign in again. A Gmail card that
 only has an App Password has no Google sign-in, so its contacts are not searched. The mail you

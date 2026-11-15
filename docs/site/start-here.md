@@ -69,9 +69,9 @@ top always says what to do next, and so do the Work list and the **Setup** chip 
    system. Email is the usual one and comes first. Microsoft 365 or Outlook signs in through your
    own Microsoft app: at a company your IT registers it once; with an Outlook.com or Hotmail
    account you register one yourself, free, in about five minutes (the card shows the steps). You
-   paste its Application (client) ID and sign in. Gmail needs an App Password, which Google makes at
+   paste its Application (client) ID and sign in. Gmail starts with an App Password, which Google makes at
    [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) once 2-Step
-   Verification is on. Any other mailbox takes its address, server and password. If your work
+   Verification is on; its card can sign in with Google afterwards, which adds the calendar. Any other mailbox takes its address, server and password. If your work
    arrives somewhere else, **More chat and task options** has Teams, Slack, WhatsApp, Discord,
    monday.com, Jira, GitHub, Linear, Asana and the rest. The step is done once one of them is
    connected and passes its test. Before Taskuary writes your job description it asks you to

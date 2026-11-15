@@ -29,7 +29,7 @@ test("what a save says is drawn by the boxes, and a refused key does not move on
 test("Credentials is ticked only after a Test passed on them", () => {
   assert.match(src, /const creds = credsDone\(conn, cfg, m\);/);
   assert.match(src, /label: "Credentials", done: creds,/);
-  assert.match(src, /: !m\.secretLabel \|\| \(!!conn\.HasSecret && !!conn\.LastSyncAt && !conn\.LastError\);/);
+  assert.match(src, /: !m\.secretLabel \|\| \(\(!!conn\.HasSecret \|\| \(conn\.Type === "gmail" && savedOn\(conn, "google_refresh_token"\)\)\) && !!conn\.LastSyncAt && !conn\.LastError\);/);
 });
 
 // ...and a card with no key is ticked by its own proof, not by having none (the UX walk, 2026-10-22)

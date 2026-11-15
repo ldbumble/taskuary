@@ -395,7 +395,7 @@
       "title": "Gmail / Google Workspace",
       "group": "Messaging",
       "planned": false,
-      "desc": "A Gmail or Google Workspace mailbox - IMAP in through triage, replies back over Gmail's own SMTP, in-thread. Optional OAuth fields add the calendar.",
+      "desc": "A Gmail or Google Workspace mailbox - IMAP in through triage, replies back over Gmail's own SMTP, in-thread. Sign in with Google for the mail, calendar and contacts together, or use an App Password for the mail alone.",
       "match": [
         "gmail / google workspace",
         "gmail",

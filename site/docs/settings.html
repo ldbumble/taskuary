@@ -157,18 +157,18 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p><code>playbooks_enabled</code> · type: switch · default: on</p>
 <p>Triage matches new mail to your playbooks, and agents may propose new ones.</p>
 <p>On: triage is shown every playbook that is switched on, a message that is an instance of one becomes a task worked from it, and a finished job that will recur is proposed as a new playbook for your approval. Off: no playbook is matched or proposed; the playbooks themselves stay on Reports → Playbooks, and a single one can be switched off there instead.</p>
-<h3 id="ai-for-the-assistant">AI for the Assistant<a class="anchor" href="#ai-for-the-assistant" aria-label="Link to this section">#</a></h3>
+<h3 id="ai-for-taskuary">AI for Taskuary<a class="anchor" href="#ai-for-taskuary" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_ai</code> · type: brain · set on a card at the top of the page</p>
-<p>Which AI speaks in the Assistant&#39;s chat here and in your phone chat - the Assistant&#39;s own brain. auto = your default coding agent, on its faster, lighter model.</p>
+<p>Which AI speaks in Taskuary&#39;s chat here and in your phone chat - Taskuary&#39;s own brain. auto = your default coding agent, on its faster, lighter model.</p>
 <p>THREE DEFAULTS, side by side in How mail is sorted: the triage brain, the default coding CLI, and this one.</p>
 <p>A CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent&#39;s own &#39;light model&#39; from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks.</p>
-<h3 id="model-for-the-assistant">Model for the Assistant<a class="anchor" href="#model-for-the-assistant" aria-label="Link to this section">#</a></h3>
+<h3 id="model-for-taskuary">Model for Taskuary<a class="anchor" href="#model-for-taskuary" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_model</code> · type: text · set on a card at the top of the page</p>
-<p>A different model for the Assistant, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.</p>
+<p>A different model for Taskuary, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.</p>
 <p>For a CLI this is its --model, and model@effort sets its reasoning effort (Claude --effort, Codex model_reasoning_effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation.</p>
 <h3 id="ai-for-general-agents">AI for general agents<a class="anchor" href="#ai-for-general-agents" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_ai</code> · type: brain · default: blank · set on a card at the top of the page</p>
-<p>Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble. Your phone talks to the Assistant, not this.</p>
+<p>Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble. Your phone talks to Taskuary, not this.</p>
 <p>Normally set on the General agent card at the top of this tab; this row is the fallback if that panel cannot load. A CLI here can run tools, drive a browser and post to the wall; an API connector has no shell, so it can only read and write - quicker, and enough for chat. Blank = the first active API connector, else the default agent.</p>
 <h3 id="where-reports-go">Where reports go<a class="anchor" href="#where-reports-go" aria-label="Link to this section">#</a></h3>
 <p><code>judge_ai</code> · type: brain · set on a card at the top of the page</p>
@@ -264,12 +264,12 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>A nearest-neighbour search always has a nearest neighbour, even when nothing is related, so passages below this cosine similarity are dropped. Raise it if unrelated passages turn up; lower it if related ones are missed. Scales differ between models, and the default 0.5 is a starting point, not a measurement for yours.</p>
 <h3 id="fast-mode">Fast mode<a class="anchor" href="#fast-mode" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_fast</code> · type: select · default: <code>auto</code></p>
-<p>Runs the Assistant&#39;s CLI on its provider&#39;s fast tier: Codex&#39;s fast service tier, Claude Code&#39;s fast mode. By default on for Codex and off for Claude.</p>
+<p>Runs Taskuary&#39;s CLI on its provider&#39;s fast tier: Codex&#39;s fast service tier, Claude Code&#39;s fast mode. By default on for Codex and off for Claude.</p>
 <p>Options: <code>auto</code>, <code>on</code>, <code>off</code></p>
 <p>Claude bills fast mode as extra usage, outside your subscription, and runs it only when extra usage is turned on in your Claude account; Codex spends your plan&#39;s credits faster. Coding and general agents are not changed.</p>
 <h3 id="how-far-back-your-list-reaches-hours">How far back your list reaches (hours)<a class="anchor" href="#how-far-back-your-list-reaches-hours" aria-label="Link to this section">#</a></h3>
 <p><code>funnel_hours</code> · type: number · default: <code>12</code></p>
-<p>How far back ordinary mail, reports and fyi enter the list the Assistant walks you through. Drafts waiting for your yes and agents waiting on you always enter.</p>
+<p>How far back ordinary mail, reports and fyi enter the list Taskuary walks you through. Drafts waiting for your yes and agents waiting on you always enter.</p>
 <p>A first launch must not surface a year of never-triaged mail. Twelve hours is a working day; set it to 48 after a long weekend.</p>
 <h3 id="most-items-on-your-list-at-once">Most items on your list at once<a class="anchor" href="#most-items-on-your-list-at-once" aria-label="Link to this section">#</a></h3>
 <p><code>funnel_max</code> · type: number · default: <code>25</code></p>
@@ -283,35 +283,35 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>Keeps withdrawn messages, out-of-office auto-replies and threads where yours is the last word off the work rail. On by default.</p>
 <h3 id="fyi-read-together">FYI read together<a class="anchor" href="#fyi-read-together" aria-label="Link to this section">#</a></h3>
 <p><code>fyi_batch</code> · type: number · default: <code>4</code></p>
-<p>How many fyi the assistant puts in front of you at once. 1 to 10. Until you set it, it follows the screen: six on a large one, four on a laptop or a phone.</p>
+<p>How many fyi Taskuary puts in front of you at once. 1 to 10. Until you set it, it follows the screen: six on a large one, four on a laptop or a phone.</p>
 <p>An fyi needs no action, so they come in a batch rather than one at a time. Left alone, the batch is sized to the screen that asks - six where they fit without scrolling, four on a screen under 800 pixels tall or a phone. A number you set here is used on every screen. At 1 they arrive singly, which is the slow read-everything walk; at 10 you clear the noise in one card. Anything outside 1-10 is clamped - a 0 would take the fyi lane out of the walk entirely.</p>
 <h3 id="keep-past-chats-days">Keep past chats (days)<a class="anchor" href="#keep-past-chats-days" aria-label="Link to this section">#</a></h3>
 <p><code>chat_keep_days</code> · type: number · default: <code>15</code></p>
 <p>Archived assistant chats older than this are removed once a day. Fifteen by default.</p>
 <p>Only the chat transcript goes. What a chat said about a task stays on the task, and memories, rules and correction evidence are never touched.</p>
 <h2 id="assistant-on-your-phone">Assistant on your phone<a class="anchor" href="#assistant-on-your-phone" aria-label="Link to this section">#</a></h2>
-<h3 id="chat-with-the-assistant-in-whatsapp-or-telegram">Chat with the assistant in WhatsApp or Telegram<a class="anchor" href="#chat-with-the-assistant-in-whatsapp-or-telegram" aria-label="Link to this section">#</a></h3>
+<h3 id="chat-with-taskuary-in-whatsapp-or-telegram">Chat with Taskuary in WhatsApp or Telegram<a class="anchor" href="#chat-with-taskuary-in-whatsapp-or-telegram" aria-label="Link to this section">#</a></h3>
 <p><code>phone_assistant</code> · type: switch · default: off · set on a card at the top of the page</p>
 <p>The default for a channel that has never been asked. Each channel above answers for itself once you set it.</p>
-<p>Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.</p>
+<p>Name the Taskuary chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Taskuary chat is not subscribed to ordinary Taskuary alerts.</p>
 <p>It is the SAME walk the desktop runs, on the same conversation and the same list of work: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as a poll on WhatsApp and as buttons on Telegram; typing a choice&#39;s number works on both.</p>
-<p>This switch is the standing permission. The Assistant&#39;s own &quot;in WhatsApp&quot; button on the desktop hands the walk over for a session whether or not it is on; the desktop keeps working beside it.</p>
+<p>This switch is the standing permission. Taskuary&#39;s own &quot;in WhatsApp&quot; button on the desktop hands the walk over for a session whether or not it is on; the desktop keeps working beside it.</p>
 <p>The chat only ever answers you: Taskuary writes to it only while you are talking to it there (your last message within 30 minutes, until you say stop) - never a reminder, a follow-up or a summary on its own, and not an urgent item either unless you turn on &quot;Text me urgent items even when I haven&#39;t written&quot;.</p>
 <p>Because answers can contain private workspace information, use a chat only you can read — WhatsApp&#39;s Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before.</p>
 <h3 id="text-me-urgent-items-even-when-i-havent-written">Text me urgent items even when I haven&#39;t written<a class="anchor" href="#text-me-urgent-items-even-when-i-havent-written" aria-label="Link to this section">#</a></h3>
 <p><code>phone_urgent_unasked</code> · type: switch · default: off</p>
-<p>Off (default): the Assistant chat stays quiet until you write to it, however urgent something is. On: urgent items may reach it anyway.</p>
+<p>Off (default): the Taskuary chat stays quiet until you write to it, however urgent something is. On: urgent items may reach it anyway.</p>
 <p>Taskuary writes to your own WhatsApp or Telegram chat only while you are talking to it there. Off (the default), that holds for urgent items too: they are shaded on the desktop and wait there.</p>
 <p>On: an urgent item may reach the chat even when you have not written - a move on a task marked urgent, an urgent by-the-way while the walk is handed to the chat, and a report&#39;s alert aimed at your own chat. Nothing else changes: reminders, follow-ups, the morning line and summaries still wait until you write. Replies to other people are not affected by this switch.</p>
-<h3 id="which-chat-the-assistant-offers">Which chat the Assistant offers<a class="anchor" href="#which-chat-the-assistant-offers" aria-label="Link to this section">#</a></h3>
+<h3 id="which-chat-taskuary-offers">Which chat Taskuary offers<a class="anchor" href="#which-chat-taskuary-offers" aria-label="Link to this section">#</a></h3>
 <p><code>phone_walk_channel</code> · type: select</p>
-<p>The &quot;Walk me through them in ...&quot; button in the Assistant&#39;s chat: WhatsApp, Telegram, or both.</p>
+<p>The &quot;Walk me through them in ...&quot; button in Taskuary&#39;s chat: WhatsApp, Telegram, or both.</p>
 <p>Options: <code>both</code>, <code>whatsapp</code>, <code>telegram</code></p>
-<p>both (default) = a button for each chat that is connected and has an Assistant chat named. whatsapp or telegram = only that one. A chat is offered only once its card under Connections names an Assistant chat, so choosing Telegram before setting it up shows no button until you do.</p>
+<p>both (default) = a button for each chat that is connected and has a Taskuary chat named. whatsapp or telegram = only that one. A chat is offered only once its card under Connections names a Taskuary chat, so choosing Telegram before setting it up shows no button until you do.</p>
 <h3 id="a-morning-line-in-the-chat">A morning line in the chat<a class="anchor" href="#a-morning-line-in-the-chat" aria-label="Link to this section">#</a></h3>
 <p><code>phone_morning_line</code> · type: switch</p>
-<p>Once a day, the assistant&#39;s chat says what is waiting and offers the two ways in: walk me through my tasks, set up a report.</p>
-<p>Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count of what is waiting and how many are on you, then the two scripts as numbered options, so one reply starts the walk there. Quiet on a day nothing is waiting; never twice in a day.</p>
+<p>Once a day, Taskuary&#39;s chat says what is waiting and offers the two ways in: walk me through my tasks, set up a report.</p>
+<p>Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Taskuary chat on every channel that has one - the count of what is waiting and how many are on you, then the two scripts as numbered options, so one reply starts the walk there. Quiet on a day nothing is waiting; never twice in a day.</p>
 <p>Even on, it goes only into a conversation you started there in the last 30 minutes: the chat never speaks first.</p>
 <h2 id="advisor">Advisor<a class="anchor" href="#advisor" aria-label="Link to this section">#</a></h2>
 <h3 id="lines-per-post-at-most">Lines per post, at most<a class="anchor" href="#lines-per-post-at-most" aria-label="Link to this section">#</a></h3>

@@ -1490,7 +1490,15 @@ DASHBOARD = {'type': 'dashboard', 'title': 'Northwind desk', 'daily_at': '07:00'
 
 
 def seed_dashboard(store) -> int:
-    return store.save_source({'Channel': 'report', 'Address': DASHBOARD['title'], 'Active': 1, 'ConfigJson': json.dumps(DASHBOARD)}, 'demo')
+    sid = store.save_source({'Channel': 'report', 'Address': DASHBOARD['title'], 'Active': 1, 'ConfigJson': json.dumps(DASHBOARD)}, 'demo')
+    # ...RUN HERE TOO, though run_dashboards runs them again once the morning is whole: each run files a message, and every message made
+    # after this point keeps the number the tests and the static demo know it by only while these two stand before it (moved to the end
+    # alone, the agents' day shifted by two and the Assistant's walk put another task on the table - CI, 2026-11-15)
+    from . import reports
+    reports.run_one(store, store.get_source(sid), None, 'schedule')
+    for src in store.list_sources(active_only=False):
+        if src.get('Owner') == 'template' and json.loads(src.get('ConfigJson') or '{}').get('type') == 'dashboard': reports.run_one(store, src, None, 'schedule')
+    return sid
 
 
 def run_dashboards(store):

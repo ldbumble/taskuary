@@ -720,6 +720,8 @@ class DemoDashboardTests(unittest.TestCase):
         heads = [m['Subject'] for m in s._rows("SELECT Subject FROM message WHERE Channel='report' AND Status NOT IN ('skipped','expired') ORDER BY MessageId")]
         self.assertTrue(any(h.startswith('Taskuary at a glance') and f'Open now {n}' in h for h in heads), (n, heads))
         self.assertTrue(any(h.startswith('Northwind desk') and f'Open tasks {n}' in h for h in heads), (n, heads))
+        # ...and nothing made after the dashboards changed its number: the walks and the static demo know the morning's messages by them
+        self.assertEqual(s.get_message(45)['TaskId'], next(t['TaskId'] for t in s.list_tasks() if 'LinkedIn' in (t.get('Title') or '')))
         # ...and they stand on the rail in the order they always did
         order = [h.split(' — ')[0] for h in heads if ' — ' in h]
         self.assertEqual(order[-3:], ['Northwind desk', 'Taskuary at a glance', 'Vendor spend, weekly'])

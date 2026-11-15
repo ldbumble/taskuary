@@ -680,6 +680,8 @@ REPORTS = [
       for i, n in enumerate((38, 41, 35, 52, 49, 22, 17, 44, 58, 61, 55, 47, 63, 71))]),
 ]
 
+REPORT_CRONS = ('0 2 * * *', '0 6 * * 1', '0 6 * * *')          # nightly, weekly on Monday, daily - as their names say
+
 # What the assistant is FOR, in the assistant's own words: it has read the thread, it knows what
 # is on the rail, and it says the one thing that decides the next move. The demo used to open
 # this pane empty, which showed a chat box and nothing worth chatting about.
@@ -959,8 +961,12 @@ def seed(store) -> int:
                      DueAt=(datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d'))
     store.link_step(g, store.checklist_id('Ray: schema sign-off'), waiting, 'owner')
     refs['goal'] = g
-    for title, chart_title, rows in REPORTS:
+    for (title, chart_title, rows), cron in zip(REPORTS, REPORT_CRONS):
         pic = f.report_row(title=title)
+        # ...on the clock its name says (a key the scheduler reads): with none, the Reports page framed each in red - "No schedule - it only
+        # runs when you press Run now" - under a name that says nightly (the walk, 2026-11-15). Touched, so nothing is due at this start
+        cfg = {**json.loads(store.get_source(pic.sid)['ConfigJson']), 'cron': cron}
+        store._exec('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(cfg), pic.sid)); store.touch_source(pic.sid)
         body = '\n'.join(json.dumps(r) for r in rows)
         store._exec('UPDATE message SET BodyText=?, Subject=? WHERE MessageId=?',
                     (body, f'{title} - {len(rows)} rows', pic.mid))

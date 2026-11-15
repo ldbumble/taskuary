@@ -699,6 +699,14 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
 
 
 class DemoDashboardTests(unittest.TestCase):
+    def test_a_report_named_nightly_or_weekly_has_that_schedule(self):
+        # with none, the Reports page framed each in red: "No schedule - it only runs when you press Run now" (the walk, 2026-11-15)
+        import json
+        s = MemoryStore(); demo.seed(s)
+        crons = {x['Address']: json.loads(x['ConfigJson']).get('cron') for x in s.list_sources(active_only=False) if x.get('Channel') == 'report'}
+        for title, _, _ in demo.REPORTS: self.assertTrue(crons.get(title), title)
+        self.assertEqual(len(demo.REPORT_CRONS), len(demo.REPORTS))
+
     def test_a_report_of_the_last_fourteen_days_ends_yesterday(self):
         from datetime import date, timedelta
         days = [r['day'] for r in next(rows for title, _, rows in demo.REPORTS if 'last 14' in title)]

@@ -10,8 +10,10 @@ from .timewords import plural
 ROUTE_CONFIDENCE = .80       # two different owner-routed tasks (.72, then .86)
 CONTEXT_CONFIDENCE = .70     # one choice may inform triage, clearly labelled tentative
 REPO_KIND = 'repository'
-PUBLIC_MAIL = {'gmail.com', 'outlook.com', 'hotmail.com', 'live.com', 'yahoo.com', 'icloud.com',
-               'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'fastmail.com'}
+# THE PUBLIC MAIL SERVICES, SAID ONCE (the audit, 2026-11-15): people search kept a list of its own, by name, and the two had drifted -
+# msn.com and mail.com could be trusted here as one organisation, and a fastmail.com address was a company called "fastmail" there
+PUBLIC_MAIL = {'gmail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'icloud.com',
+               'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'fastmail.com', 'mail.com'}
 
 
 def _field(row: dict, *names):

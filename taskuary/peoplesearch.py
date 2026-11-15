@@ -18,7 +18,8 @@ from loguru import logger
 DIR_KEY, DIR_CAP = 'people_directory', 800       # directory hits remembered, newest first
 TOP, AI_POOL = 12, 300
 _STOP = {'the', 'a', 'an', 'at', 'from', 'of', 'in', 'on', 'for', 'person', 'guy', 'lady', 'someone', 'who', 'and', 'my', 'our', 'with'}
-_FREE = {'gmail', 'outlook', 'hotmail', 'yahoo', 'icloud', 'live', 'msn', 'aol', 'proton', 'protonmail', 'me', 'mail'}
+from .projects import PUBLIC_MAIL
+_FREE = {d.split('.')[0] for d in PUBLIC_MAIL}     # ...by name, so a country's own (yahoo.co.uk) is nobody's company either
 _TLD = {'com', 'org', 'net', 'co', 'io', 'example', 'test', 'invalid', 'uk', 'us', 'de', 'il', 'au', 'ca'}
 
 

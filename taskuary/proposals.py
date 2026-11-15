@@ -573,9 +573,14 @@ def written_past(store, tid: int) -> set:
     # ...NOR CAN ONE HELD BEHIND TRUST (recorded on the real CLI, 2026-11-15): a stranger's words on the thread are handed to no agent until
     # he trusts them (origin.hold), so they moved nothing on - and the reply waiting for his colleague lost its Send to them, "agent done"
     # over it, with trusting the stranger the only press left
+    # ...asked only where a draft would be written past at all: judging a sender can write what it finds down, and this is read on every
+    # build of the rail (CI, 2026-11-15: the pipe was built twice while nothing moved)
+    mail = [x for x in conversation._mail(store, int(tid)) if str(x['MessageId']) not in led]
+    past = lambda rows: set(_older(store, tid, max((x['T'] for x in rows), default=0.)))
+    if not (got := past(mail)): return got
     from . import origin
     held = {str(m) for m in (origin.hold(store, int(tid)) or {}).get('mids') or ()}
-    return set(_older(store, tid, max((x['T'] for x in conversation._mail(store, int(tid)) if str(x['MessageId']) not in led | held), default=0.)))
+    return past([x for x in mail if str(x['MessageId']) not in held]) if held else got
 
 
 # what its agent is told of a card it raised that the conversation moved past - ONE sentence for every kind and both agent kinds

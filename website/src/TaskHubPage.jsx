@@ -16,6 +16,7 @@ import SportsEsportsIcon from "@mui/icons-material/SportsEsportsOutlined";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import api from "./api";
+import { markDemo } from "./demoWorld.js";
 import { inDesktop, quitTitle, stoppedLines } from "./appQuit.js";
 import { track } from "./demoTrack";
 import { fmtStamp } from "./dates.js";
@@ -192,7 +193,7 @@ function Bell({ onGo, onAsk }) {
    for a second whether it went anywhere. It never does: demo.py refuses at the API layer. */
 function useDemo() {
   const [demo, setDemo] = useState(null);
-  useEffect(() => { api.get("/api/demo").then(({ data }) => setDemo(data)).catch(() => {}); }, []);
+  useEffect(() => { api.get("/api/demo").then(({ data }) => { markDemo(data?.demo); setDemo(data); }).catch(() => {}); }, []);
   return demo?.demo ? demo : null;
 }
 

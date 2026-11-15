@@ -166,6 +166,9 @@ def refuse_op(op) -> str:
     if not op: return ''                                    # no such proposal: the handler's own 404 says so
     kind, p = op.get('kind'), op.get('params') or {}
     if kind in LOCAL_OPS or (kind == 'task.create_from_message' and (str(p.get('kind') or 'task').lower() == 'task' or p.get('box'))): return ''
+    # ...a letter's Send is played wherever it is pressed (refuse_verdict): the rail's Send is the card's
+    if kind == 'review.approve' and (st := _store()) is not None and (rv := st.get_review(int(op.get('target') or 0))):
+        return refuse_verdict('approve', rv.get('Kind'))
     if kind in ('review.approve', 'task.clarify', 'task.chase', 'task.handoff', 'task.share', 'task.ask_agent'): return SENDS
     if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.tell', 'agent.stop', 'agents.stop', 'task.create_from_message', 'task.create_from_text', 'calendar.prepare'): return STARTS
     return OFF
@@ -202,9 +205,27 @@ def refused(store, path: str, why: str) -> str:
     return ''
 
 
-def refuse_verdict(verb: str) -> str:
-    "'' for a verdict that only puts the card down (it writes the demo's own database), else the sentence: approving one sends it."
-    return '' if not enabled() or verb in ('reject', 'no_reply', 'close_unsent') else SENDS
+def refuse_verdict(verb: str, kind: str = 'action') -> str:
+    """'' for a verdict that only puts the card down (it writes the demo's own database) and for a letter's Send, which is PLAYED
+    (pretend_sent); else the sentence: an action approved - a post, a payment, a push - would run."""
+    return '' if not enabled() or verb in ('reject', 'no_reply', 'close_unsent') or verb in ('approve', 'edit') and kind != 'action' else SENDS
+
+
+# SEND IS PLAYED, NOT REFUSED (the owner, 2026-11-15, of the tour's "press Send - nothing leaves the demo": the press drew a red error on the
+# card and "Failed:" on the rail): the letter's own road runs to its end - the card settles, the press is a line in the chat, the task moves
+# on - and the one thing that does not happen is the delivery (verdicts._send_snapshot hands the approved letter here instead of to a
+# mailbox). What the card then says is SENT, and a recorded line of the agent's follows it (after_send): nothing here is a real agent
+SENT = 'Sent - in the demo, nothing left this computer'
+AFTER_SEND = ("That is where your part ends. In your own Taskuary the reply is on its way now, I am told it went, and I watch the "
+              "thread for the answer. Here in the demo nothing left this computer.")
+def pretend_sent(snapshot: dict) -> dict:
+    "What a delivery answers, with nothing delivered: the letter's own channel and people, marked `demo`."
+    env, msg = snapshot.get('envelope') or {}, snapshot.get('message') or {}
+    to = env.get('to') or [x for x in [msg.get('FromEmail') or msg.get('FromName')] if x]
+    return {'channel': env.get('channel') or msg.get('Channel') or 'email', 'to': to if isinstance(to, list) else [to], 'cc': env.get('cc') or [], 'demo': True}
+def after_send(store, tid) -> None:
+    "The recorded agent's line under a played Send; a letter with no task has no chat to say it in."
+    if enabled() and tid: store.add_comment_once(int(tid), 'assistant', 'assistant_agent', AFTER_SEND)
 
 
 def refuse(method: str, path: str, store=None) -> str:
@@ -1248,10 +1269,13 @@ def seed_agent_day(store, f) -> int:
                        + [(s, ah, h, h - ah, ac, c, c - ac) for s, h, c, ah, ac in SITES_OT]
                        + [('Total', tot(3), tot(1), dh, tot(4), tot(2), dc)])
     second = _made(t, f'Overtime by site - August and September{ext}', book, 139)
-    store._exec('UPDATE review SET DraftText=? WHERE ReviewId=?', (
+    # ...and it answers her SECOND mail: left pinned to the first, the redraft read as one the thread had moved past - "New messages arrived
+    # after this draft", Redraft its only button and no AI to press it for, on the task the tour sends the visitor to press Send on
+    store._exec('UPDATE review SET DraftText=?, MessageId=? WHERE ReviewId=?', (
         f'Hi Erin,\n\nHere are August and September side by side. Overtime rose {dh} hours ({dh / tot(3):.0%}) and ${dc:,} '
         f'({dc / tot(4):.1%}) to {tot(1):,} hours and ${tot(2):,}.\n\nFairhaven is nearly all of the increase (+144 hours, +$5,400) - the two '
-        f'night-shift vacancies. Riverside and Oak Ridge came down a little.\n\nThe workbook is attached, by site, with the change for each.\n\nDana', rv))
+        f'night-shift vacancies. Riverside and Oak Ridge came down a little.\n\nThe workbook is attached, by site, with the change for each.\n\nDana',
+        max(m['MessageId'] for m in store.list_messages(t)), rv))
     verdicts.attach(store, rv, second, (outputs.folder(t) / second).read_bytes(), 'assistant')
     stamp('review', 'ReviewId', rv, 138.8)          # ...written AFTER her second mail: a draft older than it reads as one the thread moved past
     c2 = said(t, 138.6, 'turn', None,

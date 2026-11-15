@@ -17,13 +17,19 @@ test("a reply that went says where, and that the task is closing or why it stays
 });
 
 // the owner, 2026-11-09: "leave the card in the turn with the pressed button" - the sent block said it with no card around it
-test("a sent reply stays its card: the subject, the words, and ✓ Sent on the button it took with where it went beside it", () => {
+test("a sent reply stays its card: the subject, the words, and ✓ Sent on the button it took with where it went beside it", async () => {
   assert.equal(sentTitle({ subject: "Re: Q3 numbers", to: "Erin Blake" }), "Re: Q3 numbers");
   assert.equal(sentTitle({ subject: "Portal login", to: "erin@northwind.example" }), "Portal login");     // a new email is no reply
   assert.equal(sentTitle({ subject: "RE: Q3 numbers" }), "RE: Q3 numbers");
   assert.equal(sentTitle({ to: "Erin Blake" }), "Reply to Erin Blake");
   assert.equal(sentSaid({ channel: "email", closing: true }), "by email - closing the task");
   assert.equal(sentSaid({ to: "Ray Colton" }), "to Ray Colton");
+  // ...IN THE DEMO A SEND IS PLAYED (the owner, 2026-11-15): the card settles and says what did not happen - one sentence, the server's own
+  assert.equal(sentLine({ channel: "email", demo: true }), "Sent - in the demo, nothing left this computer");
+  assert.equal(sentSaid({ channel: "email", demo: true }), "in the demo, nothing left this computer");
+  const { markDemo } = await import("../src/demoWorld.js");
+  markDemo(true); assert.equal(sentLine({ channel: "teams" }), "Sent - in the demo, nothing left this computer"); markDemo(false);
+  assert.equal(sentLine({ channel: "teams" }), "Sent on Teams");
   const card = read("SentCard.jsx");
   assert.match(card, /<PressedButton pressed="sent" label="✓ Sent" \/>/);      // ...a mark, never a button nobody can press (passedCard.test.mjs)
 });

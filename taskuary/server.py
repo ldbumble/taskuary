@@ -5109,13 +5109,14 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     from .verdicts import VERB2STATUS, context_moved, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
     # ...in the demo a card can be put down and never sent (demo.refuse_verdict - the path alone cannot tell Dismiss from Send)
-    if (why := demo.refuse_verdict(body.verb)):
+    if (why := demo.refuse_verdict(body.verb, rv.get('Kind'))):
         demo.refused(store, f'/api/reviews/{rid}/decide', why)
         return JSONResponse({'detail': why, 'demo': True}, status_code=403)
     if body.verb == 'close_unsent' and rv.get('Kind') == 'action': raise HTTPException(422, 'a proposal is rejected, not closed without sending')
     # An uncertain attempt must be reconciled using its saved payload first. Refreshing
     # the draft here would prevent that check (or replace text that may already be sent).
-    if (body.verb in ('approve', 'edit') and rv.get('Kind') != 'action'
+    # ...and never in the demo: its world was written in advance, nothing arrives between a draft and its Send, and there is no AI to redraft
+    if (body.verb in ('approve', 'edit') and rv.get('Kind') != 'action' and not demo.enabled()
             and rv.get('DeliveryState') not in ('unknown', 'sending')):
         try: _refresh_chat_context(task_id=rv.get('TaskId'), message_id=rv.get('MessageId'))
         except RuntimeError as e: raise HTTPException(503, str(e))

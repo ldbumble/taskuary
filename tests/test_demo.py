@@ -45,6 +45,9 @@ class TheDoorsAreShutTests(unittest.TestCase):
             # answered "nothing is sent" and the card stayed (the walk, 2026-11-15)
             self.assertEqual(demo.refuse('POST', '/api/reviews/3/decide'), '')
             for verb in ('approve', 'edit', 'merge_anyway', 'close_pr'): self.assertIn('nothing is sent', demo.refuse_verdict(verb), verb)
+            # ...a LETTER's Send is played, not refused (the owner, 2026-11-15); a push or a merge is never a letter
+            for verb in ('approve', 'edit'): self.assertEqual(demo.refuse_verdict(verb, 'draft_reply'), '', verb)
+            for verb in ('merge_anyway', 'close_pr'): self.assertIn('nothing is sent', demo.refuse_verdict(verb, 'draft_reply'), verb)
             for verb in ('reject', 'no_reply', 'close_unsent'): self.assertEqual(demo.refuse_verdict(verb), '', verb)
         self.assertEqual(demo.refuse_verdict('approve'), '', 'outside the demo nothing is refused here')
 
@@ -61,6 +64,31 @@ class TheDoorsAreShutTests(unittest.TestCase):
             r = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'reject'})
             self.assertEqual(r.status_code, 200, r.text)
             self.assertEqual(s.get_review(rid)['Status'], 'rejected')
+
+    def test_send_on_a_letter_is_played_the_card_settles_and_a_recorded_line_follows(self):
+        # the owner, 2026-11-15: the tour says "press Send - nothing leaves the demo", and the press drew a red refusal on the card
+        from fastapi.testclient import TestClient
+        from taskuary import outbound, server
+        s = MemoryStore(); demo.seed(s)
+        rv = s._one("SELECT r.* FROM review r JOIN message m ON m.MessageId=r.MessageId WHERE r.Kind='draft' AND r.Status='pending' AND r.TaskId IS NOT NULL "
+                    "AND IFNULL(r.DraftText,'')<>'' AND m.Channel='email' ORDER BY r.ReviewId LIMIT 1")
+        gone = mock.Mock(side_effect=AssertionError('nothing leaves the demo'))
+        with on(), mock.patch.object(server, 'store', s), mock.patch.object(outbound, 'send_out', gone), mock.patch.object(outbound, 'reply_to_message', gone):
+            r = TestClient(server.app).post(f"/api/reviews/{rv['ReviewId']}/decide", json={'verb': 'approve'})
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertEqual((r.json()['ok'], (r.json()['sent'] or {}).get('demo')), (True, True), r.text)
+        self.assertIn(s.get_review(rv['ReviewId'])['Status'], ('approved', 'sent'))
+        said = [c['Body'] for c in s.list_comments(rv['TaskId'])]
+        self.assertEqual(said.count(demo.AFTER_SEND), 1, 'the recorded agent says what would happen next, once')
+        self.assertIsNone(s.last_worker_event(rv['TaskId'], kinds=('failed',)), 'and no agent is woken to fail on "No AI is connected"')
+        gone.assert_not_called()
+
+    def test_the_draft_the_tour_points_at_can_be_sent(self):
+        # ...its redraft stayed pinned to the first mail, so it read as stale: Redraft alone, and no AI in the demo to redraft with
+        from taskuary import verdicts
+        s = MemoryStore(); demo.seed(s)
+        rv = s._one("SELECT r.* FROM review r JOIN task t ON t.TaskId=r.TaskId WHERE t.Title='September overtime by site' AND r.Status='pending'")
+        self.assertFalse(verdicts.context_moved(s, rv)[0], 'the reply answers her newest mail')
 
     def test_no_connector_can_be_made_edited_or_given_a_secret(self):
         with on():

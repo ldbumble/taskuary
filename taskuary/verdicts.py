@@ -222,8 +222,9 @@ def _more(env, *keys) -> dict:
 
 def _send_snapshot(store, snapshot):
     """Only the durable approved payload crosses the provider boundary."""
-    from . import outbound
+    from . import demo, outbound
     env, body = snapshot['envelope'], snapshot['body']
+    if demo.enabled(): return demo.pretend_sent(snapshot)             # ...and in the demo nothing does: its Send is played
     if env.get('kind') == 'reply':
         return outbound.reply_to_message(store, snapshot['message'], body, to=env.get('to') or None,
                                          cc=env.get('cc'), attachments=env.get('attachments'), **_more(env, 'bcc', 'subject'))
@@ -581,7 +582,11 @@ def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dic
             try: out['shut'] = concierge.close_after_send(store, rv['TaskId'], actor)
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the send went, its close did not run - {e}")
         # ...EVERY yes that went, not only one its turn said it waits on (the owner, 2026-11-09) - a held step's own road tells its agent
-        if proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed'):
+        # ...where the agents are recordings (the demo) there is none to tell: the line one would say next is written instead - a wake there
+        # ended the played Send on "No AI is connected" under a turn marked failed
+        from . import demo
+        if demo.enabled(): demo.after_send(store, rv['TaskId'])
+        elif proposals._action(rv) not in proposals.HELD_ACTS and not (out.get('shut') or {}).get('closed'):
             try: general.approved(store, rv['TaskId'], *pressed(rv, out), actor, review=rv.get('ReviewId'))
             except Exception as e: logger.warning(f"rv{rv.get('ReviewId')}: the agent was not told it went - {e}")
     return out

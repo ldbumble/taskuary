@@ -355,7 +355,7 @@ class TheDemo(unittest.TestCase):
             self.assertEqual(len(calwrite.slots_for(s, ask, 'schedule')['slots']), 3)
             self.assertEqual(demo.refuse('POST', f"/api/messages/{inv['MessageId']}/calendar", s), '', 'drafting is the demo')
             # ...a card's verdict is judged by its verb (demo.refuse_verdict): the answer is never sent, and the card can be put down
-            self.assertEqual(demo.refuse_verdict('approve'), demo.SENDS, 'Send stays refused')
+            self.assertEqual(demo.refuse_verdict('approve'), demo.SENDS, 'an action approved stays refused')
             self.assertEqual(demo.refuse('POST', f"/api/reviews/{d['reviewId']}/decide", s), '')
 
 

@@ -230,3 +230,16 @@ test("a block the agent wrote out on its way is not folded behind the steps", as
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /p\.type === "said" && \(!ended \|\| isMade\(p\.text\)\)/);
 });
+
+// A REPLY THE AGENT REWROTE, THEN SENT, KEEPS ITS SENT CARD (recorded 2026-11-15): the rewrite is the same review, so the list holds its earlier
+// version ("Earlier draft - rewritten below") above its own card - and the earlier version, drawn first, claimed every card of that review
+test("an earlier version of a draft never takes its review's own card", async () => {
+  const { isPastCard, standing } = await import("../src/chatStream.js");
+  const old = { id: "r:12:c18", review: 12, status: "superseded", was: { text: "Hi Erin, September came to..." } }, own = { id: "r:12", review: 12, status: "approved" };
+  const gone = { id: "r:7", review: 7, status: "withdrawn", was: { text: "Hi Gail" } };
+  assert.ok(isPastCard(old) && isPastCard(gone) && !isPastCard(own) && !isPastCard({ status: "superseded" }));
+  const items = [{ kind: "turn", cards: [old] }, { kind: "arrival" }, { kind: "turn", cards: [own] }, { kind: "card", ...gone }];
+  assert.deepEqual([...standing(items)], [12], "review 12 still has its own card; review 7 is only its record");
+  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /if \(isPastCard\(c\)\) \{ if \(!stands\.has\(c\.review\)\) nodes\.forEach/);
+});

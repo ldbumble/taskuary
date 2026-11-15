@@ -120,10 +120,13 @@ test("a turn at work says what is happening, or what we wait for, beside its dot
   assert.match(src, /: doing \? <span className="tq-aui-working-line" data-tq-working-line="" title=\{doing\}>\{doing\}<\/span> : null/);
 });
 
-test("his waiting line stands under the turn at work, in the conversation's own flow - never by the box across a gap (the owner, 2026-11-15)", async () => {
+test("his waiting line is pinned just over the box until the agent takes it - never in the scrolled conversation, where a turn at work pushed it down (the owner, 2026-11-15)", async () => {
   const src = (await readFile(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
   const conv = src.slice(src.indexOf('className="tq-conv"'), src.indexOf("</ThreadPrimitive.Viewport>")), foot = src.slice(src.indexOf('<div className="tq-aui-footer">'));
-  assert.match(conv, /<PendingStrip items=\{merged\.pending\}/, "inside the scrolled conversation");
-  assert.ok(conv.indexOf("<PendingStrip") > conv.indexOf("<Conversation items="), "after the turns: under the one at work, pushed down as it writes");
-  assert.doesNotMatch(foot, /<PendingStrip/, "and not over the box");
+  assert.doesNotMatch(conv, /<PendingStrip/, "not in the scrolled conversation: it moved as the turn wrote");
+  assert.match(foot, /<PendingStrip items=\{merged\.pending\}/, "over the box");
+  assert.ok(foot.indexOf("<PendingStrip") < foot.indexOf("<OneBox"), "above the box, whatever agent works the task");
+  const css = (await readFile(new URL("../src/generalWorkspace.css", import.meta.url), "utf8")).replace(/\r\n/g, "\n");
+  assert.match(css, /\.tq-conv-pending \{[^}]*margin: 0 0 10px/, "a little room between it and the box");
+  assert.match(css, /\.tq-conv-pending-row \{[^}]*border: 1px solid/, "each line in its own border");
 });

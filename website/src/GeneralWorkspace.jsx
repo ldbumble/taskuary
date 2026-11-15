@@ -18,7 +18,7 @@ import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isMade, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, placesLoose } from "./chatStream.js";
+import { chatSource, checkBackDue, waitingShown, eventsOf, hasParts, isMade, isPastCard, standing, heldAtEnd,  partsMessage, turnParts, workCount, paintable, withMine, waitingChips, workingLine, waitingOn, askTurn, lettersTurn, placesLoose } from "./chatStream.js";
 import { stepLabel } from "./agentSteps.js";
 export { checkBackDue };
 import { detailFor, useOwnDetail } from "./chatDetail.js";
@@ -480,9 +480,11 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
   const landIn = landAt ? landingTurn(items.filter((x) => x.kind === "turn").map((x) => ({ role: "assistant", id: x.id, createdAt: x.at })), landAt) : null;
   // ...every review the list places, in whatever state: a card is drawn where the list has it and nowhere else
   const used = new Set(), listed = new Set(items.flatMap((x) => (x.kind === "card" ? [x] : x.kind === "turn" ? x.cards || [] : [])).map((c) => c.review));
+  const stands = standing(items);
   const draw = (cs) => (cs || []).flatMap((c) => {
     // ...a draft no longer to press carries what it said (`was`); any other card the server settled is its own node, in its place
-    if (PAST[c.status] && c.was) { nodes.forEach((n) => { if (n.rid === c.review) used.add(n.key); }); return [<PastCard key={c.id} c={c} />]; }
+    // ...and it takes its review's node with it only where the review has no card of its own left in the list (chatStream.standing)
+    if (isPastCard(c)) { if (!stands.has(c.review)) nodes.forEach((n) => { if (n.rid === c.review) used.add(n.key); }); return [<PastCard key={c.id} c={c} />]; }
     const got = nodes.filter((n) => n.rid === c.review && !used.has(n.key)), post = posts.find((p) => p.ReviewId === c.review);
     got.forEach((n) => used.add(n.key));
     // ...ONE REVIEW IS ONE CARD: a post or a tracker comment an earlier build set aside has its settled card among the nodes, and was drawn
@@ -661,10 +663,6 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
             <RetryCtx.Provider value={retry}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
               landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} loose={placesLoose(list)} ask={askNode} askAt={askAt} lettersAt={lettersTurn(list, merged.items)} /></WaitOnCtx.Provider></RetryCtx.Provider>
-            {/* HIS LINE THAT WAITS STANDS DIRECTLY UNDER THE TURN AT WORK, and goes down as the agent writes (the owner, 2026-11-15, a screenshot:
-                it stood by the box at the foot of the window, a gap of empty canvas between it and the turn it waits on). It is in the
-                conversation's own flow, its last thing; heard, it lands where the agent heard it, as before - nothing is drawn above it then */}
-            <PendingStrip items={merged.pending} now={!!list?.now} onRetry={retry} onDrop={dropLine} onNow={sendNow} />
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}
@@ -686,6 +684,10 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
           </div>
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">
+            {/* HIS LINE THAT WAITS IS PINNED JUST OVER THE BOX until the agent takes it, then it lands in the chat where it was heard (the owner,
+                2026-11-15: under the turn at work it went down the screen for as long as that turn wrote - a minute, on a terminal). It keeps its
+                place whatever the turn does: a little room between it and the box, each line in its own border. Every kind of agent, one strip */}
+            <PendingStrip items={merged.pending} now={!!list?.now} onRetry={retry} onDrop={dropLine} onNow={sendNow} />
             {/* NO AI: one small line over the box, its Connect an AI beside it (the owner, 2026-11-06) - the box stays the box */}
             {noAi}
             {/* ONE DOOR: while the conversation is open the box is how it goes on, but once a coding run has ENDED on a closed task the bar

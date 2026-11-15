@@ -725,8 +725,9 @@ def signins(request: Request):
 def signin_remove(site: str, request: Request):
     from . import signin
     _owner_only(request, "the saved sign-ins are the owner's")
-    if not signin.remove(store, site, ACTOR): raise HTTPException(404, 'nothing is saved for that site')
-    return {'ok': True}
+    out = signin.remove(store, site, ACTOR)
+    if not out: raise HTTPException(404, 'nothing is saved for that site')
+    return {'ok': True, **out}                           # ...`deleted`: what the page's Undo line names (/api/deleted/{did}/restore)
 
 
 class SigninKeyBody(BaseModel):

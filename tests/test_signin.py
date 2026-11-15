@@ -576,7 +576,7 @@ class Removing(unittest.TestCase):
         (d / 'sessions' / 'taskuary-tq-abc.json').write_text(json.dumps(kept), encoding='utf-8')
         (d / 'sessions' / 'someone-else.json').write_text(json.dumps(kept), encoding='utf-8')
         with mock.patch.dict(os.environ, {'AGENT_BROWSER_HOME': str(d)}):
-            self.assertTrue(signin.remove(s, 'bank.example'))
+            self.assertEqual(signin.remove(s, 'bank.example')['kind'], 'signin')
         self.assertIsNone(signin.saved(s, 'bank.example'))
         self.assertEqual(signin.listing(s), [])
         left = json.loads((d / 'sessions' / 'taskuary-tq-abc.json').read_text(encoding='utf-8'))
@@ -646,6 +646,49 @@ class Routes(unittest.TestCase):
             self.assertEqual(c.delete('/api/signins/bank.example').status_code, 200)
             self.assertEqual(c.delete('/api/signins/bank.example').status_code, 404)
         self.assertEqual(c.get('/api/signins').json()['data'], [])
+
+    # ONE PRESS, AND AN UNDO THAT IS TRUE (the owner, 2026-11-15: Remove asks nothing, and leaves an Undo line as a removed task does).
+    # Undo puts back the whole saved sign-in - the password, the authenticator key and the other boxes it fills - not a row with holes
+    def test_remove_answers_with_an_undo_that_puts_the_whole_sign_in_back(self):
+        from taskuary import recentlydeleted, totp, vault
+        key = 'JBSWY3DPEHPK3PXP'
+        self.addCleanup(lambda: self.s._exec("DELETE FROM signin_vault WHERE Site='bank.example'"))
+        signin.save(self.s, 'bank.example', USER, PW, key=key, extra={'Customer ID': 'NW-7'})
+        was = signin.saved(self.s, 'bank.example')
+        with mock.patch.object(browserview, 'forget_site', return_value=0), mock.patch.object(signin, '_forget_live'), \
+                mock.patch.object(vault, 'forget') as forgot:
+            out = c.delete('/api/signins/bank.example').json()
+            self.assertEqual((out['kind'], out['title']), ('signin', 'bank.example')); did = out['deleted']
+            # ...out of the vault at once: nothing types it from the press on, and nothing lists it
+            self.assertIsNone(signin.saved(self.s, 'bank.example')); self.assertEqual(c.get('/api/signins').json()['data'], [])
+            self.assertEqual(recentlydeleted.listing(self.s), [], "the Undo line's alone - not a shelf of kept passwords")
+            forgot.assert_not_called()                         # its keychain entries wait for the Undo line to pass
+            self.assertEqual(c.post(f'/api/deleted/{did}/restore').status_code, 200)
+            forgot.assert_not_called()
+        back = signin.saved(self.s, 'bank.example')
+        self.assertEqual(vault.unseal(back['Secret']), PW); self.assertEqual(vault.unseal(back['User']), USER)
+        self.assertEqual(totp.loads(vault.unseal(back['Totp'])), totp.loads(vault.unseal(was['Totp'])))
+        self.assertEqual(signin.extra_of(back), {'Customer ID': 'NW-7'})
+        self.assertEqual([(r['site'], r['code']) for r in c.get('/api/signins').json()['data']], [('bank.example', True)])
+        self.assertEqual(c.post(f'/api/deleted/{did}/restore').status_code, 404, 'an Undo is one press')
+
+    def test_an_undo_left_unpressed_forgets_the_keychain_and_never_overwrites_a_newer_sign_in(self):
+        import time
+        from taskuary import recentlydeleted, vault
+        self.addCleanup(lambda: self.s._exec("DELETE FROM signin_vault WHERE Site='bank.example'"))
+        signin.save(self.s, 'bank.example', USER, PW)
+        old = signin.saved(self.s, 'bank.example')['Secret']
+        with mock.patch.object(browserview, 'forget_site', return_value=0), mock.patch.object(signin, '_forget_live'):
+            did = c.delete('/api/signins/bank.example').json()['deleted']
+        # the owner signs in again on the page before pressing Undo: the new one stands
+        signin.save(self.s, 'bank.example', USER, 'a newer password')
+        self.assertEqual(c.post(f'/api/deleted/{did}/restore').status_code, 409)
+        self.assertEqual(vault.unseal(signin.saved(self.s, 'bank.example')['Secret']), 'a newer password')
+        # ...and once the line's minutes pass, the kept row goes and its sealed values are forgotten
+        with mock.patch.object(vault, 'forget') as forgot:
+            self.assertIn(did, recentlydeleted.purge(self.s, time.time() + recentlydeleted.UNDO_SECONDS + 1))
+        self.assertIn(mock.call(old), forgot.call_args_list)
+        self.assertEqual(c.post(f'/api/deleted/{did}/restore').status_code, 404)
 
 
 if __name__ == '__main__': unittest.main()

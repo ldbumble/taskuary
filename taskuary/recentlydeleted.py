@@ -19,7 +19,7 @@ KEEP_DAYS, UNDO_SECONDS = 30, 600
 # look on. The post itself never leaves the Hub's own removed shelf - this entry going after KEEP_DAYS forgets nothing
 HUB = 'hub post'
 LISTED = ('report', 'workflow', 'dashboard', 'rule', 'profile', HUB)   # what Recently deleted lists; the rest is an Undo line's alone
-SHORT = ('connection', 'signout', 'cli')                   # kept for the Undo line's minutes, then finished off
+SHORT = ('connection', 'signout', 'cli', 'signin')         # kept for the Undo line's minutes, then finished off
 
 
 BRIEF = SHORT + ('task',)                                  # ...and a task Removed as not a task: its Undo line's alone, nothing to finish
@@ -50,6 +50,10 @@ def listing(store, kinds=LISTED, now: float = None) -> list:
 def _finish(store, kind: str, data: dict):
     """What makes a short-kept removal final, once its Undo has passed."""
     from . import vault
+    if kind == 'signin':
+        # a saved sign-in's sealed values (signin.remove kept the row whole): a keychain entry goes only now that Undo cannot ask for it
+        for v in filter(None, ((data.get('row') or {}).get(k) for k in ('User', 'Secret', 'Totp', 'Extra'))): vault.forget(v)
+        return
     secret = (data.get('row') or {}).get('Secret')
     if kind == 'signout' and data.get('revoke') == 'chatgpt' and secret:
         from . import chatgptauth
@@ -161,6 +165,16 @@ def sign_out(store, cid: int, title: str, cfg_after: dict, revoke: str = None, c
     return {'deleted': did, 'title': title, 'kind': 'signout'}
 
 
+def remove_signin(store, row: dict) -> dict:
+    """A saved sign-in (Settings -> Saved sign-ins, the owner 2026-11-15: one press, and an Undo line as a removed task has): out of the
+    vault at once - nothing types it from the press on - and its row kept SEALED AS IT WAS for the Undo line's minutes. Undo puts back the
+    user name, the password, the authenticator key and the other boxes; what the browser was signed in with is not kept (signin.remove
+    ends that at once), so the next visit types the saved sign-in again."""
+    did = keep(store, 'signin', row['Site'], {'row': dict(row)})
+    store._exec('DELETE FROM signin_vault WHERE Site=?', (row['Site'],))
+    return {'deleted': did, 'title': row['Site'], 'kind': 'signin'}
+
+
 def remove_cli(store, cfg: dict, name: str, users: list) -> dict:
     """A CLI connection, and which profiles ran on it - Undo puts each back on it."""
     kept = {'name': name, 'conn': cfg['cli_connections'][name], 'users': {n: dict(cfg['agents'][n]) for n in users}}
@@ -222,6 +236,10 @@ def restore(store, cfg: dict, did: int) -> dict:
     kind, d = r['Kind'], json.loads(r['DataJson'] or '{}')
     if kind == 'profile' and d['name'] in cfg.get('agents', {}): raise Taken(f"a profile named {d['name']} exists again - rename it first")
     if kind == 'cli' and d['name'] in cfg.get('cli_connections', {}): raise Taken(f"{d['name']} is connected again already")
+    if kind == 'signin':
+        from . import signin
+        # a sign-in saved for the site since (typed on the page, or added again) is the one that stands: the old one is not laid over it
+        if signin.saved(store, d['row']['Site']): raise Taken(f"a sign-in for {d['row']['Site']} is saved again already")
     store.drop_deleted(r['DeletedId'])
     if kind in ('report', 'workflow', 'dashboard', 'source'): store.put_back('source', d['row'], 'SourceId')
     elif kind == 'rule':
@@ -246,6 +264,7 @@ def restore(store, cfg: dict, did: int) -> dict:
         if not store.lore_get(d['lid']): raise Gone('that Hub post is no longer on the Hub')
         store.lore_restore(d['lid'])
     elif kind == 'task': return {'kind': kind, 'title': r['Title'], 'task_id': _restore_task(store, d)}
+    elif kind == 'signin': store.put_back('signin_vault', d['row'], 'Site')
     elif kind in SHORT:
         row = d.get('row') or {}
         # a card taken off the list comes back whole, under its own id (its sources still name it)

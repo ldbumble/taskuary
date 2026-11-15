@@ -216,18 +216,21 @@ def set_key(store, site, key, by='owner') -> bool:
     return True
 
 
-def remove(store, site, by='owner') -> bool:
-    """Forget a saved sign-in AND what it left behind: the sealed row, and that site's cookies in the browser's kept state."""
-    from . import browserview, vault
+def remove(store, site, by='owner') -> dict | None:
+    """Forget a saved sign-in AND what it left behind: the sealed row, and that site's cookies in the browser's kept state. One press,
+    no question (the owner, 2026-11-14) - and taken back by the Undo line every Remove leaves (2026-11-15, recentlydeleted.remove_signin):
+    the row is out of the vault at once and kept sealed for the line's minutes, its keychain entries forgotten only when they pass. The
+    browser is signed out now either way - Undo brings the saved sign-in back, and the next visit types it. The Remove's answer
+    ({deleted, title, kind}; no `deleted` where only cookies were left), or None when nothing was kept for the site."""
+    from . import browserview, recentlydeleted
     site = str(site or '').lower()
-    row = saved(store, site)
-    if row:
-        store._exec('DELETE FROM signin_vault WHERE Site=?', (site,))
-        for v in row.get('User'), row.get('Secret'), row.get('Totp'): vault.forget(v)
+    _tables(store)
+    row = store._one('SELECT * FROM signin_vault WHERE Site=?', (site,))
+    out = recentlydeleted.remove_signin(store, row) if row else None
     n = browserview.forget_site(site)
     _forget_live(site)
     store.audit('signin', 0, 'signin_removed', by, detail={'site': site, 'had_saved': bool(row), 'cookie_files': n})
-    return bool(row) or bool(n)
+    return out or ({'title': site, 'kind': 'signin'} if n else None)
 
 
 def _forget_live(site):

@@ -167,6 +167,10 @@ class Vaulted(unittest.TestCase):
         with mock.patch.object(vault, 'forget') as forgot, mock.patch('taskuary.browserview.forget_site', return_value=0), \
                 mock.patch.object(signin, '_forget_live'):
             signin.remove(self.s, 'bank.example')
+            # ...kept sealed for the Undo line's minutes (the owner, 2026-11-15), then all three forgotten: the user name, the password, the key
+            self.assertEqual(len(forgot.call_args_list), 0)
+            from taskuary import recentlydeleted
+            recentlydeleted.purge(self.s, time.time() + recentlydeleted.UNDO_SECONDS + 1)
         self.assertEqual(len(forgot.call_args_list), 3)
 
 

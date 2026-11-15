@@ -6,7 +6,7 @@
 const subs = new Set();
 let last = null, timer = null;
 
-// `kind`: which lists draw it ("report", "workflow", "rule", "profile", "source", "connection", "signout"); `did`: the server's id
+// `kind`: which lists draw it ("report", "workflow", "rule", "profile", "source", "connection", "signout", "signin" - a saved sign-in); `did`: the server's id
 export const removedLine = (title, verb = "Removed") => `${verb} ${title || "it"}`;
 export function announceRemoved({ did, title, kind, verb = "Removed" }) {
   last = did ? { did, title, kind, verb, at: Date.now() } : null;

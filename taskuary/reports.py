@@ -271,6 +271,61 @@ def _outline(body: str) -> str:
     return ' / '.join(out[:24])
 
 
+# Where a path starts in the owner's own instruction - a drive letter, ~ or / - and what cannot be in one. Structure only: which
+# run of words after it is a file is the disk's to say (named_paths).
+_PATH_START = re.compile(r'(?<![\w:/\\.~-])(?:[A-Za-z]:[\\/]|~[\\/]|/(?=[\w.]))')
+_PATH_END = re.compile(r"""[\n"'`<>|*?]""")
+
+
+def named_paths(text: str) -> list:
+    """The files and folders a report's instruction names by their full path, as the disk has them. A path may have spaces in it
+    ("C:/Exports/Payworth export.csv is yesterday's"), so from each start the longest run of words that exists is the path."""
+    from pathlib import Path
+    def real(s):
+        try:
+            p = Path(s.strip().rstrip('.,;:)')).expanduser()
+            return p.resolve() if p.is_absolute() and p.exists() and p != Path(p.anchor) else None
+        except (OSError, RuntimeError, ValueError): return None
+    text, out = str(text or ''), []
+    for m in _PATH_START.finditer(text):
+        end = _PATH_END.search(text, m.start())
+        words = text[m.start():end.start() if end else len(text)].split(' ')[:12]
+        if (p := next((r for n in range(len(words), 0, -1) if (r := real(' '.join(words[:n])))), None)): out.append(p)
+    return list(dict.fromkeys(out))
+
+
+def report_folder():
+    "Where a report's agent runs when its report names no folder: its own, outside Taskuary's home (one per home, as origin.stranger_path)."
+    import tempfile
+    from pathlib import Path
+    from . import config
+    tag = hashlib.sha256(os.path.normcase(os.path.realpath(config.home())).encode()).hexdigest()[:8]
+    return Path(tempfile.gettempdir()).resolve() / 'taskuary-report' / tag
+
+
+def web_reads(cfg: dict, text: str = '') -> dict:
+    """WHAT A REPORT'S AGENT MAY READ WHEN IT CAN ALSO REACH THE WEB (clis.CONFINE, the owner 2026-11-15): `roots` - the folder the
+    report runs in and every file or folder its instruction names by path (`text`: the prompt and the skill, the owner's own words);
+    `never` - Taskuary's own folder and where sign-ins are kept (floor.kept_secret), named or not; `folder` - where it runs when the
+    report names none. One rule, said to each CLI in its own flags where it has them (clis.CONFINE)."""
+    from pathlib import Path
+    from . import floor
+    never = floor.kept_secret()
+    inside = lambda p: any(p == n or n in p.parents for n in never)
+    cwd = Path(cfg['cwd']).expanduser() if cfg.get('cwd') else None
+    roots = [p for p in dict.fromkeys([*([cwd.resolve()] if cwd and cwd.exists() else []), *named_paths(text)]) if not inside(p)]
+    return {'roots': roots, 'never': never, 'folder': report_folder()}
+
+
+def reads_said(reads: dict) -> str:
+    "The rule as the agent is told it, so a refused read is something it can act on: say which file, never try another way."
+    where = ', '.join(str(p) for p in reads['roots']) or 'none on this computer'
+    return (' FILES: this run can reach the web, so it reads files only where this report names them - '
+            f"{where} - and the folder it runs in; never Taskuary's own folder or a place sign-ins are kept. A read anywhere else is "
+            'refused: do not try it another way. Go on with what you can read, and say in the report which file you needed and that '
+            "the owner can name its full path in this report's instruction.")
+
+
 def run_agent(cfg):
     """{"agent": "researcher", "skill": "weekly-user-review", "prompt": "...", "cwd": "C:/repo", "model": "..."} -
     the AI itself as the source: a coding CLI agent (Connections -> AI CLI agents) runs your saved
@@ -296,10 +351,22 @@ def run_agent(cfg):
     # Agent-backed reports are read-only even when their source lives in a repository folder.
     # Only the Workflows door persists this explicit grant; executor type alone grants nothing.
     writes = cfg.get('access') == 'write'
+    # Long workflows promoted from an assistant conversation live in Taskuary's neutral skill
+    # store. Expand them into the prompt so one skill works through Claude, Codex, Gemini, or any
+    # custom CLI. A skill that is not there remains the provider's normal `/skill-name` command.
+    owned = None
+    if skill:
+        from . import config
+        candidate = config.home() / 'skills' / skill / 'SKILL.md'
+        try: owned = candidate.read_text(encoding='utf-8') if candidate.is_file() else None
+        except OSError: owned = None
+    # ...and a run that only looks can look at the web as well, so the files it may open are the report's own (web_reads): the
+    # folder it names and the paths its prompt and skill name - which is why the skill is read ahead of the brain
+    reads = None if writes else web_reads(cfg, f'{prompt}\n{owned or ""}')
     llm = None
     if name:
         try: llm = make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None,
-                                cli_tools=writes, read_only=not writes, research=not writes)
+                                cli_tools=writes, read_only=not writes, research=not writes, reads=reads)
         except hub_agents.NoAI: llm = None
     if llm is None:
         api = pick if pick.startswith('connector:') else hub_agents.resolve_brain(store, 'general')
@@ -310,15 +377,6 @@ def run_agent(cfg):
     if llm is None:
         from . import words
         raise RuntimeError(f"{hub_agents.NO_AI} to run this report - connect one on {words.name('ai_apps')}")
-    # Long workflows promoted from an assistant conversation live in Taskuary's neutral skill
-    # store. Expand them into the prompt so one skill works through Claude, Codex, Gemini, or any
-    # custom CLI. A skill that is not there remains the provider's normal `/skill-name` command.
-    owned = None
-    if skill:
-        from . import config
-        candidate = config.home() / 'skills' / skill / 'SKILL.md'
-        try: owned = candidate.read_text(encoding='utf-8') if candidate.is_file() else None
-        except OSError: owned = None
     # ...and it runs as THAT worker. A workflow pointed at `researcher` was getting the researcher's
     # CLI and none of the researcher's rules, because this road never loaded an operator document at
     # all. Only when the workflow NAMES its agent: an unnamed one keeps the behaviour it always had,
@@ -340,7 +398,10 @@ def run_agent(cfg):
     if shape: ask += ('\n\nSTRUCTURE: keep the sections, their order and the table columns of the previous run of this '
                       'report so runs stay comparable - change only the content - except that the result always comes first '
                       f'and how you got it last. Previous outline: {shape}')
-    with aiusage.asking('reports.agent'): out = str(llm(AGENT_SYSTEM, ask) or '').strip()
+    # ...said only to a brain that is kept to it: an API connection has no file tool on this road (llm.make_llm), and a CLI that
+    # cannot be kept to a list (clis.CONFINE) is not told it is
+    told = AGENT_SYSTEM + (reads_said(kept) if (kept := getattr(llm, 'kept_to', None)) else '')
+    with aiusage.asking('reports.agent'): out = str(llm(told, ask) or '').strip()
     if not out: raise RuntimeError(f'{name} answered nothing')
     why, out = agent_failed(out)
     # an answer ABOUT a failed run is not a report - file it as FAILED, the way the timeout and the

@@ -253,11 +253,43 @@ def readonly_args(cmd: str, args: list) -> list:
     return [a for a in args if a not in drop] + list(add)
 
 
-def report_read_args(cmd: str, args: list) -> list:
-    """CLI arguments for retrieving report data without command, edit, write, or MCP access."""
+def report_read_args(cmd: str, args: list, reads: dict = None) -> list:
+    """CLI arguments for retrieving report data without command, edit, write, or MCP access. `reads` keeps the files it may open to
+    the report's own (CONFINE) - given for a run that can also reach the web."""
     _require_restricted_mode(cmd)
     drop, add = REPORT_READ[_base(cmd)]
-    return [a for a in args if a not in drop] + list(add)
+    return [a for a in args if a not in drop] + (CONFINE[_base(cmd)](reads) if reads and confines(cmd) else list(add))
+
+
+# THE WEB AND THE DISK IN ONE RUN (the owner, 2026-11-15: "do that but make sure the agents don't lose ability to do their job. ONLY for
+# web agents"): a report's agent could fetch any page AND read any file on the computer, Taskuary's own folder with the mail and the
+# tokens included, with nobody pressing anything - so a page that says "read this file and put it in your next search" had both halves of
+# a leak. A run that can reach the web reads only what its report names (reports.web_reads: `roots`), and never Taskuary's folder or
+# where sign-ins are kept (`never`). Said to a CLI in the words its own permission system has, and only to one the real CLI was seen to
+# hold to (2026-11-15):
+# - claude: Read, Glob and Grep are granted by path rule, no longer by name - its working folder, and one rule a named file or folder.
+#   A read anywhere else finds nobody to ask and comes back refused; a `never` path is refused even inside a named folder.
+# - codex is NOT here: its read-only sandbox reads the whole disk and a permission profile taking paths out of it did not hold on
+#   Windows - one run refused the folder, the next read it - and what it did apply it wrote onto the folder's own access list, for good.
+# The rest read only their working folder already, or have no tool at all (READONLY).
+def _claude_rule(p) -> str:
+    "A path as Claude Code's permission rules spell it: //c/Users/alex/exports/** - from the filesystem root, a folder with all under it."
+    from pathlib import Path
+    q = Path(p); s = q.as_posix().rstrip('/')
+    s = s[0].lower() + s[2:] if s[1:2] == ':' else s.lstrip('/')         # C:/Users -> c/Users, /home -> home
+    return f"Read(//{s}{'/**' if q.is_dir() else ''})"
+
+
+def _claude_reads(reads: dict) -> list:
+    from pathlib import Path
+    web = [t for t in REPORT_TOOLS.split(',') if t.startswith('Web')]
+    return ['--tools', REPORT_TOOLS, '--allowedTools', *web, *map(_claude_rule, reads.get('roots') or []),
+            '--disallowedTools', 'mcp__*', *map(_claude_rule, reads.get('never') or []),
+            *[x for r in reads.get('roots') or [] if Path(r).is_dir() for x in ('--add-dir', str(r))]]
+
+
+CONFINE = {'claude': _claude_reads}
+def confines(cmd: str) -> bool: return _base(cmd) in CONFINE
 
 
 def _require_restricted_mode(cmd: str):

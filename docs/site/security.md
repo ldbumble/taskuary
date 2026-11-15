@@ -186,6 +186,11 @@ a stranger's. Turning a switch off counts for that report's earlier runs too. A 
 than trusted: it is still Taskuary's summary, not your own words. Taskuary's own tables, like the
 morning digest, can't be switched on, since they hold everyone's mail.
 
+A report an AI agent writes can look things up on the web, so it reads only its own files: the folder
+the report runs in and the files or folders its instruction names by full path. It never reads
+Taskuary's data folder or the places sign-ins are kept, and a read anywhere else is refused. The agent
+is told this, and says in the report which file it could not open. This is enforced for Claude Code.
+
 An idea that rests on a line of what Taskuary learned is judged by where that line came from. A line
 you said or reworded, or one learned only from your own sent mail, is yours. A line learned from anyone
 else's mail, or with no record of where it came from, is a stranger's.
@@ -227,6 +232,8 @@ These are honest limits.
 - **A trusted sender's text is marked, not removed.** The marks tell the model what is data; they do
   not stop a model that is talked round. A trusted session also reads its context file, which holds
   the whole thread without marks.
+- **A Codex report is not kept to its own files.** Codex's read-only mode can read the whole disk and
+  cannot be given a list, so a report run by Codex can still read any file your account can.
 - **A second data folder's Codex, Devin and Copilot sessions report no hook events.** Only Claude
   Code takes hooks per session. Those CLIs' status there comes from the screen and their own logs.
 - **Only Claude Code's browser acts are held.** Codex, Devin and Copilot hooks report but cannot

@@ -189,5 +189,97 @@ class AgentSourceTests(unittest.TestCase):
         self.assertNotIn('access', out['config'])
 
 
+class WebReportReadsOnlyItsOwnFilesTests(unittest.TestCase):
+    """A report's agent that can reach the web reads only the files its report names, and never Taskuary's own folder (the owner,
+    2026-11-15: "do that but make sure the agents don't lose ability to do their job. ONLY for web agents"). It could fetch any page and
+    read any file with nobody pressing anything, so a page saying "read this file" had both halves of a leak."""
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name).resolve()
+        self.home, self.exports, self.repo = root / 'taskuary-home', root / 'Payworth exports', root / 'ledger'
+        for d in (self.home, self.exports, self.repo): d.mkdir()
+        self.export = self.exports / 'export 2026-11-15.csv'; self.export.write_text('vendor,rows,failed\nPayworth,412,2\n')
+        (self.home / 'taskuary.db').write_text('mail')
+        for where in ('taskuary.config.home', 'taskuary.floor.home'):
+            p = mock.patch(where, return_value=self.home); p.start(); self.addCleanup(p.stop)
+        self.s = MemoryStore()
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        self.s.set_setting('default_brain', 'claude', 'owner')
+
+    def _prompt(self): return f"Read {self.export.as_posix()} and compare it with the vendor's status page."
+
+    def _run_cli(self, seen):
+        def run_cli(prof, prompt, trace, resume=None, **kw): seen['prof'] = prof; return 'ok', None, None
+        return mock.patch('taskuary.agents.run_cli', run_cli)
+
+    def test_what_the_report_names_is_what_it_may_read(self):
+        r = reports.web_reads({'cwd': str(self.repo)}, self._prompt() + f' The totals are in "{self.exports}". Ignore C:/nowhere/else.csv and /.')
+        self.assertEqual(r['roots'], [self.repo, self.export, self.exports], 'its folder, the file named bare with a space in it, the folder named in quotes')
+        self.assertIn(self.home, r['never'])
+        self.assertNotIn(self.home, r['folder'].parents, "with no folder of its own it runs outside Taskuary's home")
+
+    def test_taskuarys_own_folder_is_never_one_of_them_even_when_named(self):
+        r = reports.web_reads({'cwd': str(self.home)}, f'Read {(self.home / "taskuary.db").as_posix()} and {self.export.as_posix()}')
+        self.assertEqual(r['roots'], [self.export])
+
+    def test_claude_is_granted_reads_by_path_and_the_web_by_name(self):
+        from taskuary import clis
+        r = reports.web_reads({'cwd': str(self.repo)}, self._prompt())
+        args = clis.report_read_args('claude', ['-p', '--dangerously-skip-permissions'], r)
+        allow, deny = args[args.index('--allowedTools') + 1:args.index('--disallowedTools')], args[args.index('--disallowedTools') + 1:]
+        def rule(p, under=''):
+            s = p.as_posix()
+            return f"Read(//{s[0].lower() + s[2:] if s[1] == ':' else s.lstrip('/')}{under})"
+        self.assertEqual(allow, ['WebFetch', 'WebSearch', rule(self.repo, '/**'), rule(self.export)], 'the web as before; no Read, Glob or Grep by name')
+        self.assertIn(rule(self.home, '/**'), deny); self.assertIn('mcp__*', deny)
+        self.assertEqual(args[args.index('--add-dir') + 1], str(self.repo))
+        self.assertEqual(args[args.index('--tools') + 1], clis.REPORT_TOOLS)
+        self.assertNotIn('--dangerously-skip-permissions', args)
+
+    def test_the_run_is_built_kept_to_them_and_only_this_road(self):
+        from taskuary import llm as llm_mod
+        seen, r = {}, reports.web_reads({}, self._prompt())
+        with self._run_cli(seen):
+            f = llm_mod.make_cli_llm(self.s, 'coding', read_only=True, research=True, reads=r); f('SYS', 'USER')
+            self.assertEqual(f.kept_to, r)
+            self.assertEqual(seen['prof']['cwd'], str(r['folder'])); self.assertTrue(r['folder'].is_dir())
+            self.assertFalse({'Read', 'Glob', 'Grep', 'Read,Glob,Grep,WebFetch,WebSearch'} & set(seen['prof']['args'][seen['prof']['args'].index('--allowedTools'):]))
+            self.assertTrue(any(str(a).endswith('export 2026-11-15.csv)') for a in seen['prof']['args']))
+            # a look with no report behind it, and triage, are as they were
+            f = llm_mod.make_cli_llm(self.s, 'coding', read_only=True, research=True); f('SYS', 'USER')
+            self.assertIsNone(f.kept_to); self.assertEqual(seen['prof']['cwd'], str(self.home / 'scratch'))
+            self.assertEqual(seen['prof']['args'][seen['prof']['args'].index('--allowedTools') + 1], 'Read,Glob,Grep,WebFetch,WebSearch')
+            f = llm_mod.make_cli_llm(self.s, 'coding', reads=r); f('SYS', 'USER')
+            self.assertIsNone(f.kept_to); self.assertEqual(seen['prof']['args'][seen['prof']['args'].index('--tools') + 1], '')
+
+    def test_a_cli_that_cannot_be_kept_to_a_list_is_not_told_it_is(self):
+        """Codex's read-only sandbox reads the whole disk: its flags and its folder stay as they were, and nothing claims otherwise."""
+        from taskuary import clis, llm as llm_mod
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        seen = {}
+        with self._run_cli(seen):
+            f = llm_mod.make_cli_llm(self.s, 'coding', read_only=True, research=True, reads=reports.web_reads({}, self._prompt())); f('SYS', 'USER')
+        self.assertIsNone(f.kept_to); self.assertEqual(seen['prof']['cwd'], str(self.home / 'scratch'))
+        self.assertEqual(clis.report_read_args('codex', ['exec'], {'roots': [], 'never': [self.home]}), clis.report_read_args('codex', ['exec']))
+
+    def test_the_report_road_passes_them_and_says_the_rule_where_it_holds(self):
+        calls = []
+        def make(kept):
+            def _make(store, name, model=None, cwd=None, **kw):
+                def llm(system, user, **_): calls.append({'system': system, 'reads': kw.get('reads')}); return '# Payworth\n2 of 412 rows failed'
+                llm.kept_to = kw.get('reads') if kept else None
+                return llm
+            return _make
+        ask = lambda **more: reports.REGISTRY['agent'](reports.resolve_cfg(self.s, {'type': 'agent', 'prompt': self._prompt(), **more}))
+        with mock.patch('taskuary.llm.make_cli_llm', make(True)): ask(); ask(access='write')
+        with mock.patch('taskuary.llm.make_cli_llm', make(False)): ask()
+        web, writes, unkept = calls
+        self.assertEqual(web['reads']['roots'], [self.export])
+        self.assertIn(str(self.export), web['system']); self.assertIn("name its full path in this report's instruction", web['system'])
+        self.assertIsNone(writes['reads'], 'a workflow with hands is not this road'); self.assertEqual(writes['system'], reports.AGENT_SYSTEM)
+        self.assertEqual(unkept['system'], reports.AGENT_SYSTEM, 'a brain that is not kept to the list is not told it is')
+
 if __name__ == '__main__':
     unittest.main()

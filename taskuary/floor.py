@@ -56,6 +56,12 @@ def protected() -> list:
     rs += [os.path.join(os.environ[v], *f) for v, f in (('COPILOT_HOME', ('hooks',)), ('APPDATA', ('devin', 'config.json'))) if os.environ.get(v)]
     return list(dict.fromkeys(_norm(r, real=rl) for r in rs for rl in (True, False)))
 
+def kept_secret() -> list:
+    "The same places as real paths, the ones that exist: a CLI's own deny list is written from them (reports.web_reads)."
+    from pathlib import Path
+    out = [Path(home()).resolve(), *(Path.home() / c for c in _CREDS)]
+    return [p for p in dict.fromkeys(out) if p.exists()]
+
 def _names() -> list:
     "Protected folders by their home-relative name, so `cd ~ && cat .ssh/x` and `../../.ssh/x` are seen without any root in sight."
     ns = [_cf(c) for c in _CREDS]

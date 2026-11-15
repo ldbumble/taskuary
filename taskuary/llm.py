@@ -288,7 +288,7 @@ def _general(store, task_id) -> bool:
 def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None,
                  resume=None, cli_tools: bool = False, extra_env: dict = None, read_only: bool = None,
                  research: bool = False, gear: str = 'light', keep: str = None, extra_args: list = None, task_id=None,
-                 user_settings: bool = True, hold_sid: str = None):
+                 user_settings: bool = True, hold_sid: str = None, reads: dict = None):
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
     is dropped - triage is about the message, not about any checkout.
 
@@ -327,9 +327,14 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         # safely read files and the web, but never gets command, edit, write, or connector tools.
         from .clis import preset_args, readonly_args, report_read_args
         from . import config
-        restrict = report_read_args if research else readonly_args
+        # ...and one that can reach the web as well reads only the files its report names (`reads`: reports.web_reads, clis.CONFINE)
+        from .clis import confines
+        reads = reads if research and reads and confines(prof['cmd']) else None        # ...where this CLI can be kept to them
+        restrict = (lambda c, a: report_read_args(c, a, reads)) if research else readonly_args
         prof['args'] = restrict(prof['cmd'], list(prof.get('args') or preset_args(prof['cmd']) or ['-p']))
-        scratch = config.home() / 'scratch'; scratch.mkdir(exist_ok=True)
+        # ...from a folder of its own outside Taskuary's home when it names none: the scratch folder is inside what it may not read
+        scratch = reads['folder'] if reads else config.home() / 'scratch'
+        scratch.mkdir(parents=True, exist_ok=True)
         prof['cwd'] = cwd or str(scratch)
     # The ACP road is for the general agent's tool-using runs only. `no_hands` is exactly the
     # classifier - triage and the drafter, one verdict with every tool off - and it keeps argv.
@@ -489,6 +494,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     # said out loud, not merely absent: a brain that CANNOT carry a schema is the one whose answer
     # is worth rechecking in code (llm.ask_json). Silence means "do not second-guess me".
     llm.takes_want = False
+    llm.kept_to = reads if no_hands else None      # the files this run was kept to, for the caller to say (reports.reads_said)
     return llm
 
 

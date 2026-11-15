@@ -40,7 +40,10 @@ That assumption is the whole security model — the notes below are what follows
   terminal opens a real shell — all with your credentials, on your machine. Anyone who
   can reach the API can do those things. `/api/tools/run` still refuses a catalog
   connection that is off or not marked *tool* (cards are seeded on first launch, so
-  "never connected" is not the same as "no row").
+  "never connected" is not the same as "no row"). A report written by an AI agent can also
+  reach the web, so on Claude Code it reads only the folder it runs in and the files its
+  instruction names - never Taskuary's data folder; Codex's read-only mode cannot be kept to
+  a list.
 - **Credentials are stored locally.** Connector secrets in `~/.taskuary/taskuary.db` are
   sealed with Windows DPAPI or the system keychain where one exists, and stay plain text
   where neither does; `config.toml` (the tokens among them) is plain text. They are

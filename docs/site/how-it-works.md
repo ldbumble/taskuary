@@ -17,8 +17,8 @@ Tasks, with Chase, Let it go, They answered elsewhere and Remind me under it (se
 [The Advisor](advisor#what-was-not-followed-up)).
 
 A finished or closed item gets no row: the rail is what still wants something from you, never a
-history. Open a row and it goes on the table as its task - **Came from**, **Agent** and **Close
-out** - with what triage decided and why. See [The work rail](tasks-and-agents#the-work-rail) for
+history. Open a row and it goes on the table as its task - **Came from** and **Agent**, the agent's
+one chat - with what triage decided and why. See [The work rail](tasks-and-agents#the-work-rail) for
 what puts a row there and what takes it off.
 
 ## The five roads a message can take
@@ -46,7 +46,8 @@ it. **Watch it**, **Stop watching** and every other move work on it as on any ta
 either one on a triaged item teaches triage for the next mail like it.
 
 `coding` and `general` can start an agent by themselves, when Settings allow it and the sender is
-someone Taskuary trusts; anything else waits for your Start. A `task` is yours by definition:
+someone Taskuary trusts. A sender you have not trusted waits behind one **Trust** button, and
+anything else waits for your Start. A `task` is yours by definition:
 nothing works it.
 
 :::note What "general" means
@@ -84,14 +85,16 @@ is filed too — never assumed to be work. Triage breaking is quiet and safe, no
 
 So a message that never reached the classifier was stopped by steps 1–6 or 8–9, and the fix is a
 rule, a feed or a ruling. A message the classifier *did* judge and got wrong is corrected on the
-Triage tab.
+item itself, by the move it should have had: **Make it a task** on an fyi, **Not for me**, **Watch it**
+or **Stop watching**, or under **Change ▾** "not a task" or another kind of work. Saying it to the
+Assistant ("this isn't a task", "this is a general job, not coding") lights the same button.
 
 ## Nothing sends itself
 
-Review is the outbound decision queue, and it is the only road out. A drafted reply sits there
-with the original request beside it; you edit the wording or the recipients, then **Approve &
-send** returns it through the channel the conversation started on. You can also ask for a
-redraft, reject it, or decide no reply is needed.
+Nothing leaves without your press. A reply the agent drafted sits in the task's chat as a card,
+on the turn that wrote it, with its own **Send**; you edit the wording or the recipients first,
+and **Send** returns it through the channel the conversation started on. You can also **Redraft**
+it, reject it, or decide no reply is needed.
 
 The same gate covers more than mail: a GitHub comment, an invoice, a bill posted to your finance
 system and a file written to a share are all proposals until you approve them. A connector card
@@ -99,19 +102,21 @@ ships at a read-only authority, and raising it is a deliberate act.
 
 :::rule One way to finish
 A task ends with **Mark done** — on the task page, on the Assistant's card, or by saying "done" in
-the chat. Sending the reply marks it done too, unless an agent is still working on it or a new
-message arrived meanwhile. An agent that says it is finished closes its own task, and that result
+the chat. **Send** never closes it: sending and closing are two steps. **Send and close** under a
+draft does both in one press, and still leaves the task open while an agent works on it or anything
+else on it waits on you. An agent that says it is finished closes its own task, and that result
 stays on your work rail until you have read it. See [Tasks and agents](tasks-and-agents#who-is-allowed-to-close-it).
 :::
 
 ## Correcting it teaches it
 
-The roads on the Triage tab are not decoration. Correcting a verdict writes the reason into
-`TRIAGE.md`, the document the classifier reads on the next message — so the correction applies to
-the next message *like* this one, rather than becoming a rule about this one sender.
+The moves on an item are not decoration. Pressing one that disagrees with triage writes what it
+says about you into `LEARNED.md`, which the classifier reads on the next message — so the
+correction applies to the next message *like* this one, rather than becoming a rule about this one
+sender. `TRIAGE.md` itself changes only when you edit it or generate it again.
 
 Every verdict is evidence. Editing a draft teaches voice; rejecting one teaches what should not
-be drafted; **Not our task** teaches where your responsibility ends. What a verdict says about you
+be drafted; **Not for me** teaches where your responsibility ends. What a verdict says about you
 goes into `LEARNED.md` as one line under `## What you care about`, in words - the kind of work and
 why ("You handle vendor invoice disputes yourself - not agent work"), ending `(about: …)` when it
 holds only for one sender or topic - so future triage, and the routing judge of a report, can judge
@@ -149,7 +154,8 @@ until you adopt it, and switching off a note it rested on takes it back there. E
 section's lines closest to the message first, within a budget; a line that did not fit is recorded
 as over budget, never cut in half. The opening screen says how many lines went into use this week
 and are still in use.
-`SOUL.md` always outranks `LEARNED.md`, and one setting switches the whole loop off.
+`SOUL.md` always outranks `LEARNED.md`. There is no switch that turns learning off: a line you
+disagree with is taken back with **Wrong**, **Forget** or **Undo**.
 
 **Correcting it where you read it.** **About you → Memory** reads `LEARNED.md` as plain sentences, one per
 line, each with Keep, Wrong and Forget and a faint note of when it was learned and from what. The file itself
@@ -227,13 +233,11 @@ leaving anything you wrote outside that block alone.
 
 ## Where the rest of the workspace fits
 
-- **Board** — queued, working, waiting and completed agent tasks, with a live terminal and the
-  files changed so far on the working cards.
-- **Studio** — agent capacity as a floor: one desk per slot, occupied when a task is running, a
-  raised hand when a session needs you.
-- **Wall** — every live terminal side by side, each with its own prompt box.
-- **Tasks** — the durable task, its agent sessions and the reply, as three separate records.
-- **Review** — the outbound queue.
+- **Chat** — the work rail and the Assistant, with the task on the table; what goes out waits in
+  the task's chat with its own Send.
+- **Game** — the same items as an office you walk around: people in the lobby, fyi's in the coffee room.
+- **Board** (Developer mode) — every agent and its session, full screen: **Columns** of queued,
+  working, waiting and completed tasks, the **Wall** of live terminals side by side, and **Live handoffs**.
 - **Reports** — connected data on a schedule, routines and playbooks; see [Reports and the Advisor](reports).
 - **Hub** — what agents have learned, by topic, so knowledge survives past one job.
 - **About you** — your initials in the top right corner: who you are, the documents above, and what Taskuary has learned about you (Memory).

@@ -33,8 +33,17 @@ picked as the triage brain at all (Cursor, Copilot, Kimi, OpenCode and custom co
 **A stranger does not start an agent.** A message opens a task, but an agent starts on it by itself
 only when the sender passes **Settings → Coding agent → Who may start a worker without you**: your own
 domain, someone you have written to before, or, in a chat you connected, someone you have talked with
-one-to-one, answered there, or vouched for. Everyone else's task waits for you to press Start. Earlier mail *from*
+one-to-one, answered there, or vouched for. On anyone else's task no agent works at all: its chat
+shows what came in, one line naming the sender with their address beside the name ("You have not
+trusted Erin Blake (erin@vendor.example) yet, so no agent works on this until you do."), and one
+**Trust** button. A display name is the sender's to choose; the address is what to check. Earlier mail *from*
 someone never counts. A stranger's second message is still a stranger's.
+
+**Trust starts the agent, and is kept.** Pressing **Trust** vouches for what is on the task so far and
+starts its agent as on any task of yours. It also lets that sender's next messages start an agent by
+themselves. **Settings → Agent permissions** lists the **People and organisations you trusted**, each
+with **Remove**: their next message waits behind Trust again, and tasks already worked keep what you
+vouched for.
 
 **A forged address is not a familiar one.** Taskuary reads the receiving server's
 Authentication-Results. A From address that fails DMARC or DKIM is a stranger's, however familiar it
@@ -45,7 +54,7 @@ all is judged by the rules above.
 display name anyone can copy. Being a member of a group you connected counts for nothing. Someone
 counts once the platform calls your conversation with them one-to-one and you have replied in it, once
 you have answered them in any chat there (their line, then yours, with nobody else between), or once
-you press **Trust this task** on a task they opened. WhatsApp names one person by phone in a direct
+you press **Trust** on a task they opened. WhatsApp names one person by phone in a direct
 chat and often by another id in a group; Taskuary reads both as the same person. Slack, Teams, Telegram, WhatsApp, iMessage,
 Mattermost, Google Chat and Discord say which conversations are one-to-one. Rocket.Chat is read from
 public rooms only, so there a sender counts only once you vouch for them. Teams is your own
@@ -58,14 +67,16 @@ display name. A chat sender who calls themselves "You" is still a stranger.
 **Triage says when a message is aimed at the AI.** Alongside what a message is, triage notes when its
 text reads as an attempt to steer the agent: telling it to ignore its rules, run or fetch something,
 or reveal or send files. On a stranger's task that note shows as a warning line on the card, where you
-decide whether to press Start. It is a warning, not a gate.
+decide whether to press Trust. It is a warning, not a gate.
 
 A scam aimed at you rather than the agent - a sender posing as someone else to get a password, a code,
 a sign-in or a payment - is noted too, and its warning says so: "Looks like a scam aimed at you - don't
 click or pay." Filed as FYI, its row lights Not for me, and Send to agent waits behind the ▾.
 
-**Nothing leaves without you.** Replies go out only after you approve them, and the agent cannot name
-the recipient. It answers the message on file. Pushes, pull requests and tool runs an agent
+**Nothing leaves without you.** Replies and emails go out only after you press Send. The agent does
+choose who they go to: a reply goes back to the message on file unless it names someone else, and an
+email can be addressed to anyone. Every one waits as a card showing its recipients, and an address
+the agent guessed is marked on the card to check before Send. Pushes, pull requests and tool runs an agent
 *proposes* are checked again when you approve them. Approving one never grants permission it did not
 already have.
 
@@ -155,7 +166,9 @@ session with full permissions still runs as your Windows user and has a shell.
 
 Every task knows **where its words came from**: you, a trusted sender, or a stranger. The least trusted
 text on it decides, and a stranger who writes on your colleague's thread makes it a stranger's task.
-Only you raise a task: **Trust this task** on its card. Pressing Start does not.
+Only you raise a task: **Trust** on its card, which also starts its agent. A task with a sender to
+trust runs no agent at all until then; what follows is for a stranger's task with nobody to trust,
+such as one Taskuary built from a stranger's words.
 
 A task Taskuary wrote itself, from an Advisor idea, is as trusted as the least trusted thing it was built
 from. Taskuary reads the messages and tasks the idea names: if every one is yours, a trusted sender's,
@@ -232,12 +245,15 @@ These are honest limits.
   should only read to *read*. Writes then become proposals you approve.
 - **Turn off chat trust** in **Who may start a worker without you** to trust only your own lines in
   every chat.
-- **Keep public repositories on the default.** A stranger's work waits for your Start.
+- **Keep public repositories on the default.** A stranger's work waits for you.
 - **Use an API provider, Claude Code or Codex as the triage brain.** These are the CLIs whose tools
   Taskuary knows how to turn off.
 - **Leave Hand answers to the working agent on Ask.** On Auto, a reply from the task's sender is typed
   straight into a running agent.
-- **Read a stranger's task before you press Trust this task.** Trusting it gives it your permissions.
+- **Read a stranger's task, and the address on its line, before you press Trust.** Trusting it starts
+  its agent with your permissions, and lets that sender's next messages start one too.
+- **Take back a trust you no longer want** under **Settings → Agent permissions → People and
+  organisations you trusted**.
 - **Run a stranger's work on Claude Code 2.1.295 or later.** Older versions are refused it.
 
 ## What comes next

@@ -755,7 +755,7 @@ def _is_helper(pid: int) -> bool:
         if os.name == 'nt':
             from .unpack import _image
             img = _image(int(pid))
-        else: img = os.readlink(f'/proc/{int(pid)}/exe') if os.path.exists(f'/proc/{int(pid)}') else subprocess.run(
+        else: img = os.readlink(f'/proc/{int(pid)}/exe') if os.path.exists(f'/proc/{int(pid)}') else spawn.run(
             ['ps', '-p', str(int(pid)), '-o', 'comm='], capture_output=True, text=True, timeout=5).stdout
     except Exception: return False
     return 'agent-browser' in os.path.basename(str(img or '').strip()).lower()

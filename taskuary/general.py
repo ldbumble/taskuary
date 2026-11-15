@@ -2620,7 +2620,7 @@ class GeneralSession:
         if not self.alive or getattr(self, 'ending', False): self._lock.release(); raise Ended(waiting)
         # ...AND NEWS A TURN HAS OVERTAKEN IS NOT A TURN OF ITS OWN (the browser audit, 2026-11-15): he typed a line while the saved sign-in was
         # going in, his line's turn worked the signed-in page, and the "Signed in - continue" queued behind it made the agent answer twice
-        if since and not as_owner and not self.busy and (self.last or 0) >= since: self._lock.release(); return ''
+        if since and not as_owner and not self.busy and (self.last or 0) > since: self._lock.release(); return ''
         # ONE HAND-OVER TAKES EVERYTHING THAT WAITS (the owner, 2026-11-11: "if the agent hears 40 of them at what time, it shows up there"):
         # whoever gets the turn - his line, a message passed in, Taskuary's own wake - takes every line kept for the agent with it, each with
         # the files sent with it, filed as his at the time it was typed; the turn's start hears what came in and was pressed since (hear).

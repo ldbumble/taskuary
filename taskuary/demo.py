@@ -1416,10 +1416,16 @@ def seed_tour(store, f) -> int:
 # browser tests boot this world to drive everything else from the greeting, so their harness turns the opening off (OPENS_ENV=0).
 OPENS_ENV = 'TASKUARY_DEMO_OPENS_TOUR'
 
+# ...ON WORK, NOT A CHECKLIST (the owner, 2026-11-15: "it should open on open task or open dashboard"): the tour's to-do was the first
+# thing a visitor saw. The demo opens on what an agent made - the LinkedIn post with its chart, one press from going out - and the tour
+# stays the first row on the rail for whoever wants it. Any open task stands in if that one was closed; never the empty greeting.
+SHOWCASE = 'Fairhaven safety milestone - LinkedIn post?'
+
 def opens(store) -> dict | None:
-    """What a visitor's first view opens on: the tour while it is open, else nothing - the greeting, as an install opens."""
+    """What a visitor's first view opens on: the agent's finished post while it is open, else the first open task."""
     if not enabled() or os.environ.get(OPENS_ENV, '1') == '0' or store is None: return None
-    t = next((t for t in store.list_tasks() if t.get('Title') == TOUR and t.get('Status') not in ('done', 'dropped')), None)
+    live = [t for t in store.list_tasks() if t.get('Status') not in ('done', 'dropped')]
+    t = next((t for t in live if t.get('Title') == SHOWCASE), None) or next(iter(live), None)
     return {'tid': t['TaskId']} if t else None
 
 

@@ -603,14 +603,16 @@ class TheDemoOpensOnItsTourTests(unittest.TestCase):
             if got and said and said[0] < got[0]: late.append((t['Title'], got[0], said[0]))
         self.assertEqual(late, [])
 
-    def test_the_first_view_opens_on_it_until_it_is_done(self):
+    def test_the_first_view_opens_on_an_agents_finished_work_never_the_greeting(self):
         s, _ = self.seeded()
-        tour = next(t for t in s.list_tasks() if t['Title'] == demo.TOUR)
-        with on(): self.assertEqual(demo.opens(s), {'tid': tour['TaskId']})
+        post = next(t for t in s.list_tasks() if t['Title'] == demo.SHOWCASE)
+        with on(): self.assertEqual(demo.opens(s), {'tid': post['TaskId']})
         with on(), mock.patch.dict(os.environ, {demo.OPENS_ENV: '0'}): self.assertIsNone(demo.opens(s))
         self.assertIsNone(demo.opens(s), 'never outside the demo')
-        s.update_task(tour['TaskId'], {'Status': 'done'}, 'owner')
-        with on(): self.assertIsNone(demo.opens(s), 'a finished tour opens nothing: the greeting, as an install opens')
+        s.update_task(post['TaskId'], {'Status': 'done'}, 'owner')
+        with on(): got = demo.opens(s)
+        self.assertIsNotNone(got, 'a closed showcase opens another open task, not the empty greeting')
+        self.assertNotIn(s.get_task(got['tid'])['Status'], ('done', 'dropped'))
 
     def test_where_do_i_start_brings_up_the_tour(self):
         from taskuary import concierge

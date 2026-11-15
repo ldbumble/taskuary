@@ -568,7 +568,9 @@ def test_a_turn_that_ends_with_the_reply_owed_and_unwritten_leaves_on_its_card_w
             quickwork.again(s, tid, ses, 'Friday, I think.', brief=False)
         got = conversation.items(s, tid); turns = [x for x in got['items'] if x['kind'] == 'turn']
         assert s.get_review(rid)['DraftNeeds'] == 'Morning or afternoon?'
-        assert [[c['review'] for c in x['cards']] for x in turns] == [[], [rid]] and got['letters'] == turns[-1]['id'], [(x['id'], x['cards']) for x in turns]
+        # ...and while that question is open it is the ONE thing asked (the owner's rule; 2026-11-15): no empty card under it, above his line or in its turn
+        assert [[c['review'] for c in x['cards']] for x in turns] == [[], []] and not got['letters'], [(x['id'], x['cards']) for x in turns]
+        assert got['asking'] and 'Morning or afternoon?' in got['asking']['text'], got['asking']
     # ...a turn that wrote the reply needs nothing: the draft is the card
     s = home(); tid, _ = arrived(s); rid = owed(s, tid)
     filed(s, tid, ANSWER)

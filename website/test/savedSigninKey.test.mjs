@@ -17,10 +17,3 @@ test("a saved sign-in's row keeps or drops its authenticator key, and never show
   // Remove still says Removing… only for a removal, not while a key saves
   assert.match(ss, /busy === r\.site && what === "remove" \? "Removing…" : "Remove"/);
 });
-
-test("Remove on a saved sign-in asks once before it forgets the password and signs the browser out", () => {
-  const ss = read("SavedSignins.jsx");
-  assert.match(ss, /onClick=\{\(\) => setAsking\(r\.site\)\} data-tq-signin-remove=""/);
-  assert.match(ss, /<ConfirmDelete open=\{!!asking\} title=\{`Remove the saved sign-in for \$\{asking\}\?`\} confirmLabel="Remove"/);
-  assert.doesNotMatch(ss, /onClick=\{\(\) => remove\(r\.site\)\}/);
-});

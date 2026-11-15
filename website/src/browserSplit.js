@@ -206,6 +206,13 @@ export const isTurn = (asking) => String(asking?.request_id || "").startsWith(TU
 // press is the approval, and Taskuary sees it land
 export const PRESS_PREFIX = "yourturn:press:";
 export const isPress = (asking) => String(asking?.request_id || "").startsWith(PRESS_PREFIX);
+// WHAT THE CHAT'S BOX SAYS WHILE THE AGENT WAITS ON HIM - one function for every ask: a sign-in is typed on the page (never a password here), a
+// step handed over is done on the page (the browser audit, 2026-11-15: "Answer the agent's question..." stood under a step that was no question),
+// and only a question is answered in the box
+export const SIGNIN_PREFIX = "signin:";
+export const askPlaceholder = (asking) => (!asking ? "" : String(asking.request_id || "").startsWith(SIGNIN_PREFIX) ? "Message the agent - never your password"
+  : isTurn(asking) ? (isPress(asking) ? "Press it on the page - or tell the agent here…" : "Your step is on the page - or tell the agent here…")
+  : "Answer the agent's question…");
 
 // A HELD BROWSER ACT of THIS session's browser (browsergate.py), as the view draws it - null for anything else (a shell step, another
 // session's act: those stay on their card in the conversation)

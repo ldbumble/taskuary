@@ -52,5 +52,28 @@ test("a step handed over has one I'm done, and the chat's pane says why it went"
 // sign-in was typed, "Taskuary is signing in ... the picture resumes in a moment" over the code box that was his, until the next poll
 test("a page handed to him is read afresh as it is handed, never under a stale 'signing in'", () => {
   const term = src("TerminalView.jsx");
-  assert.match(term, /React\.useLayoutEffect\(\(\) => \{ if \(!\(need \|\| yourTurn\)\) return; setBrowser\(\(b\) => \(b\.filling \? \{ \.\.\.b, filling: false \} : b\)\); kick\.current\?\.\(\); \}, \[need, yourTurn\]\);/);
+  assert.match(term, /React\.useLayoutEffect\(\(\) => \{ if \(!\(need \|\| yourTurn\)\) return; handed\.current \+= 1; setBrowser\(\(b\) => \(b\.filling \? \{ \.\.\.b, filling: false \} : b\)\); kick\.current\?\.\(\); \}, \[need, yourTurn\]\);/);
+});
+
+// ...AND NEVER ON THE READ FROM BEFORE IT (the browser audit, 2026-11-15): for up to 300 ms the view drew the last address and "Take over" -
+// the page is shown him once a read made after the hand-over has answered, and one handed over mid-read is read again at once
+test("a page handed to him is shown on a read made after the hand-over, never the one before", () => {
+  const term = src("TerminalView.jsx");
+  assert.match(term, /const ep = handed\.current;/);
+  assert.match(term, /setBrowser\(r\.data \|\| \{ open: false \}\); setReadFor\(ep\);/);
+  assert.match(term, /setTimeout\(tick, ep !== handed\.current \? 0 :/);
+  assert.match(term, /quiet \? need && readFor === handed\.current && showsBrowser\(browser\.open, browser\.url\)/);
+});
+
+// THE BROWSER AUDIT, 2026-11-15: in a window ~500 px tall the step's card took 96 of the pane's 215 px and the page under it 119 - below
+// SHORT_PANE the card is one line, its full words on hover, so the page he has to work on stays in view
+test("a short pane keeps its page: the step's card is one line", () => {
+  assert.match(pane, /export const SHORT_PANE = 360;/);
+  assert.match(pane, /setShort\(e\.contentRect\.height < SHORT_PANE\)/);
+  assert.match(pane, /<TurnBar turn=\{turn\} url=\{url\} onHandBack=\{onHandBack\} short=\{short\} \/>/);
+  assert.match(pane, /\{!pressing && !short && <Box component="span"/);
+});
+
+test("a page handed over is his from its first frame: no beat of Take over", () => {
+  assert.match(pane, /React\.useLayoutEffect\(\(\) => \{\r?\n    if \(yourTurn && !drivingRef\.current\)/);
 });

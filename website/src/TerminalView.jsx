@@ -750,6 +750,10 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   const [localOk, setLocalOk] = useState(false);          // the owner unfolded a local page: it stays shown (isLocalPage)
   const lastPage = useRef("");                            // where the browser last was, for the line that says it closed
   const slow = useRef(false), kick = useRef(null);
+  // ...each step handed to him counts (`handed`), and the read that answered which one (`readFor`): the page is his once a read made after the
+  // hand-over has answered (the browser audit, 2026-11-15: for up to 300 ms the view drew the read from before it - the last address, Take over)
+  const handed = useRef(0);
+  const [readFor, setReadFor] = useState(-1);
   // A Wall tile is one of four across and a drawer pane is 480px tall: enough to notice an agent
   // working, not enough to watch one - and far too little once a browser is beside the terminal.
   // The chat workspace runs this itself, from its own strip, so it asks for no button here.
@@ -764,15 +768,17 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
     const tick = async () => {
       if (asking) return;                    // a kick while one read is out: that read is the fresh one, and one chain of timers
       asking = true; clearTimeout(timer);
+      const ep = handed.current;
       try {
         const r = await api.get(`/api/terminals/${sid}/browser`);
         if (stop) return;
-        setBrowser(r.data || { open: false });
+        setBrowser(r.data || { open: false }); setReadFor(ep);
         if (r.data?.open && !isBlankPage(r.data.url)) setSeen(true);      // a page it opened - an empty tab was never one (isBlankPage)
         if (r.data?.open && r.data?.url && !/^about:/.test(r.data.url)) lastPage.current = r.data.url;
       } catch { /* server away for a moment: keep showing what we had */ }
       asking = false;
-      if (!stop) timer = setTimeout(tick, slow.current ? 15000 : 3000);
+      // ...a step handed over while this read was out is answered by the next one, at once
+      if (!stop) timer = setTimeout(tick, ep !== handed.current ? 0 : slow.current ? 15000 : 3000);
     };
     kick.current = tick;
     tick();
@@ -787,7 +793,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   // step drew the page his with the read taken while it was typed - "Taskuary is signing in ... the picture resumes in a moment" over the code
   // box that was his to fill, for up to a poll. A step of his is raised only once any typing of Taskuary's has ended (signin._auto), so that
   // read's `filling` is over; set before the paint, then asked again at once
-  React.useLayoutEffect(() => { if (!(need || yourTurn)) return; setBrowser((b) => (b.filling ? { ...b, filling: false } : b)); kick.current?.(); }, [need, yourTurn]);
+  React.useLayoutEffect(() => { if (!(need || yourTurn)) return; handed.current += 1; setBrowser((b) => (b.filling ? { ...b, filling: false } : b)); kick.current?.(); }, [need, yourTurn]);
   useEffect(() => {
     // ...drawn for the new width in the frame that has it (flushSync: the observer runs before that frame's paint) - set a beat later, the
     // pane that had just been given the task list's room drew one frame with the chat at its old share of it (479px, then 655)
@@ -797,7 +803,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   }, []);
   // ...and the agent's canvas keeps the view once seen, on its last frame, while the session lives (`ended`)
   // ...and an empty tab is no view and no chip: only a page the agent opened is shown (showsBrowser)
-  const showingBrowser = !!sid && (quiet ? need && showsBrowser(browser.open, browser.url) : showsBrowser(browser.open, browser.url) || (stack && seen));
+  const showingBrowser = !!sid && (quiet ? need && readFor === handed.current && showsBrowser(browser.open, browser.url) : showsBrowser(browser.open, browser.url) || (stack && seen));
   const ended = !quiet && stack && seen && !browser.open;
   useEffect(() => { if (quiet && showingBrowser) setLent(true); }, [quiet, showingBrowser]);
   const layout = quiet ? quietLayout(width, showingBrowser, folded) : layoutFor(width, showingBrowser, folded || (isLocalPage(browser.url) && !localOk), stack);

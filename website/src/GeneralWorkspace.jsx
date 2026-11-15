@@ -44,7 +44,7 @@ import ActionCard from "./ActionCard.jsx";
 import CopyCorner from "./CopyCorner.jsx";
 import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
-import { heldOn, isTurn, needsOwner, waitsOnPage } from "./browserSplit.js";
+import { askPlaceholder, heldOn, isTurn, needsOwner, waitsOnPage } from "./browserSplit.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
 import "./agentStepRows.css";
@@ -653,7 +653,7 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
   // WHAT THE AGENT ASKS STANDS IN THE TURN THAT ASKED IT (conversation.items `asking.turn`): one node, drawn there
   const askNode = asking ? <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} /> : null;
   const askAt = askTurn(asking, merged.items);
-  const askWords = !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : "Answer the agent's question…";
+  const askWords = askPlaceholder(asking);
   return (
     <AssistantRuntimeProvider runtime={runtime}><StopCtx.Provider value={onStop}>
       <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>

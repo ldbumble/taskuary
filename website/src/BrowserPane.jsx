@@ -179,7 +179,8 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
      that without taking over"). The page is yours while it waits, and goes back to it when you answer - unless you
      took it yourself, which only you hand back. */
   const handed = useRef(false);
-  useEffect(() => {
+  // ...BEFORE THE PAINT (the browser audit, 2026-11-15): set after it, a page handed over drew one frame with "Take over" where "I'm done" belongs
+  React.useLayoutEffect(() => {
     if (yourTurn && !drivingRef.current) { handed.current = true; setAsked(false); setDriving(true); }
     if (!yourTurn && handed.current) { handed.current = false; setDriving(false); }
   }, [yourTurn]);
@@ -232,8 +233,17 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
     } catch (e) { say(e?.response?.data?.detail || "could not save the snapshot", true); }
   };
 
+  // ...A SHORT PANE KEEPS ITS PAGE (the browser audit, 2026-11-15: in a window ~500 px tall the step's card took 96 of the pane's 215 px, the
+  // page under it 119): below SHORT_PANE the card is one line, its full words on hover
+  const root = useRef(null), [short, setShort] = useState(false);
+  useEffect(() => {
+    if (!root.current) return undefined;
+    const ro = new ResizeObserver(([e]) => setShort(e.contentRect.height < SHORT_PANE));
+    ro.observe(root.current);
+    return () => ro.disconnect();
+  }, []);
   return (
-    <Box sx={{ position: overlay ? "absolute" : "relative", ...(overlay ? { inset: 0, zIndex: 3 } : {}), display: "flex",
+    <Box ref={root} sx={{ position: overlay ? "absolute" : "relative", ...(overlay ? { inset: 0, zIndex: 3 } : {}), display: "flex",
       flexDirection: "column", minHeight: 0, minWidth: 0, border: `1px solid ${driving ? CATPPUCCIN.yellow : BORDER}`,
       borderRadius: 2, overflow: "hidden", bgcolor: PANEL, transition: "border-color .15s" }}>
       {/* toolbar: what page, whether frames are flowing, who is driving */}
@@ -355,7 +365,7 @@ Take over to drive it yourself; close the session to close it."
       {/* WHAT WAITS ON THE OWNER, ON THE PAGE IT WAITS ON - below the page, never over it: a CAPTCHA box under a bar is not one they
           can tick. A held act's Approve / Dismiss, and the owner's turn with its hand-back; both flow back into the agent's chat. */}
       {waiting.map((h) => <HeldBar key={h.id} held={h} onDecided={onDecided} />)}
-      {turn && <TurnBar turn={turn} url={url} onHandBack={onHandBack} />}
+      {turn && <TurnBar turn={turn} url={url} onHandBack={onHandBack} short={short} />}
     </Box>
   );
 }
@@ -397,7 +407,8 @@ function HeldBar({ held: h, onDecided }) {
 
 // THE OWNER'S TURN (browserview.your_turn): the page is theirs to click and type on (yourTurn hands it over), and Done hands it back -
 // their press, never words in their name: Taskuary tells the agent, which looks at the page and goes on (browsergate.done).
-function TurnBar({ turn, url = "", onHandBack }) {
+export const SHORT_PANE = 360;
+function TurnBar({ turn, url = "", onHandBack, short = false }) {
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const back = async () => {
     if (busy) return;
@@ -409,10 +420,12 @@ function TurnBar({ turn, url = "", onHandBack }) {
   // when the page moves on (the owner, 2026-11-05) - Done stays, quiet, for a page Taskuary cannot read
   const pressing = isPress(turn);
   return (
-    <Box data-tq-browser-turn={turn.request_id} data-tq-browser-press={pressing ? "" : undefined} sx={bar}>
-      <Typography sx={barText}>
+    <Box data-tq-browser-turn={turn.request_id} data-tq-browser-press={pressing ? "" : undefined} data-tq-browser-turn-short={short ? "" : undefined}
+      sx={short ? { ...bar, flexWrap: "nowrap", py: 0.4 } : bar}>
+      <Typography sx={short ? { ...barText, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : barText}
+        title={short ? `${turn.text || "Your turn in the browser"}${pressing ? "" : " - do it on the page, and the agent goes on when it moves on"}` : undefined}>
         <Box component="span" sx={{ color: CATPPUCCIN.yellow, fontWeight: 600 }}>{turn.text || "Your turn in the browser"}</Box>
-        {!pressing && <Box component="span" sx={{ color: "var(--tq-warning, #a8a196)" }}> · do it on the page, and the agent goes on when it moves on</Box>}
+        {!pressing && !short && <Box component="span" sx={{ color: "var(--tq-warning, #a8a196)" }}> · do it on the page, and the agent goes on when it moves on</Box>}
       </Typography>
       {/* ...AND IN HIS OWN BROWSER WHERE THIS ONE IS REFUSED (the owner, 2026-11-13: a registrar's "Verifying you are human" spun forever in the
           agent's browser - a check that turns away an automated browser even with a person at it, and Approve could not get past it): the

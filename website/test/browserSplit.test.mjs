@@ -22,6 +22,7 @@ import {
   heldOn,
   isTurn,
   isPress,
+  askPlaceholder,
   needsOwner,
   PRESS_PREFIX,
   TURN_PREFIX,
@@ -278,4 +279,13 @@ test("the first picture of a view waits a moment for the pane's shape, and the g
   const pane = readFileSync(new URL("../src/BrowserPane.jsx", import.meta.url), "utf8");
   assert.match(pane, /late\.current = setTimeout\(\(\) => \{ if \(!img\.current\) show\(\); \}, FIRST_WAIT\)/, "a still page sends no second frame: the held one is drawn when the wait is over");
   assert.match(pane, /else if \(m\.type === "tabs"\) \{ const u = activeTab\(m\); if \(u\) setUrl\(u\); \}/);
+});
+
+// THE BROWSER AUDIT, 2026-11-15: a step handed over on the page drew "Answer the agent's question..." in the box - it was no question
+test("the box says what waits on him: a sign-in, a step on the page, a press on the page, or a question", () => {
+  assert.equal(askPlaceholder(null), "");
+  assert.equal(askPlaceholder({ request_id: "signin:bank.example" }), "Message the agent - never your password");
+  assert.equal(askPlaceholder({ request_id: `${TURN_PREFIX}ab12` }), "Your step is on the page - or tell the agent here…");
+  assert.equal(askPlaceholder({ request_id: `${PRESS_PREFIX}ab12` }), "Press it on the page - or tell the agent here…");
+  assert.equal(askPlaceholder({ request_id: "q:1" }), "Answer the agent's question…");
 });

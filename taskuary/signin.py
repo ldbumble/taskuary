@@ -380,6 +380,7 @@ CODE_ROW = 4
 def code_step(f: dict) -> bool: return bool((f or {}).get('otp') or ((f or {}).get('digits') or 0) >= CODE_ROW)
 
 
+HANDED_ON = 6
 def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) -> dict:
     """The agent ended its turn asking to be signed in. Record the ask on the existing road and, when the owner keeps a sign-in for
     the site the browser is actually on, fill it at once on its own thread. `fill`: the filler (tests stand one in)."""
@@ -418,7 +419,15 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) ->
         from . import general
         def typed(*a):
             try: _auto(*a)
-            finally: general.hand(tid, -1)
+            finally:
+                # ...UNTIL IT HAS HANDED ON (watched on the real CLI, 2026-11-15): the agent is told "signed in" and its turn begins a beat
+                # later - for those 2-3 s the task read "agent waiting on you" over a turn with no words, the rail "Finished ...; nothing
+                # since". Held until that turn is at work or the sign-in is the owner's to do (its ask is up), never past HANDED_ON seconds
+                end = time.time() + HANDED_ON
+                # (...a session that can say its own phase: one that cannot never reads at work, and would be waited out whole)
+                while (time.time() < end and callable(getattr(s := general._live_of(tid), 'phase', None)) and not general._at_work(s)
+                       and not pending(store, tid)): time.sleep(.1)
+                general.hand(tid, -1)
         general.hand(tid)
         threading.Thread(target=typed, args=(store, tid, sid, site, rid, fill or type_in, ask), daemon=True, name=f'signin-{tid}').start()
         return {'site': site, 'auto': True}

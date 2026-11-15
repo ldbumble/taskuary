@@ -295,15 +295,19 @@ class Asking(unittest.TestCase):
             sid, alive, task_id = 'sess1', True, self.tid
             def __init__(self): self.said, self.during = [], None
             def send_prompt(s, text, as_owner=True): s.said.append(text)
+            def phase(s): return 'parked'                      # told, and its turn not yet at work: the beat this holds through
         sess, typing, go = Chat(), threading.Event(), threading.Event()
         def fill(*a, **k): typing.set(); go.wait(10)
         self.assertFalse(general.starting(self.tid))
-        with on_page('https://login.bank.example/'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+        with on_page('https://login.bank.example/'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}), mock.patch.object(signin, 'HANDED_ON', 1.5):
             self.assertTrue(signin.needs(self.s, self.tid, 'sess1', 'bank.example', fill=fill)['auto'])
             self.assertTrue(typing.wait(10))
             self.assertTrue(general.starting(self.tid), 'at work while the saved sign-in is typed')
             self.assertTrue(general.working(self.s, self.tid))
             go.set(); self.wait_for(lambda: sess.said)
+            # ...and through the beat between "signed in" told and the agent's next turn at work (2-3 s of "agent waiting on you" over a turn
+            # with no words, watched on the real CLI 2026-11-15) - then let go, by itself, where no turn begins
+            time.sleep(0.5); self.assertTrue(general.starting(self.tid), 'still at work in the beat after the agent is told')
             self.wait_for(lambda: not general.starting(self.tid), secs=15)
         # ...and one that does not go in hands on to the owner: nothing is left reading at work
         def boom(*a, **k): raise signin.NotAccepted('bank.example kept its sign-in form up')

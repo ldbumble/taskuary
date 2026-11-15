@@ -300,3 +300,15 @@ test("the selected row's line repeats no age the gutter already says; another cl
   const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
   assert.match(view, /\{isCur && <div className="sub">\{batchNo\[i\.key\]\?\.line \|\| subLine\(i, why\)\}<\/div>\}/);
 });
+
+test("a card opened onto the table follows the rail's row of it", async () => {
+  // recorded on the real CLI, 2026-11-15: a task opened by its link, Taskuary restarted under its agent's turn - the rail's row came back
+  // "stopped" and the card kept "working": the header read "agent working" over "Cut short when Taskuary restarted"
+  const { tableItemOf, followsItem } = await import("../src/funnelPile.js");
+  const opened = { key: "processing:a", tid: 3, lane: "working" }, row = { key: "processing:a", tid: 3, lane: "stopped" };
+  const fresh = tableItemOf(null, opened.key, { items: [{ key: "processing:b", tid: 4, lane: "yours" }, row] });
+  assert.equal(fresh, row); assert.ok(followsItem(opened, fresh));
+  const walked = { key: "processing:c", tid: 5, lane: "approve" };
+  assert.equal(tableItemOf(walked, null, { items: [row] }), walked);                    // ...a walked item is the table's own
+  assert.equal(tableItemOf(null, "processing:z", { items: [row] }), null);
+});

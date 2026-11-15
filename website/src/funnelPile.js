@@ -225,6 +225,8 @@ export const currentPresentationChanged = (current, fresh) => {
 };
 export const refreshCurrentPresentation = (current, fresh) =>
   currentPresentationChanged(current, fresh) ? fresh : current;
+// WHAT THE CARD ON THE TABLE FOLLOWS: the walk's item, or the rail's row of a task opened onto it, by the key of the card that stands there
+export const tableItemOf = (current, cardKey, pile) => current || (cardKey ? (pile?.items || []).find((i) => i.key === cardKey) || null : null);
 
 // The card under a line is decided by the item's KIND, never by the model. Every kind maps to
 // exactly one card so a reload draws the same conversation.

@@ -77,7 +77,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, tableItemOf, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, subLine, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
@@ -3496,6 +3496,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const lastCardIdx = useMemo(() => { const i = tableCardIndex(shown, old ? null : current || cardKey), c = shown[i]?.card;
     // ...the canvas's own fallback (the newest card in the chat) included: a durable line about a closed task landing after Next drew it
     return i; }, [shown, old, current, cardKey]);
+  // ...AND A CARD OPENED ONTO THE TABLE FOLLOWS THE RAIL'S ROW OF IT as a walked one follows its item (recorded on the real CLI, 2026-11-15: a
+  // task opened by its link - no walk item, no cardKey, the card its line drew - and Taskuary restarted under its agent's turn: the rail's row
+  // came back "stopped", the card kept the "working" it was opened with, and the header read "agent working" over "Cut short when Taskuary
+  // restarted" for as long as it stayed open)
+  const tableItem = useMemo(() => tableItemOf(currentItem, cardKey || shown[lastCardIdx]?.card?.key, pile), [currentItem, cardKey, shown, lastCardIdx, pile]);
   const lastSaidIdx = useMemo(() => lastActIndex(shown), [shown]);
   // ...and the item's own moves are drawn on the item: over the card on the table, else under the line that holds them (ItemMoves)
   const movesIdx = lastCardIdx >= 0 ? lastCardIdx : lastSaidIdx;
@@ -3852,12 +3857,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             {browsing ? shown.filter((m) => m.id === browsing).map((m) => <Line key={m.id} m={m} live last tableChips={[]} barHolds={false}
                                      actions={actions} fresh={null} canvas={canvasState} />)
               : <Line key={setupCard.id} m={setupCard} live last tableChips={tableChips} barHolds={barHolds}
-                  actions={actions} fresh={currentItem} canvas={canvasState} />}
+                  actions={actions} fresh={tableItem} canvas={canvasState} />}
           </div>}
           {firstRun ? state && <div data-tq-setup-under={setupCovered.current ? "hidden" : ""} style={setupCovered.current ? { display: "none" } : undefined}>{welcome()}</div>
             : state && !shown.some((m) => !inWin.has(m.id)) && (!busy || popOpen) && !starting && welcome()}
           {!firstRun && shown.map((m, i) => inWin.has(m.id) ? null : <Line key={keyOf.get(m.id)} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} moves={!old && i === movesIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
-                                     actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
+                                     actions={actions} fresh={tableItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (
             <div className="tq-browse-line" ref={(el) => { if (el && !el.dataset.seen) { el.dataset.seen = "1"; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } }}>
@@ -3948,7 +3953,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               <div className="tq-chat-pop-body" ref={popBodyRef}>
                 {!winLines.length && !popPending && !popErr && <p className="tq-chat-pop-empty">{browsing ? "Ask about this page, or anything on your list." : currentItem?.ref ? `Ask about ${currentItem.ref}, or anything on your list.` : "Ask about anything on your list."}</p>}
                 {winLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={!old && i === lastSaidIdx} moves={!old && i === movesIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
-                  actions={actions} fresh={currentItem} canvas={canvasState} />)}
+                  actions={actions} fresh={tableItem} canvas={canvasState} />)}
                 {popPending && pendingLine}
                 {popOpen && errLine}
               </div>

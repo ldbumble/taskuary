@@ -11,13 +11,12 @@ They are look-ups run in the turn, so the Assistant answers with what they say. 
 nothing here sends a line on its own - no pings about tasks, agents finishing or notes between agents.
 """
 from .timewords import plural
-import contextlib, re, threading
+import contextlib, threading
 
-from .store import task_ref
+from .store import task_ref, TYPED_REF
 
 KINDS = ('coding_agents', 'tell_agent', 'land')
 _ON = threading.local()                      # armed for one phone turn (remote_assistant.respond), on the thread that runs it
-_REF = re.compile(r'(?:tq-?)?0*(\d+)', re.I)
 LAND_ACT = 'land'
 
 
@@ -53,7 +52,7 @@ def block() -> str:
 
 
 def _tid(p: dict) -> int:
-    m = _REF.fullmatch(str((p or {}).get('task') or (p or {}).get('ref') or '').strip())
+    m = TYPED_REF.fullmatch(str((p or {}).get('task') or (p or {}).get('ref') or '').strip())
     if not m: raise LookupError('name the task as TQ-0123 - coding_agents lists them')
     return int(m.group(1))
 

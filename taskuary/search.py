@@ -18,7 +18,7 @@ import json, re
 from datetime import datetime
 from urllib.parse import quote
 from . import connectorcatalog, settings_schema, wanames
-from .store import _fold, task_ref
+from .store import _fold, task_ref, TYPED_REF
 from .inboxes import TYPES as INBOXES
 
 from .routing import CHAT_CHANNELS as CHAT        # the one list of chat channels (routing.py)
@@ -79,7 +79,7 @@ def _in(text, w) -> bool: return _fold(w) in _fold(text)          # the store's 
 
 def _ids(words) -> set:
     """The task ids typed outright - TQ-0004, tq-4, or a bare 4 - which put that task first: "4" listed TQ-0004 fourth."""
-    return {int(m[1] or m[2]) for w in words if (m := re.fullmatch(r'(?i)tq-?0*(\d+)|0*(\d+)', w))}
+    return {int(m[1]) for w in words if (m := TYPED_REF.fullmatch(w))}
 
 
 def _holder(a: str) -> str:

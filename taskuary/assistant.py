@@ -40,7 +40,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from . import aiusage, kinds as task_kinds
-from .store import is_model_idea, task_ref, auto_code_enabled
+from .store import is_model_idea, task_ref, auto_code_enabled, TQ_REF
 from .timewords import ago_m, plural, span
 from .routing import norm_subject
 from .assistantblocks import said_number   # the payload's own English for a window: 'the last two days'
@@ -1155,7 +1155,7 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
             # ...and the task it is ABOUT, for every line, not only an idea's: a meeting-prep line about a question already on an open
             # task ("TQ-0702 already has a draft waiting") reached triage tied to nothing, and became a second task for the same ask -
             # answered on the first, still open on the second (the owner, 2026-10-14). The ref is the model's `about`, never guessed.
-            about = re.search(r'\bTQ-?0*(\d+)\b', str(s.get('about') or ''), re.I)
+            about = TQ_REF.search(str(s.get('about') or ''))
             pick = store.get_task(int(about.group(1))) if about else None
             if pick and pick.get('Status') not in ('done', 'dropped') and not (by[key].get('action') or {}).get('tid'): said['tid'] = pick['TaskId']
             # the first line of the facts: prep's line carries a 1200-char dossier under it that belongs in 'skipped', not under a button
@@ -1177,7 +1177,7 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
             # WHICH task is the model's `about` (CONTRACT), and only that: a fallback scanned the line's words for TQ refs and
             # guessed - "TQ-0734 granted it, but TQ-0736 says the tab is still missing" needed a rule about open ones to land
             # on 0736 at all (the owner, 2026-10-11: everything should be ai). The ref is parsed out of `about`, never chosen.
-            about = re.search(r'\bTQ-?0*(\d+)\b', str(s.get('about') or ''), re.I)
+            about = TQ_REF.search(str(s.get('about') or ''))
             pick = store.get_task(int(about.group(1))) if about else None
             # JUST HANDLED IS NOT NEWS (the owner, 2026-09-25): an idea about a task closed this week is a second copy
             # of finished work - the vendor loop fixed yesterday came back as a fresh idea and a fresh task. A

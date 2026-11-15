@@ -69,6 +69,22 @@ class SearchTests(unittest.TestCase):
         for q in (str(four), f'TQ-{four:04d}', f'tq-{four}'):
             self.assertEqual(next(h for h in self.hits(q) if h['type'] == 'task')['tid'], four, q)
 
+    def test_a_task_ref_is_read_back_one_way_in_a_sentence_and_one_way_typed_by_itself(self):
+        """The audit, 2026-11-15: eleven regexes read a TQ ref and no two families agreed - the Assistant's "you named another task" check
+        and the brief's links wanted the dash and capitals ("tq-0002" named nothing), the one that found tasks the owner named kept
+        "TQ-4" and "TQ-0004" as two. One for a ref inside a sentence, one for an id typed by itself, beside task_ref which writes it."""
+        from taskuary import concierge, devphone, digest, peers, store
+        self.assertEqual(store.TQ_REF.findall('see tq-0012, TQ7 and TQ-10000 - not ATQ-3 or TQ-x'), ['12', '7', '10000'])
+        self.assertEqual([bool(store.TYPED_REF.fullmatch(w)) for w in ('TQ-0004', 'tq4', '0004', '4', 'TQ-4b', 'four')], [True] * 4 + [False] * 2)
+        self.assertEqual(search._ids(['tq-0004', '4', 'TQ4', 'export']), {4})
+        self.assertEqual(devphone._tid({'task': 'tq-0004'}), 4)
+        self.assertTrue(concierge.off_subject('That is tq-0002, drafted and waiting.', {'tid': 1}))      # another task, however it was written
+        self.assertFalse(concierge.off_subject('TQ-0001 is drafted and waiting.', {'tid': 1}))
+        self.assertIn('#task=12', digest._linked('tq-0012 is waiting on Gail'))
+        a = self.s.create_task({'Title': 'Ledger export', 'Kind': 'general', 'Status': 'open'}, 't')
+        self.assertEqual(concierge.named_now(self.s, f'what about TQ-{a} and TQ-{a:04d}?').count('TASK NOW'), 1)       # one task, named twice
+        for mod in (concierge, digest, peers, devphone): self.assertFalse(hasattr(mod, '_REF') or hasattr(mod, '_TQ_REF'), mod.__name__)
+
     # ..."open" listed every open task: a status is a column of the Tasks tab, asked for here as status:open
     def test_a_status_is_asked_for_by_name_not_matched_as_a_word(self):
         self.assertEqual([h for h in self.hits('open') if h['type'] == 'task'], [])

@@ -33,7 +33,7 @@ from .redact import scrub as _scrub
 from .assistant import _ts
 from . import asks, buttons, lanes, operations, timewords, workerstate as ws, words as places
 from . import bulk as bulk_mod
-from .store import task_ref
+from .store import task_ref, TQ_REF
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
 # where the owner's own words start in the prompt - the demo's scripted brain reads them by this same constant (demo.brain), and grepped
@@ -485,7 +485,7 @@ def named_now(store, text: str, item: dict | None = None) -> str:
     """TASK NOW for each task the owner NAMED (a TQ ref - an id, not meaning) other than the one on the table: "tell the agent on
     TQ-n ..." was answered blind about TQ-n, and a coding agent proposed for a task with no session on it (real-AI walk, 2026-10-18)."""
     own = int((item or {}).get('tid') or 0)
-    refs = [int(n) for n in dict.fromkeys(_TQ_REF.findall(text or '')) if int(n) != own][:4]
+    refs = [int(n) for n in dict.fromkeys(TQ_REF.findall(text or '')) if int(n) != own][:4]
     # ...and HOW TO SHOW ONE (2026-10-19 UI walk, G4): "open TQ-0004" was answered "drafted and waiting under my message" and nothing
     # opened - a task comes up beside the answer only when the answer links it, and the model was never told so of the task it was
     # asked about. ...and on a phone the link is the door too: its card and choices come up under the answer (remote_assistant, F18)
@@ -526,13 +526,12 @@ NO_THREAD = ('this item has no thread and no task yet - no message id and no TQ 
 def no_thread(item: dict | None) -> bool:
     return bool(item) and item.get('kind') not in ('fyis',) and not item.get('mid') and not item.get('tid')
 
-_TQ_REF = re.compile(r'\bTQ-(\d{1,7})\b', re.I)
 _MSG_REF = re.compile(r'\bmessage\s+#?m?(\d{2,9})\b', re.I)
 
 def unreal_refs(store, text: str, said: str = '') -> list:
     """The task and message references in `text` that name nothing in the store - except the ones the owner said himself."""
-    text, own = str(text or ''), {int(n) for n in _TQ_REF.findall(said or '')} | {-int(n) for n in _MSG_REF.findall(said or '')}
-    return ([f'TQ-{int(n):04d}' for n in dict.fromkeys(_TQ_REF.findall(text)) if int(n) not in own and not store.get_task(int(n))]
+    text, own = str(text or ''), {int(n) for n in TQ_REF.findall(said or '')} | {-int(n) for n in _MSG_REF.findall(said or '')}
+    return ([f'TQ-{int(n):04d}' for n in dict.fromkeys(TQ_REF.findall(text)) if int(n) not in own and not store.get_task(int(n))]
             + [f'message {n}' for n in dict.fromkeys(_MSG_REF.findall(text)) if -int(n) not in own and not store.get_message(int(n))])
 
 
@@ -2534,14 +2533,12 @@ def phone_screens() -> str:
             + _screens(link=False) + '\n' + THIS_APP + '\n\n')
 
 
-_REF = re.compile(r'\bTQ-0*(\d+)\b')
-
 def off_subject(say: str, item: dict | None) -> bool:
     """The model named a task that is not the one on the table (2026-09-03: the words were TQ-0312, the card was TQ-0327).
     A ref is an id - parsing, not meaning. The word-overlap half (no own word in the sentence = wandered) is gone: it decided
     meaning from a stop-word list and handed back answers that were right in other words (the owner, 2026-10-11)."""
     if not item or not item.get('tid'): return False
-    named = {int(n) for n in _REF.findall(say or '')}
+    named = {int(n) for n in TQ_REF.findall(say or '')}
     return bool(named) and int(item['tid']) not in named
 
 
@@ -3490,7 +3487,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # ...and a new to-do never names a task that is already open: "Remind me about the Payworth invoice (TQ-0005) tomorrow at
     # 9am" was proposed as a NEW task about TQ-0005 instead of putting TQ-0005 away until then (2026-10-06)
     if kind == 'task.create_from_text' and str(params.get('kind') or '') == 'task':
-        for n in re.findall(r'\bTQ-?0*(\d+)\b', str(params.get('text') or ''), re.I):
+        for n in TQ_REF.findall(str(params.get('text') or '')):
             t = store.get_task(int(n))
             if t and t.get('Status') not in ('done', 'dropped'):
                 raise CallMiss(f"{task_ref(t['TaskId'])} is already an open task - a reminder about it is task.defer on it (ref, until), "
@@ -4161,7 +4158,7 @@ def _agent_task(store, item0: dict | None, text: str) -> int | None:
     """Which task the owner means when they say "close the agent": the one they NAMED, else the one on
     the table if an agent is on it - nothing else. Never a task just because its card
     happens to be open - that is how "close the agent working" closed something else entirely."""
-    ref = re.search(r'\bTQ-?0*(\d+)\b', text or '', re.I)
+    ref = TQ_REF.search(text or '')
     live = {t.get('taskId'): t for t in _live(store) if t.get('taskId')}
     if ref and int(ref.group(1)) in live: return int(ref.group(1))
     if item0 and item0.get('tid') in live: return item0['tid']
@@ -4792,7 +4789,7 @@ def _resolve_named(store, phrase: str, item: dict | None) -> str | None:
     pile by word overlap and a "yesterday = 3 days" table, and a wrong guess put the action on another item (the owner,
     2026-10-08: no code in front of the AI). '?' goes back to the model with its rail (_say)."""
     on = str(phrase or '').strip()
-    ref = re.fullmatch(r'TQ-?0*(\d+)', on, re.I)
+    ref = TQ_REF.fullmatch(on)
     if ref: return f"task:{int(ref.group(1))}" if store.get_task(int(ref.group(1))) else '?'
     mid = re.fullmatch(r'm-?(\d+)', on, re.I)
     if mid: return f"msg:{int(mid.group(1))}" if store.get_message(int(mid.group(1))) else '?'
@@ -4874,7 +4871,7 @@ def _last_task(store, tid: int) -> str:
     "The open task this chat's newest lines made or brought up (a press's receipt, an opened card) - its ref, or ''."
     for c in reversed(general.chat_rows(store, tid)[-8:]):
         card = _card_of(c) or {}
-        m = re.search(r'TQ-?0*(\d+)', str(card.get('ref') or ''), re.I)
+        m = TQ_REF.search(str(card.get('ref') or ''))
         n = card.get('tid') or (m and m.group(1))
         if n and (store.get_task(int(n)) or {}).get('Status') not in (None, 'done', 'dropped'): return task_ref(int(n))
     return ''

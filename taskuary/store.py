@@ -274,6 +274,10 @@ INTERNAL_TASK_BASE = 1_000_000_000
 # "the owner's own task, touched a minute ago" on every arrival, and a reply on a closed thread was read as its job and joined it
 WORK = f't.TaskId<{INTERNAL_TASK_BASE}'
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
+# ...AND READ BACK ONE WAY (the audit, 2026-11-15: eleven regexes read a ref, and no two families agreed on the dash, the case or the zeros):
+# TQ_REF finds the refs named in a sentence, TYPED_REF (fullmatch) is an id typed by itself - TQ-0004, tq4 or a bare 4. Any width: TQ-10000
+TQ_REF = re.compile(r'\bTQ-?0*(\d+)\b', re.I)
+TYPED_REF = re.compile(r'(?:tq-?)?0*(\d+)', re.I)
 # the mails an Advisor line names in its words ("Erin mid 41 vs Gail mid 42"): Came from (idea_sources) and what its trust rests on
 # (origin.idea_rests_on) read them the same way - every one, uncapped, for the trust
 MID_CITE = re.compile(r'\bmids?[\s#:=]*(\d+(?:\s*(?:,|/|&|and)\s*#?\d+)*)')

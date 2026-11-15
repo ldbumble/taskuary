@@ -56,6 +56,19 @@ class TheList(unittest.TestCase):
     def kinds(self, got=None): return [(x['kind'], x.get('state', '')) for x in (got or self.list())['items']]
     def rest(self): self.assertTrue(until(lambda: not self.list()['working'] and not general.waiting_lines(self.s, self.tid)), self.kinds())
 
+    def test_a_start_that_did_not_happen_says_why_in_the_chat_with_the_way_on(self):
+        """Recorded on the real CLI, 2026-11-15: with "start an agent by itself" switched off, a new mail's task read "waiting to start" over
+        a chat that held only the mail - no reason, no button. The reason was written on the task (ingest.not_started) and drawn nowhere.
+        It is the chat's last line while nothing has worked the task, with the way on; it goes when a turn begins."""
+        from taskuary import ingest
+        self.assertIsNone(self.list()['idle'])
+        ingest.not_started(self.s, self.tid, 'Starting an agent by itself is switched off in Settings → Agents.')
+        got = self.list()
+        self.assertEqual(self.kinds(got), [('arrival', '')], 'beside the list, never an item of it: nothing drawn in a chat ever leaves it')
+        self.assertEqual(got['idle'], f'{ingest.NOT_STARTED} Starting an agent by itself is switched off in Settings → Agents. {conversation.START_BY_WRITING}')
+        self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Four permits, listed below.')
+        self.assertIsNone(self.list()['idle'], 'said only while nothing has worked it')
+
     def test_an_answer_from_before_the_ledger_stands_under_the_message_it_answered(self):
         """Every task whose agent answered before hand-overs were written down (the owner's older tasks, the demo's): an answer with no
         turn mark before it was placed at the start of time, above the mail it answered - "the chat begins with the agent's turn". A turn

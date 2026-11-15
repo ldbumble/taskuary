@@ -163,6 +163,7 @@ def unheard(store, tid: int) -> set:
     return {x['MessageId'] for x in _mail(store, tid) if str(x['MessageId']) not in led and x['T'] + 1 > m['a']}
 
 
+START_BY_WRITING = 'Write to the agent below and it starts.'
 TOOK_BACK = 'Asked for the sign-in details, then took that back: a sign-in is done on the page, never in the chat.'
 def take_back(store, tid: int, said: str = None, why: str = '', since: float = 0., ahead: bool = False) -> None:
     """AN ANSWER THAT WAS ONLY A STEP ON THE WAY IS A STEP OF THE WORK, NEVER AN ANSWER (the recorded sign-in walks, 2026-11-11): one its agent
@@ -793,9 +794,18 @@ def items(store, tid: int) -> dict:
     live_ = codingchat._live(tid)
     now = bool(at_work and pend and not perms and live_ is not None and getattr(live_, 'steerable', lambda: False)())
     dropped = [json.loads(r['Detail'] or '{}').get('line') for r in store._rows("SELECT Detail FROM audit WHERE EntityType='task' AND EntityId=? AND Action='line_dropped'", (tid,))]
+    # A START THAT DID NOT HAPPEN SAYS WHY, WHERE HE LOOKS (the owner's rule 4; recorded on the real CLI, 2026-11-15: the switch off, the task
+    # read "waiting to start" over a chat that held only the mail). The reason was written on the task (ingest.not_started) and drawn nowhere:
+    # it stands under the chat while nothing has worked the task and nothing is at work - never over a stranger's hold, which says its own.
+    # Beside the list, not an item of it: a chat's items never leave it, and this line is true only until a turn begins
+    idle = None
+    if not at_work and not hold_ and not pend and task_.get('Status') not in ('done', 'dropped') and out and all(x['kind'] == 'arrival' for x in out):
+        from .ingest import NOT_STARTED
+        why = next((c for c in reversed(store.list_comments(tid, internal=True)) if str(c.get('Body') or '').startswith(NOT_STARTED)), None)
+        if why: idle = f"{why['Body']} {START_BY_WRITING}"
     body = {'items': out, 'pending': pend, 'now': now, 'dropped': [d for d in dropped if d], 'working': at_work, 'started': t0 if at_work else None, 'asking': ask,
             'permissions': perms, 'live': codingchat.live_of(codingchat._live(tid)),
-            'letters': letters, 'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
+            'letters': letters, 'idle': idle, 'hold': hold_ and {**{k: hold_[k] for k in ('line', 'person', 'org')},
                               **({'line': origin.JOINED_LINE.format(who=hold_['who'])} if any(x['kind'] == 'turn' for x in out) else {})}, 'published': published, 'ran': bool(turn_of) or any(x['kind'] == 'turn' for x in out)}
     return {'rev': hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16], **body}
 

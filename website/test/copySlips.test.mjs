@@ -37,3 +37,14 @@ test("an ask that is its message's words, a second New playbook and a single pag
   assert.match(src("SettingsView.jsx"), /open: onePage\(key, SHELF\) \? key : null/);
   assert.match(src("CanvasBrowse.jsx"), /\{!noBack && <Box sx=\{\{ display: "flex", alignItems: "center", gap: 1\.25, px: 1\.75/);
 });
+
+test("Esc closes the Past chats panel: it stood over the task with its x the only way out", () => {
+  const view = src("AssistantView.jsx");
+  assert.match(view, /if \(!chatsOpen\) return undefined;\s*const esc = \(e\) => \{ if \(e\.key === "Escape"\) \{ e\.stopPropagation\(\); setChatsOpen\(false\); \} \};/);
+});
+
+test("a start that did not happen says why under the chat: the list's idle line, where no hold says its own", () => {
+  const view = src("GeneralWorkspace.jsx");
+  assert.match(view, /\{!hold && !!idle && <Box data-tq-not-started=""/);
+  assert.match(view, /idle=\{conv\.list\?\.idle \|\| ""\}/);
+});

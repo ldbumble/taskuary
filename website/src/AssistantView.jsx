@@ -1302,6 +1302,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const phone = useMediaQuery("(max-width:600px)");     // the composer's hint is one line there
   const deskChat = useMediaQuery("(min-width:760px)");  // ...and from 760px the chat is its own unit in the corner (composeBox)
   const [chatsOpen, setChatsOpen] = useState(false);
+  // ...and Esc closes it, as it does every panel that opens over the work (the walk, 2026-11-15: it stood over three tasks in a row, its x the only way out)
+  useEffect(() => {
+    if (!chatsOpen) return undefined;
+    const esc = (e) => { if (e.key === "Escape") { e.stopPropagation(); setChatsOpen(false); } };
+    window.addEventListener("keydown", esc, true);
+    return () => window.removeEventListener("keydown", esc, true);
+  }, [chatsOpen]);
   const [chats, setChats] = useState([]);
   const [chatsLoading, setChatsLoading] = useState(false);
   const [old, setOld] = useState(null);               // an earlier chat, read-only

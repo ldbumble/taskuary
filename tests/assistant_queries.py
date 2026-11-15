@@ -265,7 +265,8 @@ BRING_UP = [
     ('the sync interval', 'sync interval', '#settings=config&group=Sync%20%26%20startup&key=poll_minutes'),
     ('desktop notifications', 'desktop notification', '#settings=config&group=Notifications&key=hand_desktop'),
     ('which AI sorts my mail', 'AI that sorts your mail', '#settings=config&group=How%20mail%20is%20sorted&key=triage_ai'),
-    ('the assistant model', 'assistant model', '#settings=config&group=How%20mail%20is%20sorted&key=concierge_model'),
+    # ...by the name it has on screen since 2026-11-15 ("Taskuary"): that is the word a model that has seen the page searches by
+    ('the assistant model', 'model for Taskuary', '#settings=config&group=How%20mail%20is%20sorted&key=concierge_model'),
     ('stop marking mail read in my inbox setting', 'mark read source', '#settings=config&group=Sync%20%26%20startup&key=mark_read_enabled'),
     ('how many days back it catches up', 'catch-up window', '#settings=config&group=Sync%20%26%20startup&key=startup_sync_days'),
     ('the FYI batching setting', 'fyi read together', '#settings=config&group=Assistant&key=fyi_batch'),
@@ -302,7 +303,7 @@ BRING_UP = [
     ('install the latest release', 'install the latest release', '#settings=updates&key=update'),
     # ...and its siblings: a connection or a brain is its own screen too, never an agent's job
     ('connect my mail', 'email connections', '#connections=Email'),
-    ('change the assistant brain', 'assistant brain', '#settings=config&group=How%20mail%20is%20sorted&key=concierge_ai'),
+    ('change the assistant brain', 'Taskuary brain', '#settings=config&group=How%20mail%20is%20sorted&key=concierge_ai'),
     ('the Hub', 'hub', '#hub'),
 ]
 CASES += [Q('bring-up', t, None, find(q), f'link:{h}', freq=4) for t, q, h in BRING_UP]

@@ -16,7 +16,7 @@ class WhatsAppAddresses(unittest.TestCase):
             self.assertEqual(messengers.wa_jid(j), j)
 
     def test_a_name_is_refused_in_words(self):
-        with self.assertRaisesRegex(RuntimeError, 'pick the Assistant chat again'): messengers.wa_jid('Alex Doyle')
+        with self.assertRaisesRegex(RuntimeError, 'pick the Taskuary chat again'): messengers.wa_jid('Alex Doyle')
 
     def test_the_send_carries_the_address(self):
         store = mock.Mock(); store.get_connector_by_type.return_value = {'Type': 'whatsapp', 'ConfigJson': '{}'}

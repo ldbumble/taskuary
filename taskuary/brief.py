@@ -10,6 +10,16 @@ what it actually read. Rules ride separately: AGENT.md for both kinds, CODING.md
 """
 from .store import task_ref
 
+# WHAT THE ASSISTANT MADE OF HIS ASK (the owner, 2026-11-15: "i only typed this? did the agent add on more to my prompt???"): a task the
+# Assistant starts shows his words as his (concierge.setup_task); the Assistant's fuller reading - its wording, the talk before them - is
+# filed beside them as Taskuary's, and a worker reads it here
+HANDOFF_HEAD = "Taskuary's brief from the Assistant chat: "
+
+
+def handoff(store, tid: int) -> str:
+    c = next((c for c in store.list_comments(tid, internal=True) if c.get('Actor') == 'taskuary' and str(c.get('Body') or '').startswith(HANDOFF_HEAD)), None)
+    return str(c['Body'])[len(HANDOFF_HEAD):].strip() if c else ''
+
 
 def build(store, tid: int, instruction: str = None, repo: str = None, context_budget: int = None) -> dict:
     """The sections, as data. `render` turns them into prompt text; callers choose what else rides."""
@@ -31,6 +41,7 @@ def build(store, tid: int, instruction: str = None, repo: str = None, context_bu
         'objective': str(t.get('Summary') or '').strip(),
         'checklist': store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else '',   # ids: the agent ticks its own (--tick)
         'instruction': (instruction or '').strip(),
+        'handoff': handoff(store, tid),
         'repository': repo or '',
         'context': context,
         'latest': {'from': (last.get('FromName') or last.get('FromEmail') or '') if last else '', 'channel': last.get('Channel') if last else '',

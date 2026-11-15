@@ -1990,6 +1990,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     b = _brief.build(store, tid, instruction=instruction, repo=repo or cwd, context_budget=BRIEF_CONTEXT)
     if b['objective'] and not m: say(f"ASK: {fence(_cut(strip_boilerplate(b['objective']), ASK_CHARS))}", theirs_too=True)
     elif b['objective']: say(f"OBJECTIVE: {fence(_cut(b['objective'], 600))}", theirs_too=True)
+    if b.get('handoff'): say(f"TASKUARY'S BRIEF - what the Assistant made of the owner's ask and the talk before it: {fence(_cut(b['handoff'], ASK_CHARS))}", theirs_too=True)
     md = b['checklist']
     if md: say('CHECKLIST - what was asked for, as triage read it; the source message follows, and it is the authority'
                + (f' ({TICK_HEAD}: `taskuary --tick <id>`)' if _tickable(md) else '') + ':\n' + fence(md), theirs_too=True)

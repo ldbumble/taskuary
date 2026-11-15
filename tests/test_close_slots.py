@@ -357,6 +357,50 @@ def test_an_agent_the_assistant_starts_carries_his_words_alone_as_his_and_the_ta
     assert told and 'What we were talking about' in told[0][0] and told[0][1].get('brief') is True
 
 
+def test_a_task_the_assistant_starts_is_his_sentence_as_typed_and_its_polished_ask_reaches_the_agent_as_taskuarys_brief(s):
+    """The live shape, 2026-11-15: he typed a short sloppy line into the Assistant; its model called the hand-off with a polished ask
+    and a sentence he never said ("Tell me whether it exists, where it is, and its exact name."), and the new task drew that as "You" -
+    its own message, its Summary and its checklist. "i only typed this? did the agent add on more to my prompt???" """
+    from taskuary import general, terminal
+    his = 'can you login to the portal and see if there is report named REvenue Journal'
+    polished = ('Log in to the portal and check whether there is a report named Revenue Journal. '
+                'Tell me whether it exists, where it is, and its exact name.')
+    call = 'On it.\nCALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'general', 'text': polished}})
+    told, session = [], mock.Mock(busy=False)
+    session.send_prompt.side_effect = lambda text, **k: told.append((text, k))
+    fast = lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': [], 'outputs': []})
+    with mock.patch('taskuary.capabilities.has_ai', return_value=True), mock.patch('taskuary.concierge.brain', return_value=fast), \
+         mock.patch('taskuary.general.start_session', return_value=session), mock.patch('taskuary.general._live_of', return_value=None), \
+         mock.patch('taskuary.concierge.threading.Thread', Inline), mock.patch.object(terminal, 'live_sessions', return_value=[]), \
+         mock.patch('taskuary.server.store', s):
+        out = concierge.say(s, his, llm=lambda *a, **k: call)
+    tid = int(out['open'].split('=')[1])
+    t, rows = s.get_task(tid), s.list_comments(tid, internal=True)
+    owners = [str(c.get('Body') or '') for c in rows if c.get('Actor') == 'owner']
+    assert owners and all(his in b for b in owners) and not any('Tell me whether' in b for b in owners), owners
+    assert t['Summary'] == his and [i['text'] for i in s.task_checklist(tid)][:1] == [his]
+    assert 'Tell me whether' not in t['Title']                       # no title named: his words name it, not the rewording
+    from taskuary import ownwork
+    ownwork.ensure(s, tid)
+    assert ownwork.row_for(s, tid)['BodyText'] == his               # the row signed "You"
+    # ...and what the Assistant made of it still reaches the agent - as Taskuary's brief, never a line in his name
+    assert told and 'Tell me whether it exists' in told[0][0] and told[0][1].get('brief') is True
+
+
+def test_a_coding_hand_off_and_a_walk_through_keep_his_words_as_his_and_file_the_rewording_as_taskuarys(s):
+    from taskuary import brief, general
+    his, polished = 'fix the export thing erin hit', 'Fix the CSV export crash Erin Blake reported. Add a test that reproduces it.'
+    with mock.patch('taskuary.ingest._spawn'), mock.patch('taskuary.concierge._handoff_title', return_value='Export crash'):
+        coding = concierge.handoff_task(s, polished, kind='coding', said=his)['taskId']
+    walk = concierge.setup_task(s, polished, said=his)['taskId']
+    for tid in (coding, walk):
+        mine = [str(c.get('Body') or '') for c in s.list_comments(tid, internal=True) if c.get('Actor') == 'owner']
+        assert s.get_task(tid)['Summary'] == his and mine and all(his in b and 'Add a test' not in b for b in mine), mine
+    assert 'Add a test' in brief.handoff(s, coding)                 # the coding agent reads it as Taskuary's (terminal seed)
+    briefs = [c for c in s.list_comments(walk, internal=True) if general.is_brief(c)]
+    assert [c['Body'] for c in briefs] == [polished]                # the walk hears it as Taskuary's turn
+
+
 def test_a_handoff_whose_brain_fails_is_made_anyway(s):
     made, session = handoff(s, {'side_effect': RuntimeError('no brain')})
     assert s.get_task(made['taskId']) and slots.all_(s, made['taskId']) == [] and session.send_prompt.called

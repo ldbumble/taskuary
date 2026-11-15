@@ -1675,10 +1675,10 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'task.create_from_text':
         from . import concierge
         return concierge.handoff_task(store, str(p.get('text') or ''), str(p.get('kind') or 'coding'), ACTOR, title=p.get('title'),
-                                      repo=str(p.get('repo') or '') or None, profile=str(p.get('profile') or '') or None)
+                                      repo=str(p.get('repo') or '') or None, profile=str(p.get('profile') or '') or None, said=p.get('said'))
     if kind == 'task.setup':
         from . import concierge
-        return concierge.setup_task(store, str(p.get('text') or ''), ACTOR, title=str(p.get('title') or ''))
+        return concierge.setup_task(store, str(p.get('text') or ''), ACTOR, title=str(p.get('title') or ''), said=p.get('said'))
     if kind == 'message.archive': return file_message(mid, NotATaskBody(learn=False, archive=True), background)
     if kind == 'preference.exclude_sender': return not_mine(mid, NotMineBody(scope=str(p.get('scope') or 'sender')), background)
     # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')

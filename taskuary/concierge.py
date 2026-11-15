@@ -1855,7 +1855,7 @@ def _made_now(store, tid: int, op: str, params: dict, lead: str = '', actor: str
             o = outbox.compose(store, params['channel'], params['to'], params['about'], 'draft', actor=actor)
             o = {**o, 'drafted': bool(o.get('draft'))}
         else:
-            done = run_proposal(store, operations.propose(store, op, 0, params, actor), actor)
+            done = run_proposal(store, operations.propose(store, op, 0, his_words(op, params), actor), actor)
             o = done.get('outcome') or {}
             if done.get('status') != 'done' or not o.get('taskId'):
                 r = receipt_turn(store, done, actor, table=True)
@@ -4435,19 +4435,38 @@ def walk_is_external(store, text: str, llm=None) -> bool:
     return out.get('taskuary') is False
 
 
+# the operations that make a task from words, and carry the owner's own line with them (his_words)
+STARTS_FROM_WORDS = ('task.create_from_text', 'task.setup')
+
+
+def his_words(kind: str, params: dict) -> dict:
+    """A start made from the owner's words carries the line he typed this turn, verbatim, as `said`: the model writes the operation's
+    `text` - a rewording, a sentence he never said - and the task shows `said` as his (setup_task). With no typed line (a press, a
+    reaction), or for any other operation, the params are as they were."""
+    typed = str((_TURN.get() or {}).get('typed') or '').strip()
+    return {**params, 'said': typed} if kind in STARTS_FROM_WORDS and typed and not params.get('said') else params
+
+
 def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: str = SETUP_KIND,
-               agent_job: bool = False, repo: str = None, profile: str = None) -> dict:
+               agent_job: bool = False, repo: str = None, profile: str = None, said: str = None) -> dict:
     """'Set up a report that...': a task with the owner's words in it, opened for the agent that can
     walk them through it. `kind` is 'general' for a walk-through and 'coding' for a hand-off the owner
-    asked for (concierge's `coding_agent` verb), which is the only path that starts an agent in a checkout."""
+    asked for (concierge's `coding_agent` verb), which is the only path that starts an agent in a checkout.
+    `said`: the line he typed, verbatim (his_words) - where the model wrote `text` from it, `text` is Taskuary's brief."""
     from . import asks, ingest
+    from .brief import HANDOFF_HEAD
     text = str(text or '').strip()
     if not text: raise ValueError('say what to set up')
+    # HIS WORDS ARE HIS (the owner, 2026-11-15: "i only typed this? did the agent add on more to my prompt???"): the Assistant's model
+    # reworded "can you login to the portal and see if there is report named ..." into a polished ask with a sentence he never said, and
+    # the task drew it as "You" - its own row (ownwork.yours reads Summary), its checklist, its first line. What he typed is the task's;
+    # what the model made of it reaches the agent as Taskuary's (below, and handoff_task's first prompt)
+    own = str(said or '').strip() or text
     # the title the model named (the set-up sort's, the hand-off's), or the owner's sentence as said. A regex used to strip a
     # leading verb off it, and "Add Erin to payroll" became "Erin to payroll" (the owner, 2026-10-11: no word lists)
-    title = _title_cut(title) or _title_cut(' '.join(text.split()))
+    title = _title_cut(title) or _title_cut(' '.join(own.split()))
     from . import browserview
-    tid = store.create_task({'Title': title[:1].upper() + title[1:], 'Summary': text, 'Kind': kind, 'Status': 'open', 'Priority': 'normal', 'OriginBase': 'owner',
+    tid = store.create_task({'Title': title[:1].upper() + title[1:], 'Summary': own, 'Kind': kind, 'Status': 'open', 'Priority': 'normal', 'OriginBase': 'owner',
                              # a CODING hand-off is the owner's own job, not a Taskuary set-up: marked
                              # assistant:setup it read as "Taskuary's own work" and opened in Taskuary's
                              # checkout, whatever it was about (the owner, 2026-09-24: an issue in another repository)
@@ -4464,13 +4483,18 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
     # triage creates from an incoming ask. With no checklist the card rendered Summary as a banner,
     # then rendered the identical own-message below it; there was no box and the ask appeared three
     # times. The initial ask is the first real item. It can be split or edited later like any list.
-    store.set_task_checklist(tid, [text], actor)
+    store.set_task_checklist(tid, [own], actor)
     # The ask is the conversation's FIRST TURN, not a note filed beside it. As a plain human comment
     # the chat does not render it, so a walk showed an answer with no question above it and read as
     # a walk that had never started (the owner, 2026-09-14). A hand-off has no conversation to open
     # here - the agent's own brief becomes its first turn - so there the ask stays a note.
-    if kind == SETUP_KIND and not agent_job: store.add_comment(tid, actor, general.USER_TYPE, text)
-    else: store.add_comment(tid, actor, 'human', f'Asked in the Assistant chat: {text}')
+    if kind == SETUP_KIND and not agent_job: store.add_comment(tid, actor, general.USER_TYPE, own)
+    else: store.add_comment(tid, actor, 'human', f'Asked in the Assistant chat: {own}')
+    # ...and the brief, filed as Taskuary's: a walk-through hears it as its next turn, drawn as Taskuary's (general.is_brief); a coding
+    # agent reads it beside his words (brief.handoff). A general hand-off is told it as its first prompt, so it is not filed twice
+    if text != own and not agent_job:
+        if kind == SETUP_KIND: store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, text)
+        else: store.add_comment(tid, general.BRIEF_ACTOR, 'human', HANDOFF_HEAD + text)
     store.audit('task', tid, 'create_from_assistant_setup', actor)
     # ...and says whether its agent started, which the receipt checks (effects._started) before telling the owner it is on it
     started = False
@@ -4740,7 +4764,7 @@ def no_brain() -> str:
 
 
 def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', title: str = None, dock_tid: int = None, repo: str = None,
-                 profile: str = None) -> dict:
+                 profile: str = None, said: str = None) -> dict:
     """A hand-off with nothing on the table: the owner's words ARE the brief. The confirmed `task.create_from_text`
     lands here - the task is made and the agent started only then (PW-124)."""
     job = str(text or '').strip()
@@ -4750,8 +4774,9 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     # ...HIS WORDS ARE THE TASK'S OWN MESSAGE, AND ONLY HIS WORDS (recorded on the real CLI, 2026-11-15: the new task's bubble read his ask
     # and then "What we were talking about: remember that payroll questions go to Gail Got it - ..." - the Assistant's chat, in his name).
     # A general agent hears the brief as Taskuary's first prompt (below); a coding one is seeded from the task itself, so it keeps the brief
-    made = setup_task(store, job if kind == 'general' else brief, actor, title=title or _handoff_title(store, tid, job), kind=kind, agent_job=kind == 'general', repo=repo,
-                      profile=profile)
+    # ...and where the model reworded what he typed, `said` is his and `job` is Taskuary's brief (setup_task, his_words)
+    made = setup_task(store, job if kind == 'general' else brief, actor, title=title or _handoff_title(store, tid, said or job), kind=kind, agent_job=kind == 'general',
+                      repo=repo, profile=profile, said=said)
     if kind == 'general':
         # ...AT WORK FROM THE MOMENT IT IS MADE (the bug hunt, 2026-11-12: New opened the task at once, and for the seconds its outputs were
         # read before the first turn it said "agent done" with Mark done lit, over an agent that had not begun): a start in flight, as
@@ -5011,7 +5036,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     elif verb == 'split': target, params = it.get('tid'), {'text': text, 'key': it.get('key')}
     elif verb == 'setup': target, params = 0, {'text': d_text or text, 'title': decision.get('title') or None}   # the set-up sort's (_walkthrough)
     if target is None: raise ValueError(f"there is nothing to {SAYS_VERB.get(verb, verb)} on this one")
-    params = {k: v for k, v in params.items() if v is not None}
+    params = his_words(kind, {k: v for k, v in params.items() if v is not None})
     # A NEW TASK FROM THE OWNER'S OWN WORDS is not about the item on the table (the owner, 2026-10-01: "why did it say starting coding
     # agent on 912? 912 was another one about GL's"): typed while TQ-0912 was open, "stop sending me the vendor-create mails" became
     # TQ-0930 - and its card, both receipts and the settle all named TQ-0912. Only a hand-off pressed with no words carries the item
@@ -5236,6 +5261,7 @@ def _same_proposal(prev: dict | None, kind: str, target, params: dict) -> bool:
 def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, label: str, summary: str, tail: str, actor: str,
                  item: dict | None = None) -> dict:
     """A proposal that is not about the item on the table: the same revise-or-replace rule as propose_for, recorded as a card."""
+    params = his_words(kind, params)
     prev = open_proposal(store, dock_tid)
     same = _same_proposal(prev, kind, target, params)
     # the same words again are the card still waiting, as on propose_for - not a version 2 said "Changed to:"
@@ -6099,7 +6125,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # the dock has the owner's words now; the item has them with the answer, once the turn knows it was about the item
     turn = _TURN.get()
     # ...a REACTION has no words of theirs: what they did on the page is told to the model, never written as a line they said
-    if not turn.get('react'): record(store, tid, 'user', typed)
+    if not turn.get('react'): record(store, tid, 'user', typed); turn['typed'] = typed      # ...and a start made this turn shows it as his (his_words)
     if item: turn.update(item=item, said=typed)
     turn['trace'] = trace                           # the app's own trouble draws its steps as they happen (_trouble)
     rec = lambda role, body, card=None: record_related(store, tid, item, role, body, card)

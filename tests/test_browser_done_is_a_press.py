@@ -56,6 +56,23 @@ class DoneIsAPress(unittest.TestCase):
         again = ws.answer(self.s, self.tid, rid, '', press=True)                  # a second press, or the watch got there first
         self.assertEqual((again['delivered'], again['state']), (False, 'resolved')); self.assertEqual(len(self.told), 1)
 
+    def test_from_his_done_until_the_agent_is_told_the_task_is_at_work(self):
+        """Recorded on the real CLI (the browser audit, 2026-11-15): he passed the check and pressed I'm done; the step closed, and until the
+        told agent's turn had begun the task read as nothing at work, the page still drawn beside a chat that said nothing was happening.
+        The telling is an input on its way to the agent: at work from the press until it has handed on."""
+        import threading
+        go, begun = threading.Event(), threading.Event()
+        def told(text, as_owner=True, **k): begun.set(); go.wait(5); self.told.append((text, as_owner))
+        self.sess.send_prompt = told
+        rid = self.turn()
+        self.assertFalse(general.starting(self.tid))
+        self.assertTrue(ws.answer(self.s, self.tid, rid, '', press=True)['delivered'])
+        self.assertTrue(general.starting(self.tid), 'at work from the press, before the agent has been told')
+        self.assertTrue(begun.wait(5)); go.set(); self.heard()
+        end = time.time() + 5
+        while general.starting(self.tid) and time.time() < end: time.sleep(.01)
+        self.assertFalse(general.starting(self.tid), 'and no longer once it has handed on')
+
     def test_done_on_a_button_handed_over_names_the_button(self):
         rid = self.press()
         self.assertTrue(ws.answer(self.s, self.tid, rid, '', press=True)['delivered'])

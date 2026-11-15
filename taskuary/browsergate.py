@@ -427,6 +427,11 @@ def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False) ->
     # and nothing more (the spine audit, 2026-11-09: "said once: no second line by Taskuary above it") - the waiting room draws its note in
     # a chat as a line of Taskuary's own
     if term.stranger_now(store, tid, sess): return None           # the task says why nothing went in
+    # ...AND THE TASK IS AT WORK FROM HERE (the browser audit, 2026-11-15): his I'm done closed the step, and until the told agent's turn began
+    # the task read as nothing at work, the page still beside a chat that said nothing was happening - the words are an input on its way to
+    # the agent, as a mail handed to it is (general.hand)
+    from . import general
+    general.hand(tid)
     def go():
         try:
             if hasattr(sess, 'send_prompt'): sess.send_prompt(text, as_owner=False)
@@ -434,6 +439,7 @@ def _tell(store, tid: int, text: str, wait: bool = False, wake: bool = False) ->
         except Exception as e:
             logger.warning(f'browsergate: task {tid} - the agent was not told - {e}')
             store.add_comment(tid, 'taskuary', 'agent', f'{text} (The agent could not be told: {str(e)[:200]} - open the task and tell it.)')
+        finally: general.hand(tid, -1)
     th = threading.Thread(target=go, daemon=True); th.start()
     if wait: th.join(30)
 

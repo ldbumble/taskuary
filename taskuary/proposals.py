@@ -570,7 +570,12 @@ def written_past(store, tid: int) -> set:
     if not store._one("SELECT 1 AS x FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') LIMIT 1", (int(tid),)): return set()
     # ...a message its agent HAS heard settled what it stood after at that hand-over (hear): only one no agent heard can leave a draft behind
     led = {r['Ref'] for r in store._rows("SELECT Ref FROM heard WHERE TaskId=? AND Kind='mail'", (int(tid),))}
-    return set(_older(store, tid, max((x['T'] for x in conversation._mail(store, int(tid)) if str(x['MessageId']) not in led), default=0.)))
+    # ...NOR CAN ONE HELD BEHIND TRUST (recorded on the real CLI, 2026-11-15): a stranger's words on the thread are handed to no agent until
+    # he trusts them (origin.hold), so they moved nothing on - and the reply waiting for his colleague lost its Send to them, "agent done"
+    # over it, with trusting the stranger the only press left
+    from . import origin
+    held = {str(m) for m in (origin.hold(store, int(tid)) or {}).get('mids') or ()}
+    return set(_older(store, tid, max((x['T'] for x in conversation._mail(store, int(tid)) if str(x['MessageId']) not in led | held), default=0.)))
 
 
 # what its agent is told of a card it raised that the conversation moved past - ONE sentence for every kind and both agent kinds

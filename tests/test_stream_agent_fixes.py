@@ -379,3 +379,19 @@ def test_a_draft_the_thread_moved_past_reads_the_same_on_the_pill_the_rail_and_t
     # ...and a draft written AFTER that line is its answer: lit everywhere
     new = s.add_review({'TaskId': tid, 'ConversationId': CONV, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Erin - 3pm, same room.'})
     assert proposals.written_past(s, tid) == {rid} and s.waiting_on_owner(tid)['ReviewId'] == new
+
+
+def test_a_strangers_message_held_behind_trust_never_takes_send_off_the_reply_that_waits(monkeypatch):
+    """Recorded on the real CLI, 2026-11-15: a stranger wrote on a trusted thread. Their words are handed to no agent until Trust - and the
+    reply waiting for the colleague turned to "Earlier draft - not sent; set aside when you moved on" with no Send, the header "agent done":
+    he could not answer her without trusting the stranger. A message held behind Trust has not moved the conversation on."""
+    from taskuary import conversation, origin, proposals, taskstate
+    s = MemoryStore(); tid, rid = chat_task(s)
+    s._exec('UPDATE message SET CreatedAt=? WHERE TaskId=?', (stamp(-600), tid)); s._exec('UPDATE review SET CreatedAt=? WHERE ReviewId=?', (stamp(-400), rid))
+    origin.raise_to(s, tid, 'trusted', 'owner')                       # he trusted Erin's thread; the agent drafted her answer
+    mid = s.add_message({'TaskId': tid, 'ExternalId': 'wa2', 'ConversationId': CONV, 'Channel': 'whatsapp', 'FromName': 'Omar Keller',
+                         'FromEmail': 'whatsapp:15559999', 'SentAt': stamp(-60), 'BodyText': 'Hello, Omar here - can I join?', 'Status': 'routed'})
+    lit = lambda: [c['status'] for x in conversation.items(s, tid)['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
+    assert (origin.hold(s, tid) or {}).get('mids') == [mid], 'the stranger is held, by the one function that says so'
+    assert proposals.written_past(s, tid) == set()
+    assert s.waiting_on_owner(tid)['ReviewId'] == rid and lit() == ['pending'] and taskstate.state(s, s.get_task(tid)) == 'approve'

@@ -216,15 +216,21 @@ def test_the_pass_runs_on_the_advisors_own_clock_never_inside_a_report_run(monke
 def test_the_server_clock_runs_it_off_the_reports_lock_at_most_every_fifteen_minutes(monkeypatch):
     import threading
     from taskuary import demo, server
-    done, calls = threading.Event(), []
+    from taskuary import brainroute, learn
+    done, calls, reflected, held = threading.Event(), [], [], [False]
     monkeypatch.setattr(assistant, 'clock', lambda store: (calls.append(1), done.set()))
+    # ...and what the verdicts taught is consolidated on the same clock: an app left open all week reflected only at its next start
+    monkeypatch.setattr(learn, 'reflect_if_due', lambda store: reflected.append(1))
+    monkeypatch.setattr(brainroute, 'auto_held', lambda store: held[0])
     monkeypatch.setattr(demo, 'enabled', lambda: False)
     monkeypatch.setattr(server, '_ADVISOR_AT', [0.0])
     t0 = 10_000.0
     assert server.advisor_pass(t0) is True and done.wait(5)
     assert server.advisor_pass(t0 + 60) is False, 'a tick a minute later does not look again'
     assert server._ADVISOR_BUSY.acquire(timeout=5); server._ADVISOR_BUSY.release()
+    held[0] = True                                   # past the day's AI ceiling nothing unasked runs, reflection included
     done.clear(); assert server.advisor_pass(t0 + server.ADVISOR_TICK) is True and done.wait(5) and calls == [1, 1]
+    assert reflected == [1], 'once on the first tick, and not while the ceiling holds'
     monkeypatch.setattr(demo, 'enabled', lambda: True)
     assert server.advisor_pass(t0 + 3 * server.ADVISOR_TICK) is False, 'the demo world runs nothing on a clock'
 

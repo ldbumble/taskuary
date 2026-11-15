@@ -11178,7 +11178,13 @@ def advisor_pass(now: float = None) -> bool:
     _ADVISOR_AT[0] = now
     def go():
         try:
-            from . import assistant
+            # ...AND WHAT THE OWNER'S VERDICTS TAUGHT IS CONSOLIDATED ON THIS CLOCK TOO (the readiness review, 2026-11-14): reflection ran from
+            # the startup catch-up alone, so an app left open all week learned nothing until a restart. Its own rule says when it is due
+            # (learn.reflect_if_due: once a day, never on silence); unasked work, so it waits past the day's ceiling as the Advisor does
+            from . import assistant, brainroute
+            try:
+                if not brainroute.auto_held(store): learn.reflect_if_due(store)
+            except Exception as e: logger.warning(f'reflection failed: {e}')
             assistant.clock(store)
         except Exception as e: logger.warning(f"the Advisor's own pass failed: {e}")
         finally: _ADVISOR_BUSY.release()

@@ -376,7 +376,7 @@ def served(store, tid: int, out: list) -> list:
 
 def items(store, tid: int) -> dict:
     "The task's conversation: {rev, items, pending, working, started} - see the module's head."
-    from . import codingchat, funnel, general, ownwork, sessionrecord, wrapup
+    from . import codingchat, funnel, general, ownwork, session_artifacts, sessionrecord, wrapup
     from .general import ASSISTANT_TYPE, FOLD_HEAD, USER_TYPE, WAITING_TYPE
     from .processing_unread import OWNER_ACTORS
     tid = int(tid)
@@ -713,6 +713,8 @@ def items(store, tid: int) -> dict:
     # input): greyed where it stood - its turn drafts again under the input where a reply is still owed
     # ...and a turn that ended having said, done and left nothing (a CLI turn that only took a line in) is no item: the page drew nothing for it
     out = [x for x in out if not (x['kind'] == 'turn' and x['state'] == 'done' and not (x['text'] or x['steps'] or x['cards'] or x.get('summary')))]
+    # ...and EACH VIEW IT SHOWED IS DRAWN FROM THE TASK'S OWN COPY, on the turn's `show` step - whatever the CLI's trace kept of the call
+    sessionrecord.views_onto(out, store._rows("SELECT * FROM task_artifact WHERE TaskId=? AND Kind=?", (int(tid), session_artifacts.VIEW)))
 
     # A CODING RUN THAT LEFT WITHOUT FINISHING SAYS SO IN ITS CHAT (decided 2026-11-12): the header chip read "agent stopped", the rail row the
     # sentence cut by its width, and the chat nothing. The task's own idle sentence (funnel.idle_state - the one the row reads) is its last line

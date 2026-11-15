@@ -677,6 +677,27 @@ def with_views(sessions: list, arts: list) -> list:
     return sessions
 
 
+def views_onto(turns: list, arts: list) -> list:
+    """...AND A CONVERSATION'S TURNS THE SAME WAY (recorded on the real CLI, 2026-11-15): Codex calls `show` from inside its own `exec` tool, so
+    its turn's step held the call's title and no answer - "Your bar chart is ready" over no chart, and the step opened to `show {"title": ...}`
+    as JSON. Each view the task kept goes on the `show` step of the turn it was drawn in, as the server's answer (viewspec.shown): the chat
+    draws the checked spec, from whichever CLI it came. The last steps of a turn take its views - a refused first try stays a step."""
+    from .viewspec import MARK
+    from .conversation import ep
+    views = sorted((a for a in arts or [] if a.get('Kind') == session_artifacts.VIEW), key=lambda a: (str(a.get('CreatedAt') or ''), a['ArtifactId']))
+    used = set()
+    for t in (x for x in turns if x.get('kind') == 'turn' and x.get('started')):
+        mine = [a for a in views if a['ArtifactId'] not in used and t['started'] - 1 <= ep(a.get('CreatedAt')) <= (t.get('ended') or float('inf')) + 1]
+        shows = [x for x in t.get('steps') or [] if x.get('k') == 'tool' and re.fullmatch(r'(mcp__taskuary__)?show', str(x.get('name') or ''))
+                 and MARK not in str(x.get('output') or '')]
+        for x, a in zip(reversed(shows), reversed(mine)):
+            p = session_artifacts.confined(a.get('Path'))
+            try: spec = p.read_text(encoding='utf-8').strip() if p else ''
+            except OSError: spec = ''
+            if spec: x['output'] = f"Shown in the owner's chat. {MARK}{spec}"; used.add(a['ArtifactId'])
+    return turns
+
+
 def record(store, tid: int) -> dict:
     """Every session this task has had, oldest first, each in the one shape the Agent work card draws:
     who ran it, its result, what it decided and changed, its plan, the files it wrote, and every step."""

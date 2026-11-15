@@ -195,6 +195,22 @@ class TheTool(unittest.TestCase):
             self.assertEqual([x['name'] for x in drawn(chat)], ['mcp__taskuary__show'])
             self.assertEqual([x['name'] for x in drawn(sessionrecord.record(self.s, self.tid)['sessions'])], ['mcp__taskuary__show'])
 
+    def test_a_turn_whose_show_step_kept_only_its_title_draws_the_view_the_task_kept(self):
+        """Recorded on the real CLI, 2026-11-15: Codex calls `show` from inside its own `exec` tool, and its turn's step held the call's title
+        and no answer - the chat said "Your bar chart is ready" over no chart, and the step opened to `show {"title": ...}` as JSON. The
+        conversation's turn draws the view the task kept, on its `show` step, as the server's answer."""
+        from taskuary import conversation, sessionrecord
+        text, err = tool(self.tid, 'show', **SPEC)
+        self.assertFalse(err, text)
+        (art,) = [a for a in self.s.list_task_artifacts(self.tid) if a.get('Kind') == 'view']
+        at = conversation.ep(art['CreatedAt'])
+        turn = {'kind': 'turn', 'state': 'done', 'started': at - 5, 'ended': at + 3, 'text': 'Your chart is ready.', 'cards': [],
+                'steps': [{'k': 'tool', 'name': 'mcp__taskuary__show', 'text': 'Northwind renewals', 'args': {'title': 'Northwind renewals'}}]}
+        later = {**turn, 'started': at + 60, 'ended': at + 90, 'steps': [{'k': 'tool', 'name': 'mcp__taskuary__show', 'args': {'title': 'x'}}]}
+        sessionrecord.views_onto([turn, later], self.s.list_task_artifacts(self.tid))
+        self.assertEqual(json.loads(turn['steps'][0]['output'].split(viewspec.MARK)[1])['title'], 'Northwind renewals')
+        self.assertNotIn('output', later['steps'][0], 'a view goes only on the turn it was drawn in')
+
     def test_a_file_outside_the_agents_folders_is_never_read(self):
         from pathlib import Path
         from taskuary import config

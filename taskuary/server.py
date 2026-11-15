@@ -1887,9 +1887,10 @@ def _run_kind(op: dict, background: BackgroundTasks):
         return {**out, 'title': title, 'type': cfg.get('type'), 'enabled': enabled, 'link': f"#report={out['sourceId']}"}
     if kind == 'connection.create':
         # the same road the Connections tab takes; a secret never rides a proposal, and the card stays off until authorized (PW-196)
-        from . import concierge
+        # ...by the one rule that says what a secret's key is (pageview.secretish - the page's and the setup's own)
+        from . import pageview
         typ, name = str(p.get('type') or ''), str(p.get('name') or '')
-        cfg = {k: v for k, v in (p.get('config') or {}).items() if not concierge.SECRET_WORDS.search(str(k))}
+        cfg = {k: v for k, v in (p.get('config') or {}).items() if not pageview.secretish(k)}
         body = (ConnectorBody(ConnectorId=tid, ConfigJson=json.dumps(cfg) if cfg else None, Scope=p.get('scope') or None) if tid
                 else ConnectorBody(Type=typ, Name=name, ConfigJson=json.dumps(cfg) if cfg else None, Scope=p.get('scope') or None, Active=False))
         out = save_connector(body)

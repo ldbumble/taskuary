@@ -31,7 +31,9 @@ SEND_VERBS = frozenset({'approve', 'send_close', 'send', 'accept_invite', 'decli
 # to press when the owner says so (the owner, 2026-11-02: "why can't assistant start an agent"). "Send to coding agent" too: it was
 # read as a send, so "have a coding agent fix this" on New only lit it
 _SEND_WORDS = re.compile(r'^\s*(send(?! to (an? )?((coding|general) )?agent)|approve|post|forward|reply all|email (it|them|him|her)|share by email)\b', re.I)
-_SECRET_WORDS = re.compile(r'(password|passphrase|secret|token|api[ _-]?key|private key|access key|client key|xox[bp]-)', re.I)
+# ...and the one rule for a proposed connection's keys too (server connection.create, 2026-11-15): it had a word list of its own, which
+# let a passphrase and a signing key through and dropped a refresh interval. Its two words this list lacked are kept - passwd, bearer
+_SECRET_WORDS = re.compile(r'(password|passwd|passphrase|secret|token|bearer|api[ _-]?key|private[ _-]?key|access key|client key|xox[bp]-)', re.I)
 REFUSED_SECRET = 'is yours to paste into its field - I never see or type a secret'
 SENT_IS_YOURS = 'sends something out - that press is yours, so it is lit for you'
 # Updates' install button by its label (UpdateCard.jsx: "Update to v0.3.10.16"), the one press besides a send that is the owner's alone

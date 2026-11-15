@@ -205,6 +205,20 @@ class ConnectionSetupTests(unittest.TestCase):
         self.assertEqual(again.get('open'), '#connector=slack')                 # the card it made is opened now, not a second one
         self.assertEqual(len(s.connectors_by_type('slack')), 1)
 
+    def test_what_counts_as_a_secret_key_is_the_one_rule_the_page_and_the_setup_read(self):
+        """The audit, 2026-11-15: a proposed connection dropped its secret keys by a word list of its own, beside the rule the page and Set up
+        with AI read (pageview.secretish over build._secretish). They disagreed both ways: a passphrase or a signing key rode the proposal
+        onto the card, and a refresh interval - no secret - was thrown away."""
+        from taskuary import pageview
+        s = store(); s._exec("DELETE FROM connector WHERE Type='slack'")
+        cfg = {'workspace': 'northwind', 'refresh_minutes': 5, 'bot_token': 't', 'passphrase': 'p', 'signing_key': 'k', 'bearer': 'b', 'passwd': 'w'}
+        with mock.patch.object(server, 'store', s):
+            cid = server._run_kind({'kind': 'connection.create', 'target': 0, 'params': {'type': 'slack', 'name': 'Slack', 'config': cfg}}, None)['connectorId']
+        kept = json.loads(s.get_connector(cid)['ConfigJson'])
+        self.assertEqual(kept, {'workspace': 'northwind', 'refresh_minutes': 5})
+        self.assertEqual({k for k in cfg if not pageview.secretish(k)}, set(kept))                  # ...the page's own answer, key for key
+        self.assertFalse(hasattr(concierge, 'SECRET_WORDS'))
+
     def test_an_unnamed_system_is_asked_for_and_a_secret_typed_in_is_not_kept(self):
         s = store()
         out = say(s, 'connect the books', composer(sort={'kind': 'connection', 'provider': None}))

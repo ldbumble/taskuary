@@ -5106,8 +5106,6 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
 
 
 # ── setting things up from the chat (PW-194..197): sorted and gathered by AI, confirmed, created through the tabs' roads ──
-# a token typed into the chat is not kept (PW-196): what looks like one is replaced before any row is written
-SECRET_WORDS = re.compile(r'(secret|token|password|passwd|api[_ -]?key|refresh|private[_ -]?key|client[_ -]?secret|bearer)', re.I)
 SETUP_QUESTIONS = 'setup_questions'
 SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small company\'s assistant. Answer JSON only: '
                      '{"kind": "report" | "routine" | "playbook" | "connection" | "role" | "investigate", "provider": "<connector type or null>", '

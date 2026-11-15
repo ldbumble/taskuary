@@ -2101,6 +2101,19 @@ const RequestConnection = ({ q }) => (
     {connectName(q) ? btnLabel("report_bug", "connect").replace("this connection", connectName(q)) : btnLabel("report_bug", "connect")}
   </Button>);
 
+// ...AND NO CARD IS NOT NO WAY (the first-run walk, 2026-11-15: an office manager searched her billing system, read "Nothing matches", and was
+// offered only a request on GitHub): an agent works in a system with no card through that system's own website, signed in with a sign-in she
+// saves - the road that works today is said first, beside the request for a card
+export const NO_CARD_LINE = (q) => `There is no card for ${connectName(q) || "it"} yet. An agent can still work in it through its own website: save its sign-in here, and Taskuary types it for the agent.`;
+const NoCard = ({ q, onSignins }) => (
+  <Box data-tq-no-card="">
+    <Typography variant="body2" sx={{ color: DIM, maxWidth: 620, mb: 1 }}>{NO_CARD_LINE(q)}</Typography>
+    <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+      <Button size="small" variant="contained" disableElevation data-tq-no-card-signin="" onClick={onSignins}>Add a sign-in</Button>
+      <RequestConnection q={q} />
+    </Box>
+  </Box>);
+
 // `browse` (the assistant canvas, CanvasBrowse.jsx): draw the catalogue's groups, cards and one connector's detail through
 // the canvas's frame instead of this tab's rail - same data, same cards, same detail, same controls.
 export default function ConnectorsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null }) {
@@ -2387,6 +2400,9 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   groupsRef.current = groups;
   const shown = groups.find((g) => g.title === group) || groups[0];
 
+  // the saved sign-ins, opened from a search that found no card (NoCard): its section and card in the canvas, its panel on the tab
+  const toSignins = () => { setQ(""); setOpen({ kind: "signins" }); onBrowseState?.({ section: "Sign-ins", open: "signins" }); };
+
   if (browse) {
     const all = groups.flatMap((g) => g.cards);
     const connected = nOn ?? connectors.filter((c) => c.Active && (c.HasSecret || c.LastSyncAt) && !c.LastError).length;
@@ -2411,7 +2427,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
           sx={{ mt: 1.5, width: "100%", boxSizing: "border-box", height: 34, px: 1.25, border: `1px solid ${BORDER}`, borderRadius: "8px",
             fontFamily: "inherit", fontSize: 12.5, color: INK, bgcolor: "var(--tq-panel, #fff)", outline: "none", "&:focus": { borderColor: "#55697a" } }} />
       ),
-      query: q, empty: "Nothing in this section yet.", noneAction: <RequestConnection q={q} />,
+      query: q, empty: "Nothing in this section yet.", noneAction: <NoCard q={q} onSignins={toSignins} />,
       // a card removed is gone, and the page back on the list: its Undo stands here (RemoveConnection)
       tools: <UndoLine kinds={["connection"]} onRestored={load} sx={{ mt: 1.25, mb: 0 }} />,
     });
@@ -2437,7 +2453,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
 
       {q ? (
         <Box>
-          {!hits.length ? <><Empty>{nothingMatches(q, "Connections")}</Empty><Box sx={{ textAlign: "center", mt: 1 }}><RequestConnection q={q} /></Box></> : (
+          {!hits.length ? <><Empty>{nothingMatches(q, "Connections")}</Empty><Box sx={{ mt: 1 }}><NoCard q={q} onSignins={toSignins} /></Box></> : (
             <>
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
                 {hits.length} {hits.length === 1 ? "result" : "results"}

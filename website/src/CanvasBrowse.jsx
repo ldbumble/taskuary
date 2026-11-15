@@ -119,9 +119,9 @@ export function BrowseFrame({ title, area = "", summary, sections = [], section,
                 {!!c.badge && <Box component="span" sx={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, color: c.badgeInk || FAINT }}>{c.badge}</Box>}
               </Box>
             ))}
-            {!cards.length && <Typography data-tq-browse-empty="" sx={{ fontSize: 12.5, color: FAINT, p: 1 }}>{none}</Typography>}
+            {!cards.length && <Typography data-tq-browse-empty="" sx={{ fontSize: 12.5, color: FAINT, p: 1, gridColumn: "1 / -1" }}>{none}</Typography>}
             {/* ...and what the page offers when the words typed found nothing (Connections: Request <name>) */}
-            {!cards.length && String(query || "").trim() && noneAction && <Box sx={{ px: 1, pb: 1 }}>{noneAction}</Box>}
+            {!cards.length && String(query || "").trim() && noneAction && <Box sx={{ px: 1, pb: 1, gridColumn: "1 / -1" }}>{noneAction}</Box>}
           </Box>
         </>
       )}

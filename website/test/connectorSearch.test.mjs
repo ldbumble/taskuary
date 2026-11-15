@@ -75,3 +75,11 @@ test("an app's client secret is a masked, write-only box that says it is saved (
   assert.match(src, /`\$\{label\} — saved, type to replace`/);
   assert.match(src, /Object\.fromEntries\(Object\.entries\(cfg\)\.filter\(\(\[k\]\) => !\(conn\?\.WriteOnlyKeys \|\| \[\]\)\.includes\(k\)\)\)/, "typed, then saved, the box empties");
 });
+
+test("a search that finds no card offers the road that works today - a saved sign-in - beside the request for a card", () => {
+  const view = fs.readFileSync(path.join(import.meta.dirname, "..", "src", "ConnectorsView.jsx"), "utf8");
+  assert.match(view, /noneAction: <NoCard q=\{q\} onSignins=\{toSignins\} \/>/);
+  assert.match(view, /<NoCard q=\{q\} onSignins=\{toSignins\} \/><\/Box><\/> : \(/);
+  assert.match(view, /const toSignins = \(\) => \{ setQ\(""\); setOpen\(\{ kind: "signins" \}\); onBrowseState\?\.\(\{ section: "Sign-ins", open: "signins" \}\); \};/);
+  assert.match(view, /An agent can still work in it through its own website: save its sign-in here/);
+});

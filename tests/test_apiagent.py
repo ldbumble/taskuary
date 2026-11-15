@@ -269,7 +269,8 @@ class OneRoundTripTests(unittest.TestCase):
                 seen.append((json.loads(json.dumps(msgs)), json.loads(json.dumps(tools))))
                 step = plan.pop(0)
                 if step is None: return {'content': 'Filled; the rate is the open question.' if plan else 'Filled, and the email is drafted.'}
-                return {'tool_calls': [{'id': f'c{len(seen)}-{j}', 'function': {'name': n, 'arguments': json.dumps(a)}} for j, (n, a) in enumerate(step)]}
+                return {'tool_calls': [{'id': f'c{len(seen)}-{j}', 'function': {'name': n, 'arguments': json.dumps(a)}} for j, (n, a) in enumerate(step)],
+                        'provider_specific_fields': {'thought_signatures': [f'sig{len(seen)}' + 'A' * 3000]}}      # Gemini's, handed back as it came
         def post(url, json=None, headers=None, timeout=None):
             r = mock.Mock(status_code=200); r.json.return_value = agenttools.rpc(json, lambda n, a: f'{n}: ' + 'a found line of mail. ' * 120, ()); return r
         real = apiagent.run_tool
@@ -285,7 +286,10 @@ class OneRoundTripTests(unittest.TestCase):
                 apiagent.turn(Model(), MemoryStore(), 1, 'inv', system, task, 500, tools=tools, history=kept)
                 apiagent.turn(Model(), MemoryStore(), 1, 'inv', system, 'go on - the rate is 130', 500, tools=tools, history=kept)
         finally: apiagent.forget(1, 'inv')
-        size = lambda m, t: len(json.dumps({'messages': m, 'tools': t}, separators=(',', ':'), ensure_ascii=False))
+        # ...what a model READS: a thought signature is carried back whole (the model needs it) but is never read as tokens
+        read = lambda m: [{k: v for k, v in x.items() if k != 'provider_specific_fields'} for x in m]
+        size = lambda m, t: len(json.dumps({'messages': read(m), 'tools': t}, separators=(',', ':'), ensure_ascii=False))
+        self.assertTrue(all(f'sig{k}A' in json.dumps(seen[-1][0]) for k in range(13, 24)), "this turn's signatures go back, every one")
         sizes = [size(m, t) for m, t in seen]
         self.assertEqual(len(seen), 25)
         # FIRST: the system, the tools and the task - nothing else rides on a call before the work begins

@@ -458,12 +458,17 @@ KEEP_STEPS = 3
 # function measures a call as it goes out (size) and every call of every card is held under REQUEST_CHARS by it (sent): the system, the
 # tools and the task lead (the cached prefix, ~50,000 characters on a fresh install), which leaves the working window ~30,000 - a file
 # read or two and what came of them. A picture counts as IMAGE_CHARS, what a model reads of it, never its base64 bytes.
-REQUEST_CHARS, IMAGE_CHARS = 80_000, 4_000
+# ...and a Gemini model's THOUGHT SIGNATURES (provider_specific_fields, ~2-4,000 base64 characters a step, which it must be handed back) are
+# carried but not read as tokens (live, gemini-2.5-pro: 237,000 characters sent, 29,000 tokens counted) - counted, they narrowed the window for nothing
+REQUEST_CHARS, IMAGE_CHARS, OPAQUE = 80_000, 4_000, ('provider_specific_fields', 'thinking_blocks')
+def _read(o):
+    if isinstance(o, list): return [_read(v) for v in o]
+    return {k: _read(v) for k, v in o.items() if k not in OPAQUE} if isinstance(o, dict) else o
 def size(msgs: list, tools=()) -> int:
-    "One call's characters as it goes out: every message (the calls' arguments too) and the tools' schemas."
+    "One call's characters as a model reads them: every message (the calls' arguments too) and the tools' schemas."
     pics = sum(len(p['image_url'].get('url') or '') - IMAGE_CHARS for m in msgs for p in (m.get('content') if isinstance(m.get('content'), list) else ())
                if isinstance(p, dict) and isinstance(p.get('image_url'), dict))
-    return len(json.dumps({'messages': msgs, 'tools': list(tools or ())}, separators=(',', ':'), ensure_ascii=False, default=str)) - pics
+    return len(json.dumps({'messages': _read(msgs), 'tools': list(tools or ())}, separators=(',', ':'), ensure_ascii=False, default=str)) - pics
 def _whole_from(msgs: list, keep: int = KEEP_STEPS) -> int:
     "Where whole answers begin: the step at the last block boundary at least `keep` steps back (0: everything whole)."
     steps = [i for i, m in enumerate(msgs) if m.get('tool_calls')]

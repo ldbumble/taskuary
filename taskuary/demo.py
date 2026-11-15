@@ -530,7 +530,7 @@ def answer(method: str, path: str):
 OWNER = 'Dana Whitfield'
 # ...and the owner's own mailbox, at the company the colleagues write from: with no address the owner had no domain, so everyone at
 # Northwind was a stranger to the demo (origin.py - a colleague's task read as an outsider's; the UX walk, 2026-10-22)
-OWNER_EMAIL = 'alex@northwind.example'
+OWNER_EMAIL = 'dwhitfield@northwind.example'         # ...her own, written as her colleagues' are: About you read "alex@... · Dana Whitfield"
 PEOPLE = [('Marcus Reed', 'mreed@northwind.example'), ('Priya Shah', 'pshah@northwind.example'),
           ('Tom Alvarez', 'talvarez@vendor.example'), ('Ruth Bennett', 'rbennett@northwind.example')]
 

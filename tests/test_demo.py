@@ -317,6 +317,11 @@ class TheWorldTests(unittest.TestCase):
         s.create_task({'Title': 'a real task'}, 'o')
         self.assertEqual(demo.seed(s), 0)
 
+    def test_the_owners_address_is_the_owners(self):
+        # About you read "alex@northwind.example · Dana Whitfield": one person under two names (the walk, 2026-11-15)
+        first, last = demo.OWNER.lower().split()
+        self.assertEqual(demo.OWNER_EMAIL, f'{first[0]}{last}@northwind.example')
+
     def test_nobody_real_is_in_it(self):
         """Every address in the demo world is on a RESERVED domain. This used to name the one real
         domain it was guarding against, which put that domain in the repository the guard exists to

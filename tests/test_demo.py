@@ -644,6 +644,11 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
         os.environ.pop(demo.FLAG, None)
         for path in self.HOST_READS: self.assertIsNone(demo.answer('GET', path), path)
 
+    def test_settings_asks_for_no_signature_out_of_sent_mail_that_does_not_exist(self):
+        from taskuary import signatures
+        s = MemoryStore(); demo.seed(s)
+        self.assertFalse(signatures.overview(s)['offer'])
+
     def test_trust_says_no_agent_starts_here_never_that_it_would_reach_something_real(self):
         with on(): self.assertEqual(demo.refuse('POST', '/api/tasks/4/trust'), demo.STARTS)
 

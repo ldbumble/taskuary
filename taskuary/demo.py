@@ -868,6 +868,9 @@ def seed(store) -> int:
     from . import peoplesearch
     peoplesearch.remember(store, DIRECTORY)
     seed_connections(store)
+    # ...and no sent mail to read a signature from: Settings > Replies asked for one on opening, and the demo refused it (a 403 in the page)
+    from . import signatures
+    store.set_setting(signatures.OFFERED, '1', 'demo')
     made = 0
     refs = {}
     for i, (channel, who, subject, body, verdict, why) in enumerate(SEEDS):

@@ -50,6 +50,23 @@ class ApiWorkerSignals(unittest.TestCase):
         self.assertEqual(st['state'], 'input_needed'); self.assertEqual(st['requests'][0]['text'], 'Which vendor?')
         self.assertEqual([e['Kind'] for e in ws.events(self.s, self.tid, sess.sid)], ['working', 'turn_end', 'input_needed'])
 
+    def test_a_question_a_later_turn_no_longer_needs_is_over(self):
+        """Recorded on the real CLI, 2026-11-15: the agent asked which room; the owner then answered the sender outside the app, and the turn
+        that heard it ended "You can close the task with Mark done", its summary saying nothing is left - under a chip "agent waiting on you"
+        and a box "Answer the agent's question...". The question was never answered in the box, so nothing retired it. A turn whose own
+        summary says nothing is left on the owner, and that asks nothing, closes the questions its session still held open."""
+        import json
+        sess, _ = self.turn('Two options.\n[[TASKUARY-ASK]] Which vendor?')
+        self.assertEqual(ws.status(self.s, self.tid)['state'], 'input_needed')
+        summ = lambda left: selfclose.SUMMARY_OPEN + json.dumps({'about': 'the vendors', 'did': 'Noted your answer to Gail', 'on_you': [], 'nothing_left': left}) + selfclose.SUMMARY_CLOSE
+        say = lambda words: (mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: words), sess)
+        with say('Still comparing.' + summ(False))[0]: sess.send_prompt('Gail wrote again', as_owner=False)
+        self.assertEqual([r['text'] for r in ws.status(self.s, self.tid)['requests']], ['Which vendor?'], 'a turn with work left still asks it')
+        with say('You answered Gail yourself - nothing more is needed here.' + summ(True))[0]: sess.send_prompt('You answered Gail outside the app', as_owner=False)
+        st = ws.status(self.s, self.tid)
+        self.assertEqual(st['requests'], []); self.assertEqual(ws.events(self.s, self.tid, sess.sid)[-1]['Kind'], 'turn_end', 'and the turn is over, not going on')
+        self.assertNotIn(st['state'], ('input_needed', 'working'))
+
     def test_a_general_agents_question_carries_no_chips_on_the_desktop_or_the_phone(self):
         """Chips are only a CLI question tool's or its on-screen chooser's (the owner, 2026-11-03): a general agent's question is
         plain words, answered in the box under it - choices written on its line anyway stay in its text, never as presses."""

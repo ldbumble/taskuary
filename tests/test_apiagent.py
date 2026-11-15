@@ -534,11 +534,13 @@ class TheHandsTests(unittest.TestCase):
         wb = Workbook(); ws = wb.active
         ws.append(['Date', 'Units', 'Rate', 'Amount']); ws.append(['2026-10-01', 4, 15, '=B2*C2']); ws.append([None, None, 'Total', '=SUM(D2:D2)'])
         wb.save(d / 'Invoice template.xlsx')
-        self.run_('file_edit', path='Invoice template.xlsx', old='2026-10-01 | 4 | 15',
+        self.assertIn('2026-10-01 | 4 | 15 | =B2*C2', self.run_('file_read', path='Invoice template.xlsx'))    # a formula no Excel worked out, as itself
+        self.run_('file_edit', path='Invoice template.xlsx', old='2026-10-01 | 4 | 15 | =B2*C2',
                   new='2026-10-01 | 4 | 15\n2026-10-02 | 6 | 15\n2026-10-03 | 2 | 30', save_as='Invoice INV-2026-10.xlsx')
         ws = load_workbook(d / 'Invoice INV-2026-10.xlsx').active
         self.assertEqual([ws['A4'].value, ws['B4'].value, ws['C4'].value, ws['D4'].value], ['2026-10-03', 2, 30, '=B4*C4'])
         self.assertEqual([ws['C5'].value, ws['D5'].value], ['Total', '=SUM(D2:D4)'])
+        self.assertIn('Total | =SUM(D2:D4)', self.run_('file_read', path='Invoice INV-2026-10.xlsx'))      # the total it can check, read back
 
     def test_the_file_tools_are_offered_whole_not_behind_load_tools(self):
         "A model never shown file_write said it had no way to make the file (the same ask, on a card): making one is the hands' first job."

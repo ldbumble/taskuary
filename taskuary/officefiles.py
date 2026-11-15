@@ -147,12 +147,12 @@ def _edit_xlsx(p: Path, old: str, new: str, to: Path) -> str:
     try: from openpyxl import load_workbook; from openpyxl.formula.translate import Translator
     except ImportError: raise ValueError('this computer has no Excel reader (openpyxl) - write the sheet anew with file_write') from None
     wb, shown = load_workbook(p), load_workbook(p, data_only=True)        # ...the second as file_read reads it: a total its cached value
-    look = lambda ws, row: [c for c in shown[ws.title][row[0].row] if c.value not in (None, '')] if row else []
+    look = lambda ws, row: [(c, kn.shown(v.value, c.value)) for c, v in zip(row, shown[ws.title][row[0].row]) if kn.shown(v.value, c.value) not in (None, '')] if row else []
     hits = []
     for ws in wb.worksheets:
         for row in ws.iter_rows():
             vis = look(ws, row)
-            if '|' in old and [str(c.value).strip() for c in vis] == cells(old): hits.append((ws, row, vis)); continue
+            if '|' in old and [str(v).strip() for _, v in vis] == cells(old): hits.append((ws, row, vis)); continue
             hits += [(ws, c, None) for c in row if not str(c.value or '').startswith('=') and old in str(c.value or '') for _ in range(str(c.value).count(old))]
     _once(len(hits), p.name)
     ws, at, vis = hits[0]
@@ -166,7 +166,7 @@ def _edit_xlsx(p: Path, old: str, new: str, to: Path) -> str:
             for c in ws.iter_rows():
                 for x in c:
                     if isinstance(x.value, str) and x.value.startswith('=') and x.row != r: x.value = _moved(x.value, r, len(vals) - 1)
-        cols = [c.column for c in vis]
+        cols = [c.column for c, _ in vis]
         for i, v in enumerate(vals):
             for c in ws[r]:
                 y = ws.cell(r + i, c.column)

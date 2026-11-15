@@ -73,6 +73,9 @@ def _pptx(data: bytes) -> str:
                         key=lambda n: int(re.search(r'(\d+)', n.rsplit('/', 1)[-1]).group(1)))
         return '\n\n'.join(_xml_text(z.read(n), r'</a:p>', 'a:t') for n in slides)
 
+# A FORMULA NO EXCEL HAS WORKED OUT YET READS AS ITSELF: a sheet written by code (officefiles) keeps no value for it, and its total read
+# as nothing - an agent filling an invoice told the owner it could not check the total
+def shown(v, f): return v if v not in (None, '') or not (isinstance(f, str) and f.startswith('=')) else f
 def _xlsx(data: bytes, sheets: int = None, rows: int = None) -> str:
     """Every sheet as `## title` and one ` | `-joined line per non-empty row - or only the first `sheets`, `rows` lines each
     (an attachment is read for its gist; the knowledge base reads the whole book)."""
@@ -82,19 +85,19 @@ def _xlsx(data: bytes, sheets: int = None, rows: int = None) -> str:
         # no openpyxl: the shared strings are every text cell in the book, unordered but searchable
         try: return _xml_text(_zip_part(data, 'xl/sharedStrings.xml'), r'</si>', 't')
         except KeyError: return ''
-    wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    wb, fs = (load_workbook(io.BytesIO(data), read_only=True, data_only=d) for d in (True, False))
     out = []
     try:
-        for ws in wb.worksheets[:sheets]:
+        for ws, wf in zip(wb.worksheets[:sheets], fs.worksheets):
             out.append(f'## {ws.title}')
             n = 0
-            for row in ws.iter_rows(values_only=True):
-                cells = [str(c) for c in row if c not in (None, '')]
+            for row, frow in zip(ws.iter_rows(values_only=True), wf.iter_rows(values_only=True)):
+                cells = [str(c) for c in map(shown, row, frow) if c not in (None, '')]
                 if not cells: continue
                 if rows is not None and n >= rows: out.append(f'(more rows not read - the first {rows} are above)'); break
                 out.append(' | '.join(cells)); n += 1
         if sheets is not None and len(wb.worksheets) > sheets: out.append(f'({len(wb.worksheets) - sheets} more sheet(s) not read)')
-    finally: wb.close()
+    finally: wb.close(); fs.close()
     return '\n'.join(out)
 
 class Encrypted(Unsupported): pass

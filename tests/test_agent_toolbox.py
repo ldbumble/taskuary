@@ -65,6 +65,20 @@ class TheServer(unittest.TestCase):
         self.assertEqual({n for n, t in tools.items() if (t.get('_meta') or {}).get('anthropic/alwaysLoad')} - {'propose_email', 'propose'}, {'show', 'propose_reply', 'remember'})
         self.assertNotIn('_meta', tools['search_messages'])
 
+    def test_the_invoice_an_agent_made_rides_on_its_email_card(self):
+        "Fill an invoice and mail it (2026-11-15): the .docx file_write made in the task folder is the email card's attachment, as made."
+        from taskuary import apiagent, outputs
+        self.addCleanup((outputs.folder(self.tid) / 'Invoice INV-2026-10.docx').unlink, missing_ok=True)     # the folder is the home's, shared
+        apiagent.run_tool(self.s, self.tid, 'sid-inv', 'file_write', {'path': str(outputs.folder(self.tid) / 'Invoice INV-2026-10.docx'),
+                                                                     'text': '# Invoice INV-2026-10\n| Date | Amount |\n| 2026-10-01 | 60.00 |'})
+        text, err = tool(self.tid, 'propose_email', to='billing@northwind.example', subject='Invoice INV-2026-10', text='Attached.',
+                         attach=['Invoice INV-2026-10.docx'])
+        self.assertFalse(err, text)
+        [f] = json.loads(self.s.get_review(json.loads(text)['review_id'])['Deliver'])['attachments']
+        self.assertEqual(f['name'], 'Invoice INV-2026-10.docx')
+        from taskuary import knowledge
+        self.assertIn('2026-10-01 | 60.00', knowledge.extract(f['name'], open(f['path'], 'rb').read()))     # a Word file, its table whole
+
     def test_a_file_that_came_on_this_tasks_mail_is_sent_on_by_its_id_and_checked_again_at_send(self):
         """The north-star audit, 2026-11-10: asked to send a document the task received on to someone else, the agent could attach only
         files in its task folder. It names the mail's file by the id its brief shows - only one on a message OF THIS task, checked at the

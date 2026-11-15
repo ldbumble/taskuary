@@ -10,6 +10,12 @@
       "desc": "What Taskuary is, how to install it, and what the first hour looks like."
     },
     {
+      "slug": "tour",
+      "file": "tour.md",
+      "title": "A day with Taskuary",
+      "desc": "One working day through the real app: what lands, what the agent does with each ask, and every feature along the way."
+    },
+    {
       "slug": "how-it-works",
       "file": "how-it-works.md",
       "title": "How it works",

@@ -44,21 +44,29 @@ taskuary            # opens http://127.0.0.1:7787
 
 The first run asks for an AI and at least one inbox, and tests each connection before it goes live.
 
-## How it works
+## What it does
 
-1. **Everything lands in one list.** Mail (Gmail, Outlook), chats (Slack, Teams, WhatsApp, Telegram), GitHub,
-   alerts and scheduled reports. Triage sorts each item: a task, something for later, a report, or FYI.
-2. **An agent works each task.** It reads the thread and your notes, uses your connected systems and a browser,
-   and writes up what it did. Code goes to the coding CLI you already use.
-3. **You press the last button.** The email with its attachment, the post with its picture, the payment on the
-   vendor's page - each waits as a card. You edit, send, or say no.
-4. **It remembers.** Tell it something once ("Ray owns the ledger now") and triage, the agents and the Assistant
-   use it from then on. Your edits to its drafts teach it how you write.
+**One list for everything that needs you.** Mail (Gmail, Outlook), chats (Slack, Teams, WhatsApp, Telegram),
+GitHub, alerts and scheduled reports land in one place, sorted into what needs work, what can wait, and what is
+just for your information. No more checking six apps.
+
+![The work rail sorting the day into Tasks, Reports and FYI, beside the morning card.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/01-timeline-sources-and-times.png?v=chat)
+
+**An agent does the work, not just the summary.** It reads the thread, looks things up, uses your systems and a
+real browser, and comes back with the finished thing: the reply with the spreadsheet attached, the post with its
+chart, the payment filled in on the vendor's page. Coding work goes to Claude Code, Codex or Gemini.
 
 ![The agent's turn: what it did, and a LinkedIn post with its chart waiting for one press.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/03-agent.png?v=chat)
 
-Also: work your list from your phone over WhatsApp or Telegram, scheduled reports and dashboards, routines, and
-saved sign-ins the agent can use without ever seeing the password.
+**You press the last button.** Every email, post, push and payment waits as a card. Edit it, send it, or say no.
+
+**It remembers.** Tell it once ("Ray owns the ledger now") and every agent knows from then on. Your edits to its
+drafts teach it how you write.
+
+**And more:** run your list from your phone over WhatsApp or Telegram, scheduled reports and dashboards, routines,
+and saved sign-ins the agent uses without ever seeing the password.
+
+**[See a full day with Taskuary →](https://taskuary.com/docs/tour)**
 
 ## Prompt injection
 

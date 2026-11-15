@@ -2226,6 +2226,9 @@ def task_detail(task_id: int):
             'origin': {**o,                                                                  # who's words are on it (origin.py)
                        # ...and the presses that trust them, in the same words as the held box's (senders.trust_offer)
                        **({'trust': _trust_offer(task_id, msgs)} if o['origin'] == 'stranger' else {}),
+                       # ...and whether the task is HELD for them (origin.hold): then the chat says so with its one Trust, and Came from says
+                       # nothing more (the owner, 2026-11-11: Trust only on the task; the audit, 2026-11-15: two sentences, three Trust buttons)
+                       **({'held': True} if o['origin'] == 'stranger' and origin.hold(store, task_id) else {}),
                        # ...and what one of them tries to make an AI or the owner do, as triage or ranking read it (message.Danger) - and
                        # whom: 'owner' for a scam on them, 'agent' for text written to steer the AI (the owner, 2026-10-30)
                        'danger': dm.get('Danger'), 'danger_aim': (dm.get('DangerAim') or 'agent') if dm else None},

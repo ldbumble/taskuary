@@ -65,3 +65,13 @@ test("the held box carries the presses; Came from then carries none (one place, 
   assert.match(page, /\{!trustBoxed && strangerLine\(detail\)\.trust && <>/);
   assert.match(page, /runOperation\(api, "task\.trust", selected, scope \? \{ scope \} : undefined\)/);
 });
+
+// ONE HOLD, ONE SENTENCE, ONE TRUST (the owner, 2026-11-11: "Trust only on the task"; the audit, 2026-11-15): a held task's chat says "You have
+// not trusted Tom Alvarez yet" with its Trust - Came from said it again in other words, with two more buttons
+test("while the task is held for its sender the chat says it - Came from has no line and no Trust of its own", () => {
+  const held = { origin: { origin: "stranger", why: "sent by someone not in your people", held: true, trust: { person: "Trust Tom", org: "Trust everyone at vendor.example" } } };
+  assert.equal(strangerLine(held), null);
+  assert.ok(strangerLine({ origin: { ...held.origin, held: false } }).trust, "a stranger's task nothing holds keeps its line and its presses");
+  const fs = readFileSync(new URL("../../taskuary/server.py", import.meta.url), "utf8");
+  assert.match(fs, /\*\*\(\{'held': True\} if o\['origin'\] == 'stranger' and origin\.hold\(store, task_id\) else \{\}\)/, "the one function that says a task is held");
+});

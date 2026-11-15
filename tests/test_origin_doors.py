@@ -82,8 +82,12 @@ def test_the_hold_names_the_address_says_trust_is_kept_and_settings_takes_it_bac
     server.store.tag_task(tid, ingest.HOLD_TAG, on=True, actor='t')
     h = origin.hold(server.store, tid)
     assert 'Erin Blake (erin@lookalike.example)' in h['line'] and 'Settings' in h['after']
+    # ...and the task's own read says it is held, so Came from stands aside for the chat's one line and one Trust (2026-11-15: it said it
+    # again in other words, with two more buttons) - and stops saying so the moment it is trusted
+    assert c.get(f'/api/tasks/{tid}').json()['origin'].get('held') is True
     monkeypatch.setattr(server, 'start_session', lambda *a, **k: 'sid')
     c.post(f'/api/tasks/{tid}/trust')
+    assert 'held' not in c.get(f'/api/tasks/{tid}').json()['origin']
     row = next(r for r in c.get('/api/trusted').json()['data'] if r['label'] == 'erin@lookalike.example')
     assert c.post('/api/trusted/remove', json={'kind': row['kind'], 'key': row['key']}, headers=agent()).status_code == 403
     assert c.post('/api/trusted/remove', json={'kind': row['kind'], 'key': row['key']}).json()['ok']

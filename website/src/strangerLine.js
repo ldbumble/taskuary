@@ -4,8 +4,12 @@
 // tool. Words Taskuary itself wrote from what it read (a report, the assistant) are not "someone" - they say so instead.
 // The presses are the server's words for this sender (senders.trust_offer) - the same ones the held box carries (the owner,
 // 2026-10-26): "Trust Erin", "Trust everyone at vendor.example", a Slack workspace's name - and no organisation where there is none.
+// ...A HELD TASK SAYS IT ONCE, IN ITS CHAT (the owner, 2026-11-11: "Trust only on the task"; the audit, 2026-11-15: Came from said "From
+// someone you haven't worked with here yet" with Trust Tom and Trust everyone at vendor.example over a chat that said "You have not trusted
+// Tom Alvarez yet" with Trust Tom). While the task is held (`origin.held`, the server's origin.hold) the chat's line and its one Trust are
+// the hold's - HeldStart draws them where the agent would work - and Came from has no line of its own
 export const strangerLine = (d) => {
-  if (d?.origin?.origin !== "stranger") return null;
+  if (d?.origin?.origin !== "stranger" || d.origin.held) return null;
   // ...and Taskuary's own work offers no "Trust it" (the owner, 2026-10-27: "trust it for something taskuary itself made??"): there is no
   // one to trust - what it read is the risk, and the line just says so; a step it holds still carries its own presses (trustInBox)
   const ours = /^written by Taskuary/i.test(d.origin.why || ""), what = /report/i.test(d.origin.why || "") ? "a report" : "what it read";

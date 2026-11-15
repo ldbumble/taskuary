@@ -135,6 +135,14 @@ class NoBlanketSoulTests(unittest.TestCase):
         self.assertTrue((s.doc('soul') or '').strip())
         self.assertIn('soul', inspect.signature(triage.classify_intent).parameters)
 
+    def test_letters_are_signed_and_a_chat_answer_to_the_owner_never_is(self):
+        """The owner, 2026-11-15 ("yes, both"): Codex signed every chat answer with the owner's name, as SOUL.md's "How we respond" told it
+        ("Sign as ..."). The shipped document says to sign letters and emails, and never an answer in chat to the owner himself."""
+        shipped = (TEMPLATES / 'soul.md').read_text(encoding='utf-8')
+        line = next(l for l in shipped.splitlines() if 'warm-professional' in l)
+        self.assertIn('Sign letters and emails as', line); self.assertIn('never signed', line)
+        self.assertNotRegex(shipped, r'Sign as [A-Z]')
+
     def test_the_triage_role_reaches_triage_and_no_worker(self):
         """The agent walk, 2026-11-10: a coding agent's background opened "You are the funnel between everything inbound and the
         owner's attention: triage every message" - SOUL.md's opening, written to the one reader that sorts mail. A worker is told

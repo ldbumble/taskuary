@@ -159,12 +159,12 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>On: triage is shown every playbook that is switched on, a message that is an instance of one becomes a task worked from it, and a finished job that will recur is proposed as a new playbook for your approval. Off: no playbook is matched or proposed; the playbooks themselves stay on Reports → Playbooks, and a single one can be switched off there instead.</p>
 <h3 id="ai-for-the-assistant">AI for the Assistant<a class="anchor" href="#ai-for-the-assistant" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_ai</code> · type: brain · set on a card at the top of the page</p>
-<p>Which AI speaks on the Assistant tab and in your phone chat, and walks you through the pipe - the Assistant&#39;s own brain. auto = your default coding agent, on its faster, lighter model.</p>
+<p>Which AI speaks in the Assistant&#39;s chat here and in your phone chat - the Assistant&#39;s own brain. auto = your default coding agent, on its faster, lighter model.</p>
 <p>THREE DEFAULTS, side by side in How mail is sorted: the triage brain, the default coding CLI, and this one.</p>
 <p>A CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent&#39;s own &#39;light model&#39; from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks.</p>
 <h3 id="model-for-the-assistant">Model for the Assistant<a class="anchor" href="#model-for-the-assistant" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_model</code> · type: text · set on a card at the top of the page</p>
-<p>A different model for the Assistant tab, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.</p>
+<p>A different model for the Assistant, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.</p>
 <p>For a CLI this is its --model, and model@effort sets its reasoning effort (Claude --effort, Codex model_reasoning_effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation.</p>
 <h3 id="ai-for-general-agents">AI for general agents<a class="anchor" href="#ai-for-general-agents" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_ai</code> · type: brain · default: blank · set on a card at the top of the page</p>
@@ -269,11 +269,11 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>Claude bills fast mode as extra usage, outside your subscription, and runs it only when extra usage is turned on in your Claude account; Codex spends your plan&#39;s credits faster. Coding and general agents are not changed.</p>
 <h3 id="how-far-back-your-list-reaches-hours">How far back your list reaches (hours)<a class="anchor" href="#how-far-back-your-list-reaches-hours" aria-label="Link to this section">#</a></h3>
 <p><code>funnel_hours</code> · type: number · default: <code>12</code></p>
-<p>How far back ordinary mail, reports and fyi enter the pipe the assistant walks you through. Drafts waiting for your yes and agents waiting on you always enter.</p>
+<p>How far back ordinary mail, reports and fyi enter the list the Assistant walks you through. Drafts waiting for your yes and agents waiting on you always enter.</p>
 <p>A first launch must not surface a year of never-triaged mail. Twelve hours is a working day; set it to 48 after a long weekend.</p>
 <h3 id="most-items-on-your-list-at-once">Most items on your list at once<a class="anchor" href="#most-items-on-your-list-at-once" aria-label="Link to this section">#</a></h3>
 <p><code>funnel_max</code> · type: number · default: <code>25</code></p>
-<p>How many items the pipe shows at once. The rest wait their turn and slide in as you clear it.</p>
+<p>How many items that list shows at once. The rest wait their turn and slide in as you clear it.</p>
 <p>Order is kept: an agent waiting on you or a draft for your yes is never the one held back.</p>
 <h3 id="a-meeting-stays-on-the-rail-after-it-starts-minutes">A meeting stays on the rail after it starts (minutes)<a class="anchor" href="#a-meeting-stays-on-the-rail-after-it-starts-minutes" aria-label="Link to this section">#</a></h3>
 <p><code>meeting_grace_minutes</code> · type: number · default: <code>5</code></p>
@@ -294,8 +294,8 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p><code>phone_assistant</code> · type: switch · default: off · set on a card at the top of the page</p>
 <p>The default for a channel that has never been asked. Each channel above answers for itself once you set it.</p>
 <p>Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.</p>
-<p>It is the SAME walk the Assistant tab runs, on the same conversation and the same pipe: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as a poll on WhatsApp and as buttons on Telegram; typing a choice&#39;s number works on both.</p>
-<p>This switch is the standing permission. The Assistant tab&#39;s own &quot;in WhatsApp&quot; button hands the walk over for a session whether or not it is on; the tab keeps working beside it.</p>
+<p>It is the SAME walk the desktop runs, on the same conversation and the same list of work: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as a poll on WhatsApp and as buttons on Telegram; typing a choice&#39;s number works on both.</p>
+<p>This switch is the standing permission. The Assistant&#39;s own &quot;in WhatsApp&quot; button on the desktop hands the walk over for a session whether or not it is on; the desktop keeps working beside it.</p>
 <p>The chat only ever answers you: Taskuary writes to it only while you are talking to it there (your last message within 30 minutes, until you say stop) - never a reminder, a follow-up or a summary on its own, and not an urgent item either unless you turn on &quot;Text me urgent items even when I haven&#39;t written&quot;.</p>
 <p>Because answers can contain private workspace information, use a chat only you can read — WhatsApp&#39;s Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before.</p>
 <h3 id="text-me-urgent-items-even-when-i-havent-written">Text me urgent items even when I haven&#39;t written<a class="anchor" href="#text-me-urgent-items-even-when-i-havent-written" aria-label="Link to this section">#</a></h3>
@@ -303,21 +303,21 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>Off (default): the Assistant chat stays quiet until you write to it, however urgent something is. On: urgent items may reach it anyway.</p>
 <p>Taskuary writes to your own WhatsApp or Telegram chat only while you are talking to it there. Off (the default), that holds for urgent items too: they are shaded on the desktop and wait there.</p>
 <p>On: an urgent item may reach the chat even when you have not written - a move on a task marked urgent, an urgent by-the-way while the walk is handed to the chat, and a report&#39;s alert aimed at your own chat. Nothing else changes: reminders, follow-ups, the morning line and summaries still wait until you write. Replies to other people are not affected by this switch.</p>
-<h3 id="which-chat-the-assistant-tab-offers">Which chat the Assistant tab offers<a class="anchor" href="#which-chat-the-assistant-tab-offers" aria-label="Link to this section">#</a></h3>
+<h3 id="which-chat-the-assistant-offers">Which chat the Assistant offers<a class="anchor" href="#which-chat-the-assistant-offers" aria-label="Link to this section">#</a></h3>
 <p><code>phone_walk_channel</code> · type: select</p>
-<p>The &quot;Walk me through them in ...&quot; button on the Assistant tab: WhatsApp, Telegram, or both.</p>
+<p>The &quot;Walk me through them in ...&quot; button in the Assistant&#39;s chat: WhatsApp, Telegram, or both.</p>
 <p>Options: <code>both</code>, <code>whatsapp</code>, <code>telegram</code></p>
 <p>both (default) = a button for each chat that is connected and has an Assistant chat named. whatsapp or telegram = only that one. A chat is offered only once its card under Connections names an Assistant chat, so choosing Telegram before setting it up shows no button until you do.</p>
 <h3 id="a-morning-line-in-the-chat">A morning line in the chat<a class="anchor" href="#a-morning-line-in-the-chat" aria-label="Link to this section">#</a></h3>
 <p><code>phone_morning_line</code> · type: switch</p>
 <p>Once a day, the assistant&#39;s chat says what is waiting and offers the two ways in: walk me through my tasks, set up a report.</p>
-<p>Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count in the pipe and how many are on you, then the two scripts as numbered options, so one reply starts the walk there. Quiet on a day the pipe is empty; never twice in a day.</p>
+<p>Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count of what is waiting and how many are on you, then the two scripts as numbered options, so one reply starts the walk there. Quiet on a day nothing is waiting; never twice in a day.</p>
 <p>Even on, it goes only into a conversation you started there in the last 30 minutes: the chat never speaks first.</p>
 <h2 id="advisor">Advisor<a class="anchor" href="#advisor" aria-label="Link to this section">#</a></h2>
 <h3 id="lines-per-post-at-most">Lines per post, at most<a class="anchor" href="#lines-per-post-at-most" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_max_lines</code> · type: number · default: <code>5</code></p>
-<p>The Advisor checks in every 30 minutes and on startup (the &#39;Advisor&#39; report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md in Settings → Docs: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.</p>
-<p>One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. &#39;Follow up&#39; drafts the chase in your voice onto the task — nothing is sent by itself; &#39;Make it a task&#39; starts the agent. Voice: COUNSEL.md (Settings → Docs); what to watch for: the report&#39;s prompt. Without an AI connector the facts still post, in the hub&#39;s own words. &#39;Run now&#39; on the Reports tab&#39;s Assistant row posts regardless of the schedule.</p>
+<p>The Advisor checks in every 30 minutes and on startup (the &#39;Advisor&#39; report under Reports — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md in Settings → Docs: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.</p>
+<p>One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. &#39;Follow up&#39; drafts the chase in your voice onto the task — nothing is sent by itself; &#39;Make it a task&#39; starts the agent. Voice: COUNSEL.md (Settings → Docs); what to watch for: the report&#39;s prompt. Without an AI connector the facts still post, in the hub&#39;s own words. &#39;Run now&#39; on the Advisor&#39;s row under Reports posts regardless of the schedule.</p>
 <h3 id="silence-before-a-follow-up">Silence before a follow-up<a class="anchor" href="#silence-before-a-follow-up" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_followup_hours</code> · type: number · default: <code>24</code></p>
 <p>Hours after your last reply on a thread — one that asked for or promised something — before &#39;no answer yet, follow up?&#39; appears. 24 by default.</p>
@@ -510,7 +510,6 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p><code>poll_minutes</code> · type: number · default: <code>4</code></p>
 <p>How often the app checks your connections while it is open. 0 turns it off.</p>
 <p>The server keeps this clock, so it runs whichever tab you are on and whether or not you are looking at the app - it is also what makes a SCHEDULED REPORT fire on time, since reports are checked on the same pass.</p>
-<p>It used to live in the Timeline tab instead: the countdown died the moment you opened Board or Tasks, restarted itself every time you changed a filter, and with the window closed nothing polled at all - so a report set for 8am Monday only ran if somebody happened to be sitting on the Timeline at 8am on Monday.</p>
 <p>4 is the default: an AI provider keeps the sorting instructions it has just read for about five minutes, so a check every 4 lets each new mail reuse them instead of paying for them again. A check that finds nothing new asks no AI. Raise it if a mailbox limits how often it may be read; 0 turns recurring background polling off. Sync now, startup catch-up, and an action that must refresh chat context can still fetch.</p>
 <p>Chat connectors (Teams, Slack, Telegram, WhatsApp, iMessage, Discord) also have a separate recurring fast clock - every 30 seconds unless their card says otherwise. 0 here disables both recurring clocks; manual Sync now, startup catch-up, and action-time refreshes remain available.</p>
 <h3 id="catch-up-window-days">Catch-up window (days)<a class="anchor" href="#catch-up-window-days" aria-label="Link to this section">#</a></h3>

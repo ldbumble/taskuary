@@ -51,7 +51,7 @@ SLOTS = [
      'why': 'This is the expensive, capable gear: it reads your repository and writes code.'},
     {'key': 'concierge_ai', 'label': 'Assistant', 'pick': 'brain', 'gear': 'light',
      'model_setting': 'concierge_model',
-     'desc': 'Speaks in the chat here and on your phone (WhatsApp, Telegram), and walks you through the pipe.',
+     'desc': 'Speaks in the chat here and on your phone (WhatsApp, Telegram), and walks you through what is waiting.',
      'why': 'Turn by turn and conversational, so it rides the same quick gear as triage.'},
     # The fifth worker, and the only one that does not have to be able to write. A report's own
     # brain writes its summary; this decides where the finished run goes - four yes/nos about text

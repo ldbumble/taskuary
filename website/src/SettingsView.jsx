@@ -43,7 +43,7 @@ import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
 import { normalizeBrainOptions } from "./brainOptions.js";
 import { recordRow, workingTable } from "./workingNumbers.js";
 import { mailboxChoices, mailboxValue } from "./ruleMailbox.js";
-import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, pageId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
+import { ABOUT_SECTIONS, AUDIT_SECTIONS, onePage, secId, pageId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
 import RoleStart from "./RoleStart.jsx";
@@ -1249,12 +1249,12 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     const label = (k) => (k === "you" ? "You" : k === "profiles" ? "Profiles" : k === "memory" ? "Memory" : PAGES[k].title);
     const where = about ? "About you" : "Settings";
     return browse({
-      title: where, wide: about && section === "memory", noBack: section === PHONE_PAGE || section === "you",
+      title: where, wide: about && section === "memory", noBack: onePage(section, SHELF),
       summary: about ? "how you sound, how you do your job, and what Taskuary has learned · pick a section" : "how Taskuary works for you · pick a section",
       sections: mine.map((k) => ({ key: k, label: label(k) })),
       section: needle ? "" : section,
-      // You is one page: its chip opens it, with no card to press first - and so is Phone & chats
-      onSection: (key) => { setQ(""); onBrowseState?.({ section: key, open: key === "you" || key === PHONE_PAGE ? key : null }); },
+      // a section that is one page opens from its chip, with no card to press first (settingsMap.onePage)
+      onSection: (key) => { setQ(""); onBrowseState?.({ section: key, open: onePage(key, SHELF) ? key : null }); },
       cards: cards.map((c, i) => ({ ...c, key: needle ? `${c.key}-${i}` : c.key,
         onOpen: c.node ? undefined : () => {
           setQ("");
@@ -1279,7 +1279,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
           <Box key={catN} sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box></> : null}</>,
       detail: open && section !== "memory" ? <SettingsPages only={{ page, group: section === "config" ? open : null, knob: browseState.knob || "", at: browseState.at }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
-      onBack: () => (section === "you" || section === PHONE_PAGE ? onBrowseState?.({ section: null, open: null }) : onBrowseState?.({ ...browseState, open: null })),
+      onBack: () => (onePage(section, SHELF) ? onBrowseState?.({ section: null, open: null }) : onBrowseState?.({ ...browseState, open: null })),
       openLabel: !open ? "" : SHELF[section] ? `the document "${docCards.find((c) => c.key === open)?.title || (open === "d:learned" ? "LEARNED.md" : "Docs")}" (${where} - ${section === "docs" ? "Docs" : "Profiles"})`
         : section === "you" ? "who you are - your name, your identity on each channel, what the agents are told (About you)"
         : section === PHONE_PAGE ? `Phone & chats (Settings) - your Assistant chat on WhatsApp or Telegram${devMode ? ", and the chats bound to coding agents" : ""}`

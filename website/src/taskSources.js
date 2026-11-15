@@ -240,6 +240,9 @@ export const sortedLine = (facts, kind) => {
   const head = facts.triaged ? `Sorted as: ${what}` : what.charAt(0).toUpperCase() + what.slice(1);
   return [head, repo && `in ${repo}`, `${facts.pills.find((p) => p.key === "priority")?.value || "regular"} priority`].filter(Boolean).join(" · ");
 };
+// ...UNDER THE CARD'S OWN HEAD ("What triage made of it"): the same words with no "Sorted as:", one way - a task triage sorted read
+// "a task for you", one made by hand "A task for you" (the walk, 2026-11-15)
+export const madeOf = (facts, kind) => { const s = sortedLine(facts, kind).replace(/^Sorted as: /, ""); return s.charAt(0).toUpperCase() + s.slice(1); };
 // ...AT THE FOOT OF FROM (the redesign, owner-approved 2026-10-21): "Sorted as: <what> · <priority> · <why>" - the why is the one
 // triage recorded (triageLine), never written here
 export const triageSays = (facts, kind, why = "") => [sortedLine(facts, kind), oneLine(why)].filter(Boolean).join(" · ");

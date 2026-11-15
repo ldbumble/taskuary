@@ -31,3 +31,7 @@ export const sectionOffset = (id) => {
   const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
   return { off, landed: Math.abs(off) < 4 || (atEnd && off > 0) };
 };
+// A SECTION THAT IS ONE PAGE OPENS FROM ITS CHIP (You and Phone & chats did; Mail rules, Updates and the Activity log each drew one card
+// named like the chip, to press again - the walk, 2026-11-15). Every section but the ones that hold several: Configuration's groups, a
+// shelf of documents, Memory's own list.
+export const onePage = (section, shelves = {}) => !!section && !["config", "memory"].includes(section) && !shelves[section];

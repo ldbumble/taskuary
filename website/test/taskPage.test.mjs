@@ -64,6 +64,11 @@ test("From's last line says what triage made of it in one plain sentence, and th
     "Sorted as: a task for an assistant · normal priority");
   assert.equal(sortedLine({ triaged: true, pills: pills({ intent: "reply", priority: "high" }) }, "reply"), "Sorted as: a reply to send · high priority");
   assert.equal(sortedLine({ triaged: false, pills: pills({ priority: "normal" }) }, "task"), "A task for you · normal priority");
+  // ...and under the card's own head it reads one way, sorted by triage or made by hand
+  const { madeOf } = await import("../src/taskSources.js");
+  assert.equal(madeOf({ triaged: true, pills: pills({ intent: "task", priority: "normal" }) }, "task"), madeOf({ triaged: false, pills: pills({ priority: "normal" }) }, "task"));
+  assert.equal(madeOf({ triaged: true, pills: pills({ intent: "reply", priority: "high" }) }, "reply"), "A reply to send · high priority");
+  assert.match(page, /\{madeOf\(facts, t\?\.Kind \|\| "task"\)\}/);
   // ...and the why triage recorded rides at its end: "Sorted as: <what> · <priority> · <why>"
   assert.equal(triageSays({ triaged: true, pills: pills({ intent: "reply", priority: "normal" }) }, "reply", "  she asks for half an hour\n on a named day "),
     "Sorted as: a reply to send · normal priority · she asks for half an hour on a named day");

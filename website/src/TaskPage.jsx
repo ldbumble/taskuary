@@ -62,7 +62,7 @@ import { onLive, touches } from "./live.js";
 import { pollCalming } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
-import { askLine, byLine, cameFromLabel, cameFromWhere, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isIdeaLine, isChat, madeLine, rowText, sortedLine, todoSources, toLine, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
+import { askLine, byLine, cameFromLabel, cameFromWhere, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isIdeaLine, isChat, madeLine, madeOf, rowText, sortedLine, todoSources, toLine, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -2128,7 +2128,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       </Box>
       <Box data-tq-sorted="" title={`${detail.ref} · ${made}${triaged.at ? ` · sorted ${whenShort(triaged.at)}` : ""}`} sx={CARD}>
         <Typography sx={cardHead}>What triage made of it</Typography>
-        <Typography sx={{ fontSize: 15, lineHeight: 1.5, color: INK }}>{sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "")}</Typography>
+        <Typography sx={{ fontSize: 15, lineHeight: 1.5, color: INK }}>{madeOf(facts, t?.Kind || "task")}</Typography>
         {!cameSummary && triaged.why && <Typography sx={{ fontSize: 13, lineHeight: 1.5, color: DIM, overflowWrap: "anywhere" }}>{triaged.why}</Typography>}
         {triaged.later > 0 && <Typography sx={{ fontSize: 12.5, color: FAINT }}>{plural(triaged.later, "later message")} joined this task</Typography>}
         {workContext && <Typography sx={{ fontSize: 12.5, color: FAINT }}>Works from: {workContext}</Typography>}

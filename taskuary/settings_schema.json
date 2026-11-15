@@ -149,14 +149,14 @@
       "group": "How mail is sorted",
       "label": "AI for the Assistant",
       "type": "brain",
-      "desc": "Which AI speaks on the Assistant tab and in your phone chat, and walks you through the pipe - the Assistant's own brain. auto = your default coding agent, on its faster, lighter model.",
+      "desc": "Which AI speaks in the Assistant's chat here and in your phone chat - the Assistant's own brain. auto = your default coding agent, on its faster, lighter model.",
       "help": "THREE DEFAULTS, side by side in How mail is sorted: the triage brain, the default coding CLI, and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks."
     },
     "concierge_model": {
       "group": "How mail is sorted",
       "label": "Model for the Assistant",
       "type": "text",
-      "desc": "A different model for the Assistant tab, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.",
+      "desc": "A different model for the Assistant, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.",
       "help": "For a CLI this is its --model, and model@effort sets its reasoning effort (Claude --effort, Codex model_reasoning_effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation."
     },
     "assistant_ai": {
@@ -207,8 +207,8 @@
       "group": "Advisor",
       "label": "Lines per post, at most",
       "type": "number",
-      "desc": "The Advisor checks in every 30 minutes and on startup (the 'Advisor' report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md in Settings → Docs: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.",
-      "help": "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. 'Follow up' drafts the chase in your voice onto the task — nothing is sent by itself; 'Make it a task' starts the agent. Voice: COUNSEL.md (Settings → Docs); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Reports tab's Assistant row posts regardless of the schedule."
+      "desc": "The Advisor checks in every 30 minutes and on startup (the 'Advisor' report under Reports — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md in Settings → Docs: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.",
+      "help": "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. 'Follow up' drafts the chase in your voice onto the task — nothing is sent by itself; 'Make it a task' starts the agent. Voice: COUNSEL.md (Settings → Docs); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Advisor's row under Reports posts regardless of the schedule."
     },
     "assistant_followup_hours": {
       "group": "Advisor",
@@ -517,7 +517,7 @@
       "label": "Chat with the assistant in WhatsApp or Telegram",
       "type": "switch",
       "desc": "The default for a channel that has never been asked. Each channel above answers for itself once you set it.",
-      "help": "Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.\n\nIt is the SAME walk the Assistant tab runs, on the same conversation and the same pipe: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as a poll on WhatsApp and as buttons on Telegram; typing a choice's number works on both.\n\nThis switch is the standing permission. The Assistant tab's own \"in WhatsApp\" button hands the walk over for a session whether or not it is on; the tab keeps working beside it.\n\nThe chat only ever answers you: Taskuary writes to it only while you are talking to it there (your last message within 30 minutes, until you say stop) - never a reminder, a follow-up or a summary on its own, and not an urgent item either unless you turn on \"Text me urgent items even when I haven't written\".\n\nBecause answers can contain private workspace information, use a chat only you can read — WhatsApp's Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before."
+      "help": "Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.\n\nIt is the SAME walk the desktop runs, on the same conversation and the same list of work: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as a poll on WhatsApp and as buttons on Telegram; typing a choice's number works on both.\n\nThis switch is the standing permission. The Assistant's own \"in WhatsApp\" button on the desktop hands the walk over for a session whether or not it is on; the desktop keeps working beside it.\n\nThe chat only ever answers you: Taskuary writes to it only while you are talking to it there (your last message within 30 minutes, until you say stop) - never a reminder, a follow-up or a summary on its own, and not an urgent item either unless you turn on \"Text me urgent items even when I haven't written\".\n\nBecause answers can contain private workspace information, use a chat only you can read — WhatsApp's Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before."
     },
     "phone_urgent_unasked": {
       "group": "Assistant on your phone",
@@ -528,14 +528,14 @@
     },
     "phone_walk_channel": {
       "group": "Assistant on your phone",
-      "label": "Which chat the Assistant tab offers",
+      "label": "Which chat the Assistant offers",
       "type": "select",
       "options": [
         "both",
         "whatsapp",
         "telegram"
       ],
-      "desc": "The \"Walk me through them in ...\" button on the Assistant tab: WhatsApp, Telegram, or both.",
+      "desc": "The \"Walk me through them in ...\" button in the Assistant's chat: WhatsApp, Telegram, or both.",
       "help": "both (default) = a button for each chat that is connected and has an Assistant chat named. whatsapp or telegram = only that one. A chat is offered only once its card under Connections names an Assistant chat, so choosing Telegram before setting it up shows no button until you do."
     },
     "phone_morning_line": {
@@ -543,7 +543,7 @@
       "label": "A morning line in the chat",
       "type": "switch",
       "desc": "Once a day, the assistant's chat says what is waiting and offers the two ways in: walk me through my tasks, set up a report.",
-      "help": "Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count in the pipe and how many are on you, then the two scripts as numbered options, so one reply starts the walk there. Quiet on a day the pipe is empty; never twice in a day.\n\nEven on, it goes only into a conversation you started there in the last 30 minutes: the chat never speaks first."
+      "help": "Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count of what is waiting and how many are on you, then the two scripts as numbered options, so one reply starts the walk there. Quiet on a day nothing is waiting; never twice in a day.\n\nEven on, it goes only into a conversation you started there in the last 30 minutes: the chat never speaks first."
     },
     "vision_enabled": {
       "group": "Attachments & images",
@@ -564,7 +564,7 @@
       "label": "Background sync (minutes)",
       "type": "number",
       "desc": "How often the app checks your connections while it is open. 0 turns it off.",
-      "help": "The server keeps this clock, so it runs whichever tab you are on and whether or not you are looking at the app - it is also what makes a SCHEDULED REPORT fire on time, since reports are checked on the same pass.\n\nIt used to live in the Timeline tab instead: the countdown died the moment you opened Board or Tasks, restarted itself every time you changed a filter, and with the window closed nothing polled at all - so a report set for 8am Monday only ran if somebody happened to be sitting on the Timeline at 8am on Monday.\n\n4 is the default: an AI provider keeps the sorting instructions it has just read for about five minutes, so a check every 4 lets each new mail reuse them instead of paying for them again. A check that finds nothing new asks no AI. Raise it if a mailbox limits how often it may be read; 0 turns recurring background polling off. Sync now, startup catch-up, and an action that must refresh chat context can still fetch.\n\nChat connectors (Teams, Slack, Telegram, WhatsApp, iMessage, Discord) also have a separate recurring fast clock - every 30 seconds unless their card says otherwise. 0 here disables both recurring clocks; manual Sync now, startup catch-up, and action-time refreshes remain available."
+      "help": "The server keeps this clock, so it runs whichever tab you are on and whether or not you are looking at the app - it is also what makes a SCHEDULED REPORT fire on time, since reports are checked on the same pass.\n\n4 is the default: an AI provider keeps the sorting instructions it has just read for about five minutes, so a check every 4 lets each new mail reuse them instead of paying for them again. A check that finds nothing new asks no AI. Raise it if a mailbox limits how often it may be read; 0 turns recurring background polling off. Sync now, startup catch-up, and an action that must refresh chat context can still fetch.\n\nChat connectors (Teams, Slack, Telegram, WhatsApp, iMessage, Discord) also have a separate recurring fast clock - every 30 seconds unless their card says otherwise. 0 here disables both recurring clocks; manual Sync now, startup catch-up, and action-time refreshes remain available."
     },
     "startup_sync_days": {
       "group": "Sync & startup",
@@ -609,14 +609,14 @@
       "group": "Assistant",
       "label": "How far back your list reaches (hours)",
       "type": "number",
-      "desc": "How far back ordinary mail, reports and fyi enter the pipe the assistant walks you through. Drafts waiting for your yes and agents waiting on you always enter.",
+      "desc": "How far back ordinary mail, reports and fyi enter the list the Assistant walks you through. Drafts waiting for your yes and agents waiting on you always enter.",
       "help": "A first launch must not surface a year of never-triaged mail. Twelve hours is a working day; set it to 48 after a long weekend."
     },
     "funnel_max": {
       "group": "Assistant",
       "label": "Most items on your list at once",
       "type": "number",
-      "desc": "How many items the pipe shows at once. The rest wait their turn and slide in as you clear it.",
+      "desc": "How many items that list shows at once. The rest wait their turn and slide in as you clear it.",
       "help": "Order is kept: an agent waiting on you or a draft for your yes is never the one held back."
     },
     "meeting_grace_minutes": {

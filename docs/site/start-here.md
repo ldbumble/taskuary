@@ -213,7 +213,14 @@ cd taskuary
 docker compose up
 ```
 
-Open `http://127.0.0.1:7787`. Data lives in the `taskuary-data` volume. The container gives you
+The container opens no browser, and the page signs in only from a link Taskuary hands out. Ask it
+for one, then open the address it prints (it works once, within two minutes):
+
+```bash
+docker compose exec taskuary taskuary --link
+```
+
+Data lives in the `taskuary-data` volume. The container gives you
 the Assistant, its rail, Reports and Connections; coding CLIs and the optional WhatsApp bridge stay
 host programs, because both need a machine of their own.
 

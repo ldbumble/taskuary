@@ -24,6 +24,10 @@ class GoneSurfaces(unittest.TestCase):
         self.assertEqual(hits, [])
         cat = (PKG / 'connectorcatalog.json').read_text(encoding='utf-8')
         self.assertIsNone(gone.search(cat), 'a connector card still names a gone surface')
+        # ...nor a setting's label, description or help - the Settings page and the help site's reference are written from it, and it still
+        # sent people to "the Assistant tab", "the Reports tab" and "the Timeline tab" (the walk, 2026-11-15)
+        knobs = (PKG / 'settings_schema.json').read_text(encoding='utf-8')
+        self.assertEqual(gone.findall(knobs), [], 'a setting still names a gone surface')
 
     def test_jargon_in_flags_them_as_written(self):
         self.assertEqual(words.jargon_in('it is on the Reports tab'), ['Reports tab'])

@@ -94,6 +94,12 @@ def _open_private(url):
     try: spawn.bare(_with_target(cmd, str(launchkey.via_file(url, config.home() / 'launch'))))
     except OSError: webbrowser.open(url)          # a stale registration - the browser uninstalled: still a window, as before
 
+# STARTED WITH NO BROWSER (a container, a server): the address alone opens a page that is not signed in - it said only "Open Taskuary from
+# its app, or run `taskuary --link`", and a Docker user had no app and no shell to run it in (the readiness review, 2026-11-14)
+HEADLESS = ('No browser was opened, and the page signs in only from a link Taskuary hands out. For one, run `taskuary --link` (it works once, '
+            'within two minutes) - in Docker: `docker compose exec taskuary taskuary --link`.')
+
+
 def _open_keyed(url):
     "The browser this process's own server opens, with a one-time key so the page carries the owner token (launchkey, R29)."
     _open_private(launchkey.link(url))
@@ -760,6 +766,7 @@ def main():
         return
     instance.claim(url)
     print(f'Taskuary {__version__} - {url}  (data: {config.db_path()})')
+    if args.no_browser: print(HEADLESS)
     # the port actually bound, for anything in the server that has to name its own address (the
     # QuickBooks redirect URI): server.py reads config, and config reads this
     import os; os.environ['TASKUARY_PORT'] = str(port)

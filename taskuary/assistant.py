@@ -42,6 +42,7 @@ from loguru import logger
 from . import aiusage, kinds as task_kinds
 from .store import is_model_idea, task_ref, auto_code_enabled
 from .timewords import ago_m, plural, span
+from .routing import norm_subject
 from .assistantblocks import said_number   # the payload's own English for a window: 'the last two days'
 
 CHANNEL = 'assistant'
@@ -904,7 +905,7 @@ def _recent(store, days: int = 2) -> str:
         # a muted report is out of the brief too: a mute is "never show me these again" (G1, 2026-09-28)
         if r.get('Channel') == 'report' and any(funnel.muted(m, {'who': r.get('SourceName'), 'title': r.get('Subject'), 'lane': 'report'}) for m in mutes): continue
         k = (r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or '?',
-             re.sub(r'^((re|fw|fwd|aw)\s*:\s*)+', '', _short(r.get('Subject'), 60), flags=re.I).lower())
+             norm_subject(_short(r.get('Subject'), 60)))
         g = by.setdefault(k, {'n': 0, 'r': r, 'cats': set()}); g['n'] += 1; g['cats'].add(r.get('Category') or '')
     lines = []
     for (who, _), g in sorted(by.items(), key=lambda kv: -kv[1]['n'])[:35]:
@@ -932,7 +933,7 @@ def _people_context(store, days: int = 2) -> tuple[str, list[int]]:
     by = {}
     for r in rows:
         if sender_class(r, team) != 'person': continue
-        k = r.get('ConversationId') or re.sub(r'^((re|fw|fwd|aw)\s*:\s*)+', '', _short(r.get('Subject'), 60), flags=re.I).lower()
+        k = r.get('ConversationId') or norm_subject(_short(r.get('Subject'), 60))
         by.setdefault(k, []).append(r)
     me = (store.get_setting('owner_email') or '').lower()
     mine = lambda c: c.get('Status') == 'context' or c.get('Direction') == 'out' or (c.get('FromEmail') or '').lower() == me

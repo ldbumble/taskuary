@@ -13,10 +13,14 @@ import re
 from . import kinds as task_kinds
 
 # Common reply/forward prefixes stripped before subject comparison (incl. localized ones).
-_SUBJ_PREFIX = re.compile(r'^\s*((re|fw|fwd|aw|sv|vs)\s*(\[\d+\])?\s*:\s*)+', re.I)
+# ...THE ONE PLACE A "Re:" COMES OFF (the audit, 2026-11-15): the brief, the calendar's title, the phone's row, the workstreams and the
+# vocabulary each stripped it with a regex of their own, and each knew fewer prefixes than this - "AW:" stayed on the phone's row, "WG:"
+# only the vocabulary knew, "Re[2]:" only routing. bare_subject keeps the subject's own case, norm_subject is the key two subjects compare by
+_SUBJ_PREFIX = re.compile(r'^\s*((re|fw|fwd|aw|wg|sv|vs)\s*(\[\d+\])?\s*:\s*)+', re.I)
 _TOKEN = re.compile(r'[a-z0-9]{2,}')
 
-def norm_subject(s): return _SUBJ_PREFIX.sub('', s or '').strip().lower()
+def bare_subject(s): return _SUBJ_PREFIX.sub('', str(s or '')).strip()
+def norm_subject(s): return bare_subject(s).lower()
 # the words a typed SEARCH is matched by, literally - no stopword list, and never how alike two texts are (that is textsim's)
 def tokens(s): return _TOKEN.findall((s or '').lower())
 

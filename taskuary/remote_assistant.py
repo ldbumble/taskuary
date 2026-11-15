@@ -21,6 +21,7 @@ import collections, json, re, threading, time
 from loguru import logger
 from . import kinds as task_kinds
 from .timewords import plural
+from .routing import bare_subject
 from . import buttons, devphone, lanes
 from .inboxes import NAMES as INBOX_NAMES
 # the row's words (who, state, your move) and when a For later row comes back are worked out ONCE, in funnel_presentation
@@ -2521,7 +2522,7 @@ def subject_of(store, item: dict | None) -> str:
     m = re.match(r'^[\w.-]+/[\w.-]+#(\d+)\s+(.*)$', s)
     body = str((msg or {}).get('BodyText') or '').lstrip().lower()
     kind = 'PR ' if body.startswith('[pull request') else 'Issue ' if body.startswith('[issue') else ''
-    return f'{kind}#{m.group(1)} · {m.group(2)}' if m else re.sub(r'^((re|fw|fwd):\s*)+', '', s, flags=re.I)
+    return f'{kind}#{m.group(1)} · {m.group(2)}' if m else bare_subject(s)
 
 
 def summary_rest(store, item: dict | None) -> str:

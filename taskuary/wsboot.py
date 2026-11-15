@@ -17,6 +17,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from loguru import logger
 from . import workstreams as W
+from .routing import bare_subject
 
 DAYS = 180                 # six months (the owner, 2026-11-01)
 OWN_W, IN_W = 3, 1         # what an owner's thread weighs against one that only landed on them
@@ -78,7 +79,7 @@ def gather(store, days: int = DAYS, rows=None) -> list:
             t['own'] = True
             t['days'].add(str(m.get('SentAt') or '')[:10])          # a chat is one long conversation: the days the owner wrote in it count
             if (w := ' '.join(str(m.get('BodyText') or '').split())[:200]): t['lines'].append(w)
-        if m.get('Subject'): t['subjects'].add(re.sub(r'^\s*((re|fw|fwd)\s*:\s*)+', '', str(m['Subject']), flags=re.I)[:80])
+        if m.get('Subject'): t['subjects'].add(bare_subject(m['Subject'])[:80])
     return [t for t in th.values() if t['people'] or t['sources'] or t['repos']]
 
 

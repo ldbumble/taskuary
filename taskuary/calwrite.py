@@ -455,7 +455,8 @@ def _people(store, msg: dict) -> list:
 
 
 def _title(msg: dict) -> str:
-    s = re.sub(r'^\s*((re|fw|fwd|aw)\s*:\s*)+', '', str(msg.get('Subject') or ''), flags=re.I).strip()
+    from .routing import bare_subject
+    s = bare_subject(msg.get('Subject'))
     return s[:200] or 'Meeting'
 
 

@@ -237,3 +237,15 @@ class CodingIsNotTheDefaultMigrationTests(unittest.TestCase):
     def test_an_unnamed_kind_is_the_owners_list(self):
         from taskuary.routing import draft_task_fields
         self.assertEqual(draft_task_fields({'subject': 'Valley BAI feed', 'body': 'Kevin still has not started the feed.'})['kind'], 'task')
+
+    def test_a_reply_prefix_comes_off_one_way_wherever_a_subject_is_shown_or_compared(self):
+        """The audit, 2026-11-15: six regexes took "Re:" off a subject, each knowing fewer prefixes than routing's - a German "AW:" stayed on
+        the phone's row and on a workstream's subjects, "Re[2]:" on a meeting's title. One function, and every one of them asks it."""
+        from taskuary import calwrite, remote_assistant, routing
+        s = MemoryStore(); tid = s.create_task({'Title': 'Ledger export', 'Kind': 'reply', 'Status': 'open'}, 't')
+        for said in ('Re: Fwd: Ledger export', 'AW: WG: Ledger export', 'RE[2]: Ledger export', ' sv : Ledger export '):
+            self.assertEqual((routing.bare_subject(said), routing.norm_subject(said)), ('Ledger export', 'ledger export'), said)
+            self.assertEqual(calwrite._title({'Subject': said}), 'Ledger export', said)                 # a meeting's title
+            s._exec('DELETE FROM message'); s.add_message({'TaskId': tid, 'ExternalId': said, 'Channel': 'email', 'Subject': said, 'FromName': 'Gail Moreno', 'Status': 'routed'})
+            self.assertEqual(remote_assistant.subject_of(s, {'tid': tid}), 'Ledger export', said)       # the phone's row
+        self.assertEqual(routing.bare_subject('Regarding the export'), 'Regarding the export')         # a word, never a prefix

@@ -227,6 +227,7 @@ ROOM = 8000
 # reasoning and handed back 16 words with finish_reason 'length' - "Tell me what you'd like the routine to do-what", a CALL cut at
 # `{"params` - and the chat showed the stub (the owner, 2026-11-09). A route seen thinking is asked with ROOM from then on.
 _THINKS = set()            # (type, endpoint, model) whose answers were seen cut by reasoning tokens
+_SAID = {}                 # a CLI conversation's id -> the hash of the instructions it was last typed (make_cli_llm: said once)
 def cut_by_thinking(j: dict) -> bool:
     "A 'length' finish whose budget went mostly to reasoning: the visible words are a stub, not the answer the cap allowed."
     ch, u = (j.get('choices') or [{}])[0], j.get('usage') or {}
@@ -433,6 +434,10 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         kwargs = {'cancel': cancel} if cancel is not None else {}
         if extra_env: kwargs['extra_env'] = extra_env
         run_prof, prompt = shaped(system, user)
+        # ...A CLI WITH NO SYSTEM CHANNEL HEARS ITS INSTRUCTIONS ONCE PER CONVERSATION (the cache audit, 2026-11-14): codex and gemini had the
+        # whole ~30K-character system typed above every resumed turn, ~7.5K tokens more history each turn. A changed system is said again
+        sid0, said = (llm.session_id if keep else resume), hashlib.sha1(str(system).encode('utf-8')).hexdigest()
+        if system and cli != 'claude' and sid0 and _SAID.get(sid0) == said: prompt = user
         if run_prof.get('model'): aiusage.note(str(run_prof['model']).split('@')[0])
         # A KEPT conversation goes on with the session its last call was on, not the id this brain was built with: a new
         # chat's second round (a look-up, the gate's retry) went out with no id, which clipool reads as New chat - so it
@@ -444,6 +449,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
                                       resume=llm.session_id if keep else resume, **({'images': images} if images else {}), **kwargs)
         # what the caller needs to CONTINUE this conversation instead of starting another one
         llm.session_id = sid or resume
+        if system and cli != 'claude' and llm.session_id: _SAID[llm.session_id] = said
         if stranger_mode in ('auto', 'look') and sid: store.set_setting(f'stranger_sid:{task_id}', sid, 'router')   # born in the stranger's folder
         return out
     def shaped(system, user):

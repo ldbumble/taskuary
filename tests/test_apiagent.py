@@ -154,11 +154,14 @@ class OneRoundTripTests(unittest.TestCase):
         kept = []
         with mock.patch.object(apiagent, 'run_tool', side_effect=lambda s, t, i, n, a: page(a['path'])):
             apiagent.turn(Reader(), MemoryStore(), 1, 's', 'sys ' * 2000, 'go', 500, history=kept)
-        self.assertLess(len(seen[-1]), 8000 + 3 * 5100 + 6 * 400 + 2000, 'the last call carries three answers whole, the rest as lines')
+        self.assertLess(len(seen[-1]), 8000 + 5 * 5100 + 3 * 400 + 2000, 'the last call carries at most five answers whole, the rest as lines')
         self.assertTrue('the answer to file_read' in seen[-1] and 'f1.txt' in seen[-1] and 'call it again' in seen[-1])
         self.assertEqual(sum(len(m.get('content') or '') > 5000 for m in kept if m['role'] == 'tool'), 8, 'what is kept is whole')
         same = lambda a, b: next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
         self.assertTrue(all(same(a, b) >= 8000 for a, b in zip(seen, seen[1:])), 'the system and the task lead every call, byte for byte')
+        # ...and a call is the one before it with more at the end, but where the line moves - a block of three steps at a time (the cache
+        # audit, 2026-11-14: moved on every step, each step wrote the last three answers to the cache again)
+        self.assertLessEqual(sum(same(a, b) < len(a) - 2 for a, b in zip(seen, seen[1:])), 2)
 
     def test_a_read_made_again_in_one_turn_is_answered_from_the_first_until_something_else_runs(self):
         """A model that read the same file or brief twice paid for the whole answer twice and the server ran it twice. A read-only tool
@@ -341,13 +344,14 @@ class TheSessionTests(unittest.TestCase):
         self.assertEqual([m['role'] for m in session.card_msgs], ['user', 'assistant', 'user'])
         self.assertIn('and the newest?', session.card_msgs[-1]['content'])
 
-    def test_two_turns_of_one_task_share_their_system_up_to_the_lines_a_turn_changes(self):
-        """A provider's prompt cache serves a prompt only up to its first changed byte: "the owner answered this themselves" landed a third of
-        the way into the system, and everything after it - the conversation kept too - was paid for again on the next turn."""
+    def test_a_kept_conversation_s_system_never_changes_and_what_changed_leads_the_next_turn(self):
+        """A provider's prompt cache serves a prompt only up to its first changed byte: "the owner answered this themselves" landed in the
+        system, and everything after it - the conversation kept too - was paid for again on the next turn (the owner, 2026-11-14: "every agent
+        turn should not refresh the entire cache"). The system is the first turn's, byte for byte; the new line leads the turn, once."""
         from taskuary import general, llm as llm_mod, selfclose
         heard = []
         class Brain:
-            def chat(self, msgs, tools, max_tokens, **kw): heard.append(msgs[0]['content']); return {'content': 'Found it.'}
+            def chat(self, msgs, tools, max_tokens, **kw): heard.append((msgs[0]['content'], msgs[-1]['content'])); return {'content': 'Found it.'}
         s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't')
         tid = s.create_task({'Title': 'August export', 'Summary': 'Erin asks for the August export', 'Kind': 'general', 'Status': 'open'}, 'owner')
         mail = lambda i, who, at, body, **kw: s.add_message({'TaskId': tid, 'ExternalId': f'x-{i}', 'ConversationId': 'c1', 'Channel': 'email',
@@ -361,10 +365,12 @@ class TheSessionTests(unittest.TestCase):
             session.send_prompt('find the export', echo=False)
             mail(2, ('Alex Doyle', 'alex@northwind.example'), '2026-11-06 10:00:00', 'Sent it.', Direction='out')
             session.send_prompt('and the September one?', echo=False)
-        a, b = heard
-        at = b.index(selfclose.OWNER_ANSWERED_LINE)
-        self.assertEqual(a[:at], b[:at], 'everything before the changed line is the same bytes')
-        self.assertGreater(at, b.index(apiagent.TOOLS_BRIEF), 'and the stable lines - the tools brief among them - come before it')
+            session.send_prompt('and the October one?', echo=False)
+        (a, _), (b, said), (c, again) = heard
+        self.assertEqual(a, b); self.assertEqual(b, c)
+        self.assertNotIn(selfclose.OWNER_ANSWERED_LINE, b)
+        self.assertIn(selfclose.OWNER_ANSWERED_LINE, said); self.assertTrue(said.startswith(general.UPDATED))
+        self.assertNotIn(selfclose.OWNER_ANSWERED_LINE, again, 'said once')
 
     def test_a_model_that_refuses_tools_is_asked_the_plain_way(self):
         seen = []

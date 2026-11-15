@@ -438,7 +438,14 @@ DROPPED = '(dropped to save room - run it again if you need it)'
 # answers of the last KEEP_STEPS steps whole and an older one as a line naming the call, which the agent can make again; the conversation
 # kept is untouched. Older answers stay stubbed once stubbed, so what goes before them is the same bytes call after call (the provider's
 # prompt cache), and the whole is held under the `agent_request_chars` setting.
+# ...AND THE LINE MOVES IN WHOLE BLOCKS (the cache audit, 2026-11-14): stubbed per step, the line between whole and stubbed moved on every
+# call, and each step from the fourth wrote the last three answers to the cache again. It moves KEEP_STEPS steps at a time now, so the calls
+# between are read from the cache whole, and the newest KEEP_STEPS to 2*KEEP_STEPS-1 answers go whole.
 KEEP_STEPS, REQUEST_CHARS = 3, 120_000
+def _whole_from(msgs: list, keep: int = KEEP_STEPS) -> int:
+    "Where whole answers begin: the step at the last block boundary at least `keep` steps back (0: everything whole)."
+    steps = [i for i, m in enumerate(msgs) if m.get('tool_calls')]
+    return steps[(len(steps) - keep) // keep * keep] if len(steps) >= 2 * keep else 0
 def _stub(name, args, n) -> str: return f'(the answer to {name}({str(args or "")[:160]}), {n:,} characters, is not repeated here - call it again if you need it)'
 
 
@@ -447,9 +454,7 @@ def _stub(name, args, n) -> str: return f'(the answer to {name}({str(args or "")
 # nothing else has run since: any other call - a tick, a write, a command, a click - clears the turn's record, since it may have changed it
 def _again(msgs: list, first: dict, text: str, name: str) -> str:
     "A pointer where the first answer still goes whole with every call (sent); else that answer again, as it came, without running it."
-    steps = [i for i, m in enumerate(msgs) if m.get('tool_calls')]
-    cut = steps[-KEEP_STEPS] if len(steps) >= KEEP_STEPS else 0
-    if any(m is first for m in msgs[cut:]) and first.get('content') == text:
+    if any(m is first for m in msgs[_whole_from(msgs):]) and first.get('content') == text:
         return f'(the same as your earlier {name} call this turn, answered above - nothing since could change it)'
     return text
 
@@ -474,9 +479,8 @@ def _fit(msgs: list, keep: int = 6, budget: int = None):
 
 
 def sent(msgs: list, budget: int = REQUEST_CHARS, keep: int = KEEP_STEPS) -> list:
-    "What one call sends of the conversation `msgs`: tool answers older than the last `keep` steps as a stub (_stub), the whole under `budget`."
-    steps = [i for i, m in enumerate(msgs) if m.get('tool_calls')]
-    cut = steps[-keep] if len(steps) >= keep else 0
+    "What one call sends of the conversation `msgs`: tool answers before the last block of steps (_whole_from) as a stub (_stub), the whole under `budget`."
+    cut = _whole_from(msgs, keep)
     calls = {c.get('id') or (c.get('function') or {}).get('name'): c.get('function') or {} for m in msgs[:cut] for c in m.get('tool_calls') or []}
     out = []
     for i, m in enumerate(msgs):

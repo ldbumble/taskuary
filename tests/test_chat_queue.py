@@ -50,7 +50,7 @@ class TakingTurnsTests(unittest.TestCase):
         """The owner, 2026-11-05: several lines typed during a turn are read together - the model decides if a later one clarifies."""
         sess, patched = _session(self.s, self.tid, 'answered', delay=0.8)
         got, prompts = [], []
-        with patched, mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: (prompts.append(system), time.sleep(0.8), 'answered')[-1]):
+        with patched, mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: (prompts.append(f'{system} {user}'), time.sleep(0.8), 'answered')[-1]):
             first = threading.Thread(target=lambda: got.append(sess.send_prompt('one')))
             first.start(); time.sleep(0.2)
             more = [threading.Thread(target=lambda w=w: got.append(sess.send_prompt(w))) for w in ('two', 'actually three')]

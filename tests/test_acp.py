@@ -151,6 +151,17 @@ class NothingElseChangesTests(unittest.TestCase):
             brain('sys', 'user')
         self.assertFalse(seen.get('acp_ok'))
 
+    def test_a_cli_with_no_system_channel_hears_its_instructions_once_per_conversation(self):
+        """codex had the whole ~30K-character system typed above every resumed turn, ~7.5K tokens more history each turn (the cache audit,
+        2026-11-14). Said with the first turn, again only when they change."""
+        from taskuary import llm
+        s = MemoryStore()
+        s.upsert_agent('codex', 'general', 'cli', json.dumps({'cmd': 'codex', 'args': ['exec']}))
+        brain, typed = llm.make_cli_llm(s, 'codex', keep='general:1:sx'), []
+        with mock.patch.object(agents, 'run_cli', side_effect=lambda prof, prompt, *a, **k: (typed.append(prompt), ('ok', 'codex-sess-1', None))[1]):
+            brain('SYSTEM v1', 'first'); brain('SYSTEM v1', 'second'); brain('SYSTEM v2', 'third')
+        self.assertIn('SYSTEM v1', typed[0]); self.assertEqual(typed[1], 'second'); self.assertIn('SYSTEM v2', typed[2])
+
     def test_a_general_agent_run_with_hands_is_marked_for_the_acp_road(self):
         from taskuary import llm
         s = MemoryStore()

@@ -1897,6 +1897,23 @@ def _prompt(store, tid: int) -> tuple[str, str]:
 def with_late(system: str, late) -> str: return '\n\n'.join([system, *(x for x in late if x)])
 
 
+# A KEPT CONVERSATION'S INSTRUCTIONS NEVER CHANGE (the owner, 2026-11-14: "every agent turn should not refresh the entire cache"). A changed
+# system prompt is a new prefix: the CLI's warm process was restarted on a new prompt file (clipool) and the whole conversation after it read
+# again at full price - a LEARNED.md line, a style note or his answer outside the app did that to every open task. The system a conversation
+# began with is sent unchanged; a late line it has not heard rides the head of the next turn, once. Only a change to the head itself (his
+# JOB.md, the browser handed to it, another AI) is a new system - rare, and real.
+UPDATED = 'SINCE THIS CONVERSATION BEGAN (these replace what your instructions said on the same point):'
+def freeze(s, head: str, late, kept: bool) -> tuple[str, str]:
+    "(the system to send, the lines to lead this turn with) for session `s` - see above. `kept`: the conversation goes on."
+    late = [x for x in late if x]
+    if kept and s.frozen and s.frozen[0] == head:
+        new = [x for x in late if x not in s.frozen[2]]
+        s.frozen = (head, s.frozen[1], s.frozen[2] | set(new))
+        return s.frozen[1], '\n\n'.join([UPDATED, *new]) if new else ''
+    s.frozen = (head, with_late(head, late), set(late))
+    return s.frozen[1], ''
+
+
 def prompt_parts(store, tid: int, turn: bool = False) -> tuple[str, list, str]:
     """(the system's lines that stay the same turn after turn, those a turn can change, the user turn) - _prompt joins them. `turn`: built for
     a session's turn that just began (turn_facts) - the thread as its hand-over took it: what came in since is the next turn's to hear."""
@@ -2309,6 +2326,7 @@ class GeneralSession:
         self._cancel = None                  # the stop switch for the answer being written now
         self.cli_sid = ''                    # the CLI's OWN conversation, resumed turn to turn
         self.card_msgs, self.card_key = [], None      # ...and an API card's, kept here: what it said, called and was answered (apiagent.turn)
+        self.frozen = None                   # (the head, the system sent, the late lines it carried) of the conversation now kept (freeze)
         from . import continuity
         self.resume_notice = ''
         if (saved.get('Pick') == self.pick and continuity.can_resume(store, self.pick)
@@ -2855,13 +2873,15 @@ class GeneralSession:
                     if self.browser_wanted and not apiagent.can(brain): self._remember_trace('progress', 'browser', NO_BROWSER_LINE)     # true of a card that takes no tools, and only of it
                     system = f'{system}\n\n{apiagent.no_browser_line() if apiagent.can(brain) else apiagent.no_tools_line()}'
             kept_conv = bool(self.cli_sid or (looped and self.card_msgs))
-            system = with_late(system, late if kept_conv else [*late, turn_said])
+            head, system, news = system, *freeze(self, system, late, kept_conv)
+            if turn_said and not kept_conv: user = f'{turn_said}\n\n{user}'
             whole = user                 # the conversation said in full: what a fresh one hears where this one cannot be picked back up
             if kept_conv:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
                 user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
                 if (lb := turn_facts(self.store, self.task_id, resumed=True, rules=False, turn=True)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
                 if turn_said: user, whole = f'{turn_said}\n\n{user}', f'{turn_said}\n\n{whole}'
+                if news: user = f'{news}\n\n{user}'
                 if is_dock(self.store.get_task(self.task_id)):
                     user += f'\n\n{dock_snapshot(self.store)}'
             # ...and WHAT ANOTHER AGENT WROTE TO THIS ONE since its last turn (peers.py): a coding agent on a card hears it on its next turn, as
@@ -2906,6 +2926,7 @@ class GeneralSession:
                 # look things up and its place among the open CLIs (so a 300 s leash came back on an agent's turn); and a card with
                 # tools was asked without them. Only what "resumed" changes is said again: no id, and the conversation in full
                 anew = {**build_args, 'resume': None}
+                system = freeze(self, head, late, False)[0]      # ...and a fresh conversation is told what is true now, frozen from here
                 brain = llm_mod.build_llm(self.store, **anew, job='quick_work') if quick else llm_mod.build_llm(self.store, **anew, job='general')
                 if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
                 try: reply = ask(brain, whole + files)

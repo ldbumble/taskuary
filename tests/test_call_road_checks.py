@@ -92,7 +92,8 @@ class TheCardSaysWhatIsSoTests(unittest.TestCase):
         dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
         out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail covers payroll'}}, None, 'remember Gail covers payroll')
         self.assertNotIn('memory.remember', out['say'])
-        self.assertIn('Gail covers payroll', out['say'])
+        # ...and since 2026-11-14 (the owner: "memory should be silent") no receipt of it either: a word, and the fact is in the memory
+        self.assertEqual(out['say'], concierge.GOT_IT); self.assertIn('- Gail covers payroll', s.get_doc('learned'))
         out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Ray covers AP.'}}, None, 'remember it')
         self.assertNotIn('..', out['say'])
 

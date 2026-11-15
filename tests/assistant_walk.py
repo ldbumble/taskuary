@@ -47,7 +47,7 @@ STEPS = [
     # a fact kept changes the instructions the CLI was launched with (LEARNED.md rides them): the next ask, typed once the owner has read
     # this answer, finds the new process already up - it restarted the CLI under them, 4 s on the stand-in (the speed pass, 2026-10-27)
     Step('remember that Marcus prefers mornings', None, c('memory.remember', note='Marcus Reed prefers meetings in the morning', about='Marcus Reed',
-                                                         section='people'), 'decision:setting', r'^Remembered',
+                                                         section='people'), 'decision:setting', r'^Got it',
          budget=(2.0, 3.0)),                                     # a bare CALL writes no words: its first word is the answer
     Step('open Settings → Sounds', None, 'The sounds are under [Notifications](#settings=config&group=Notifications).', 'link:#settings', r'Notifications',
          reads=3.5),

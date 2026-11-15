@@ -266,9 +266,11 @@ class EachFactGoesWhereItBelongs(unittest.TestCase):
         for section, about, want in (('soul', '', ['[SOUL.md](#about=docs&doc=soul)', 'read by triage']),
                                      ('counsel', '', ['[COUNSEL.md](#about=docs&doc=counsel)', 'the morning brief']),
                                      ('style', 'gail@northwind.example', ['for gail@northwind.example', 'By recipient', 'drafts to them']),
-                                     ('care', '', ['[your memory](#about=memory)', 'read by triage'])):
+                                     ('care', '', [concierge.GOT_IT])):
             out = call(s, 'memory.remember', note=f'a {section} fact', section=section, about=about)
             for w in want: self.assertIn(w, out['say'], section)
+        # ...but the memory itself is silent (the owner, 2026-11-14): a fact kept in LEARNED.md is answered in a word, with no link to follow
+        self.assertNotIn('](', out['say']); self.assertIn('- a care fact', s.get_doc('learned'))
 
     def test_a_name_with_no_known_address_is_asked_not_guessed(self):
         s = store()

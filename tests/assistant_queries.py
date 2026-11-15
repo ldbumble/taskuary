@@ -1385,6 +1385,9 @@ def said_what(say: str, got: list, q) -> bool:
     if any(g.split(':')[0] in ('light', 'pressed', 'view') for g in got): return not say.startswith('Lit ')
     # ...and Next on a phone: remote_assistant drops its bare "Next." and the next card is the receipt (the phone audit, 2026-11-02)
     if q.phone and got == ['next']: return True
+    # ...and MEMORY IS SILENT (the owner, 2026-11-14): a fact kept - memory.remember itself having run - is answered in a few natural
+    # words ("Got it - Omar for badge faults."), never a report of the save; any words at all are its answer
+    if 'did:memory.remember' in got: return bool(say.strip())
     return not acted or say.startswith(ACTS) and len(say.split()) > 2
 
 

@@ -84,6 +84,9 @@ KNOWN = [
 #           WebFetch and WebSearch each asked, 2026-11-06). Its other modes answer for us: auto, acceptEdits, bypassPermissions.
 #   codex   `workspace-write`: commands run in Codex's own sandbox without asking, and whatever needs the network or a folder
 #           outside the workspace is blocked and then ASKED for - a push, a fetch, an upload. `agent-full-access` asks nothing.
+#           No mode of codex-acp 2.5.0 asks for every command WITHOUT the sandbox, and it sends the mode's policies with each turn, so
+#           CODEX_CONFIG cannot say so either (docs/acp-transport.md). What the sandbox cannot do - launch a browser - it asks Taskuary
+#           for (`taskuary --browser`, browserview.ask_open).
 # The @zed-industries packages were renamed to these; their claude adapter (0.16.2) failed session/new on Claude Code 2.1.318.
 ADAPTERS = {'claude': {'pkg': '@agentclientprotocol/claude-agent-acp@0.101.0', 'bin': 'claude-agent-acp',
                        'env': {'CLAUDE_CODE_EXECUTABLE': '{cli}'}, 'mode': 'default'},

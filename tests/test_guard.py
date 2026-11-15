@@ -236,7 +236,7 @@ class AllowListTests(unittest.TestCase):
             # an invite's answer, a new meeting and a share set up on its own task (2026-11-08) - each a card the owner presses
             'POST /api/agent/answer-invite', 'POST /api/agent/meeting', 'POST /api/agent/share',
             'POST /api/agent/use-repo',                     # the checkout its own task is worked in (repochoice, 2026-11-06) - inside the allowed folders
-            'POST /api/agent/check-back',                   # its own follow-up on its own task (checkback.py, 2026-11-05) - nothing leaves
+            'POST /api/agent/browser', 'POST /api/agent/check-back',                   # its own follow-up on its own task (checkback.py, 2026-11-05) - nothing leaves
             # its own task's to-dos kept as the issue list, and the owner's Remind me set on their word (2026-11-09) - nothing leaves
             'POST /api/agent/todos', 'POST /api/agent/remind',
             'POST /api/agent/note-peers', 'POST /api/agent/propose-land',   # a note to a peer, and its pick for how its branch lands (2026-11-06)

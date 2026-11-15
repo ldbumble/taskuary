@@ -589,8 +589,35 @@ def _page(url) -> bool: u = str(url or '').strip(); return bool(u) and not u.low
 def on_demand(sid: str, cmd: str) -> bool:
     "Launch this session's browser on the address the agent's command navigates to, if it is not up yet. True when one was launched."
     from .browsergate import opens
-    u = opens(cmd)
-    return bool(u) and _page(u) and not state(sid, fresh=True).get('open') and start(sid, u)
+    return launch(sid, opens(cmd))
+def launch(sid: str, url: str) -> bool:
+    "The one launch on demand: this session's browser on an address, if it is not up yet. The hook's road (on_demand) and the agent's own ask (ask_open)."
+    return bool(url) and _page(url) and not state(sid, fresh=True).get('open') and start(sid, url)
+
+
+# ...AND AN AGENT WHOSE CLI HAS NO SUCH HOOK ASKS FOR IT (the owner, 2026-11-14: an on-demand tool, no Chrome on a turn that does not browse).
+# The launch at the first `open` is the hook's, and one CLI has that hook: on the real Codex CLI the agent's own launch ran inside its
+# sandbox and died - "Auto-launch failed: CDP response channel closed" on every open, so no page ever opened on that AI. `taskuary
+# --browser <url>` reaches the server, which is outside the sandbox, and it opens the page by the same launch; the agent goes on with
+# agent-browser against the browser that is then up.
+ASK_LINE = ('If `agent-browser open` cannot launch a browser from your shell, run `taskuary --browser <url>` instead - Taskuary opens the '
+            'page for you - then go on with `agent-browser`. ')
+def ask_open(sid: str, url: str) -> dict:
+    "The agent asked for a page: launch the session's browser on it, or point the one already up at it. {url, launched} - ValueError says why not."
+    u = (url or '').strip()
+    if u and not re.match(r'^[a-z][a-z0-9+.-]*:', u, re.I): u = 'https://' + u
+    if not re.match(r'^https?://', u, re.I) or not _page(u): raise ValueError('give the address of a web page (http:// or https://)')
+    if not installed(): raise ValueError('agent-browser is not installed on this computer')
+    if launch(sid, u): return {'url': u, 'launched': True}
+    if not state(sid, fresh=True).get('open'): raise ValueError(FAILED_WHY)
+    try: return {'url': navigate(sid, u), 'launched': False}
+    except ValueError:
+        # ...WHAT THE AGENT'S OWN FAILED LAUNCH LEFT BEHIND IS NOT A BROWSER (recorded on Codex, 2026-11-14): its `agent-browser open` died in
+        # the sandbox and left a daemon that answers its port with no Chrome under it - "open", and every command to it failed the same
+        # way. That one is closed and a whole one launched in its place
+        close(sid)
+        if start(sid, u): return {'url': u, 'launched': True}
+        raise ValueError(FAILED_WHY)
 
 
 def start(sid: str, url: str = 'about:blank') -> bool:
@@ -739,7 +766,7 @@ OFFER_HEAD = ('NO BROWSER IS OPEN for this task yet, but Taskuary keeps one for 
               # from its shell eight times, met the sign-in form there, and asked for the password or reported "nobody is signed in" - the rule
               # for it stood at the far end of the offer, under how to drive a browser it had not chosen to open)
               'What answers with a sign-in (a portal, an account) is never fetched from your shell: open it here from the start. '
-              'NEVER use --session, --headed, profile listing, or launch Chrome separately. ')
+              'NEVER use --session, --headed, profile listing, or launch Chrome separately. ' + ASK_LINE)
 NOT_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET (agent-browser is not installed). Do not use a browser tool of your own CLI '
               'or of another app instead - Taskuary cannot show those to the owner or hold their presses, and they fail here. If the work needs a web page, do what you can without it (read the message, find the link), then tell the owner in one line: '
               '"The browser is not set up - install agent-browser under {where}, then ask me again." ')

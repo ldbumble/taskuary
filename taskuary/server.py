@@ -5758,6 +5758,25 @@ def agent_check_back(body: AgentCheckBackBody, request: Request):
     try: return checkback.set_check(store, body.task_id, body.when, body.what, body.agent)
     except ValueError as e: raise HTTPException(422, str(e))
 
+class AgentBrowserBody(BaseModel): task_id: int; url: str; sid: str = ''
+
+@app.post('/api/agent/browser')
+def agent_browser(body: AgentBrowserBody, request: Request):
+    """`taskuary --browser <url>` from the session working the task: its browser, opened on that page by Taskuary itself - for a CLI whose
+    own shell cannot launch one (browserview.ask_open). Only its own live session's browser, and never on a stranger's task: a link in
+    a stranger's mail is not followed by an agent (browserview.STRANGER_LINE)."""
+    from . import browserview, general, terminal as hub_term
+    _own_task_only(request, body.task_id)
+    t = store.get_task(body.task_id)
+    if not t: raise HTTPException(404, 'no such task')
+    s = hub_term.SESSIONS.get(str(body.sid)) or general._live_of(body.task_id)
+    if s is None or not getattr(s, 'alive', False) or getattr(s, 'task_id', None) != body.task_id:
+        raise HTTPException(409, 'no session of this task is running to open a browser for')
+    if not (browserview.wanted(t) or general.browser_offered(store, body.task_id, getattr(s, 'pick', '') or 'cli:')):
+        raise HTTPException(403, 'this task has no browser: it carries a message from someone the owner has not vouched for')
+    try: return {'ok': True, **browserview.ask_open(str(s.sid), body.url)}
+    except ValueError as e: raise HTTPException(422, str(e))
+
 class AgentTodosBody(BaseModel): task_id: int; add: list[str] = []; reword: dict[str, str] = {}; merge: list[dict] = []; agent: str = 'agent'
 
 @app.post('/api/agent/todos')

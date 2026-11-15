@@ -132,6 +132,20 @@ allow; measured, Read, Glob, Grep, Bash, PowerShell, Edit, WebFetch and WebSearc
 network or a folder outside the workspace; `agent-full-access` would ask for nothing. A folder named by its 8.3 short
 name made Codex's Windows sandbox deny even `Get-ChildItem`, so the folder is passed by its long name.
 
+**Why Codex is not run as Claude is - no sandbox, every command asked.** codex-acp 2.5.0 has four modes and no other
+(`dist/index.js`, `_AgentMode`): `read-only` and `workspace-write` (approval `on-request`, Codex's sandbox), `agent`
+(the same sandbox, Codex's own reviewer answering instead of the client) and `agent-full-access` (no sandbox, approval
+`never`). The adapter sends the mode's approval policy and sandbox policy with every turn, so an `approval_policy` or
+`sandbox_mode` in `CODEX_CONFIG` is overridden: "ask for every command, no sandbox" cannot be asked of it. Without the
+sandbox nothing reaches `acpgate`, and a send or a push would run unheld - so Codex stays in `workspace-write`.
+
+**What the sandbox costs, and the road round it.** A Chrome launched from inside Codex's sandbox dies ("Auto-launch
+failed: CDP response channel closed", measured on Windows 2026-11-14), so the agent's own `agent-browser open` never
+opens a page there. Claude's shell hook launches Taskuary's browser from the server at the agent's first navigate
+(`browserview.on_demand`); a CLI with no such hook asks for the same launch with `taskuary --browser <url>`
+(`browserview.ask_open`), then drives the browser that is up with `agent-browser`. Nothing is launched on a turn that
+never asks.
+
 ## What the argv carried, over ACP
 
 `make_cli_llm` builds Taskuary's tools and the owner's send filter into argv. The adapters take them another way

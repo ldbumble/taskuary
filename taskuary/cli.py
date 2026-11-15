@@ -109,7 +109,8 @@ AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 't
               'search', 'message', 'memory',        # ...and the owner's mail history and memory, which a stranger's task never reads
               'sign_form',                          # ...and the owner's signature, which never goes on a stranger's form
               'check_back',                         # ...and a wake of its own later, which a stranger's words never schedule
-              'use_repo')                           # ...and which of the owner's checkouts it works in (repochoice)
+              'use_repo',                           # ...and which of the owner's checkouts it works in (repochoice)
+              'browser')                            # ...and its browser opened on a page, which a link in a stranger's mail never is
 STRANGER_ACTS = AGENT_ACTS[:13]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
 OWNER_ACTS = ('prompts', 'backfill_asks', 'evalset', 'demo', 'link')
 NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - Taskuary's own is the owner's, and a "
@@ -392,6 +393,7 @@ def main():
     ap.add_argument('--memory', metavar='SECTION', nargs='?', const='',
                     help="print what Taskuary has learned about the owner (LEARNED.md) - all of it, or one section: people, care, work, promises, bring")
     ap.add_argument('--guide', metavar='TOPIC', help="print one of Taskuary's how-tos for an agent - browser, number (guides.py)")
+    ap.add_argument('--browser', metavar='URL', help="open this task's browser on a page - for an agent whose own shell cannot launch one; then drive it with agent-browser")
     args = ap.parse_args()
     # ...static text, nothing of the owner's in it: any session may read one, before any server or task is asked for
     if args.guide is not None:
@@ -504,6 +506,19 @@ def main():
         r, out = got
         print("withdrawn - the draft is kept under Not sent; nothing was sent." if out.get('ok')
               else f"not withdrawn: {out.get('why') or out.get('detail') or r.text[:200]}")
+        return
+    if args.browser:
+        import os, sys
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')      # the browser's own words may not be in the console's code page
+        except (AttributeError, OSError): pass
+        tid = os.environ.get('TASKUARY_TASK')
+        if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to open a browser for'); return
+        sid = os.environ.get('TASKUARY_SID') or (os.environ.get('AGENT_BROWSER_SESSION') or '')[3:]
+        got = _post('/api/agent/browser', {'task_id': int(tid), 'url': args.browser, 'sid': sid}, stranger, timeout=90)
+        if not got: return
+        r, out = got
+        print(f"the browser is open on {out.get('url')} - go on with agent-browser (snapshot -i -c, click, read); do not open it again" if out.get('ok')
+              else f"the browser did not open: {out.get('detail') or r.text[:200]}")
         return
     if args.check_back:
         import os, sys

@@ -105,6 +105,64 @@ class TheFirstNavigateLaunchesIt(unittest.TestCase):
         self._hook('agent-browser open https://air.example/', open_=True).assert_not_called()
 
 
+class TheAgentAsksForIt(unittest.TestCase):
+    """A CLI with no hook to launch the browser at its first `open` asks Taskuary for the page (`taskuary --browser <url>`): on the real
+    Codex CLI the agent's own launch ran inside its sandbox and died on every open (recorded, the browser round 2026-11-14). The ask
+    takes the hook's own launch - one road - and nothing is launched on a turn that never asks."""
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        self.server, self.c, self.s = server, TestClient(server.app), server.store
+        self.tid = flights(self.s, tags='')
+        self.sess = mock.Mock(sid='s-9', alive=True, task_id=self.tid, pick='cli:codex')
+        p = [mock.patch.dict(terminal.SESSIONS, {'s-9': self.sess}), mock.patch.object(bv, 'installed', return_value=True),
+             mock.patch.object(general, 'browser_offered', return_value=True)]
+        for x in p: x.start(); self.addCleanup(x.stop)
+
+    def _ask(self, url, open_=False, tid=None, sid='s-9'):
+        with mock.patch.object(bv, 'start', return_value=True) as started, mock.patch.object(bv, 'navigate', side_effect=lambda s, u: u) as nav, \
+             mock.patch.object(bv, 'state', return_value={'open': open_, 'url': '', 'port': 0}):
+            r = self.c.post('/api/agent/browser', json={'task_id': tid or self.tid, 'url': url, 'sid': sid})
+        return r, started, nav
+
+    def test_it_is_launched_on_the_address_asked_for_by_the_hooks_own_launch(self):
+        r, started, nav = self._ask('https://portal.example/login?app=1')
+        self.assertEqual((r.status_code, r.json()['launched']), (200, True))
+        started.assert_called_once_with('s-9', 'https://portal.example/login?app=1'); nav.assert_not_called()
+        self.assertIs(bv.on_demand.__globals__['launch'], bv.launch)            # the hook's road and this one are the same launch
+
+    def test_a_browser_already_up_is_pointed_at_the_page_not_launched_again(self):
+        r, started, nav = self._ask('portal.example/invoices', open_=True)
+        self.assertEqual((r.status_code, r.json()['launched']), (200, False))
+        started.assert_not_called(); nav.assert_called_once_with('s-9', 'https://portal.example/invoices')
+
+    def test_a_dead_browser_the_agents_own_launch_left_is_closed_and_a_whole_one_launched(self):
+        """Recorded on the real Codex CLI: the agent tried `agent-browser open` first, which died in its sandbox and left a daemon that
+        answered its port with no Chrome under it - the ask then met an "open" browser that refused every command."""
+        with mock.patch.object(bv, 'start', return_value=True) as started, mock.patch.object(bv, 'close') as closed, \
+             mock.patch.object(bv, 'navigate', side_effect=ValueError('Auto-launch failed: CDP response channel closed')), \
+             mock.patch.object(bv, 'state', return_value={'open': True, 'url': '', 'port': 5}):
+            r = self.c.post('/api/agent/browser', json={'task_id': self.tid, 'url': 'https://portal.example/', 'sid': 's-9'})
+        self.assertEqual((r.status_code, r.json()['launched']), (200, True))
+        closed.assert_called_once_with('s-9'); started.assert_called_once_with('s-9', 'https://portal.example/')
+
+    def test_no_page_no_launch_and_the_answer_says_why(self):
+        for url in ('about:blank', 'file:///C:/x.html', ''):
+            r, started, _ = self._ask(url)
+            self.assertEqual(r.status_code, 422); started.assert_not_called()
+
+    def test_a_strangers_task_and_a_task_with_no_session_get_none(self):
+        with mock.patch.object(general, 'browser_offered', return_value=False):
+            r, started, _ = self._ask('https://portal.example/')
+        self.assertEqual(r.status_code, 403); started.assert_not_called()
+        other = flights(self.s, tags='')
+        r, started, _ = self._ask('https://portal.example/', tid=other, sid='nobody')
+        self.assertEqual(r.status_code, 409); started.assert_not_called()
+
+    def test_the_agent_is_told_of_it_in_one_sentence_where_it_is_told_its_browser(self):
+        self.assertIn('taskuary --browser <url>', bv.offer()); self.assertEqual(bv.offer().count('taskuary --browser'), 1)
+
+
 class YourTurnNeedsAPage(unittest.TestCase):
     def test_a_hand_over_with_no_page_is_a_question_in_words(self):
         s = MemoryStore(); tid = flights(s)

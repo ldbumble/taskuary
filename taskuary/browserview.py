@@ -505,6 +505,13 @@ def your_turn(store, tid: int, sid: str, what: str = '', watch=...) -> str:
         rid = ws.fresh_id(store, tid, ws.request_id_for(text))
         ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, source='api')
         return rid
+    # ...AND A PAGE THAT ASKS FOR A PASSWORD OR A CODE IS A SIGN-IN, whichever marker handed it over (the owner's own sign-ins, 2026-11:
+    # typed on the page several times, none kept): the agent is told a sign-in it cannot type may be handed over as its turn, and that road
+    # tried no saved sign-in and kept nothing he typed. One road for a sign-in: the saved one first, else his typing heard and kept
+    from . import signin
+    try: signing = signin.on_signin_page(sid)
+    except Exception as e: signing = False; logger.debug(f'task {tid}: the page handed over could not be read for a sign-in - {e}')
+    if signing and (site := signin.needs(store, tid, sid, '').get('site')): return f'{signin.PREFIX}{site}'
     try: host = urlsplit(str(st.get('url') or '')).hostname or ''
     except ValueError: host = ''
     host = host[4:] if host.startswith('www.') else host

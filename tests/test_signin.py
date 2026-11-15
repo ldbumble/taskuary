@@ -452,6 +452,38 @@ class TheOwnerSignsInOnThePage(Asking):
         self.assertIsNone(signin.saved(self.s, 'bank.example')); self.assertEqual(sess.said, [])
         self.assertTrue(signin.pending(self.s, self.tid)); self.assertNotIn(self.tid, signin._TYPED)
 
+    def test_a_sign_in_typed_a_page_at_a_time_with_a_code_after_is_kept_whole(self):
+        """The owner's own sign-ins (2026-11): typed on the page several times, seen through, none kept. User name on one page, password on the
+        next, a code on a third, each sent by a control that fires no submit - so what is typed is handed over as it is typed, a box at a
+        time; and the code typed after the password is not the user name."""
+        sess = self.chat(); p = self.ask(sess)
+        at = 'https://login.bank.example/signin'
+        code = {'top': True, 'href': at, 'password': False, 'user': False, 'otp': True}
+        page = WatchPage([form(at, password=False), form(at, user=False), code, code, form('https://app.bank.example/home', False, False)],
+                         sent=[{'u': USER[:3], 'p': '', 'href': at}, {'u': USER, 'p': '', 'href': at},        # ...each key of it
+                               {'u': '', 'p': PW[:4], 'href': at}, {'u': '', 'p': PW, 'href': at},
+                               {'u': '482913', 'p': '', 'href': at}])                                          # an older page's script: the code as "user"
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+            self.assertTrue(signin.watch(self.s, self.tid, 'sess1', 'bank.example', p['request_id'], conn=page, every=0))
+        from taskuary import vault
+        row = signin.saved(self.s, 'bank.example')
+        self.assertEqual((vault.unseal(row['User']), vault.unseal(row['Secret'])), (USER, PW))
+        # ...and the page's own script hears typing, a change and the page going, and takes no code box for the user name
+        for want in ("addEventListener('input'", "addEventListener('change'", "addEventListener('pagehide'", '!coded(e)'): self.assertIn(want, signin.CAPTURE)
+        # ...nor is a code page's one box "a user box" to the look that tells a code prompt from a sign-in form
+        self.assertIn("const alone = ins.filter((e) => texty(e) && !isCode(e));", signin.FIELDS)
+
+    def test_a_sign_in_page_handed_over_as_his_turn_is_a_sign_in_all_the_same(self):
+        """The agent may hand a sign-in it cannot type over as its turn (browserview.TURN_LINE). That road tried no saved sign-in and kept
+        nothing he typed: a page asking for a password or a code is raised as the sign-in it is."""
+        from taskuary import browserview
+        sess = self.chat()
+        with on_page('https://login.bank.example/signin'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}), \
+             mock.patch.object(signin, 'on_signin_page', return_value=True), mock.patch.object(signin, 'watch') as watched:
+            rid = browserview.your_turn(self.s, self.tid, 'sess1', 'sign in and type the code from your phone', watch=None)
+            self.wait_for(lambda: watched.called)
+        self.assertEqual((rid, signin.pending(self.s, self.tid)['site']), ('signin:bank.example', 'bank.example'))
+
     def test_done_typed_in_the_chat_box_still_says_signed_in(self):
         self.assertTrue(signin.said_done('signin:bank.example', 'done'))
         self.assertTrue(signin.said_done('signin:bank.example', 'Signed in.'))

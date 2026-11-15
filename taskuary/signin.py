@@ -561,7 +561,10 @@ CAPTURE = r'''(() => {
     const ins = deepAll('input').filter(vis);
     const pw = ins.find((e) => e.type === 'password' && e.value);
     const before = pw ? ins.slice(0, ins.indexOf(pw)) : ins;
-    const user = before.filter((e) => texty(e) && e.value).pop();
+    // ...never a code box: the code typed on the page after the password was heard as the user name, and kept as it
+    const coded = (e) => e.autocomplete === 'one-time-code' || /otp|one.?time|totp|2fa|mfa|passcode|verif|auth.*code|security.?code|^code$|^pin$/i
+      .test([e.name, e.id, e.getAttribute('aria-label'), e.placeholder].join(' ').trim());
+    const user = before.filter((e) => texty(e) && e.value && !coded(e)).pop();
     if ((!pw && !user) || typeof __tqSignin !== 'function') return;
     // ...and the form's other boxes the owner filled (a "Customer ID"), by their label - kept with the sign-in, filled by it next time
     const labelOf = (e) => { const r = e.getRootNode(), h = r && r.host, l = e.labels && e.labels[0];
@@ -570,6 +573,12 @@ CAPTURE = r'''(() => {
     try { __tqSignin(JSON.stringify({ u: user ? user.value : '', p: pw ? pw.value : '', o, href: location.href })); } catch (_) {}
   };
   document.addEventListener('submit', grab, true);
+  // ...AND AS IT IS TYPED, not only as the form is sent (the owner's own sign-ins, 2026-11: seen through, and nothing kept). A page sends
+  // its form many ways this cannot hear - a control that is no button calling form.submit(), which fires no submit event; a script on a
+  // timer; a box that sends itself when it is full - so what stands in the boxes is handed over on every change to one, and as the page goes
+  document.addEventListener('input', (e) => { if (e.composedPath().some((x) => x.tagName === 'INPUT')) grab(); }, true);
+  document.addEventListener('change', (e) => { if (e.composedPath().some((x) => x.tagName === 'INPUT')) grab(); }, true);
+  window.addEventListener('pagehide', grab, true);
   // composedPath: a key or a press inside a component's shadow root reaches the document retargeted to its host
   document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.composedPath().some((x) => x.tagName === 'INPUT')) grab(); }, true);
   document.addEventListener('pointerdown', (e) => { if (e.composedPath().some((x) => x.matches && x.matches('button, [type=submit], [role=button], a'))) grab(); }, true);
@@ -592,7 +601,8 @@ def heard(tid, site: str, raw) -> bool:
     if not on_site(d.get('href'), site): return False
     cur = _TYPED.setdefault(tid, {'site': site, 'user': '', 'pw': ''})
     if cur.get('site') != site: cur.update(site=site, user='', pw='')
-    if d.get('u'): cur['user'] = str(d['u'])[:256]
+    # ...and once the password is held, a box typed into WITHOUT one is no user name: the page after the password asks a code, a search
+    if d.get('u') and (d.get('p') or not cur.get('pw')): cur['user'] = str(d['u'])[:256]
     if d.get('p'): cur['pw'] = str(d['p'])[:512]
     if isinstance(d.get('o'), dict) and d['o']:
         cur['extra'] = {str(k)[:60]: str(v)[:256] for k, v in list(d['o'].items())[:5] if str(k).strip() and str(v)}
@@ -676,8 +686,11 @@ FIELDS = r'''(want) => {
     h && h.id, h && h.getAttribute('name'), h && h.getAttribute('label'), h && h.getAttribute('aria-label')].join(' '); };
   const named = (e) => /user|mail|login|account|ident|member|customer/i.test(words(e));
   const before = pw ? ins.slice(0, ins.indexOf(pw)).filter(texty) : [];
-  const alone = ins.filter(texty);
-  const user = before.reverse().find(named) || before[0] || (!pw && (ins.find((e) => texty(e) && named(e)) || (alone.length === 1 ? alone[0] : null)));
+  // ...A BOX THE PAGE MARKS AS A CODE IS NEVER THE USER-NAME BOX (recorded 2026-11-14: a code page's one box, alone on it, read as "a user
+  // box" - so the saved sign-in's code prompt was not seen, the agent was told "signed in" over it, and the ask that followed read "sign in")
+  const isCode = (e) => e.autocomplete === 'one-time-code' || /otp|one.?time|totp|2fa|mfa|passcode|verif|auth.*code|security.?code|^code$/i.test(words(e).trim());
+  const alone = ins.filter((e) => texty(e) && !isCode(e));
+  const user = before.reverse().find(named) || before[0] || (!pw && (ins.find((e) => texty(e) && named(e) && !isCode(e)) || (alone.length === 1 ? alone[0] : null)));
   const frames = [...document.querySelectorAll('iframe')].filter(vis).map((e) => e.src || '');
   // THE CODE BOX (2026-10-25): the one the page itself marks as a one-time code, else a short numeric-looking box that names a
   // code - never the user name or password box. A page of six one-digit boxes is not one this types into (not built).

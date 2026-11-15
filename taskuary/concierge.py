@@ -2803,11 +2803,35 @@ def _brain_for(store, tid: int, llm, trace=None, cancel=None, fast=True):
         return None
 
 
-def turn_system(store, llm=None) -> str:
+def turn_system(store, llm=None, tid=None) -> str:
     """A typed turn's instructions: COUNSEL, SOUL, the voice, then the tool index. ONE text for every round of a turn and for
     warm(): a CLI brain is launched with it (--system-prompt-file, named by its content), so a round that sent another one
-    restarted the process under it."""
-    return _system(store, llm) + '\n\n' + toolcatalog.block(store) + '\n\n' + TURN_GUIDE
+    restarted the process under it.
+    ...AND ONE TEXT FOR THE WHOLE CHAT (the owner, 2026-11-14: "check the assistant cache too"): a memory kept, a connection made or
+    a repository found changed it, the next turn swapped the CLI and the whole chat was written to the cache again. With `tid` the chat's
+    first instructions are kept (general.freeze) and what changed since waits for its next turn (turn_news)."""
+    built = _system(store, llm) + '\n\n' + toolcatalog.block(store) + '\n\n' + TURN_GUIDE
+    if tid is None: return built
+    from types import SimpleNamespace
+    s, ps = _frozen(store).setdefault((tid, DELIVERY.get()), SimpleNamespace(frozen=None, news=[], sid='')), built.split('\n\n')
+    # ...kept while it is the same model conversation: one picked up again from its words (Continue, a CLI that lost it) is told afresh
+    sid = _sid(store, tid)
+    kept = bool(s.frozen and s.frozen[0] == ps[0] and general.chat_rows(store, tid) and s.sid in ('', sid))
+    system, news = general.freeze(s, ps[0], ps[1:], kept)
+    s.sid = sid
+    s.news = [*s.news, *news.split('\n\n')[1:]] if kept else []
+    return system
+
+def _frozen(store) -> dict:
+    "(the chat's task, desk or phone) -> its kept instructions and what changed since (turn_system) - kept on the store, as the chat is"
+    if (d := getattr(store, '_chat_frozen', None)) is None: d = store._chat_frozen = {}
+    return d
+def turn_news(store, tid) -> str:
+    "What changed in the chat's instructions since it began, said once at the head of its next turn - '' when nothing did."
+    s = _frozen(store).get((tid, DELIVERY.get()))
+    if not s or not s.news: return ''
+    out, s.news = '\n\n'.join([general.UPDATED, *s.news]) + '\n\n', []
+    return out
 
 
 _WARMING = threading.Lock()
@@ -2831,7 +2855,7 @@ def warm(store, actor: str = 'owner', wait: bool = False, changed: bool = False)
             # the page's every read: one look, no build - and after a turn, nothing to swap when nothing is live
             if any(x['key'] == f'{LIVE_KEY}:{tid}' for x in clipool.live()) != changed: return False
             llm = _brain_for(store, tid, None)
-            return bool(getattr(llm, 'warm', None) and llm.warm(turn_system(store, llm), **({'swap': True} if changed else {})))
+            return bool(getattr(llm, 'warm', None) and llm.warm(turn_system(store, llm, tid), **({'swap': True} if changed else {})))
         except Exception as e:
             logger.info(f'concierge: the CLI was not warmed - {e}'); return False
         finally: _WARMING.release()
@@ -6011,7 +6035,7 @@ def _answer_on_item(store, tid: int, text: str, item: dict | None, llm, trace=No
         say_ = no_brain(); record(store, tid, 'assistant', say_)
         return {'say': say_, 'options': [], 'chips': [], 'decision': None, 'no_brain': True}
     try:
-        raw = str(llm(turn_system(store, llm), f"{item_whole(store, item)}\n\n{ITEM_ONLY}\n{OWNER_SAYS}{text}\nAnswer them, briefly.",
+        raw = str(llm(turn_system(store, llm, tid), f"{turn_news(store, tid)}{item_whole(store, item)}\n\n{ITEM_ONLY}\n{OWNER_SAYS}{text}\nAnswer them, briefly.",
                       max_tokens=MAX_TOKENS) or '').strip()
         from . import pageview
         raw = parse_decision(parse_call(pageview.take(raw, None)[0])[0])[0]
@@ -6095,12 +6119,12 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # workers, the repositories and the app's state rode every turn as blocks; agents.list, repos.list,
         # reports.list, connections.list and settings.list read them when a turn needs them.
         # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
-        system = turn_system(store, llm)
-        on_page = f"{pageview.block(turn['view'])}\n" if turn.get('view') else ''
+        system = turn_system(store, llm, tid)
+        on_page =f"{pageview.block(turn['view'])}\n" if turn.get('view') else ''
         # THE CANVAS FIRST (canvas_block): the table's stage, ask, lit button and row by id, then what this walk put down - the Advisor's
         # decision read once (adv_d, above), for the lit button there and the "why?" line under the facts
         # the pipe's own SELECT values ride the turn, not the index (toolcatalog.select_values): they move with every mail
-        asked = (f"{canvas_block(store, item, tid, adv_d)}\n\n"
+        asked = (f"{turn_news(store, tid)}{canvas_block(store, item, tid, adv_d)}\n\n"
                  f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n{picks}\n\n"
                  f"{facts(store, item, whole=True)}\n\n"
                       + (f"THE TASKS THEY NAMED, as they are now:\n{nn}\n\n" if (nn := named_now(store, text, item)) else '')
@@ -6258,7 +6282,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     if decision and decision.get('on') and _resolve_named(store, decision['on'], item) == '?' and llm:
         try:
             # ...on the turn's own instructions: a CLI brain is launched with them, and other ones restarted its process twice
-            again = str(llm(turn_system(store, llm), f"{table}\n\n{_rail_block(p, store=store)}\n\n{OWNER_SAYS}{text}\nYou chose {decision.get('verb')} "
+            again = str(llm(turn_system(store, llm, tid), f"{table}\n\n{_rail_block(p, store=store)}\n\n{OWNER_SAYS}{text}\nYou chose {decision.get('verb')} "
                                                 f"with `on`: {str(decision['on'])[:80]!r}, which names no row. Put the row's handle in `on` - the "
                                                 'TQ ref or m-number that starts its line above, or one a look-up gave you - and CALL it again. '
                                                 'If none of them is it, say so in plain words.', max_tokens=MAX_TOKENS) or '')

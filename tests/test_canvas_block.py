@@ -153,6 +153,22 @@ class HowATurnReadsIsSaidOnce(unittest.TestCase):
             self.assertNotIn(said, seen[0])
         self.assertTrue(seen[0].rstrip().endswith(f"{concierge.OWNER_SAYS}what is this\nAnswer them, briefly."), seen[0][-200:])
 
+    def test_a_chat_s_instructions_never_change_and_what_changed_leads_its_next_turn_once(self):
+        """A memory kept or a document changed rebuilt the chat's instructions, the CLI was swapped and the whole chat cached again (the
+        owner, 2026-11-14: "check the assistant cache too"). The chat keeps its first instructions; the change leads the next turn, once."""
+        llm, seen = self.cli(); systems = []
+        def heard(system, user, **kw): systems.append(system); seen.append(user); return 'Ok.'
+        heard.session_id, heard.warm = 'sid-1', llm.warm
+        self.s.set_setting(f'{concierge.SID_KEY}:{self.dock}', 'sid-1', 't')
+        concierge.say(self.s, 'what is this', key='msg:1', llm=heard)
+        self.s.save_doc('soul', 'Alex Doyle runs payroll at Northwind and now also the Fairview rollout.', 'owner')
+        concierge.say(self.s, 'and this one', key='msg:1', llm=heard)
+        concierge.say(self.s, 'and again', key='msg:1', llm=heard)
+        self.assertEqual(len(set(systems)), 1, 'one set of instructions for the whole chat')
+        self.assertNotIn('Fairview rollout', systems[0])
+        self.assertTrue(seen[1].startswith(general.UPDATED) and 'Fairview rollout' in seen[1])
+        self.assertNotIn('Fairview rollout', seen[2], 'said once')
+
     def test_a_cli_conversation_reads_the_rail_whole_once_then_unchanged(self):
         llm, seen = self.cli()
         for text in ('what is this', 'and this one', 'and again'): concierge.say(self.s, text, key='msg:1', llm=llm)

@@ -3188,7 +3188,7 @@ class GeneralSession:
         if signing is None and turn is None and not asks:
             from . import signin
             try:
-                if signin.on_signin_page(self.sid): signing = ''
+                if signin.on_signin_page(self.sid) and not signin.set_aside(self.store, self.task_id, self.sid): signing = ''
             except Exception as e: logger.debug(f'task {self.task_id}: the browser could not be read for a sign-in - {e}')
         if signing is not None:
             from . import signin

@@ -33,5 +33,23 @@ def test_a_turn_that_ends_on_a_login_form_raises_the_sign_in():
     assert _turn('The sign-in page is open in the browser - sign in and I will go on.', True).called
 
 
+def test_a_sign_in_he_set_aside_in_words_is_not_put_back_in_front_of_him():
+    """Recorded on a real site (2026-11-15): a code was asked of him, he wrote "leave it for today", the agent left it - and its turn ending on
+    the code page raised the sign-in again by itself. His words answered that ask; only the agent asking again puts it back."""
+    from taskuary import workerstate as ws
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Pull the portal statement', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    session = general.GeneralSession(s, tid); session.pick, session.provider = 'cli:claude', 'claude'
+    with mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'Left where it is.'), \
+         mock.patch.object(signin, 'on_signin_page', return_value=True), mock.patch.object(signin, 'needs') as needs:
+        ws.record(s, tid, session.sid, 'input_needed', request_id='signin:portal.example', text='portal.example asks for a code', source='api')
+        session.send_prompt('Leave it for today.')
+        assert not needs.called
+        # ...and with no ask of that kind set aside, a turn ending on the form still raises it (the next time he asks for the statement)
+        ws.record(s, tid, session.sid, 'answered', request_id='signin:portal.example', text='x', source='owner')
+        session.send_prompt('Get the statement now.')
+        assert needs.called
+
+
 def test_a_turn_that_ends_elsewhere_raises_nothing():
     assert not _turn('Here is the statement summary.', False).called

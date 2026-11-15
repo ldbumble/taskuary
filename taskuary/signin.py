@@ -344,6 +344,16 @@ def on_signin_page(sid: str, conn=None) -> bool:
     return bool(f.get('top') and (f.get('password') or code_step(f)))      # ...or its code box: the second step of one is a sign-in page too
 
 
+def set_aside(store, tid: int, sid: str) -> bool:
+    """Did the owner's newest words to this agent overtake an open sign-in ask - he answered it in words, not on the page? Then a turn that
+    ends with the page still on its sign-in does not put it back in front of him by itself (recorded on a real site, 2026-11-15: "leave
+    it for today", the agent left it - and the page was shown him again, "sign in to continue"). The agent may still ask, in its own words."""
+    from . import workerstate as ws
+    evs = ws.events(store, tid, sid)
+    spoke = max((i for i, e in enumerate(evs) if e['Kind'] == 'working' and e.get('Text') != ws.WAKE), default=-1)
+    return spoke >= 0 and any(str(r.get('RequestId') or '').startswith(PREFIX) for r in ws.open_requests(evs[:spoke]))
+
+
 def on_password_page(sid: str) -> bool:
     try:
         c = connect(sid)

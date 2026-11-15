@@ -2,6 +2,62 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.8 - 2026-11-15
+
+- A task reads at work while its saved sign-in is typed
+- A memory line learned mid-conversation leads a running coding session's next turn
+- The demo's dashboards count the whole morning
+- The demo's "last 14 days" report ends yesterday, not in August
+- The demo's owner has her own address
+- The demo's Trust says no agent starts here
+- The lesson writer is told the item is somebody else's words
+- What the owner's verdicts taught is consolidated on the Advisor's clock, not only at start
+- The demo's Settings asks for no signature out of sent mail that does not exist
+- Settings sections that are one page open from their chip; settings copy names no surface that is gone; a no-browser start says how to sign in
+- The demo answers each press as what it is: a card can be put down, and nothing reads "failed" or "would reach something real" that did not
+- The demo's Assistant names the questions it answers
+- The demo's reports run on the clock their names say
+- The demo's messages keep their numbers: the dashboards run where they did, and again once the morning is whole
+- Twenty-seven names nothing uses are gone
+- A dashboard is called a dashboard, and the owner's own press is said to him as his
+- A stranger's message held behind Trust never takes Send off the reply that waits
+- Only the owner's own words set a coding session's waiting cards aside
+- An agent hears Taskuary's own reason when Taskuary refuses a step
+- A saved sign-in holds the task at work until the agent's next turn is
+- A question the agent no longer needs answered stops waiting on the owner
+- A start that did not happen says why under the chat; Esc closes Past chats
+- A search that finds no connection card offers the road that works: a saved sign-in
+- A tick on a step that is gone is the agent's to drop, not the owner's to hear of
+- A task the Assistant starts carries the owner's words alone as his
+- The email still waiting stays on screen while the turn his Send woke is at work
+- Who is held behind Trust is asked only where a draft would be written past
+- Removing a saved sign-in asks once; an AI connected after the page opened is seen
+- Removing a saved sign-in acts at once again: only a connection card asks
+- The saved sign-in's hold ends when the told agent writes its next line
+- What the agent made for him stands in its turn: a script is no longer hidden as a working file
+- A report's agent that can reach the web reads only the files its report names
+- One failure is one row: a run names the tasks that hold part of it, a monitor sees what is raised
+- His waiting line is pinned over the box; the demo plays its Send; a rewritten reply keeps its Sent card
+- A reply nobody has written yet is no longer re-addressed to whoever wrote last
+- The Assistant is told of Saved sign-ins among the pages it can bring up
+- Which channels are chat is said once, and every reader agrees
+- A reply prefix comes off a subject in one place
+- The public mail services are one list, read by trust and by people search
+- What counts as a secret's key is one rule for a proposed connection too
+- A task ref is read back by one pattern in a sentence and one typed alone
+- Three more names nothing used are deleted
+- The demo's unused SENT string no longer shadows the reader's SENT answers
+- The agent decides what it shows, and code draws it: no list of file kinds hides what it made
+- A phone's action rows stay one line: the invite folds its other answers, the bar never cuts Mark done
+- The Assistant goes by one name wherever the owner reads it: Taskuary
+- Removing a saved sign-in stays one press and leaves an Undo line that puts the whole sign-in back
+- First run in plain words: what Outlook takes, Back to the list of sources, cards without shorthand
+- The rail: a goal's title keeps its room, and the row on the table says its age once
+- One hold says itself once: the chat's line and its one Trust, nothing more in Came from
+- Search says a task the way its rail row does, fits a phone, and reads at night
+- Gmail signs in with Google for mail and calendar, on the install's own client
+- The Gmail card's Sign in with Google box: the client's steps, and what the sign-in covers
+
 ## 0.4.0.7 - 2026-11-14
 
 - What the owner just said is never the line a reader's budget leaves out

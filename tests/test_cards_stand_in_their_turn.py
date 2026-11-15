@@ -73,7 +73,8 @@ def test_a_file_a_draft_carries_is_drawn_on_its_card_never_as_a_preview_of_its_o
     import shutil
     from taskuary import outputs
     s = MemoryStore(); tid, a1, a2 = chat(s)
-    d = outputs.folder(tid); d.mkdir(parents=True, exist_ok=True)
+    # ...from an empty folder: task 1's folder is every MemoryStore's, and a file another test left there (CI, 2026-11-15) is not this one's
+    d = outputs.folder(tid); shutil.rmtree(d, True); d.mkdir(parents=True, exist_ok=True)
     (d / 'tool review.xlsx').write_bytes(b'PK'); (d / 'notes.txt').write_text('notes')
     rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Short version attached.'})
     s._exec('UPDATE review SET Deliver=? WHERE ReviewId=?', (json.dumps({'kind': 'reply', 'to': ['paula@vendor.example'], 'attachments': [{'name': 'tool review.xlsx'}]}), rid))

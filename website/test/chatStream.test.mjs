@@ -257,3 +257,14 @@ test("a file the agent wrote opens on its contents inside the steps, and a shown
   assert.ok(pages.includes("export const isText = (p) =>") && pages.includes("plain"), "plain text is read as text wherever it came from");
   assert.match(pages, /\{p\.url && isText\(p\) && <CopyFile f=\{p\} \/>\}/);
 });
+
+test("a missing fact is one question: the reply not written yet waits under no open question", async () => {
+  // recorded on the real CLI, 2026-11-15: the agent asked for the owner's car plate and under its question stood the empty reply it could not
+  // write yet, captioned with the same question, over a greyed Send
+  const { askedFirst } = await import("../src/chatStream.js");
+  const empty = { Kind: "draft", Status: "pending", DraftText: "" }, written = { ...empty, DraftText: "Hi Gail, it is AB12 CDE. Alex" };
+  assert.equal(askedFirst({ request_id: "q1", text: "What is the plate?" }, [empty]), true);
+  assert.equal(askedFirst(null, [empty]), false);                                          // ...nothing asked: the card says why it is empty
+  assert.equal(askedFirst({ request_id: "q1" }, [written]), false);                         // ...a reply with words is his to send
+  assert.equal(askedFirst({ request_id: "q1" }, [empty, { Kind: "slot", Status: "pending", DraftText: "x" }]), false);   // ...emails wait with it
+});

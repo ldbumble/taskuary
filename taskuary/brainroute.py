@@ -607,6 +607,40 @@ def unspend(store, pick: str) -> None:
     except Exception as e: logger.debug(f'brainroute: could not clear {pick} spent - {e}')
 
 
+# ANOTHER MODEL ANSWERED (llm.fell_back): kept per card as an EPISODE - written when it starts, cleared when the model asked for answers
+# again - so the card, the bell and the task say it from one record, and a call that changes nothing writes nothing
+FELL_KEY = 'ai_route_fell_back'   # {pick: {'asked', 'answered', 'from'}} while a card's calls are answered by another model
+
+
+def fell_back(store) -> dict:
+    import json
+    try: d = json.loads(str(store.get_setting(FELL_KEY) or '').strip() or '{}')
+    except ValueError: d = {}
+    return d if isinstance(d, dict) else {}
+
+
+def heard(store, pick: str, box: dict) -> None:
+    "What answered `pick`'s call (llm.hearing): a fallback opens its episode, the model asked for answering closes it; nothing new, no write."
+    import json
+    if not (pick and box and box.get('answered')): return
+    d = fell_back(store)
+    was, fell = d.get(pick), bool(box.get('fell'))
+    if fell and was and (was.get('asked'), was.get('answered')) == (box.get('asked'), box.get('answered')): return
+    if not fell and not was: return
+    if fell: d[pick] = {'asked': box['asked'], 'answered': box['answered'], 'from': (was or {}).get('from') or datetime.now().isoformat(sep=' ', timespec='seconds')}
+    else: d.pop(pick)
+    try: store.set_setting(FELL_KEY, json.dumps(d), 'router')
+    except Exception as e: logger.debug(f'brainroute: could not note what answered {pick} - {e}')
+    if fell: logger.info(f"brainroute: {pick} asked for {box['asked']} and was answered by {box['answered']} - the gateway fell back")
+
+
+def fell_line(store, pick: str) -> str:
+    "The fallback line while `pick`'s calls are answered by another model, else ''."
+    from .llm import fallback_line
+    e = fell_back(store).get(pick)
+    return fallback_line(e['asked'], e['answered']) if e else ''
+
+
 def cap(store):
     "The owner's limit on strong calls a day, or None (blank, the default: no cap)."
     v = str(store.get_setting(CAP_KEY) or '').strip()

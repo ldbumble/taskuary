@@ -9,6 +9,12 @@ test("a call reads as its job, model, how hard, tokens and time", () => {
   assert.equal(usedLine({ what: "triage", model: "gemini-flash", tier: "as set", tokens: null, seconds: 1.4, calls: 1 }), "triage · gemini-flash · 1s");
 });
 
+test("a call another model answered says so on its line", () => {
+  const fell = "Asked for Claude Sonnet 5.5 - answered by Gemini 2.5 Pro: the gateway fell back (Claude not available - e.g. its quota)";
+  assert.equal(usedLine({ what: "general work", model: "gemini-2.5-pro", tier: "normal", seconds: 4, calls: 1, fell_back: fell }),
+    `general work · gemini-2.5-pro · normal · 4s · ${fell}`);
+});
+
 test("the total, and the small numbers", () => {
   assert.equal(usedTotal({ calls: 4, tokens: 1250000, seconds: 3725 }), "4 calls · 1.3M tokens · 1h 2m");
   assert.equal(usedTotal({ calls: 0 }), "");

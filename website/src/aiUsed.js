@@ -5,6 +5,6 @@ export const tokens = (n) => n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)
 export const took = (s) => s == null ? "" : s < 1 ? "<1s" : s < 60 ? `${Math.round(s)}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m`;
 const tierWord = (t) => (t && t !== "as set" && t !== "held" ? t : "");
 export const usedLine = (r) => [r.what, r.model, tierWord(r.tier), r.tokens != null ? `${tokens(r.tokens)} tokens` : "", took(r.seconds),
-  r.calls > 1 ? `${r.calls} calls` : ""].filter(Boolean).join(" · ");
+  r.calls > 1 ? `${r.calls} calls` : "", r.fell_back || ""].filter(Boolean).join(" · ");
 export const usedTotal = (t) => !t?.calls ? "" : [`${t.calls} ${t.calls === 1 ? "call" : "calls"}`, t.tokens != null ? `${tokens(t.tokens)} tokens` : "",
   took(t.seconds)].filter(Boolean).join(" · ");

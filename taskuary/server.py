@@ -7674,6 +7674,9 @@ def connectors(request: Request):
     from .llm import AI_TYPES
     rows = [c | {'ScopeDefault': scopes.default_scope(c['Type']), 'SignedOut': problems.signed_out(c),
                  'LastErrorPlain': card_error(c), 'IsAI': c['Type'] in AI_TYPES} for c in store.list_connectors()]
+    # FellBack: the card's calls are answered by another model than the one asked for (brainroute.fell_line) - the bell's own line
+    from .brainroute import fell_line
+    rows = [c | {'FellBack': fell_line(store, f"connector:{c['ConnectorId']}")} if c['IsAI'] else c for c in rows]
     # GatewayBuiltIn: this build ships the organisation gateway's address, so its card's address field is optional (llm.gateway_base)
     from .llm import OPENAI_COMPATIBLE
     rows = [c | {'GatewayBuiltIn': bool(OPENAI_COMPATIBLE['hipaa_ai'][0])} if c['Type'] == 'hipaa_ai' else c for c in rows]

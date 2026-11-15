@@ -87,6 +87,68 @@ class BudgetSpent(RuntimeError):
         super().__init__(line); self.until = datetime.now() + timedelta(seconds=rest)
 
 
+# A MODEL THAT DID NOT ANSWER IS SAID, NOT HIDDEN (the owner, 2026-11-15: "it should tell the user as well that the model did not work because
+# of quota so we know what it's doing"). A gateway asked for one model may answer with another - LiteLLM's `fallbacks` put Gemini 2.5 Pro on
+# every Claude call while Claude's quota was 0, and the owner believed he was on Claude. The answer names who answered (its `model`), and
+# LiteLLM counts its fallbacks in a header; where one of them shows another model answered, the call says so (fell_back) and the router
+# keeps it as the card's episode (brainroute.heard) - the card, the bell and the task's "AI used" read one line (fallback_line). A call
+# turned down outright on a quota (429, every retry spent) is the provider's quota, in those words, with the way on (QuotaSpent).
+QUOTA_LINE = "{name}: {model} is over its quota at the provider (it answered 429) - raise the quota there, or pick another model on its card"
+QUOTA_REST = 600           # seconds before a card over its quota is asked again: a per-minute quota is back by then, a raised one too
+_FAMILY = re.compile(r'claude|gemini|gpt|o\d|llama|mistral|grok|deepseek|qwen|command|sonar|kimi', re.I)
+_FELL = contextvars.ContextVar('tq_llm_fell', default=None)
+
+
+class QuotaSpent(BudgetSpent):
+    "The provider turned the call away on its quota (429 after every retry): said as that, and the card rests (brainroute.spend) for QUOTA_REST."
+    def __init__(self, line: str): super().__init__(line, QUOTA_REST)
+
+
+def words(model: str) -> str:
+    "A model id as a person says it: 'vertex_ai/claude-sonnet-5-5@2026' -> 'Claude Sonnet 5.5', 'gemini-2.5-pro' -> 'Gemini 2.5 Pro'."
+    out = []
+    for w in re.split(r'[-_ ]+', str(model or '').rsplit('/', 1)[-1].split('@')[0]):
+        if not w: continue
+        if out and w.isdigit() and re.fullmatch(r'[\d.]+', out[-1]): out[-1] += f'.{w}'
+        else: out.append(w.upper() if w.lower() == 'gpt' else w[:1].upper() + w[1:])
+    return ' '.join(out) or str(model or '')
+
+
+def fell_back(asked: str, answered: str, headers=None) -> bool:
+    "Did another model answer than the one asked for? LiteLLM's own count where it sent one; else the two ids' families differ."
+    n = str((headers or {}).get('x-litellm-attempted-fallbacks') or '').strip()
+    if n.isdigit(): return int(n) > 0
+    a, b = _FAMILY.search(str(asked or '')), _FAMILY.search(str(answered or ''))
+    return bool(a and b and a[0].lower() != b[0].lower())
+
+
+def fallback_line(asked: str, answered: str) -> str:
+    "The one line every surface says a fallback in."
+    fam = (_FAMILY.search(str(asked or '')) or [words(asked)])[0]
+    return (f'Asked for {words(asked)} - answered by {words(answered)}: the gateway fell back '
+            f'({fam[:1].upper() + fam[1:]} not available - e.g. its quota)')
+
+
+def heard_from() -> dict | None:
+    "What the calls made inside `hearing` were answered by: {'asked', 'answered', 'fell'} of the last one, None when none answered."
+    return _FELL.get()
+
+
+@contextmanager
+def hearing():
+    box = {}
+    tok = _FELL.set(box)
+    try: yield box
+    finally: _FELL.reset(tok)
+
+
+def refused(t: str, r, url: str, model: str) -> Exception:
+    "The error a refused call raises: a quota in plain words with the way on (QuotaSpent), else the provider's own."
+    if r.status_code == 429:
+        return QuotaSpent(QUOTA_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t, model=words(model) or 'its model'))
+    return RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
+
+
 def budget_said(text) -> str:
     "The spent-budget line inside an error however it was wrapped ('AI triage failed (...)'), else ''."
     m = re.search(r"[A-Za-z][\w .-]{0,40}?" + re.escape(BUDGET_LINE.split('{name}')[1]), str(text or ''))
@@ -593,20 +655,28 @@ class _Cooling:
     raises the same line at once, so a poll with no backup holds its mail without a request per message (brainroute.spend)."""
     def __init__(self, store, pick, brain):
         for k, v in (('_store', store), ('_pick', pick), ('_brain', brain)): object.__setattr__(self, k, v)
-    def __call__(self, *a, **kw):
+    def __call__(self, *a, **kw): return self._asked(self._brain, a, kw)
+    def _asked(self, f, a, kw):
         from . import brainroute
         if (line := brainroute.spent(self._store, self._pick)): raise BudgetSpent(line)
-        try: out = self._brain(*a, **kw)
+        try:
+            with hearing() as box: out = f(*a, **kw)
         except Exception as e:
             if isinstance(e, BudgetSpent): brainroute.spend(self._store, self._pick, str(e), e.until)
             elif getattr(e, 'until', None): brainroute.cool(self._store, self._pick, e.until)
             raise
         brainroute.unspend(self._store, self._pick)
+        brainroute.heard(self._store, self._pick, box)
         from . import agents
         agents.answered(self._store, self._pick)
         return out
     def __bool__(self): return bool(object.__getattribute__(self, '_brain'))
-    def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
+    def __getattr__(self, k):
+        v = getattr(object.__getattribute__(self, '_brain'), k)
+        # ...and EVERY STEP OF AN AGENT'S LOOP the same (apiagent.turn's brain.chat): a spent card, a quota, a fallback are each step's too
+        if k != 'chat' or not callable(v): return v
+        def chat(*a, **kw): return self._asked(v, a, kw)
+        return chat
     def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
 
 
@@ -1073,15 +1143,44 @@ def said_text(msg: dict) -> str:
 # - OpenAI, and Gemini 2.5+ behind a gateway, cache a repeated prefix by themselves (OpenAI from 1,024 tokens; Gemini Flash from 4,096) - there
 #   the order alone hits. A LiteLLM gateway also takes cache_control and makes a Vertex cachedContent of the marked part, but on Gemini that
 #   turns the free implicit cache off for it and bills storage, so it is the card's choice (`cache: explicit` in its settings), not the default;
+# - CLAUDE BEHIND A GATEWAY caches only what is marked, as on the Messages API (the HIPAA AI card, 2026-11-15: Vertex caching turned on, and a
+#   Claude model on it was never marked - every step of an agent's turn paid its whole prefix again). So the MODEL decides, not the card: the
+#   one the call goes to, and once one has answered, the one that did (a gateway that falls back to Gemini for a Claude name says so in its
+#   answer's `model`). Marked there: the stable system and the conversation's last message, in the Messages API's own shape (LiteLLM hands
+#   cache_control on to Vertex's and Bedrock's Claude, and OpenRouter to Anthropic's);
 # - a card that refuses the marker (a 400 naming it) is asked again without it, and never marked again (_NO_CACHE).
 # Whatever reads it as text - a CLI's prompt file, a log - reads the same words: Stable is a str.
 EPHEMERAL, CACHE_FROM = {'type': 'ephemeral'}, 2_000      # characters: under ~512 tokens no provider caches at all
 _NO_CACHE = set()          # (type, endpoint, model) that refused a cache marker
-# how each card's provider caches: 'explicit' takes the marker; 'implicit' caches a repeated prefix by itself (OpenAI-style APIs; Gemini behind a
-# gateway - its newest Flash models cache implicitly only, at a 90% discount, from ~4-6K tokens, for up to a day). The Messages API is marked in
-# make_llm's own branch. A card's `cache` setting overrides its type's; a type not listed is implicit
-CACHE_MARKS = {'anthropic': 'explicit', 'hipaa_ai': 'implicit', 'vertex_ai': 'implicit', 'gemini': 'implicit', 'openai': 'implicit',
-               'azure_openai': 'implicit', 'openrouter': 'implicit', 'deepseek': 'implicit'}
+_ANSWERED = {}             # (type, endpoint, model) -> the model that last answered it, as its answer named it
+_CLAUDE = re.compile(r'claude|anthropic', re.I)          # a model id's own family name: Vertex's, Bedrock's and OpenRouter's all carry it
+
+
+def cache_mode(cfg: dict, model: str, answered: str = '') -> str:
+    "'explicit' where the model the call reaches caches only what is marked (Claude), else 'implicit'; a card's `cache` setting overrides."
+    return cfg.get('cache') or ('explicit' if _CLAUDE.search(str(answered or model or '')) else 'implicit')
+
+
+def mark_last(msgs: list) -> list:
+    "The conversation with its last message marked, so the next step reads all before it from the cache: a user line in its content, else the message."
+    if not msgs: return msgs
+    m, c = msgs[-1], msgs[-1].get('content')
+    if m.get('role') != 'user': return [*msgs[:-1], {**m, 'cache_control': EPHEMERAL}]
+    parts = [{'type': 'text', 'text': c}] if isinstance(c, str) else list(c or [])
+    return [*msgs[:-1], {**m, 'content': parts[:-1] + [{**parts[-1], 'cache_control': EPHEMERAL}]}] if parts else msgs
+
+
+def unmark(msgs: list) -> bool:
+    "Every cache marker taken out of `msgs`, in place - a system of blocks back to its words. Whether there was one."
+    had = False
+    for i, m in enumerate(msgs):
+        c = m.get('content')
+        if 'cache_control' in m: had, m = True, {k: v for k, v in m.items() if k != 'cache_control'}
+        if isinstance(c, list) and any(isinstance(b, dict) and 'cache_control' in b for b in c):
+            had, c = True, [{k: v for k, v in b.items() if k != 'cache_control'} for b in c]
+            m = {**m, 'content': ''.join(b.get('text') or '' for b in c) if m.get('role') == 'system' else c}
+        msgs[i] = m
+    return had
 _CACHE_REFUSED = re.compile(r'cache_control|cached_?content|cache', re.I)
 
 
@@ -1228,13 +1327,22 @@ def make_llm(t, cfg: dict, key: str):
     else:
         raise RuntimeError(f'unknown AI connector type: {t}')
     ek = (t, urls[0], model)
-    marked = lambda system: ((cfg.get('cache') or CACHE_MARKS.get(t, 'implicit')) == 'explicit' and ek not in _NO_CACHE
-                             and blocks(system, seconds=True)) or str(system)
+    # ...marked as the model it reaches caches (cache_mode): Claude's TTL in its own words, Gemini's cachedContent in seconds
+    claude = lambda: bool(_CLAUDE.search(str(_ANSWERED.get(ek) or model or '')))
+    marking = lambda: cache_mode(cfg, model, _ANSWERED.get(ek)) == 'explicit' and ek not in _NO_CACHE
+    marked = lambda system, marks=4: (marking() and blocks(system, marks, seconds=not claude())) or str(system)
+    def heard(r):
+        """The model that answered, as the answer names it: a gateway that put a Claude name on Gemini is marked as Gemini from the next call,
+        and the call says whether it fell back (hearing)."""
+        said = str((r.json() or {}).get('model') or '') if isinstance(r.json(), dict) else ''
+        if said: _ANSWERED[ek] = said
+        if (box := _FELL.get()) is not None and said and model:
+            box.update(asked=model, answered=said, fell=fell_back(model, said, getattr(r, 'headers', None)))
+        if said and model and fell_back(model, said, getattr(r, 'headers', None)): aiusage.fell(model)
     def unmarked(r, msgs) -> bool:
         "A refused cache marker (a 400 naming it): taken off this request and never put on this card again."
-        if r.status_code not in (400, 422) or not msgs or isinstance(msgs[0].get('content'), str) or msgs[0].get('role') != 'system': return False
-        if not _CACHE_REFUSED.search(r.text or ''): return False
-        _NO_CACHE.add(ek); msgs[0] = {**msgs[0], 'content': ''.join(b.get('text') or '' for b in msgs[0]['content'])}
+        if r.status_code not in (400, 422) or not msgs or not _CACHE_REFUSED.search(r.text or '') or not unmark(msgs): return False
+        _NO_CACHE.add(ek)
         from loguru import logger
         logger.info(f'{t}: the card refused a cache marker - asked without one from now on'); return True
 
@@ -1274,7 +1382,7 @@ def make_llm(t, cfg: dict, key: str):
                         if not _THINK_REFUSED.search(said): _no_effort(ek, said)
                         r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                     if r.status_code == 200:
-                        aiusage.openai(r.json())
+                        aiusage.openai(r.json()); heard(r)
                         ch = (r.json().get('choices') or [{}])[0]
                         said = said_text(ch.get('message') or {})
                         if cut_by_thinking(r.json()): _THINKS.add(ek); raise _Empty('length')
@@ -1285,7 +1393,7 @@ def make_llm(t, cfg: dict, key: str):
                     if r.status_code == 400 and images and _IMAGE_REFUSED.search(r.text): raise _ImageRefused(r.text[:300])
                     if r.status_code == 400 and 'max_completion_tokens' in r.text: continue
                     if fmt and refused_format(r): return None           # cannot carry this format -> ask with the next one
-                    raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
+                    raise refused(t, r, url, model)
             return None
 
         # `want` is a JSON schema the answer MUST fit, and the strongest form is worth asking for:
@@ -1308,7 +1416,7 @@ def make_llm(t, cfg: dict, key: str):
                 if out is not None:
                     if fmt or want: _FORMAT_FROM[where] = i
                     return out
-            raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}{tried(last)}: {last.text[:300]}')
+            raise refused(t, last, urls[-1], model)
         # ...and an empty 'stop' is asked once more as it was: Gemini behind the HIPAA AI gateway now and then thinks and writes nothing
         spent = 0
         while True:
@@ -1327,7 +1435,9 @@ def make_llm(t, cfg: dict, key: str):
     # carries `tools` on to the Gemini and Claude models behind a gateway (verified live on the HIPAA AI card, 2026-11-09).
     def chat(messages, tools, max_tokens=MAX_TOKENS, **extra):
         last = None
-        if messages and messages[0].get('role') == 'system': messages = [{**messages[0], 'content': marked(messages[0].get('content') or '')}, *messages[1:]]
+        # ...where the model caches only what is marked, the conversation too: each step reads every step before it from the cache
+        if messages and messages[0].get('role') == 'system': messages = [{**messages[0], 'content': marked(messages[0].get('content') or '', 2)}, *messages[1:]]
+        if marking() and claude() and len(messages) > 1: messages = mark_last(messages)
         for url in urls:
             for tok_param in ('max_completion_tokens', 'max_tokens'):
                 body = {'messages': messages, 'tools': tools, tok_param: max_tokens, **extra, **({'model': model} if model else {}),
@@ -1338,13 +1448,13 @@ def make_llm(t, cfg: dict, key: str):
                 if r.status_code in (400, 422) and body.pop('reasoning_effort', None) and _EFFORT_REFUSED.search(r.text or ''):
                     r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                 if r.status_code == 200:
-                    aiusage.openai(r.json())
+                    aiusage.openai(r.json()); heard(r)
                     return (r.json().get('choices') or [{}])[0].get('message') or {}
                 last = r
                 if r.status_code == 404: break
                 if r.status_code == 400 and 'max_completion_tokens' in (r.text or ''): continue
-                raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
-        raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}{tried(last)}: {last.text[:300]}')
+                raise refused(t, r, url, model)
+        raise refused(t, last, urls[-1], model)
     llm.chat = chat
 
     # THE MODEL'S OWN WEB SEARCH, through the gateway (the owner, 2026-11-09: "why can't the model itself do web search?"): LiteLLM's
@@ -1361,7 +1471,7 @@ def make_llm(t, cfg: dict, key: str):
                 'max_tokens': max_tokens, 'web_search_options': {'search_context_size': 'medium'}, **({'model': model} if model else {})}
         r = post_retrying(urls[0], headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
         if budget_spent(r): raise BudgetSpent(BUDGET_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t))
-        if r.status_code != 200: raise RuntimeError(f'{t} error {r.status_code}: {r.text[:300]}')
+        if r.status_code != 200: raise refused(t, r, urls[0], model)
         aiusage.openai(r.json())
         m = (r.json().get('choices') or [{}])[0].get('message') or {}
         cites = list(dict.fromkeys(str((a.get('url_citation') or a).get('url') or '') for a in m.get('annotations') or [] if isinstance(a, dict)))

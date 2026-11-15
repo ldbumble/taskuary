@@ -3001,6 +3001,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
               ? (isAI ? "On — sorts your mail." : "On — polling on schedule and via Sync now.")
               : "Off — flip on once Test passes."}
           </Typography>)}
+        {/* another model answers this card's calls (brainroute.fell_line): the bell's own line, said where the card is */}
+        {isAI && conn.FellBack && <Typography data-tq-fell-back="" variant="body2" sx={{ color: "var(--tq-warn, #7a5a1f)", flexBasis: "100%" }}>{conn.FellBack}</Typography>}
         {/* the last step of a setup should be the first sync - not a wait for the ten-minute clock. It is there once the SERVER has the
             card on (syncState), and greyed - the reason in its hover - while a box or a pick is still saving an edit it would not read */}
         {sync.show && !isAI && (

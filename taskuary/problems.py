@@ -327,6 +327,16 @@ def collect(store, all_of_them: bool = False) -> list:
         out.append({'key': 'triage', 'title': brain['title'], 'detail': brain['detail'], 'since': brain['since'], 'error': brain['error'][:400],
                     'now': True, 'where': 'Connections', 'connector': pick[10:] if pick.startswith('connector:') else None,
                     'fix': 'Check my setup', 'kind': 'thinking'})
+    # ...and an AI card answered by ANOTHER model than the one asked for (brainroute.heard): its own episode, said at once - working, so
+    # not a red poll failure, but the owner is told which model is really answering until the one asked for answers again
+    from .brainroute import fell_back, fell_line
+    from .llm import words
+    for pick, e in fell_back(store).items():
+        c = store.get_connector(int(pick[10:])) if pick.startswith('connector:') and pick[10:].isdigit() else None
+        name = (c or {}).get('Name') or (c or {}).get('Type') or pick
+        out.append({'key': f'fell_back:{pick}', 'title': f'{name}: {fell_line(store, pick)}', 'detail': 'Every call still gets an answer - '
+                    'from the model the gateway fell back to.', 'back': f"{name}: {words(e.get('asked'))} answers again", 'since': e.get('from') or '',
+                    'now': True, 'where': 'Connections', 'connector': pick[10:] if c else None, 'fix': 'Open the card'})
     # ...and the day's ceiling for AI work nobody asked for, while it holds: one line, gone tomorrow or when the limit is raised
     from .brainroute import auto_held
     if held := auto_held(store):

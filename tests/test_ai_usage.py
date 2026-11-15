@@ -387,3 +387,122 @@ def test_a_row_written_before_the_column_still_reads(tmp_path):
     with aiusage.asking('triage.classify', 7): new = _route(s)
     assert (_row(s, new)['Caller'], _row(s, new)['MessageId']) == ('triage.classify', 7)
 
+
+
+# ── which model the call reaches decides the cache marker, and a model that did not answer is said (the HIPAA AI card, 2026-11-15) ──
+GW = {'base_url': 'https://ai.northwind.example/v1'}
+TOOLS = [{'type': 'function', 'function': {'name': 'file_read', 'description': 'd', 'parameters': {'type': 'object', 'properties': {}}}}]
+def _said(model, headers=None, text='ok'):
+    "A gateway's 200 as LiteLLM sends it: the model that answered named in the body, its fallbacks counted in a header."
+    r = _post({'model': model, 'choices': [{'message': {'role': 'assistant', 'content': text}}], 'usage': {'prompt_tokens': 9, 'completion_tokens': 1}})
+    r.headers = {'x-litellm-attempted-fallbacks': '0', **(headers or {})}; return r
+def _steps(): return [{'role': 'system', 'content': 'guide ' * 1000}, {'role': 'user', 'content': 'fill the invoice'},
+                      {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'c1', 'type': 'function', 'function': {'name': 'file_read', 'arguments': '{}'}}]},
+                      {'role': 'tool', 'tool_call_id': 'c1', 'content': 'Date | Units | Amount'}]
+def _marks(body) -> int: return json.dumps(body).count('cache_control')
+
+
+@pytest.mark.parametrize('t,model', [('hipaa_ai', 'claude-sonnet-5-5'), ('hipaa_ai', 'claude-opus-5-5'), ('openrouter', 'anthropic/claude-sonnet-5-5'),
+                                     ('openai', 'gpt-5')])
+def test_the_model_the_call_reaches_decides_the_marker_not_the_card(t, model):
+    "Claude caches only what is marked, behind any gateway; Gemini and OpenAI cache a repeated prefix themselves, and a marker there turns that off."
+    llm._NO_CACHE.clear(); llm._ANSWERED.clear()
+    with mock.patch.object(llm, 'post_retrying', return_value=_said(model)) as post:
+        llm.make_llm(t, {**GW, 'model': model}, 'k').chat(_steps(), TOOLS)
+        step = post.call_args.args[2]
+        llm.make_llm(t, {**GW, 'model': model}, 'k')(llm.stable('guide ' * 1000, rest='this mail', ttl='1h'), 'the mail')
+        one = post.call_args.args[2]
+    if 'claude' not in model:
+        assert _marks(step) == _marks(one) == 0 and isinstance(step['messages'][0]['content'], str); return
+    assert step['messages'][0]['content'][0]['cache_control'] == llm.EPHEMERAL, 'the system: tools and guide read from the cache'
+    assert step['messages'][-1]['cache_control'] == llm.EPHEMERAL, 'the conversation so far: each step reads the one before from the cache'
+    assert 'cache_control' not in step['messages'][2] and _marks(step) <= 4, "within Claude's four breakpoints"
+    assert one['messages'][0]['content'][0]['cache_control'] == {'type': 'ephemeral', 'ttl': '1h'}, "Claude's TTL in its own words, never Gemini's '3600s'"
+
+
+@pytest.mark.parametrize('model', ['gemini-3.8-flash', 'gemini-2.5-pro', 'hipaa-ai'])
+def test_gemini_and_the_alias_on_the_hipaa_card_are_left_to_cache_by_themselves(model):
+    llm._NO_CACHE.clear(); llm._ANSWERED.clear()
+    with mock.patch.object(llm, 'post_retrying', return_value=_said('gemini-3.8-flash')) as post:
+        llm.make_llm('hipaa_ai', {**GW, 'model': model}, 'k').chat(_steps(), TOOLS)
+    assert _marks(post.call_args.args[2]) == 0
+
+
+def test_a_claude_user_line_is_marked_in_its_content_and_a_refused_marker_comes_off_everywhere_once():
+    llm._NO_CACHE.clear(); llm._ANSWERED.clear()
+    msgs = _steps()[:2]
+    refused, sent = _post({'error': {'message': 'cache_control is not permitted here'}}, 400), []
+    answers = iter([refused, _said('claude-sonnet-5-5'), _said('claude-sonnet-5-5')])
+    def post(url, headers, body, timeout): sent.append(json.loads(json.dumps(body))); return next(answers)
+    with mock.patch.object(llm, 'post_retrying', side_effect=post):
+        brain = llm.make_llm('hipaa_ai', {**GW, 'model': 'claude-sonnet-5-5'}, 'k')
+        brain.chat(msgs, TOOLS); brain.chat(msgs, TOOLS)
+    assert sent[0]['messages'][-1]['content'][-1]['cache_control'] == llm.EPHEMERAL
+    assert [_marks(b) for b in sent] == [2, 0, 0], 'asked again with no marker anywhere, and never marked again on this card'
+
+
+def test_a_claude_name_the_gateway_answered_with_gemini_is_not_marked_from_the_next_call():
+    llm._NO_CACHE.clear(); llm._ANSWERED.clear()
+    with mock.patch.object(llm, 'post_retrying', return_value=_said('gemini-2.5-pro', {'x-litellm-attempted-fallbacks': '1'})) as post:
+        brain = llm.make_llm('hipaa_ai', {**GW, 'model': 'claude-sonnet-5-5'}, 'k')
+        brain.chat(_steps(), TOOLS); first = post.call_args.args[2]
+        brain.chat(_steps(), TOOLS); second = post.call_args.args[2]
+    assert _marks(first) == 2 and _marks(second) == 0, 'a cachedContent on Gemini would turn its own cache off'
+
+
+def _card(s, model='claude-sonnet-5-5'):
+    got = s.save_connector({'Type': 'hipaa_ai', 'Name': 'HIPAA AI', 'Active': 1, 'ConfigJson': json.dumps({**GW, 'model': model})}, 't')
+    return got if isinstance(got, int) else got['ConnectorId']
+
+
+def test_a_fallback_is_said_on_the_card_the_bell_and_the_turn_once_per_episode_until_the_model_asked_for_answers():
+    """The owner, 2026-11-15: "it should tell the user as well that the model did not work because of quota so we know what it's doing" -
+    every Claude call on the gateway was answered by Gemini 2.5 Pro, and nothing said so."""
+    from fastapi.testclient import TestClient
+    from taskuary import problems, server
+    llm._NO_CACHE.clear(); llm._ANSWERED.clear()
+    s = MemoryStore(); cid = _card(s); pick = f'connector:{cid}'
+    rid = _route(s, job='general', tid=None)
+    fell = _said('gemini-2.5-pro', {'x-litellm-attempted-fallbacks': '1'})
+    with mock.patch.object(llm, 'post_retrying', return_value=fell):
+        brain = aiusage.Metered(s, rid, llm._Cooling(s, pick, llm.make_llm('hipaa_ai', {**GW, 'model': 'claude-sonnet-5-5'}, 'k')))
+        brain('sys', 'one'); brain.chat(_steps(), TOOLS)
+    line = 'Asked for Claude Sonnet 5.5 - answered by Gemini 2.5 Pro: the gateway fell back (Claude not available - e.g. its quota)'
+    assert llm.fallback_line('claude-sonnet-5-5', 'gemini-2.5-pro') == line
+    assert aiusage.row(s, _row(s, rid))['fell_back'] == line, "the task's AI used line for that turn"
+    with mock.patch.object(server, 'store', s):
+        card = next(c for c in TestClient(server.app).get('/api/connectors').json()['data'] if c['ConnectorId'] == cid)
+    assert card['FellBack'] == line
+    bell = [p for p in problems.collect(s) if p['key'] == f'fell_back:{pick}']
+    assert len(bell) == 1 and bell[0]['title'] == f'HIPAA AI: {line}'
+    with mock.patch.object(s, 'set_setting', wraps=s.set_setting) as wrote, mock.patch.object(llm, 'post_retrying', return_value=fell):
+        brain('sys', 'two')
+    assert not [c for c in wrote.call_args_list if c.args[0] == 'ai_route_fell_back'], 'the same episode is written once'
+    with mock.patch.object(llm, 'post_retrying', return_value=_said('claude-sonnet-5-5')): brain('sys', 'three')
+    assert not [p for p in problems.collect(s) if p['key'].startswith('fell_back:')]
+    assert any('Claude Sonnet 5.5 answers again' in n['title'] for n in problems.news(s)), 'its end is said, as every episode that rang'
+
+
+def test_an_alias_the_gateway_resolves_is_not_a_fallback_but_its_own_count_is():
+    assert not llm.fell_back('hipaa-ai', 'gemini-3.8-flash', {'x-litellm-attempted-fallbacks': '0'})
+    assert not llm.fell_back('hipaa-ai', 'gemini-3.8-flash'), 'an alias names no family to differ from'
+    assert llm.fell_back('hipaa-ai', 'gemini-2.5-pro', {'x-litellm-attempted-fallbacks': '2'})
+    assert llm.fell_back('anthropic/claude-sonnet-5-5', 'google/gemini-2.5-pro'), 'a gateway with no count: the families differ'
+    assert not llm.fell_back('claude-sonnet-5-5', 'claude-sonnet-5-5@20261001')
+
+
+def test_a_quota_refusal_is_the_providers_quota_in_plain_words_and_the_card_rests():
+    llm._NO_CACHE.clear(); llm._ANSWERED.clear()
+    s = MemoryStore(); cid = _card(s); pick = f'connector:{cid}'
+    quota = _post({'error': {'message': 'Quota exceeded for online_prediction_requests_per_base_model with base model: '
+                                        'anthropic-claude-sonnet. Please submit a quota increase request.', 'code': 429}}, 429)
+    brain = llm._Cooling(s, pick, llm.make_llm('hipaa_ai', {**GW, 'model': 'claude-sonnet-5-5'}, 'k'))
+    for ask in (lambda: brain('sys', 'one'), lambda: brain.chat(_steps(), TOOLS)):
+        from taskuary import brainroute
+        brainroute.unspend(s, pick)
+        with mock.patch.object(llm, 'post_retrying', return_value=quota), pytest.raises(llm.QuotaSpent) as e: ask()
+        assert str(e.value) == ('HIPAA AI: Claude Sonnet 5.5 is over its quota at the provider (it answered 429) - raise the quota there, '
+                                'or pick another model on its card')
+    assert brainroute.spent(s, pick) == str(e.value), 'it rests: the next call says the same line at once, and a backup takes it'
+    with mock.patch.object(llm, 'post_retrying') as post, pytest.raises(llm.BudgetSpent): brain('sys', 'again')
+    post.assert_not_called()

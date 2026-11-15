@@ -73,6 +73,11 @@ def note(model: str = '', i=None, cached=None, o=None) -> None:
         if v is not None: m[k] = m.get(k, 0) + int(v)
 
 
+def fell(asked: str) -> None:
+    "This call was answered by another model than `asked` (llm.fell_back): its route row says so (FellFrom)."
+    if (m := _METER.get()) is not None and asked: m['fell_from'] = asked
+
+
 def _n(o, k):
     v = o.get(k) if isinstance(o, dict) else getattr(o, k, None)
     return int(v) if isinstance(v, (int, float)) else 0
@@ -268,6 +273,7 @@ def _brain(store, pick, said):
 def row(store, r: dict, said: dict = None) -> dict:
     "One route row in plain words: when, the job, the brain and model, quick/normal/hard, tokens and seconds (None where uncounted)."
     from .brainroute import JOB_WORDS
+    from .llm import fallback_line
     brain, ms = _brain(store, r.get('Pick') or '', {} if said is None else said), r.get('Ms')
     i, o = r.get('TokensIn'), r.get('TokensOut')
     return {'id': r['Id'], 'at': r.get('At') or '', 'day': str(r.get('At') or '')[:10], 'task_id': r.get('TaskId'),
@@ -276,7 +282,8 @@ def row(store, r: dict, said: dict = None) -> dict:
             'model': r.get('Ran') or r.get('Model') or brain, 'tier': TIER_WORDS.get(r.get('Tier'), r.get('Tier') or ''),
             'tokens_in': i, 'cached': r.get('Cached'), 'tokens_out': o, 'tokens': None if i is None and o is None else (i or 0) + (o or 0),
             'seconds': None if ms is None else round(ms / 1000, 1), 'calls': r.get('Calls') or (1 if ms is not None else 0),
-            'run': bool(r.get('Sid')) or (r.get('Job') in RUN_JOBS and r.get('Rule') != 'agent asked'), 'outcome': r.get('Outcome') or 'ok'}
+            'run': bool(r.get('Sid')) or (r.get('Job') in RUN_JOBS and r.get('Rule') != 'agent asked'), 'outcome': r.get('Outcome') or 'ok',
+            **({'fell_back': fallback_line(r['FellFrom'], r.get('Ran'))} if r.get('FellFrom') and r.get('Ran') else {})}
 
 
 def for_task(store, tid: int, limit: int = 200) -> dict:

@@ -214,7 +214,9 @@ export async function startHarness({ fresh = false, bin = "", tour = false } = {
     // Taskuary's home is still the scratch one, and the fixture still opens no connection out. Never set in CI: the stand-in is the default.
     if (process.env.TASKUARY_BROWSER_REAL_CLI) {
       backendEnv.PATH = [bin, ...process.env.TASKUARY_BROWSER_REAL_CLI.split(path.delimiter), ...system].filter(Boolean).join(path.delimiter);
-      for (const k of ["HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY"]) {
+      // ...CODEX_HOME with them: another CLI of theirs (REAL_EXTRA_PATH) signs in from their own profile as Claude does - a copy of its
+      // sign-in in the scratch home would be refreshed there, and their own left stale
+      for (const k of ["HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "CODEX_HOME"]) {
         if (process.env[k] === undefined) delete backendEnv[k]; else backendEnv[k] = process.env[k];
       }
       // ...and the person's own user-level Claude hooks post every CLI event to THEIR running Taskuary, a scratch session's among them. curl

@@ -571,6 +571,8 @@ def _continue(store, tid, rid, site, actor, code=False):
     sess, said = ws._live(tid), f'{DONE} to {site} - continue.'
     # the receipt (2026-10-25): that a code went in too, so the owner knows the vault answered the site's second question
     did = f"Signed in to {site}{' with the saved sign-in' if actor != 'owner' else ''}{' and its authenticator code' if code else ''}"
+    from . import browserview
+    if sess and getattr(sess, 'sid', None): browserview.keep_soon(sess.sid)     # past the sign-in: what the site set is kept now (keep)
     if not sess:
         store.add_comment(tid, actor, 'agent', f'{did}, but no agent is running on this task to tell - open it to continue.')
         return False

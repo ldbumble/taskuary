@@ -12,7 +12,7 @@ of a workflow").
 A browser job is now a workflow: dispatched to a real session, whose task carries `needs:browser`,
 which is what opens the same named browser restored from the owner's own profile.
 """
-import json, os, unittest
+import json, os, time, unittest
 from unittest import mock
 
 from taskuary import blackboard, browserview, concierge, general, ingest, reports, selfclose, terminal, triage, workflows
@@ -305,6 +305,56 @@ class ALeftOverBrowserIsClosedTests(unittest.TestCase):
             got = {c['name']: c['value'] for c in json.loads((sessions / 'taskuary-tq-run-b.json').read_text())['cookies']}
             self.assertEqual(got, {'sess': 'live', 'pref': 'dark'})
             self.assertEqual(browserview.seed('run-b'), 0)                 # once: a restarted session keeps its own
+
+    def test_a_sign_in_is_kept_on_disk_while_the_browser_is_still_open(self):
+        """The owner's live sign-in, 2026-11-15: the code typed, "remember this device" ticked, and the task's restore state still the one
+        written at its launch ten minutes on - kept only when a browser closes, so a crash lost the remembered device and the next task asked a
+        code again. keep() writes the live cookies of every tab over it now, the page storage agent-browser kept beside them left as it was;
+        the same jar is not written twice, and an unreadable browser never empties the file. Invented site."""
+        import json
+        sessions = self.dir / 'sessions'; sessions.mkdir(); own = sessions / 'taskuary-tq-run-a.json'
+        own.write_text(json.dumps({'cookies': [{'name': 'pre', 'value': '1', 'domain': 'portal.example', 'path': '/'}], 'origins': [{'origin': 'https://portal.example'}]}))
+        jar = [{'name': 'sess', 'value': 's1', 'domain': 'portal.example', 'path': '/'}, {'name': 'trusted', 'value': 'd1', 'domain': 'portal.example', 'path': '/'},
+               {'name': 'pref', 'value': 'dark', 'domain': 'news.example', 'path': '/'}]
+        with mock.patch.object(browserview, '_live_cookies', return_value=jar):
+            self.assertEqual(browserview.keep('run-a'), 3)
+            d = json.loads(own.read_text())
+            self.assertEqual({c['name'] for c in d['cookies']}, {'sess', 'trusted', 'pref'})
+            self.assertEqual(d['origins'], [{'origin': 'https://portal.example'}])
+            self.assertEqual(browserview.keep('run-a'), 0)                 # nothing new: not written again
+        with mock.patch.object(browserview, '_live_cookies', return_value=[]): self.assertEqual(browserview.keep('run-a'), 0)
+        self.assertEqual(len(json.loads(own.read_text())['cookies']), 3)
+
+    def test_it_is_kept_when_the_sign_in_or_the_step_is_through_on_the_clock_and_at_close(self):
+        """One road, three moments: the sign-in past (signin._continue) and a handed step closed (browsergate._close) keep it at once; a
+        browser Taskuary launched keeps it on a clock while it is open; close keeps it before the browser goes."""
+        from taskuary import browsergate, signin, workerstate
+        kept = []
+        with mock.patch.object(browserview, 'keep', side_effect=lambda sid: kept.append(sid) or 1):
+            sess = mock.Mock(sid='run-a', spec=['sid'])
+            with mock.patch.object(workerstate, '_live', return_value=sess), mock.patch('taskuary.terminal.stranger_now', return_value=False), \
+                 mock.patch('taskuary.terminal.type_into'), mock.patch.object(workerstate, 'record'):
+                signin._continue(mock.Mock(), 7, 'signin:portal.example', 'portal.example', 'owner')
+            browsergate.HANDS['turn:x'] = {'tid': 7, 'sid': 'run-b', 'kind': 'turn', 'site': 'portal.example'}
+            with mock.patch.object(workerstate, 'open_requests', return_value=[]), mock.patch.object(workerstate, 'events', return_value=[]):
+                self.assertTrue(browsergate._close(mock.Mock(), 7, 'turn:x', 'done on the page'))
+            for _ in range(100):
+                if len(kept) >= 2: break
+                time.sleep(.02)
+            self.assertEqual(sorted(kept), ['run-a', 'run-b'])
+            kept.clear(); opened = {'on': True}
+            with mock.patch.object(browserview, 'KEEP_EVERY', .02), mock.patch.object(browserview, 'state', side_effect=lambda sid, fresh=False: {'open': opened['on']}):
+                browserview.clock('run-c')
+                for _ in range(100):
+                    if len(kept) >= 2: break
+                    time.sleep(.02)
+                self.assertGreaterEqual(len(kept), 2)
+                opened['on'] = False; time.sleep(.1); n = len(kept); time.sleep(.1)
+                self.assertEqual(len(kept), n)                             # a closed browser stops its clock
+            kept.clear(); (self.dir / 'tq-run-d.stream').write_text('9')
+            with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'run'):
+                browserview.close('run-d')
+            self.assertEqual(kept, ['run-d'])
 
 
 if __name__ == '__main__':

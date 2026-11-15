@@ -123,7 +123,8 @@ IDLE_MS = '0'
 # without the restored login. With the clock off there is NO per-command save either: 0.37.1 and 0.38.2
 # alike write the restore state only when the browser closes (close(), the pty's end) - so a login the
 # owner typed survives a session that ends cleanly, and not one whose daemon is killed. Still required on
-# 0.38.2, as is the env-borne idle timeout above (re-measured 2026-10-02).
+# 0.38.2, as is the env-borne idle timeout above (re-measured 2026-10-02). On 0.41.2 its own `state save` fails the same way once a
+# second site is open ("Invalid response: EOF", 2026-11-15) - so Taskuary keeps the cookies itself, over DevTools (keep, clock).
 AUTOSAVE_MS = '0'
 # ...AND A USER-AGENT THAT DOES NOT SAY "HeadlessChrome". Headless Chrome sends `HeadlessChrome/<v>` in its
 # User-Agent header, and Akamai-fronted sites reset the HTTP/2 stream on it: fidelity.com and its sign-in page
@@ -415,7 +416,9 @@ def close(sid: str, tid: int = None):
         try: keep_last(sid)
         except Exception as e: logger.debug(f'the last frame of {sid} was not kept: {e}')
         if tid: keep_frame(tid, sid)
+        if (stop := _CLOCKS.pop(sid, None)): stop.set()
         if exe and _read(session_name(sid), 'stream'):
+            _safe_keep(sid)                                        # what it holds now, whether or not agent-browser's own save on close works
             try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True)
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')
         _end_daemon(sid)
@@ -589,6 +592,54 @@ def seed(sid: str) -> int:
     return len(jar)
 
 
+# ...AND KEPT WHILE IT IS OPEN, not only when it closes (the owner's live sign-in, 2026-11-15): the authenticator code typed, "remember this
+# device" ticked, and the task's restore state was still the one written at its launch ten minutes on - agent-browser writes it only on close
+# (AUTOSAVE_MS), so a crash or a killed Taskuary took the remembered device with it and the next task asked a code again. One road keeps it:
+# the moment a sign-in or a handed step is through (signin._continue, browsergate._close), on a clock while the browser is up, and at close.
+# Cookies are the whole browser's - every tab's; the page storage agent-browser kept beside them is left as it was.
+KEEP_EVERY = 15.0
+_KEEP_LOCK = threading.Lock()
+_CLOCKS = {}                    # sid -> the Event that stops its clock
+
+def keep(sid: str) -> int:
+    "Write this browser's live cookies into its restore state. How many; 0 when nothing changed or the browser could not be read."
+    jar = _live_cookies(sid)
+    if not jar: return 0                               # an unreadable browser never empties what was kept
+    k = lambda c: (str(c.get('name')), str(c.get('domain')), str(c.get('path')))
+    jar = sorted(jar, key=k); own = _own_state(sid)
+    with _KEEP_LOCK:
+        try: d = json.loads(own.read_text(encoding='utf-8'))
+        except (OSError, ValueError): d = {}
+        d = d if isinstance(d, dict) else {}
+        if sorted(d.get('cookies') or [], key=k) == jar: return 0
+        d['cookies'] = jar; d.setdefault('origins', [])
+        own.parent.mkdir(parents=True, exist_ok=True); tmp = own.with_suffix('.json.tmp')
+        try: tmp.write_text(json.dumps(d), encoding='utf-8'); os.replace(tmp, own)
+        except OSError as e: logger.debug(f'the sign-ins of {sid} were not kept: {e}'); return 0
+    return len(jar)
+
+def keep_soon(sid: str) -> None:
+    "keep() off the caller's thread: a sign-in through tells its agent without waiting on the browser."
+    threading.Thread(target=lambda: _safe_keep(sid), daemon=True, name=f'keep-{sid}').start()
+
+def _safe_keep(sid: str) -> int:
+    try: return keep(sid)
+    except Exception as e: logger.debug(f'the sign-ins of {sid} were not kept: {e}'); return 0
+
+def clock(sid: str) -> None:
+    "Keep this browser's cookies every KEEP_EVERY seconds while it is open; one clock per session, stopped by close() or the browser going."
+    with _KEEP_LOCK:
+        if sid in _CLOCKS: return
+        stop = _CLOCKS[sid] = threading.Event()
+    def run():
+        try:
+            while not stop.wait(KEEP_EVERY) and state(sid, fresh=True).get('open'): _safe_keep(sid)
+        finally:
+            with _KEEP_LOCK:
+                if _CLOCKS.get(sid) is stop: _CLOCKS.pop(sid, None)
+    threading.Thread(target=run, daemon=True, name=f'keep-clock-{sid}').start()
+
+
 def forget_site(site: str) -> int:
     """Take one site's cookies and storage out of every kept browser state (Settings -> Saved sign-ins -> Remove): a removed
     sign-in must not leave its session behind for the next task to walk in on. How many files changed."""
@@ -607,7 +658,8 @@ def forget_site(site: str) -> int:
         if len(cs) == len(d.get('cookies') or []) and len(os_) == len(d.get('origins') or []): continue
         d['cookies'], d['origins'] = cs, os_
         tmp = p.with_suffix('.json.tmp')
-        try: tmp.write_text(json.dumps(d), encoding='utf-8'); os.replace(tmp, p); n += 1
+        try:
+            with _KEEP_LOCK: tmp.write_text(json.dumps(d), encoding='utf-8'); os.replace(tmp, p); n += 1
         except OSError as e: logger.warning(f'could not take {site} out of {p.name}: {e}')
     return n
 
@@ -711,7 +763,7 @@ def start(sid: str, url: str = 'about:blank') -> bool:
             return False
         for _ in range(int(LAUNCH_WAIT / LAUNCH_POLL)):            # it has a Chrome to launch
             time.sleep(LAUNCH_POLL)
-            if state(sid, fresh=True)['open']: listed(sid, True, _daemon_pid(sid)); return True
+            if state(sid, fresh=True)['open']: listed(sid, True, _daemon_pid(sid)); clock(sid); return True
         logger.warning(f'the browser for {sid} did not come up within {LAUNCH_WAIT:.0f}s')
         return False
 

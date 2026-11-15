@@ -578,6 +578,8 @@ def _close(store, tid: int, rid: str, said: str) -> dict | None:
     with _HANDS_LOCK: h = HANDS.pop(rid, None)
     if not h and not req: return None
     h = h or {'sid': str(req['Sid']), 'btn': 'the button', 'site': 'the page'}
+    from . import browserview
+    browserview.keep_soon(h['sid'])                         # a step through on the page - a code, a check: what it set is kept now
     if req: ws.record(store, tid, h['sid'], 'answered', request_id=rid, text=said, source='owner')
     return h
 

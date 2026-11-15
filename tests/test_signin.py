@@ -369,9 +369,22 @@ class Asking(unittest.TestCase):
         with on_page('https://login.bank.example/'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}), \
              mock.patch.object(signin, 'asks_code', return_value=True):
             self.assertTrue(signin.needs(self.s, self.tid, 'sess1', 'bank.example', fill=lambda *a, **k: {}, watch=None)['auto'])
-            self.wait_for(lambda: signin.pending(self.s, self.tid))
+            # ...THE CODE PAGE IS MADE READY FIRST (the owner, 2026-11-15: "why can't you click save for 30 days"): its agent is told to tick
+            # whatever the page offers to remember this browser and to hand the code step back - never that it is signed in
+            self.wait_for(lambda: sess.said)
+            self.assertEqual(sess.said, [signin.READY_CODE.format(site='bank.example')])
+            self.assertIsNone(signin.pending(self.s, self.tid))
+            # ...its turn ends with the marker: the code step is his at once - nothing typed again, no "asked again within minutes"
+            self.assertFalse(signin.needs(self.s, self.tid, 'sess1', 'bank.example', fill=lambda *a, **k: self.fail('typed again'), watch=None)['auto'])
+            # ...and that turn is a step of the work, never an answer standing in the chat
+            from taskuary import conversation, general
+            self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'I need the site signed in to go on.')
+        with mock.patch.dict('taskuary.terminal.SESSIONS', clear=True):
+            turn = next(x for x in reversed(conversation.items(self.s, self.tid)['items']) if x['kind'] == 'turn')
+        self.assertEqual((turn['text'], [st['text'] for st in turn['steps']][-1]), ('', 'Made the code page of bank.example ready for you.'))
         self.assertEqual(signin.pending(self.s, self.tid)['text'], 'bank.example took the saved sign-in and asks for a code - type it on the page to continue')
-        self.assertEqual(sess.said, [])
+        self.assertFalse(any('asked to sign in again' in r['Body'] for r in self.s._rows('SELECT Body FROM comment WHERE TaskId=?', (self.tid,))))
+        self.assertEqual(len(sess.said), 1)
 
     def test_a_saved_sign_in_is_never_typed_on_another_site(self):
         signin.save(self.s, 'bank.example', USER, PW)

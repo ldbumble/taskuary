@@ -379,3 +379,14 @@ class LooksThatAreNot(unittest.TestCase):
             self.assertEqual(bg.check(s, t, 's1', 'agent-browser get value @e1'), {})
             for ref in ('@e2', '@e9', '"#pw"'):
                 self.assertEqual(bg.check(s, t, 's1', f'agent-browser get value {ref}')['hookSpecificOutput']['permissionDecision'], 'deny', ref)
+
+
+class AFormFieldIsNotTheSending(unittest.TestCase):
+    def test_the_judge_is_told_a_field_of_an_unsent_form_is_reversible(self):
+        """Recorded on the real CLI (the browser audit, 2026-11-15): told to tick a sign-in page's "keep this browser verified for 30 days"
+        before handing the code step over, the agent's tick was held for the owner's approval as a security setting - and the press the
+        page then saw was said to him as his tick. A field of a form not sent yet changes nothing outside the browser; the sending is
+        judged on its own."""
+        from taskuary import browsergate as bg
+        self.assertIn('ticking, choosing or filling a field of a form that is not sent yet', bg.SYSTEM)
+        self.assertIn('the sending is judged on its own', bg.SYSTEM)

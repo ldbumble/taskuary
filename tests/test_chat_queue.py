@@ -61,6 +61,23 @@ class TakingTurnsTests(unittest.TestCase):
         self.assertEqual(users, ['one', 'two', 'actually three'])
         self.assertTrue(any('THE OWNER SENT 2 MESSAGES' in p for p in prompts))
 
+    def test_news_a_turn_has_overtaken_is_not_a_turn_of_its_own(self):
+        """Recorded on the real CLI (the browser audit, 2026-11-15): he typed a line while the saved sign-in was going in; his line's turn
+        worked the signed-in page, and Taskuary's "Signed in to <site> - continue." queued behind it made the agent answer a second time
+        ("You were already signed in ... I finished last time"). News of a moment a turn has ended after is said by that turn: once."""
+        sess, patched = _session(self.s, self.tid, 'answered', delay=0.6)
+        calls, got = [], []
+        with mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: (calls.append(user), time.sleep(0.6), 'answered')[-1]):
+            his = threading.Thread(target=lambda: got.append(sess.send_prompt('list the invoices')))
+            his.start(); time.sleep(0.2)
+            got.append(sess.send_prompt('Signed in to portal.example - continue.', as_owner=False, since=time.time()))   # the sign-in went in mid-turn
+            his.join(10)
+            self.assertEqual(sorted(got), ['', 'answered'], 'his turn answers; the news behind it is no turn of its own')
+            self.assertEqual(len(calls), 1)
+            # ...and news with no turn ended after it is said, as before
+            self.assertEqual(sess.send_prompt('Signed in to portal.example - continue.', as_owner=False, since=time.time()), 'answered')
+            self.assertEqual(len(calls), 2)
+
     def test_the_third_one_lands_too(self):
         """The exact report: two answered, the third silent."""
         sess, patched = _session(self.s, self.tid, 'answered', delay=0.3)

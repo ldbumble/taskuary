@@ -2586,7 +2586,7 @@ class GeneralSession:
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
                     pick=None, trace=None, cancel=None, as_owner=True,
                     delivery_instructions: str = None, kept: bool = False, brief: bool = False, waiting: int = None, line_id: str = None, mails=(),
-                    quick: bool = False) -> str:
+                    quick: bool = False, since: float = None) -> str:
         """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
         make it open a conversation (the walk, a setup). It is not written to the history and
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
@@ -2594,7 +2594,9 @@ class GeneralSession:
         `brief`: the first ask of an agent that started by itself - kept as the conversation's turn, but filed by Taskuary (BRIEF_ACTOR).
         `waiting`: the owner's line already kept for the agent (wait_line) - a session that ended under it hands it to the next (say_line).
         `mails`: the messages (ids) this turn exists to pass in - where an earlier turn heard them all already, there is nothing to say.
-        `quick`: the warm agent's turn (quickwork.again) - the same turn and tools, on the quick_work job, at a fraction of a desk."""
+        `quick`: the warm agent's turn (quickwork.again) - the same turn and tools, on the quick_work job, at a fraction of a desk.
+        `since`: Taskuary's own news of that moment (a sign-in that went in) - where a turn has ended after it by the time this one gets the
+        session, the agent has worked past it and nothing more is said."""
         text = str(text or '').strip()
         if not text and waiting is None: raise ValueError('empty message')
         if not self.alive: raise Ended(waiting)
@@ -2616,6 +2618,9 @@ class GeneralSession:
         # ...it idled out while this waited for the lock (idle_out), or the turn ahead failed and its session is closing: the caller's road
         # starts it again
         if not self.alive or getattr(self, 'ending', False): self._lock.release(); raise Ended(waiting)
+        # ...AND NEWS A TURN HAS OVERTAKEN IS NOT A TURN OF ITS OWN (the browser audit, 2026-11-15): he typed a line while the saved sign-in was
+        # going in, his line's turn worked the signed-in page, and the "Signed in - continue" queued behind it made the agent answer twice
+        if since and not as_owner and not self.busy and (self.last or 0) >= since: self._lock.release(); return ''
         # ONE HAND-OVER TAKES EVERYTHING THAT WAITS (the owner, 2026-11-11: "if the agent hears 40 of them at what time, it shows up there"):
         # whoever gets the turn - his line, a message passed in, Taskuary's own wake - takes every line kept for the agent with it, each with
         # the files sent with it, filed as his at the time it was typed; the turn's start hears what came in and was pressed since (hear).

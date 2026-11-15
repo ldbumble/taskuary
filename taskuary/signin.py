@@ -50,6 +50,13 @@ PREFIX = 'signin:'              # the request id of a sign-in ask: `signin:<site
 DONE = 'Signed in'
 FAILED_ASK = 'The saved sign-in for {site} did not work - sign in on the page, and it is saved again when it works'
 CODE_ASK = '{site} took the saved sign-in and asks for a code - type it on the page to continue'
+# ...AND THE CODE PAGE IS MADE READY FOR HIM FIRST (the owner, 2026-11-15: "why can't you click save for 30 days when you sign in ... so you
+# won't need it"): the agent, which reads the page, ticks whatever the page offers to remember this browser - so the next task, and one
+# opened beside it, does not stop for a code - and hands the code step over. What such a box is, is its judgement: nothing here reads words
+READY_CODE = ('TASKUARY: the saved sign-in for {site} went in, and the site now asks for a code only the owner has. Get that page ready for '
+              'them: if it offers to remember this browser or device (so later sign-ins skip the code), tick that - type nothing in the code '
+              'box and press nothing else - then end your turn with the final line [[TASKUARY-SIGNIN: {site}]], and Taskuary hands them the code '
+              'step. Say nothing else to them.')
 LOOPBACK = ('localhost', '127.0.0.1', '::1')
 # TWO-LABEL PUBLIC SUFFIXES - where the registrable domain is THREE labels. Without them "bank.co.uk" would pin "co.uk", and a
 # saved sign-in would fill on every site in the UK. Not the whole Public Suffix List (no dependency carries it here); the
@@ -411,6 +418,14 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) ->
         ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, choices=None, source='api')
         if watch: threading.Thread(target=watch, args=(store, tid, sid, site, rid), daemon=True, name=f'signin-watch-{tid}').start()
     row, last = saved(store, site), _TRIED.get((tid, site), 0)
+    # ...A PAGE THAT ASKS ONLY THE CODE is his step at once, however lately the saved sign-in was typed (its agent made it ready, READY_CODE):
+    # not a sign-in "asked again within minutes"
+    if row and last and _now() - last < AGAIN and not _code_of(row.get('Totp')) and asks_code(sid) and not on_password_page(sid):
+        # ...and the turn that made it ready is a step, not an answer ("I need the site signed in to go on" stood in the chat, 2026-11-15)
+        if _chat(sid):
+            from . import conversation
+            conversation.take_back(store, tid, why=f'Made the code page of {site} ready for you.', since=_now(), ahead=True)
+        return ask(CODE_ASK.format(site=site)) or {'site': site, 'auto': False}
     # A SAVED SIGN-IN GOES STRAIGHT IN, AND NOTHING IS ASKED (the owner, 2026-11-05: "once you have that saved it should save the login and
     # next time just go in and get the data"). The open `signin:` ask is what puts the browser on the owner's screen; raised before the
     # fill, it drew the pane for the seconds the server typed - for a step the owner had nothing to do in. It is raised only when the
@@ -461,7 +476,7 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
         # ...A PAGE THAT ASKS ONLY THE CODE, and none is kept: nothing of the saved sign-in is typed - the code is his, said in one line
         # (the owner's own sign-in, 2026-11-14: the agent asked again on the code page, the saved sign-in was tried on it, "there is no
         # sign-in form", and the task read "the saved sign-in was not used")
-        if ask and not code and asks_code(sid) and not on_password_page(sid): return ask(CODE_ASK.format(site=site))
+        if ask and not code and asks_code(sid) and not on_password_page(sid): return _ready_code(store, tid, sid, site) or ask(CODE_ASK.format(site=site))
         got = fill(sid, site, user, pw, **({'code': code} if code else {}), **({'extra': ex} if ex else {})) or {}
         _used(store, site)
         # THE PASSWORD WENT IN AND THE SITE ASKS A CODE NOBODY KEEPS: that step is the owner's, on the page, and it is said in one line - the
@@ -470,7 +485,7 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
         if ask and not got.get('code') and asks_code(sid):
             _audit(store, tid, site, 'vault', True, 'a code was asked')
             back(f'Typed the saved sign-in for {site} - it asks for a code next.')
-            return ask(CODE_ASK.format(site=site))
+            return _ready_code(store, tid, sid, site) or ask(CODE_ASK.format(site=site))
         _audit(store, tid, site, 'vault', True, code=bool(got.get('code')) if code else None)
         # ...and the answer that only handed the sign-in over ("once you have signed in...") is a step of the work: nobody was asked to
         back(f"Signed in to {site} with the saved sign-in{' and its authenticator code' if got.get('code') else ''}.")
@@ -490,6 +505,15 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
         back(f'The saved sign-in for {site} was not used.')
         store.add_comment(tid, 'taskuary', 'agent', f'The saved sign-in for {site} was not used: {why}. Sign in yourself to continue.')
         if ask: ask()
+
+
+def _ready_code(store, tid, sid, site) -> bool:
+    "The chat's agent makes the code page ready (READY_CODE) and hands it back with the marker - needs() then gives him the step. False: no chat to tell."
+    from . import workerstate as ws
+    sess = ws._live(tid)
+    if not sess or not hasattr(sess, 'send_prompt') or getattr(sess, 'sid', sid) != sid: return False
+    try: sess.send_prompt(READY_CODE.format(site=site), as_owner=False); return True
+    except Exception as e: logger.info(f'task {tid}: the code page was not made ready by its agent - {e}'); return False
 
 
 def _code_of(key):
@@ -560,7 +584,9 @@ def _continue(store, tid, rid, site, actor, code=False):
     # runs inside this call, so all the while it worked the task still read "Sign in to ... to continue" and the page beside it "your turn")
     ws.record(store, tid, sess.sid, 'answered', request_id=rid, text=DONE, source='owner' if actor == 'owner' else 'api')
     try:
-        if hasattr(sess, 'send_prompt'): sess.send_prompt(said, as_owner=False)
+        # ...once: a turn that ends after this moment - his line's, begun while the sign-in went in - has worked the page signed in
+        from .general import GeneralSession
+        if hasattr(sess, 'send_prompt'): sess.send_prompt(said, as_owner=False, **({'since': time.time()} if isinstance(sess, GeneralSession) else {}))
         else: term.type_into(sess, said, brief=True)      # Taskuary's, never the owner's line
     except Exception as e:
         logger.warning(f'signin: task {tid} signed in to {site}, but the agent was not told - {e}')

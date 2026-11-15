@@ -9,8 +9,8 @@ import { failLine, landed, press as pressReview } from "./press.js";
 import { label } from "./buttons.js";
 import { useAgents } from "./ui.jsx";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, mono } from "./theme.jsx";
-import { fitFrame, isPaste, isPress, keyMessage, mayShape, pasteMessages, mouseMessage, parseMessage, shortUrl, viewportFor, viewportMoved,
-  wheelMessage } from "./browserSplit.js";
+import { activeTab, FIRST_WAIT, fitFrame, holdFirst, isPaste, isPress, keyMessage, mayShape, pasteMessages, mouseMessage, parseMessage, shortUrl, viewportFor,
+  viewportMoved, wheelMessage } from "./browserSplit.js";
 
 const wsUrl = (sid) => {
   const t = localStorage.getItem("taskuary_token");
@@ -48,7 +48,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
   const held = useRef(null);    // the newest frame while this tab is hidden: drawn and acked on return
   // null until the daemon says; false = it is up but holding no page, so no frame is coming
   const [attached, setAttached] = useState(null);
-  const shape = useRef(null), shapeTimer = useRef(null), shaped = useRef(false);
+  const shape = useRef(null), shapeTimer = useRef(null), shaped = useRef(false), firstAt = useRef(0), late = useRef(null);
 
   /* THE PAGE IS GIVEN THIS PANE'S SHAPE, so there is nothing left to letterbox. Debounced, because
      the splitter drags; ignored on failure, because a browser that will not resize still draws. */
@@ -74,7 +74,9 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
     if (c.width !== bw * dpr || c.height !== bh * dpr) { c.width = bw * dpr; c.height = bh * dpr; c.style.width = `${bw}px`; c.style.height = `${bh}px`; }
     const ctx = c.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = "#101010"; ctx.fillRect(0, 0, bw, bh);
+    // THE GROUND IS THE APP'S OWN, NOT BLACK: a view opening for a step of his drew a black box for a beat, then the page between black
+    // bars until its shape landed, in a cream window (recorded, the browser round 2026-11-14) - "black" is how a broken pane has been described
+    ctx.fillStyle = getComputedStyle(box.current).backgroundColor || "#fffdfb"; ctx.fillRect(0, 0, bw, bh);
     if (!im) return;
     fit.current = fitFrame(im.naturalWidth, im.naturalHeight, bw, bh);
     const f = fit.current;
@@ -88,10 +90,16 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
          and an ack-paced stream sends no frame at all while a page sits still, so a sign-in
          form the agent was waiting on read as a dead pane (2026-09-15). It is live until the
          relay closes; a page that is not moving is a page that is not moving. */
-      img.current = im; paint(); setLive(true);
+      const show = () => { clearTimeout(late.current); img.current = im; paint(); setLive(true); };
       // the FIRST frame of a connection sends the pane's shape: one sent while the browser was still starting is refused (browserview.set_viewport),
       // and the page would stay letterboxed - black bars at its sides - until a resize (2026-11-04)
-      if (!shaped.current) { shaped.current = true; fitViewport(true); }
+      if (!shaped.current) { shaped.current = true; firstAt.current = Date.now(); fitViewport(true); }
+      /* ...AND THE FIRST PICTURE WAITS FOR THAT SHAPE, a moment: the page was drawn small between bars, then again at its size - a thing that
+         appears and then moves (recorded, the browser round 2026-11-14). Only while nothing is drawn yet, and never for long: a still
+         page sends no second frame, so the one held is drawn when the wait is over (browserSplit.holdFirst). */
+      if (holdFirst(!!img.current, m, box.current?.getBoundingClientRect(), Date.now() - firstAt.current)) {
+        clearTimeout(late.current); late.current = setTimeout(() => { if (!img.current) show(); }, FIRST_WAIT);
+      } else show();
       send?.({ type: "ack", seq: m.seq });       // ack AFTER drawing: the next frame is the page now, not history
     };
     im.src = m.src;
@@ -114,6 +122,9 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
           if (document.hidden) { held.current = m; return; }
           draw(m, send);
         } else if (m.type === "url" && m.url) setUrl(m.url);
+        // ...and the tabs a viewer is greeted with say where the page is NOW: opened after the saved sign-in had moved it on, the address bar
+        // read the sign-in page's address over the code page for three seconds (recorded, the browser round 2026-11-14)
+        else if (m.type === "tabs") { const u = activeTab(m); if (u) setUrl(u); }
         /* THE STREAM SAYS WHEN IT HAS NOTHING, and we used to drop that on the floor. An
            agent-browser daemon answers its screencast port the moment it launches, whether or not
            a page was ever opened in it - browserview.state() calls that "open", the relay
@@ -130,7 +141,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
          open (the 2026-10-02 pane pass). Now the poll turning `open` false tears this effect down and
          true brings it back; in between, the retry backs off instead of hammering. */
       ws.onopen = () => { tries = 0; };
-      ws.onclose = () => { setLive(false); shaped.current = false; if (!closed) retry = setTimeout(connect, Math.min(15000, 2000 * 2 ** tries++)); };
+      ws.onclose = () => { setLive(false); shaped.current = false; clearTimeout(late.current); if (!closed) retry = setTimeout(connect, Math.min(15000, 2000 * 2 ** tries++)); };
     };
     connect();
     return () => { closed = true; clearTimeout(retry); ws?.close(); };
@@ -222,7 +233,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
   return (
     <Box sx={{ position: overlay ? "absolute" : "relative", ...(overlay ? { inset: 0, zIndex: 3 } : {}), display: "flex",
       flexDirection: "column", minHeight: 0, minWidth: 0, border: `1px solid ${driving ? CATPPUCCIN.yellow : BORDER}`,
-      borderRadius: 2, overflow: "hidden", bgcolor: "#101010", transition: "border-color .15s" }}>
+      borderRadius: 2, overflow: "hidden", bgcolor: PANEL, transition: "border-color .15s" }}>
       {/* toolbar: what page, whether frames are flowing, who is driving */}
       {/* clearRight: the session's full-screen button floats over this corner, and it sat on the fold arrow - the one way
           to put the browser away was under it (2026-10-09) */}
@@ -268,7 +279,7 @@ Take over to drive it yourself; close the session to close it."
       {/* a click on the page is not a claim on its shape: re-sending it reshaped the page under the owner's first click, and the box they
           clicked could lose its caret before the first keys arrived (2026-11-03) */}
       <Box ref={box} onPointerDown={() => fitViewport()}
-        sx={{ flex: 1, minHeight: 0, position: "relative", cursor: driving ? "default" : "not-allowed" }}>
+        sx={{ flex: 1, minHeight: 0, position: "relative", bgcolor: PANEL, cursor: driving ? "default" : "not-allowed" }}>
         <Box component="canvas" ref={canvas} tabIndex={0} onMouseDown={onMouse} onMouseUp={onMouse} onMouseMove={onMouse}
           onWheel={onWheel} onKeyDown={onKey} onKeyUp={onKey} onPaste={onPaste} onContextMenu={(e) => e.preventDefault()}
           sx={{ display: "block", outline: "none", position: "absolute", inset: 0 }} />

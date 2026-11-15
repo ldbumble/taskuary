@@ -261,3 +261,21 @@ test("the chat keeps one width at rest and at work, and the browser pane arrives
   const chat = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(chat, /<SessionPane sid=\{\(!noTools && session\?\.sid\) \|\| \(coding && needNow && cli\?\.sid\) \|\| null\}/);
 });
+
+// THE VIEW OPENING FOR A STEP OF HIS, WATCHED FRAME BY FRAME (the browser round, 2026-11-14): the page was drawn small between bars, then again
+// at its size 0.6 s later; and its address bar read the sign-in page's address over the code page the saved sign-in had moved it on to.
+test("the first picture of a view waits a moment for the pane's shape, and the greeting's tabs name the page", async () => {
+  const { holdFirst, FIRST_WAIT, activeTab, viewportFor } = await import("../src/browserSplit.js");
+  const box = { width: 623, height: 507 }, want = viewportFor(box.width, box.height);
+  assert.equal(holdFirst(false, { w: 1280, h: 720 }, box, 0), true, "a frame at another shape is held while nothing is drawn");
+  assert.equal(holdFirst(false, { w: want.w, h: want.h }, box, 0), false, "the pane's own shape is drawn at once");
+  assert.equal(holdFirst(true, { w: 1280, h: 720 }, box, 0), false, "a page already on the canvas is never held back by a resize");
+  assert.equal(holdFirst(false, { w: 1280, h: 720 }, box, FIRST_WAIT), false, "and never for long: a browser that will not resize still draws");
+  assert.equal(holdFirst(false, { w: 0, h: 0 }, box, 0), false, "a frame that does not say its size is drawn");
+  assert.equal(activeTab({ type: "tabs", tabs: [{ active: false, url: "https://a.example/" }, { active: true, url: "https://b.example/code?x=1" }] }), "https://b.example/code?x=1");
+  assert.equal(activeTab({ type: "tabs" }), "");
+  const { readFileSync } = await import("node:fs");
+  const pane = readFileSync(new URL("../src/BrowserPane.jsx", import.meta.url), "utf8");
+  assert.match(pane, /late\.current = setTimeout\(\(\) => \{ if \(!img\.current\) show\(\); \}, FIRST_WAIT\)/, "a still page sends no second frame: the held one is drawn when the wait is over");
+  assert.match(pane, /else if \(m\.type === "tabs"\) \{ const u = activeTab\(m\); if \(u\) setUrl\(u\); \}/);
+});

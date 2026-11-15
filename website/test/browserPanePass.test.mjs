@@ -22,7 +22,7 @@ test("the socket connects only while the browser is open, and backs off", () => 
 });
 
 test("the first frame of a connection sends the pane's shape, which a still-starting browser was refused (2026-11-04)", () => {
-  assert.match(pane, /if \(!shaped\.current\) \{ shaped\.current = true; fitViewport\(true\); \}/);
+  assert.match(pane, /if \(!shaped\.current\) \{ shaped\.current = true; firstAt\.current = Date\.now\(\); fitViewport\(true\); \}/);
   assert.match(pane, /ws\.onclose = \(\) => \{ setLive\(false\); shaped\.current = false;/);
 });
 
@@ -57,4 +57,15 @@ test("a page handed over can be opened in his own browser, for a check that turn
   assert.match(pane, /<TurnBar turn=\{turn\} url=\{url\}/);
   assert.match(pane, /href=\{url\} target="_blank" rel="noreferrer" data-tq-browser-own=""/);
   assert.match(pane, />Open in my browser</);
+});
+
+test("the view's ground is the app's own colour, never a black box before the page draws (the browser round, 2026-11-14)", () => {
+  // recorded: a view opening for a step of his was a black box for a beat, then the page between black bars until its shape landed
+  assert.match(pane, /ctx\.fillStyle = getComputedStyle\(box\.current\)\.backgroundColor/);
+  assert.match(pane, /position: "relative", bgcolor: PANEL, cursor: driving/);
+  assert.doesNotMatch(pane.split("export function LastView")[0].split("const bar =")[0], /bgcolor: "#101010"|fillStyle = "#101010"/);
+});
+
+test("the chat is told the view is on screen before the paint, so his step is never drawn in both for a frame (the browser round, 2026-11-14)", () => {
+  assert.match(term, /React\.useLayoutEffect\(\(\) => \{ onView\?\.\(onScreen\); \}, \[onScreen\]\)/);
 });

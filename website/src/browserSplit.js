@@ -134,6 +134,18 @@ export const viewportFor = (w, h) => {
   return { w: vw, h: Math.max(MIN_VIEWPORT_H, Math.round(vw * (h / w))) };
 };
 
+// THE FIRST PICTURE OF A VIEW WAITS FOR THE PANE'S SHAPE (BrowserPane.draw): a frame taken at another shape than the pane asks for is held
+// while nothing is drawn yet, for at most FIRST_WAIT ms from the connection's first frame. `drawn`: a picture is already on the canvas;
+// `frame`: {w, h} of the frame; `box`: the pane's own size; `waited`: ms since the first frame.
+export const FIRST_WAIT = 1200;
+export const holdFirst = (drawn, frame, box, waited) => {
+  const want = box && viewportFor(box.width, box.height);
+  if (drawn || !want || !(frame?.w > 0 && frame?.h > 0) || waited >= FIRST_WAIT) return false;
+  return viewportMoved({ w: frame.w, h: frame.h }, want);
+};
+// the address of the tab the browser says is the active one (its `tabs` message), or ""
+export const activeTab = (m) => String((m?.tabs || []).find((t) => t?.active)?.url || "");
+
 // Dragging the splitter fires a resize every frame; Chrome should not be re-laid-out for six pixels.
 export const viewportMoved = (was, now, tol = 32) =>
   !!now && (!was || Math.abs(was.w - now.w) > tol || Math.abs(was.h - now.h) > tol);

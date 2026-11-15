@@ -798,7 +798,9 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   const layout = quiet ? quietLayout(width, showingBrowser, folded) : layoutFor(width, showingBrowser, folded || (isLocalPage(browser.url) && !localOk), stack);
   const share = quiet ? quietRatio(ratio) : splitRatio(ratio, width);
   const onScreen = showingBrowser && viewOnScreen(layout);
-  useEffect(() => { onView?.(onScreen); }, [onScreen]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // ...told BEFORE the paint (a layout effect): told after it, the frame that first drew the view still drew his step in the chat too -
+  // its words and its I'm done twice on one screen for a beat (recorded, the browser round 2026-11-14)
+  React.useLayoutEffect(() => { onView?.(onScreen); }, [onScreen]);  // eslint-disable-line react-hooks/exhaustive-deps
   // ...and while it shows the page the owner has a part on, the task list folds away to give it the room (browserSplit.wantRoom)
   // ...ONLY WHILE THE PAGE IS ON SCREEN: folded away to its chip it needs no room, and the chat ran the window's whole width (1465px,
   // recorded 2026-11-11) with the task list still gone. ASKED BEFORE THE PAINT (a layout effect): asked after it, the pane first drew

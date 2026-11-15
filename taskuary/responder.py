@@ -190,9 +190,6 @@ DONE = ('The work this thread asked for is FINISHED - the complete result below 
         f'If the result says no answer should go back - the owner decided not to reply, or there is nothing the sender '
         f'needs to hear - write exactly {NO_REPLY} and nothing else.')
 
-CHAT_CHANNELS = ('teams', 'slack', 'telegram', 'whatsapp', 'imessage')
-
-
 def written_as_chat(channel) -> bool:
     """Everything but EMAIL is written like a chat: no greeting, no sign-off, no name. A GitHub issue comment was
     drafted as a letter - "Sincerely," and the owner's name - because only five chat apps were listed here and

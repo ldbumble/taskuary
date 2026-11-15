@@ -21,7 +21,7 @@ from . import connectorcatalog, settings_schema, wanames
 from .store import _fold, task_ref
 from .inboxes import TYPES as INBOXES
 
-CHAT = {'teams', 'slack', 'whatsapp', 'telegram', 'imessage', 'discord'}
+from .routing import CHAT_CHANNELS as CHAT        # the one list of chat channels (routing.py)
 TICKET = {'jira', 'asana', 'monday', 'linear', 'clickup', 'todoist', 'trello', 'notion', 'azdo', 'sentry', 'pagerduty', *INBOXES}
 CLOSED = ('done', 'dropped')
 N_TASKS, N_MSGS, N_SRCS, N_PLACES = 8, 30, 6, 6

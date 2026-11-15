@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 from . import kinds as task_kinds
 from .timewords import plural
-from .routing import first_line, draft_task_fields, norm_subject
+from .routing import first_line, draft_task_fields, norm_subject, CHAT_CHANNELS     # ...and the one list of chat channels
 from .policy import evaluate
 from .triage import agent_words, classify_intent, person_name, sender_called, wrapper_of
 from .store import task_ref, auto_code_enabled, _now
@@ -2070,10 +2070,6 @@ def answered_before(store, msg: dict, me=(), days=365, n=6, crowd=8) -> list:
 # unfinished sentence from "Also, separate thing:": a reader, holding the exchange, OURS AND
 # THEIRS. Our own replies are the strongest boundary in the conversation and nothing ever showed
 # them to a classifier before.
-CHAT_CHANNELS = {'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage',
-                 'mattermost', 'rocketchat', 'matrix', 'google_chat'}
-
-
 def is_chat(msg: dict) -> bool:
     return str(msg.get('channel') or '').lower() in CHAT_CHANNELS
 

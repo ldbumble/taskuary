@@ -54,8 +54,7 @@ def route_intent(reason) -> str:
 def route_why(reason) -> str:
     "Triage's own reason with the head taken off: 'triage: yours to do - she asks for X · ...' -> 'she asks for X · ...'."
     return re.sub(r'^triage:\s*[^·]*?\s-\s', '', str(reason or ''), count=1)
-CHAT = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord',
-        'mattermost', 'rocketchat', 'matrix', 'google_chat'}
+from .routing import CHAT_CHANNELS as CHAT        # the one list of chat channels (routing.py)
 
 
 def _domain(email): return (email or '').rsplit('@', 1)[-1].lower().strip()

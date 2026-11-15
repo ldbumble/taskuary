@@ -470,10 +470,8 @@ _PR_RULE_NOW = (
 
 # conversation ids that name a CHAT rather than a topic - one id for every message ever exchanged
 # there, so an owner verdict on it covers an episode, not the relationship (owner_verdict_on_thread)
-CHAT_PREFIXES = ('teams:', 'slack:', 'telegram:', 'whatsapp:', 'imessage:',
-                 'mattermost:', 'rocketchat:', 'matrix:', 'google_chat:')
-CHAT_CHANNELS = {'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage',
-                 'mattermost', 'rocketchat', 'matrix', 'google_chat'}
+from .routing import CHAT_CHANNELS                 # the one list of chat channels (routing.py)
+CHAT_PREFIXES = tuple(sorted(f'{c}:' for c in CHAT_CHANNELS))
 # (CHAT_VERDICT_HOURS is gone: a chat ruling carries nothing forward at all - see
 # owner_verdict_on_thread. "Nothing to do here" is about the message it was said on.)
 

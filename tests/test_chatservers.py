@@ -234,6 +234,17 @@ class WiredInTests(unittest.TestCase):
             self.assertIn(t, STORE_CHAT, f'{t} is not chat to the store')
             self.assertIn(f'{t}:', CHAT_PREFIXES, f'{t} has no conversation prefix')
 
+    def test_chat_is_decided_by_one_list_and_every_reader_of_it_agrees(self):
+        """The audit, 2026-11-15: the four lists above had become seven, and three of them knew only six channels - a Mattermost line was
+        titled with its room's name, wore no chat pill in search, and a message composed to it was written as an email. One list now."""
+        from taskuary import categories, ingest, routing, search, store
+        for copy in (categories.CHAT, ingest.CHAT_CHANNELS, store.CHAT_CHANNELS, search.CHAT): self.assertIs(copy, routing.CHAT_CHANNELS)
+        self.assertEqual(set(store.CHAT_PREFIXES), {f'{c}:' for c in routing.CHAT_CHANNELS})
+        for t in FOUR:
+            line = {'channel': t, 'subject': 'Ops room', 'body': 'The ledger export is failing again', 'from_email': 'gail@northwind.example'}
+            self.assertEqual(search.kind_of({'Channel': t}), 'chat', t)
+            self.assertEqual(routing.draft_task_fields(line)['title'], 'The ledger export is failing again', t)   # the line, never the room's name
+
     def test_each_can_carry_a_reply_and_a_report(self):
         from taskuary.outbound import REPORTABLE, SENDABLE
         for t in FOUR:

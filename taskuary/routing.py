@@ -34,9 +34,11 @@ def subject_topic(s, min_words=2):
         if len(tokens(cand)) >= min_words: return cand[:200]
     return ''
 
-# the channels where a conversation id names a ROOM and not a topic (store.CHAT_CHANNELS is the
-# same set; this module stays pure, so it keeps its own copy rather than importing the store)
-CHAT_CHANNELS = {'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage'}
+# THE CHAT CHANNELS, SAID ONCE: where a conversation id names a ROOM and not a topic. This module stays pure, so the list lives here and
+# the store, ingest, categories, search and the composer read it. Each kept a copy of its own and they had drifted (the audit,
+# 2026-11-15): ten channels to three of them, six here and to search and the composer - so a Mattermost or Matrix line was titled with
+# its room's name, wore no chat pill in search and was written as an email, signature and all - and five in a list nothing read.
+CHAT_CHANNELS = frozenset({'teams', 'slack', 'telegram', 'whatsapp', 'discord', 'imessage', 'mattermost', 'rocketchat', 'matrix', 'google_chat'})
 def first_line(body: str) -> str:
     """The first line with words on it - no rule about which words a line may open with. GREETING skipped
     "hi/hello/dear" lines and so skipped "Hi-res scans of the Q3 file are missing" too; triage's own title

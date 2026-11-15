@@ -341,6 +341,8 @@ def auto_code_enabled(src) -> bool:
     cfg = src if isinstance(src, dict) else src.get_settings()
     return str(cfg.get('coding_auto_enabled', DEFAULT_SETTINGS['coding_auto_enabled'])) == '1'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
+# a review's words written now, when they differ from what it held (SET reads the row as it was): the same text saved again keeps its time
+_DRAFT_AT = 'DraftAt=CASE WHEN DraftText IS ? THEN DraftAt ELSE ? END'
 def _cfg_type(cj) -> str:
     try: return str((json.loads(cj or '{}') or {}).get('type') or '')
     except (TypeError, ValueError): return ''
@@ -1266,6 +1268,9 @@ class SQLiteStore:
             # WHICH MAIL THE DRAFT ANSWERS (the delivery target), kept apart from MessageId, the newest mail it saw (freshness); and the drafter's one line on why
             if 'AnswersMid' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN AnswersMid INTEGER')
             if 'DraftWhy' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftWhy TEXT')
+            # ...and WHEN ITS WORDS WERE WRITTEN, which is not when the card was raised: a reply owed is raised empty as its mail lands and
+            # written later, and a line that came between read as one the draft never saw (proposals.written_past). NULL: written as raised
+            if 'DraftAt' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftAt TEXT')
             # ...and what an ACT's press failed on (review_act_failed): it lived only in the answer to that press - a reload drew the card as
             # if never pressed, and its agent was told nothing (the spine audit, 2026-11-09). Read only while the review still waits
             if 'ActError' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ActError TEXT')
@@ -5814,8 +5819,8 @@ class SQLiteStore:
             return False
         fp = None if files in (None, ...) else json.dumps({'named': [str(f) for f in files]})
         self._exec("UPDATE review SET FilesPromised=CASE WHEN ? THEN ? WHEN DraftText IS ? THEN FilesPromised END, DraftText=?, RunId=?, DraftError=NULL, DraftNeeds=NULL, NotNeeded=NULL, "
-                   "DraftBy=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')",
-                   (files is not ..., fp, draft, draft, run_id, by, rid))
+                   f"DraftBy=?, {_DRAFT_AT} WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')",
+                   (files is not ..., fp, draft, draft, run_id, by, draft, _now(), rid))
         self._review_changed(rid)
         return True
     def add_review_instruction(self, rid, text: str):
@@ -5896,7 +5901,7 @@ class SQLiteStore:
         self._exec('UPDATE review SET DraftSid=? WHERE ReviewId=?', (sid, rid)); self._review_changed(rid)
     def save_review_draft(self, rid, draft):
         """Persist the owner's editor without erasing which agent run originally produced it."""
-        self._exec("UPDATE review SET DraftText=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (draft, rid))
+        self._exec(f"UPDATE review SET DraftText=?, {_DRAFT_AT} WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (draft, draft, _now(), rid))
         self._review_changed(rid)
 
     # policies / sources / settings / memory / docs

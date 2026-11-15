@@ -555,17 +555,22 @@ def _older(store, tid: int, before: float, actions: float = 0) -> list:
         except (TypeError, ValueError): d = {}
         return isinstance(d, dict) and not (d.get('closeout') or d.get('action') in CLOSEOUT or d.get('action') in PLAYBOOKS or d.get('block')
                                             or str(r.get('Reason') or '').startswith('the workflow'))
-    return [r['ReviewId'] for r in rows if (r['Kind'] not in ('action', 'slot') and str(r.get('DraftText') or '').strip() and ep(r['CreatedAt']) < before
+    # ...A REPLY'S WORDS BY WHEN THEY WERE WRITTEN (DraftAt), not when its card was raised: one owed is raised empty as its mail lands and the
+    # agent writes it later - a line between the two is one it saw (CI, 2026-11-15: which second each landed in decided it). Older only:
+    # a stamp is no finer than its second, and a line in the draft's own second leaves it standing until its agent hears it
+    return [r['ReviewId'] for r in rows if (r['Kind'] not in ('action', 'slot') and str(r.get('DraftText') or '').strip()
+                                            and ep(r.get('DraftAt') or r['CreatedAt']) < before
                                             or actions and ours(r) and ep(r['CreatedAt']) < actions)]
 
 
 def written_past(store, tid: int) -> set:
     """THE CARDS THE CONVERSATION HAS MOVED PAST AND NO AGENT HAS HEARD OF YET - ONE FUNCTION FOR EVERY SURFACE (the owner, 2026-11-13: the
     chat greyed a reply draft his own outside answer stood under while the header's pill said "ready to send"): a pending reply draft
-    with a newer message on the task's thread, the sender's or his own. `hear` settles it for good the moment an agent takes that message
-    (set_aside_drafts, by this same rule, and its agent drafts again where a reply is still owed); until then - no agent may start, the
-    switch is off, the house is full - the row still reads pending, and what waits on his press (store.waiting_on_owner: the pill, the
-    rail, the board) and what the chat draws lit (conversation.items) both leave it out. -> the review ids."""
+    with a message on the task's thread that joined after its words were written (_older), the sender's or his own. `hear` settles it
+    for good the moment an agent takes that message (set_aside_drafts, by this same rule, and its agent drafts again where a reply is still
+    owed); until then - no agent may start, the switch is off, the house is full - the row still reads pending, and what waits on his press
+    (store.waiting_on_owner: the pill, the rail, the board) and what the chat draws lit (conversation.items) both leave it out. The thread
+    keeps its one row on the rail all the same - the ask still owed, never "ready to send" (funnel.from_feed). -> the review ids."""
     from . import conversation
     if not store._one("SELECT 1 AS x FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') LIMIT 1", (int(tid),)): return set()
     # ...a message its agent HAS heard settled what it stood after at that hand-over (hear): only one no agent heard can leave a draft behind

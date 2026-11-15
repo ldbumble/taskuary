@@ -29,7 +29,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import buttons, concierge, funnel, general, ingest, operations, railwalk, server, terminal, wrapup
+from taskuary import buttons, concierge, funnel, general, ingest, operations, proposals, railwalk, server, terminal, wrapup
 from taskuary.store import MemoryStore
 from taskuary import memorylines
 from tests.memlines import teaching
@@ -1142,16 +1142,36 @@ class PipeTruthTests(unittest.TestCase):
         self.assertEqual((hey['status'], hey['task_id']), ('filed', None))
         self.assertEqual(s.list_reviews('pending'), [])
 
-    def test_a_pending_draft_speaks_for_its_whole_thread(self):
+    def _drafted_then_followed(self, drafted_h):
+        """A reply owed raised as Erin's mail lands (5h ago), its words written `drafted_h` hours ago, her fyi follow-up joining 1h ago -
+        every stamp set, so which second each landed in on the machine running it decides nothing (CI, 2026-11-15: the draft row came
+        and went with the clock)."""
         s = store()
         out = arrive(s, subject='Nightly export drops rows', body='Can you fix it?', who='Erin Blake',
                      email='erin@ours.com', conv='c:export', hours=5, llm=brain('reply_only', None))
-        rv = s.pending_review(out['task_id']); s.save_review_draft(rv['ReviewId'], 'Fixed and pushed.')
-        arrive(s, subject='RE: Nightly export drops rows', body='Also keep two decimals.', who='Erin Blake',
-               email='erin@ours.com', conv='c:export', hours=1, llm=brain('fyi', None))
-        rows = [i for i in pile(s) if i.get('cid') == 'c:export']
+        tid, rv = out['task_id'], s.pending_review(out['task_id'])
+        s.save_review_draft(rv['ReviewId'], 'Fixed and pushed.')
+        late = arrive(s, subject='RE: Nightly export drops rows', body='Also keep two decimals.', who='Erin Blake',
+                      email='erin@ours.com', conv='c:export', hours=1, llm=brain('fyi', None))
+        for mid, h in ((out['message_id'], 5), (late['message_id'], 1)):
+            s._exec('UPDATE message SET CreatedAt=? WHERE MessageId=?', (ago(hours=h), mid)); s._exec('UPDATE route SET CreatedAt=? WHERE MessageId=?', (ago(hours=h), mid))
+        s._exec('UPDATE review SET CreatedAt=?, DraftAt=? WHERE ReviewId=?', (ago(hours=5), ago(hours=drafted_h), rv['ReviewId']))
+        return s, tid, rv['ReviewId'], [i for i in pile(s) if i.get('cid') == 'c:export']
+
+    def test_a_pending_draft_speaks_for_its_whole_thread(self):
+        # ...its words written after her follow-up, on a card raised before it: the draft saw the follow-up, and is ready to send
+        s, tid, rid, rows = self._drafted_then_followed(drafted_h=0.5)
+        self.assertEqual(proposals.written_past(s, tid), set())
         self.assertEqual([i['kind'] for i in rows], ['review'])            # one row, and it is the draft
         self.assertEqual(rows[0]['more'], 1)                               # ...which says how much it stands for
+
+    def test_a_draft_the_thread_moved_past_leaves_the_ask_on_the_rail(self):
+        # ...written before her follow-up, with no agent to hear it (the 2026-11-13 ruling): not "ready to send" - and the thread still has
+        # its one row, the ask that is owed, never none
+        s, tid, rid, rows = self._drafted_then_followed(drafted_h=4)
+        self.assertEqual(proposals.written_past(s, tid), {rid})
+        self.assertEqual([(i['kind'], i['tid']) for i in rows], [('asked', tid)])
+        self.assertTrue(rows[0]['unread'])
 
     def test_a_stopped_agent_gives_the_task_back(self):
         s, tid, mid, item = ResponseTests()._asked()

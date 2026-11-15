@@ -305,6 +305,17 @@ class OneRoundTripTests(unittest.TestCase):
         WORK = 22_000
         self.assertLess(sum(s - sizes[0] for s in sizes) / len(sizes), WORK)
 
+    def test_the_line_that_stands_for_text_sent_earlier_is_never_written(self):
+        """The real run on gemini-2.5-pro (2026-11-15): shown its earlier file_edit with `new` shortened to a line, the model made the call again
+        with that line as `new`, and the line went into the invoice. A call carrying it is refused before it runs, and says what to do."""
+        import tempfile
+        f = Path(tempfile.mkdtemp()) / 'invoice.txt'; f.write_text('Rows: [rows]\n', encoding='utf-8')
+        line = json.loads(apiagent._slim(json.dumps({'path': str(f), 'old': '[rows]', 'new': 'a session row. ' * 40})))['new']
+        self.assertIn(apiagent.SLIMMED, line)
+        with self.assertRaisesRegex(ValueError, 'send the full text itself'):
+            apiagent.run_tool(MemoryStore(), 1, 'sl', 'file_edit', {'path': str(f), 'old': '[rows]', 'new': line})
+        self.assertEqual(f.read_text(encoding='utf-8'), 'Rows: [rows]\n')
+
     def test_a_long_conversation_drops_its_oldest_tool_answers_then_its_oldest_turns(self):
         call = lambda k: {'role': 'assistant', 'tool_calls': [{'id': k, 'function': {'name': 'file_read', 'arguments': '{}'}}]}
         def talk(): return [{'role': 'system', 'content': 'sys'}, {'role': 'user', 'content': 'the whole task'},

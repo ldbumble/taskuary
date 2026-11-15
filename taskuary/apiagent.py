@@ -347,6 +347,9 @@ def run_tool(store, tid: int, sid: str, name: str, a: dict) -> str:
     "One tool call, run by the server. Raises ValueError with words the model can act on."
     from . import browserview as bv, browsergate as bg
     if (tid, sid) in OFFERED and name not in OFFERED[(tid, sid)]: raise ValueError(f'{name} is not one of your tools on this task')
+    if SLIMMED in json.dumps(a, ensure_ascii=False, default=str):
+        raise ValueError('an argument is the line that stands for text you sent on an earlier call, not the text - nothing was done; '
+                         'send the full text itself (read the file again if you need it)')
     if name not in LOCAL or (name == 'show' and TOOLBOX.get((tid, sid))):
         if name not in (TOOLBOX.get((tid, sid)) or ()): raise ValueError(f'no tool named {name}')
         return call_taskuary(tid, sid, name, a, stranger=(tid, sid) in STRANGERS)
@@ -478,9 +481,14 @@ def _slim(args) -> str:
     "A call's arguments with each long text said by its length: the file it wrote whole is not sent again on every call after (WRITE)."
     args = args if isinstance(args, str) else json.dumps(args or {})
     try: a = json.loads(args or '{}')
-    except ValueError: return args if len(args) <= STUB_AT else json.dumps({'arguments': f'({len(args):,} characters, not repeated)'})
+    except ValueError: return args if len(args) <= STUB_AT else json.dumps({'arguments': _said(args)})
     if not isinstance(a, dict) or not any(isinstance(v, str) and len(v) > STUB_AT for v in a.values()): return args
-    return json.dumps({k: f'({len(v):,} characters, not repeated)' if isinstance(v, str) and len(v) > STUB_AT else v for k, v in a.items()}, ensure_ascii=False)
+    return json.dumps({k: _said(v) if isinstance(v, str) and len(v) > STUB_AT else v for k, v in a.items()}, ensure_ascii=False)
+# ...AND A LINE IS NEVER TAKEN FOR THE TEXT (the real run on gemini-2.5-pro, 2026-11-15): shown its earlier file_edit as "(1,685 characters, not
+# repeated)", the model made the same call again with that line as `new`, and it went into the invoice. The line says it is not text, and a
+# call carrying it is refused before it runs (run_tool) - the agent is told to send the text itself
+SLIMMED = 'characters sent here earlier - not repeated, and not text to send again'
+def _said(v: str) -> str: return f'[{len(v):,} {SLIMMED}]'
 STUB_AT = 300
 
 

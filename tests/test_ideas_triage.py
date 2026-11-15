@@ -300,6 +300,25 @@ class OneProblemOneRowTests(unittest.TestCase):
         self.assertEqual([(i.get('kind'), i.get('tid')) for i in rows], [(rows[0].get('kind'), tid)])
         self.assertNotEqual(rows[0].get('kind'), 'idea')
 
+    def test_the_same_failure_again_lands_quietly_and_only_a_change_wakes_the_agent(self):
+        """The owner, 2026-11-15: repeats wake only on change. Each new line of the same failure joined its open task and woke its agent,
+        which looked again at a failure it already had. Triage reads whether it changed (`repeat`); the note lands on the task either way,
+        and the agent is woken only where it changed - it spread, its cause differs, it came back."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Investigate the Payworth export 403', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'report'}, 'router')
+        shown = [{'tid': tid, 'ref': task_ref(tid), 'title': 'Investigate the Payworth export 403', 'status': 'in_progress'}]
+        def run(slug, text, repeat):
+            row = idea(s, f'report:9:idea:{slug}', text, {'type': 'note'})
+            def verdict(system, user, **k):
+                self.assertIn('**repeat**', system)
+                return json.dumps({'intent': 'fyi', 'why': 'the same failure already open', 'same_as': tid, 'repeat': repeat})
+            with mock.patch('taskuary.ingest._spawn'), mock.patch('taskuary.context.recent_open', return_value=shown),                  mock.patch('taskuary.ingest.thread_moved', return_value=False) as woke:
+                assistant.triage_ideas(s, [row], verdict, report_title='Backend monitor')
+            return woke.called
+        self.assertFalse(run('again', 'Payworth user export failed again at 03:10: 2 of 81 sites, HTTP 403.', 'same'))
+        self.assertTrue(run('spread', 'Payworth user export now fails on 30 of 81 sites, HTTP 403.', 'changed'))
+        self.assertEqual(len(s.list_messages(tid)), 2, 'both lines are kept on the task')
+
     def test_a_line_about_work_that_was_closed_stands_alone(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'Investigate the Payworth export 403', 'Kind': 'general', 'Status': 'done'}, 'router')

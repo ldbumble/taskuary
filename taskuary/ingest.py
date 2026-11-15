@@ -1588,7 +1588,8 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         # a moved meeting reads as itself on its task (invite_verdict)
         return (f"{v['why']} · your answer goes out only when you press {buttons.label('approve')}" if (v or {}).get('invite') else reason, new)
     # ...and a WATCH on a line that joins its thread (the owner, 2026-11-03) asks nothing of the owner either: kept for the chain like an fyi
-    if v and not awaited and (v.get('intent') in QUIET or kept):
+    # ...and a notice the task already holds, come again with nothing new (triage's `repeat`), is kept the same way, whatever its intent
+    if v and not awaited and (v.get('intent') in QUIET or kept or v.get('repeat') == 'same'):
         mid = _land(store, msg, tid, 'filed')
         route, note = said(True)
         store.add_route(mid, tid, 'attach', score, route, [], 'triage', verdict=_stored_verdict(v))
@@ -1599,7 +1600,10 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         watch.moved(store, tid, msg, v, mine, actor)
         # nothing for the owner, but the answer the waiting agent asked for all the same - it was typed in when a
         # busy thread skipped triage, and judging it must not strand the agent (B6, 2026-10-11)
-        if talking: _hand_to_agent(store, cfg, tid, msg, actor)
+        # ...but A NOTICE THE TASK HOLDS, COME AGAIN WITH NOTHING NEW, wakes nobody (the owner, 2026-11-15: repeats wake only on change): the note
+        # is on the task, and its agent hears of it only when triage's `repeat` says it changed - it spread, its cause differs, it came back
+        if v.get('repeat') == 'same': pass
+        elif talking: _hand_to_agent(store, cfg, tid, msg, actor)
         # ...and nothing for the owner is still a change for the assistant on it: someone else may have answered what its draft
         # answers (thread_moved - the agent re-plans; a filed line's own verdict and reading ride with it)
         # ...by any road (the night run, 2026-11-09: "never mind, Omar sent it" on another channel was filed as "the same, nothing new" -

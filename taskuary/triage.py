@@ -191,6 +191,7 @@ LEVELS = ('regular', 'important', 'urgent')
 # how much thought the work takes and whether the reader could tell - a verdict apart from priority, read by the router (2026-10-25)
 DIFFICULTY, SURE, DATA = _bullet('difficulty'), _bullet('sure'), _bullet('data_class')
 REFINES = _bullet('refines')
+REPEAT = _bullet('repeat')           # ...and whether a notice an open task holds, come again, changed: only a change wakes its agent (2026-11-15)
 COVERED = _bullet('covered')         # the open tasks that already hold part of what a message reports (2026-11-15)
 TASK_TITLE = _bullet('task_title')   # ...and the wider title a line that joins at the combine level gives the task (2026-10-29)
 OFFER = _bullet('offer')         # what an agent could do for the owner about the main ask (2026-10-28)
@@ -367,6 +368,7 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
     # ...and whether a line that joins changes what the task ITSELF asks - only then is it retitled (the owner, 2026-10-28)
     if thread_task or same or candidates is not None:
         p['refines'] = {'type': ['boolean', 'null']}
+        p['repeat'] = {'type': ['string', 'null'], 'enum': ['same', 'changed', None]}
         # ...and when it joins with a part the title does not cover, the title that covers both: the task widens, never narrows to the
         # line (the owner, 2026-10-29: a chat bridge's later lines joined at combine 4 - the task should read as the bridge's, not the last line's)
         p['task_title'] = {'type': ['string', 'null']}
@@ -1026,6 +1028,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '"data_class"' not in base: system += '\n\n' + DATA                   # ...and what data it carries (2026-10-25)
             # ...and whether a joining line refines the task's own ask, wherever a task it may join was shown (2026-10-28)
             if not shape and 'refines' not in base and (home or same_ids or candidates is not None): system += '\n\n' + REFINES
+            if not shape and '**repeat**' not in base and (home or same_ids or candidates is not None): system += '\n\n' + REPEAT
             if not shape and 'task_title' not in base and (home or same_ids or candidates is not None): system += '\n\n' + TASK_TITLE
             if not shape and '**covered**' not in base and same_ids: system += '\n\n' + COVERED      # ...and what open work already holds (2026-11-15)
             if not shape and '**offer**' not in base: system += '\n\n' + OFFER        # ...and what an agent could do for them (2026-10-28)
@@ -1148,6 +1151,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if isinstance(j.get('asks_owner'), bool): out['asks_owner'] = j['asks_owner']
                 if watched and isinstance(j.get('handled_elsewhere'), bool): out['handled_elsewhere'] = j['handled_elsewhere']
                 if j.get('refines') is True and (home or same_ids or candidates is not None): out['refines'] = True
+                if j.get('repeat') in ('same', 'changed') and (home or same_ids or candidates is not None): out['repeat'] = j['repeat']
                 wide = ' '.join(str(j.get('task_title') or '').split())[:120]
                 if wide and wide.lower() not in ('null', 'none') and not out.get('refines') and (home or same_ids or candidates is not None):
                     out['task_title'] = wide

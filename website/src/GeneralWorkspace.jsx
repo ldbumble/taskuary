@@ -660,6 +660,10 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
               <div className="tq-aui-welcome-copy">Research, plan, write, analyze, or coordinate. This conversation stays on the task.</div></div></div>}
             <RetryCtx.Provider value={retry}><WaitOnCtx.Provider value={waitingOn(list)}><Conversation items={merged.items} nodes={turnCards || []} posts={nextAt?.cards || []} next={nextAt?.next || null} nextRid={nextRid}
               landing={landNode} landAt={landAt} name={turnName} tid={task.TaskId} onChanged={nextAt?.refresh} loose={placesLoose(list)} ask={askNode} askAt={askAt} lettersAt={lettersTurn(list, merged.items)} /></WaitOnCtx.Provider></RetryCtx.Provider>
+            {/* HIS LINE THAT WAITS STANDS DIRECTLY UNDER THE TURN AT WORK, and goes down as the agent writes (the owner, 2026-11-15, a screenshot:
+                it stood by the box at the foot of the window, a gap of empty canvas between it and the turn it waits on). It is in the
+                conversation's own flow, its last thing; heard, it lands where the agent heard it, as before - nothing is drawn above it then */}
+            <PendingStrip items={merged.pending} now={!!list?.now} onRetry={retry} onDrop={dropLine} onNow={sendNow} />
             {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
             {cards}
             {/* ...under everything only while the list names no turn for it (a read behind, a chat with no turn yet) */}
@@ -679,7 +683,6 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
           </div>
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">
-            <PendingStrip items={merged.pending} now={!!list?.now} onRetry={retry} onDrop={dropLine} onNow={sendNow} />
             {/* NO AI: one small line over the box, its Connect an AI beside it (the owner, 2026-11-06) - the box stays the box */}
             {noAi}
             {/* ONE DOOR: while the conversation is open the box is how it goes on, but once a coding run has ENDED on a closed task the bar

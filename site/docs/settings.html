@@ -179,6 +179,10 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>Auto, the default: triage judges each task quick, normal or hard, and quick work runs on a smaller model, hard work on a stronger one. Fixed runs every job exactly as its card says.</p>
 <p>Options: <code>fixed</code>, <code>auto</code></p>
 <p>Normally set on the line above the AI cards; this row is the fallback if that panel cannot load. In Auto each card is its job&#39;s normal model, and the rules under it say when the quick or the strong model runs instead - each shown as a sentence with its own switch. An AI with only one model thinks less for quick work and harder for hard work instead, where it takes an effort setting (Claude Code, Codex, and the Anthropic, OpenAI and Azure OpenAI API cards); any other AI stays on its one model. An explicit pick - yours, a report&#39;s, a workflow&#39;s - always wins, and nothing is sent without your press either way.</p>
+<h3 id="ai-calls-a-day-before-automatic-work-waits">AI calls a day before automatic work waits<a class="anchor" href="#ai-calls-a-day-before-automatic-work-waits" aria-label="Link to this section">#</a></h3>
+<p><code>auto_ai_daily_calls</code> · type: number · default: <code>1500</code> · set on a card at the top of the page</p>
+<p>Past this many AI calls in a day, agents stop starting and waking by themselves until tomorrow. What you ask for still runs. 1500 by default; 0 = no limit.</p>
+<p>Normally set under TODAY, beside the day&#39;s calls and tokens; this row is the fallback if that panel cannot load. It stops a leak - a start on every arrival, a wake that wakes again - from running a whole day unseen. An ordinary busy day is a few hundred calls. While it holds, the bell says so.</p>
 <h3 id="strong-model-uses-a-day-at-most">Strong-model uses a day, at most<a class="anchor" href="#strong-model-uses-a-day-at-most" aria-label="Link to this section">#</a></h3>
 <p><code>ai_route_strong_cap</code> · type: text · default: blank · set on a card at the top of the page</p>
 <p>At most this many calls a day on a strong model, in Auto. Blank = no cap.</p>

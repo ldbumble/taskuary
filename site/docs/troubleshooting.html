@@ -173,7 +173,9 @@ steps and which of them are deterministic gates.</p>
 <li><strong>Stopped by a gate</strong> (a feed connection, a policy rule, your own standing ruling, an agent
 already waiting) — the fix is that rule, that role or that ruling. The classifier was never
 asked.</li>
-<li><strong>Judged and wrong</strong> — correct it on the Triage tab. The correction is written into <code>TRIAGE.md</code>
+<li><strong>Judged and wrong</strong> — correct it on the item with the move it should have had: <strong>Make it a
+task</strong>, <strong>Not for me</strong>, <strong>Watch it</strong> or <strong>Stop watching</strong>, or &quot;not a task&quot; or another kind under
+<strong>Change ▾</strong> (or say it to the Assistant). What it says about you is written into <code>LEARNED.md</code>
 and applies to the next message <em>like</em> this one.</li>
 <li><strong>&quot;Awaiting AI triage&quot;</strong> — there is no AI connector active, so nothing was guessed. Add a key,
 and the retry sweep picks it up.</li>
@@ -198,6 +200,10 @@ and answer it.</p>
 <p><strong>It is waiting on its CLI.</strong> A headless agent without its noninteractive flag hangs forever on a
 prompt that cannot be answered. The connector presets set the flag; a custom CLI needs it added.
 The card&#39;s <strong>Test</strong> action reproduces it in ten seconds.</p>
+<p><strong>Agents stopped starting by themselves.</strong> Past a set number of AI calls in a day, agents stop
+starting and waking on their own until tomorrow, and the bell says so; what you ask for still runs.
+<strong>Settings → Which AI does what</strong> shows the day&#39;s calls and tokens under <strong>TODAY</strong>, with the limit
+beside them: 1500 by default, 0 for none.</p>
 <p><strong>It hit a limit.</strong> The saved result says so. <strong>Start new coding session</strong> picks a different
 harness and keeps the checkout and the history.</p>
 <p><strong>It says there is no local path for the repository.</strong> Map that repository to its checkout on

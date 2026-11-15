@@ -15,6 +15,7 @@
     "calendar_enabled": "1",
     "assistant_ai": "",
     "ai_route_mode": "auto",
+    "auto_ai_daily_calls": "1500",
     "ai_route_strong_cap": "",
     "assistant_model": "",
     "assistant_max_lines": "5",

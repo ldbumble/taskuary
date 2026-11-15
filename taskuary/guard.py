@@ -194,6 +194,7 @@ OWNER_ONLY = (
     (r'DELETE', r'^/api/tasks/\d+/check-back$', "cancelling the agent's check-back is the owner's press - the agent sets its own"),
     (r'POST', r'^/api/tasks/\d+/desktop$', "marking a task 'needs desktop' hands its agent the owner's desktop - never its own agent's press"),
     (r'POST', r'^/api/tasks/\d+/trust$', "raising a task's origin is the owner's decision (origin.raise_to) - never a session's"),
+    (r'POST', r'^/api/trusted/remove$', "taking back a trust is the owner's - who starts an agent by their mail is his word (senders.untrust)"),
     (r'POST', r'^/api/tasks/\d+/assistant/seen$', "the owner's open task keeps its agent's process warm - a session never keeps itself alive (clipool.touch)"),
     (r'POST', r'^/api/tasks/\d+/waiting/(now|[^/]+/drop)$', "what he typed and has not been heard is his to take back or send in now - never an agent's (general.drop_line)"),
     (r'POST', r'^/api/reason/(trusted|gate|folder|held/[0-9A-Za-z]+)$', "who may reach the owner's agents over Reason Network is the owner's"),

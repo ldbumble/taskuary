@@ -60,7 +60,10 @@ class TheServer(unittest.TestCase):
         self.assertIn('search_messages', tools); self.assertIn('propose_reply', tools)
         self.assertTrue(tools['search_messages']['annotations']['readOnlyHint'])
         self.assertFalse(tools['propose_reply']['annotations']['readOnlyHint'])
-        self.assertIn('nothing is sent', tools['propose_reply']['description'])
+        # ...each by ONE LINE and its parameters' names (the owner, 2026-11-15: "MCP-style tools with simple JSON"); its whole words are find_tools'
+        self.assertLess(len(tools['propose_reply']['description']), 100); self.assertNotIn('description', json.dumps(tools['propose_reply']['inputSchema']))
+        said = rpc(self.tid, 'tools/call', {'name': 'find_tools', 'arguments': {'query': 'propose_reply'}}).json()['result']['content'][0]['text']
+        self.assertIn('nothing is sent', said)
         # ...and the view and the acts load with the session, never a bare name it must search for (2026-11-13: no view in 8 sessions)
         self.assertEqual({n for n, t in tools.items() if (t.get('_meta') or {}).get('anthropic/alwaysLoad')} - {'propose_email', 'propose'}, {'show', 'propose_reply', 'remember'})
         self.assertNotIn('_meta', tools['search_messages'])

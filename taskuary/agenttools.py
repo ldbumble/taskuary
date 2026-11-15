@@ -230,6 +230,10 @@ TOOLS = {
                            "button in front of the owner - nothing happens until they press it. `replaces`: as on propose_email.",
                 {'type': 'object', 'properties': {'action': _STR, 'why': _STR}, 'required': ['action', 'why'],
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),
+    # ...and EVERY TOOL'S FULL INSTRUCTIONS, ON ASK (the owner, 2026-11-15: "MCP-style tools with simple JSON ... All methods can be searched
+    # later"): listed, a tool is its name, one line and its parameters (SHORT, lean); what it takes and its rules are read here
+    'find_tools': ('read', "A tool's full instructions by its name, or the tools that fit what you need by words - read a tool's before its "
+                           "first use where its line does not say enough. Read-only.", _S({'query': _STR}, ('query',)), ('GET', '/api/tasks/1')),
 }
 # ...`reach`: a read of a system outside Taskuary (run_system) - its answer can change under the agent, and a save it runs is a write
 ANNOTATIONS = {'read': {'readOnlyHint': True, 'openWorldHint': False}, 'reach': {'readOnlyHint': True, 'openWorldHint': True},
@@ -253,9 +257,63 @@ CODING_TOOLS = ('note_peers', 'use_repo', 'find_repos', 'propose_land')
 # did, so no view was drawn and every result came back as prose. These ride whole on every turn (Claude Code 2.1.285+, the per-tool
 # `anthropic/alwaysLoad`): the view, and the three that set an act up for the owner's press
 ALWAYS_LOAD = ('show', 'propose_reply', 'propose_email', 'propose', 'remember')     # ...and the one that keeps what the owner tells it: said in passing, never searched for
+# ONE LINE A TOOL, FOR EVERY BRAIN (the owner, 2026-11-15: "They should be MCP-style tools with simple JSON: what they do and descriptions.
+# All methods can be searched later"): the whole description of every tool rode on every call - ~15,000 characters, ~650 a tool. A tool is
+# listed by its name, this line and its parameters' names and types (lean); its full words, rules and examples are find_tools' answer
+SHORT = {
+    'search_messages': "Search the owner's saved mail and chats (dates YYYY-MM-DD).",
+    'read_message': 'One saved message in full (id: m1073).',
+    'read_attachment': 'The text of one attachment on a saved message, by its id.',
+    'my_task': "This task's brief and to-dos with their ids.",
+    'search_tasks': "Search the owner's tasks, mail, chats and pull requests, and what earlier tasks settled.",
+    'person': "Who a name or address is in the owner's mail, and their latest messages.",
+    'search_knowledge': "Search the owner's knowledge base (indexed folders, SharePoint).",
+    'owner_memory': 'What Taskuary has learned about the owner: their people, priorities and ways.',
+    'remember': 'Keep a fact the owner tells you for future work.',
+    'calendar': "The owner's busy times for the next N days.",
+    'list_systems': "The owner's other systems you may use, with their connector ids and tool types.",
+    'guide': "Read one of Taskuary's how-tos (browser, number, propose ...).",
+    'run_system': "Run one tool on one of the owner's systems: {type, connector_id, ...its fields}.",
+    'show': 'Draw a view (table, chart, tiles) or show files in this chat.',
+    'tick': "Tick or untick one of this task's to-dos.",
+    'todos': "Add, reword or merge this task's to-dos.",
+    'check_back': 'Be woken on this task later, at `when`, with `what` as your next turn.',
+    'remind': "Take the task off the owner's list until `when`.",
+    'ask_stronger': 'Ask a stronger model one hard question; `context` is all it sees.',
+    'note_peers': 'Leave a note for another coding agent (`to`: TQ-0123, repo or all).',
+    'use_repo': "Pick the git checkout this task's work belongs in.",
+    'find_repos': 'The git checkouts you may work in, newest commit first.',
+    'propose_land': "How your work lands (rebase, merge, pr ...), as the owner's buttons.",
+    'propose_reply': "Set up this task's reply for the owner's Send.",
+    'reply_not_needed': 'The reply waiting here is no longer needed; say why.',
+    'withdraw_draft': 'Take back a reply, email or proposal you set up that has not gone out.',
+    'propose_email': "Draft an email for the owner's Send.",
+    'sign_form': "Fill and sign a PDF form with the owner's saved signature.",
+    'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
+    'set_up_meeting': "Set up a meeting for the owner's press.",
+    'share': 'Share a dashboard or report you made with a person.',
+    'propose': 'Ask the owner to approve one act Taskuary runs on their press (action, why).',
+    'find_tools': "A tool's full instructions by name, or more tools by need.",
+}
+def lean(s):
+    "A schema as a list shows it: names, types, enums and what is required - no words, no examples (find_tools has them)."
+    if isinstance(s, list): return [lean(v) for v in s]
+    if not isinstance(s, dict): return s
+    return {k: ({p: lean(v) for p, v in s[k].items()} if k == 'properties' else lean(v)) for k, v in s.items() if k not in ('description', 'examples', 'default', 'title') and not (k == 'required' and not v)}
+def instructions(name: str) -> str:
+    "One tool's whole description and parameters, as find_tools answers it."
+    c, d, s, _ = TOOLS[name]
+    return f'{name}: {d}\nParameters: {json.dumps(s, ensure_ascii=False)}'
+def found(query, names: dict) -> list:
+    "The tools of `names` ({name: description}) that `query` asks for: by name, else by most of its words in a name and description (at most 4)."
+    q = str(query or '').strip().lower()
+    if q in names: return [q]
+    ws = [w for w in re.findall(r'[a-z0-9_]+', q) if len(w) > 2]
+    score = lambda n: sum((w in n) * 3 + (w in str(names[n]).lower()) for w in ws)
+    return [n for n in sorted(names, key=lambda n: -score(n)) if score(n)][:4]
 def listing(skip=()) -> list:
-    "tools/list: every tool with what it does and whether it only reads - but those in `skip`."
-    return [{'name': n, 'description': d, 'inputSchema': s, 'annotations': ANNOTATIONS[c], **({'_meta': {'anthropic/alwaysLoad': True}} if n in ALWAYS_LOAD else {})}
+    "tools/list: every tool by its name, its line and its parameters, and whether it only reads - but those in `skip`."
+    return [{'name': n, 'description': SHORT.get(n) or d, 'inputSchema': lean(s), 'annotations': ANNOTATIONS[c], **({'_meta': {'anthropic/alwaysLoad': True}} if n in ALWAYS_LOAD else {})}
             for n, (c, d, s, _) in TOOLS.items() if n not in skip]
 
 
@@ -347,6 +405,9 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'guide':
         from . import guides
         return _out(guides.read(a.get('topic')))
+    if name == 'find_tools':
+        hits = found(a.get('query'), {n: d for n, (_, d, _s, _) in TOOLS.items()})
+        return '\n\n'.join(map(instructions, hits)) if hits else f"No tool fits {a.get('query')!r} - name one, or say what it should do in other words."
     if name == 'run_system':
         r = doors['tool_run']({**a, 'task_id': tid})
         return _out(_j(json.loads(r.body) if hasattr(r, 'body') else r), fence_it=True)     # a 202 (queued) comes back as a response
@@ -564,7 +625,9 @@ def rpc(msg: dict, run, skip=()) -> dict | None:
         return ok({'protocolVersion': v if v in PROTOCOLS else PROTOCOLS[0], 'capabilities': {'tools': {'listChanged': False}},
                    'serverInfo': {'name': SERVER, 'version': '1'},
                    'instructions': "Taskuary's tools reach the owner's saved mail, chats, tasks, people, calendar and documents. None "
-                                   "of them sends: to answer anyone, propose it and the owner presses Send."})
+                                   "of them sends: to answer anyone, propose it and the owner presses Send. Each is listed by one line: find_tools "
+                                   "with a tool's name gives its whole instructions - read them before its first use where the line does not say enough. "
+                                   + SHOW_WHAT})
     if m == 'ping': return ok({})
     if m == 'tools/list': return ok({'tools': listing(skip)})
     if m == 'tools/call':

@@ -286,7 +286,7 @@ def test_the_browser_is_offered_where_there_is_one_and_said_where_there_is_not(r
     def plan(): yield 'Opening it.'
     model, *_ = run(road, s, tid, plan, installed=installed)
     names, system = _tools(road, model.bodies[0]), _system(road, model.bodies[0])
-    assert ('browser_open' in names) is installed and ('browser_look' in names) is installed
+    assert ('browser_open' in names) is installed     # ...and its other hands come with the first page it opens (apiagent.BROWSER_MORE)
     if installed: assert 'browser_open' in system
     else: assert 'NO BROWSER FOR AGENTS YET' in system and '[[TASKUARY-ASK]]' in system, 'one line and the way on, never "cannot be done from here"'
 
@@ -357,11 +357,12 @@ class TestTheCliRoadsReachTheSameTools:
         assert {'propose_email', 'propose_reply', 'show', 'read_attachment', 'search_messages'} <= names
 
     def test_every_hand_a_cli_has_the_ai_card_has_by_its_own_name(self):
-        "Claude Code's Read/Write/Edit/Bash/WebSearch/WebFetch and agent-browser - each one family the API road offers whole (never behind load_tools)."
+        """Claude Code's Read/Write/Edit/Bash/WebSearch/WebFetch and agent-browser - each one the API road offers, listed or found with find_tools
+        (the owner, 2026-11-15: "All methods can be searched later"), as Claude Code's own deferred tools are found with its ToolSearch."""
         s, tid, _ = world({})
         with mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
-            names = {t['function']['name'] for t in apiagent.tools_for(tid, 'sid-h', browser=True)}
-        apiagent.forget(tid, 'sid-h')
+            apiagent.tools_for(tid, 'sid-h', browser=True)
+        names = set(apiagent.OFFERED[(tid, 'sid-h')]); apiagent.forget(tid, 'sid-h')
         for cli, ours in {'Read': 'file_read', 'Write': 'file_write', 'Edit': 'file_edit', 'Glob': 'files_list', 'Bash': 'run_command',
                           'WebSearch': 'web_search', 'WebFetch': 'web_fetch', 'agent-browser open': 'browser_open', 'agent-browser snapshot': 'browser_look',
                           'agent-browser click': 'browser_click', 'agent-browser fill': 'browser_fill', 'agent-browser screenshot': 'browser_screenshot'}.items():

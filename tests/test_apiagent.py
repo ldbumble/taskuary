@@ -219,18 +219,21 @@ class OneRoundTripTests(unittest.TestCase):
 
     def test_tools_are_offered_as_the_work_needs_them_and_a_loaded_one_is_added_at_the_end(self):
         """The owner's rule, "model sees all, tools progressive" (2026-11-10: "the ai limits as much as possible to use ai"): every schema rode
-        on every step. The core is offered whole, the rest named in load_tools; loading one appends it, so what went before is the same bytes."""
+        on every step. The core is offered, a line each; the rest are found with find_tools, which appends what it finds, so what went before is the
+        same bytes - and the whole list stays under TOOL_CHARS (the owner, 2026-11-15: "MCP-style tools with simple JSON")."""
         from taskuary import agenttools
         def post(url, json=None, headers=None, timeout=None):
             r = mock.Mock(status_code=200); r.json.return_value = agenttools.rpc(json, lambda n, a: f'{n} answered', ()); return r
         whole = len(json.dumps(apiagent.tools_for(1, 'p', True, post=post) + list(apiagent.DEFERRED[(1, 'p')].values())))
         core = apiagent.tools_for(1, 'p', True, post=post)
         names = [t['function']['name'] for t in core]
-        assert {'search_messages', 'read_message', 'propose_reply', 'check_back', 'show'} <= set(names) and 'calendar' not in names
-        line = core[-1]['function']['description']
-        assert names[-1] == 'load_tools' and all(n in line for n in apiagent.LATER if n in apiagent.DEFERRED[(1, 'p')])
-        assert len(json.dumps(core)) < whole * 0.7
-        seen, steps = [], iter([{'tool_calls': [{'id': 'a', 'function': {'name': 'load_tools', 'arguments': '{"names": ["calendar"]}'}}]},
+        assert {'search_messages', 'read_message', 'propose_reply', 'propose_email', 'show', 'file_write'} <= set(names) and 'calendar' not in names
+        assert names[-1] == 'find_tools' and len(json.dumps(core)) < whole * 0.5
+        TOOL_CHARS = 4_000                # what every call carries before a word of the job: was ~15,000 (23 tools at ~650 characters)
+        assert len(json.dumps(core, separators=(',', ':'))) < TOOL_CHARS
+        said = apiagent.find(1, 'p', list(core), 'meeting calendar')
+        assert 'set_up_meeting:' in said and 'calendar:' in said, 'found by words, each with its whole instructions'
+        seen, steps = [], iter([{'tool_calls': [{'id': 'a', 'function': {'name': 'find_tools', 'arguments': '{"query": "calendar"}'}}]},
                                 {'tool_calls': [{'id': 'b', 'function': {'name': 'set_up_meeting', 'arguments': '{}'}}]}, {'content': 'Booked.'}])
         class Brain:
             def chat(self, msgs, tools, max_tokens, **kw): seen.append([t['function']['name'] for t in tools]); return next(steps)
@@ -664,7 +667,7 @@ class TheHandsTests(unittest.TestCase):
     def test_a_step_that_waits_for_approve_is_asked_for_by_calling_it(self):
         "Told only that a push waits for the owner's Approve, a model wrote that it needed approval and never called: no button on the task."
         from taskuary import apiagent
-        said = next(t['function']['description'] for t in apiagent.SHELL if t['function']['name'] == 'run_command')
+        said = apiagent.FULL['run_command']                     # its whole words, as find_tools answers
         for text in (said, apiagent.TOOLS_BRIEF):
             self.assertIn("waits for the owner's Approve", text); self.assertIn(apiagent.ASK_BY_CALLING, text)
 
@@ -718,8 +721,8 @@ class TheHandsTests(unittest.TestCase):
         with mock.patch.object(apiagent, 'taskuary_tools', return_value=[]):
             names = {t['function']['name'] for t in apiagent.tools_for(self.tid, 'sid-h', browser=False, hands=False)}
         try:
-            self.assertTrue({'files_list', 'file_read', 'web_fetch', 'web_search'} <= names)
-            self.assertFalse({'file_write', 'file_edit', 'run_command', 'browser_open'} & names)
+            self.assertTrue({'files_list', 'file_read', 'web_fetch', 'web_search'} <= apiagent.OFFERED[(self.tid, 'sid-h')])
+            self.assertFalse({'file_write', 'file_edit', 'run_command', 'browser_open'} & apiagent.OFFERED[(self.tid, 'sid-h')])
             with self.assertRaises(ValueError): self.run_('run_command', command='dir', why='list')
         finally: apiagent.OFFERED.pop((self.tid, 'sid-h'), None); apiagent.TOOLBOX.pop((self.tid, 'sid-h'), None)
 

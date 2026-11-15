@@ -6,6 +6,11 @@ import os from "node:os";
 import path from "node:path";
 import { startHarness } from "./harness.mjs";
 
+// ...AND NOTHING OF `npm exec` REACHES THE APP (the browser audit, 2026-11-15): run as `npm exec --package=node@22 -- node real-run.mjs`, its
+// npm_config_package=node@22 rode into the server, so the server's own `npx -y <the ACP adapter>` fetched node instead and ran the adapter's
+// name as a command ("'agentclientprotocol' is not recognized") - every agent of the walk fell back to its command line, a road the owner's
+// machine does not take
+for (const k of Object.keys(process.env)) if (/^npm_/i.test(k)) delete process.env[k];
 const out = process.env.REAL_OUT || path.join(os.tmpdir(), "claude", "real");
 await mkdir(out, { recursive: true });
 const where = (n) => execFileSync("where", [n], { encoding: "utf8" }).trim().split(/\r?\n/).map((s) => s.trim());

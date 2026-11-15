@@ -354,7 +354,9 @@ class TheDemo(unittest.TestCase):
             self.assertEqual(json.loads(s.get_review(d['reviewId'])['Deliver'])['act'], 'accept')
             self.assertEqual(len(calwrite.slots_for(s, ask, 'schedule')['slots']), 3)
             self.assertEqual(demo.refuse('POST', f"/api/messages/{inv['MessageId']}/calendar", s), '', 'drafting is the demo')
-            self.assertEqual(demo.refuse('POST', f"/api/reviews/{d['reviewId']}/decide", s), demo.SENDS, 'Send stays refused')
+            # ...a card's verdict is judged by its verb (demo.refuse_verdict): the answer is never sent, and the card can be put down
+            self.assertEqual(demo.refuse_verdict('approve'), demo.SENDS, 'Send stays refused')
+            self.assertEqual(demo.refuse('POST', f"/api/reviews/{d['reviewId']}/decide", s), '')
 
 
 class MovedMeeting(unittest.TestCase):

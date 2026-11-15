@@ -247,11 +247,11 @@ def test_a_reply_owed_on_the_owners_own_row_goes_to_the_agent():
 
 
 def test_a_reply_nothing_has_written_is_not_called_a_draft_left_behind():
-    "A second question on a reply nobody has written yet: the review moves to the newest line - and is no stale draft, for there is none."
+    "A second question on a reply nobody wrote yet: the review stays on the line it was raised for (the owner, 2026-11-15) - and is no stale draft."
     s = store(general_auto_enabled='0'); tid = reply_task(s)
     out, went = arrived(s, mail(**{**WORK, 'body': 'Sorry - make that Wednesday?'}), says(intent='reply_only', kind='task', refines=False))
     rv = s.pending_review(tid, kind='draft')
-    assert went == ['reply_to_agent'] and rv['MessageId'] == out['message_id'] and not rv.get('Stale')
+    assert went == ['reply_to_agent'] and rv['MessageId'] < out['message_id'] and not rv.get('Stale')
     assert not any('drafted reply is behind' in x for x in lines(s, tid))
     s.update_review_draft(rv['ReviewId'], 'Tuesday works.', None)                  # ...and one that IS written is behind the next line, as before
     arrived(s, mail(**{**WORK, 'external_id': 'm3', 'sent_at': '2026-10-28 11:00', 'body': 'Or Thursday?'}), says(intent='reply_only', kind='task', refines=False))

@@ -1666,8 +1666,14 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         # left the pending reply pinned to his first one, warned as behind, with nothing behind
         # the warning (TQ-0665, 2026-09-21). The reply is owed to the newest line either way, and
         # the owner still approves it. An fyi never reaches here: it files and returns above.
+        # ...BUT WHO AN UNWRITTEN REPLY GOES TO IS ITS AGENT'S TO SAY (the owner, 2026-11-15: "shouldn't the agent decide this. It's not a
+        # hard coded decision"): a stranger wrote on a thread where the reply owed to a colleague waited with no words yet, the pin moved
+        # to the newest line whoever wrote it, and the empty card read "To" the stranger. Only a draft that EXISTS is pinned to the line
+        # it is now behind (its freshness marker - whom it answers stays its own, AnswersMid). One nobody wrote stays owed to whom it was
+        # raised for: its agent hears the new line (reply_to_agent, thread_moved) and names who its letter goes to where it writes it
+        # (wrapup.agent_reply)
         if v and not talking:
-            store.update_review_message(behind['ReviewId'], mid)
+            if drafted: store.update_review_message(behind['ReviewId'], mid)
             if not msg.get('_reply_agent') and not agent_drafts(store, tid, went):
                 if drafted: store.add_comment(tid, 'triage', 'agent', 'The thread moved - the drafted reply is behind it.')
                 owed = behind['ReviewId']
@@ -1683,7 +1689,7 @@ def land_on(store, msg: dict, tid: int, v: dict | None, actor: str, how: str = '
         unsendable = send_block(store, msg.get('channel'))
         owed = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage',
                                  'Reason': f"needs a reply: {v.get('why') or 'question for you'}" + (f' · {unsendable}' if unsendable else '')})
-    if owed: _spawn(reply_to_agent, store, tid, owed, msg)
+    if owed: _spawn(reply_to_agent, store, tid, owed, {**msg, 'message_id': mid})
     # the classic round trip: the agent asked something, the hub asked the person, and
     # THIS is their answer arriving on the same thread. With answer_to_agent=auto it is
     # typed straight into the live session; 'ask' leaves the one-click offer in the
@@ -2449,6 +2455,9 @@ def reply_to_agent(store, tid, rid, msg: dict = None) -> bool:
         m = store.get_message(rv['MessageId']) if rv.get('MessageId') else None
         if not m: return False
         msg = msg or _from_row(m, store)
+        # ...and the line that ARRIVED is what a start is judged by (its sender, what triage read in it), where the caller says which it
+        # was: the review is no longer moved onto it (land_on), so the message it was raised for may be an earlier one from somebody else
+        mid = msg.get('message_id') or m['MessageId']
         ran = bool(general.history(store, tid) or store.list_runs(tid) or store.resumable_session(tid))
         if t.get('Kind') not in ('reply', 'task') and (ran or started(store, tid) or not general.handles(t)):
             # ...a start set going a beat ago with nothing to show yet is that agent on its way: a burst's second line starts no second
@@ -2458,12 +2467,12 @@ def reply_to_agent(store, tid, rid, msg: dict = None) -> bool:
             # reply and nobody writing one until the owner pressed Continue. The question is that agent's next turn, by the road new
             # work takes (_carry_on: its session reopened, or a first start, where one may start by itself - else the task says why)
             if not general.handles(t):
-                return _carry_on(store, tid, msg, m['MessageId'], {'intent': 'task', 'kind': t.get('Kind'), 'why': rv.get('Reason') or ''}, 'triage')
+                return _carry_on(store, tid, msg, mid, {'intent': 'task', 'kind': t.get('Kind'), 'why': rv.get('Reason') or ''}, 'triage')
             # ...its conversation's own road said why where it refused (thread_moved); only what that road keeps quiet is said here
-            why = w if code_of(w := wake_why(store, tid, msg, m['MessageId'], None)) in QUIET_WHY else ''
+            why = w if code_of(w := wake_why(store, tid, msg, mid, None)) in QUIET_WHY else ''
             if why: not_started(store, tid, f'{why} - {general.carry_on(t)}')
             return False
-        try: return agent_on_reply(store, tid, msg, m['MessageId'], {'intent': 'task', 'kind': 'general', 'why': rv.get('Reason') or ''}, 'triage', opening=True)
+        try: return agent_on_reply(store, tid, msg, mid, {'intent': 'task', 'kind': 'general', 'why': rv.get('Reason') or ''}, 'triage', opening=True)
         except Exception as e: logger.warning(f'the reply on task {tid} was not handed to an agent: {e}'); return False
 
 

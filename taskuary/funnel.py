@@ -331,7 +331,9 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             # SQLite and still show only the old "yes" that opened the draft.
             latest = None if canonical else (store.last_inbound_on_task(r.get('TaskId')) if r.get('TaskId') else
                       store.last_inbound_in(cid) if cid else None)
-            stale = bool(latest and latest.get('MessageId') != rv.get('MessageId'))
+            # ...and only a draft that EXISTS is behind a newer line: a reply nobody wrote yet stays on the message it was raised for
+            # (ingest.land_on, 2026-11-15) and is behind nothing
+            stale = bool(r.get('HasDraft') and latest and latest.get('MessageId') != rv.get('MessageId'))
             if latest:
                 base.update(mid=latest.get('MessageId'), when=latest.get('SentAt'),
                             who=latest.get('FromName') or latest.get('FromEmail') or who,

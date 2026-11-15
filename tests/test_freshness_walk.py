@@ -194,6 +194,29 @@ class SupersedeTests(Base):
         self.assertIn(('reply_to_agent', rid), spawned)                            # ...and the agent's to write from it
         self.assertEqual(len(self.s.list_reviews('pending')), 1)
 
+    def test_a_reply_nobody_wrote_yet_stays_owed_to_whom_it_was_raised_for_when_somebody_else_writes(self):
+        """The owner, 2026-11-15: "shouldn't the agent decide this. It's not a hard coded decision." Gail asked, the reply owed to her waited
+        with no words yet, and a stranger wrote on the same thread: the pin moved to the newest line whoever wrote it, so the empty card
+        read "To Omar Keller". Who the letter goes to is its agent's to say where it writes it - the agent is handed the new line, the same
+        review, and the card is addressed as before. A draft that exists is still pinned to the line it is behind (the test above)."""
+        tid, first, rid = mail_task(self.s)
+        self.s._exec("UPDATE message SET FromName='Gail Moreno', FromEmail='gail@northwind.example' WHERE MessageId=?", (first,))
+        self.s._exec('UPDATE review SET DraftText=NULL WHERE ReviewId=?', (rid,))
+        spawned = []
+        llm = lambda *a, **k: json.dumps({'intent': 'reply_only', 'why': 'he asks for the same file', 'asks_owner': True})
+        omar = {**mail('Hello, Omar here - could I get that export as well?', 'm:omar'), 'from_email': 'omar@vendor.example', 'from_name': 'Omar Keller'}
+        with mock.patch.object(ingest, '_spawn', side_effect=lambda f, *a: spawned.append((f.__name__, *a[2:]))):
+            out = ingest.ingest_message(self.s, omar, llm=llm)
+        rv = self.s.get_review(rid)
+        self.assertEqual((out['task_id'], rv['MessageId'], rv['Stale']), (tid, first, 0))       # still Gail's, and nothing is behind an empty card
+        self.assertEqual(len(self.s.list_reviews('pending')), 1)
+        # ...and the agent hears the line that arrived, on that same review: a start is judged by the stranger's own message
+        (name, got, msg), = [x for x in spawned if x[0] == 'reply_to_agent']
+        self.assertEqual((got, msg['from_email'], msg['message_id']), (rid, 'omar@vendor.example', out['message_id']))
+        # ...and the row never says a draft is behind newer mail where no draft was written
+        row = next(i for i in funnel.pile(self.s, force=True)['items'] if i.get('rid') == rid)
+        self.assertFalse(row.get('stale'))
+
     def test_the_second_message_adds_its_own_boxes_to_the_task_list(self):
         """Re-triaged means re-triaged: what the new line ASKS FOR joins the list, nothing already
         on it moves or unticks, and the addition is said on the task rather than made silently.

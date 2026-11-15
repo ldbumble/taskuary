@@ -164,21 +164,27 @@ def unheard(store, tid: int) -> set:
 
 
 TOOK_BACK = 'Asked for the sign-in details, then took that back: a sign-in is done on the page, never in the chat.'
-def take_back(store, tid: int, said: str = None, why: str = '', since: float = 0.) -> None:
+def take_back(store, tid: int, said: str = None, why: str = '', since: float = 0., ahead: bool = False) -> None:
     """AN ANSWER THAT WAS ONLY A STEP ON THE WAY IS A STEP OF THE WORK, NEVER AN ANSWER (the recorded sign-in walks, 2026-11-11): one its agent
     is made to take back - it asked him for the password, was woken to open the sign-in page instead, and the ask stood in the chat above the
     page it opened - and one that only handed Taskuary a sign-in the saved one then did ("once you have signed in..." over a sign-in nobody
     was asked for; `why`: the line that says what happened instead, `since`: only an answer filed from then on). Marked by the answer's own
     row - or, read before that row is filed, as the next answer after the newest row - and drawn by `items` as that turn's work with one
-    line in place of the words, the turn that goes on under it."""
+    line in place of the words, the turn that goes on under it.
+    `ahead`: the answer filed from `since` on is taken back even where it is not filed yet (the next one to be), and a later call says how
+    it ended in the same line - a saved sign-in takes seconds to type, and all that time the answer that only handed it over stood in the
+    chat as the agent's answer ("I have no saved sign-in for it ...", recorded 2026-11-14)."""
     from .general import ASSISTANT_TYPE
     rows = store.list_comments(int(tid), internal=True)
     c = next((c for c in reversed(rows) if c.get('ActorType') == ASSISTANT_TYPE), None)
+    nxt = f">{max((r['CommentId'] for r in rows), default=0)}"
     if said is None:
-        if not c or ep(c['CreatedAt']) < since - 1: return
-        ref = str(c['CommentId'])
-    else: ref = str(c['CommentId']) if c and str(c.get('Body') or '')[:4000] == said[:4000] else f">{max((r['CommentId'] for r in rows), default=0)}"
+        filed = bool(c) and ep(c['CreatedAt']) >= since - 1
+        if not filed and not ahead: return
+        ref = str(c['CommentId']) if filed else nxt
+    else: ref = str(c['CommentId']) if c and str(c.get('Body') or '')[:4000] == said[:4000] else nxt
     store._exec('INSERT OR IGNORE INTO heard (TaskId,Kind,Ref,At,Grp,Seq,Sid) VALUES (?,?,?,?,?,?,?)', (int(tid), 'back', ref, time.time(), 0, 0, why))
+    if ahead and why: store._exec("UPDATE heard SET Sid=? WHERE TaskId=? AND Kind='back' AND (Ref=? OR (Ref LIKE '>%' AND At>=?))", (why, int(tid), ref, since - 1))
     store._poke('task-changed', task_id=int(tid))
 
 
@@ -384,6 +390,7 @@ def items(store, tid: int) -> dict:
     era = min((r['At'] for r in led.values()), default=INF)
     marks = [r for (k, _), r in led.items() if k == 'turn']
     backs = [int(r[1:]) for k, r in led if k == 'back' and r[:1] == '>']      # an answer taken back before its row was filed (take_back)
+    back_why = lambda cid: next((w for n in sorted(backs, reverse=True) if n < cid and (w := led[('back', f'>{n}')].get('Sid'))), '')
     asked = None                                   # the task's own row: the ask that opened it, where no message did
     pend, ev = [], []                              # ev: (when, rank - an input before the work it began, order, entry)
     put = lambda t, rank, e, hid=0: ev.append((t, rank, hid, len(ev), e))        # ...and what one hand-over took, in the order it took it
@@ -432,7 +439,7 @@ def items(store, tid: int) -> dict:
             # asked Alex ...; no reference number has been read yet" - under the note that it had signed in, the owner in the third person)
             took = (('back', str(cid)) in led or any(n < cid for n in backs)) and body
             if took:
-                st, body, backs = [*st, {'k': 'note', 'text': (led.get(('back', str(cid))) or {}).get('Sid') or TOOK_BACK}], '', [n for n in backs if n >= cid]
+                st, body, backs = [*st, {'k': 'note', 'text': (led.get(('back', str(cid))) or {}).get('Sid') or back_why(cid) or TOOK_BACK}], '', [n for n in backs if n >= cid]
             t = {'kind': 'turn', 'at': stamp(began) or c['CreatedAt'], 'state': 'done', 'steps': st, 'text': body, 'cards': [], 'started': began or None,
                  'ended': ep(c['CreatedAt']), 'answer': f'comment-{cid}', **({'summary': summ[cid]} if cid in summ and not took else {})}
             # ...and each draft this turn left that a later turn rewrote: greyed where it stood, never moved

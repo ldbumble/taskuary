@@ -256,6 +256,34 @@ class Asking(unittest.TestCase):
         self.assertIsNone(signin.pending(self.s, self.tid))
         self.assertEqual(sess.said, ['Signed in to bank.example - continue.'])
 
+    def test_while_the_saved_sign_in_is_typed_the_answer_that_handed_it_over_is_already_a_step(self):
+        """Recorded (the browser round, 2026-11-14): the agent ended its turn "I have no saved sign-in for it ... once the sign-in is done I
+        will read it", and for the seconds Taskuary typed the saved one that stood in the chat as its answer - untrue, and gone a beat
+        later. It is a step of the work from the moment the saved sign-in starts, under a line that says what is happening; the line
+        says how it ended once it has."""
+        import threading
+        from taskuary import conversation, general
+        signin.save(self.s, 'bank.example', USER, PW)
+        class Chat:
+            sid, alive, task_id = 'sess1', True, self.tid
+            def __init__(self): self.said = []
+            def send_prompt(self, text, as_owner=True): self.said.append(text)
+        sess, typing, go = Chat(), threading.Event(), threading.Event()
+        def fill(*a, **k): typing.set(); go.wait(10)
+        def last():        # ...read as the chat reads it; the stand-in session is no session to read steps from
+            with mock.patch.dict('taskuary.terminal.SESSIONS', clear=True):
+                return next((x for x in reversed(conversation.items(self.s, self.tid)['items']) if x['kind'] == 'turn'), None)
+        with on_page('https://login.bank.example/'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+            self.assertTrue(signin.needs(self.s, self.tid, 'sess1', 'bank.example', fill=fill)['auto'])
+            # ...the answer is filed a moment after the ask (general._file), while the saved one is going in
+            self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'I have no saved sign-in for it. Once the sign-in is done I will read the balance.')
+            self.assertTrue(typing.wait(10))
+            turn = last()
+            self.assertEqual((turn['text'], [st['text'] for st in turn['steps']][-1]), ('', 'Signing in to bank.example with the saved sign-in.'))
+            go.set(); self.wait_for(lambda: sess.said)
+            self.wait_for(lambda: [st['text'] for st in last()['steps']][-1] == 'Signed in to bank.example with the saved sign-in.', secs=15)
+        self.assertEqual(last()['text'], '')
+
     def test_a_saved_sign_in_that_does_not_go_in_asks_the_owner_after_all(self):
         signin.save(self.s, 'bank.example', USER, PW)
         def boom(*a, **k): raise signin.NotAccepted('bank.example kept its sign-in form up')

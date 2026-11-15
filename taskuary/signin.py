@@ -399,8 +399,12 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) ->
 
 def _auto(store, tid, sid, site, rid, fill, ask=None):
     """Type the saved sign-in. `ask`: raises the owner's ask - called only when the fill did not go in."""
-    from . import vault
+    from . import conversation, vault
     row = saved(store, site) or {}
+    # THE ANSWER THAT ONLY HANDED THE SIGN-IN OVER IS A STEP FROM NOW, not once the typing is done: for those seconds it stood in the chat as
+    # the agent's answer - "I have no saved sign-in for it ... once the sign-in is done" - untrue, and gone a beat later (recorded 2026-11-14)
+    back = lambda why: _chat(sid) and conversation.take_back(store, tid, why=why, since=_TRIED.get((tid, site), 0), ahead=True)
+    back(f'Signing in to {site} with the saved sign-in.')
     try:
         user, pw = vault.unseal(row.get('User') or '') or '', vault.unseal(row.get('Secret') or '')
         if not pw: raise SignInError('the saved password could not be opened on this computer')
@@ -413,18 +417,17 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
         # was asked of anyone)
         if ask and not got.get('code') and asks_code(sid):
             _audit(store, tid, site, 'vault', True, 'a code was asked')
-            from . import conversation
-            if _chat(sid): conversation.take_back(store, tid, why=f'Typed the saved sign-in for {site} - it asks for a code next.', since=_TRIED.get((tid, site), 0))
+            back(f'Typed the saved sign-in for {site} - it asks for a code next.')
             return ask(CODE_ASK.format(site=site))
         _audit(store, tid, site, 'vault', True, code=bool(got.get('code')) if code else None)
         # ...and the answer that only handed the sign-in over ("once you have signed in...") is a step of the work: nobody was asked to
-        from . import conversation
-        if _chat(sid): conversation.take_back(store, tid, why=f"Signed in to {site} with the saved sign-in{' and its authenticator code' if got.get('code') else ''}.", since=_TRIED.get((tid, site), 0))
+        back(f"Signed in to {site} with the saved sign-in{' and its authenticator code' if got.get('code') else ''}.")
         _continue(store, tid, rid, site, 'taskuary', bool(got.get('code')))
     except NotAccepted as e:
         _audit(store, tid, site, 'vault', False, str(e))
         why = str(e) if 'also asks for' in str(e) else (f'The saved password for {site} did not work - {site} kept its sign-in form up. '
                                                       'Sign in on the page, or fill it in securely with the right one - it is saved when it works.')
+        back(f'The saved sign-in for {site} did not go in.')
         store.add_comment(tid, 'taskuary', 'agent', why[0].upper() + why[1:] + ('.' if not why.endswith('.') else ''))
         # ...and the ask itself says why the page is in front of him (the recorded walk, 2026-11-11: it read "Sign in to ... to continue" over a
         # form the site had just refused the saved password on)
@@ -432,6 +435,7 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
+        back(f'The saved sign-in for {site} was not used.')
         store.add_comment(tid, 'taskuary', 'agent', f'The saved sign-in for {site} was not used: {why}. Sign in yourself to continue.')
         if ask: ask()
 

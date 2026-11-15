@@ -230,6 +230,15 @@ class OneConversationNotTwentyTests(unittest.TestCase):
         self.assertIn(general.UNLEARNED + '\n- Laptop and badge faults go to Marcus Reed', said, 'and the line taken back, named as taken back')
         self.assertNotIn('expense approvals', said, 'only what changed: the lines it knows are not said again')
         self.assertEqual(seen[2]['system'], seen[0]['system']); self.assertNotIn(general.UPDATED, seen[2]['user'], 'said once')
+        # ...a conversation begun before any record was kept (an upgrade) is told all that holds now, once - never a silent swap
+        self.s.save_frozen(self.tid, None)
+        self.sess = general.GeneralSession(self.s, self.tid)
+        self.sess.pick, self.sess.provider, self.sess.cli_sid = 'cli:claude', 'coding', 'sess-1'
+        self.sess._remember_session()
+        self._run(['and shorter', 'thanks'], brain)
+        self.assertTrue(seen[3]['user'].startswith(general.UPDATED)); self.assertIn('faults go to Omar Keller now', seen[3]['user'])
+        self.assertNotIn(general.UPDATED, seen[4]['user']); self.assertEqual(seen[3]['system'], seen[4]['system'])
+        del seen[3:]
         # ...and a line the owner Forgets is taken back the same way, with nothing new beside it
         memoryedit.mark(self.s, 'You batch expense approvals on Monday mornings', 'forget')
         self._run(['thanks'], brain)

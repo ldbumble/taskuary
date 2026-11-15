@@ -1933,7 +1933,9 @@ def freeze(s, head: str, late, kept: bool, by_line: bool = False) -> tuple[str, 
         s.frozen = (head, s.frozen[1], s.frozen[2] | set(late)) if s.frozen[0] == head else (head, with_late(head, late), set(late) | s.frozen[2])
         return s.frozen[1], '\n\n'.join([UPDATED, *new]) if new else ''
     s.frozen = (head, with_late(head, late), set(late))
-    return s.frozen[1], ''
+    # ...and A KEPT CONVERSATION WITH NO RECORD of what it was told (one begun before the record was kept, or whose record was lost) is
+    # told all of it once, as what holds now: its system is written afresh either way, and unsaid the new line was one among the old
+    return s.frozen[1], '\n\n'.join([UPDATED, *late]) if kept and late else ''
 
 
 # WHAT THE OWNER TOOK BACK, A KEPT CONVERSATION IS TOLD (the memory round, 2026-11-14: "Wrong/Forget undoes it", "nobody reads both as true"):

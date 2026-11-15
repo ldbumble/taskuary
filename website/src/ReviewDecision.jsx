@@ -3,7 +3,7 @@
 // sending you to another tab to make it (2026-09-22). A proposal (a playbook, a setting, an
 // action) renders through the same card: proposalPresentation() gives it its own title, its
 // destination and its own labels, and nothing is sent to a sender.
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Alert, Box, Button, Typography, CircularProgress, Menu, MenuItem } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
@@ -18,6 +18,7 @@ import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, DraftField, SubjectRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, replyContext } from "./replyDelivery.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
+import { useFoldBar } from "./foldBar.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
 import { boxText, editAfterRefile, useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
@@ -93,6 +94,7 @@ const CAL_ACT = { accept: btn("accept_invite"), decline: btn("decline_invite"), 
 export const CAL_PRESS = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: "Propose this time", schedule: "Send invite" };
 // ...and an invite's other answers beside it, each setting that one up instead (POST /api/messages/{mid}/calendar - the row's own draft; a new
 // time with none named is the first free one): nothing reaches the calendar before the lit press
+const HIDE = { display: "none" };   // a folded button stays mounted, unseen: its width is the one useFoldBar measured while it was drawn
 const CAL_OTHER = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: btn("propose_time") };
 // The times are the server's words (calwrite.when): the envelope carries them as they will be said.
 export const CalendarLine = ({ meta }) => (
@@ -457,22 +459,17 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // back only while another move on this card is lit - an advised Send or Redraft - so one button is ever filled
   // ...and only for a move DRAWN beside it (the product audit, 2026-11-08): a lit Redraft this card does not draw left Send and close outlined
   // on one reply card and filled on the next - closeVariant, below, once the drawn moves are known
-  // THE LINE NEVER WRAPS (the owner, 2026-10-23): with two sends it holds one line, and when they do not fit Send folds into a ▾ - measured
-  // against the width it needed, so it comes back out once there is room again. An advised Send stays in view (actionRow: the lit move)
-  const [foldSend, setFoldSend] = useState(false), [sendAt, setSendAt] = useState(null), foldAt = useRef(0);
-  const folded = paired && foldSend && lit !== no("approve");
-  useLayoutEffect(() => {
-    const el = movesRef.current;
-    if (!paired || !el || typeof ResizeObserver === "undefined") return undefined;
-    const fit = () => {
-      if (!foldSend && el.scrollWidth > el.clientWidth + 1) { foldAt.current = el.scrollWidth; setFoldSend(true); }
-      else if (foldSend && el.clientWidth >= foldAt.current) setFoldSend(false);
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [paired, foldSend]);
+  // THE LINE NEVER WRAPS (the owner, 2026-10-23): with two sends it holds one line, and when they do not fit Send folds into a ▾ - and it
+  // comes back out once there is room again. An advised Send stays in view (actionRow: the lit move)
+  // ...and after Send, AN INVITE'S OTHER ANSWERS (the owner, 2026-11-15): on a phone "Propose this time and close", the ▾ and Accept / Decline
+  // ran off the card's right edge. The line folds as every bar of fixed buttons does (foldBar.useFoldBar, the Tasks bar's road): Send first,
+  // then the other answers, into the one ▾ beside the filled move - the card's own measure of its Send is gone
+  const calOthers = isCal && CAL_OTHER[meta.act] && r.MessageId && r.Status === "pending" && !delivery.frozen ? Object.entries(CAL_OTHER).filter(([a]) => a !== meta.act) : [];
+  const sendLit = lit === no("approve");
+  const foldRanks = useMemo(() => (paired ? { ...(sendLit ? {} : { send: 1 }), ...Object.fromEntries(Object.keys(CAL_OTHER).map((a) => [`cal:${a}`, 2])) } : {}), [paired, sendLit]);
+  const bar = useFoldBar(foldRanks, `${sendWord}|${closeWord}|${copying}|${busy}|${switching}|${calOthers.length}`), [sendAt, setSendAt] = useState(null);
+  const setMoves = useCallback((el) => { movesRef.current = el; bar.ref(el); }, [bar.ref]);
+  const folded = paired && !bar.shown("send");
   const rejectTitle = "Dismisses it - nothing runs and nothing is sent";
   const remindTitle = `${btnHint("defer")} - nothing is merged, closed or sent`;
   const doneTitle = `${btnHint("close")} - nothing is sent; the draft stays on it, to send later if you want`;
@@ -537,7 +534,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       { id: no("approve"), label: busy ? sentOr("Sending…") : `${sendWord} without the file`, tone: "s", disabled: off || !words.trim(), why: words.trim() ? "" : "write the reply first",
         run: () => decide("approve"), title: `Sends only the words to ${replyContext(r)} - no file goes with them` },
     ] : twoSends ? [
-      // Close out's two: Send and close the primary, Send beside it - the one that gives up its place when the line is tight (foldSend)
+      // Close out's two: Send and close the primary, Send beside it - the one that gives up its place when the line is tight (useFoldBar)
       { id: no("send_close"), label: busy && pressed === "send_close" ? sentOr("Sending…") : `${closeWord}${copying}`, tone: "p", disabled: off || (!words.trim() && !isCal),
         why: words.trim() || isCal ? "" : "write the reply first", run: () => decide("approve", false, true), title: closeTitle },
       { id: no("approve"), label: busy && pressed !== "send_close" ? sentOr("Sending…") : `${sendWord}${copying}`, tone: "s", disabled: off || (!words.trim() && !isCal),
@@ -569,6 +566,18 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   useVerbs(`fix:${r.ReviewId}`, fix ? [{ id: no("fix"), group: "decide", tone: "s", label: fix.label, title: "Opens where this is fixed",
     run: () => openAppLink(fix.href) }] : [], !!fix && toRow);
 
+  // THE LINE'S ONE ▾: the open Send its pair gave up (`send`), then whichever other answers the width could not hold - each the press its button is
+  const calTitle = (w) => `Sets up "${w}" in place of this answer - nothing reaches the calendar until you press it`;
+  const foldMore = (send) => {
+    const rest = [...(folded ? send : []), ...calOthers.filter(([a]) => !bar.shown(`cal:${a}`)).map(([a, w]) => ({ id: `cal:${a}`, label: switching === a ? "Setting up…" : w, title: calTitle(w),
+      disabled: off || !!switching, run: () => { setSendAt(null); answerInstead(a); } }))];
+    return rest.length > 0 && <>
+      <Button size="small" variant="outlined" disabled={rest.every((x) => x.disabled)} onClick={(e) => setSendAt(e.currentTarget)} title={rest.map((x) => x.label).join(", ")}
+        aria-label={`More - ${rest.map((x) => x.label).join(", ")}`} aria-haspopup="menu" data-tq-send-more="" data-tq-bar-more="" sx={{ minWidth: 0, px: 1 }}>▾</Button>
+      <Menu open={!!sendAt} anchorEl={sendAt} onClose={() => setSendAt(null)}>
+        {rest.map((x) => <MenuItem key={x.id} dense disabled={x.disabled} title={x.title} data-tq-verb={x.id} sx={{ fontSize: 13 }} onClick={x.run}>{x.label}</MenuItem>)}
+      </Menu></>;
+  };
   if (r.Status === "held") {
     return (
       <Box sx={{ mt: 0.5, bgcolor: "var(--tq-inset, #e3e6e1)", border: "1px solid var(--tq-border, #d2d6cf)", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
@@ -722,7 +731,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           </Box>
         </Box>
       )}
-      <Box ref={movesRef} data-tq-moves="" data-tq-two-sends={paired ? (folded ? "folded" : "both") : undefined}
+      <Box ref={setMoves} data-tq-moves="" data-tq-two-sends={paired ? (folded ? "folded" : "both") : undefined}
         sx={{ display: "flex", gap: 0.75, mt: 0.75, flexWrap: paired ? "nowrap" : "wrap", ...(paired ? { "& > button": { whiteSpace: "nowrap", flexShrink: 0 } } : {}) }}>
         {/* ONE approve: it sends whatever is in the box above, edited or not. Two buttons
             asked you to declare something the text already shows. */}
@@ -752,18 +761,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
             <Button size="small" variant={closeVariant} disableElevation disabled={off || blocked || !words.trim()}
               onClick={() => decideBoth("approve", true)} title={blocked ? gh.reason : closeCoTitle} data-tq-send="close">
               {busy && pressed === "send_close" ? sentOr(co.busyLabel) : closeCo}</Button>
-            {folded ? (<>
-              <Button size="small" variant="outlined" disabled={off || blocked || !words.trim()} onClick={(e) => setSendAt(e.currentTarget)} title={coTitle}
-                aria-label={`More - ${co.approveLabel}`} data-tq-send-more="" sx={{ minWidth: 0, px: 1 }}>▾</Button>
-              <Menu open={!!sendAt} anchorEl={sendAt} onClose={() => setSendAt(null)}>
-                <MenuItem dense title={coTitle} data-tq-verb={no("approve")} sx={{ fontSize: 13 }}
-                  onClick={() => { setSendAt(null); decideBoth("approve", false); }}>{co.approveLabel}</MenuItem>
-              </Menu>
-            </>) : (
-              <Button size="small" variant={lit === no("approve") ? "contained" : "outlined"} disableElevation disabled={off || blocked || !words.trim()}
-                onClick={() => decideBoth("approve", false)} title={coTitle} data-tq-send="open">
-                {busy && pressed !== "send_close" ? sentOr(co.busyLabel) : co.approveLabel}</Button>
-            )}
+            {foldMore([{ id: no("approve"), label: co.approveLabel, title: coTitle, disabled: off || blocked || !words.trim(), run: () => { setSendAt(null); decideBoth("approve", false); } }])}
+            <Button size="small" variant={lit === no("approve") ? "contained" : "outlined"} disableElevation disabled={off || blocked || !words.trim()}
+              onClick={() => decideBoth("approve", false)} title={coTitle} data-tq-send="open" data-tq-bar-item="send" style={folded ? HIDE : undefined}>
+              {busy && pressed !== "send_close" ? sentOr(co.busyLabel) : co.approveLabel}</Button>
           </>) : (
             <Button size="small" variant={solid} disableElevation disabled={off || blocked || (sendable && !words.trim())}
               onClick={() => decideBoth("approve")} title={blocked ? gh.reason : thenLine}>
@@ -814,18 +815,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
             <Button size="small" variant={closeVariant} disableElevation disabled={off || (!words.trim() && !isCal)} onClick={() => decide("approve", false, true)}
               title={closeTitle} data-tq-send="close">
               {busy && pressed === "send_close" ? spinning("Sending…") : `${closeWord}${copying}`}</Button>
-            {folded ? (<>
-              <Button size="small" variant="outlined" disabled={off || (!words.trim() && !isCal)} onClick={(e) => setSendAt(e.currentTarget)} title={sendTitle}
-                aria-label={`More - ${sendWord}`} data-tq-send-more="" sx={{ minWidth: 0, px: 1 }}>▾</Button>
-              <Menu open={!!sendAt} anchorEl={sendAt} onClose={() => setSendAt(null)}>
-                <MenuItem dense title={sendTitle} data-tq-verb={no("approve")} sx={{ fontSize: 13 }}
-                  onClick={() => { setSendAt(null); decide("approve", false, false); }}>{`${sendWord}${copying}`}</MenuItem>
-              </Menu>
-            </>) : (
-              <Button size="small" variant={lit === no("approve") ? "contained" : "outlined"} disableElevation disabled={off || (!words.trim() && !isCal)}
-                onClick={() => decide("approve", false, false)} title={sendTitle} data-tq-send="open">
-                {busy && pressed !== "send_close" ? spinning("Sending…") : `${sendWord}${copying}`}</Button>
-            )}
+            {foldMore([{ id: no("approve"), label: `${sendWord}${copying}`, title: sendTitle, disabled: off || (!words.trim() && !isCal), run: () => { setSendAt(null); decide("approve", false, false); } }])}
+            <Button size="small" variant={lit === no("approve") ? "contained" : "outlined"} disableElevation disabled={off || (!words.trim() && !isCal)}
+              onClick={() => decide("approve", false, false)} title={sendTitle} data-tq-send="open" data-tq-bar-item="send" style={folded ? HIDE : undefined}>
+              {busy && pressed !== "send_close" ? spinning("Sending…") : `${sendWord}${copying}`}</Button>
           </>
         ) : (
           // ...a calendar answer's note may be empty (verdicts: `cal`), so an invite with none still has its Send - New → Meeting's pick
@@ -843,9 +836,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         {canRedraft && !r.Stale && !delivery.frozen && !warnTop && <Button data-tq-redraft-btn="" size="small" variant={lit === no("redraft") ? "contained" : "outlined"} disableElevation disabled={off} onClick={redraft}
           title={btnHint("redraft")}>
           {redraftLabel}</Button>}
-        {isCal && CAL_OTHER[meta.act] && r.MessageId && r.Status === "pending" && !delivery.frozen && Object.entries(CAL_OTHER).filter(([a]) => a !== meta.act).map(([a, w]) =>
-          <Button key={a} size="small" variant="outlined" data-tq-cal-instead={a} disabled={off || !!switching} onClick={() => answerInstead(a)}
-            title={`Sets up "${w}" in place of this answer - nothing reaches the calendar until you press it`}>
+        {calOthers.map(([a, w]) =>
+          <Button key={a} size="small" variant="outlined" data-tq-cal-instead={a} data-tq-bar-item={`cal:${a}`} style={bar.shown(`cal:${a}`) ? undefined : HIDE} disabled={off || !!switching} onClick={() => answerInstead(a)}
+            title={calTitle(w)}>
             {switching === a ? "Setting up…" : w}</Button>)}
         {/* ...and one email of several can be let go: it drops that slot and closes nothing (slots.settled) */}
         {isSlot && onDrop && !delivery.frozen && <Button size="small" variant="outlined" disabled={off} onClick={onDrop}

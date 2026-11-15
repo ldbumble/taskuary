@@ -73,7 +73,10 @@ for (const [name, list] of Object.entries(STATES)) {
       else assert.ok(rowWidth(fit.groups, row.next, m) <= avail(vw), `${name} @${vw}: ${rowWidth(fit.groups, row.next, m)}px in ${avail(vw)}px`);
       assert.ok(row.next, "Next is on the row"); assert.ok(!fit.groups.some((g) => [...g.shown, ...g.rest].some((x) => x.group === "next")), "Next never folds");
       const shown = fit.groups.flatMap((g) => g.shown), menus = fit.groups.flatMap((g) => g.rest);
-      if (lead) assert.ok(shown.includes(lead), `${name} @${vw}: the lit or leading move "${lead.label}" stays in view`);
+      // ...a leading move the narrowest layout has no room for is in the ▾, never shortened beside Mark done (the owner, 2026-11-15)
+      const noRoom = lead && lead.tone !== "p" && pinW && rowWidth(foldsOf(row).at(-1), row.next, m) > avail(vw);
+      if (lead && !noRoom) assert.ok(shown.includes(lead), `${name} @${vw}: the lit or leading move "${lead.label}" stays in view`);
+      if (noRoom) assert.ok(menus.includes(lead) && !fit.tight || !lead, `${name} @${vw}: "${lead.label}" folds whole`);
       const lit = [...row.decide, ...row.agent, ...row.more].find((x) => x.tone === "p");
       if (lit) assert.ok(shown.includes(lit), `${name} @${vw}: the one filled button is never folded`);
       assert.deepEqual(ids([...shown, ...menus]), every, `${name} @${vw}: every verb is reachable, once`);
@@ -217,7 +220,9 @@ test("a desk bar too narrow for its worded Nav takes the short one, and only the
 
 // ...A MOVE SQUEEZED TO A LETTER FOLDS (the 2026-10-27 sweep): a phone's report put Back, Next and the chat pill beside "Put it on my list",
 // and the row drew "Pu". With too little room for its words the move joins the ▾ - unless it is the lit one; with room it is shortened
-test("on a phone, an unlit move with no room for its words goes into the ▾; a lit one, or one with room, is shortened instead", () => {
+// ...BUT NEVER BESIDE MARK DONE (the owner, 2026-11-15): a phone's coding task drew "Mark d…" and "Review ch…" - the move shortened beside
+// Mark done took Mark done's letters with it. There the move goes into the ▾ whole; only a lit move is shortened, and Mark done keeps its width
+test("on a phone, an unlit move with no room goes into the ▾ - always beside Mark done, which is never the one cut; a lit one is shortened instead", () => {
   const list = [v("r:task", "decide", { label: "Put it on my list" }), v("r:agent", "agent", { label: "Send to agent" }), v("r:pause", "more", { label: "Pause this report" }), next];
   const row = rowOf({ ref: "", list }), m = model(390, row), tiny = m.next + m.btn["r:task"] / 4;
   const fit = fitRow(row, m, tiny, true);
@@ -229,8 +234,19 @@ test("on a phone, an unlit move with no room for its words goes into the ▾; a 
   assert.equal(kept.tight, true, "the lit move stays, shortened");
   assert.deepEqual(kept.groups[0].shown.map((x) => x.id), ["r:task"]);
   const roomy = fitRow(row, m, rowWidth(foldsOf(row).at(-1), row.next, m) - 20, true);
-  assert.equal(roomy.tight, true, "room for most of its words: shortened, still on the row");
+  assert.equal(roomy.tight, true, "alone, with room for most of its words: shortened, still on the row");
   assert.deepEqual(roomy.groups[0].shown.map((x) => x.id), ["r:task"]);
+  // the phone's coding task: Back, Next, Mark done, Review changes and the ▾ in a 390px bar - 20px short
+  const code = rowOf({ ref: "TQ-12", list: [v("done", "more"), v("diff", "agent", { lead: true, label: "Review changes" }), v("run-another", "agent"), v("remind", "more"), next] });
+  const cm = model(390, code), need = rowWidth(foldsOf(code).at(-1), code.next, cm), cut = fitRow(code, cm, need - 20, true);
+  assert.deepEqual(cut.groups[0].shown.map((x) => x.id), ["done"], "Mark done alone beside the ▾");
+  assert.ok(cut.groups[0].rest.some((x) => x.id === "diff") && !cut.tight, "Review changes is in the ▾ and nothing is squeezed");
+  assert.ok(rowWidth(cut.groups, code.next, cm) <= need - 20);
+  // ...and where the move beside it is lit, the lit one alone gives up letters: Mark done and the ▾ keep their width
+  const litCode = { ...code, agent: code.agent.map((x) => (x.id === "diff" ? { ...x, tone: "p" } : x)) };
+  const lc = fitRow(litCode, cm, need - 20, true);
+  assert.equal(lc.tight, true); assert.deepEqual(lc.groups[0].shown.map((x) => x.id).sort(), ["diff", "done"]);
+  assert.match(fs.readFileSync(new URL("../src/assistantView.css", import.meta.url), "utf8"), /\.tq-arow-verbs\.tight \.tq-ab\[data-tq-verb="done"\], \.tq-arow-verbs\.tight \.tq-ab\[data-tq-verb\$=":done"\], \.tq-arow-verbs\.tight \.tq-cl-more \{ flex-shrink: 0; \}/);
 });
 
 test("the Tasks tab's bar folds the same way: Change first, Mark done and Remind me never", () => {

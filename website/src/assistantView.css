@@ -888,6 +888,8 @@
    takes the step's own width (FirstRun's 980px column), centred, so its line and Back/Next sit under the cards */
 .tq-dock.tq-setup-dock { width: min(980px, 100%); margin-inline: auto; }
 .tq-arow-verbs.tight > .tq-cl:not(.tq-cl-next) { flex-shrink: 1; }
+/* ...and there MARK DONE KEEPS ITS WORDS (the owner, 2026-11-15: a phone's bar read "Mark d…"): only the lit move beside it is shortened */
+.tq-arow-verbs.tight .tq-ab[data-tq-verb="done"], .tq-arow-verbs.tight .tq-ab[data-tq-verb$=":done"], .tq-arow-verbs.tight .tq-cl-more { flex-shrink: 0; }
 /* the unseen copy ActionRow measures: every part in the row's own classes, at its natural width, taking no room */
 .tq-arow-ghost { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
 .tq-arow-ghost .tq-cl { width: max-content; max-width: none; }

@@ -468,13 +468,15 @@ export function fitRow(row, m, avail, phone = false, extra = 0) {
   if (!m || !(avail > 0)) return at(from + extra);
   for (let i = from; i <= last; i++) if (rowWidth(all[i], navOf(row), m) <= avail) return at(i + extra);
   // ...and a move left too little room to say anything goes into the ▾ too, unless it is the lit one: a phone's report put Back, Next and
-  // the chat pill beside "Put it on my list", and it read "Pu" (the 2026-10-27 sweep). A long move with room for its words is shortened.
-  // Mark done stays (pinOf): only the move beside it goes
+  // the chat pill beside "Put it on my list", and it read "Pu" (the 2026-10-27 sweep). A long move alone with room for its words is shortened.
+  // ...BESIDE MARK DONE IT ALWAYS GOES (the owner, 2026-11-15: the others fold into the ▾ before Mark done is ever cut): shortened there, it
+  // took Mark done's letters with it - a phone's coding task read "Mark d…" and "Review ch…". Mark done stays whole (pinOf)
   const g = all[last][0], lead = g?.shown.find((v) => !isDone(v)), pin = g?.shown.find(isDone);
-  if (lead && lead.tone !== "p" && avail - (rowWidth(all[last], navOf(row), m) - (m.btn[lead.id] ?? 0)) < MOVE_MIN) {
+  if (lead && lead.tone !== "p" && (pin || avail - (rowWidth(all[last], navOf(row), m) - (m.btn[lead.id] ?? 0)) < MOVE_MIN)) {
     const one = { type: pin ? g.type : "more", label: "", shown: pin ? [pin] : [], rest: [...g.shown.filter((v) => v !== pin), ...g.rest] };
     return { ...at(last), groups: [one], ...(pin && rowWidth([one], navOf(row), m) > avail ? { tight: true } : {}) };
   }
+  // ...and a lit move too long for the line is shortened alone: Mark done and the ▾ beside it keep their width (assistantView.css, .tight)
   return { ...at(last), tight: true };
 }
 const MOVE_MIN = 72;   // a few words and the ellipsis: less reads as a stray letter

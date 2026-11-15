@@ -324,4 +324,29 @@ def test_a_reply_draft_is_the_agents_to_redecide_never_passed_by_the_line_itself
     assert proposals.move_on(s, tid) == [] and s.get_review(rid)['Status'] == 'pending'
 
 
+
+
+@pytest.mark.parametrize('acp', [False, True])
+def test_a_prompt_that_is_not_his_never_sets_his_waiting_reply_aside(acp, tmp_path, monkeypatch):
+    """Recorded on the real CLI, 2026-11-15: a coding session's prompt hook set every waiting card aside on ANY prompt - a note another agent
+    left, a brief Taskuary typed - and told its agent "THE OWNER MOVED ON PAST THESE CARDS": the reply to the colleague greyed a second after
+    the note arrived, the owner having touched nothing, and the agent would not raise it again. Only his own words move the conversation on
+    (the record's one rule for whose a told step is - sessionrecord.mark_briefs); over ACP his line is heard as the turn begins (_begins)."""
+    from taskuary import session_artifacts, sessionrecord
+    monkeypatch.setattr(session_artifacts, 'root', lambda: tmp_path)
+    s = MemoryStore(); tid = Factory(s).task('Comment the ledger totals')
+    rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Gail - total() returns the sum plus tax.'})
+    s._exec("UPDATE review SET CreatedAt='2026-01-01 09:00:01' WHERE ReviewId=?", (rid,))
+    told, note = [], 'A note for you from the agent on TQ-0009: it changed totals.py in this checkout - read its diff before you edit the same lines.'
+    sess = SimpleNamespace(store=s, task_id=tid, sid='run1', bg={}, acp=acp)
+    with mock.patch.object(general, 'tell', lambda st, t, n, actor='owner': told.append(n) or 'told'):
+        sessionrecord.keep_seed(tid, note)                         # Taskuary typed it (terminal.type_into `brief`)
+        hooks._events(sess, {'hook_event_name': 'UserPromptSubmit', 'prompt': note})
+        assert s.get_review(rid)['Status'] == 'pending' and not told, (s.get_review(rid)['Status'], told)
+        hooks._events(sess, {'hook_event_name': 'UserPromptSubmit', 'prompt': 'Actually make the reply shorter.'})
+    # ...his own line in a terminal is heard here; over ACP the hook leaves it to the turn's own beginning
+    assert s.get_review(rid)['Status'] == ('pending' if acp else 'superseded')
+    assert bool(told) == (not acp)
+
+
 if __name__ == '__main__': unittest.main()

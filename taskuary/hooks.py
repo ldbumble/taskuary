@@ -393,7 +393,13 @@ def _events(t, p: dict) -> None:
             # working again, not the owner speaking, so it must not overtake a question still open (open_requests)
             from .background import is_wake
             ws.record(st, tid, sid, 'working', text=ws.WAKE if is_wake(p.get('prompt')) else '', source='hook')
-            if not is_wake(p.get('prompt')):                # ...and the owner's words are their next move after a stop (outcomes.py)
+            # ...AND ONLY HIS OWN WORDS MOVE THE CONVERSATION ON (recorded on the real CLI, 2026-11-15): every prompt did - a note another agent
+            # left, a brief Taskuary typed - so his waiting reply greyed a second after a peer's note arrived and its agent was told "THE OWNER
+            # MOVED ON". Whose a prompt is, by the record's one rule (sessionrecord.mark_briefs). Over ACP his line is heard as the turn
+            # begins (acpcoding._begins, the conversation's own hand-over): nothing is set aside here a second time
+            from . import sessionrecord
+            his = not is_wake(p.get('prompt')) and any(x.get('k') == 'you' for x in sessionrecord.mark_briefs(tid, [{'k': 'you', 'text': str(p.get('prompt') or '')}]))
+            if his and not getattr(t, 'acp', False):
                 try:                                         # ...past every card raised before it (proposals.move_on, 2026-11-10)
                     from . import proposals
                     # ...said to it as Taskuary's next line: the prompt that passed them is already in (general.tell, the one road)
@@ -403,6 +409,7 @@ def _events(t, p: dict) -> None:
                         from . import general
                         general.tell(st, tid, note)
                 except Exception as e: logger.debug(f'task {tid}: a held step stayed pending - {e}')
+            if not is_wake(p.get('prompt')):                # ...and the owner's words are their next move after a stop (outcomes.py)
                 try:
                     from . import outcomes
                     outcomes.moved_on(st, tid, p.get('prompt'))

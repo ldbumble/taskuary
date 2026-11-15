@@ -1339,12 +1339,6 @@ def _personal(store, tgt) -> bool:
     except Exception: return False
 
 
-def _can_read(store) -> bool:
-    """Whether the model will answer the item soon: an AI is connected and the hour's budget has room - else nothing is coming, and the
-    rule's own facts decide at once."""
-    from . import capabilities
-    try: return capabilities.has_ai(store) and not _capped(store)
-    except Exception: return False
 
 
 def capacity(store, item: dict) -> bool:

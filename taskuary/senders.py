@@ -55,10 +55,6 @@ def org_of(store, domain: str = '', tenant: str = '', team: str = '') -> dict | 
     return next((o for o in trusted_orgs(store) if any(v and o.get(k) == v for k, v in want.items())), None)
 
 
-def _opener(store, tid: int, msgs=None) -> dict | None:
-    "The task's first line that is not ours - whose organisation Trust their organisation names (ingest.from_opener's reading)."
-    from .ingest import is_ours
-    return next((m for m in (store.list_messages(tid) if msgs is None else msgs) if not is_ours(m)), None)
 
 
 def sender_org(store, m: dict) -> dict:

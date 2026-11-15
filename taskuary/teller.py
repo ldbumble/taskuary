@@ -34,7 +34,6 @@ from .timewords import plural
 
 API = 'https://api.teller.io'
 CONNECT_JS = 'https://cdn.teller.io/connect/connect.js'
-ENVS = ('sandbox', 'development', 'production')
 TIMEOUT = 30
 
 

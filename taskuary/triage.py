@@ -508,7 +508,7 @@ def strip_wrapper(text: str, wrapper=()) -> str:
     return kept or str(text or '')
 
 
-strip_banner = strip_footer = strip_wrapper   # the names every screen already calls
+strip_footer = strip_wrapper   # the names every screen already calls
 
 
 def read_text(body: str, own: str = None, wrapper=()) -> str:

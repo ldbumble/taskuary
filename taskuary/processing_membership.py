@@ -38,10 +38,6 @@ def _problem(code, entity_kind, local_id, **detail):
     return out
 
 
-def _active_item_for(cur, entity, follow_item):
-    row = cur.execute('''SELECT ItemId FROM processing_member
-        WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL''', entity).fetchone()
-    return follow_item(cur, row['ItemId']) if row else None
 
 
 # What a census does NOT need to read. Membership is decided from ids, kinds and links; a message

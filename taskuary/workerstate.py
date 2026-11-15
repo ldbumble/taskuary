@@ -249,7 +249,6 @@ def status(store, tid: int) -> dict:
     return out
 
 
-ENDINGS = ('finished', *TERMINAL)
 
 
 # A QUESTION THE AGENT ITSELF ASKED, as its run recorded it: its question tool's (q:<group>:<n>), a chooser read off its screen or an API

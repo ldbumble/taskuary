@@ -1354,7 +1354,6 @@ def scrub_queries(s: str) -> str:
 _ANSI = re.compile(r'\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-B]|\x1b[=>]'
                    r'|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 _FORWARD = re.compile(r'\x1b\[(\d*)C')          # cursor-forward: a GAP, not nothing
-_ERASE = re.compile(r'\x1b\[0?K')             # erase-to-end: the old paint is GONE
 
 
 def _overlay(line: str) -> str:

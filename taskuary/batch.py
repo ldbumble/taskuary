@@ -241,26 +241,6 @@ def start(store, tid):
 REPORT = 'taskuary --item'
 
 
-def _unbuilt(store, it, diff: str, sha: str) -> tuple:
-    """(the diff without its build output, the built files left out). A rebuilt bundle is 700K of minified code nobody can read,
-    but where the repository's OWN CI rebuilds that path and fails on any difference (github.ci_verified_paths), and every check
-    passed on THIS head, it is provably the source's build, so the source is what the danger check reads. Anything less - a check
-    red or still running, a path CI does not verify - leaves it in."""
-    p, tok = pull(it.get('Link')), _token(store)
-    if not (p and tok): return diff, []
-    from . import github
-    secs = re.split(r'(?m)^(?=diff --git a/)', diff)
-    try:
-        verified = github.ci_verified_paths(tok, p[0])
-        if not verified: return diff, []
-        def built(sec):
-            f = (re.match(r'diff --git a/(\S+) ', sec) or [None, ''])[1]
-            return f and any(f == v or f.startswith(v + '/') for v in verified)
-        if not any(built(s) for s in secs): return diff, []
-        if github.checks(tok, p[0], sha).get('state') != 'success': return diff, []
-    except Exception as e:
-        logger.info(f'batch: the build output of {it.get("Link")} could not be proven ({e})'); return diff, []
-    return ''.join(s for s in secs if not built(s)), [re.match(r'diff --git a/(\S+) ', s)[1] for s in secs if built(s)]
 
 
 def follow(store, it) -> bool:

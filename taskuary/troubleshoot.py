@@ -152,7 +152,6 @@ def chat_check(store, c: dict, q: str, n: int = 0, admits=None) -> dict:
 
 # A SLOW AGENT START on Claude Code or Codex is most often its agent connector (acpadapter) not installed: every start then fetches it
 # through npx - seconds more, and a download the first time. Asked by the CLI's own name, or "the agent connector".
-CLI_CARD = 'Open AI CLI agents'
 
 
 def agent_cli(name: str) -> str:

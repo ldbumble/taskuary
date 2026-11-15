@@ -376,9 +376,6 @@ def list_items(tok, repo, since=None, state='open', limit=25):
     return r.json()[:limit]
 
 
-def list_issues(tok, repo, since=None, state='open', limit=25):
-    """Just the issues - pull requests filtered out."""
-    return [i for i in list_items(tok, repo, since, state, limit=100) if 'pull_request' not in i][:limit]
 
 
 def issue_comments(tok, repo, number, since=None, limit=50):

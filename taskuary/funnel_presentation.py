@@ -322,9 +322,6 @@ def _backings(cur, items: list[dict]) -> dict[int, dict]:
     return out
 
 
-def _backing(cur, item: dict) -> dict:
-    """One card's backing, through the batched road."""
-    return _backings(cur, [item])[id(item)]
 
 
 # ---- the stamps made since the last write anywhere (design D, 2026-09-17) -------------------------

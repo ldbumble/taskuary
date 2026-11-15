@@ -2382,9 +2382,6 @@ def _workerstate():
     from . import workerstate
     return workerstate
 
-def _browsergate():
-    from . import browsergate
-    return browsergate
 
 
 def _assistant_payload(task_id: int, session=None):
@@ -10583,9 +10580,6 @@ def _close_drain_workers(timeout=None, target_store=None) -> bool:
     return ok
 
 
-def _ingest_status(what: str = None):
-    st = {'state': 'running', 'what': what, 'at': datetime.now().isoformat(sep=' ', timespec='seconds')} if what else {'state': 'idle'}
-    store.set_setting('ingest_status', json.dumps(st), 'system')
 
 
 def _latest_context_message(task_id: int = None, message_id: int = None):

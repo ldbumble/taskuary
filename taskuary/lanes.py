@@ -16,7 +16,6 @@ SECTION = {s['key']: s for s in SECTIONS}
 LEVEL_ORDER = tuple(s['key'] for s in SECTIONS)
 SECTION_WORDS = {s['key']: s['word'] for s in SECTIONS}
 LEVEL_OF_BAND = {s['band']: s['key'] for s in SECTIONS if s['band']}
-BAND_OF = {k: b for b, k in LEVEL_OF_BAND.items()}
 # URGENT IS A SHADE, NOT A SECTION (the owner, 2026-10-22): its band is drawn in Tasks, at its arrival place
 URGENT = VOCAB['urgent']
 LEVEL_OF_BAND[URGENT['band']] = URGENT['section']

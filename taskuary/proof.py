@@ -59,7 +59,6 @@ TEST_LINES = [
     # between "3 failed" and "42 failed" on a card somebody trusts.
     (r'Ran (\d+) tests? in [\d.]+s\s+(OK[^\n]*|FAILED \([^)]*\))', 'unittest'),
 ]
-FAIL_WORDS = re.compile(r'\b(FAILED|FAIL|failed|error:|Error:|Traceback)\b')
 
 
 def tests_from(text: str) -> dict:

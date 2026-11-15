@@ -3094,14 +3094,6 @@ def _tg_buttons(store, chat: str) -> list:
 def bare_number(text: str) -> bool: return str(text or '').strip().lstrip('#').rstrip('.').strip().isdigit()
 
 
-def _chunks(text: str, limit=3900) -> list[str]:
-    """Split a long walkthrough where a reader would split it (chatformat.split).
-
-    This used to take max() of the paragraph, line and space positions - and the space is
-    always the latest of the three, so it won every time and the break landed mid-sentence:
-    '...asked Fri 18 Sep 10:34 re "Northwind and' (the owner, 2026-09-19, with a screenshot)."""
-    from . import chatformat
-    return chatformat.split(str(text or '').strip(), limit)
 
 
 LOST_KEY = 'phone_undelivered'              # :<channel>:<chat> -> the opening of a message that never arrived (A13)

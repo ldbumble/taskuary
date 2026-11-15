@@ -278,16 +278,3 @@ def _text_of(content) -> str:
     return str(content or '')
 
 
-def trace_line(u: dict) -> str:
-    """One readable line for the Board, or '' for an update with nothing to show. Mirrors what
-    agents._live_line does for claude's stream-json, so the run looks the same on either road."""
-    kind = u.get('sessionUpdate')
-    if kind == 'agent_message_chunk': return ' '.join(_text_of(u.get('content')).split())[:400]
-    if kind in ('tool_call', 'tool_call_update'):
-        title = u.get('title') or u.get('toolCallId') or 'tool'
-        status = u.get('status') or ''
-        return f'{title}{f" ({status})" if status else ""}'[:400]
-    if kind == 'plan':
-        entries = [str((e or {}).get('content') or '') for e in (u.get('entries') or [])]
-        return ('plan: ' + '; '.join(x for x in entries if x))[:400] if entries else ''
-    return ''

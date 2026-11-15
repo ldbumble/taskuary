@@ -17,7 +17,6 @@ from loguru import logger
 MACHINE = frozenset(('learn', 'reflect', 'verdicts', 'decay', 'owner-verdicts', 'template', 'seed', 'migrate', 'withdraw',
                      'voice', 'system', 'settle'))
 GROW = 3        # a line the owner removed comes back only once its evidence is this many times what it had (the design, 2.3)
-STATUSES = ('watching', 'in_use', 'wrong', 'forgotten', 'closed', 'retired')
 
 
 def _now(): return datetime.now().strftime('%Y-%m-%d %H:%M:%S')

@@ -1103,22 +1103,6 @@ ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')      # 'notify': retired
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
 
 
-def _reader_copy(snap):
-    """A private copy of exactly what a reader of the display cache may WRITE to.
-
-    The cached snapshot is served with live worker telemetry overlaid on it (apply_workers), plus a
-    fresh `as_of` and `snapshot_revision` - so it cannot be handed out by reference. It used to be
-    handed out as a FULL deep copy: 84,130 recursive calls per pile build on the owner's store
-    (2026-09-14 profile), about 75ms, on a path whose whole purpose is to avoid work.
-
-    The write set is three levels and seven keys: `as_of`, `snapshot_revision`,
-    `worker_attention_available` and `worker_input_revision` at the top; `view_revision` on each
-    item; `worker_attention` and `worker_attention_available` on each item's view - and the
-    attention list is REPLACED, never appended to. Everything under those - messages, tasks,
-    comments, attachments, ideas - is read-only on this path and is shared by reference.
-    """
-    return {**snap, 'items': [{**item, 'view': dict(item.get('view') or {})}
-                              for item in snap.get('items') or []]}
 
 
 def _snapcopy(o):

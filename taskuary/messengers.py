@@ -17,7 +17,6 @@ from . import net as requests     # pooled Session + (connect, read) timeouts, s
 
 TG_API = 'https://api.telegram.org'
 TG_LIMIT = 25                # messages per poll, like the other channels
-WA_URL = 'http://127.0.0.1:8977'   # the bridge's default; override in the connector config
 def wa_url(raw='') -> str:
     "The card's bridge URL - the managed bridge's current port when it names none, or names it where it was (wabridge.bridge_url)."
     from .wabridge import bridge_url

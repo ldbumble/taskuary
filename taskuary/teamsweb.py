@@ -80,8 +80,6 @@ def dom(html: str) -> Node:
     return t.root
 
 def _tid(*want): return lambda n: n.get('data-tid') in want
-def _idp(*pre): return lambda n: n.get('id').startswith(pre)
-def _cls(word): return lambda n: word.lower() in n.get('class').lower()
 
 
 # ── what the page says ──────────────────────────────────────────────────────────────────────────────────────────────────

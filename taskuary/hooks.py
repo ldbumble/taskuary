@@ -1017,6 +1017,3 @@ def start_codex_spool(path: str = None) -> CodexSpool:
     return _SPOOL
 
 
-def stop_codex_spool() -> None:
-    global _SPOOL
-    if _SPOOL: _SPOOL.stop.set(); _SPOOL = None

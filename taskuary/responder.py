@@ -206,7 +206,6 @@ _TEMPLATE_LINES = re.compile(r'^.*(not generated yet|Write your own rules here).
 
 # An explicit instruction about HOW to write (PW-060) lives in STYLE.md under Owner notes, which every draft reads (style_doc) - the
 # memory table's 'writing' notes were moved there once (memorylines.migrate, 2026-10-27), and the notes table is gone
-WRITING_SOURCE = 'writing'
 OWNER_NOTES = '## Owner notes'
 
 

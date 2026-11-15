@@ -1454,8 +1454,6 @@ HUB_LINE = ('The Hub is a high-signal commons, not a task log. Only file a reusa
             '"<durable claim>" --why-earned "<specific investigation or reasoning>" --topic <company-area> --kind new_idea|technical_solve|howto|gotcha|'
             'decision|system|people`. Never file routine output, a raw brainstorm, current activity, '
             'or what you did. Use ids in FROM HUB to upvote, correct, or comment before reposting.')
-# Old imports/tests may still name this while installations roll forward.
-SOCIAL_LINE = HUB_LINE
 # THE TURN IS THE JOB: nothing wakes a general agent once its answer is filed, so background work it would wait on comes back to
 # nobody - "I'm waiting for the walkthrough to finish, then I'll write the brief" ended a researcher's turn (the owner, 2026-10-21)
 # ...said true (2026-11-09): a turn CAN be woken - their next message, a check-back (CHECK BACK LATER), a press it set up, the judge's WAKE -

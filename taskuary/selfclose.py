@@ -637,7 +637,6 @@ def without_ask(text: str) -> str:
 # ── ...and a sign-in it needs (signin.py) ────────────────────────────────────────────────────
 # The browser agent's "sign me in here". Its domain is only the agent's WORD, shown to the owner - what gets signed in is the page
 # the browser is on (signin.needs), so a marker a mail talked the agent into writing can name anything and fill nothing.
-SIGNIN_MARKER = '[[TASKUARY-SIGNIN]]'
 _SIGNIN_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?SIGN[-_ ]?IN\s*(?::\s*([^\]]*))?\]\][^\n]*', re.I)
 
 
@@ -652,7 +651,6 @@ def signin_marker(text: str) -> tuple:
 # ── ...and a step only the owner can do on the page (browserview.TURN_PREFIX) ────────────────────────────────────────────────
 # A CAPTCHA, a sign-in the agent cannot finish, a card number: the agent stops and HANDS THE PAGE OVER, and the owner does it in the
 # browser view and hands it back. The owner's words in the marker are shown on the view; the page is the browser's, never the marker's.
-TURN_MARKER = '[[TASKUARY-YOURTURN]]'
 _TURN_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?YOUR[-_ ]?TURN\s*(?::\s*([^\]]*))?\]\][^\n]*', re.I)
 
 

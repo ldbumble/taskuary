@@ -926,13 +926,6 @@ def _envelope(m: dict) -> dict:
 _MAIL_MSGS_IMPLEMENTATION = _mail_msgs
 
 
-def _mail_cursor(s: dict) -> dict:
-    """Where each folder's last read stopped short: {folder: receivedDateTime} in the source's ConfigJson."""
-    try: cur = json.loads(s.get('ConfigJson') or '{}').get('mail_cursor') or {}
-    except ValueError: cur = {}
-    return dict(cur) if isinstance(cur, dict) else {}
-
-
 def _mail_config(s: dict) -> dict:
     try: cfg = json.loads(s.get('ConfigJson') or '{}')
     except ValueError: return {}

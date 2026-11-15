@@ -18,7 +18,6 @@ from . import words
 from .timewords import plural
 
 BATCH = 25                  # messages per batch: the watermark is saved after each, the poll goes on until the gap is drained
-TRANSPORT = (imaplib.IMAP4.abort, OSError)   # the CONNECTION went, not one message: stop, keep the watermark, retry next poll
 HOSTS = {'gmail': ('imap.gmail.com', 'smtp.gmail.com')}
 
 

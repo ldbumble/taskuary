@@ -502,6 +502,31 @@ def test_a_coding_agent_is_told_its_duties_about_drafts_once_and_each_turn_after
     assert not any(selfclose.NO_NEW_LINE in x for x in told)
 
 
+def test_a_memory_line_learned_mid_conversation_leads_the_coding_sessions_next_turn_once(world, monkeypatch):
+    """The memory round, 2026-11-14: a fact the owner told while a CODING session ran never reached it - a chat's kept conversation is told
+    what changed at the head of its next turn (general.freeze), a coding session only what its opening brief had read. The same road: the
+    lines new since the session began lead its next turn once, and one taken back is named as taken back."""
+    from taskuary import acp, memoryedit
+    s, tid, repo = world
+    told, real = [], acp.ACPClient.prompt
+    monkeypatch.setattr(acp.ACPClient, 'prompt', lambda self, text, sent=None: (told.append(text), real(self, text, sent=sent))[1])
+    memoryedit.remember(s, 'Ledger questions go to Gail Moreno')
+    t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)
+    t.prompt('and the tax line?'); assert idle(t, 2)
+    assert not any(general.UPDATED in x for x in told), 'nothing changed: nothing is said'
+    memoryedit.remember(s, 'Gail Moreno moved to payroll: ledger questions go to Ray Colton now', replaces='Ledger questions go to Gail Moreno')
+    t.prompt('who should review this?'); assert idle(t, 3)
+    assert general.UPDATED in told[2] and 'ledger questions go to Ray Colton now' in told[2], told[2]
+    assert general.UNLEARNED + chr(10) + '- Ledger questions go to Gail Moreno' in told[2]
+    t.prompt('thanks'); assert idle(t, 4)
+    assert general.UPDATED not in told[3], 'said once'
+    # ...and never on a stranger's task: what the owner knows is not theirs to read back (general.prompt_parts keeps the same distance)
+    monkeypatch.setattr(origin, 'of_task', lambda *a, **k: ('stranger', ''))
+    memoryedit.remember(s, 'The ledger freezes on the third working day')
+    t.prompt('one more'); assert idle(t, 5)
+    assert general.UPDATED not in told[4] and 'third working day' not in told[4]
+
+
 def test_the_taskuary_command_is_in_reach_of_every_session_however_the_app_was_started(tmp_path, monkeypatch):
     """The recorded walk, 2026-11-11: a coding agent told the owner "the taskuary command is not installed in this shell, so I could not read
     the board" - its rules send it to `taskuary --board`, and the app had been started by its interpreter with no such script on PATH."""

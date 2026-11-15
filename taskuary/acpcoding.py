@@ -112,6 +112,7 @@ class ACPCoding:
         self._began = None                       # when the turn now queued began: his press, else the moment it was queued (prompt)
         self.owned = self.woke = self.silent = self.stop_next = False   # his turn; woken once (wake); woken for saying nothing; stop the turn as it goes
         self.duties = False                                              # told its duties about drafts (selfclose.DRAFTS_ONCE) - once, in _begins
+        self.frozen = None                                               # the memory lines this session has been told (general.freeze), from its first turn on
 
     # ── the terminal a Wall cell and the Terminal toggle show ──────────────────────────────────────────────────────────────
     def _out(self, s: str, output: bool = False):
@@ -493,6 +494,14 @@ class ACPCoding:
                     from . import selfclose
                     text = f"{'' if getattr(self, 'duties', False) else selfclose.DRAFTS_ONCE + chr(10) * 2}{lb}\n\n{text}"; self.duties = True
             except Exception as e: logger.debug(f'task {self.task_id}: the turn was not told its facts - {e}')
+            # ...AND WHAT THE OWNER'S MEMORY LEARNED SINCE THIS SESSION BEGAN, as a chat's kept conversation is told (general.freeze - the one
+            # road): its opening brief read the memory once, and a fact told mid-conversation never reached it (the memory round, 2026-11-14)
+            try:
+                from . import origin
+                kept, outsider = self.frozen is not None, origin.of_task(self.store, self.task_id)[0] == 'stranger'      # never on a stranger's task (general.prompt_parts)
+                news = general.freeze(self, '', [] if outsider else [general.learned_block(self.store, self.task_id), general.unlearned(self.store, self.frozen)], kept, by_line=True)[1]
+                if kept and news: text = f'{news}\n\n{text}'
+            except Exception as e: logger.debug(f'task {self.task_id}: the turn was not told what the memory learned - {e}')
         return text, lines
 
     def _used(self, since: str, ms: int):

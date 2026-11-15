@@ -255,6 +255,18 @@ class GatewayAddressTests(unittest.TestCase):
             row = next(x for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'hipaa_ai')
             self.assertIs(row['GatewayBuiltIn'], False)
 
+    def test_the_server_says_which_cards_are_an_ai_so_agent_permissions_leaves_them_out(self):
+        """Seen on an install that runs on this gateway (2026-11-15): Settings > Agent permissions listed it as "HIPAA AI - off for agents -
+        Let agents use it", which reads as if agents may not use the AI. An AI card is what agents think with, never a system they act in
+        (the brain is picked whatever its Roles say): the server marks it, from the one list (llm.AI_TYPES), and the page leaves it out."""
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        with mock.patch.object(server, 'store', self.s):
+            rows = {x['Type']: x for x in TestClient(server.app).get('/api/connectors').json()['data']}
+        self.assertIs(rows['hipaa_ai']['IsAI'], True); self.assertIs(rows['anthropic']['IsAI'], True); self.assertIs(rows['github']['IsAI'], False)
+        ui = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'AgentPermissions.jsx').read_text(encoding='utf8')
+        self.assertRegex(ui, r'filter\(\(c\) => c\.Active && !c\.IsAI\)')
+
 
 class _Site:
     """Anything at an address that answers every GET the same way: status, content type, body and any extra headers."""

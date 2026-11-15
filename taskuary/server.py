@@ -7670,8 +7670,10 @@ def connectors(request: Request):
     # SignedOut: a stored token is not a sign-in - Microsoft can let it lapse, and the card said "Signed in" over it
     # LastErrorPlain: the card's red line in words - LastError stays raw for problems.lapsed and the Advisor's facts
     from .channels import card_error
+    # IsAI: an AI card (llm.AI_TYPES) - what agents think with, never a system they act in: Agent permissions leaves it out
+    from .llm import AI_TYPES
     rows = [c | {'ScopeDefault': scopes.default_scope(c['Type']), 'SignedOut': problems.signed_out(c),
-                 'LastErrorPlain': card_error(c)} for c in store.list_connectors()]
+                 'LastErrorPlain': card_error(c), 'IsAI': c['Type'] in AI_TYPES} for c in store.list_connectors()]
     # GatewayBuiltIn: this build ships the organisation gateway's address, so its card's address field is optional (llm.gateway_base)
     from .llm import OPENAI_COMPATIBLE
     rows = [c | {'GatewayBuiltIn': bool(OPENAI_COMPATIBLE['hipaa_ai'][0])} if c['Type'] == 'hipaa_ai' else c for c in rows]

@@ -25,7 +25,9 @@ export default function AgentPermissions({ onLoaded }) {
     catch (e) { setErr(e?.response?.data?.detail || "could not save that"); }
     setBusy(0);
   };
-  const live = (rows || []).filter((c) => c.Active);
+  // ...never an AI card (the server's IsAI, llm.AI_TYPES): it is what agents think with, not a system they act in - "HIPAA AI - off for agents"
+  // read as if agents could not use the AI (2026-11-15)
+  const live = (rows || []).filter((c) => c.Active && !c.IsAI);
   return (
     <Box sx={{ mb: 2 }} data-tq-agent-permissions>
       <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>

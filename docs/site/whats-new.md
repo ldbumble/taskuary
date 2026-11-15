@@ -2,6 +2,29 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.9 - 2026-11-15
+
+- A session at rest does not wait on the owner while an input is handed to it
+- A missing fact is one question: no empty reply card under it, and the agent asks it once
+- A notice an open task holds, come again with nothing new, lands quietly: only a change wakes its agent
+- A view the agent showed is drawn from the task's own copy, whichever CLI called show
+- Agent permissions lists the systems agents act in, never an AI connection
+- A task opened onto the table follows its rail row: no "agent working" over a turn a restart cut
+- The page draws no empty reply card under the agent's open question either
+- A view is drawn or stays a step, never printed as its JSON
+- The Gmail card's Google Cloud steps link in the app's own colour
+- A saved sign-in being typed reads as work in the chat, over the answer that handed it over
+- From his I'm done on a handed-over page until the agent is told, the task is at work
+- A page handed to the owner is read afresh as it is handed, never under a stale "signing in"
+- SOUL.md signs letters and emails with the owner's name, never a chat answer to him
+- A sign-in's code page is made ready to be remembered, and a line typed during a saved sign-in is answered once
+- The agents' browser: Codex opens pages by Taskuary, helpers end with their browser, a new task starts with the live sign-ins
+- The browser view: a handed page is his from its first frame, a short pane keeps its page, the box says what waits
+- The helper check starts its one process through spawn, and news is overtaken only by a turn that ended after it
+- An agent on an AI card writes and fills Word and Excel files with its own file tools
+- An agent on an AI card is offered file_write and file_edit whole, never behind load_tools
+- A sheet's formula with no value worked out yet reads as itself, so an agent can check the total it filled
+
 ## 0.4.0.8 - 2026-11-15
 
 - A task reads at work while its saved sign-in is typed

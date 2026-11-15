@@ -214,8 +214,8 @@ def card_error(c: dict) -> str:
 
 def plain_failure(e: Exception, signin: bool = False) -> str:
     raw = str(e)
-    from .msauth import LAPSED
-    if LAPSED in raw: return raw[:500]      # already says what to do: sign in again
+    from . import googlecal, msauth
+    if msauth.LAPSED in raw or googlecal.lapsed(raw): return raw[:500]      # already says what to do: sign in again
     code = _status(e)
     # ...the service's own trouble (a Microsoft outage, 2026-11-12): the raw line put its URL, the mailbox in it, on the card and the
     # bell - and there is nothing on the card to change

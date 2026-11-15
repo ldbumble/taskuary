@@ -32,12 +32,11 @@ def _gmail(store, cid):
 def google_url(store, cid: int, server: dict, on: bool = True) -> str:
     """Where the browser goes to say yes. The scopes are the ones the card's token holds now, plus drive.file (on) or minus it (off)."""
     c, cfg = _gmail(store, cid)
-    from .googlecal import UNAVAILABLE, client      # the client the card's token was minted with: Taskuary's own, or the card's
-    if not all(client(cfg)): raise ValueError(UNAVAILABLE)
+    from .googlecal import NO_CLIENT, client, token      # the install's own Google client, and the one road to what its token holds
+    if not all(client(cfg)): raise ValueError(NO_CLIENT)
     held = []
     if cfg.get('google_refresh_token'):
-        from .calwrite import _google_token
-        try: held = _google_token(cfg)[1].split()
+        try: held = token(cfg)[1].split()
         except Exception: held = []
     scope = [s for s in held if s != DRIVE_FILE] + ([DRIVE_FILE] if on else [])
     if not scope: raise ValueError('nothing to sign in for - the card holds no Google access to keep')

@@ -138,13 +138,41 @@ def _hosts(c) -> tuple:
     return imap_h, smtp_h, cfg
 
 
+# ── SIGNED IN WITH GOOGLE INSTEAD OF AN APP PASSWORD ────────────────────────────────────
+# The owner, 2026-11-15: "add that option as well not just app password". The same IMAP and SMTP, signed in to with the Gmail card's
+# Google sign-in (googlecal.py, scope https://mail.google.com/) by XOAUTH2 - no second mail road. A saved App Password is what the
+# card uses while it is there: it does not lapse, and removing it is how the owner moves the mail to the sign-in.
+def google_mail(c, cfg) -> bool: return c.get('Type') == 'gmail' and not c.get('Secret') and bool(cfg.get('google_refresh_token'))
+def xoauth2(user: str, token: str) -> str: return f'user={user}\x01auth=Bearer {token}\x01\x01'
+
+
+def _google_token(cfg) -> str:
+    """The access token mail signs in with - or, in one line, why the card's Google sign-in cannot carry mail (a lapse says itself)."""
+    from . import googlecal
+    tok, scope = googlecal.token(cfg)
+    if googlecal.MAIL not in scope.split():
+        raise RuntimeError(f'the Google sign-in on this card was not given the mail - press {googlecal.G_SIGNIN} on the Gmail card again '
+                           'and leave the Gmail box ticked, or save an App Password')
+    return tok
+
+
+def _once(auth, empty):
+    """An XOAUTH2 answer for imaplib / smtplib: the auth string first, then nothing - Google answers a refused one with a
+    challenge that wants an empty line back before it says no."""
+    left = [auth]
+    return lambda *_: left.pop() if left else empty
+
+
 def _login(c):
     imap_h, _smtp, cfg = _hosts(c)
     if not imap_h: raise RuntimeError('no IMAP host set - e.g. imap.yourdomain.com')
     user = (cfg.get('address') or '').strip()
     if not user: raise RuntimeError('no mailbox address set')
-    if not c.get('Secret'): raise RuntimeError('no password saved - for Gmail use an App Password '
-                                               '(myaccount.google.com > Security > App passwords)')
+    google = google_mail(c, cfg)
+    if not (c.get('Secret') or google):
+        raise RuntimeError('no sign-in and no password saved - press Sign in with Google on the card, or use an App Password '
+                           '(myaccount.google.com > Security > App passwords)' if c.get('Type') == 'gmail' else 'no password saved')
+    tok = _google_token(cfg) if google else None        # before the socket: a lapsed sign-in says so, and opens nothing
     if _microsoft(user, imap_h):
         # basic auth is gone from Outlook.com (Sept 2024) and Exchange Online (2023): the
         # password would be refused after the socket opened, so say the useful thing first
@@ -166,12 +194,16 @@ def _login(c):
                                'Taskuary from reaching the mail server; ask IT to allow it (or allow port 993)') from e
         raise
     verify_pin(M.sock, cfg, imap_h)
-    try: M.login(user, c['Secret'])
+    try:
+        if google: M.authenticate('XOAUTH2', _once(xoauth2(user, tok).encode(), b''))
+        else: M.login(user, c['Secret'])
     except imaplib.IMAP4.abort: raise          # the connection dropped mid-login: not a password, and not the owner's to fix
     except imaplib.IMAP4.error as e:
         if not re.search(r'AUTHENTICATIONFAILED|invalid credentials|login failed|authentication failed|incorrect', str(e), re.I): raise
         # the server's own words are b'[AUTHENTICATIONFAILED] Invalid credentials (Failure)' - true, and no help
         with contextlib.suppress(Exception): M.shutdown()
+        if google: raise RuntimeError(f'Gmail refused the Google sign-in for {user} - it has to be the account that signed in. Press Sign in '
+                                      'with Google on the Gmail card again; a Workspace account also needs IMAP allowed by its admin.') from e
         raise RuntimeError('The mail server refused the password. Gmail and some others need an app password '
                            '(myaccount.google.com → Security → App passwords) rather than your normal one.') from e
     return M, user
@@ -904,7 +936,12 @@ def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = No
         try: S.starttls(context=ssl_ctx(cfg))
         except ssl.SSLCertVerificationError as e: raise tls_error(e, smtp_h, port, True) from e
         verify_pin(S.sock, cfg, smtp_h)
-        S.login(user, c['Secret'])
+        if google_mail(c, cfg):
+            S.ehlo()
+            try: S.auth('XOAUTH2', _once(xoauth2(user, _google_token(cfg)), ''), initial_response_ok=True)
+            except smtplib.SMTPAuthenticationError as e:
+                raise RuntimeError(f'Gmail refused the Google sign-in for {user} - press Sign in with Google on the Gmail card again.') from e
+        else: S.login(user, c['Secret'])
         S.sendmail(user, list(to) + cc + bcc, m.as_string())
     return {'channel': 'email', 'to': to, 'cc': cc, 'bcc': bcc, 'mailbox': user, 'threaded': bool(in_reply_to),
             'attached': [f['name'] for f in (attachments or [])]}

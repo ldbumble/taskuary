@@ -164,7 +164,7 @@ def test_the_sign_ins_ask_for_people_and_contacts():
     assert {'People.Read', 'User.ReadBasic.All', 'Chat.ReadWrite'} <= set(msauth.TEAMS_SCOPES.split())
     # an Outlook sign-in a Teams card reads through is never asked for more than it was: its chats would read as lapsed
     assert 'People.Read' not in msauth.TEAMS_CHAT.split()
-    assert googlecal.SCOPES.split() == [googlecal.SCOPE, *googlecal.PEOPLE]
+    assert googlecal.SCOPES.split() == [googlecal.MAIL, googlecal.SCOPE, *googlecal.PEOPLE]
     assert {x.rpartition('/')[2] for x in googlecal.PEOPLE} == {'contacts.readonly', 'contacts.other.readonly', 'directory.readonly'}
 
 

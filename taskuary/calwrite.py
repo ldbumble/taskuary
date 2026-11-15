@@ -25,7 +25,7 @@ from . import buttons, calendar as cal, net as requests
 
 GRAPH = cal.GRAPH
 MS_WRITE = 'Calendars.ReadWrite'
-G_WRITE = ('https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/calendar')
+from .googlecal import CAL_WRITE as G_WRITE, G_SIGNIN, READ_ONLY as NEED_G    # what the card's sign-in asks for, and its line when an older one did not
 ACTS = ('accept', 'decline', 'propose', 'schedule')
 SAID = {'accept': 'Accept', 'decline': 'Decline', 'propose': 'Propose a new time', 'schedule': 'Invite'}
 # the line the reply box starts with - the owner's to change or empty; empty sends the answer with no note
@@ -308,23 +308,12 @@ def ms_can_write(cfg: dict, tok: str = None) -> bool:
     return not held or any(h.startswith('calendars.readwrite') for h in held)
 
 
-def _google_token(cfg: dict) -> tuple:
-    """(access token, granted scopes) off the Gmail card's refresh token."""
-    from .googlecal import client         # a token signed in on Taskuary's own client renews with it (googlecal.client)
-    gid, gsec = client(cfg)
-    t = requests.post('https://oauth2.googleapis.com/token', timeout=20,
-                      data={'client_id': gid, 'client_secret': gsec, 'refresh_token': cfg.get('google_refresh_token'), 'grant_type': 'refresh_token'})
-    if t.status_code != 200: raise RuntimeError(f'Google token failed ({t.status_code})')
-    j = t.json() or {}
-    return j.get('access_token') or '', str(j.get('scope') or '')
-
-
 MS_FIX = ('Sign in again', '#connector=outlook')
 NO_CALENDAR = 'No calendar is connected - connect one, and the answer goes to it.'
 G_FIX = ('Open the Gmail card', '#connector=gmail')
 NEED_MS = (f'Calendar access needs to be granted - sign in again on the Outlook card and allow {MS_WRITE} '
            '(a tenant app needs it as an application permission).')
-NEED_G = 'Calendar access needs to be granted - the Gmail card needs a Google refresh token with the calendar.events scope.'
+NO_G = f'The Gmail card has no Google sign-in, and its App Password carries no calendar - press {G_SIGNIN} on the card.'
 
 
 def account(store, msg: dict = None, provider: str = '') -> dict:
@@ -348,7 +337,7 @@ def account(store, msg: dict = None, provider: str = '') -> dict:
     # NOTHING CONNECTED IS SAID SO, with the connect step (B15, the email walk 2026-10-29): with no mailbox card at all, Accept on an
     # invite talked about a Google refresh token and "Open the Gmail card", and Find a time offered "Sign in again" - nothing had ever
     # been signed in. The Gmail card's calendar wording is for a Gmail card that is there.
-    if want == 'google' and any(c.get('Active') for c in store.connectors_by_type('gmail')): raise NoAccess(NEED_G, *G_FIX)
+    if want == 'google' and any(c.get('Active') for c in store.connectors_by_type('gmail')): raise NoAccess(NO_G, *G_FIX)
     fix = connect_fix(store)
     raise NoAccess(NO_CALENDAR, fix['label'], fix['href'])
 
@@ -358,8 +347,9 @@ def require_write(store, acct: dict):
     from . import demo
     if demo.enabled(): return
     if acct['provider'] == 'google':
-        try: _, granted = _google_token(acct['cfg'])
-        except Exception as e: raise NoAccess(f'The Google calendar could not be reached ({str(e)[:120]}).', *G_FIX)
+        from .googlecal import token
+        try: _, granted = token(acct['cfg'])
+        except Exception as e: raise NoAccess(f'The Google calendar could not be reached: {str(e)[:160]}.', *G_FIX)
         if not any(s in granted.split() for s in G_WRITE): raise NoAccess(NEED_G, *G_FIX)
         return
     cfg = acct['cfg']
@@ -767,7 +757,8 @@ def deliver(store, env: dict, note: str) -> dict:
     to = list(env.get('to') or [])
     if env.get('provider') == 'google':
         cfg = _cfg(c)
-        tok, _ = _google_token(cfg)
+        from .googlecal import access_token
+        tok = access_token(cfg)
         h = {'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'}
         base = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
         if act == 'schedule':

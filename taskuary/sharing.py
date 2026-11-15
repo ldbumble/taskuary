@@ -367,7 +367,7 @@ def gdrive_block(store) -> str:
     c = _g_card(store)
     if not c: return 'no Google account is signed in - the Gmail card holds the Google sign-in'
     def check():
-        from .calwrite import _google_token
+        from .googlecal import token as _google_token
         try: _, granted = _google_token(json.loads(c.get('ConfigJson') or '{}'))
         except Exception as e: return f'the Google account could not be reached ({str(e)[:120]})'
         return '' if any(s in granted.split() for s in G_FILES) else NEED_G
@@ -530,7 +530,7 @@ def gdrive(store, snap: dict, actor: str = 'owner') -> dict:
     """The page as a file in a Taskuary folder on the owner's Google Drive. drive.file sees only what this app made, so the
     folder is found (or made) among those."""
     if why := gdrive_block(store): raise PermissionError(why)
-    from .calwrite import _google_token
+    from .googlecal import token as _google_token
     tok, _ = _google_token(json.loads(_g_card(store).get('ConfigJson') or '{}'))
     hdr = {'Authorization': f'Bearer {tok}'}
     q = f"name='{FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false"

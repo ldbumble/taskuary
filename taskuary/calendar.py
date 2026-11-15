@@ -10,10 +10,9 @@ Two sources, both read-only, both riding credentials already on a connector card
 - Outlook: Microsoft Graph `calendarView` on every mailbox the Outlook card polls, with the
   same app registration the mail comes through - it needs the APPLICATION permission
   Calendars.Read granted once (Test on the card says whether it is).
-- Google: the Gmail card is IMAP (an app password), which carries no calendar access, so a
-  Google calendar needs a refresh token - minted by the card's "Sign in with Google for the
-  calendar" step on Taskuary's own Google client (googlecal.py), or pasted beside a client of the
-  card's own. When present it is read; when absent it is simply not one of the sources.
+- Google: an App Password carries no calendar access, so a Google calendar needs the Gmail
+  card's "Sign in with Google" (googlecal.py, on the install's own Google client). When the
+  card is signed in it is read; when not it is simply not one of the sources.
 The same read is a tool (`calendar` in reports.REGISTRY) so an agent can check before it
 commits anyone to a time.
 """
@@ -101,6 +100,8 @@ def google_events(cfg: dict, start: datetime, end: datetime, tz) -> list:
     """Google Calendar with an OAuth refresh token from the card - primary calendar, expanded."""
     from .googlecal import access_token, client     # cached until it expires: today, upcoming and every draft read the same calendar
     if not (cfg.get('google_refresh_token') and all(client(cfg))): return []
+    from .googlecal import CAL_READ, granted     # a sign-in whose calendar box was left unticked brings the mail only: nothing to read
+    if granted(cfg) and not any(x in granted(cfg) for x in CAL_READ): return []
     r = requests.get('https://www.googleapis.com/calendar/v3/calendars/primary/events', timeout=20,
                      headers={'Authorization': f"Bearer {access_token(cfg)}"},
                      params={'timeMin': start.astimezone(tz).isoformat(), 'timeMax': end.astimezone(tz).isoformat(),

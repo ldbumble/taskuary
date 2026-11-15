@@ -60,7 +60,7 @@ class FindTimes(unittest.TestCase):
             {'address': ME, 'google_client_id': 'id', 'google_client_secret': 'sec', 'google_refresh_token': 'rt'})}, 't')
         fb = {'calendars': {ERIN: {'busy': [{'start': f'{D}T15:00:00Z', 'end': f'{D}T17:00:00Z'}]}, GAIL: {'errors': [{'reason': 'notFound'}]}}}
         g = Fake({'oauth2.googleapis.com/token': R(200, {'access_token': 'g', 'scope': calwrite.G_WRITE[0]}), 'freeBusy': R(200, fb)})
-        with mock.patch('taskuary.googlecal.access_token', return_value='g'):
+        with mock.patch('taskuary.googlecal.token', return_value=('g', calwrite.G_WRITE[0])):     # the one road to a Google token
             out = slots(s, g)
         self.assertEqual((out['provider'], out['read'], out['unread']), ('google', [ERIN], [GAIL]))
         self.assertTrue(all(x['end'][11:] <= '15:00' for x in out['slots']))

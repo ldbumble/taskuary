@@ -226,7 +226,7 @@ class FileAccess(unittest.TestCase):
         from urllib.parse import parse_qs, urlsplit
         from taskuary import fileaccess
         cid = self.gmail()
-        with mock.patch('taskuary.calwrite._google_token', return_value=('t', 'https://www.googleapis.com/auth/calendar.events')):
+        with mock.patch('taskuary.googlecal.token', return_value=('t', 'https://www.googleapis.com/auth/calendar.events')):
             url = c.post(f'/api/connectors/{cid}/google/files', json={'on': True}).json()['url']
         q = {k: v[0] for k, v in parse_qs(urlsplit(url).query).items()}
         self.assertEqual(q['scope'].split(), ['https://www.googleapis.com/auth/calendar.events', fileaccess.DRIVE_FILE])
@@ -362,7 +362,7 @@ class Uploads(unittest.TestCase):
     def test_google_drive_uploads_through_a_drive_file_scope(self):
         self.s.save_connector({'Type': 'gmail', 'Name': 'Gmail', 'Active': 1,
                                'ConfigJson': json.dumps({'google_refresh_token': 'r', 'address': 'alex@northwind.example'})}, 'test')
-        with mock.patch('taskuary.calwrite._google_token', return_value=('tok', 'https://www.googleapis.com/auth/drive.file')), \
+        with mock.patch('taskuary.googlecal.token', return_value=('tok', 'https://www.googleapis.com/auth/drive.file')), \
              mock.patch.object(sharing.requests, 'get', return_value=mock.Mock(status_code=200, json=lambda: {'files': [{'id': 'F1'}]})), \
              mock.patch.object(sharing.requests, 'post', return_value=mock.Mock(status_code=200, json=lambda: {'webViewLink': 'https://drive.google.example/f'})) as post:
             out = sharing.share(self.s, LAN, {'how': 'gdrive', 'message': self.mid})
@@ -371,7 +371,7 @@ class Uploads(unittest.TestCase):
 
     def test_a_google_sign_in_without_drive_is_greyed(self):
         self.s.save_connector({'Type': 'gmail', 'Name': 'Gmail', 'Active': 1, 'ConfigJson': json.dumps({'google_refresh_token': 'r'})}, 'test')
-        with mock.patch('taskuary.calwrite._google_token', return_value=('tok', 'https://www.googleapis.com/auth/calendar.events')):
+        with mock.patch('taskuary.googlecal.token', return_value=('tok', 'https://www.googleapis.com/auth/calendar.events')):
             self.assertIn('drive.file', sharing.ways(self.s, LAN)['gdrive']['why'])
 
 

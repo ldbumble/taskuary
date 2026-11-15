@@ -136,5 +136,7 @@ export function viewOf(e, result) {
   const raw = got === undefined ? e.detail?.args : got;
   // ...arguments cut down in the trace (a summary) or never kept (a CLI log's step): nothing to draw, so it stays a step
   if (raw == null || (got === undefined && !isObj(raw.elements))) return null;
-  return { type: "view", spec: normalise(raw), raw };
+  // ...and one the page cannot draw is no view either (2026-11-15): it stays the step it was, never its JSON in the chat
+  const spec = normalise(raw);
+  return spec ? { type: "view", spec, raw } : null;
 }

@@ -291,7 +291,7 @@ const TurnWorkView = ({ data, now, ended, k }) => {
     : p.type === "edit" ? [{ id: p.id, kind: "edit", summary: p.summary, status: "done" }] : [])) }} />;
   const draw = (p, i, lvl) => p.type === "said" ? <Md key={p.id} text={p.text} /> : p.type === "edit" ? <EditRow key={p.id} p={p} />
     : p.type === "plan" ? <PlanRow key={p.id} p={p} />
-    : p.type === "view" ? <ViewSpec key={p.id} spec={p.spec} raw={p.raw} />
+    : p.type === "view" ? <ViewSpec key={p.id} spec={p.spec} />
     // ...a file the agent showed (show `files`) is drawn by its kept copy, placed in its turn by the server for both chats (ShownCtx), never twice
     : p.type === "files" ? null
     : lvl === "everything" ? <AgentSteps key={p.id} data={{ steps: p.steps }} />

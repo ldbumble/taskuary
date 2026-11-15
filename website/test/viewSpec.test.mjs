@@ -66,8 +66,10 @@ test("the server's checked spec rides the answer after its mark; a refusal or a 
   assert.equal(viewOf(call("show", SPEC), res("done")), null);                         // someone else's tool called show
   assert.equal(viewOf(call("mcp__taskuary__show", { summary: "{\"root\":…" })), null); // its arguments cut in the trace
   assert.equal(viewOf(call("mcp__taskuary__show", SPEC)).spec.title, "Northwind renewals");   // live: drawn from its arguments
-  const broken = viewOf(call("mcp__taskuary__show"), res(`${MARK}{"root":"a","elements":{"a":{"type":"marquee"}}}`));
-  assert.equal(broken.spec, null); assert.equal(broken.raw.root, "a");               // drawn as its JSON
+  // ...and A VIEW IS DRAWN OR IT STAYS A STEP, NEVER ITS JSON (the owner, 2026-11-15: "did you also fix the json render of the charts/visuals?"):
+  // a spec the page cannot draw - a live call's own arguments outside the catalog (a pie, a Vega object) - was printed as JSON in the chat
+  assert.equal(viewOf(call("mcp__taskuary__show"), res(`${MARK}{"root":"a","elements":{"a":{"type":"marquee"}}}`)), null);
+  assert.equal(viewOf(call("mcp__taskuary__show", { root: "p", elements: { p: { type: "chart", props: { kind: "pie", points: [] } } } })), null);
 });
 
 test("in the chat a view is its own part, between the words around it", () => {

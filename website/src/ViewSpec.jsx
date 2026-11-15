@@ -2,7 +2,8 @@
 // tiles side by side, a grid that sets a chart beside its table, the dashboard's bars and line (dashboard/charts.jsx), words through Md.
 // A button lights the real one on the task page (pageView's `point`: never pressed) or opens an app page - nothing here sends, pays or closes.
 // Its buttons are never the page's own (data-tq-view-skip): the reader that lights one never finds this copy instead.
-// A spec the page cannot read, or one that throws while drawing, is shown as its JSON: a view never takes the chat down with it.
+// A VIEW IS DRAWN, NEVER ITS JSON (the owner, 2026-11-15): a spec the page cannot read is no view (viewSpec.viewOf - it stays a step), and one
+// that throws while drawing says so in a line - a view never takes the chat down with it.
 import React, { useMemo } from "react";
 import { Button } from "@mui/material";
 import PlanDone from "@mui/icons-material/CheckBoxRounded";
@@ -120,17 +121,16 @@ const Node = ({ els, id }) => {
     {!!kids.length && <div className={cls} data-cols={cols || undefined}>{kids.map((k) => <Node key={k} els={els} id={k} />)}</div>}</div>;
 };
 
-const AsText = ({ raw }) => <pre className="tq-view-raw" data-tq-view-raw="">{(() => { try { return JSON.stringify(raw, null, 2); } catch { return String(raw); } })()}</pre>;
 class Guard extends React.Component {
   constructor(props) { super(props); this.state = { bad: false }; }
   static getDerivedStateFromError() { return { bad: true }; }
   componentDidCatch(err) { console.warn("view could not be drawn:", err); }
-  render() { return this.state.bad ? <AsText raw={this.props.raw} /> : this.props.children; }
+  render() { return this.state.bad ? <p className="tq-aui-hint" data-tq-view-failed="">This view could not be drawn here.</p> : this.props.children; }
 }
 
-export default function ViewSpec({ spec, raw }) {
-  if (!spec) return <AsText raw={raw} />;
-  return <Guard raw={raw}><section className="tq-dash tq-view" data-tq-view="" data-tq-view-skip="" aria-label={spec.title || "A view from the agent"}>
+export default function ViewSpec({ spec }) {
+  if (!spec) return null;
+  return <Guard><section className="tq-dash tq-view" data-tq-view="" data-tq-view-skip="" aria-label={spec.title || "A view from the agent"}>
     {spec.title && <h3 className="tq-view-title">{spec.title}</h3>}
     <Node els={spec.elements} id={spec.root} />
   </section></Guard>;

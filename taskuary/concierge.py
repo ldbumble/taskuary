@@ -4750,7 +4750,10 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
     if not job: raise ValueError('say what the agent should do')
     tid = dock_tid or general.dock_task(store, actor)[0]['TaskId']
     brief = _handoff_brief(store, tid, job)
-    made = setup_task(store, brief, actor, title=title or _handoff_title(store, tid, job), kind=kind, agent_job=kind == 'general', repo=repo,
+    # ...HIS WORDS ARE THE TASK'S OWN MESSAGE, AND ONLY HIS WORDS (recorded on the real CLI, 2026-11-15: the new task's bubble read his ask
+    # and then "What we were talking about: remember that payroll questions go to Gail Got it - ..." - the Assistant's chat, in his name).
+    # A general agent hears the brief as Taskuary's first prompt (below); a coding one is seeded from the task itself, so it keeps the brief
+    made = setup_task(store, job if kind == 'general' else brief, actor, title=title or _handoff_title(store, tid, job), kind=kind, agent_job=kind == 'general', repo=repo,
                       profile=profile)
     if kind == 'general':
         # ...AT WORK FROM THE MOMENT IT IS MADE (the bug hunt, 2026-11-12: New opened the task at once, and for the seconds its outputs were

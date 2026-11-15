@@ -339,6 +339,24 @@ def test_a_handoff_reads_at_work_from_the_moment_it_is_made_until_its_first_turn
         assert seen == [('reading', True), ('turn', True)] and not general.working(s, made_box[0])
 
 
+def test_an_agent_the_assistant_starts_carries_his_words_alone_as_his_and_the_talk_before_them_as_taskuarys_brief(s):
+    """Recorded on the real CLI, 2026-11-15: "start an agent to find two venues" made the task, and its bubble in his name read his ask
+    followed by "What we were talking about: ..." - the Assistant's chat, which he never typed there."""
+    from taskuary import general
+    dock = general.dock_task(s, 'owner')[0]['TaskId']
+    s.add_comment(dock, 'owner', general.USER_TYPE, 'remember that payroll questions go to Gail')
+    s.add_comment(dock, 'assistant', general.ASSISTANT_TYPE, 'Got it - payroll questions go to Gail.')
+    s.add_comment(dock, 'owner', general.USER_TYPE, 'start an agent to find two venues')
+    told, session = [], mock.Mock(busy=False)
+    session.send_prompt.side_effect = lambda text, **k: told.append((text, k))
+    llm = lambda sys, user, **k: json.dumps({'summary': 's', 'checklist': [], 'outputs': []})
+    with mock.patch('taskuary.concierge.brain', return_value=llm), mock.patch('taskuary.general.start_session', return_value=session),          mock.patch('taskuary.general._live_of', return_value=None), mock.patch('taskuary.concierge.threading.Thread', Inline):
+        made = concierge.handoff_task(s, 'Find two venues for a 40-person offsite', kind='general', dock_tid=dock)
+    own = ' '.join(str(c.get('Body') or '') for c in s.list_comments(made['taskId'], internal=True)) + ' ' + str(s.get_task(made['taskId']).get('Summary') or '')
+    assert 'What we were talking about' not in own and 'payroll' not in own, own
+    assert told and 'What we were talking about' in told[0][0] and told[0][1].get('brief') is True
+
+
 def test_a_handoff_whose_brain_fails_is_made_anyway(s):
     made, session = handoff(s, {'side_effect': RuntimeError('no brain')})
     assert s.get_task(made['taskId']) and slots.all_(s, made['taskId']) == [] and session.send_prompt.called

@@ -277,7 +277,10 @@ class TheDemoChatAnswersItsSuggestionsTests(unittest.TestCase):
         from taskuary import concierge
         with mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []):
             out = concierge.say(self.s, 'close all the tasks from Priya', llm=demo.brain(store=self.s))
-            self.assertEqual(out['say'], demo.OUT_OF_SCRIPT)
+            # ...the questions in the line's own words too: the Assistant's window draws no chips, and "the suggested questions" named
+            # questions nobody could see (the walk, 2026-11-15)
+            self.assertEqual(out['say'], f'{demo.OUT_OF_SCRIPT} {demo.ASK_ONE}')
+            for _, ask, _ in demo.PROMPTS: self.assertIn(f'“{ask}”', out['say'])
             self.assertEqual([c for c in out['chips'] if c.get('prompt')], demo.prompt_chips())
             self.assertTrue(all(c['ask'] == c['label'] for c in demo.prompt_chips()), 'a chip sends exactly the words it shows')
             out = concierge.say(self.s, demo.PROMPTS[2][1], llm=demo.brain(store=self.s))

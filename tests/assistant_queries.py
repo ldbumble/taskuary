@@ -1458,7 +1458,7 @@ def demo_line(said: str, out: dict | None = None) -> str:
     from taskuary import demo
     out = out or {}
     if out.get('light') or out.get('pressed') or out.get('decision') or out.get('proposal'): return 'acted'
-    if said == demo.OUT_OF_SCRIPT and [c for c in out.get('chips') or [] if c.get('prompt')] == demo.prompt_chips(): return 'out'
+    if said in (demo.OUT_OF_SCRIPT, f'{demo.OUT_OF_SCRIPT} {demo.ASK_ONE}') and [c for c in out.get('chips') or [] if c.get('prompt')] == demo.prompt_chips(): return 'out'
     return 'other'
 
 

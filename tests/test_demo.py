@@ -651,6 +651,20 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
         for kind in ('email', 'linkedin', 'teams', 'whatsapp', 'github'): self.assertIsNone(outbound.connect_fix(s, kind), kind)
 
 
+class DemoDashboardTests(unittest.TestCase):
+    def test_the_dashboards_count_the_whole_morning_not_the_half_seeded_before_them(self):
+        # they ran before the agents' day and the tour were seeded: the rail read "Open now 12" beside nineteen open tasks (the walk, 2026-11-15)
+        from taskuary import dashboards
+        s = MemoryStore(); demo.seed(s)
+        n = sum(r['state'] == 'open' for r in dashboards._tasks(s, 90))
+        heads = [m['Subject'] for m in s._rows("SELECT Subject FROM message WHERE Channel='report' AND Status NOT IN ('skipped','expired') ORDER BY MessageId")]
+        self.assertTrue(any(h.startswith('Taskuary at a glance') and f'Open now {n}' in h for h in heads), (n, heads))
+        self.assertTrue(any(h.startswith('Northwind desk') and f'Open tasks {n}' in h for h in heads), (n, heads))
+        # ...and they stand on the rail in the order they always did
+        order = [h.split(' — ')[0] for h in heads if ' — ' in h]
+        self.assertEqual(order[-3:], ['Northwind desk', 'Taskuary at a glance', 'Vendor spend, weekly'])
+
+
 class DemoNeverPollsTests(unittest.TestCase):
     def test_opening_a_chat_task_reads_no_channel_and_leaves_its_card_connected(self):
         # opening a Teams or WhatsApp task refreshed its channel: the prop card then read "last test failed", and the WhatsApp read went to

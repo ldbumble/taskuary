@@ -1077,6 +1077,7 @@ def seed(store) -> int:
     made += seed_tour(store, f)
     seed_set_ups(store, f)
     seed_ai_usage(store)          # ...and the morning's asks, for their "AI used" folds
+    run_dashboards(store)
     logger.info(f'demo: seeded {made} items of invented work')
     return made
 
@@ -1457,15 +1458,20 @@ DASHBOARD = {'type': 'dashboard', 'title': 'Northwind desk', 'daily_at': '07:00'
 
 
 def seed_dashboard(store) -> int:
+    return store.save_source({'Channel': 'report', 'Address': DASHBOARD['title'], 'Active': 1, 'ConfigJson': json.dumps(DASHBOARD)}, 'demo')
+
+
+def run_dashboards(store):
+    """EVERY DASHBOARD, RUN ONCE THE WHOLE MORNING IS SEEDED (the walk, 2026-11-15): run where they were made - before the agents' day and the
+    tour - the rail read "Open now 12" beside nineteen open tasks. The showcase one, then the built-in one every install gets
+    (store.SEEDED_REPORTS), then what an agent built: the order they stand in on the rail, which settles a same-second tie by the first filed
+    (funnel.place_id, 2026-10-25). Their clocks move, so the server's start does not run them again."""
     from . import reports
-    sid = store.save_source({'Channel': 'report', 'Address': DASHBOARD['title'], 'Active': 1, 'ConfigJson': json.dumps(DASHBOARD)}, 'demo')
-    reports.run_one(store, store.get_source(sid), None, 'schedule')      # its clock moves, so the server's start does not run it again
-    # ...and the built-in one every install gets (store.SEEDED_REPORTS), filled the same way: the demo's showcase dashboard
-    for src in store.list_sources(active_only=False):
-        if src.get('Owner') == 'template' and json.loads(src.get('ConfigJson') or '{}').get('type') == 'dashboard':
-            # ...in the same second as the showcase one: the rail settles that tie by the first filed (funnel.place_id, 2026-10-25)
-            reports.run_one(store, src, None, 'schedule')
-    return sid
+    dash = [s for s in store.list_sources(active_only=False) if json.loads(s.get('ConfigJson') or '{}').get('type') == 'dashboard']
+    rank = lambda s: (s.get('Address') != DASHBOARD['title'], s.get('Owner') != 'template', s['SourceId'])
+    for src in sorted(dash, key=rank):
+        try: reports.run_one(store, src, None, 'schedule')
+        except Exception as e: logger.warning(f"demo: the dashboard {src.get('Address')} did not run - {e}")
 
 
 # what the week behind today's finished work left: each task closed a few hours after its ask, the replies were answered some

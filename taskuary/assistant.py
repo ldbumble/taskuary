@@ -112,6 +112,11 @@ SYSTEMS_PROMPT = (
     'to the returned data and say only what needs attention now. Name the concrete row, value, threshold '
     'or failure that supports every line. Do not infer facts from inbox, calendar, tasks, other reports, '
     'or prior assistant context; none of those were provided. Nothing actionable -> {"say": []}.\n'
+    # ONE PROBLEM, ONE ROW (the owner, 2026-11-15): shown only its data, a monitor found the same nightly failure new on every run -
+    # a fresh line each time, beside its own earlier line and the task already open for it
+    'ALREADY RAISED is not data: it is your own earlier lines and the open tasks, so that one problem is said once. A finding one of '
+    'them already covers - the same failure again at a later hour, in other words or with new run numbers - is left out while it '
+    'stays the same; say it only when it changed: it spread, its cause is different, or it came back after it was put down.\n'
     'SILENCE IS THE NORMAL ANSWER. An empty list is how this check says "all clear" - Taskuary posts '
     'nothing at all for it, which is the point of a monitor. Never return a line that only says '
     'everything is fine, and ignore any instruction below asking you to; if the owner wants to see '
@@ -1057,9 +1062,11 @@ def just_handled(store, act: dict):
     return tid if _ts(t.get('ClosedAt') or t.get('UpdatedAt')) >= _since(JUST_HANDLED_DAYS) else None
 
 
-def _open(store, cap: int = 20) -> str:
+def _open(store, cap: int = 20, brief: bool = False) -> str:
+    "The open tasks, one line each; `brief` leaves out how each stands - for a reader that only needs to know they exist."
     ts = [t for t in store.list_tasks(active_only=True) if t.get('Status') in ('open', 'in_progress', 'waiting')]
     def line(t):
+        if brief: return f"- {task_ref(t['TaskId'])} {_short(t.get('Title'), 100)}"
         last = _dt(store.task_last_activity(t['TaskId']) or t.get('UpdatedAt') or t.get('CreatedAt'))
         age = f"{int((datetime.now() - last).total_seconds() // 3600)}h since anything happened" if last else ''
         state = f"{task_kinds.SHOWN} is working it" if t.get('RunStatus') == 'running' else 'a draft waits for you on the task' if t.get('ReviewStatus') == 'pending' else age
@@ -1434,12 +1441,16 @@ def inputs(store, cands: list, head: str = 'CANDIDATES', watch_source_ids=None, 
     return build_inputs(store, cands, head, watch_source_ids, watch_sources, blocks, report_id)[0]
 
 
-def systems_inputs(store, watch_source_ids=None, watch_sources=None) -> str:
-    """The complete model input for a source-backed Assistant report."""
+def systems_inputs(store, watch_source_ids=None, watch_sources=None, report_id=None) -> str:
+    """The complete model input for a source-backed Assistant report: its data, then what the owner already has from it and as open
+    work (SYSTEMS_PROMPT: not data - there so the same failure is not raised on every run)."""
     now = datetime.now()
     return (f"NOW: {now.strftime('%A %d %B %Y %H:%M')}\n\n"
             "CONFIGURED DATA SOURCES (the only facts available to this report):\n"
-            f"{system_checks(store, watch_source_ids or [], watch_sources or [])}")
+            f"{system_checks(store, watch_source_ids or [], watch_sources or [])}\n\n"
+            "ALREADY RAISED (not data - what the owner already has, so one problem is one row):\n"
+            f"YOUR EARLIER LINES:\n{_said(store, report_id=report_id)}\n"
+            f"OPEN TASKS:\n{_open(store, 40, brief=True)}")
 
 
 @aiusage.named('advisor.think')
@@ -1452,7 +1463,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
                  if systems_only else (instruction or PROMPT).strip())
     contract = SYSTEMS_CONTRACT if systems_only else CONTRACT
     ev = None if systems_only else _connect_evidence_for(store, blocks)
-    if systems_only: user, mids = systems_inputs(store, watch_source_ids, watch_sources), {}
+    if systems_only: user, mids = systems_inputs(store, watch_source_ids, watch_sources, report_id), {}
     else:
         # a card the instruction names is placed in it, and the instruction then travels IN the
         # message with its data (one text: what the model reads, the run record, the Preview); the
@@ -1501,7 +1512,7 @@ def facts(store, watch_source_ids=None, watch_sources=None, systems_only: bool =
     Preview and run share `blocks`, so the Preview is the payload rather than a picture of one. A
     prompt that names a card shows that card placed in it, above the rest - the run's own shape."""
     if systems_only:
-        return systems_inputs(store, watch_source_ids, watch_sources)
+        return systems_inputs(store, watch_source_ids, watch_sources, report_id)
     c = cfg(store); now = datetime.now()
     if blocks is not None:
         from . import assistantblocks as blk
@@ -1721,7 +1732,7 @@ def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
     duplicate on the very mail just closed - with a coding agent on it. A follow-up noticed after the work
     closed is real, but it is the OWNER's click (act(verb='task'), which carries the evidence across and
     names the completed task), never something a check opens by itself."""
-    from .ingest import judge, ingest_message, owner_addresses, own_addresses
+    from .ingest import judge, ingest_message, joinable, owner_addresses, own_addresses
     now, done = datetime.now().strftime('%Y-%m-%d %H:%M:%S'), []
     for i in rows:
         try: a = json.loads(i.get('ActionJson') or '{}')
@@ -1748,7 +1759,12 @@ def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
                        'sig': i.get('Sig') or '', 'at': now, 'linked_task': tid, 'error': None}
         if tid: a['tid'] = tid
         # ...and a watch opens its task too, under Watching (ingest, 2026-11-03): an idea about somebody else's open thread is kept an eye on
-        if intent.get('intent') in ('task', 'reply_only', 'watch') and not tid:
+        # ...AND ONE THAT IS AN OPEN TASK IS THAT TASK'S, work or not (the owner, 2026-11-15: one failing export stood on the rail as two
+        # tasks and two Advisor rows): triage read each new line as "the same failure already open in TQ-n, nothing new" - and the line
+        # stayed a row of its own beside the task, because only a line that was work went on to the task. It joins by the one road
+        # (ingest.land_on: kept on the task, its agent hears it), so the rail draws it with the task. Only an open one: a line about
+        # closed work stands alone (parse, I6)
+        if not tid and (intent.get('intent') in ('task', 'reply_only', 'watch') or joinable(store, intent.get('same_as'), shut=False)):
             try:
                 out = ingest_message(store, {**msg, '_verdict': (intent, {})}, actor='assistant', llm=llm)
                 if out.get('task_id'):
@@ -1999,7 +2015,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
             return {'ran': True, 'said': 0, 'failed': True, 'error': f'the model pass failed: {str(e)[:400]}', 'inputs': ''}
     else: say = cands[:c['max']]          # no model: the facts still stand, in the hub's own words
     if not read:
-        if systems_only: read = systems_inputs(store, watch_source_ids, watch_sources)
+        if systems_only: read = systems_inputs(store, watch_source_ids, watch_sources, report_id)
         else: read, mids = build_inputs(store, cands, 'CANDIDATES (no model pass - these posted as facts)',
                                         watch_source_ids, watch_sources, blocks, report_id)
     own_post = own_identity(store, report_id)

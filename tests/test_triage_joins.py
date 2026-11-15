@@ -207,6 +207,27 @@ class LaterStepFailedTests(unittest.TestCase):
         self.assertEqual(s.stranded_triage_failures(10), [])
 
 
+class CoveredTests(unittest.TestCase):
+    """A report's run that holds one new failure beside one an open task already has (the owner, 2026-11-15): triage is asked which open
+    tasks hold a part of it, by the ids it was shown, and the run's own task is for the rest."""
+    def test_triage_names_the_open_tasks_that_hold_a_part_and_only_ones_it_was_shown(self):
+        s = MemoryStore()
+        first = mail(s, 'a', brain('task', title='Investigate the Payworth export 403'), conv='c1', subject='Payworth export failed')
+        seen = []
+        run = mail(s, 'report:1:b', brain('task', title='Investigate the Trainly export 400', seen=seen, kind='general', covered=[first['task_id'], 999, 'x']),
+                   conv='report:1', channel='report', subject='Process error check - 2 failures',
+                   body='Trainly report export: HTTP 400\nPayworth user export: 2 of 81 sites failed, HTTP 403', frm=None)
+        self.assertIn('**covered**', seen[-1]['sys']); self.assertIn('each is weighed by itself', seen[-1]['sys'])
+        self.assertEqual(json.loads(s.message_routes(run['message_id'])[-1]['VerdictJson'])['covered'], [first['task_id']])
+        self.assertEqual((run['status'], len(s.list_tasks())), ('created', 2))
+        self.assertTrue(any(c['Body'].startswith('A report mentions this') or 'mentions this' in c['Body'] for c in s.list_comments(first['task_id'])))
+
+    def test_the_one_it_is_is_not_also_a_part_of_it(self):
+        s = MemoryStore()
+        first = mail(s, 'a', brain('task'), conv='c1')
+        again = mail(s, 'b', brain('task', same_as=first['task_id'], covered=[first['task_id']]), conv='c2')
+        self.assertNotIn('covered', json.loads(s.message_routes(again['message_id'])[-1]['VerdictJson']))
+
 if __name__ == '__main__':
     unittest.main()
 

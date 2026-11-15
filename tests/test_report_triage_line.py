@@ -128,6 +128,58 @@ class ReportMentionsTests(unittest.TestCase):
         r = ingest.identity_route(self.s, {'channel': 'report', 'conversation_id': conv})
         self.assertEqual((r['decision'], r['task_id']), ('create', None))
 
+class RunsThatReportSeveralThingsTests(unittest.TestCase):
+    """ONE PROBLEM, ONE ROW (the owner, 2026-11-15: "bug is in 4 places?? can't have that"). A nightly export to a vendor kept failing and
+    an error check reported it on every run. The run that held the old failure AND a new one could name neither task as same_as, so it
+    opened a second task titled for both - the old failure on the rail twice. Triage names the open tasks that hold a part of a run
+    (`covered`): each is noted, and the task the run opens is only for the rest."""
+    def setUp(self):
+        self.s = s = MemoryStore(); _brain(s)
+        self.src = _src(s, {'type': 'agent', 'title': 'Process error check', 'route': {'triage': {'how': 'always'}}})
+
+    def _run(self, verdict, body):
+        import time
+        if _reports(self.s): time.sleep(1.1)          # a run is known by its second: two in one are one arrival
+        with mock.patch.object(reports, 'render_report', return_value=('ran', body)), mock.patch('taskuary.ingest._spawn'), \
+             mock.patch('taskuary.ingest.judge', return_value=(verdict, {})):
+            return reports.run_report_source(self.s, self.src, llm=TASK_LLM)
+
+    def _notes(self, tid): return [c['Body'] for c in self.s.list_comments(tid) if c['Body'].startswith('Process error check mentions this')]
+    def _titles(self): return sorted(t['Title'] for t in self.s.list_tasks())
+
+    def test_the_night_it_failed_again_beside_something_new(self):
+        from taskuary.store import task_ref
+        s = self.s
+        self._run({'intent': 'task', 'kind': 'general', 'why': 'two sites failed', 'title': 'Investigate the Payworth export 403'},
+                  'Payworth user export 21:46: 2 of 81 sites failed, HTTP 403')
+        first = s.list_tasks()[0]['TaskId']
+        # three hours on: the same failure again, and a new one beside it
+        self._run({'intent': 'task', 'kind': 'general', 'why': 'the Trainly export is new; the Payworth 403 is open work',
+                   'title': 'Investigate the Trainly export 400', 'covered': [first]},
+                  'Trainly report export 01:27: HTTP 400\nPayworth user export 00:46: 2 of 81 sites failed, HTTP 403')
+        self.assertEqual(self._titles(), ['Investigate the Payworth export 403', 'Investigate the Trainly export 400'])
+        second = next(t['TaskId'] for t in s.list_tasks() if t['TaskId'] != first)
+        self.assertEqual(len(self._notes(first)), 1); self.assertIn(f'what is new in it is {task_ref(second)}', self._notes(first)[0])
+        self.assertTrue(any(task_ref(first) in c['Body'] and 'this task is for the rest' in c['Body'] for c in s.list_comments(second)),
+                        'the new task says which part is not its own')
+        self.assertEqual([m['TaskId'] for m in _reports(s)], [first, second], 'the run is the new task\'s, never joined to the old one')
+        # ...and three hours on again: both failures, nothing new - no third task, the run is its own row
+        self._run({'intent': 'fyi', 'why': 'both are open work', 'covered': [first, second]},
+                  'Trainly report export 04:27: HTTP 400\nPayworth user export 03:46: 2 of 81 sites failed, HTTP 403')
+        self.assertEqual(len(s.list_tasks()), 2)
+        last = _reports(s)[-1]
+        self.assertEqual((last['Status'], last['TaskId']), ('feed', None))
+        self.assertIn(f'{task_ref(first)} and {task_ref(second)}', s.message_routes(last['MessageId'])[-1]['Reason'])
+        self.assertEqual((len(self._notes(first)), len(self._notes(second))), (1, 1), 'one note a day on each, not one a run')
+
+    def test_a_part_only_closed_work_held_is_not_covered(self):
+        """Closed is closed: a failure that came back after its task was closed is the new task's, whole."""
+        s = self.s
+        old = s.create_task({'Title': 'Investigate the Payworth export 403', 'Kind': 'general', 'Status': 'done'}, 'o')
+        self._run({'intent': 'task', 'kind': 'general', 'why': 'it is back', 'title': 'The Payworth export fails again', 'covered': [old]},
+                  'Payworth user export 21:46: 2 of 81 sites failed, HTTP 403')
+        self.assertEqual(len(s.list_tasks()), 2); self.assertEqual(self._notes(old), [])
+
 
 class TriageLineMigrationTests(unittest.TestCase):
     """Every report was triaged every run before the line existed: each gets the line its own behaviour already says, once."""

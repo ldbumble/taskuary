@@ -265,6 +265,67 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(len(s.list_ideas()), before)
 
 
+class OneProblemOneRowTests(unittest.TestCase):
+    """The owner, 2026-11-15 ("bug is in 4 places?? can't have that"): a vendor export failed every few hours and a monitor read the
+    failures. Each run it raised the failure again in new words; triage read each line as "the same failure already open in TQ-n,
+    nothing new" - and the line stayed a row of its own beside the task, because only a line that was WORK went on to the task."""
+    def _monitor(self, s):
+        reports.REGISTRY['_runs'] = lambda cfg: ('2 rows', 'Payworth user export success=0 error=2 of 81 sites failed, HTTP 403')
+        self.addCleanup(lambda: reports.REGISTRY.pop('_runs', None))
+        sid = s.save_source({'Channel': 'report', 'Address': 'Backend monitor', 'Active': 1, 'ConfigJson': json.dumps({
+            'type': 'assistant', 'title': 'Backend monitor', 'ai_prompt': 'Raise any export that failed.',
+            'watch_sources': [{'type': '_runs', 'label': 'runs in the last hour', 'query': 'SELECT 1'}]})}, 't')
+        return s.get_source(sid)
+
+    def _says(self, slug, text, seen):
+        def llm(system, user, **k):
+            seen.append({'system': system, 'user': user})
+            return json.dumps({'say': [{'key': f'idea:{slug}', 'text': text, 'section': 'systems', 'why': 'success=0', 'mid': None, 'task': None}]})
+        return llm
+
+    def test_a_line_triage_reads_as_an_open_task_goes_onto_that_task(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Investigate the Payworth export 403', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'report'}, 'router')
+        row = idea(s, 'report:9:idea:payworth-403-again', 'Payworth user export failed again at 00:46: 2 of 81 sites, HTTP 403.', {'type': 'note'})
+        def same(system, user, **k): return json.dumps({'intent': 'fyi', 'why': 'the same failure already open, nothing new', 'same_as': tid})
+        shown = [{'tid': tid, 'ref': task_ref(tid), 'title': 'Investigate the Payworth export 403', 'status': 'in_progress'}]
+        with mock.patch('taskuary.ingest._spawn'), mock.patch('taskuary.context.recent_open', return_value=shown):
+            assistant.triage_ideas(s, [row], same, report_title='Backend monitor')
+        a = json.loads(s.get_idea(row['IdeaId'])['ActionJson'])
+        self.assertEqual((a['triage']['intent'], a.get('tid')), ('fyi', tid))
+        self.assertEqual(len(s.list_tasks()), 1); self.assertEqual(s.get_task(tid)['Source'], 'report')
+        self.assertEqual([m['ExternalId'] for m in s.list_messages(tid)], [f"idea:{row['IdeaId']}"], 'kept on the task, where its agent and the owner read it')
+        # ...so the rail draws one row for the failure: the task's, never a second one for the line
+        rows = [i for i in pile(s) if i.get('tid') == tid or i.get('idea') == row['IdeaId']]
+        self.assertEqual([(i.get('kind'), i.get('tid')) for i in rows], [(rows[0].get('kind'), tid)])
+        self.assertNotEqual(rows[0].get('kind'), 'idea')
+
+    def test_a_line_about_work_that_was_closed_stands_alone(self):
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Investigate the Payworth export 403', 'Kind': 'general', 'Status': 'done'}, 'router')
+        row = idea(s, 'report:9:idea:payworth-403-back', 'Payworth user export fails again after it was fixed.', {'type': 'note'})
+        def same(system, user, **k): return json.dumps({'intent': 'fyi', 'why': 'like the closed one', 'same_as': tid})
+        shown = [{'tid': tid, 'ref': task_ref(tid), 'title': 'Investigate the Payworth export 403', 'status': 'done'}]
+        with mock.patch('taskuary.ingest._spawn'), mock.patch('taskuary.context.recent_closures', return_value=shown):
+            assistant.triage_ideas(s, [row], same, report_title='Backend monitor')
+        self.assertFalse(json.loads(s.get_idea(row['IdeaId'])['ActionJson']).get('tid'))
+        self.assertEqual(s.list_messages(tid), [])
+
+    def test_the_monitor_is_shown_what_is_already_raised_and_a_line_it_repeats_is_not_said_twice(self):
+        s = MemoryStore(); src = self._monitor(s); seen = []
+        tid = s.create_task({'Title': 'Rotate the Spendly API key', 'Kind': 'task', 'Status': 'open'}, 'owner')
+        text = 'Payworth user export failed at 21:46: 2 of 81 sites, HTTP 403.'
+        with mock.patch.object(assistant, 'triage_ideas'):
+            first = reports.run_report_source(s, src, self._says('payworth-403', text, seen), trigger='owner')
+            # an hour on the failure is in the data again, and the monitor says it under the key it was shown
+            again = reports.run_report_source(s, src, self._says('payworth-403', 'Payworth user export failed at 22:46 too.', seen), trigger='owner')
+        self.assertEqual((first['said'], again['said']), (1, 0)); self.assertEqual(len(s.list_ideas()), 1)
+        told = next(x['user'] for x in seen if 'YOUR EARLIER LINES' in x['user'] and text in x['user'])
+        self.assertIn('ALREADY RAISED (not data', told)
+        self.assertIn(f'{task_ref(tid)} Rotate the Spendly API key', told.split('OPEN TASKS:')[1])
+        self.assertIn('ALREADY RAISED is not data', seen[0]['system']); self.assertIn('left out while it stays the same', seen[0]['system'])
+        self.assertIn('ALREADY RAISED', again['inputs'], 'what it was shown is what the run keeps')
+
 if __name__ == '__main__':
     unittest.main()
 

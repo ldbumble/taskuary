@@ -191,6 +191,7 @@ LEVELS = ('regular', 'important', 'urgent')
 # how much thought the work takes and whether the reader could tell - a verdict apart from priority, read by the router (2026-10-25)
 DIFFICULTY, SURE, DATA = _bullet('difficulty'), _bullet('sure'), _bullet('data_class')
 REFINES = _bullet('refines')
+COVERED = _bullet('covered')         # the open tasks that already hold part of what a message reports (2026-11-15)
 TASK_TITLE = _bullet('task_title')   # ...and the wider title a line that joins at the combine level gives the task (2026-10-29)
 OFFER = _bullet('offer')         # what an agent could do for the owner about the main ask (2026-10-28)
 NEEDS_BROWSER = _bullet('needs_browser')   # the work is done on a web page: the agent gets Taskuary's browser, wherever it starts (2026-10-29)
@@ -357,6 +358,8 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
                  related_message_ids={'type': ['array', 'null'], 'items': {'type': 'integer'}},
                  existing_task_id={'type': ['integer', 'null']}, same_problem={'type': ['boolean', 'null']})
     if same: p['same_as'] = {'type': ['integer', 'null']}
+    # ...and the open tasks that already hold PART of it, for a message that reports several things (ingest: a report run, 2026-11-15)
+    if same: p['covered'] = {'type': ['array', 'null'], 'items': {'type': 'integer'}}
     # THE THREAD IS A HINT (the owner, 2026-10-26): a message on a task's thread joins it unless this says why it is another job
     if thread_task: p['new_job'] = {'type': ['string', 'null']}
     # ...and on a task the owner is WATCHING, whether this line shows somebody else handled it (watch.py) - it lights Mark done, never closes
@@ -1024,6 +1027,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # ...and whether a joining line refines the task's own ask, wherever a task it may join was shown (2026-10-28)
             if not shape and 'refines' not in base and (home or same_ids or candidates is not None): system += '\n\n' + REFINES
             if not shape and 'task_title' not in base and (home or same_ids or candidates is not None): system += '\n\n' + TASK_TITLE
+            if not shape and '**covered**' not in base and same_ids: system += '\n\n' + COVERED      # ...and what open work already holds (2026-11-15)
             if not shape and '**offer**' not in base: system += '\n\n' + OFFER        # ...and what an agent could do for them (2026-10-28)
             if not shape and '**needs_browser**' not in base: system += '\n\n' + NEEDS_BROWSER   # ...and whether it is done on a web page (2026-10-29)
             if not shape and '**needs_desktop**' not in base: system += '\n\n' + NEEDS_DESKTOP   # ...or in a desktop app (2026-10-31)
@@ -1081,6 +1085,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 try: same = int(j.get('same_as')) if j.get('same_as') is not None else None
                 except (TypeError, ValueError): same = None
                 if same in same_ids: out['same_as'] = same
+                # covered: the same rule - only tids it was shown, and never the one it IS
+                cov = [int(x) for x in (j.get('covered') if isinstance(j.get('covered'), list) else []) if str(x).lstrip('-').isdigit()]
+                if (cov := [x for x in dict.fromkeys(cov) if x in same_ids and x != out.get('same_as')]): out['covered'] = cov
                 # new_job: only on a thread whose task was shown, only for work (an fyi stays on the thread for the chain), and never
                 # beside a same_as naming that very task - the answer that contradicts itself keeps the default, the join
                 nj = j.get('new_job')

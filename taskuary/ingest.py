@@ -1092,9 +1092,15 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # triage should not make it a task"). The End of day checkup's line about an open thread was read as same_as that task, the
         # whole digest joined it, and the next run followed it there for the chain - turning the task's origin to a stranger. A run
         # that points at existing work leaves the task a note and files as its own row; only what no task covers opens one.
+        # ...AND A RUN REPORTS SEVERAL THINGS AT ONCE (the owner, 2026-11-15: "bug is in 4 places?? can't have that"): a nightly error check
+        # whose run held one new failure and one an open task already had could name neither as same_as, so it opened a second task titled
+        # for both - the old failure on the rail twice. Triage names the open tasks that hold a part (`covered`): each gets the note, and
+        # the task the run opens is only for the rest. A run whose every part is covered opens nothing
+        covered = [t for t in intent.get('covered') or [] if joinable(store, t, shut=False)] if msg.get('channel') == 'report' else []
         if msg.get('channel') == 'report' and (hit := (same if (same := intent.get('same_as')) and store.get_task(same) else None)
-                                               or (sv['task'] if sv and store.get_task(sv['task']) else None)):
-            return _mention(store, msg, hit, intent, actor, _notes_note())
+                                               or (sv['task'] if sv and store.get_task(sv['task']) else None)
+                                               or (covered[0] if covered and intent['intent'] == 'fyi' else None)):
+            return _mention(store, msg, list(dict.fromkeys([hit, *covered])), intent, actor, _notes_note())
         if sv and joinable(store, sv['task']) and any(x['id'] == sv['step'] for x in store.goal_steps(sv['task'])):
             return _split_note(store, split_from, msg, _serve_step(store, msg, sv, intent, actor, _notes_note(), pol, cfg, mine))
         same = intent.get('same_as')
@@ -1188,6 +1194,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # ...and WHERE the work is done is the coding agent's to pick when it starts (repochoice, the owner 2026-11-06): nothing here
             mid = _land(store, msg, tid, 'routed')
             if intent.get('checklist') and not goal: store.source_checklist(tid, mid, 'triage')     # its boxes came from this message
+            # ...and the part of a report's run that open work already holds is said on both sides: this task is for the rest (`covered`)
+            if covered:
+                _mentioned(store, msg, covered, mid, actor, f" - what is new in it is {task_ref(tid)}")
+                store.add_comment(tid, 'triage', 'agent', 'This run also reports what ' + ', '.join(
+                    f"{task_ref(h)} ({(store.get_task(h) or {}).get('Title') or ''})" for h in covered) + f" already hold{'s' if len(covered) == 1 else ''} - that part stays there; this task is for the rest.")
             # the same-day lines this one continues or answers that had no task yet join the task it opens:
             # the fyi that opened a subject belongs with the ask that followed it (PW-031)
             for rel_mid in (intent.get('related_message_ids') or []):
@@ -1473,18 +1484,25 @@ def _retitle(store, t: dict, msg: dict, intent: dict, actor: str, reopened: bool
     return True
 
 
-def _mention(store, msg: dict, tid: int, intent: dict, actor: str, notes_note: str = '') -> dict:
-    """A report run about a task that exists: the run is filed as its own row (never on the task, so it cannot become the task's
-    origin or its chain) and the task gets ONE note a day per report that the report named it - a daily run does not stack them."""
-    mid = _land(store, msg, None, 'feed')
-    ref, who = task_ref(tid), msg.get('source_name') or msg.get('from_name') or 'A report'
-    store.add_route(mid, None, 'file', None, f"triage: it is about {ref}, which already holds that work - filed as the report's own row, "
-                    f"not joined to it · {intent.get('why') or ''}" + notes_note, [], 'triage', verdict=_stored_verdict(intent))
+def _mentioned(store, msg: dict, tids: list, mid: int, actor: str, tail: str = '') -> None:
+    "ONE note a day per report on each task its run named - a daily run does not stack them."
+    who = msg.get('source_name') or msg.get('from_name') or 'A report'
     head, today = f'{who} mentions this', datetime.now().strftime('%Y-%m-%d')
-    if not any(str(c.get('Body') or '').startswith(head) and str(c.get('CreatedAt') or '')[:10] == today for c in store.list_comments(tid)):
-        store.add_comment(tid, actor, 'agent', f"{head} in its run of {str(msg.get('sent_at') or today)[:16]} (report row #{mid}): {msg.get('subject') or ''}")
+    for tid in tids:
+        if any(str(c.get('Body') or '').startswith(head) and str(c.get('CreatedAt') or '')[:10] == today for c in store.list_comments(tid)): continue
+        store.add_comment(tid, actor, 'agent', f"{head} in its run of {str(msg.get('sent_at') or today)[:16]} (report row #{mid}): {msg.get('subject') or ''}{tail}")
+
+
+def _mention(store, msg: dict, tids: list, intent: dict, actor: str, notes_note: str = '') -> dict:
+    """A report run about work that exists: the run is filed as its own row (never on a task, so it cannot become the task's origin
+    or its chain) and each task that holds a part of it gets the note that the report named it (_mentioned)."""
+    mid = _land(store, msg, None, 'feed')
+    ref = ' and '.join(task_ref(t) for t in tids)
+    store.add_route(mid, None, 'file', None, f"triage: it is about {ref}, which already hold{'s' if len(tids) == 1 else ''} that work - filed as the report's own row, "
+                    f"not joined to it · {intent.get('why') or ''}" + notes_note, [], 'triage', verdict=_stored_verdict(intent))
+    _mentioned(store, msg, tids, mid, actor)
     logger.info(f"ingest: a report run about {ref} - filed as its own row, noted on the task")
-    return {'status': 'feed', 'task_id': None, 'message_id': mid, 'mentions': tid}
+    return {'status': 'feed', 'task_id': None, 'message_id': mid, 'mentions': tids[0]}
 
 
 def joinable(store, tid, shut: bool = True):

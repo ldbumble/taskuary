@@ -313,7 +313,9 @@ def _claude_version(cmd: str) -> tuple:
 HELD_LINE = "You have not trusted {who} yet, so no agent works on this until you do."
 # ...and where an agent already worked the thread they wrote on: it is handed nothing more until he says so
 JOINED_LINE = "You have not trusted {who} yet, so the agent hears nothing more from this thread until you do."
-_HOLDS = {}                   # (store, task) -> (what it was judged on, when, the hold): a chat at work reads this twice a second
+# ...and what the press does past this task, said under it: a trust is kept, and Settings is where it is taken back
+TRUST_AFTER = "Trusting them also lets their next messages start an agent by themselves - take it back any time in Settings, under Agent permissions."
+_HOLDS = {}                 # (store, task) -> (what it was judged on, when, the hold): a chat at work reads this twice a second
 def hold(store, tid) -> dict | None:
     "{line, person (the Trust action's label), org, who, mids (the untrusted messages)} while an untrusted sender's words stand on the task."
     import time
@@ -334,7 +336,12 @@ def _hold(store, tid: int, t: dict) -> dict | None:
     if not mids or not (offer := senders.trust_offer(store, int(tid), msgs)): return None      # Taskuary's own words, a teammate chat: no sender to trust
     m = senders.whom(store, msgs, through) or {}
     who = ' '.join(str(m.get('FromName') or m.get('FromEmail') or 'this sender').split())        # ...mid-sentence: "You have not trusted this sender yet"
-    return {'line': HELD_LINE.format(who=who), 'person': offer['person'], 'org': offer.get('org'), 'who': who, 'mids': mids}
+    # ...WITH THE ADDRESS BESIDE THE NAME (the readiness review, 2026-11-14): a display name is the sender's to choose, and a stranger
+    # named like a colleague read as that colleague on the one line the press rests on
+    addr = str(m.get('FromEmail') or '').strip()
+    named = f'{who} ({addr})' if '@' in addr and addr.lower() not in who.lower() else who
+    return {'line': HELD_LINE.format(who=named), 'person': offer['person'], 'org': offer.get('org'), 'who': who, 'mids': mids,
+            'after': TRUST_AFTER}
 
 
 def launch_mode(store, tid, cli: str, cmd: str = '') -> str:

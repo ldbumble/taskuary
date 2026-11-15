@@ -928,7 +928,7 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'assistant_ai': '', 'assistant_model': '',
                     # which AI does each job (brainroute): auto = triage's judgement picks the model (the owner, 2026-11-06), fixed =
                     # the cards exactly as before; rules '' = the shipped ones
-                    'ai_route_mode': 'auto', 'ai_route_rules': '', 'ai_route_strong_cap': '',
+                    'ai_route_mode': 'auto', 'ai_route_rules': '', 'ai_route_strong_cap': '', 'auto_ai_daily_calls': '1500',
                     # ...and an AI per level for the agents' work ({quick|normal|hard: {pick, model}}) - blank = each card's own AI
                     'ai_route_brain_by_level': '',
                     # the agent's context file (context.py): history, past work and the brief, written to
@@ -6376,6 +6376,12 @@ class SQLiteStore:
     def remember_trust(self, mailbox: str, email: str, reason: str):
         self._exec('INSERT OR REPLACE INTO sender_trust (Mailbox, Address, Reason, CheckedAt) VALUES (?,?,?,?)',
                    ((mailbox or '').lower(), (email or '').lower(), reason, _now()))
+    def trusts(self, reasons) -> list:
+        return self._rows(f"SELECT * FROM sender_trust WHERE Reason IN ({','.join('?' * len(reasons))}) ORDER BY CheckedAt DESC", tuple(reasons))
+    def forget_trust(self, mailbox: str, email: str) -> bool:
+        q, p = 'FROM sender_trust WHERE LOWER(Mailbox)=LOWER(?) AND LOWER(Address)=LOWER(?)', (mailbox or '', email or '')
+        if not self._one('SELECT 1 x ' + q, p): return False
+        self._exec('DELETE ' + q, p); return True
     def _heal_notes(self):
         """An older install's notes table, healed in place before memorylines.migrate writes its rows into LEARNED.md and drops it."""
         self.cx.execute("UPDATE memory SET Note=REPLACE(Note, ' from an unknown sender', '') WHERE Source='verdict' AND Note LIKE '%from an unknown sender%'")

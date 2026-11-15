@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, AlertTitle, Autocomplete, Box, Checkbox, CircularProgress, FormControlLabel, MenuItem, Select, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { ACCENT2, BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
-import { RecentRoutes, RouteRules } from "./RouteRules.jsx";
+import { RecentRoutes, RouteRules, TodayUsage } from "./RouteRules.jsx";
 import { repick, runsLine } from "./aiCards.js";
 
 // A model box left blank is not "unconfigured" — it means the provider's own default, and the
@@ -223,6 +223,7 @@ export default function AiDefaults({ brains, agents, onGo, onLoaded }) {
         <Slot key={s.key} slot={s} brains={brains} agents={state.agent_options || agents || state.agents || []}
           judgeOptions={state.judge_options || []} onSave={(patch) => save(s, patch)} onGo={onGo} />
       ))}
+      {!!(state.slots || []).length && <TodayUsage />}
       {!!(state.slots || []).length && <RecentRoutes />}
     </Box>
   );

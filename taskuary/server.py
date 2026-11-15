@@ -2099,6 +2099,24 @@ def task_trust(task_id: int, scope: str = ''):
     return {'origin': o, 'why': why, 'started': started, **({'org': org} if org else {})}
 
 
+@app.get('/api/trusted')
+def trusted_list():
+    "Every sender and organisation the owner trusted (senders.trusted) - Settings -> Agent permissions, with Remove."
+    from . import senders
+    return {'data': senders.trusted(store)}
+
+class UntrustBody(BaseModel):
+    kind: str
+    key: dict
+
+@app.post('/api/trusted/remove')
+def trusted_remove(body: UntrustBody, request: Request):
+    from . import senders
+    _owner_only(request, "taking back a trust is the owner's")
+    if not senders.untrust(store, body.kind, body.key, ACTOR): raise HTTPException(404, 'that trust is not on file - it was taken back already')
+    return {'ok': True}
+
+
 def _trusted_starts(task_id: int) -> str:
     """TRUST STARTS THE AGENT (the owner, 2026-11-11): the hold is gone, and what waited is worked as on any task - a live agent is handed
     it as a line that joined the thread is (ingest.thread_moved: one turn for all of it), a task no agent worked yet starts its own."""
@@ -7647,7 +7665,7 @@ def brains():
     # detail, not the identity - 'coding' says nothing about which model family answers.
     # Each entry also carries its known model choices, so pickers offer a dropdown instead
     # of a spelling test (free typing still allowed for models we don't know about).
-    CONN_MODELS = {'anthropic': ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
+    CONN_MODELS = {'anthropic': ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-5-5'],
                    'openai': ['gpt-4o-mini'],
                    'openrouter': ['openrouter/auto', 'meta-llama/llama-3.3-70b-instruct'],
                    # the private tier leads; -contributor is a data-sharing choice, not a default

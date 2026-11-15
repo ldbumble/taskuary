@@ -296,3 +296,15 @@ def test_a_busy_day_stays_one_judgement_per_new_kind_of_mail_and_one_look_or_tur
     spent = day(store(), n=150, looks=48, every=4)
     print(NL + 'BUSY DAY (calls, est. tokens):', json.dumps(spent))
     assert spent['triage'][0] <= 42 and spent['quick_work'][0] <= 19 * 12 and spent['general'][0] <= 19 * 12 and spent.get('advisor', (0,))[0] <= 3, spent
+
+
+def test_the_days_ceiling_is_a_settings_knob_that_says_where_it_is_and_takes_0_for_none():
+    "The ceiling's own sentence sent the owner to Settings, where no row set it (the readiness review, 2026-11-14): it is a knob now."
+    from taskuary import brainroute, settings_schema
+    m = settings_schema.knobs()[brainroute.AUTO_CAP_KEY]
+    assert m['type'] == 'number' and brainroute.AUTO_CAP_KEY in settings_schema.panel_owned()
+    s = store(); assert s.get_setting(brainroute.AUTO_CAP_KEY) == str(brainroute.AUTO_CAP)
+    s.add_brain_route({'At': time.strftime('%Y-%m-%d %H:%M:%S'), 'Job': 'general', 'Pick': 'connector:1', 'Tier': 'standard', 'Calls': 1600})
+    assert 'in Settings, under Today' in brainroute.auto_held(s)
+    s.set_setting(brainroute.AUTO_CAP_KEY, '0', 't'); assert brainroute.auto_held(s) == '', '0 is no limit'
+    s.set_setting(brainroute.AUTO_CAP_KEY, '', 't'); assert brainroute.auto_held(s), 'blank is the default, not none'

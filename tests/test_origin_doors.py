@@ -70,3 +70,22 @@ def test_mode_of_task_is_empty_without_a_session_and_a_term_defaults_to_full():
     terminal.SESSIONS['zz'] = live
     try: assert terminal.mode_of_task(424242) == 'auto'
     finally: terminal.SESSIONS.pop('zz', None)
+
+
+def test_the_hold_names_the_address_says_trust_is_kept_and_settings_takes_it_back(monkeypatch):
+    """A stranger named like a colleague read as that colleague on the hold line, and a Trust was kept for good with no way back (the
+    readiness review, 2026-11-14): the line carries the address, the note under it says the trust is kept, and Remove ends it."""
+    from taskuary import ingest
+    tid = server.store.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'email'}, 'router')
+    server.store.add_message({'TaskId': tid, 'Channel': 'email', 'SourceName': 'box@northwind.example', 'FromName': 'Erin Blake',
+                              'FromEmail': 'erin@lookalike.example', 'Status': 'routed'})
+    server.store.tag_task(tid, ingest.HOLD_TAG, on=True, actor='t')
+    h = origin.hold(server.store, tid)
+    assert 'Erin Blake (erin@lookalike.example)' in h['line'] and 'Settings' in h['after']
+    monkeypatch.setattr(server, 'start_session', lambda *a, **k: 'sid')
+    c.post(f'/api/tasks/{tid}/trust')
+    row = next(r for r in c.get('/api/trusted').json()['data'] if r['label'] == 'erin@lookalike.example')
+    assert c.post('/api/trusted/remove', json={'kind': row['kind'], 'key': row['key']}, headers=agent()).status_code == 403
+    assert c.post('/api/trusted/remove', json={'kind': row['kind'], 'key': row['key']}).json()['ok']
+    assert not server.store.trusted_sender('box@northwind.example', 'erin@lookalike.example')
+    assert c.post('/api/trusted/remove', json={'kind': row['kind'], 'key': row['key']}).status_code == 404

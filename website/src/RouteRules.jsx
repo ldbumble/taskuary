@@ -191,6 +191,40 @@ export function RouteRules() {
   );
 }
 
+// WHAT THE AI DID TODAY, AND THE DAY'S LIMIT (the readiness review, 2026-11-14): the ceiling's own message said "the limit is in
+// Settings" while no Settings row set it, and /api/ai/today was drawn nowhere. One line of totals, one by job, and the limit beside them.
+const k = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n || 0));
+export const todayLine = (jobs) => {
+  const t = Object.values(jobs || {}).reduce((a, j) => ({ calls: a.calls + (j.calls || 0), in: a.in + (j.in || 0), cached: a.cached + (j.cached || 0), out: a.out + (j.out || 0) }),
+    { calls: 0, in: 0, cached: 0, out: 0 });
+  return `${t.calls.toLocaleString()} AI calls · ${k(t.in)} tokens in, ${k(t.cached)} of them cached · ${k(t.out)} out`;
+};
+export function TodayUsage() {
+  const [d, setD] = useState(null), [lim, setLim] = useState(""), [say, setSay] = useState("");
+  const load = useCallback(() => api.get("/api/ai/today").then((r) => { setD(r.data); setLim(String(r.data.ceiling ?? "")); }).catch(() => setD(false)), []);
+  useEffect(() => { load(); }, [load]);
+  if (!d) return null;
+  const save = () => lim !== String(d.ceiling ?? "") && api.patch("/api/settings", { name: "auto_ai_daily_calls", value: lim.trim() })
+    .then(() => { setSay(""); load(); }).catch((e) => setSay(err(e, "could not save the limit")));
+  const jobs = Object.entries(d.jobs || {}).sort((a, b) => (b[1].calls || 0) - (a[1].calls || 0));
+  return (
+    <Box data-tq-knob="auto_ai_daily_calls" data-tq-ai-today="" sx={{ ...card, p: 2, mb: 1.5, bgcolor: "var(--tq-panel, #fff)" }}>
+      <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.5 }}>TODAY</Typography>
+      <Typography sx={{ fontSize: 12.5, color: INK }} data-tq-ai-today-total="">{todayLine(d.jobs)}</Typography>
+      {!!jobs.length && <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>
+        {jobs.map(([j, v]) => `${JOB[j] || j} ${v.calls}`).join(" · ")}</Typography>}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: 1.25 }}>
+        <Typography sx={{ fontSize: 12.5, color: DIM }}>Past</Typography>
+        <TextField size="small" value={lim} onChange={(e) => setLim(e.target.value)} onBlur={save}
+          inputProps={{ "aria-label": "AI calls a day before automatic work waits", "data-tq-ai-limit": "" }} sx={{ width: 90, bgcolor: "var(--tq-panel, #fff)" }} />
+        <Typography sx={{ fontSize: 12.5, color: DIM }}>AI calls a day, agents stop starting and waking by themselves until tomorrow. What you ask for still runs. 0 = no limit.</Typography>
+      </Box>
+      {d.held && <Alert severity="warning" sx={{ mt: 1, fontSize: 12.5 }} data-tq-ai-held="">{d.held}</Alert>}
+      {say && <Alert severity="warning" sx={{ mt: 1, fontSize: 12.5 }}>{say}</Alert>}
+    </Box>
+  );
+}
+
 // RECENT ROUTES: the last twenty AI calls, one line each - which job, which task, which tier on which brain, and why. Read-only.
 export function RecentRoutes() {
   const [rows, setRows] = useState(null);

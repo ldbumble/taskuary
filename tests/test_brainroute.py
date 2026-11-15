@@ -351,3 +351,16 @@ def test_a_coding_pane_walks_backup_brains(monkeypatch):
     monkeypatch.setattr(config, 'load', lambda: {'cli_connections': {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex'}}})
     assert brainroute.session_chain(s, 'claude') == agents.brain_chain(s, 'claude') == ['claude', 'codex']
     assert brainroute.choose(s, 'coding', want_pick='cli:claude').chain == ['cli:codex']
+
+
+def test_a_blank_anthropic_card_reads_mail_on_its_light_model_and_keeps_its_own_for_the_rest(real):
+    """A blank model box on an Anthropic card read every mail on Opus, thinking less (the readiness review, 2026-11-14). Its quick jobs
+    run on the provider's light model as a CLI's do; a model the owner typed is his, and agent work stays on the card's own."""
+    s, cfg, cid = _home((), connector='anthropic', settings={'ai_route_mode': 'auto'})
+    with mock.patch.object(config, 'load', lambda: cfg):
+        r = brainroute.choose(s, 'triage')
+        assert (r.pick, r.tier, r.model) == (f'connector:{cid}', 'light', llm.PROVIDER_LIGHT['anthropic'])
+        assert brainroute.choose(s, 'general').model != llm.PROVIDER_LIGHT['anthropic']
+        assert brainroute._words(s, f'connector:{cid}', cfg)['quick'] == llm.PROVIDER_LIGHT['anthropic']
+        c = s.get_connector(cid); s.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({**json.loads(c.get('ConfigJson') or '{}'), 'model': 'claude-sonnet-5'})}, 'owner')
+        assert llm.PROVIDER_LIGHT['anthropic'] not in brainroute.choose(s, 'triage').model, 'a model he typed is his'

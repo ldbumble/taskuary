@@ -101,6 +101,31 @@ def trust_org(store, tid: int, actor: str) -> dict:
     return {'domain': o.get('domain', ''), 'tenant': o.get('tenant', ''), **{k: o[k] for k in ('team', 'name') if o.get(k)}}
 
 
+# WHO HE TRUSTED, AND TAKING IT BACK (the readiness review, 2026-11-14: one press trusted a sender for good, and nothing listed or undid it).
+# Only his own word is listed - a Trust press, a vouch, an organisation; an address found in his Sent Items is known by that, not by a press.
+OWNER_SAID = ('trusted by the owner', 'you vouched for them', 'you trust this source')
+
+def _org_label(o: dict) -> str:
+    return (f"everyone at {o['domain']}" if o.get('domain') else f"the Slack workspace {o.get('name') or o['team']}" if o.get('team')
+            else 'their organisation on Teams')
+
+def trusted(store) -> list:
+    "[{kind: 'person' | 'org', key, label, via}] - every sender and organisation the owner trusted, newest first."
+    ps = [{'kind': 'person', 'key': {'mailbox': r['Mailbox'], 'address': r['Address']}, 'label': r['Address'],
+           'via': r['Mailbox'] if '@' in (r['Mailbox'] or '') else (r['Mailbox'] or '').capitalize(), 'at': r['CheckedAt']}
+          for r in store.trusts(OWNER_SAID)]
+    return ps + [{'kind': 'org', 'key': {k: o[k] for k in _ORG_KEYS if o.get(k)}, 'label': _org_label(o), 'via': ''} for o in trusted_orgs(store)]
+
+def untrust(store, kind: str, key: dict, actor: str) -> bool:
+    "Takes one trust back: their next message waits behind Trust again. Tasks already worked keep what they were vouched for."
+    if kind == 'person': ok = store.forget_trust(key.get('mailbox') or '', key.get('address') or '')
+    else:
+        orgs = trusted_orgs(store); keep = [o for o in orgs if not any(key.get(k) and o.get(k) == key[k] for k in _ORG_KEYS)]
+        if ok := len(keep) < len(orgs): store.set_setting('trusted_orgs', json.dumps(keep), actor)
+    if ok: store.audit('trust', 0, 'untrust', actor, detail={'kind': kind, **key})
+    return ok
+
+
 def trust_offer(store, tid: int, msgs=None) -> dict | None:
     """The two presses that lift a stranger's hold, worded for the channel (the owner, 2026-10-26: "we should have button on untrusted
     user to either trust user or trust domain and then we won't have issue again"): {'person': 'Trust Erin', 'org': 'Trust everyone at

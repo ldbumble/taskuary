@@ -213,6 +213,12 @@ VERTEX_DEFAULT = 'gemini-3.8-flash'
 # kept a copy, and it drifted: it said Vertex ran 'google/gemini-3.8-flash' while it ran this (the router, 2026-10-25).
 PROVIDER_DEFAULT = {'anthropic': 'claude-opus-5', 'openai': 'gpt-4o-mini', 'openrouter': 'openrouter/auto', 'meta': 'muse-spark-1.2',
                     'vertex_ai': VERTEX_DEFAULT}
+# ...and its QUICK work - triage, ranking, memory, summaries - where the box is blank too, as a CLI's quick work runs on its light model
+# (LIGHT_DEFAULT): a blank Anthropic card read every mail on Opus (the readiness review, 2026-11-14). A provider not here thinks less instead.
+PROVIDER_LIGHT = {'anthropic': 'claude-haiku-5-5'}
+def light_of(kind: str, config: dict) -> str:
+    "The model an AI card's quick work runs on: its own quick box, else its provider's light model while its model box is blank, else ''."
+    return str(config.get('light_model') or '').strip() or ('' if str(config.get('model') or '').strip() else PROVIDER_LIGHT.get(kind, ''))
 # AN ANSWER CUT OFF BY THE LIMIT IS ASKED AGAIN WITH ROOM. A thinking model (Gemini 2.5+, the reasoning GPTs) spends its token budget
 # thinking before it writes, so a 400-token triage came back with no message at all - read as a refused format, then as an error with
 # no reason, and a connected Vertex AI sorted no mail (2026-10-15). Once more with this much room; empty after that says so.

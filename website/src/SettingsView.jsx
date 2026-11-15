@@ -48,6 +48,7 @@ import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
 import RoleStart from "./RoleStart.jsx";
 import LinesSetting from "./LinesSetting.jsx";
+import TrustedSenders from "./TrustedSenders.jsx";
 import DetailSlider, { chatDefaultsChanged } from "./DetailSlider.jsx";
 import { asLevel } from "./chatDetail.js";
 import { label as btnLabel } from "./buttons.js";
@@ -756,7 +757,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const after = {
     Sharing: panel("panel:sharedlinks", <SharedLinks />),
     Replies: panel("panel:handsig", <HandSignature />),              // the signature forms are signed with sits beside the one under the email
-    "Agent permissions": <>{panel("panel:signins", <SavedSignins />)}{panel("panel:sendfilter", <SendFilter />)}</>,
+    "Agent permissions": <>{panel("panel:trusted", <TrustedSenders />)}{panel("panel:signins", <SavedSignins />)}{panel("panel:sendfilter", <SendFilter />)}</>,
   };
   // no coding tool connected: the Coding agent section has nothing to set (capabilities.js)
   // ...and the phone's knobs are Phone & chats' (the owner, 2026-11-06: "it's not clear where that is"), never a Configuration group too

@@ -21,6 +21,7 @@ export default function HeldStart({ taskId, hold, onChanged }) {
           startIcon={busy ? <CircularProgress size={12} color="inherit" /> : null} sx={{ fontSize: 12.5, minHeight: 30, textTransform: "none" }}>
           {busy ? "Starting…" : hold.person || "Trust them"}</Button>
       </Box>
+      {hold.after && <Typography variant="caption" sx={{ display: "block", color: "var(--tq-faint, #8a857b)", mt: 0.5 }} data-tq-trust-after="">{hold.after}</Typography>}
       {err && <Typography variant="caption" sx={{ display: "block", color: "var(--tq-danger, #8a3646)", mt: 0.5 }}>{err}</Typography>}
     </Box>);
 }

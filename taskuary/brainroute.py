@@ -211,6 +211,8 @@ def lift(store, pick: str, tier: str, model: str = '', cfg=None) -> str:
     else:
         c = store.get_connector(int(p[10:])) if p[10:].isdigit() else None
         if (c or {}).get('Type') not in llm.EFFORT_TAKERS: return ''
+        # ...a card whose model box is blank has its provider's light model for quick work (llm.light_of), not its default thinking less
+        if tier == 'light' and not model and (lt := llm.light_of(c['Type'], {'model': _own(store, p, 'model', cfg)})): return lt
     m, e = climodels.split_pick(model or _own(store, p, 'model', cfg))
     want = LIFT[tier]
     if e in EFFORTS and (EFFORTS.index(e) <= EFFORTS.index(want) if tier == 'light' else EFFORTS.index(e) >= EFFORTS.index(want)): return ''
@@ -631,7 +633,7 @@ def auto_held(store, now: datetime = None) -> str:
     n = int(v) if v.isdigit() else AUTO_CAP
     if not n or (done := calls_today(store, now)) < n: return ''
     return (f"today's AI calls reached {done:,} (the daily limit for work nobody asked for is {n:,}), so agents do not start or wake by "
-            "themselves until tomorrow - what you ask for still runs, and the limit is in Settings")
+            "themselves until tomorrow - what you ask for still runs, and the limit is in Settings, under Today")
 
 
 def strong_today(store, now: datetime = None) -> int:
@@ -685,6 +687,13 @@ def _card_model(store, pick: str) -> str:
             or (llm.OPENAI_COMPATIBLE.get(t) or ('', ''))[1] or 'its default model')
 
 
+def _card_light(store, pick: str) -> str:
+    "The provider's light model an AI card's quick work runs on while its model box is blank (llm.light_of), else ''."
+    from . import llm
+    c = store.get_connector(int(pick[10:])) if pick[10:].isdigit() else None
+    return llm.light_of((c or {}).get('Type') or '', {'model': _own(store, pick, 'model')}) if c else ''
+
+
 def _base(store, p: str, cfg) -> str:
     """The model brain `p` runs when nothing asks for more, BY NAME where the app knows it (the owner, 2026-11-11: "settings are not
     clear" over "same model" and "its own model"): the model on its connection or card, else the one its CLI is set to in its own
@@ -701,7 +710,7 @@ def _words(store, p: str, cfg) -> dict:
     base = _base(store, p, cfg)
     name = base.split(', ')[0]
     at = lambda tier: f'{name}, {LIFT[tier]} effort' if lift(store, p, tier, cfg=cfg) else base
-    dflt = LIGHT_DEFAULT.get(_cli(store, p, cfg), '') if p.startswith('cli:') else ''
+    dflt = LIGHT_DEFAULT.get(_cli(store, p, cfg), '') if p.startswith('cli:') else _card_light(store, p)
     quick = spell(_own(store, p, 'light_model', cfg)) or (f'{name}, {dflt[7:]} effort' if dflt.startswith('effort:') else dflt) or at('light')
     return {'quick': quick, 'normal': base, 'hard': spell(strong_of(store, p, cfg)) or at('strong')}
 

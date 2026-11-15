@@ -161,6 +161,12 @@ def told(store, doc: str, text: str, actor: str = 'owner') -> dict:
     return {'ok': True, 'text': text, 'section': doc, 'doc': doc, 'title': f'{doc.upper()}.md'}
 
 
+def said(doc: str, text: str) -> bool:
+    "Whether the owner's own lines already say `text` - the same words, whatever the case, the spacing or a closing full stop."
+    t = ' '.join(str(text or '').split()).lstrip('-* ').strip()
+    return any(_same(_bare(l), t) for l in str(doc or '').splitlines() if l.strip().startswith(('- ', '* ')) and not TAG.match(l))
+
+
 def remember(store, text: str, about: str = '', section: str = '', replaces: str = '') -> dict:
     """A fact in the owner's own words, under the section it belongs in - `section` a slug (people, care, work, promises, bring), else
     Your people when it names someone (`about`, or an address in it) and What you care about otherwise. `replaces`: the key of a line it
@@ -191,7 +197,9 @@ def remember(store, text: str, about: str = '', section: str = '', replaces: str
     closed = close(store, replaces) if replaces else None
     doc = store.get_doc(DOC) or ''
     raw = f'- {t}'
-    if raw in doc.splitlines(): return {'ok': True, 'text': t, 'section': slug, 'already': True, 'closed': closed}
+    # ...SAID AGAIN IS NOT SAID TWICE (the owner, 2026-11-14: "be careful not to make the memory file too big"): the same words in other
+    # case, spacing or with a full stop were a second line each time an agent or the Assistant was told a thing it had been told
+    if said(doc, t): return {'ok': True, 'text': t, 'section': slug, 'already': True, 'closed': closed}
     _save(store, doc, _under(doc, lc.SECTIONS[slug], raw))
     store.add_learned_event(_key(t), t, 'live', 0, '', 'said', 'owner')
     return {'ok': True, 'text': t, 'section': slug, 'title': lc.TITLE[slug], 'closed': closed}

@@ -49,6 +49,35 @@ def test_wrong_is_never_revived_and_keep_makes_a_line_the_owners(w):
     assert 'you answer her asks within the hour' in s.get_doc('learned')
 
 
+def test_a_long_run_of_tellings_and_corrections_leaves_the_memory_the_size_it_was():
+    """The owner, 2026-11-14: "be careful not to make the memory file too big." Sixty rounds on one fact - who takes payroll questions, corrected
+    again and again, and said again in other case and punctuation between - are one line at the end, and the lines it replaced are history,
+    not text any reader is handed. Measured on the real run of the memory round: 55 lines / 8,507 characters before, 56 / 8,781 after."""
+    from taskuary import concierge, general
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    for i in range(30): memoryedit.remember(s, f'Mail about the site {i} cleaning rota is not yours')
+    n0, c0 = len([l for l in s.get_doc('learned').splitlines() if l.startswith('- ')]), len(s.get_doc('learned'))
+    who = ['Gail Moreno', 'Ray Colton', 'Paula Vance', 'Omar Keller', 'Marcus Reed']
+    last = ''
+    for i in range(60):
+        now = f'Payroll questions go to {who[i % 5]} (round {i})'
+        r = memoryedit.remember(s, now, replaces=last)
+        assert r['ok'] and (not last or r['closed']['text'] == last)
+        for again in (now.upper(), f'  {now}.', now.lower()):                       # ...said again, three ways: not three lines
+            assert memoryedit.remember(s, again).get('already'), again
+        last = now
+    doc = s.get_doc('learned')
+    ls = [l for l in doc.splitlines() if l.startswith('- ')]
+    assert len(ls) == n0 + 1 and len(doc) < c0 + 120, (len(ls), len(doc) - c0)
+    assert sum('Payroll questions go to' in l for l in ls) == 1 and ls[-1].endswith('(round 59)')
+    # ...and no reader is handed a replaced line: triage's whole memory, an agent's block, the Assistant's instructions
+    tid = s.create_task({'Title': 'Payroll question', 'Summary': 'Who takes payroll questions', 'Kind': 'general', 'Status': 'open'}, 'o')
+    for read in (lc.whole(s, 'triage'), general.learned_block(s, tid), concierge._system(s)):
+        assert '(round 59)' in read and '(round 58)' not in read and '(round 0)' not in read
+    assert s._one("SELECT COUNT(*) n FROM learned_history WHERE Action='closed'")['n'] == 59, 'kept as history, out of the document'
+
+
 def test_wrong_on_your_own_line_says_why_and_changes_nothing(w):
     s, facts, erin, ray, own = w
     key = next(k for raw, k in lc.lines(s.get_doc('learned'), lc.PEOPLE) if 'Paula' in raw)
@@ -147,7 +176,7 @@ def test_the_chat_keeps_gail_moved_to_ops_and_forgets_rays_payroll_line_at_once(
     dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
     out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail Moreno moved to Ops', 'about': 'gail@northwind.example',
                                                                          'replaces': 'gail finance headcount'}}, None, 'Gail moved to Ops')
-    assert out['did'] == 'memory.remember' and out['say'].startswith('Remembered under Your people') and 'kept as history' in out['say']
+    assert out['did'] == 'memory.remember' and out['say'] == concierge.GOT_IT, 'kept, and answered in a word: no receipt (2026-11-14)'
     assert learnedlines.row(s, 'gail finance headcount')['Status'] == 'closed' and 'moved to Ops' in s.get_doc('learned')
     out = concierge.call_turn(s, dock, {'kind': 'memory.wrong', 'params': {'key': 'payroll ray', 'how': 'forget'}}, None, 'forget that Ray does payroll')
     assert out['did'] == 'memory.wrong' and 'Ray Colton' in out['say'] and 'Ray Colton' not in s.get_doc('learned')

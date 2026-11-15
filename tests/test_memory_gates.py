@@ -56,7 +56,7 @@ def test_dont_care_said_to_the_assistant_lands_in_what_you_care_about():
     dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
     out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': LEGACY}}, None, LEGACY)
     assert out['did'] == 'memory.remember' and not out.get('open'), 'kept at once, not the notes page'
-    assert out['say'].startswith('Remembered under What you care about')
+    assert out['say'] == concierge.GOT_IT and '](' not in out['say'], 'no receipt, and no link for the page to follow'
     assert f'- {LEGACY}' in _care(s)
     # ...and the phone's road (server._run_operation) writes the same line, never a saved note
     s2 = MemoryStore()
@@ -111,10 +111,23 @@ def test_the_routing_judge_and_triage_read_every_section():
     assert 'Fridays for vendor renewals' in reports.judge_memory(s, {'title': 'Nightly process check'})
 
 
-def test_a_note_that_ends_its_own_sentence_is_receipted_with_one_full_stop():
-    "The bug hunt, 2026-11-12: \"Remembered under ... “Gail always wants budget figures rounded to the nearest thousand.”.\""
+def test_a_fact_told_to_the_assistant_is_kept_and_answered_in_its_own_few_words_never_a_receipt():
+    """The owner, 2026-11-14 ("memory should be silent"), from the recorded real chat: told "Marcus moved to security, laptop faults go to Omar
+    now", the Assistant answered with four lines - "Remembered under Your people in your memory (read by triage (priority only) · drafts ·
+    the Advisor · the Assistant · agents): “...” - “...” is kept as history, true until ..." - and the page followed the receipt's link to
+    the Memory page, off the task the owner was on. Now: its own words above the CALL, or two words; nothing for the page to open."""
     s = MemoryStore()
     dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
-    out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail always wants budget figures rounded to the nearest thousand.',
-                                                                         }}, None, 'remember that')
-    assert out['say'].startswith('Remembered under') and out['say'].endswith('nearest thousand.”'), out['say']
+    call = {'kind': 'memory.remember', 'params': {'note': 'Marcus Reed moved to security; laptop and badge faults go to Omar Keller now', 'section': 'people'}}
+    tok = concierge._TURN.set({'lead': 'Got it - Omar for laptop and badge faults.'})
+    try: out = concierge.call_turn(s, dock, call, None, 'Marcus moved to security, laptop faults go to Omar now')
+    finally: concierge._TURN.reset(tok)
+    assert out['say'] == 'Got it - Omar for laptop and badge faults.' and 'go to Omar Keller now' in s.get_doc('learned')
+    for no in ('Remembered', 'memory', 'read by', '](', '#about'): assert no not in out['say'], no
+    # ...with no words of its own, a plain two; and the guidance is one sentence where the tool is described
+    out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail always wants budget figures rounded to the nearest thousand.'}}, None, 'remember that')
+    assert out['say'] == concierge.GOT_IT
+    assert 'never that it was saved, where, or who reads it' in concierge.turn_system(s)
+    # ...and a task's agent is told the same of its own tool: a few natural words, never a report of the save
+    from taskuary import agenttools
+    assert 'never say that you saved it, or where' in agenttools.TOOLS['remember'][1]

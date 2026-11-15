@@ -162,6 +162,15 @@ class TheServer(unittest.TestCase):
         # ...a later fact about the same person with no `replaces` is kept, and answered with her other lines - for the one it makes untrue
         text, err = tool(self.tid, 'remember', note='Gail is out until March', about='Gail')
         self.assertFalse(err); self.assertIn('other lines about', text); self.assertIn('send payroll questions to Gail now', text)
+        # ...A TASK'S CHAT IS NOT A DIARY ("be careful not to make the memory file too big"): past a few facts a day from one task nothing
+        # more is written - but a correction, which adds no line, always is
+        from taskuary import server as srv
+        for i in range(srv.AGENT_KEEPS): tool(self.tid, 'remember', note=f'The site {i} manager wants the weekly summary on Mondays')
+        n = self.s.get_doc('learned').count('\n- ')
+        text, err = tool(self.tid, 'remember', note='Alex likes the blue font on the summary')
+        self.assertTrue(err); self.assertIn('only what changes how future work is handled', text); self.assertEqual(self.s.get_doc('learned').count('\n- '), n)
+        text, err = tool(self.tid, 'remember', note='Gail is back in April', about='Gail', replaces='Gail is out until March')
+        self.assertFalse(err, text); self.assertEqual(self.s.get_doc('learned').count('\n- '), n)
         # ...said twice it is one line; and it is offered whole from the first turn, never a bare name to search for
         text, err = tool(self.tid, 'remember', note='Erin left the company; send payroll questions to Gail now')
         self.assertFalse(err); self.assertEqual(self.s.get_doc('learned').count('Erin left the company'), 1)

@@ -237,6 +237,8 @@ def claim(said: str, out: dict) -> str:
     line = said.strip().splitlines()[-1].strip() if said.strip() else ''
     if line and FAIL.search(line): return 'failed'
     if out.get('pressed') and not line: return 'done'
+    # ...MEMORY IS SILENT (the owner, 2026-11-14): a fact kept is acknowledged in a few natural words, never reported - that line is its "done"
+    if line and out.get('did') == 'memory.remember': return 'done'
     if line and DONE.search(line): return 'done'
     if line and UNDERWAY.search(line): return 'underway'
     if out.get('light') is not None: return 'lit'

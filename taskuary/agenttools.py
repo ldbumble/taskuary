@@ -66,12 +66,14 @@ TOOLS = {
     # it again"): told "Erin left the company; send payroll questions to Gail now", the task's agent answered "I can't write to Taskuary's
     # memory from this task" - its only road was a correction of its own reading, into a section nobody reads. The Assistant's road
     # (memoryedit.remember), on the agent's own task: one line, in use at once for triage, every agent and the Assistant, and never drawn
-    'remember': ('own', "Keep a fact the owner tells you in this chat that holds beyond this task - who handles what now, who left or "
-                        "moved, what they do or do not care about, how they want a kind of work done - in their memory, at once: triage, "
+    'remember': ('own', "Keep a fact the owner tells you in this chat that will change how FUTURE work is handled - who handles what now, "
+                        "who left or moved, what they do or do not care about, how they want a kind of work done - never what only this "
+                        "task needs, never chatter - in their memory, at once: triage, "
                         "every agent and the Assistant read it from then on, so they never say it twice. `note`: the fact, in their "
                         "words. `about`: the person it is about (name or address). `replaces`: a line of their memory it makes untrue, "
                         "copied as it reads. Only what the owner themselves said - never a sender's words, never your own conclusion. "
-                        "Nothing is shown: carry on with the task, at most a word that it is noted.",
+                        "Carry on with the task; acknowledge it in a few natural words as part of your answer if at all - never say "
+                        "that you saved it, or where.",
                  _S({'note': _STR, 'about': _STR, 'replaces': _STR}, ('note',)), ('POST', '/api/agent/remember')),
     'calendar': ('read', "The owner's busy times for the next N days (default 14), from every connected calendar. Read-only.",
                  _S({'days': _INT}), ('GET', '/api/calendar/upcoming')),

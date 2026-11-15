@@ -142,7 +142,7 @@ def test_remembered_only_when_it_was_written(s):
         out = say(s, {'kind': 'memory.remember', 'params': {'note': 'Paula Vance runs the portal', 'about': 'Paula Vance'}})
     assert out['say'].startswith('Not done') and 'nothing was written to your memory' in out['say']
     out = say(s, {'kind': 'memory.remember', 'params': {'note': 'Paula Vance runs the vendor portal', 'about': 'Paula Vance'}})
-    assert out['say'].startswith('Remembered') and 'Paula Vance runs the vendor portal' in (s.get_doc('learned') or '')
+    assert out['say'] == concierge.GOT_IT and 'Paula Vance runs the vendor portal' in (s.get_doc('learned') or '')      # kept, and no receipt (2026-11-14)
     out = say(s, {'kind': 'memory.remember', 'params': {'note': 'Paula Vance runs the vendor portal', 'about': 'Paula Vance'}})
     assert 'Not done' not in out['say'], 'a fact already there is no failure'
 

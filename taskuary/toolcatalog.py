@@ -79,7 +79,8 @@ PURPOSE = {
     # ...and a rule about HOW to write goes where the drafter reads its voice, STYLE.md's Owner notes - the model says which, by what the
     # fact IS (the owner, 2026-10-28: "when I ask the chat to write Mrs X to women from now on it should go to STYLE.md ... It should know
     # where each memory goes")
-    'memory.remember':          ("keep a fact or rule the owner tells you, at once - `note`: it, in the owner's words "
+    'memory.remember':          ("keep a fact or rule the owner tells you, at once, and above the CALL answer them in a few natural words "
+                                 '("Got it - Omar for badge faults.") - never that it was saved, where, or who reads it. `note`: it, in the owner\'s words '
                                  '("Gail moved to Ops", "Ray handles payroll for me", "I put renewals off to Friday", "I don\'t care about the '
                                  'legacy export job any more"); `section`, always: people (who someone is to them, how they deal with them) | '
                                  'care (what they are responsible for and what they do NOT care about - a legacy process, a system no longer '

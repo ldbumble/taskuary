@@ -45,4 +45,4 @@ def test_the_assistant_says_where_it_saved_it():
         said = concierge._memory(s, tid, 'memory.remember', {'note': RULE, 'section': 'style'})
         fact = concierge._memory(s, tid, 'memory.remember', {'note': 'Gail moved to Ops', 'section': 'people', 'about': 'Gail Moreno'})
     assert said.startswith('Saved to your writing style:') and 'Mrs <surname>' in said
-    assert fact.startswith('Remembered under Your people')
+    assert fact == concierge.GOT_IT, 'a fact for the memory is kept without a receipt (the owner, 2026-11-14: memory is silent)'

@@ -5807,6 +5807,7 @@ def agent_remind(body: AgentRemindBody, request: Request):
     return {'ok': True, **out}
 
 class AgentRememberBody(BaseModel): task_id: int; note: str = ''; about: str = ''; replaces: str = ''; agent: str = 'agent'
+AGENT_KEEPS = 5          # new memory lines one task's agent may write in a day; a correction (`replaces`) adds none and is always taken
 
 @app.post('/api/agent/remember')
 def agent_remember(body: AgentRememberBody, request: Request):
@@ -5823,6 +5824,14 @@ def agent_remember(body: AgentRememberBody, request: Request):
     if not general.owner_spoke(store, body.task_id):
         raise HTTPException(422, "not kept: the owner has said nothing in this chat, and only their own words go into their memory - what a "
                                  "sender wrote is not theirs. Carry on with the task; if the owner tells you the fact, keep it then.")
+    # ...and A TASK'S CHAT IS NOT A DIARY (the owner, 2026-11-14: "be careful not to make the memory file too big"): a few facts a day from
+    # one task, counted by its own audit rows - past that it is chatter, and the line is not written
+    from datetime import timedelta
+    since = (datetime.now() - timedelta(days=1)).isoformat(sep=' ', timespec='seconds')
+    kept = store._one("SELECT COUNT(*) n FROM audit WHERE EntityType='task' AND EntityId=? AND Action='agent_remembered' AND CreatedAt>=?", (body.task_id, since))
+    if int((kept or {}).get('n') or 0) >= AGENT_KEEPS and not body.replaces.strip() and not memoryedit.said(store.get_doc('learned'), body.note):
+        raise HTTPException(422, f"not kept: {AGENT_KEEPS} facts from this task are in the owner's memory since yesterday, and it holds only what "
+                                 "changes how future work is handled. Carry on with the task; a fact that corrects one of them is kept with `replaces`.")
     try: r = memoryedit.remember(store, body.note, body.about, replaces=body.replaces)
     except LookupError:
         # ...a line to replace that the memory does not hold: the lines about them, to copy one from - or kept beside them, with no `replaces`
@@ -5831,14 +5840,14 @@ def agent_remember(body: AgentRememberBody, request: Request):
                                  "call again with the one it makes untrue copied exactly, or with no `replaces`." if near else
                                  "Call again with no `replaces`, or read the lines first (owner_memory) and copy the one it makes untrue."))
     except ValueError as e: raise HTTPException(422, str(e))
-    store.audit('task', body.task_id, 'agent_remembered', body.agent, 'agent', {'line': r['text'][:400], 'section': r.get('section'), 'closed': (r.get('closed') or {}).get('text')})
+    if not r.get('already'): store.audit('task', body.task_id, 'agent_remembered', body.agent, 'agent', {'line': r['text'][:400], 'section': r.get('section'), 'closed': (r.get('closed') or {}).get('text')})
     c = r.get('closed') or {}
     # ...and the other lines about the same person, for the one this makes untrue: two lines that disagree are read as two truths
     rest = [] if c or r.get('already') or not body.about.strip() else [l['text'] for l in memoryedit.about(store, body.about)['lines'] if l['text'] != r['text']][:6]
     return {'ok': True, **r, 'says': (f"Already in the owner's memory: {r['text']}" if r.get('already') else f"Kept in the owner's memory, in use from now: {r['text']}")
             + (f" - and {c['text']!r} is closed as no longer true." if c else '')
             + (f" The memory's other lines about {body.about}: {json.dumps(rest, ensure_ascii=False)} - if this makes one of them untrue, call again "
-               "with it as `replaces`." if rest else '') + ' Nothing is shown to the owner; carry on.'}
+               "with it as `replaces`." if rest else '') + ' Carry on; never tell the owner it was saved, or where.'}
 
 @app.delete('/api/tasks/{tid}/check-back')
 def cancel_check_back(tid: int, request: Request):

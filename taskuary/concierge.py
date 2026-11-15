@@ -1599,6 +1599,7 @@ def _lookout(store, tid: int) -> dict:
     return _did(store, tid, said, 'advisor.ideas') | {'started': started}
 
 
+GOT_IT = 'Got it.'
 def _memory(store, tid: int, kind: str, p: dict) -> dict:
     """memory.remember (a fact about how the owner works) and memory.wrong, run: the memory changed and said in one line, with the words
     of the line - or a miss the model fixes (no such line; Wrong on the owner's own line)."""
@@ -1623,11 +1624,12 @@ def _memory(store, tid: int, kind: str, p: dict) -> dict:
             if doc in memoryedit.TOLD_DOCS:
                 return _did(store, tid, f"Saved to {at} ({memoryedit.DOC_READS[doc]}): {q(r['text'])}"
                                         + (' - it was there already.' if r.get('already') else '.'), kind, r)
-            from . import learned_cut
-            # ...one full stop: a note that ends its own sentence inside its quotes is not given a second after them
-            stop = '' if str(r['text']).rstrip().endswith(('.', '!', '?')) else '.'
-            return _did(store, tid, f"Remembered under {r.get('title') or 'your memory'} in {at} ({learned_cut.reads_label(r.get('section') or 'care')}): {q(r['text'])}"
-                        + (f" - {q(c['text'])} is kept as history, true until {c['until']}." if c else stop), kind, r)
+            # MEMORY IS SILENT (the owner, 2026-11-14: "memory should be silent"): a fact kept in LEARNED.md is answered as a person would -
+            # the Assistant's own few words above its CALL ("Got it - Omar for badge faults."), else GOT_IT. It was a four-line receipt -
+            # the section, who reads it, the line quoted, what it replaced - whose link the page then followed, taking the owner off what
+            # they were doing to the Memory page. A write that did not land is still said (_landed)
+            lead = ' '.join(str((_TURN.get() or {}).get('lead') or '').split())
+            return _did(store, tid, lead[:300] or GOT_IT, kind, r)
         how = str(p.get('how') or 'wrong').strip().lower()
         if how not in ('wrong', 'forget', 'ended', 'keep'): raise ValueError(f'memory.wrong how is wrong, forget, ended or keep - not {how!r}')
         key = str(p.get('key') or '')
@@ -2124,6 +2126,9 @@ TURN_GUIDE = ('HOW EACH OF THE OWNER\'S TURNS READS - the message that carries t
               # the sounds" with directions
               '- How you write: plain text. A CALL is one bare line at the end - no code fence, no XML or tool-call markup around it, '
               'one CALL per answer.\n'
+              # ...MEMORY IS SILENT (the owner, 2026-11-14): one sentence, where it is told how it acts
+              '- A fact the owner tells you to keep is a memory.remember CALL under a few natural words of yours ("Got it - Omar for badge '
+              'faults.") - never that it was saved, where, or who reads it.\n'
               '- A plain question nothing here knows (the weather, a fact of the world) is answered in words - "I can\'t tell from here" is '
               'an answer. An agent is for work the owner wants done, never a stand-in for "I don\'t know".\n'
               '- A wish or a bug about Taskuary itself ("I wish it could...", "it keeps getting X wrong") is issue.draft. A sync asked for now '
@@ -6224,6 +6229,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                 if off and not is_button(store, item, off):
                     if not reply: reply, options = _in_words(llm, system, table, text, off)
                     call = None; break
+                if (turn_ := _TURN.get()) is not None: turn_['lead'] = reply        # its own words above the CALL: what a kept fact is answered with (_memory)
                 try: return call_turn(store, tid, call, item, text, actor)
                 except CallMiss as e:
                     if miss: miss = str(e); break                    # the second miss: answered below, by the model

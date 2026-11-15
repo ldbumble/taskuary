@@ -238,6 +238,69 @@ class OneRoundTripTests(unittest.TestCase):
             self.assertEqual(apiagent.turn(Brain(), MemoryStore(), 1, 'p', 'sys', 'book it', 500, tools=core), 'Booked.')
         assert seen[1] == names + ['calendar'] and seen[2] == names + ['calendar', 'set_up_meeting'], 'appended, never reordered'
 
+    def test_an_invoice_job_of_25_steps_stays_under_the_bound_on_every_call(self):
+        """The gateway's own per-call log for an outside client (2026-11-15): one invoice job, 139 calls at 35-60K prompt tokens, 6.4M in all.
+        The bound counted the messages' text alone - not the tools' schemas, not the arguments of the agent's own calls - so every whole file
+        it wrote (an invoice, a PowerShell script) rode on every call after it. The job's shape: a real-size template and timesheet read, the
+        invoice written whole four times and edited between, reads in parallel, a page searched, across two turns."""
+        import tempfile
+        from taskuary import agenttools, officefiles
+        d = Path(tempfile.mkdtemp())
+        tpl, xl, out = d / 'invoice-template.docx', d / 'timesheet.xlsx', d / 'invoice-october.docx'
+        officefiles.write(tpl, '\n'.join(['# INVOICE', 'Bill to: [client]', 'Date | Session | Hours | Rate | Amount', '[date] | [session] | [hours] | [rate] | [amount]',
+                                          *[f'Terms {i}: payment within thirty days of the invoice date, by bank transfer.' for i in range(30)]]))
+        officefiles.write(xl, '\n'.join(['Date | Person | Session | Hours | Rate', *[f'2026-10-{1 + i % 28:02d} | Erin Blake | Team coaching item {i} | {1 + i % 3} | 120'
+                                                                                    for i in range(300)]]))
+        full = lambda r: '\n'.join(['# INVOICE', 'Bill to: Payworth', 'Date | Session | Hours | Rate | Amount',
+                                    *[f'2026-10-{1 + i % 28:02d} | Team coaching item {i} | {1 + i % 3} | {r} | {(1 + i % 3) * r}' for i in range(90)]])
+        P = lambda n, **a: (n, a)
+        turn1 = [[P('file_read', path=str(tpl)), P('file_read', path=str(xl))], [P('search_messages', query='invoice Payworth')],
+                 [P('web_search', query='Payworth billing address')], [P('file_write', path=str(out), text=full(120))], [P('file_read', path=str(out))],
+                 *[[P('file_edit', path=str(out), old=f'Team coaching item {i}', new=f'Team coaching, item {i}')] for i in (81, 82, 83)],
+                 [P('file_write', path=str(out), text=full(125))], [P('file_read', path=str(out)), P('file_read', path=str(xl))], None]
+        turn2 = [[P('file_write', path=str(out), text=full(130))], *[[P('file_edit', path=str(out), old=f'Team coaching item {i}', new=f'Coaching {i}')] for i in (81, 82, 83)],
+                 [P('file_read', path=str(out))], [P('web_search', query='Payworth accounts payable')], [P('file_write', path=str(out), text=full(135))],
+                 [P('file_read', path=str(out)), P('file_read', path=str(xl))], [P('file_read', path=str(tpl))], [P('search_messages', query='Paula rate')],
+                 [P('web_search', query='Payworth tax number')], [P('show', files=[str(out)])],
+                 [P('propose_email', to='billing@vendor.example', subject='October invoice', text='The October invoice is attached.', attach=[str(out)])], None]
+        plan, seen = [*turn1, *turn2], []
+        class Model:
+            def chat(self, msgs, tools, max_tokens, **kw):
+                seen.append((json.loads(json.dumps(msgs)), json.loads(json.dumps(tools))))
+                step = plan.pop(0)
+                if step is None: return {'content': 'Filled; the rate is the open question.' if plan else 'Filled, and the email is drafted.'}
+                return {'tool_calls': [{'id': f'c{len(seen)}-{j}', 'function': {'name': n, 'arguments': json.dumps(a)}} for j, (n, a) in enumerate(step)]}
+        def post(url, json=None, headers=None, timeout=None):
+            r = mock.Mock(status_code=200); r.json.return_value = agenttools.rpc(json, lambda n, a: f'{n}: ' + 'a found line of mail. ' * 120, ()); return r
+        real = apiagent.run_tool
+        def run(s, t, i, n, a):
+            if n == 'web_search': return apiagent._cut('\n'.join(f'{a["query"]} - result {k}: ' + 'what the page says ' * 6 for k in range(200)))
+            if n in apiagent.LOCAL and n != 'show': return real(s, t, i, n, a)
+            return f'{n} done.'
+        system = 'You are the agent on this task. ' * 1_000           # a fresh install's system prompt is ~33,000 characters (measured)
+        task = 'TASK TQ-0001\nTITLE: October invoice\n' + 'Paula asks for the October invoice from the timesheet. ' * 60
+        tools, kept = apiagent.tools_for(1, 'inv', False, post=post), []
+        try:
+            with mock.patch.object(apiagent, 'run_tool', side_effect=run):
+                apiagent.turn(Model(), MemoryStore(), 1, 'inv', system, task, 500, tools=tools, history=kept)
+                apiagent.turn(Model(), MemoryStore(), 1, 'inv', system, 'go on - the rate is 130', 500, tools=tools, history=kept)
+        finally: apiagent.forget(1, 'inv')
+        size = lambda m, t: len(json.dumps({'messages': m, 'tools': t}, separators=(',', ':'), ensure_ascii=False))
+        sizes = [size(m, t) for m, t in seen]
+        self.assertEqual(len(seen), 25)
+        # FIRST: the system, the tools and the task - nothing else rides on a call before the work begins
+        self.assertLess(sizes[0], len(system) + len(task) + len(json.dumps(tools)) + 500)
+        # EVERY CALL, the WHOLE of it (tools and the calls' own arguments counted), under the bound
+        self.assertLessEqual(max(sizes), apiagent.REQUEST_CHARS, f'calls over the bound: {[s for s in sizes if s > apiagent.REQUEST_CHARS]}')
+        # ...and a file the agent wrote whole goes once, not on every call after it
+        self.assertLessEqual(max(json.dumps(m).count('Coaching 89 |') + json.dumps(m).count('item 89 | 3 | 1') for m, _ in seen[-3:]), 2)
+        # THE PREFIX - system, then the tools offered first - is the same bytes on every call (the provider's cache)
+        self.assertTrue(all(m[0] == seen[0][0][0] and t[:len(tools)] == seen[0][1][:len(tools)] for m, t in seen))
+        # ...and the WORK, what the calls carried beyond that prefix: under WORK a call on average. This job sent ~27,000 a call before (the
+        # files it wrote, again and again) and ~18,000 after; the prefix itself is the provider's cache to serve
+        WORK = 22_000
+        self.assertLess(sum(s - sizes[0] for s in sizes) / len(sizes), WORK)
+
     def test_a_long_conversation_drops_its_oldest_tool_answers_then_its_oldest_turns(self):
         call = lambda k: {'role': 'assistant', 'tool_calls': [{'id': k, 'function': {'name': 'file_read', 'arguments': '{}'}}]}
         def talk(): return [{'role': 'system', 'content': 'sys'}, {'role': 'user', 'content': 'the whole task'},

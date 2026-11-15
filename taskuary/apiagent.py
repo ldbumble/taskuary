@@ -451,20 +451,40 @@ DROPPED = '(dropped to save room - run it again if you need it)'
 # ...AND THE LINE MOVES IN WHOLE BLOCKS (the cache audit, 2026-11-14): stubbed per step, the line between whole and stubbed moved on every
 # call, and each step from the fourth wrote the last three answers to the cache again. It moves KEEP_STEPS steps at a time now, so the calls
 # between are read from the cache whole, and the newest KEEP_STEPS to 2*KEEP_STEPS-1 answers go whole.
-KEEP_STEPS, REQUEST_CHARS = 3, 120_000
+KEEP_STEPS = 3
+# ...AND THE BOUND IS THE WHOLE CALL (the gateway's own per-call log, 2026-11-15: an invoice job of 139 calls at 35-60K prompt tokens each,
+# 6.4M in all): the bound counted the messages' text alone - never the tools' schemas, never the arguments of the calls the agent made - so
+# every file it wrote whole rode on every later call, and 120,000 characters of "conversation" was a call of 45K tokens and more. One
+# function measures a call as it goes out (size) and every call of every card is held under REQUEST_CHARS by it (sent): the system, the
+# tools and the task lead (the cached prefix, ~50,000 characters on a fresh install), which leaves the working window ~30,000 - a file
+# read or two and what came of them. A picture counts as IMAGE_CHARS, what a model reads of it, never its base64 bytes.
+REQUEST_CHARS, IMAGE_CHARS = 80_000, 4_000
+def size(msgs: list, tools=()) -> int:
+    "One call's characters as it goes out: every message (the calls' arguments too) and the tools' schemas."
+    pics = sum(len(p['image_url'].get('url') or '') - IMAGE_CHARS for m in msgs for p in (m.get('content') if isinstance(m.get('content'), list) else ())
+               if isinstance(p, dict) and isinstance(p.get('image_url'), dict))
+    return len(json.dumps({'messages': msgs, 'tools': list(tools or ())}, separators=(',', ':'), ensure_ascii=False, default=str)) - pics
 def _whole_from(msgs: list, keep: int = KEEP_STEPS) -> int:
     "Where whole answers begin: the step at the last block boundary at least `keep` steps back (0: everything whole)."
     steps = [i for i, m in enumerate(msgs) if m.get('tool_calls')]
     return steps[(len(steps) - keep) // keep * keep] if len(steps) >= 2 * keep else 0
-def _stub(name, args, n) -> str: return f'(the answer to {name}({str(args or "")[:160]}), {n:,} characters, is not repeated here - call it again if you need it)'
+def _stub(name, args, n) -> str: return f'(the answer to {name}({_slim(args)[:160]}), {n:,} characters, is not repeated here - call it again if you need it)'
+def _slim(args) -> str:
+    "A call's arguments with each long text said by its length: the file it wrote whole is not sent again on every call after (WRITE)."
+    args = args if isinstance(args, str) else json.dumps(args or {})
+    try: a = json.loads(args or '{}')
+    except ValueError: return args if len(args) <= STUB_AT else json.dumps({'arguments': f'({len(args):,} characters, not repeated)'})
+    if not isinstance(a, dict) or not any(isinstance(v, str) and len(v) > STUB_AT for v in a.values()): return args
+    return json.dumps({k: f'({len(v):,} characters, not repeated)' if isinstance(v, str) and len(v) > STUB_AT else v for k, v in a.items()}, ensure_ascii=False)
+STUB_AT = 300
 
 
 # A READ MADE AGAIN IN ONE TURN IS ANSWERED FROM THE FIRST: a model that searched or read the same thing twice paid for the whole answer twice,
 # and the server ran it twice. Only a tool that reads Taskuary's own records or the agent's files (READS, FILES) is answered so, only while
 # nothing else has run since: any other call - a tick, a write, a command, a click - clears the turn's record, since it may have changed it
-def _again(msgs: list, first: dict, text: str, name: str) -> str:
+def _again(msgs: list, first: dict, text: str, name: str, tools=(), budget: int = REQUEST_CHARS) -> str:
     "A pointer where the first answer still goes whole with every call (sent); else that answer again, as it came, without running it."
-    if any(m is first for m in msgs[_whole_from(msgs):]) and first.get('content') == text:
+    if first.get('content') == text and any(m.get('tool_call_id') == first.get('tool_call_id') and m.get('content') == text for m in sent(msgs, tools, budget)):
         return f'(the same as your earlier {name} call this turn, answered above - nothing since could change it)'
     return text
 
@@ -488,26 +508,35 @@ def _fit(msgs: list, keep: int = 6, budget: int = None):
         over -= sum(map(_size, msgs[2:nxt])); del msgs[2:nxt]
 
 
-def sent(msgs: list, budget: int = REQUEST_CHARS, keep: int = KEEP_STEPS) -> list:
-    "What one call sends of the conversation `msgs`: tool answers before the last block of steps (_whole_from) as a stub (_stub), the whole under `budget`."
-    cut = _whole_from(msgs, keep)
+def _stubbed(msgs: list, cut: int) -> list:
+    "`msgs` with every tool answer and call argument before `cut` said as a line: copies, the conversation kept is untouched."
     calls = {c.get('id') or (c.get('function') or {}).get('name'): c.get('function') or {} for m in msgs[:cut] for c in m.get('tool_calls') or []}
     out = []
     for i, m in enumerate(msgs):
         c = m.get('content')
-        if i < cut and m.get('role') == 'tool' and isinstance(c, str) and len(c) > 300:
+        if i < cut and m.get('role') == 'tool' and isinstance(c, str) and len(c) > STUB_AT:
             f = calls.get(m.get('tool_call_id')) or {}
             m = {**m, 'content': _stub(f.get('name') or 'a tool', f.get('arguments'), len(c))}
+        elif i < cut and m.get('tool_calls'):
+            m = {**m, 'tool_calls': [{**k, 'function': {**k['function'], 'arguments': _slim(k['function'].get('arguments'))}} if k.get('function') else k
+                                     for k in m['tool_calls']]}
         out.append(dict(m))
-    _fit(out, budget=budget)
     return out
 
 
-# ...AND THE BOUND IS THE WHOLE REQUEST (the gateway's own log, 2026-11-15: calls of 35-60K tokens under a 120,000-character bound): the tools'
-# schemas ride on every call beside the conversation and were never counted - ~15,000 characters before one word of the job
-def room(budget: int, tools) -> int:
-    "What the conversation may take of `budget` once the tools' schemas, sent on the same call, are counted."
-    return max(budget // 4, budget - len(json.dumps(tools or [], separators=(',', ':'))))
+def sent(msgs: list, tools=(), budget: int = REQUEST_CHARS, keep: int = KEEP_STEPS) -> list:
+    """What one call sends of the conversation `msgs` beside `tools`, under `budget` as size() counts it: tool answers and call arguments
+    before the last block of steps (_whole_from) as lines; over the bound, the whole window moves on a step at a time - never past the
+    newest step, whose answers the model has not read yet - and then the oldest turns go (_fit)."""
+    cut, steps = _whole_from(msgs, keep), [i for i, m in enumerate(msgs) if m.get('tool_calls')]
+    out = _stubbed(msgs, cut)
+    for at in (s for s in steps if s > cut):
+        if size(out, tools) <= budget: break
+        out = _stubbed(msgs, at)
+    if (over := size(out, tools) - budget) > 0:
+        _fit(out, budget=max(1, sum(map(_size, out)) - over))
+        if size(out, tools) > budget: logger.info(f'apiagent: a call of {size(out, tools):,} characters goes over the {budget:,} bound - its newest step alone')
+    return out
 
 
 def _setting(store, key: str, default: int) -> int:
@@ -556,7 +585,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
             # ...stopped before its first answer, a conversation under way still heard the line: the next turn says only its own
             if stopped(): begun = begun or bool(history); raise RuntimeError('stopped')
             _fit(msgs)
-            try: m = _await(lambda: brain.chat(sent(msgs, room(budget, tools)), tools, max_tokens), cancel)
+            try: m = _await(lambda: brain.chat(sent(msgs, tools, budget), tools, max_tokens), cancel)
             except Exception as e:
                 if stopped(): begun = begun or bool(history); raise
                 # ...the conversation it was handed is what this call could not take (too long for the model now, or a gateway that
@@ -578,7 +607,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                 if trace: trace('tool_call', name, {'args': a})
                 if name in (DEFERRED.get((tid, sid)) or {}): load(tid, sid, tools, [name])       # called by the name it was given: loaded as it runs
                 key, again = (name, json.dumps(a, sort_keys=True, default=str)), False
-                if name in reads and key in seen: out, err, again = _again(msgs, *seen[key], name), False, True
+                if name in reads and key in seen: out, err, again = _again(msgs, *seen[key], name, tools, budget), False, True
                 else:
                     try: out, err = (load(tid, sid, tools, a.get('names')) if name == LOAD else _await(lambda: run_tool(store, tid, sid, name, a), cancel)), False
                     except Exception as e:
@@ -602,7 +631,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                 break
         # going in circles (or out of a caller's own bound): one last answer in words, no more tools - where it got and what is left
         msgs.append({'role': 'user', 'content': f'{why} Say what you did, what you found, and what is left.'})
-        return said(_await(lambda: brain.chat(sent(msgs, room(budget, tools)), tools, max_tokens, tool_choice='none'), cancel))
+        return said(_await(lambda: brain.chat(sent(msgs, tools, budget), tools, max_tokens, tool_choice='none'), cancel))
     finally:
         # ...kept once the model has answered at all: a turn stopped or failed part-way keeps what it did, so Continue goes on from there.
         # Its pictures are not carried (the model saw them; their bytes would ride on every later call)

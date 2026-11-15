@@ -22,7 +22,7 @@ test("the socket connects only while the browser is open, and backs off", () => 
 });
 
 test("the first frame of a connection sends the pane's shape, which a still-starting browser was refused (2026-11-04)", () => {
-  assert.match(pane, /if \(!shaped\.current\) \{ shaped\.current = true; firstAt\.current = Date\.now\(\); fitViewport\(true\); \}/);
+  assert.match(pane, /if \(!shaped\.current\) \{ shaped\.current = true; firstAt\.current = Date\.now\(\); fitViewport\(true, true\); \}/);
   assert.match(pane, /ws\.onclose = \(\) => \{ setLive\(false\); shaped\.current = false;/);
 });
 
@@ -68,4 +68,11 @@ test("the view's ground is the app's own colour, never a black box before the pa
 
 test("the chat is told the view is on screen before the paint, so his step is never drawn in both for a frame (the browser round, 2026-11-14)", () => {
   assert.match(term, /React\.useLayoutEffect\(\(\) => \{ onView\?\.\(onScreen\); \}, \[onScreen\]\)/);
+});
+
+test("an opening view asks for its shape as it connects and says what it waits for (the browser round, 2026-11-14)", () => {
+  // recorded at 800x600: the shape was asked after the first picture and behind the splitter's 400 ms, and the view stood empty 1.7 s
+  assert.match(pane, /ws\.onopen = \(\) => \{ tries = 0; fitViewport\(true, true\); \};/);
+  assert.match(pane, /\}, now \? 0 : 400\);/);
+  assert.match(pane, /\{attached \? "loading the page…" : "starting the browser…"\}/);
 });

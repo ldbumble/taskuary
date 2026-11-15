@@ -52,7 +52,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
 
   /* THE PAGE IS GIVEN THIS PANE'S SHAPE, so there is nothing left to letterbox. Debounced, because
      the splitter drags; ignored on failure, because a browser that will not resize still draws. */
-  const fitViewport = (claim = false) => {
+  const fitViewport = (claim = false, now = false) => {
     if (!box.current || !mayShape(document.hidden, document.hasFocus(), claim)) return;
     const r = box.current.getBoundingClientRect();
     const want = viewportFor(r.width, r.height);
@@ -62,7 +62,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
     shapeTimer.current = setTimeout(() => {
       shape.current = want;
       api.post(`/api/terminals/${sid}/browser/viewport`, want).catch(() => { shape.current = null; });
-    }, 400);
+    }, now ? 0 : 400);      // ...at once for a view that is opening: the wait is for a splitter being dragged
   };
 
   // draw whatever the newest frame is into whatever size the box is now
@@ -93,7 +93,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
       const show = () => { clearTimeout(late.current); img.current = im; paint(); setLive(true); };
       // the FIRST frame of a connection sends the pane's shape: one sent while the browser was still starting is refused (browserview.set_viewport),
       // and the page would stay letterboxed - black bars at its sides - until a resize (2026-11-04)
-      if (!shaped.current) { shaped.current = true; firstAt.current = Date.now(); fitViewport(true); }
+      if (!shaped.current) { shaped.current = true; firstAt.current = Date.now(); fitViewport(true, true); }
       /* ...AND THE FIRST PICTURE WAITS FOR THAT SHAPE, a moment: the page was drawn small between bars, then again at its size - a thing that
          appears and then moves (recorded, the browser round 2026-11-14). Only while nothing is drawn yet, and never for long: a still
          page sends no second frame, so the one held is drawn when the wait is over (browserSplit.holdFirst). */
@@ -140,7 +140,9 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
          page, no close code to read) and this knocked every two seconds for as long as the task stayed
          open (the 2026-10-02 pane pass). Now the poll turning `open` false tears this effect down and
          true brings it back; in between, the retry backs off instead of hammering. */
-      ws.onopen = () => { tries = 0; };
+      // ...and the page is asked for this pane's shape as the view connects, not after its first picture: asked then, the view stood empty
+      // for the 1.7 s the reshaping took (recorded at 800x600, the browser round 2026-11-14)
+      ws.onopen = () => { tries = 0; fitViewport(true, true); };
       ws.onclose = () => { setLive(false); shaped.current = false; clearTimeout(late.current); if (!closed) retry = setTimeout(connect, Math.min(15000, 2000 * 2 ** tries++)); };
     };
     connect();
@@ -285,10 +287,11 @@ Take over to drive it yourself; close the session to close it."
           sx={{ display: "block", outline: "none", position: "absolute", inset: 0 }} />
         {/* BEFORE ANYTHING ARRIVES, it says it is starting: a black box marked "…" is how the owner has described a broken pane
             ("freezes and is just black") - the chip already said "browser · starting…" (2026-10-25) */}
-        {attached === null && !live && (
+        {attached !== false && !live && (
           <Box data-tq-browser-starting="" sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
             pointerEvents: "none" }}>
-            <Typography sx={{ ...mono, fontSize: 11.5, color: "var(--tq-warning, #a8a196)" }}>starting the browser…</Typography>
+            {/* ...and once the browser has answered, what is awaited is its page's picture - said, not an empty box */}
+            <Typography sx={{ ...mono, fontSize: 11.5, color: "var(--tq-warning, #a8a196)" }}>{attached ? "loading the page…" : "starting the browser…"}</Typography>
           </Box>
         )}
         {/* Only before the first frame: once a page has painted, a momentary "not connected"

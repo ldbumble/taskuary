@@ -69,3 +69,16 @@ test("the only ring on a row is the working one; the hand and the flag are the o
   assert.match(logo, /badge = !spins && st\?\.badge \|\| "";/, "the badge is railStatus.BADGE's - never the lane's mark");
   assert.doesNotMatch(view, /progress=\{goal/, "a goal is its mark and its count, no ring");
 });
+
+// A GOAL'S TITLE KEEPS ITS ROOM ON THE RAIL (the owner, 2026-11-15): at every desktop width its row read "Migra… · 1 of 5 steps slipped Nov 1" -
+// the count and the word whole, the title five letters, the date cut at the card's edge. The title holds its half as every row's does; the
+// count and the due date give way first, then the word shortens - "slipped" itself stays
+test("a goal's title holds its half of the row; its count, its due date and then its word give way", () => {
+  const css = src("assistantView.css");
+  assert.match(css, /^\.tq-pile-row \.t b \{ flex: 1 1 auto; min-width: 50%;/m, "every row's title");
+  assert.doesNotMatch(css, /b\.goal-t \{ min-width: 20%/, "a goal's is no exception any more");
+  assert.match(css, /^\.tq-pile-row \.t b\.goal-t \{ flex-shrink: 3; \}$/m, "it gives up its long tail before the word gives up a letter");
+  assert.match(css, /^\.tq-pile-steps, \.tq-pile-due \{ flex: 0 1000 auto; min-width: 0; overflow: hidden; \}$/m, "the count and the date go first");
+  assert.match(css, /^\.tq-pile-word\.keep \{ flex: 0 1 auto; min-width: 46px; overflow: hidden; text-overflow: ellipsis; \}$/m, "then the word, down to slipped");
+  assert.match(css, /^\.tq-pile-word\.keep \.w \{ display: inline !important; \}$/m, "never down to its mark (2026-10-21)");
+});

@@ -106,5 +106,6 @@ test("the rail row draws no +N in the age column, and the newest message on the 
   const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
   assert.doesNotMatch(view, /tq-pile-new|newMark/);
   assert.match(view, /: ageHover\(i\)\}>/);
-  assert.match(view, /latestLine\(i\) \? \[latestLine\(i\), ago\(i\.last_at\)\]/);
+  // ...through funnelPile.subLine since 2026-11-15, which says the newest message's age only where it is not the gutter's own
+  assert.match(view, /subLine\(i, why\)/); assert.match(readFileSync(fileURLToPath(new URL("../src/funnelPile.js", import.meta.url)), "utf8"), /latestLine\(i\) \? \[latestLine\(i\), other\(i\.last_at\)\]/);
 });

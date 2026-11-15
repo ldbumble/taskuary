@@ -78,7 +78,7 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, stillLeaving, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, liveBrowseId, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
-import { FYI_PAGE, ageHover, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, subLine, answersTo, awayFromClear, closedElsewhere, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, pinOf, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -861,8 +861,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                         )}
                       </div>
                       {/* the line under the title is the NEWEST message once there is more than one (the owner, 2026-10-23) */}
-                      {isCur && <div className="sub">{batchNo[i.key]?.line || (latestLine(i) ? [latestLine(i), ago(i.last_at)]
-                        : [why, i.kind === "meeting" ? age(i.when) : ago(i.since || i.when)]).filter(Boolean).join(" · ")}</div>}
+                      {/* ...and its age is the gutter's, said once (funnelPile.subLine) */}
+                      {isCur && <div className="sub">{batchNo[i.key]?.line || subLine(i, why)}</div>}
                     </div>
                     {/* no "ON THE TABLE" under the ringed row (audit, 2026-11-05): the ring and its highlight say it */}
                   </div>

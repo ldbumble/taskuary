@@ -283,3 +283,20 @@ test('an agent on the table keeps its own lane on the rail when the walk has tak
   // ...a task's own card is still on you while it is open
   assert.equal(pulledRow({ key: 'processing:p3', kind: 'todo', lane: 'queued', order_band: 2, tid: 38 }).lane, 'yours');
 });
+
+// THE ROW ON THE TABLE SAYS ITS AGE ONCE (the audit, 2026-11-15: "4h" in the gutter, then "Sam Delgado asked 4 hours ago. · 4h ago" under the title)
+test("the selected row's line repeats no age the gutter already says; another clock is still said", async () => {
+  const { subLine } = await import("../src/funnelPile.js"), fs = await import("node:fs");
+  const now = new Date("2026-11-12T16:00:00"), row = { key: "task:33", arrived_at: "2026-11-12 12:00:00", since: "2026-11-12 12:00:00" };
+  assert.equal(subLine(row, "a reply is drafted for you to send", now), "a reply is drafted for you to send", 'no "· 4h ago" beside a gutter that says 4h');
+  // ...a wait that began after it arrived is another clock
+  assert.equal(subLine({ ...row, since: "2026-11-12 15:00:00" }, "the agent asked you", now), "the agent asked you · 1h ago");
+  // ...as is the newest message's, on a row whose reply came later - and not when it is the arrival itself
+  const said = { ...row, latest: { who: "Erin", text: "any news?" }, last_at: "2026-11-12 15:30:00" };
+  assert.equal(subLine(said, "x", now), "Erin: any news? · 30m ago");
+  assert.equal(subLine({ ...said, last_at: row.arrived_at }, "x", now), "Erin: any news?");
+  // ...and a meeting says when it starts
+  assert.equal(subLine({ key: "m", kind: "meeting", when: "2026-11-12 16:30:00" }, "AP cutover dry run", now), "AP cutover dry run · in 30m");
+  const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
+  assert.match(view, /\{isCur && <div className="sub">\{batchNo\[i\.key\]\?\.line \|\| subLine\(i, why\)\}<\/div>\}/);
+});

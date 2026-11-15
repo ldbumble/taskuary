@@ -1,7 +1,7 @@
 import vocab from "../../taskuary/lanes.json" with { type: "json" };
 import { label } from "./buttons.js";
 import { says, subState } from "./laneSays.js";
-import { ago, band } from "./timeWords.js";
+import { age, ago, band } from "./timeWords.js";
 import { fmtDateTime } from "./dates.js";
 import { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, isUrgent, levelOf, notYet, onYou } from "./lanes.js";
 import { AGENT_SHOWN } from "./kinds.js";
@@ -463,6 +463,13 @@ export const ageHover = (i) => [arrivedAt(i) && `arrived ${fmtDateTime(arrivedAt
   .filter(Boolean).join(" · ") || undefined;
 // ...and the line under its title is the newest message, who said it and what
 export const latestLine = (i) => (i?.latest?.text ? [i.latest.who, i.latest.text].filter(Boolean).join(": ") : "");
+// THE ROW ON THE TABLE SAYS ITS AGE ONCE (the audit, 2026-11-15: "4h" in the gutter, then "asked 4 hours ago. · 4h ago" under the title):
+// the gutter is its age. The line under the title carries a time only where it is ANOTHER one - a newer message's, a wait that began
+// after it arrived - and a meeting's, which is when it starts
+export const subLine = (i, why = "", now) => {
+  const gutter = band(arrivedAt(i), now), other = (at) => (at && band(at, now) !== gutter ? ago(at, now) : "");
+  return (latestLine(i) ? [latestLine(i), other(i.last_at)] : [why, i?.kind === "meeting" ? age(i.when, now) : other(i?.since || i?.when)]).filter(Boolean).join(" · ");
+};
 // A ROW FROM OUTSIDE THE PILE - the task on the table pulled by name, a batch's members put back - TAKES ITS PLACE in the rail's
 // order: it was drawn first, above every row of its section, so the row on the table jumped to the top (2026-10-22: "on the table
 // should never move them")

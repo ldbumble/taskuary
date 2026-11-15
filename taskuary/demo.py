@@ -135,7 +135,8 @@ REFUSALS = (
     (r'^/api/connectors', 'This is the demo - these connections are invented, and there is nothing real behind them to change.'),
     (r'^/api/(tools/run|agents/[^/]+/test)', 'This is the demo - nothing runs, because there are no real systems here to run against.'),
     (r'^/api/(reviews?/\d+/(send|decide)|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
-    (r'^/api/(terminals|agents)(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume)$'
+    # ...and Trust, whose whole effect is that an agent starts on the sender's words: it read "that would reach something real"
+    (r'^/api/(terminals|agents)(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume|trust)$'
      r'|^/api/messages/\d+/dispatch$|^/api/calendar/prepare$', STARTS),
     (r'^/api/(sync|ingest|poll|msauth|hooks)', 'This is the demo - no mail is fetched; what you see was written in advance.'),
     (r'^/api/(doc|soul|semantic|reports?/[^/]*/(run|preview)|dashboards/(compose|preview))','This is the demo - editing your documents and running reports are switched off.'),

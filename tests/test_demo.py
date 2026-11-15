@@ -644,6 +644,9 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
         os.environ.pop(demo.FLAG, None)
         for path in self.HOST_READS: self.assertIsNone(demo.answer('GET', path), path)
 
+    def test_trust_says_no_agent_starts_here_never_that_it_would_reach_something_real(self):
+        with on(): self.assertEqual(demo.refuse('POST', '/api/tasks/4/trust'), demo.STARTS)
+
     def test_the_tool_cards_buttons_say_it_is_the_demo(self):
         with on():
             for path in ('/api/cli/install', '/api/cli/update', '/api/cli/setup', '/api/cli/connections/claude', '/api/deps/install', '/api/update'):

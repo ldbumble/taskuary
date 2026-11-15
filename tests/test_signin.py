@@ -484,6 +484,29 @@ class TheOwnerSignsInOnThePage(Asking):
             self.wait_for(lambda: watched.called)
         self.assertEqual((rid, signin.pending(self.s, self.tid)['site']), ('signin:bank.example', 'bank.example'))
 
+    def test_a_step_giving_way_to_the_next_is_not_through_and_through_is_taken_back(self):
+        """The owner's own sign-in, in its order (2026-11-14): the user name on one page, the password on the next, then a code page on
+        another name of the site, moved by its fragment, the code split over six unnamed numeric boxes - read as "no box at all", so the
+        sign-in was called through as the code page came up, the page was taken from him and handed straight back. Then the page behind
+        the sign-in, with a search box - read as "a user box", so it was never taken back at all."""
+        sess = self.chat(); p = self.ask(sess)
+        step = lambda href, **k: {'top': True, 'href': href, 'password': False, 'user': False, 'otp': False, 'digits': 0, 'named': False, **k}
+        code = step('https://accounts.bank.example/#/mfa/verify', digits=6)
+        home = step('https://www.bank.example/home/home.jsp', user=True)                      # its search box, alone on the page
+        page = WatchPage([step('https://login.bank.example/signin', user=True), step('https://login.bank.example/signin', password=True),
+                          *[code] * 8, home])
+        told = []
+        sess.send_prompt = lambda text, as_owner=True: told.append((text, page.pages[0]['href']))
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+            self.assertTrue(signin.watch(self.s, self.tid, 'sess1', 'bank.example', p['request_id'], conn=page, every=0))
+        self.assertEqual(told, [('Signed in to bank.example - continue.', home['href'])])     # once, and only on the page behind it
+        self.assertFalse(ws.status(self.s, self.tid)['requests'])
+        # ...and each step by itself: a code row is a step, one fragment to another is a move, a lone unnamed box behind it is no step
+        self.assertFalse(signin.past(code, 'bank.example', 'https://login.bank.example/signin'))
+        self.assertTrue(signin.past(step('https://accounts.bank.example/#/home'), 'bank.example', code['href']))
+        self.assertFalse(signin.past(step('https://www.bank.example/reset', user=True, named=True), 'bank.example', code['href']))
+        for want in ('digits,', "named: !!user && (named(user)"): self.assertIn(want, signin.FIELDS)
+
     def test_done_typed_in_the_chat_box_still_says_signed_in(self):
         self.assertTrue(signin.said_done('signin:bank.example', 'done'))
         self.assertTrue(signin.said_done('signin:bank.example', 'Signed in.'))

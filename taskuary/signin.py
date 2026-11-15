@@ -341,7 +341,15 @@ def on_signin_page(sid: str, conn=None) -> bool:
     try: f = c.fields('') or {}
     finally:
         if conn is None: c.close()
-    return bool(f.get('top') and (f.get('password') or f.get('otp')))      # ...or its code box: the second step of one is a sign-in page too
+    return bool(f.get('top') and (f.get('password') or code_step(f)))      # ...or its code box: the second step of one is a sign-in page too
+
+
+def on_password_page(sid: str) -> bool:
+    try:
+        c = connect(sid)
+        try: return bool((c.fields('') or {}).get('password'))
+        finally: c.close()
+    except Exception: return False
 
 
 def asks_code(sid: str, conn=None) -> bool:
@@ -352,7 +360,14 @@ def asks_code(sid: str, conn=None) -> bool:
         finally:
             if conn is None: c.close()
     except Exception: return False
-    return bool(f.get('top') and f.get('otp'))
+    return bool(f.get('top') and code_step(f))
+
+
+# A CODE STEP, BY THE PAGE'S OWN SHAPE: the box it marks as a one-time code, or a code split over a row of small numeric boxes - one per
+# digit, unnamed (FIELDS `digits`). The second was not seen at all: a real site's code page read as "no password box, no user box, no code
+# box", so the sign-in was called through the moment its password page gave way to the code page (the owner's own sign-in, 2026-11-14).
+CODE_ROW = 4
+def code_step(f: dict) -> bool: return bool((f or {}).get('otp') or ((f or {}).get('digits') or 0) >= CODE_ROW)
 
 
 def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) -> dict:
@@ -410,6 +425,10 @@ def _auto(store, tid, sid, site, rid, fill, ask=None):
         if not pw: raise SignInError('the saved password could not be opened on this computer')
         code = _code_of(row.get('Totp'))
         ex = extra_of(row)
+        # ...A PAGE THAT ASKS ONLY THE CODE, and none is kept: nothing of the saved sign-in is typed - the code is his, said in one line
+        # (the owner's own sign-in, 2026-11-14: the agent asked again on the code page, the saved sign-in was tried on it, "there is no
+        # sign-in form", and the task read "the saved sign-in was not used")
+        if ask and not code and asks_code(sid) and not on_password_page(sid): return ask(CODE_ASK.format(site=site))
         got = fill(sid, site, user, pw, **({'code': code} if code else {}), **({'extra': ex} if ex else {})) or {}
         _used(store, site)
         # THE PASSWORD WENT IN AND THE SITE ASKS A CODE NOBODY KEEPS: that step is the owner's, on the page, and it is said in one line - the
@@ -584,7 +603,7 @@ CAPTURE = r'''(() => {
   document.addEventListener('pointerdown', (e) => { if (e.composedPath().some((x) => x.matches && x.matches('button, [type=submit], [role=button], a'))) grab(); }, true);
 })()'''
 WATCH_FOR = 30 * 60             # a sign-in ask is watched this long, then left to the owner's word
-WATCH_EVERY = 1.5
+WATCH_EVERY = 1.0
 # ...and PAST ONLY ONCE IT STAYS PAST (the owner, 2026-11-05, a site that asks for the user name, then the password on a page of its own: the
 # password page, still loading, read as no user box and no password box at another address - "signed in", the agent was woken on the
 # password page, and when the owner did sign in nothing was watching any more). This many readings in a row, ~4.5 s at WATCH_EVERY
@@ -612,7 +631,11 @@ def heard(tid, site: str, raw) -> bool:
 def past(f: dict, site: str, start: str) -> bool:
     "Is the page past the sign-in: on the site, no password or user box, and not the page the ask was made on?"
     if not f or not f.get('top') or not on_site(f.get('href'), site): return False
-    return not f.get('password') and not f.get('user') and not f.get('otp') and str(f.get('href') or '').split('#')[0] != str(start or '').split('#')[0]
+    # ...THROUGH IS EVERY STEP LEFT BEHIND, never one step giving way to the next (the owner, 2026-11-14: "it took it back when it started
+    # 2fa, then quickly reopened it ... then I got through and it did not automatically take it back"): no password box, no code step
+    # (code_step), no box the page itself names as the user's. A lone unnamed box is no step once the page has moved - the page behind a
+    # sign-in has a search box, and read as "a user box" it kept the sign-in open for good. And a page that moves by its fragment has moved.
+    return not f.get('password') and not code_step(f) and not f.get('named') and str(f.get('href') or '') != str(start or '')
 
 
 def keep_typed(store, tid, site) -> bool:
@@ -692,6 +715,11 @@ FIELDS = r'''(want) => {
   const alone = ins.filter((e) => texty(e) && !isCode(e));
   const user = before.reverse().find(named) || before[0] || (!pw && (ins.find((e) => texty(e) && named(e) && !isCode(e)) || (alone.length === 1 ? alone[0] : null)));
   const frames = [...document.querySelectorAll('iframe')].filter(vis).map((e) => e.src || '');
+  // A CODE SPLIT OVER ONE BOX PER DIGIT: the longest row of small numeric boxes side by side (digits), told by shape - the page names none
+  const small = ins.filter((e) => e !== pw && ['text', 'tel', 'number', ''].includes(e.type) && e.getBoundingClientRect().width <= 90
+    && (e.inputMode === 'numeric' || e.inputMode === 'decimal' || e.type === 'tel' || e.type === 'number' || e.maxLength === 1));
+  const rows = {}; small.forEach((e) => { const k = Math.round(e.getBoundingClientRect().top / 4); rows[k] = (rows[k] || 0) + 1; });
+  const digits = Math.max(0, ...Object.values(rows));
   // THE CODE BOX (2026-10-25): the one the page itself marks as a one-time code, else a short numeric-looking box that names a
   // code - never the user name or password box. A page of six one-digit boxes is not one this types into (not built).
   const coded = (e) => /otp|one.?time|totp|2fa|mfa|passcode|verif|auth.*code|security.?code|^code$/i
@@ -707,7 +735,8 @@ FIELDS = r'''(want) => {
   if (el) { el.focus(); try { el.select(); } catch (_) { el.value = ''; } }
   if (el && want === 'otp') el.setAttribute('data-tq-code', '');
   const others = pw ? ins.filter((e) => texty(e) && e !== user && e !== otp && !e.value).map(labelOf).filter(Boolean) : [];
-  return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, otp: !!otp, frames, others,
+  return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, otp: !!otp, frames, others, digits,
+           named: !!user && (named(user) || /username|email/.test(user.autocomplete || '')),
            focused: !!el && deepActive() === el };
 }'''
 CLEAR = "(() => { " + DEEP + " deepAll('input[type=password], input[data-tq-code]').forEach((e) => { e.value = ''; }); })()"
@@ -900,7 +929,7 @@ def accepted(c, site: str, wait: float = REJECT_WAIT) -> bool:
         try: f = c.fields('')
         except SignInError: f = None                          # mid-navigation: the page cannot be read for a moment
         if f is not None:
-            if not f.get('top') or not on_site(f.get('href'), site) or not f.get('password') or f.get('otp'): return True
+            if not f.get('top') or not on_site(f.get('href'), site) or not f.get('password') or code_step(f): return True
         if time.time() >= end: return f is None
         time.sleep(.5)
 

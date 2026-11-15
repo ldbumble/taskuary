@@ -183,9 +183,13 @@ function emit(ev) {
 // THE OWNER'S OWN EDITS, heard only inside a session: a box settles 1.5 s after its last keystroke or when it loses focus; a Save at once
 const settle = { t: 0, key: null, label: "" };
 const fieldOf = (el) => el?.closest?.(ROOTS) && el.matches?.("input, textarea, select") ? el : null;
+// ...and A LINE TYPED TO THE TASK'S AGENT IS THE AGENT'S TO HEAR, never an edit of the page (the memory round, 2026-11-14, recorded: with the
+// Assistant's chat open on a task, a fact typed to the agent was kept by both - two memory lines in two wordings - and the Assistant
+// took the owner off the task to the Memory page). Inside a task only its agent acts on what is said in its box
+const AGENT_BOX = ".tq-aui-input";
 function edited(e) {
   if (!e.isTrusted || acting || !session) return;
-  const el = fieldOf(e.target); if (!el || el.closest(SKIP)) return;
+  const el = fieldOf(e.target); if (!el || el.closest(SKIP) || el.matches(AGENT_BOX)) return;
   rev += 1;
   const label = labelOf(el), secret = el.matches("input[type=password]") || isSecret(keyOf(el, label), label);
   clearTimeout(settle.t); settle.key = el; settle.label = secret ? `${label} (typed - its value is yours)` : label;

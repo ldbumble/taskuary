@@ -104,3 +104,10 @@ test("the bell's ask is one sentence per stop - a detail's own full stop is not 
   assert.equal(failureAsk({ title: "Reports", detail: "It stopped", error: "timeout" }), "Reports: It stopped (timeout). Can you look into it and fix it?");
 });
 
+test("a line typed to the task's agent is never an edit the Assistant reacts to (2026-11-14: both kept the fact, and the Assistant left the task for Memory)", () => {
+  const src = read("pageView.js");
+  assert.match(src, /const AGENT_BOX = "\.tq-aui-input";/);
+  assert.match(src, /if \(!el \|\| el\.closest\(SKIP\) \|\| el\.matches\(AGENT_BOX\)\) return;/);
+  // ...and both agent boxes carry that name: the chat's own and the summary's
+  for (const f of ["GeneralWorkspace.jsx", "AgentSummary.jsx"]) assert.match(read(f), /className="tq-aui-input"/, f);
+});

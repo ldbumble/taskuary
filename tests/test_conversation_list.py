@@ -502,6 +502,22 @@ class TheList(unittest.TestCase):
         self.assertFalse(conversation.unwritten({'Kind': 'draft', 'Status': 'pending', 'DraftText': '', 'DraftBy': 'agent:claude'}))
         self.assertFalse(conversation.unwritten({'Kind': 'draft', 'Status': 'pending', 'DraftText': '', 'DraftError': 'the AI returned nothing'}))
 
+    def test_a_missing_fact_is_one_question_with_no_empty_reply_card_under_it(self):
+        """Recorded on the real CLI, 2026-11-15: a sender asked for the owner's car plate. The agent could not find it and asked - and under
+        its question stood the reply card it could not write yet, captioned with the same question, an empty box over a greyed Send. The
+        owner's rule: a missing fact is ONE question in the task. While the agent waits on his answer its unwritten reply is not drawn; his
+        answer's turn writes it, and then it is a card."""
+        self.brain.said[1] = 'The plate is nowhere in your mail.\n\n[[TASKUARY-ASK]] What is the plate number of the car you will bring?'
+        self.say('Have a look.', 'l-one'); self.rest()
+        rid = self.s.add_review({'TaskId': self.tid, 'MessageId': self.s.list_messages(self.tid)[0]['MessageId'], 'Kind': 'draft', 'Status': 'pending', 'Origin': 'triage',
+                                 'Reason': 'needs a reply: a question for you'})
+        self.s.set_review_draft_needs(rid, 'not drafted - it needs the plate number of the car you will bring')
+        cards = lambda got: [c['review'] for x in got['items'] for c in ([x] if x['kind'] == 'card' else x.get('cards') or [])]
+        got = self.list()
+        self.assertTrue(got['asking'] and got['asking'].get('said'), got['asking'])
+        self.assertEqual(cards(got), [], 'the question is the one thing asked: no empty reply card under it')
+        with mock.patch('taskuary.taskstate.asking', return_value=None): self.assertEqual(cards(self.list()), [rid])   # ...nothing asked: the card says why
+
     def test_a_reply_card_he_writes_past_greys_in_its_place_at_once_and_the_new_turns_card_comes_when_it_ends(self):
         """The owner's live task on 0.3.11.50, 2026-11-12 ("it shows ... on top of new prompt and action card is not greyed out ... the email
         from prior prompt disappears. I thought we keep it but grey out buttons right away"; and "it should finish thinking and last thing

@@ -768,6 +768,12 @@ def items(store, tid: int) -> dict:
         said_of = lambda t: ' '.join([str(t.get('text') or ''), *(s.get('text') or '' for s in t.get('steps') or [] if s.get('k') == 'said')])
         by = (made_in(ep(ask['at']) + 0.999) if ask.get('at') else None) or last
         ask = {**ask, 'turn': by['id'], **({'said': True} if flat(ask.get('text')) and flat(ask['text']) in flat(said_of(by)) else {})}
+    # ...AND IT IS THE ONE THING ASKED (the owner: a missing fact is one question in the task; recorded on the real CLI, 2026-11-15: under the
+    # agent's question stood the reply it could not write yet, captioned with the same question, an empty box over a greyed Send): a reply
+    # with no words is not drawn while its agent waits on his answer - the turn his answer begins writes it
+    if ask:
+        for x in out:
+            if x['kind'] == 'turn': x['cards'] = [c for c in x['cards'] if not (c['status'] == 'pending' and c['what'] in DRAFTS and not c.get('was'))]
     # WHERE THE LETTERS THAT WAIT FOR HIS SEND ARE DRAWN: the reply and the task's emails are one block of the page (the reply's card, the
     # emails over it), and the list names its turn - `letters`: the LAST turn that left a letter still waiting, the end of its run. The page
     # hung the block on the newest reply whatever its state, so an email written turns after a reply had gone was drawn up at that reply's

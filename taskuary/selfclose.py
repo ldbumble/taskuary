@@ -625,8 +625,9 @@ def tick_markers(text: str) -> tuple:
 ASK_MARKER = '[[TASKUARY-ASK]]'
 _ASK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?\s*(.*)', re.I | re.S)
 ASK_LINE = (f'ASKING THE OWNER: when you cannot continue without their answer - a fact or a decision only they can give - end your reply with a final line: '
-            f'{ASK_MARKER} <the exact question>. The owner answers it in their own words. One a turn: the question the rest hangs on, '
-            f'with your recommended answer in it. Taskuary shows it as a question waiting for them and brings their answer back to you. '
+            f'{ASK_MARKER} <the exact question> - that line is the question they see, so do not ask it in your words above it too. '
+            f'The owner answers it in their own words. One a turn: the question the rest hangs on, '
+            f'with your recommended answer in it. '
             f'Only for a real blocker, never for a rhetorical question, and never for permission to do what a card already asks: a draft\'s '
             f'Send, a post\'s Post, an Approve is that question, asked once. And never after you have answered: a part you could not '
             f'do is said in the answer (what you could not check and what would let you), not asked as a question.')

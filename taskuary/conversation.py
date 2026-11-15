@@ -587,8 +587,13 @@ def items(store, tid: int) -> dict:
     mark = max((m['At'] for m in marks), default=0.)
     # ...AND A TURN WHOSE ANSWER IS FILED AFTER THE NEWEST HAND-OVER IS THE WORK THAT WAS AT WORK (recorded 2026-11-12: its session still read
     # busy for a beat after the answer was filed, and a second, empty turn stood "starting" under it for a frame and went): nothing new runs
+    # ...BUT A HAND-OVER ON ITS WAY IS NEW WORK (the browser audit, 2026-11-15): the agent's turn ended asking for the sign-in, its answer filed,
+    # and the ~3 s Taskuary typed the saved one read as nothing at work - "agent waiting on you" with nothing on him (general.starting): that
+    # turn is the one at work again, its last step the sign-in going in
     if at_work and not pend and tail and tail['kind'] == 'turn' and tail['state'] == 'done' and tail.get('answer') and (tail.get('ended') or 0) >= mark - 0.01 \
-            and not (t0 and t0 > (tail.get('ended') or 0)): at_work = False
+            and not (t0 and t0 > (tail.get('ended') or 0)):
+        if general.starting(tid): tail.update(state='working', ended=None)
+        else: at_work = False
     mine =not halted and tail and tail['kind'] == 'turn' and (tail['state'] == 'working' or tail.get('sid') == live_sid and live_sid and (tail.get('ended') or INF) >= mark - 0.01)
     # ...AND NONE BEFORE THE LINE THAT BEGINS IT IS IN THE LIST (recorded 2026-11-12: a read between take_line's "at work" and its keeping the
     # line drew the new turn's dots under the old answer, his line then under them): a line heard and not yet filed is the input it waits for

@@ -256,6 +256,37 @@ class Asking(unittest.TestCase):
         self.assertIsNone(signin.pending(self.s, self.tid))
         self.assertEqual(sess.said, ['Signed in to bank.example - continue.'])
 
+    def test_while_the_saved_sign_in_is_typed_the_chat_reads_at_work_over_the_answer_that_handed_it_over(self):
+        """Recorded on the real CLI (the browser audit, 2026-11-15): the agent's turn ended asking for the sign-in, its answer was filed, and
+        for the ~3 s Taskuary typed the saved one the chat's payload said nothing was at work - the header read "agent waiting on you" with
+        nothing on him. A turn whose answer is filed after the newest hand-over is finished, but the typing is a hand-over on its way to the
+        next turn (general.starting): the chat reads at work from the start of the typing until the agent is told."""
+        import threading
+        from taskuary import conversation, general
+        signin.save(self.s, 'bank.example', USER, PW)
+        class Chat:
+            sid, alive, task_id = 'sess1', True, self.tid
+            def __init__(self): self.said = []
+            def send_prompt(self, text, as_owner=True): self.said.append(text)
+        sess, typing, go = Chat(), threading.Event(), threading.Event()
+        def fill(*a, **k): typing.set(); go.wait(10)
+        def working():     # ...read as the chat reads it, the turn at work its last
+            with mock.patch.dict('taskuary.terminal.SESSIONS', clear=True):
+                c = conversation.items(self.s, self.tid); turn = next(x for x in reversed(c['items']) if x['kind'] == 'turn')
+                return c['working'] and turn['state'] == 'working'
+        with on_page('https://login.bank.example/'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+            self.assertTrue(signin.needs(self.s, self.tid, 'sess1', 'bank.example', fill=fill)['auto'])
+            self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'I need the site signed in to go on.')
+            self.assertTrue(typing.wait(10))
+            self.assertTrue(working(), 'at work while the saved sign-in is typed, over the answer that handed it over')
+            # ...and the chat's session says so of itself, where the header and the rail read it: not parked waiting on him
+            parked = general.GeneralSession.__new__(general.GeneralSession)
+            parked.alive, parked.busy, parked.spoke, parked.task_id = True, False, True, self.tid
+            self.assertFalse(parked.waiting(), 'the session is not waiting on him while the saved sign-in is typed')
+            go.set(); self.wait_for(lambda: sess.said)
+            self.wait_for(lambda: not general.starting(self.tid), secs=15)
+        self.assertTrue(parked.waiting(), 'and waits on him again once it has handed on')
+
     def test_while_the_saved_sign_in_is_typed_the_answer_that_handed_it_over_is_already_a_step(self):
         """Recorded (the browser round, 2026-11-14): the agent ended its turn "I have no saved sign-in for it ... once the sign-in is done I
         will read it", and for the seconds Taskuary typed the saved one that stood in the chat as its answer - untrue, and gone a beat

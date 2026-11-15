@@ -653,8 +653,9 @@ REPORTS = [
       {'vendor': 'Kesler Medical', 'past_due': 7715.4}, {'vendor': 'BrightPath IT', 'past_due': 4180.0},
       {'vendor': 'Cardinal Food Svc', 'past_due': 2260.75}]),
     ('Helpdesk tickets by day, last 14', 'Ticket volume by day',
-     [{'day': f'2026-08-{d:02d}', 'tickets': n}
-      for d, n in zip(range(18, 32), (38, 41, 35, 52, 49, 22, 17, 44, 58, 61, 55, 47, 63, 71))]),
+     # ...the fourteen days up to yesterday: fixed in August, "last 14" read "peak 71 on Aug 31, the latest day" in November
+     [{'day': str(datetime.now().date() - timedelta(days=14 - i)), 'tickets': n}
+      for i, n in enumerate((38, 41, 35, 52, 49, 22, 17, 44, 58, 61, 55, 47, 63, 71))]),
 ]
 
 # What the assistant is FOR, in the assistant's own words: it has read the thread, it knows what

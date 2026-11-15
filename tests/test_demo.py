@@ -652,6 +652,11 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
 
 
 class DemoDashboardTests(unittest.TestCase):
+    def test_a_report_of_the_last_fourteen_days_ends_yesterday(self):
+        from datetime import date, timedelta
+        days = [r['day'] for r in next(rows for title, _, rows in demo.REPORTS if 'last 14' in title)]
+        self.assertEqual((len(days), days[-1], days[0]), (14, str(date.today() - timedelta(days=1)), str(date.today() - timedelta(days=14))))
+
     def test_the_dashboards_count_the_whole_morning_not_the_half_seeded_before_them(self):
         # they ran before the agents' day and the tour were seeded: the rail read "Open now 12" beside nineteen open tasks (the walk, 2026-11-15)
         from taskuary import dashboards

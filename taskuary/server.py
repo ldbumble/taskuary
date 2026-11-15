@@ -5111,6 +5111,10 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     if not rv: raise HTTPException(404, 'review not found')
     from .verdicts import VERB2STATUS, context_moved, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
+    # ...in the demo a card can be put down and never sent (demo.refuse_verdict - the path alone cannot tell Dismiss from Send)
+    if (why := demo.refuse_verdict(body.verb)):
+        demo.refused(store, f'/api/reviews/{rid}/decide', why)
+        return JSONResponse({'detail': why, 'demo': True}, status_code=403)
     if body.verb == 'close_unsent' and rv.get('Kind') == 'action': raise HTTPException(422, 'a proposal is rejected, not closed without sending')
     # An uncertain attempt must be reconciled using its saved payload first. Refreshing
     # the draft here would prevent that check (or replace text that may already be sent).

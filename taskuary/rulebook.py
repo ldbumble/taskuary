@@ -209,6 +209,9 @@ def state(store, item: dict, verbs: list) -> tuple:
         if workerstate.left_asking(store, tid): return 'agent_asking', {}
     try: f = advisor.failure(store, it)
     except Exception: f = None
+    # ...WHAT THE DEMO REFUSED DID NOT FAIL (the walk, 2026-11-15): its tour says "press Send - nothing leaves the demo", and the row then
+    # read "Failed: This is the demo - nothing is sent" in the words of a real fault. The item is as it was; the press's own line said why
+    if f and f.get('cause') == 'demo': f = None
     if kind == 'report' and (it.get('bad') or f): return 'report_failed', {'why': _plain_why((f or {}).get('why'), it.get('why'), default='it did not run')}
     # ...a fix named after its place, or none named and the cause for the model to read (a mail too large is redrafted, a dead address
     # is fixed, a run that hit a wall is tried again)

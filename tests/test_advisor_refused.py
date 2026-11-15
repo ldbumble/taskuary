@@ -46,6 +46,19 @@ class RefusedTests(_Rail):
         self.assertEqual(s.get_operation('op9')['Status'], 'proposed', 'the proposal itself is left as it was')
         self.assertEqual(demo.refused(s, '/api/connectors/3', demo.OFF), '')
 
+    def test_what_the_demo_refused_is_not_a_failure_on_the_items_row(self):
+        """The walk, 2026-11-15: the tour says "press Send - nothing leaves the demo", and after the press the rail row read "Failed: This
+        is the demo - nothing is sent..." in the words of a real fault. The Advisor still reads the refusal (above); the row says what
+        the item is."""
+        from taskuary import rulebook
+        s = self._world(); key, r = self._draft(s)
+        it = advisor._item(s, 'task', r['TaskId'], key)
+        before = rulebook.state(s, it, [])[0]
+        demo.refused(s, f"/api/reviews/{r['ReviewId']}/decide", demo.SENDS)
+        self.assertEqual(advisor.failure(s, it)['cause'], 'demo')
+        self.assertEqual(rulebook.state(s, it, [])[0], before)
+        self.assertNotIn(before, rulebook.FAILED)
+
     def test_the_scripted_advisor_reads_what_failed(self):
         ask = lambda verbs, extra='': json.loads(demo.brain()('Answer with JSON only', f'EVENT: item.shown\n\nVERBS OFFERED: {verbs}{extra}'))
         send = 'approve (Send), redraft (Redraft), close (Mark done)'

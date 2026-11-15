@@ -72,6 +72,9 @@ ALLOWED_WRITES = (
     r'^/api/prompt-(image|file)$',                     # a picture or a file for a prompt: saved in the demo's own home
     r'^/api/messages/\d+/(file|promote|read)$',        # the triage verdicts: the whole funnel
     r'^/api/reviews?/\d+/(hold|drop|edit)$',           # ...but never /send
+    # ...and a card's verdict, judged by its VERB in the handler (refuse_verdict): the page puts a card down by the road it sends one
+    # (/decide), and refused whole, Dismiss on a post answered "nothing is sent" and the card could not be put down (the walk, 2026-11-15)
+    r'^/api/reviews/\d+/decide$',
     r'^/api/reviews/\d+/attachment$',                  # a file onto a draft: copied into the demo's own home, sent nowhere
     r'^/api/board/notes',                              # the wall
     r'^/api/(hub|handbook)',                           # durable Hub posts and compatibility route
@@ -99,6 +102,7 @@ ALLOWED_WRITES = (
     r'^/api/operations(/[^/]+)?$',
     r'^/api/operations/[^/]+/execute$',
     r'^/api/tasks/\d+/remind$',
+    r'^/api/tasks/\d+/checklist/[^/]+/note$',           # a note on a to-do step: a line in the demo's own database
     # ...and the owner's correction of how hard a task is (the router's chip): a row in the demo's own database. Which AI does each
     # job (/api/ai/route_rules) stays refused, as adopt-brain does: a visitor changing what reads the mail is not a tour
     r'^/api/tasks/\d+/judged$',
@@ -128,18 +132,25 @@ LOCAL_OPS = {'task.complete', 'task.reopen', 'task.defer', 'task.watching', 'ite
 SENDS = 'This is the demo - nothing is sent. In your own Taskuary this is where you approve it and it goes.'
 STARTS = 'This is the demo - the agents here are recordings, so nothing new starts.'
 OFF = 'This is the demo - that would reach something real, so it is switched off. Everything here is invented.'
+NO_AI = 'This is the demo - no AI runs here, so nothing is read or planned again. In your own Taskuary your AI does this.'
 
 # What is refused, and the sentence the visitor sees. Order matters: the first match wins.
 REFUSALS = (
     (r'^/api/(cli|deps|update)(/|$)', 'This is the demo - nothing happens. Its AI tools are pretend, and nothing on your computer is touched.'),
     (r'^/api/connectors', 'This is the demo - these connections are invented, and there is nothing real behind them to change.'),
     (r'^/api/(tools/run|agents/[^/]+/test)', 'This is the demo - nothing runs, because there are no real systems here to run against.'),
-    (r'^/api/(reviews?/\d+/(send|decide)|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
+    (r'^/api/(reviews?/\d+/send|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
     # ...and Trust, whose whole effect is that an agent starts on the sender's words: it read "that would reach something real"
-    (r'^/api/(terminals|agents)(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume|trust)$'
+    # ...and a goal's step sent to an agent, which is a start like any other
+    (r'^/api/(terminals|agents)(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume|trust|steps/[^/]+/start)$'
      r'|^/api/messages/\d+/dispatch$|^/api/calendar/prepare$', STARTS),
+    # ...what would ask an AI to read or plan again (a goal's Re-plan): none runs here
+    (r'^/api/tasks/\d+/read-ask$', NO_AI),
     (r'^/api/(sync|ingest|poll|msauth|hooks)', 'This is the demo - no mail is fetched; what you see was written in advance.'),
-    (r'^/api/(doc|soul|semantic|reports?/[^/]*/(run|preview)|dashboards/(compose|preview))','This is the demo - editing your documents and running reports are switched off.'),
+    # ...every press on a report - Run now, Run due now, its switch, Pause - answered as what it is: "would reach something real" stood
+    # under each of them (the walk, 2026-11-15)
+    (r'^/api/(doc|soul|semantic|reports?/([^/]*/(run|rerun|preview)|due)$|sources(/|$)|dashboards/(compose|preview))',
+     'This is the demo - its documents and reports are fixed: editing, running, pausing and switching them are off here.'),
 )
 
 
@@ -189,6 +200,11 @@ def refused(store, path: str, why: str) -> str:
                              'Error': why, 'OutcomeJson': json.dumps({**({'what': what} if what else {}), 'cause': 'demo', 'retry': False})})
         return oid
     return ''
+
+
+def refuse_verdict(verb: str) -> str:
+    "'' for a verdict that only puts the card down (it writes the demo's own database), else the sentence: approving one sends it."
+    return '' if not enabled() or verb in ('reject', 'no_reply', 'close_unsent') else SENDS
 
 
 def refuse(method: str, path: str, store=None) -> str:

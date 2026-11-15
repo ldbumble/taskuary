@@ -39,8 +39,28 @@ class OffByDefaultTests(unittest.TestCase):
 class TheDoorsAreShutTests(unittest.TestCase):
     def test_nothing_sends(self):
         with on():
-            for path in ('/api/reviews/3/send', '/api/review/3/send', '/api/tasks/7/handoff', '/api/reviews/3/decide'):
+            for path in ('/api/reviews/3/send', '/api/review/3/send', '/api/tasks/7/handoff'):
                 self.assertIn('nothing is sent', demo.refuse('POST', path), path)
+            # ...a card's verdict is judged by its verb: approving one sends it, and putting it down sends nothing - Dismiss on a post
+            # answered "nothing is sent" and the card stayed (the walk, 2026-11-15)
+            self.assertEqual(demo.refuse('POST', '/api/reviews/3/decide'), '')
+            for verb in ('approve', 'edit', 'merge_anyway', 'close_pr'): self.assertIn('nothing is sent', demo.refuse_verdict(verb), verb)
+            for verb in ('reject', 'no_reply', 'close_unsent'): self.assertEqual(demo.refuse_verdict(verb), '', verb)
+        self.assertEqual(demo.refuse_verdict('approve'), '', 'outside the demo nothing is refused here')
+
+    def test_dismiss_puts_a_card_down_and_send_is_still_refused_as_the_demo(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = MemoryStore(); demo.seed(s)
+        rid = s._one("SELECT ReviewId FROM review WHERE Kind='action' AND Status='pending' ORDER BY ReviewId LIMIT 1")['ReviewId']
+        with on(), mock.patch.object(server, 'store', s):
+            c = TestClient(server.app)
+            r = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve'})
+            self.assertEqual((r.status_code, r.json().get('demo')), (403, True)); self.assertIn('nothing is sent', r.json()['detail'])
+            self.assertEqual(s.get_review(rid)['Status'], 'pending')
+            r = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'reject'})
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertEqual(s.get_review(rid)['Status'], 'rejected')
 
     def test_no_connector_can_be_made_edited_or_given_a_secret(self):
         with on():
@@ -648,6 +668,17 @@ class TheDemoWorldIsConnectedTests(unittest.TestCase):
         from taskuary import signatures
         s = MemoryStore(); demo.seed(s)
         self.assertFalse(signatures.overview(s)['offer'])
+
+    def test_a_press_that_reaches_nothing_real_is_never_answered_as_if_it_did(self):
+        # each of these answered "that would reach something real, so it is switched off" (the walk, 2026-11-15)
+        with on():
+            self.assertEqual(demo.refuse('PATCH', '/api/tasks/36/checklist/c1/note'), '', 'a note on a to-do step is the demo own database')
+            self.assertEqual(demo.refuse('POST', '/api/tasks/7/steps/s2/start'), demo.STARTS)
+            self.assertEqual(demo.refuse('POST', '/api/tasks/7/read-ask'), demo.NO_AI)
+            for path in ('/api/reports/7/rerun', '/api/reports/7/run', '/api/reports/due', '/api/sources', '/api/sources/7'):
+                self.assertIn('reports are fixed', demo.refuse('POST', path), path)
+            for path in ('/api/tasks/7/steps/s2/start', '/api/tasks/7/read-ask', '/api/reports/due', '/api/sources'):
+                self.assertNotEqual(demo.refuse('POST', path), demo.OFF, path)
 
     def test_trust_says_no_agent_starts_here_never_that_it_would_reach_something_real(self):
         with on(): self.assertEqual(demo.refuse('POST', '/api/tasks/4/trust'), demo.STARTS)

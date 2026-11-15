@@ -48,3 +48,8 @@ test("a start that did not happen says why under the chat: the list's idle line,
   assert.match(view, /\{!hold && !!idle && <Box data-tq-not-started=""/);
   assert.match(view, /idle=\{conv\.list\?\.idle \|\| ""\}/);
 });
+
+test("an AI connected after the page opened is seen: the rail stopped saying No AI is connected only on a reload", () => {
+  const view = src("AssistantView.jsx");
+  assert.match(view, /picksOf\(s\.providers\) !== picksOf\(st\.providers\) \? \{ \.\.\.s, providers: st\.providers \|\| \[\] \} : s/);
+});

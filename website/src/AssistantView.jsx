@@ -176,6 +176,7 @@ const errText = (e) => {
 // THE DEMO SAYING NO (U8, 2026-10-17): a refusal is the demo speaking, so it is posted as a plain line of its own - it came in
 // red with "Report this bug" under it, as if the app had broken. setErr below routes any sentence in this set to the chat - the set every
 // refusal lands in as it is answered (apiError.DEMO_SAID), so a card's own catch passing one on is the demo's line too.
+const picksOf = (providers) => (providers || []).map((p) => p.pick).join("|");
 const demoNo = (e) => (e?.response?.status === 403 && e.response.data?.demo ? String(e.response.data.detail || "This is the demo - nothing is sent.") : "");
 // a press the server answered with a reason and no proposal fails as a refused request does: every catch that draws a row's or a card's
 // own line (errText, failOf, proposeFailed) reads its `detail`
@@ -1622,6 +1623,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // WHERE THE WALK IS, from the same answer: a hand-off started or ended somewhere else (a second tab, the phone's own
     // "stop") - kept as state only; it locks nothing here (2026-10-23)
     setState((s) => (s && (s.handoff?.at || null) !== (st.handoff?.at || null) ? { ...s, handoff: st.handoff || null } : s));
+    // ...AND WHICH AIs THERE ARE (the first-run walk, 2026-11-15: Claude was connected in setup, and the rail went on saying "No AI is
+    // connected ... Connect an AI" - the list read once, when the page opened, before there was one)
+    setState((s) => (s && picksOf(s.providers) !== picksOf(st.providers) ? { ...s, providers: st.providers || [] } : s));
     // ...AND WHAT IS ON THE TABLE, from the same answer. The walk can be driven from somewhere
     // else - a phone chat holding the handoff, another tab - and this one followed the WORDS while
     // its rail went on ringing whatever the desk itself last put up: the chat showed four fyis and

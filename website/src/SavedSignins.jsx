@@ -8,6 +8,7 @@ import { Box, Button, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { ago } from "./timeWords.js";
 import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
+import { ConfirmDelete } from "./ui.jsx";
 
 // A SIGN-IN SAVED AHEAD OF TIME (the owner, 2026-11-03: "we probably should have space on connector to fill out what the system requires"):
 // the site, its user name and password - and its authenticator key if it has one - sealed the way the fill page's Save to vault keeps them.
@@ -61,6 +62,9 @@ export default function SavedSignins() {
   // A REFUSED PRESS IS SAID ON ITS OWN ROW (2026-10-26): a refused Remove replaced the whole list with its error until a reload, and a
   // refused Remove authenticator key said nothing - its box, where keyErr is drawn, is not open on a row that has a key
   const [rowErr, setRowErr] = useState({ site: "", text: "" });
+  // REMOVE IS ONE PRESS AND ONE CONFIRM, as a connection's is (the owner, 2026-11-05; the walk, 2026-11-15: this one deleted the saved
+  // password and signed the browser out on the first press, with no way back)
+  const [asking, setAsking] = useState("");
   const load = () => api.get("/api/signins").then(({ data }) => { setRows(data?.data || []); setErr(""); })
     .catch((e) => setErr(e?.response?.data?.detail || "The saved sign-ins could not be read - Taskuary did not answer."));
   useEffect(() => { load(); }, []);
@@ -70,6 +74,9 @@ export default function SavedSignins() {
     catch (e) { setRowErr({ site, text: e?.response?.data?.detail || "That sign-in was not removed - try again." }); }
     finally { setBusy(""); }
   };
+  const confirm = <ConfirmDelete open={!!asking} title={`Remove the saved sign-in for ${asking}?`} confirmLabel="Remove"
+    consequence="Its saved password is forgotten and the agents' browser is signed out of that site. The next agent that needs it asks you to sign in again."
+    onConfirm={() => remove(asking)} onClose={() => setAsking("")} />;
   const saveKey = async (site, value) => {
     setBusy(site); setWhat("key"); setKeyErr(""); setRowErr({ site: "", text: "" });
     try { await api.post(`/api/signins/${encodeURIComponent(site)}/code`, { key: value }); setKeyFor(""); setKey(""); await load(); }
@@ -89,6 +96,7 @@ export default function SavedSignins() {
   return (
     <Box data-tq-saved-signins="" sx={{ py: 1.5 }}>
       <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, mb: 0.5 }}>Saved sign-ins</Typography>
+      {confirm}
       <AddSignin onSaved={load} />
       {rows.map((r) => (
         <Box key={r.site} sx={{ py: 1, borderBottom: `1px solid ${BORDER}` }}>
@@ -104,7 +112,7 @@ export default function SavedSignins() {
               title={r.code ? "Forgets the authenticator key - the site's code is then yours to type"
                 : "Keep the site's authenticator key, so Taskuary types its code after the password"}>
               {r.code ? "Remove authenticator key" : "Add authenticator key"}</Button>
-            <Button size="small" variant="outlined" disabled={busy === r.site} onClick={() => remove(r.site)} sx={{ color: DIM, borderColor: BORDER }}
+            <Button size="small" variant="outlined" disabled={busy === r.site} onClick={() => setAsking(r.site)} data-tq-signin-remove="" sx={{ color: DIM, borderColor: BORDER }}
               title="Forgets the saved password and signs the browser out of this site">{busy === r.site && what === "remove" ? "Removing…" : "Remove"}</Button>
           </Box>
           {rowErr.site === r.site && rowErr.text && (

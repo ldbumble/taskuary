@@ -55,7 +55,7 @@ separate Reject: the reply on it is edited or redrafted in place.
 | Button | Answer | What happens |
 |---|---|---|
 | **Not for me** | Just this once | This message is filed. Its task is deleted if nothing was done on it, otherwise marked done |
-| | From now on | Triage learns to file everything from this sender. Their mail still arrives and stays readable |
+| | From now on | Triage learns to file mail like this from this sender. Their mail still arrives and stays readable, and another kind of mail from them is still judged |
 | | A rule in Settings | An exclusion rule: their mail never reaches triage, and what already arrived leaves the rail. Reversible |
 | **Send to agent** | A coding agent | A task and a coding agent in a repository. The card asks which repository when it is not clear |
 | | A non-coding agent | A task and an agent for reading, checking, drafting or research |

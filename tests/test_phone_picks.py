@@ -71,7 +71,7 @@ class PickIsTheButtonTests(unittest.TestCase):
         s, _ = armed()
         offer(s, {'say': 'x', 'item': ITEM, 'chips': CHIPS})
         alts = [{'verb': 'not_ours', 'label': 'Just this once', 'current': True},
-                {'verb': 'not_ours_sender', 'label': 'From now on - their mail is filed for you', 'current': False},
+                {'verb': 'not_ours_sender', 'label': 'From now on - mail like this from them is filed for you', 'current': False},
                 {'verb': 'block_sender', 'label': 'A rule in Settings - their mail never comes in', 'current': False}]
         prop = {'id': 'op1', 'status': 'proposed', 'verb': 'not_ours', 'label': 'File it', 'summary': 'The export job → file it',
                 'key': 'msg:7', 'settles': True, 'alts': alts}
@@ -82,7 +82,7 @@ class PickIsTheButtonTests(unittest.TestCase):
         run.assert_not_called()                                      # a question is open: nothing runs yet
         body, poll = got[0]
         self.assertIn('How far?', body)
-        self.assertEqual(poll, ['Just this once', 'From now on - their mail is filed for you',
+        self.assertEqual(poll, ['Just this once', 'From now on - mail like this from them is filed for you',
                                 'A rule in Settings - their mail never comes in', 'Cancel'])
         # the owner taps "From now on" in the poll: a new proposal from the same road, run at once
         second = {**prop, 'id': 'op2', 'verb': 'not_ours_sender', 'label': 'Ignore this sender from now on'}
@@ -91,7 +91,7 @@ class PickIsTheButtonTests(unittest.TestCase):
              mock.patch.object(concierge, 'receipt', return_value='Done - Ignore this sender from now on.'), \
              mock.patch.object(concierge, 'surface', return_value={'say': 'All clear.', 'item': None}), \
              mock.patch.object(funnel, 'next_item', return_value=ITEM):
-            got = sent_to(s, 'From now on - their mail is filed for you', poll=True)   # the poll tap
+            got = sent_to(s, 'From now on - mail like this from them is filed for you', poll=True)   # the poll tap
         self.assertEqual(pd.call_args.args[1:3], ('not_ours_sender', 'msg:7'))
         self.assertTrue(pd.call_args.kwargs['exact'])
         run.assert_called_once()
@@ -319,7 +319,7 @@ class NotOursOnTheTableTests(unittest.TestCase):
     proposal acts at once (concierge.AUTO, the owner 2026-10-21: no question before it) and carries its alts, and the phone drew
     the question with no way to answer it. It runs on the tap, as the desktop's button does, and the next card follows."""
     ALTS = [{'verb': 'not_ours', 'label': 'Just this once', 'current': True},
-            {'verb': 'not_ours_sender', 'label': 'From now on - their mail is filed for you', 'current': False}]
+            {'verb': 'not_ours_sender', 'label': 'From now on - mail like this from them is filed for you', 'current': False}]
 
     def _tap(self, s, patch, channel, chat):
         with patch([]): ra.send(s, channel, chat, ra.turn_text({'say': 'x', 'item': ITEM, 'chips': CHIPS}, store=s), None)

@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { inDesktop, quitTitle, stoppedLines, updateWaiting, waitingNote } from "../src/appQuit.js";
+import { howLine, inDesktop, quitTitle, stoppedLines, updateWaiting, waitingNote } from "../src/appQuit.js";
 
 const src = (f) => fs.readFileSync(path.join(import.meta.dirname, "..", "src", f), "utf8");
 
@@ -59,4 +59,10 @@ test("a check that did not get through draws no Update button, only Check now an
   const card = src("UpdateCard.jsx");
   assert.match(card, /\{!\(unknown && !busy\) && <Button size="small" variant="contained"/);
   assert.doesNotMatch(card, /"Couldn't check"/);
+});
+
+test("the update card says which install this is, and nothing where it has no words for one (the demo read: This is .)", () => {
+  for (const how of ["setup", "exe", "pip", "source"]) assert.match(howLine(how), /^This is (the|a) .+\.$/);
+  assert.equal(howLine("demo"), ""); assert.equal(howLine(undefined), "");
+  assert.match(src("UpdateCard.jsx"), /howLine\(how\)/); assert.doesNotMatch(src("UpdateCard.jsx"), /This is \{/);
 });

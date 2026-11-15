@@ -30,3 +30,15 @@ def test_the_generated_docs_carry_the_same_sentence():
     import pathlib
     docs = (pathlib.Path(__file__).resolve().parent.parent / 'docs' / 'site' / 'assistant-tools.md').read_text(encoding='utf-8')
     assert 'FIRST' in docs and 'Send the drafted reply as it stands.' not in docs
+
+
+def test_from_now_on_promises_only_the_kind_of_mail_that_was_pressed():
+    # the press teaches one line about THIS KIND of mail from the sender (memorylines, 7803d97b5: "never everything they send, since another
+    # kind from them may be real work") - the button, its hover, the Assistant's receipt and its tool sentence said "their mail is filed"
+    from taskuary import buttons
+    said = [dict(buttons.choices('not_ours'))['not_ours_sender'], buttons.hint('not_ours_sender'), concierge.RECEIPTS['not_ours_sender'],
+            toolcatalog.DECISIONS['not_ours_sender'], toolcatalog.PURPOSE['preference.exclude_sender']]
+    for text in said:
+        t = text.lower()
+        assert 'like this' in t or 'this kind of mail' in t, text
+        assert 'everything from' not in t and 'their mail is filed' not in t, text

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
-import { CATALOGUE, PLANNED_CONNECTORS, onceEach, plannedFor } from "../src/connectorCatalog.js";
+import { browseSummary, CATALOGUE, PLANNED_CONNECTORS, onceEach, plannedFor } from "../src/connectorCatalog.js";
 import { AI_SHELF } from "../src/aiShelf.js";
 
 const CATEGORIES = [
@@ -91,4 +91,9 @@ test("a mailbox preset makes an IMAP card with its servers, and is offered until
   const view = read("ConnectorsView.jsx");
   assert.match(view, /\.\.\.presetCards\(\["fastmail", "yahoo_mail", "proton_mail", "exchange"\]\)/);
   assert.match(view, /const m = metaOf\(conn\) \|\| \{ fields: \[\], howto: \[\] \};/);
+});
+
+test("the Connections line counts the catalogue, not only the cards still planned", () => {
+  assert.equal(browseSummary(4, [{ planned: true }, {}, {}]), "4 connected · 3 in the catalogue · pick a section");
+  assert.match(read("ConnectorsView.jsx"), /summary: browseSummary\(connected, all\)/);
 });

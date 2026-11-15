@@ -5,15 +5,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, CircularProgress, Typography } from "@mui/material";
 import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import api from "./api";
-import { updateWaiting, waitingNote } from "./appQuit.js";
+import { howLine, updateWaiting, waitingNote } from "./appQuit.js";
 import { BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
-
-const HOW = {
-  setup: "the installed desktop app — the new installer is downloaded and runs quietly after this window closes; it reopens by itself. Windows asks for your OK only if Taskuary was installed for all users",
-  exe: "the one-file desktop app (Taskuary.exe) — the installer is downloaded and runs quietly after this window closes; Taskuary moves into its installed home with a Start menu entry, the one file is removed, and it reopens by itself",
-  pip: "a pip install — `pip install -U taskuary` runs, then the same command line is relaunched",
-  source: "a source checkout — update it with `git pull` in the repository, then restart; nothing here can do that for you",
-};
 
 // `asked`: the Assistant brought this page up for its button ("update the app", "is there an update") - it is lit, outlined the way an
 // asked knob row is, until the owner presses it. The Assistant never presses it (assistant-is-a-router, 2026-10-25)
@@ -106,9 +99,7 @@ export default function UpdateCard({ asked = false, at = 0 }) {
                 </Box>
               )}
             </Typography>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.25 }}>
-              This is {HOW[how]}.
-            </Typography>
+            {!!howLine(how) && <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.25 }}>{howLine(how)}</Typography>}
           </Box>
           <Button size="small" variant="outlined" disabled={!!busy} onClick={() => check(true)}
             startIcon={busy === "check" ? <CircularProgress size={12} /> : null}>Check now</Button>

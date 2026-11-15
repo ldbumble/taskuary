@@ -86,7 +86,7 @@ The "Not for me" button: file it, just this once - its card asks whether from no
 
 ### `not_ours_sender`
 
-The "Ignore this sender" button: file everything from this sender from now on - their mail still arrives and stays readable.
+The "Ignore this sender" button: file mail like this from this sender from now on - their mail still arrives and stays readable, and another kind from them is still judged.
 
 <p class="runs">Brings up its button for you to press.</p>
 
@@ -608,7 +608,7 @@ Archive it: off the pipe and closed, nothing deleted.
 
 ### `preference.exclude_sender`
 
-Teach triage to file this sender or subject from now on - their mail still arrives (`scope`: sender | subject)
+Teach triage to file this kind of mail from this sender, or this subject, from now on - their mail still arrives (`scope`: sender | subject)
 
 - `scope` - sender | subject
 

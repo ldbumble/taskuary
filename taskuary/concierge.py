@@ -215,7 +215,7 @@ RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so."
             'reply': "I'll draft that - nothing goes out until you say so.", 'approve': f"Sending it as drafted - the task stays open until you {buttons.label('close')}.",
             'send_close': 'Sending it as drafted, then closing the task - it stays open while anything on it still waits on you.',
             'not_ours': "Not for me, then - filed. Moving on.", 'not_ours_remember': "Filed, and remembered: this kind goes straight past you from now on.",
-            'not_ours_sender': "Noted: that sender is noise - everything from them files itself from now on. Moving on.",
+            'not_ours_sender': "Noted: mail like this from them files itself from now on. Moving on.",
             'remember': "Remembered. Moving on.", 'coding_agent': "Handed off - the code work starts now, and what it finds comes back here.",
             'regular_agent': "Handed off - work on it starts now, and the answer comes back here.",
             'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Running it again - its result goes where the report sends it, and if it fails the bell says why. Moving on.",
@@ -647,7 +647,7 @@ def facts(store, item: dict, whole: bool = False) -> str:
         lines.append(f"BATCH: these {n} notices are one card, of {fyi_waiting(store, item)} FYI waiting in all. Its own button is done "
                      f"(All read, next) - for these {n} only. Words that say ALL the FYI mean every one waiting: pipe.clear "
                      "(select kind: fyi, scope: all), never this card's button. A verb meant for ONE of them names it with `on` (its m-number, below): not_ours (just this one), "
-                     "not_ours_sender (that sender's mail is filed from now on), block_sender (a rule: never reaches triage again).")
+                     "not_ours_sender (mail like this from that sender is filed from now on), block_sender (a rule: never reaches triage again).")
     if item['kind'] == 'meeting':
         e = item.get('event') or {}
         lines.append(f"meeting {e.get('start')} - {e.get('end') or ''}" + (f" with {', '.join(e.get('who') or [])}" if e.get('who') else '')

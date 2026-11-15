@@ -43,7 +43,7 @@ PURPOSE = {
                                  'task.defer on it'),
     'message.file':             "file it - not ours, just this one",
     'message.archive':          'archive it: off the pipe and closed, nothing deleted',
-    'preference.exclude_sender': 'teach triage to file this sender or subject from now on - their mail still arrives (`scope`: sender | subject)',
+    'preference.exclude_sender': 'teach triage to file this kind of mail from this sender, or this subject, from now on - their mail still arrives (`scope`: sender | subject)',
     'preference.sender_rule':   'an exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the work rail',
     'item.settle':              'put the item down, read and settled - `verb`: done (the item on the table is the target)',
     'task.complete':            (f'{L("close")} - the task is finished; `note` (optional): what came of it, in the owner\'s words when they '
@@ -429,7 +429,7 @@ _DECIDE = {
                         'Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick. '
                         '`new`: true when the job is NOT about the item on the table'),
     'not_ours':        'file it, just this once - its card asks whether from now on, or as a rule',
-    'not_ours_sender': 'file everything from this sender from now on - their mail still arrives and stays readable',
+    'not_ours_sender': 'file mail like this from this sender from now on - their mail still arrives and stays readable, and another kind from them is still judged',
     'block_sender':    'an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule',
     'not_ours_kind':   "an Advisor idea only: put it down AND no more ideas like it - the Advisor's next run reads that",
     'close':           'the task behind the item is finished',

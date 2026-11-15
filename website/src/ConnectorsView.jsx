@@ -38,7 +38,7 @@ import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import BrowserPane from "./BrowserPane.jsx";
 import { WAITING_META, waitingIn } from "./waitingMeta.js";
-import { CATALOGUE, NOT_SET_UP, PRESETS, cardState, matchCards, onceEach, oneCardPerSystem, oneOf, plannedFor, presetBody, presetOf, presetsLeft, repliesOf, repliesOn, WAY_NAMES, WAYS, waysOf, wayState } from "./connectorCatalog.js";
+import { browseSummary, CATALOGUE, NOT_SET_UP, PRESETS, cardState, matchCards, onceEach, oneCardPerSystem, oneOf, plannedFor, presetBody, presetOf, presetsLeft, repliesOf, repliesOn, WAY_NAMES, WAYS, waysOf, wayState } from "./connectorCatalog.js";
 import { settingsOf } from "./actionCard.js";
 import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
@@ -2394,7 +2394,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     const inSection = q ? hits : (groups.find((g) => g.title === browseState.section)?.cards || []);
     return browse({
       title: "Connections",
-      summary: `${connected} connected · ${all.filter((c) => c.planned).length} more in the catalogue · pick a section`,
+      summary: browseSummary(connected, all),
       sections: groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.length || null })),
       section: q ? "" : browseState.section ?? null,
       onSection: (key) => { setQ(""); setOpen(null); onBrowseState?.({ section: key, open: null }); },

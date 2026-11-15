@@ -133,3 +133,6 @@ export const presetsLeft = (types, connectors) => types.filter((t) => PRESETS[t]
 // helpdesk or a chat, off for a public post (the owner, 2026-11-08). The card's own `replies` / `reply_note` once the owner moved them.
 export const repliesOf = (type) => CATALOGUE.find((c) => c.type === type)?.replies || null;
 export const repliesOn = (type, cfg = {}) => (cfg.replies == null ? !!repliesOf(type)?.on : [true, 1, "1", "true", "on"].includes(cfg.replies));
+// THE CONNECTIONS PAGE'S ONE LINE: how many are connected, and how many cards the catalogue holds - it read "1 more in the catalogue"
+// over twenty sections of them, counting only the cards not built yet
+export const browseSummary = (connected, cards) => `${connected} connected · ${cards.length} in the catalogue · pick a section`;

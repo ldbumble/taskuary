@@ -593,6 +593,8 @@ class TheGeneralAgentsDayTests(unittest.TestCase):
         ot = next(t for n, t in tids.items() if 'overtime' in n)
         self.assertEqual(len([m for m in s.list_messages(ot) if m.get('Direction') != 'out']), 2, 'a second mail joined the thread')
         self.assertEqual(len(s.draft_snapshots(ot)), 2, 'each turn keeps the draft it wrote')
+        # ...and the redraft answers that second mail, so it is the one to press: it read "set aside when you moved on" over "waiting to start"
+        self.assertEqual(proposals.written_past(s, ot), set(), 'the draft written after her second mail is not one the thread moved past')
 
     def test_the_owners_own_answer_ends_in_a_recommendation_never_a_close(self):
         from taskuary import general

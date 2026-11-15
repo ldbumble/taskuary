@@ -1220,6 +1220,7 @@ def seed_agent_day(store, f) -> int:
         f'({dc / tot(4):.1%}) to {tot(1):,} hours and ${tot(2):,}.\n\nFairhaven is nearly all of the increase (+144 hours, +$5,400) - the two '
         f'night-shift vacancies. Riverside and Oak Ridge came down a little.\n\nThe workbook is attached, by site, with the change for each.\n\nDana', rv))
     verdicts.attach(store, rv, second, (outputs.folder(t) / second).read_bytes(), 'assistant')
+    stamp('review', 'ReviewId', rv, 138.8)          # ...written AFTER her second mail: a draft older than it reads as one the thread moved past
     c2 = said(t, 138.6, 'turn', None,
          {'about': 'Erin wrote again: she wants August next to September to see what changed.',
                'did': f'Put August beside September: overtime is up **{dh} hours ({dh / tot(3):.0%})** and **${dc:,} ({dc / tot(4):.1%})**. '

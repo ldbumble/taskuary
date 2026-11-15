@@ -503,6 +503,13 @@ def sent(msgs: list, budget: int = REQUEST_CHARS, keep: int = KEEP_STEPS) -> lis
     return out
 
 
+# ...AND THE BOUND IS THE WHOLE REQUEST (the gateway's own log, 2026-11-15: calls of 35-60K tokens under a 120,000-character bound): the tools'
+# schemas ride on every call beside the conversation and were never counted - ~15,000 characters before one word of the job
+def room(budget: int, tools) -> int:
+    "What the conversation may take of `budget` once the tools' schemas, sent on the same call, are counted."
+    return max(budget // 4, budget - len(json.dumps(tools or [], separators=(',', ':'))))
+
+
 def _setting(store, key: str, default: int) -> int:
     try: return max(1, int(store.get_setting(key) or default))
     except (TypeError, ValueError, AttributeError): return default
@@ -549,7 +556,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
             # ...stopped before its first answer, a conversation under way still heard the line: the next turn says only its own
             if stopped(): begun = begun or bool(history); raise RuntimeError('stopped')
             _fit(msgs)
-            try: m = _await(lambda: brain.chat(sent(msgs, budget), tools, max_tokens), cancel)
+            try: m = _await(lambda: brain.chat(sent(msgs, room(budget, tools)), tools, max_tokens), cancel)
             except Exception as e:
                 if stopped(): begun = begun or bool(history); raise
                 # ...the conversation it was handed is what this call could not take (too long for the model now, or a gateway that
@@ -595,7 +602,7 @@ def turn(brain, store, tid: int, sid: str, system: str, user: str, max_tokens: i
                 break
         # going in circles (or out of a caller's own bound): one last answer in words, no more tools - where it got and what is left
         msgs.append({'role': 'user', 'content': f'{why} Say what you did, what you found, and what is left.'})
-        return said(_await(lambda: brain.chat(sent(msgs, budget), tools, max_tokens, tool_choice='none'), cancel))
+        return said(_await(lambda: brain.chat(sent(msgs, room(budget, tools)), tools, max_tokens, tool_choice='none'), cancel))
     finally:
         # ...kept once the model has answered at all: a turn stopped or failed part-way keeps what it did, so Continue goes on from there.
         # Its pictures are not carried (the model saw them; their bytes would ride on every later call)

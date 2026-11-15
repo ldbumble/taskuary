@@ -163,6 +163,19 @@ class OneRoundTripTests(unittest.TestCase):
         # audit, 2026-11-14: moved on every step, each step wrote the last three answers to the cache again)
         self.assertLessEqual(sum(same(a, b) < len(a) - 2 for a, b in zip(seen, seen[1:])), 2)
 
+    def test_the_request_bound_counts_the_tools_sent_beside_the_conversation(self):
+        "The gateway's own log, 2026-11-15: calls of 35-60K tokens under a 120,000-character bound - the tools' schemas were never counted."
+        page = lambda k: f'PAGE {k} ' + 'x' * 9000
+        seen, tools = [], [apiagent._fn(f'tool{i}', 'd' * 700, apiagent._S({})) for i in range(20)]
+        class Reader:
+            def chat(self, msgs, tools, max_tokens, **kw):
+                seen.append(len(json.dumps(msgs)) + len(json.dumps(tools))); k = len(seen)
+                return {'content': 'Read all eight.'} if k > 8 else {'tool_calls': [{'id': f'c{k}', 'function': {'name': 'file_read', 'arguments': json.dumps({'path': f'f{k}.txt'})}}]}
+        s = MemoryStore(); s.set_setting('agent_request_chars', '60000', 'owner')
+        with mock.patch.object(apiagent, 'run_tool', side_effect=lambda s, t, i, n, a: page(a['path'])):
+            apiagent.turn(Reader(), s, 1, 's', 'sys ' * 2000, 'go', 500, tools=tools)
+        self.assertLess(max(seen), 60000 * 1.05, 'the whole request - its tools with it - under the bound')
+
     def test_a_read_made_again_in_one_turn_is_answered_from_the_first_until_something_else_runs(self):
         """A model that read the same file or brief twice paid for the whole answer twice and the server ran it twice. A read-only tool
         (the catalogue's mark) called again with the same arguments is answered by a pointer while the first answer still goes whole, by

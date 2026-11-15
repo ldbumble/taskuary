@@ -144,6 +144,15 @@ TEACH_SYSTEM = (
     'Answer JSON only: {"line": "<the line>" or "", "replaces": "<an existing line copied exactly>" or "", "only_this": true when it holds '
     'only for mail like this one (this sender or this topic), false when it is general}')
 TEACH_FIT = 6000          # the existing lines the model weighs a new one against
+# A SORTING VERDICT THE OWNER PRESSED FOR THE LIKE OF IT IS NEVER TAUGHT AS NOTHING, AND NEVER WIDER THAN WHAT WAS PRESSED (the owner,
+# 2026-11-14: a lesson "applies at once", and stays "as narrow as what was pressed: this vendor's newsletters aren't tasks, never this
+# vendor's mail isn't a task"). On the real model, "from now on" pressed on a colleague's weekly sign-off sheet taught no line at all -
+# nothing general could be said, so nothing was - and the next week's sheet was a task again. Said for these verdicts alone: an Advisor
+# idea turned down still writes a line only when it adds understanding
+NARROW = ('\nThe owner pressed this for mail like this one from now on, so a line is owed unless an EXISTING line already says it: where nothing '
+          'general can be said, say what KIND of mail from this sender it was ("Their weekly sign-off sheets are not yours to act on") with '
+          'only_this true. Never wider than the item - not everything this sender sends: another kind of mail from them may be real work.')
+PRESSED = (*SAID, 'made_task')
 
 
 def _llm(store):
@@ -198,7 +207,7 @@ def teach(store, kind: str, src: str, facts: str, scope: str = 'global', key: st
         llm = llm if llm is not None else _llm(store)
         if llm is None: return ''
         have = _existing(store.get_doc(memoryedit.DOC) or '', slug, scope, key)
-        a = _answer(llm(TEACH_SYSTEM, f'THE VERDICT: {WORDS.get(kind, kind)}\n\nTHE ITEM:\n{str(facts or "")[:2500]}\n\n'
+        a = _answer(llm(TEACH_SYSTEM + (NARROW if kind in PRESSED and scope != 'global' else ''), f'THE VERDICT: {WORDS.get(kind, kind)}\n\nTHE ITEM:\n{str(facts or "")[:2500]}\n\n'
                                      'EXISTING LINES:\n' + ('\n'.join(have) or '(none yet)'), max_tokens=300))
         said = text_of(ABOUT.sub('', str(a.get('line') or '')).strip())
         if not said or (stands and not stands()): return ''

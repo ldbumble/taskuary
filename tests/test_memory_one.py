@@ -156,6 +156,17 @@ def test_a_lesson_marked_wrong_is_no_longer_shown_to_triage_as_a_correction_eith
     assert operations.evidence_lines(s, nxt) == [] and raw not in lines(s)
 
 
+def test_a_pressed_sorting_verdict_is_asked_for_a_line_as_narrow_as_the_item_and_an_idea_is_not():
+    """The real model, 2026-11-14: "from now on" on a colleague's weekly sign-off sheet answered {"line": ""} - nothing general to say - and
+    the lesson was lost. The owner's ruling the same day: it applies at once, and stays as narrow as what was pressed."""
+    s, seen = MemoryStore(), []
+    def llm(system, user, **k): seen.append(system); return json.dumps({'line': "Ray's weekly sign-off sheets are not yours to act on", 'replaces': '', 'only_this': True})
+    raw = memorylines.teach(s, 'not_ours', 'msg13', 'From: Ray Colton <ray@northwind.example>\nSubject: Weekly inspection sheet - please sign off', 'sender', 'ray@northwind.example', llm=llm)
+    assert raw.endswith('(about: ray@northwind.example)') and memorylines.NARROW in seen[-1] and 'not everything this sender sends' in seen[-1]
+    memorylines.teach(s, 'made_task', 'msg14', 'Subject: Account review', 'subject', 'account review', llm=llm); assert memorylines.NARROW in seen[-1]
+    memorylines.teach(s, 'idea_dismiss', 'idea3', 'An idea about newsletters', section='bring', llm=llm); assert memorylines.NARROW not in seen[-1]
+
+
 def test_wrong_takes_a_verdicts_line_out_and_it_is_not_taught_back():
     """A line a verdict taught has no tag, so Wrong answered "That line is yours - you wrote it" - untrue, and the owner could only Forget the
     model's words (2026-11-12). Wrong now takes it out for good; a line he typed himself still is his to Forget, not Wrong."""

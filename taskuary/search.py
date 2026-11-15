@@ -130,10 +130,18 @@ def _tasks(store, q: str, words, status: str = '', today: bool = False) -> tuple
     for r in store._rows(f"SELECT TaskId, Channel, SourceName, Subject, FromName, FromEmail, ExternalId, SourceLink FROM message WHERE TaskId IN "
                          f"({','.join('?' * len(top))})", [t['TaskId'] for t in top]) if top else []:
         mail.setdefault(r['TaskId'], []).append(r)
+    # THE RAIL'S OWN ROW RIDES ON A TASK STILL ON IT (the audit, 2026-11-15: a hit read "reply · email · 1m ago" beside a rail row that said
+    # "ready to send" and 6h - the task's kind and when its row was last written, which is nobody's question). The page says such a hit
+    # with the rail's own functions (searchHits.meta, hitAge) off this row - the rail as last built, never a build for a search
+    from . import funnel
+    rail = {}
+    for i in (funnel.cached_pile(store) or {}).get('items') or ():
+        if i.get('tid'): rail.setdefault(i['tid'], i)
     return [{'type': 'task', 'id': f"task:{t['TaskId']}", 'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
              'sub': ' · '.join(x for x in (t.get('Kind'), t.get('Source')) if x), 'when': t.get('ClosedAt') or t.get('UpdatedAt') or t.get('CreatedAt'),
              'status': t.get('Status'), 'snippet': snippet(t.get('Summary'), words, 120),
-             'why': _task_why(t, words, mail.get(t['TaskId'], []))} for t in top], len(ts)
+             'why': _task_why(t, words, mail.get(t['TaskId'], [])),
+             **({'row': rail[t['TaskId']]} if t['TaskId'] in rail and t.get('Status') not in CLOSED else {})} for t in top], len(ts)
 
 
 def _who(store, m: dict) -> str:

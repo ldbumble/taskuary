@@ -20,7 +20,7 @@ import api from "./api";
 import { OPEN_SEARCH, focusPlace, openAppLink } from "./appLinks.js";
 import { prefetchTask } from "./taskDetail.js";
 import { ago } from "./timeWords.js";
-import { aloneAs, arrange, asks, channelsFor, countWords, filters, kindOf, lineOf, marks, messageLink, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
+import { aloneAs, arrange, asks, channelsFor, countWords, filters, hitAge, kindOf, lineOf, marks, messageLink, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
 import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS, ACCENT, mono } from "./theme.jsx";
 import { useAgents } from "./ui.jsx";
 const DONE_TODAY = "done:today";      // search.DONE_TODAY
@@ -32,7 +32,8 @@ const TONES = { slate: ["var(--tq-link, #55697a)", "var(--tq-tint-slate, #e6ebef
 const ICONS = { task: TaskAltIcon, email: MailOutlineIcon, chat: ChatBubbleOutlineIcon, pr: CallMergeIcon, issue: AdjustIcon,
   advisor: PsychologyOutlinedIcon, report: BarChartIcon, source: PowerOutlinedIcon, setting: TuneIcon, connector: PowerOutlinedIcon,
   person: PersonOutlineIcon };
-const MARK = "var(--tq-tint-brass, #efe3bf)";            // the matched words: a highlighter's wash, not a colour that means anything
+// ...and its own token (appPalette `mark`, the audit 2026-11-15): on the night palette tint-brass is within a shade of the panel, and the wash vanished
+const MARK = "var(--tq-mark, #efe3bf)";                  // the matched words: a highlighter's wash, not a colour that means anything
 
 export function Pill({ hit, sx }) {
   const k = kindOf(hit), [fg, bg] = TONES[k.tone] || TONES.oat;
@@ -123,7 +124,7 @@ function Row({ hit, words, on, onPick, onTask, onHover, onMessage }) {
         {/* the sender and the place are marked too, and a match nothing on the row shows is said (search.py `why`) */}
         {(m.length > 0 || hit.when || hit.why) && (
           <Box sx={{ fontSize: 11.5, color: FAINT, mt: 0.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            <Marked text={[...m, hit.when ? ago(hit.when) : "", hit.why || ""].filter(Boolean).join(" · ")} words={words} /></Box>
+            <Marked text={[...m, hitAge(hit), hit.why || ""].filter(Boolean).join(" · ")} words={words} /></Box>
         )}
         {hit.snippet && (
           <Box sx={{ fontSize: 11.5, color: DIM, mt: 0.35, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2,
@@ -135,7 +136,7 @@ function Row({ hit, words, on, onPick, onTask, onHover, onMessage }) {
         <Tooltip title={hit.type === "task" ? (closed ? "Closed - open it to read or reopen it" : "Open the task") : "Open the task it is on"}>
           <Box component="button" type="button" data-tq-search-task={hit.tid}
             onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); onTask(hit.tid); }}
-            sx={{ ...mono, flexShrink: 0, fontSize: 10.5, color: closed ? FAINT : ACCENT, bgcolor: "transparent", border: `1px solid ${BORDER}`,
+            sx={{ ...mono, flexShrink: 0, fontSize: 10.5, color: closed ? FAINT : "var(--tq-link, #55697a)" /* the theme's link ink: the brand's fixed slate was dark on dark */, bgcolor: "transparent", border: `1px solid ${BORDER}`,
               borderRadius: "6px", px: 0.6, py: "1px", cursor: "pointer", textDecoration: closed ? "line-through" : "none",
               "&:hover": { borderColor: "var(--tq-border, #cbd4dc)", bgcolor: "var(--tq-inset, #e6ebef)" } }}>{hit.ref}</Box>
         </Tooltip>
@@ -327,11 +328,15 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
       </Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, height: 36, borderTop: `1px solid ${BORDER}`, bgcolor: "var(--tq-panel, #faf8f5)",
         fontSize: 11, color: FAINT }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>↑</Kbd><Kbd>↓</Kbd>move</Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>Enter</Kbd>open</Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>Tab</Kbd>kind</Box>
+        {/* ONE LINE ON A PHONE TOO (the audit, 2026-11-15: at 390px the count wrapped to three lines and spilled under the footer): the
+            key hints are a keyboard's and are not drawn there; the count never wraps */}
+        <Box data-tq-search-keys="" sx={{ display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 1.5, flexShrink: 0 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>↑</Kbd><Kbd>↓</Kbd>move</Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>Enter</Kbd>open</Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>Tab</Kbd>kind</Box>
+        </Box>
         <Box sx={{ flex: 1 }} />
-        {res && hits.length > 0 && <Box data-tq-search-count="">{footer}</Box>}
+        {res && hits.length > 0 && <Box data-tq-search-count="" sx={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{footer}</Box>}
       </Box>
     </Dialog>
   );

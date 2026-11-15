@@ -89,3 +89,38 @@ test("a person opened with nothing on record is said to have nothing yet - never
   assert.equal(aloneAs({ q: "lena", hits: [lena] }), "");
   assert.equal(aloneAs({ q: "lortiz@dynamo.example", hits: [] }), "");
 });
+
+
+// A TASK ON THE RAIL IS SAID AS THE RAIL SAYS IT (the audit, 2026-11-15: a hit read "reply · email · 1m ago" beside its rail row's "ready to
+// send", 6h): search.py hands the rail's own row with the hit, and its words and its age are read by the rail's own functions
+test("a task hit still on the rail says the rail's words and the rail's age; any other keeps its own", async () => {
+  const { hitAge } = await import("../src/searchHits.js"), { railStatus } = await import("../src/railStatus.js"), { band } = await import("../src/timeWords.js");
+  const now = new Date("2026-11-12T16:00:00"), row = { key: "review:41", tid: 4, lane: "decide", kind: "review", channel: "email", why: "a reply is drafted for you to send",
+    arrived_at: "2026-11-12 10:00:00", since: "2026-11-12 15:59:00" };
+  const hit = { type: "task", tid: 4, sub: "reply · email", when: "2026-11-12 15:59:00", status: "open", row };
+  assert.equal(meta(hit)[0], railStatus(row).word, "the word its rail row wears");
+  assert.notEqual(meta(hit)[0], "reply · email");
+  assert.equal(hitAge(hit, now), band(row.arrived_at, now)); assert.equal(hitAge(hit, now), "6h", "when it arrived - not when its row was last written");
+  const closed = { type: "task", tid: 16, sub: "general · email", when: "2026-11-11 16:00:00", status: "done" };
+  assert.deepEqual(meta(closed), ["general · email", "closed"]); assert.equal(hitAge(closed, now), "1d ago");
+  assert.equal(hitAge({ type: "setting" }, now), "");
+  const fs = await import("node:fs"), se = fs.readFileSync(new URL("../src/SearchEverything.jsx", import.meta.url), "utf8");
+  assert.match(se, /\[\.\.\.m, hitAge\(hit\), hit\.why \|\| ""\]/);
+  assert.match(fs.readFileSync(new URL("../../taskuary/search.py", import.meta.url), "utf8"), /funnel\.cached_pile\(store\)/, "the rail as last built, never a build for a search");
+});
+
+// THE BOX ON A PHONE AND AT NIGHT (same audit): the footer wrapped to three lines at 390px, and on the night palette the matched words
+// and the TQ chips could not be read
+test("the search footer is one line on a phone, and the highlight and the task chips read on the night palette", async () => {
+  const fs = await import("node:fs"), se = fs.readFileSync(new URL("../src/SearchEverything.jsx", import.meta.url), "utf8");
+  const { DARK } = await import("../src/appPalette.js");
+  assert.match(se, /data-tq-search-keys="" sx=\{\{ display: \{ xs: "none", sm: "flex" \}/, "a keyboard's hints are not a phone's");
+  assert.match(se, /data-tq-search-count="" sx=\{\{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" \}\}/);
+  assert.match(se, /const MARK = "var\(--tq-mark, #efe3bf\)";/, "the day's wash as it was");
+  const lum = (h) => { const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  assert.ok(ratio(DARK.mark, DARK.panel) >= 1.8, `the wash stands off the panel (${ratio(DARK.mark, DARK.panel).toFixed(2)})`);
+  assert.ok(ratio(DARK["tint-brass"], DARK.panel) < 1.1, "tint-brass, which it used, is the panel's own shade there");
+  assert.ok(ratio(DARK.text, DARK.mark) >= 4.5, "and the words on it still read");
+  assert.match(se, /color: closed \? FAINT : "var\(--tq-link, #55697a\)"/); assert.ok(ratio(DARK.link, DARK.panel) >= 4.5);
+});

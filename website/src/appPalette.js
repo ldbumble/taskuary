@@ -7,6 +7,7 @@ export const DARK = {
   link: "#a8c4d9", success: "#abc9a5", danger: "#e5a3ae", warning: "#dac18c", purple: "#c9afd8",
   "tint-slate": "#293743", "tint-sage": "#2a392f", "tint-red": "#422d35",
   "tint-brass": "#3b3428", "tint-neutral": "#31302e", "tint-purple": "#372e40",
+  mark: "#665634",                       // a search hit's matched words: the highlighter's wash, where tint-brass is the panel's own shade
   "edge-slate": "#526779", "edge-sage": "#506c55", "edge-red": "#78505a", "edge-brass": "#756345", "edge-purple": "#695477",
 };
 

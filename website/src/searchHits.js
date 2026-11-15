@@ -1,5 +1,8 @@
 // What the search box's answers look like (SearchEverything.jsx; the server's search.py): the pill each kind of hit wears,
 // the order the kinds are listed in, the filter strip's counts and the matched words picked out of a line.
+import { railStatus, rowWhy } from "./railStatus.js";
+import { arrivedAt } from "./funnelPile.js";
+import { ago, band } from "./timeWords.js";
 
 // `tone` names the colour SearchEverything.jsx draws the pill in (TONES there)
 export const KINDS = {
@@ -111,12 +114,16 @@ export function marks(text, words) {
 // the small grey line under a title: who, where, and the task it is on when the title is not already the task
 export function meta(h) {
   // ...a task found by a line of its agent chat says so, and whose line it was (search.py _chat, F28)
-  if (h.type === "task") return [h.sub, h.tag, h.who, h.status && ["done", "dropped"].includes(h.status) ? (h.status === "done" ? "closed" : "dropped") : ""].filter(Boolean);
+  // ...and one still on the rail says what its rail row says (`row`, search.py: the rail's own item, read by the rail's own functions) -
+  // "ready to send", never its kind and source (the audit, 2026-11-15: "reply · email" beside a row that said "ready to send")
+  if (h.type === "task") return [(h.row && (railStatus(h.row)?.word || rowWhy(h.row))) || h.sub, h.tag, h.who, h.status && ["done", "dropped"].includes(h.status) ? (h.status === "done" ? "closed" : "dropped") : ""].filter(Boolean);
   // a WhatsApp source is titled by its name or number; its JID is the small line (search.py `sub`)
   if (h.type === "source") return [h.channel, h.sub].filter(Boolean);
   if (h.type === "person") return [h.to, h.company].filter(Boolean);
   if (h.href) return [h.where, h.sub].filter(Boolean);
   return [h.who, h.where && h.where !== h.who ? h.where : ""].filter(Boolean);
 }
+// ...and its age is the rail's: when it arrived, in the gutter's own short form (timeWords.band) - any other hit, when it was sent or closed
+export const hitAge = (h, now) => (h?.row ? band(arrivedAt(h.row), now) : h?.when ? ago(h.when, now) : "");
 // the chat line a hit was found in (GeneralWorkspace data-tq-chat-line): the task opens scrolled to it - "" for any other hit
 export const lineOf = (h) => (/^comment-\d+$/.test(String(h?.line || "")) ? `[data-tq-chat-line="${h.line}"]` : "");

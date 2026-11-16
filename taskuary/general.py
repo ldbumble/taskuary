@@ -15,6 +15,7 @@ from loguru import logger
 from . import kinds as _kinds, llm as llm_mod, words, wrapup
 from .buttons import label as L          # the action card's buttons by their one name (buttons.json)
 from .timewords import plural
+from .readgate import ALLOWED as READ_ALLOWED    # a held read's yes, as its card says it
 
 
 USER_TYPE = 'assistant_user'
@@ -665,7 +666,7 @@ PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))} - pu
            # ...and the answer on an agent's permission card, said with what it allowed ("You permission answered." told nobody anything)
            'permission_answered': lambda d: f"{ANSWERED.get(d.get('answer'), 'answered')}: {d.get('asked') or 'what the agent asked'}",
            # ...an APPROVED HELD STEP is the owner's press too, said with what it did (the owner, 2026-11-09: "once i approve it should say sent")
-           'shell_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_done': lambda d: f"approved: {_held_what(d)} - it ran on the page",
+           'shell_act_done': lambda d: f"approved: {_held_what(d)} - " + (READ_ALLOWED if d.get('reads') and not d.get('command') else 'it ran'), 'browser_act_done': lambda d: f"approved: {_held_what(d)} - it ran on the page",
            'desktop_act_done': lambda d: f"approved: {_held_what(d)} - it ran", 'browser_act_refused': lambda d: 'approved it - the page did not take it',
            # ...and a step the agent handed them ON ITS PAGE - a captcha, the last button of a checkout: the page moved on, or they pressed Done
            'browser_act_pressed': lambda d: _on_page(d),

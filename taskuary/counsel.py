@@ -204,7 +204,11 @@ def for_brief(store) -> str: return pick(store, GOAL_HEAD, VOICE_HEAD)
 def for_discussion(store) -> str: return pick(store, VOICE_HEAD)
 # A worker gets the Voice alone (2026-11-09): the intro is the desk's ("I do not do the work myself: I ... bring up the button"),
 # and it opened every task agent's style section - an agent whose whole job is to do the work.
-def for_worker(store) -> str: return without(pick(store, VOICE_HEAD, intro=False), SAID_IN_AGENT)
+def for_worker(store) -> str: return DESK_ONLY.sub('', without(pick(store, VOICE_HEAD, intro=False), SAID_IN_AGENT))
+
+# ...AND NOT THE DESK'S OWN "NOTHING GOES OUT UNTIL YOU SAY SO" (the owner, 2026-11-16): a task agent read it as a line to say, and said it over
+# the card that already says so. Left out on the agent road only - the Assistant keeps it, and his document is never edited
+DESK_ONLY = re.compile(r',?\s*"nothing\s+goes\s+out\s+until\s+you\s+say\s+so"', re.I)
 
 # ...LESS WHAT AGENT.md ALREADY TELLS A WORKER (the instruction trim, 2026-11-16): the desk needs these two bullets - it has no AGENT.md - and
 # a worker read each rule twice. Only the SHIPPED bullet, word for word, is left out: a bullet the owner wrote or reworded always reaches it

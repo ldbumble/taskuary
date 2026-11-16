@@ -96,3 +96,11 @@ test("a held read has no command to show", () => {
   assert.match(card.steps[0].text, /read q3-budget\.csv/i);
   assert.match(read("HeldSteps.jsx"), /c\.steps\.some\(\(s\) => s\.command\) && <Typography/);
 });
+
+// ...and its yes ran nothing (the owner, 2026-11-16): "Allowed - this task may read that folder", never "it ran"; a command still "ran"
+test("an approved held read says it was allowed, never that it ran", () => {
+  const read = { ReviewId: 9, TaskId: 7, Kind: "action", Status: "approved", DraftText: JSON.stringify({ action: "shell_act", sid: "run1", turn: 3, command: "",
+    what: "read q3-budget.csv in Documents", reads: ["C:/Users/alex/Documents"] }) };
+  assert.equal(heldCard([read]).said, "Allowed - this task may read that folder");
+  assert.equal(heldCard([step(1, 4, "git push origin master", "Push master", "approved")]).said, "it ran");
+});

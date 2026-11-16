@@ -19,6 +19,7 @@ from pathlib import Path
 WHY = "it is outside this task's own folders"
 NEVER = ("Taskuary's own data and the places sign-ins are kept are never read by an agent - not even with the owner's yes. Go on without "
          'it, and say what you needed if it matters')
+ALLOWED = 'Allowed - this task may read that folder'      # a read's Approve, said as what it did: nothing "ran" (heldCard says the same)
 GRANT = 'read:'                                         # a folder the owner let this task read (store.set_perm_rule)
 READ_TOOLS = ('Read', 'Glob', 'Grep', 'LS', 'NotebookRead')
 _KEYS = ('file_path', 'notebook_path', 'path', 'pattern', 'dir', 'directory')

@@ -345,6 +345,10 @@ class ReadingOutside(unittest.TestCase):
         with mock.patch('taskuary.workerstate._live', return_value=self.sess):
             self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
         self.assertIn('The owner let you read', self.heard()[0])
+        # ...and his press, where it is said as a line, reads as what it did - nothing "ran" (the owner, 2026-11-16; the card: heldCard)
+        from taskuary import general, readgate
+        said = general.PRESSES['shell_act_done']({'what': 'read conftest.py in tests', 'reads': [self.docs]})
+        self.assertIn(readgate.ALLOWED, said); self.assertNotIn('it ran', said)
         self.assertEqual(acpgate.decide(call, self.ctx)[0], acpgate.ALLOWED)
         self.assertEqual(acpgate.decide(self.read(os.path.join(self.docs, 'browser', 'x.mjs')), self.ctx)[0], acpgate.ALLOWED)
         self.assertEqual(self.pending(), [])

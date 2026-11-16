@@ -332,6 +332,7 @@ export const heldGroups = (rows) => {
   return out;
 };
 // ...what the card says: its title, the one why, the folder, each step's words and state, and how its press ended
+export const READ_ALLOWED = "Allowed - this task may read that folder";
 export const heldCard = (reviews) => {
   const rs = [...(reviews || [])].sort((a, b) => a.ReviewId - b.ReviewId), ps = rs.map((r) => proposalFrom(r) || {});
   const n = rs.length, lead = (p) => heldLead(p).lead;
@@ -348,7 +349,8 @@ export const heldCard = (reviews) => {
   const pressed = waiting.length ? null : steps.some((s) => s.state === "failed") ? "failed" : ran.length ? "approved" : "dismissed";
   return { title: n > 1 ? `${lead(ps[0])} - ${n} steps` : lead(ps[0]), why: `Held before it ran - ${whys.join("; ")}.`,
     folder: ps[0].where || ps[0].cwd || "the agent's folder", steps, waiting: waiting.map((s) => s.id), pressed,
-    said: pressed === "approved" ? (n > 1 ? `${ran.length} of ${n} ran` : "it ran")
+    // ...a read outside the task's folders runs nothing: its yes lets the task read there (readgate.ALLOWED, the owner 2026-11-16)
+    said: pressed === "approved" ? (ps.every((p) => !p.command && p.reads?.length) ? READ_ALLOWED : n > 1 ? `${ran.length} of ${n} ran` : "it ran")
       : pressed === "failed" ? `${n > 1 ? `${ran.length} of ${n} ran, step ${k} failed` : "it failed"} - the agent was told and goes on from there`
       : pressed === "dismissed" ? "nothing was run" : ran.length ? `${ran.length} of ${n} ran` : "",
     url: ran.map((s) => s.result?.url).filter(Boolean).at(-1) || "",

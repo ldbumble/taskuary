@@ -1576,6 +1576,7 @@ def _acp_gears(client, profile: dict, name: str, trace):
         if cat == 'model': trace('progress', 'acp', f"{want} is not available on this {_cli_name(name)} sign-in, so this ran on {now}")
 
 
+STOP_GRACE = 2.0                 # seconds a stopped turn has to honour session/cancel before its process is closed
 def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None, store=None):
     """One headless turn over ACP. Returns (result, session_id, diff) - run_cli's own contract, so
     nothing upstream can tell which road a run took.
@@ -1616,8 +1617,8 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             cancel.wait()
             if over.is_set() or not conv.lock.locked(): return
             client.cancel()
-            if not over.wait(2): clipool.drop(keep, conv) if keep else client.close()
-        threading.Thread(target=_cancel, daemon=True).start()
+            if not over.wait(STOP_GRACE): clipool.drop(keep, conv) if keep else client.close()
+        threading.Thread(target=_cancel, daemon=True, name='acp-stop-backstop').start()
     stop, ok = None, False
     try:
         with conv.lock:

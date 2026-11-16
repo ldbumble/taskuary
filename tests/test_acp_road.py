@@ -291,29 +291,32 @@ def test_a_kept_conversation_holds_its_connection_between_turns():
     finally: clipool.close(key)
 
 
-def test_a_stop_ends_its_own_turn_and_never_the_one_that_begins_after_it():
+def test_a_stop_ends_its_own_turn_and_never_the_one_that_begins_after_it(monkeypatch):
     """The recorded stop, 2026-11-11: he stopped a turn with two lines waiting. Their turn began at once on the same kept conversation, and the
-    stop's backstop closed it two seconds after the press - "died mid-turn", nothing drawn, his lines unanswered."""
-    import threading, time
-    key, said = 'general:test-acp-stop', {}
+    stop's backstop closed it two seconds after the press - "died mid-turn", nothing drawn, his lines unanswered. Read by states, never the
+    clock: the backstop's grace is long enough for the slowest runner, and the backstop itself is seen to have let go."""
+    import threading
+    monkeypatch.setattr(agents, 'STOP_GRACE', 60)
+    key, said, heard, real = 'general:test-acp-stop', {}, threading.Event(), agents.ACPSteps.__call__
+    def steps(self, u): real(self, u); heard.set()                             # the turn's first update: its prompt is at the agent
+    monkeypatch.setattr(agents.ACPSteps, '__call__', steps)
+    trace = lambda *a: None
     def turn(n, stop, resume=None):
         with mock.patch.object(agents, '_resolve_cmd', return_value=[FAKE[0]]):
-            try: said[n] = agents.run_cli(profile(keep_alive=key), f'turn {n}', lambda *a: None, extra_env={'FAKE_ACP_HANG': '1'}, cancel=stop, resume=resume)
+            try: said[n] = agents.run_cli(profile(keep_alive=key), f'turn {n}', trace, extra_env={'FAKE_ACP_HANG': '1'}, cancel=stop, resume=resume)
             except Exception as e: said[n] = e
+    backstops = lambda: [t for t in threading.enumerate() if t.name == 'acp-stop-backstop']
     try:
         s1, s2 = threading.Event(), threading.Event()
-        a = threading.Thread(target=turn, args=(1, s1)); a.start(); time.sleep(1.5)
-        t0 = time.time(); s1.set(); a.join(10)                                 # his stop: the turn honours it and ends
-        # ...within the backstop's two seconds, or the backstop closed it as designed - a slow runner, where nothing after it means anything
-        if time.time() - t0 >= 1.8: pytest.skip('the stopped turn outlived the stop backstop on this machine')
+        a = threading.Thread(target=turn, args=(1, s1)); a.start()
+        assert heard.wait(60), 'the first turn began'
+        s1.set(); a.join(60)                                                   # his stop: the turn honours it and ends
         assert isinstance(said[1], tuple), said                                # ...as an answer, its conversation kept
-        # ...and the lines that waited have theirs, on that conversation - bounded: on a slow runner this hung the whole part for 35 minutes
-        b = threading.Thread(target=turn, args=(2, s2, said[1][1]), daemon=True); b.start(); b.join(15)
-        assert not b.is_alive(), 'the turn after the stop never answered'
-        time.sleep(2.5)                                                        # past the backstop's two seconds: it was not closed under them
-        c = threading.Thread(target=turn, args=(3, s2, said[1][1]), daemon=True); c.start(); c.join(8)
-        assert not c.is_alive(), 'the conversation was closed and a fresh process began its first turn'
-        assert 'turn=2' in str(said[2]) and 'turn=3' in str(said[3]), (said[2][0], said[3][0] if isinstance(said[3], tuple) else said[3])
+        for t in backstops(): t.join(10)
+        assert not backstops(), 'the stopped turn is over: its backstop let go at once'
+        b = threading.Thread(target=turn, args=(2, s2, said[1][1]), daemon=True); b.start(); b.join(60)
+        c = threading.Thread(target=turn, args=(3, s2, said[1][1]), daemon=True); c.start(); c.join(60)
+        assert 'turn=2' in str(said[2]) and 'turn=3' in str(said[3]), (said.get(2), said.get(3))    # ...both on that one conversation
         assert clipool.is_live(key)
     finally: s1.set(); s2.set(); clipool.close(key)
 

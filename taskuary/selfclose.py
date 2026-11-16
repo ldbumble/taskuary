@@ -326,8 +326,9 @@ HANDLES_LINE = ("An id Taskuary gives a draft or a card (rv4) is your tools' han
 # close the task from here", a failure over finished work (the desktop stress test, 2026-11-03). It is told whose press the close is
 def owner_closes_line() -> str:
     from .buttons import label
-    return (f'ENDING THE TASK: the owner closes it with {label("close")}; when the work is complete, say it is ready for '
-            f'{label("close")} - never that you could not close it. '
+    # ...and never while a card of its own waits (the real Codex walk, 2026-11-16: "Ready for Mark done" over the email card still waiting for Send)
+    return (f'ENDING THE TASK: the owner closes it with {label("close")}; when the work is complete and no card you set up still waits for '
+            f'their press, say it is ready for {label("close")} - never that you could not close it. '
             # ...and where what it drafts is (the owner, 2026-11-05: a draft said to be in a section that no longer exists): earlier turns of the
             # conversation may still name another screen - the page they were written for is gone
             f'WHERE YOUR DRAFTS ARE: this task is one chat - no other screen or tab, whatever an earlier turn said. {CARD_SAID} '

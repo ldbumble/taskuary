@@ -34,6 +34,9 @@ def test_a_draft_is_said_in_a_line_and_its_words_are_the_cards():
     assert 'Say none of that' in line and 'Add only what the card cannot say' in line and 'assum' in line and 'what you set up and for whom' not in line
     # ...nor its id (agent walk 2, 2026-11-10: "send it after rv3"): the prompt names drafts by Taskuary's handle, which the owner never sees
     assert selfclose.HANDLES_LINE in line and 'the owner never sees it' in line
+    # ...and the task is never "ready for Mark done" while a card it set up waits (the real Codex walk, 2026-11-16: said over an email card
+    # still waiting for Send) - one sentence, every brain
+    assert 'no card you set up still waits for their press, say it is ready for Mark done' in line
     marked = general._prompt(s, t)[0]; tooled = general.by_tool(marked)
     for system in (marked, tooled): assert system.count('Add only what the card cannot say') == 1
     # ...a session that drafts by marked block writes the words once, in the block: there the block IS the draft

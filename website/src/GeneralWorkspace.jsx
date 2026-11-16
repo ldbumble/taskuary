@@ -26,6 +26,7 @@ import { useChatDefaults } from "./DetailSlider.jsx";
 import { PermissionCards } from "./AgentChannels.jsx";
 import { Hunk } from "./DiffView.jsx";
 import { withImages } from "./promptImages.jsx";
+import { shared } from "./singleFlight.js";
 import WriteIcon from "@mui/icons-material/EditNoteRounded";
 import ViewSpec, { PlanRow } from "./ViewSpec.jsx";
 import { wantsAsk, withoutAsk } from "./newTask.js";
@@ -364,7 +365,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 // ...the list last read of each task: a chat drawn again (the pane remounts when its session starts) draws what it held at once, never a blank beat
 // ...and one never read here draws the list that was asked for ahead with its task (taskDetail.prefetchTask: the row Next brings, a rail row
 // under the pointer) on its first frame - the read on mount still follows, so what is held is only ever the first paint
-const LISTS = new Map();
+const LISTS = new Map(), READS = new Map();      // READS: the read of each task's list on its way (singleFlight.shared)
 // ...WHICHEVER WAS ASKED LAST (chatStream.newerList): the list this view last read, or the one read ahead as he came back
 const listOf = (tid) => { const l = paintable(LISTS.get(tid), heldConversation(tid)); if (l) LISTS.set(tid, l); return l; };
 // ...and what the chat stands on beside its list - the agent's state, its picks, what it holds (`/assistant`) - by the same rule: as last
@@ -376,10 +377,13 @@ export function useConversation(tid, on) {
   // ...READS LAND IN THE ORDER THEY WERE ASKED (the recorded walk, 2026-11-11: on a loaded machine an older read came back after a newer one -
   // his line vanished, the chat read "at rest" over a turn at work, and his next line was drawn as heard): one that a later read overtook is dropped
   const asked = useRef(0), shown = useRef(0);
-  const load = useCallback(() => { const n = ++asked.current, at = Date.now(); return (on ? api.get(`/api/tasks/${tid}/conversation`, { params: { rev: rev.current } }).then(({ data: d }) => {
+  // ...ONE READ OF THE TASK'S LIST AT A TIME, whichever view or listener asks (singleFlight.shared): a read on its way is joined, never doubled
+  const load = useCallback(() => { const n = ++asked.current, at = Date.now(); return (on ? shared(READS, tid, () => api.get(`/api/tasks/${tid}/conversation`, { params: { rev: rev.current } })).then(({ data: d }) => {
     if (n < shown.current) return false;
     shown.current = n;
     if (d?.same && LISTS.get(tid)) LISTS.get(tid)._at = at;
+    // ...a read another view asked that found the list unchanged: this view draws the list that view holds, where it is newer than its own
+    if (d?.same && LISTS.get(tid)?.rev === d.rev) { const l = LISTS.get(tid); rev.current = l.rev; setList((cur) => (cur?.rev === l.rev ? cur : l)); }
     if (!d || d.same) return false;
     // ...nor a read asked before the one this view holds (one read ahead as he came back, landed first)
     if ((LISTS.get(tid)?._at || 0) > at) return false;

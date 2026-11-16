@@ -386,7 +386,11 @@ async def request_log(request: Request, call_next):
         # A SLOW ONE SAYS WHERE ITS TIME WENT (2026-10-23): waited on the store's lock, or ran (its own work, the thread pool, the
         # network). The freezes left only "20 requests finished in the same second"; this line, with store.lock's own warning
         # naming the holder, is what tells a held store from a slow handler next time.
-        why = f' - store.lock wait {waited[0]:.1f}s, ran {max(0.0, took - waited[0]):.1f}s' if took >= SLOW_REQUEST else ''
+        # ...and only names the lock when it was waited on: "store.lock wait 0.0s" on every slow line read as "locks all day" to the
+        # owner (2026-11-16) when no lock was ever held - the time was the handler's own work
+        w = waited[0]
+        why = ('' if took < SLOW_REQUEST else f' - slow: its own work took {took:.1f}s, no lock waited on' if w < 0.05
+               else f' - store.lock wait {w:.1f}s, ran {max(0.0, took - w):.1f}s')
         (logger.info if took >= SLOW_REQUEST else logger.debug)(
             f'{request.method} {request.url.path} -> {resp.status_code} ({int(took * 1000)}ms){why}')
     return resp

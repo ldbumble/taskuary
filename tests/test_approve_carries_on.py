@@ -363,6 +363,16 @@ class AFailedPressIsHandedBack(unittest.TestCase):
         cx = sqlite3.connect(self.db); cx.execute('CREATE TABLE ledger (id INTEGER, amount REAL)'); cx.commit(); cx.close()
         c = self.s.get_connector_by_type('database')
         self.s.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': json.dumps({'conn_str': f'sqlite:///{self.db}'}), 'Active': 1}, 'test')
+        # ...the engine itself stood in by sqlite3 (CI installs no sqlalchemy): the card, the road and the result's words are the real ones
+        def engine(cs, query, n, write=False):
+            cx = sqlite3.connect(cs.split(':///', 1)[1])
+            try:
+                cur = cx.execute(query)
+                rows = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchmany(n)] if cur.description else [{'rows_affected': max(cur.rowcount, 0)}]
+                cx.commit() if write else cx.rollback(); return rows
+            except sqlite3.Error as e: raise RuntimeError(f'(sqlite3.{type(e).__name__}) {e}')
+            finally: cx.close()
+        p = mock.patch('taskuary.db._rows_sqlalchemy', engine); p.start(); self.addCleanup(p.stop)
 
     def coding_ended(self):
         tid = Factory(self.s).task('Copy the September rows', kind='coding'); self.s.add_transcript(tid, 'run1', 'Set up the insert.', 'claude', HELD)

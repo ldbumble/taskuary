@@ -444,13 +444,17 @@ def broken(r: Run) -> list:
             c = next((c for c in s['cards'] if c['id'] == int(rid)), None)
             if not c or c['status'] not in ('pending', 'held'): say('vii', i, f"told rv{rid} waits, but it is {c and c['status']}")
     # (iii) a card stands in the turn that raised it, from its first answer on, and never moves
+    # ...BUT A RUN IS ONE TURN'S WORK (conversation.items, the owner 2026-11-13): a turn Taskuary woke with no line of his between - a press's
+    # outcome handed back (general.approved, general.failed) - goes on from the one before it, and what still waits stands at the run's end
     last = ss[-1]['cards'] if ss else []
     for c in last:
-        if c['id'] in r.raised and c['turn'] is not None and c['turn'] != r.raised[c['id']]:
-            out.append(f"(iii) rv{c['id']} raised in turn {r.raised[c['id']] + 1} is drawn in turn {c['turn'] + 1} ({'named' if c['named'] else 'by time'})")
         turns = [next((x['turn'] for x in s['cards'] if x['id'] == c['id']), None) for s in ss]
-        placed = [t for t in turns if t is not None]
-        if len(set(placed)) > 1: out.append(f"(iii) rv{c['id']} moved between turns: {placed}")
+        run_on = lambda i: i > 0 and len(ss[i]['lines']) == len(ss[i - 1]['lines'])
+        moved = [(turns[i - 1], turns[i]) for i in range(1, len(ss)) if turns[i] is not None and turns[i - 1] is not None and turns[i] != turns[i - 1] and not run_on(i)]
+        went = {(turns[i - 1], turns[i]) for i in range(1, len(ss)) if turns[i] is not None and turns[i - 1] is not None and turns[i] != turns[i - 1] and run_on(i)}
+        if c['id'] in r.raised and c['turn'] is not None and c['turn'] != r.raised[c['id']] and (r.raised[c['id']], c['turn']) not in went:
+            out.append(f"(iii) rv{c['id']} raised in turn {r.raised[c['id']] + 1} is drawn in turn {c['turn'] + 1} ({'named' if c['named'] else 'by time'})")
+        if moved: out.append(f"(iii) rv{c['id']} moved between turns: {[t for t in turns if t is not None]}")
     # ...and THE THING TO PRESS IS RIGHT ABOVE THE BOX (the owner, 2026-11-11): a waiting card's live copy stands under the newest answer
     for i, s in enumerate(ss):
         for c in s['cards']:
@@ -668,10 +672,9 @@ def k_send_fails(r: Run):
     r.turn('The reply with the agenda waits for your Send.', ('propose_reply', {'text': 'Hi Erin - agenda: budget, hiring, offsite.'}))
     r.fail = 'the mail server refused the message (550 relay denied)'
     r.send(label='send - it fails')
-    r.type('try again please')
-    # ...his line sets the card he wrote past aside, greyed where it stood (the owner, 2026-11-12): the turn that answers him raises it again
-    r.turn('It did not go: the mail server refused it. The reply is drafted again below for when the mailbox is fixed.',
-           ('propose_reply', {'text': 'Hi Erin - agenda: budget, hiring, offsite.'}))
+    # ...ITS AGENT IS WOKEN WITH THE FAILURE AT ONCE (general.failed, the owner 2026-11-16: "at least hand back to agent so we are not left
+    # hanging"): no line of his is needed to move it. A send that did not go still waits for its Send (general.NOT_GONE), so it says why
+    r.turn('It did not go: the mail server refused it (550 relay denied). The reply still waits above - press Send once the mailbox is fixed.')
     r.send(label='send again - it goes')
 
 

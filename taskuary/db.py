@@ -52,20 +52,32 @@ def _rows_sqlalchemy(cs, query, n, write=False):
         # install that still had 1.4 failed with "'Connection' object has no attribute 'rollback'" (2026-10-06)
         with eng.connect() as cx, cx.begin() as tx:
             if not write and eng.dialect.name == 'postgresql': cx.execute(sqlalchemy.text('SET TRANSACTION READ ONLY'))   # the server's own word too
-            rows = [dict(r._mapping) for r in cx.execute(sqlalchemy.text(query)).fetchmany(n)]
+            res = cx.execute(sqlalchemy.text(query))
+            rows = [dict(r._mapping) for r in res.fetchmany(n)] if res.returns_rows else [{'rows_affected': max(res.rowcount, 0)}]
             tx.commit() if write else tx.rollback()      # read is read (mssql.run_query)
             return rows
     finally:
         eng.dispose()
 
 
+# A STATEMENT THAT RETURNS NO ROWS IS DONE, NOT FAILED (the owner, 2026-11-16: an approved INSERT ... SELECT on SQL Server said "No results.
+# Previous SQL was not a query." - the fetch raised before the commit, so the approved change was rolled back and the card said it failed).
+# The batch's first result set is read; one with none says how many rows it changed, and the write is committed.
+def odbc_rows(cur, n: int) -> list:
+    "Rows of the first result set a pyodbc cursor has, past any row counts; a batch with none -> [{'rows_affected': n}]."
+    changed = getattr(cur, 'rowcount', -1)
+    while cur.description is None:
+        if not cur.nextset(): return [{'rows_affected': max(changed, 0)}]
+        changed = cur.rowcount if cur.rowcount >= 0 else changed
+    cols = [c[0] for c in cur.description]
+    return [dict(zip(cols, r)) for r in cur.fetchmany(n)]
+
+
 def _rows_odbc(cs, query, n, write=False):
     import pyodbc
     cx = pyodbc.connect(cs, timeout=10)
     try:
-        cur = cx.cursor().execute(query)
-        cols = [c[0] for c in cur.description or []]
-        rows = [dict(zip(cols, r)) for r in cur.fetchmany(n)]
+        rows = odbc_rows(cx.cursor().execute(query), n)
         cx.commit() if write else cx.rollback()          # read is read (mssql.run_query)
         return rows
     finally: cx.close()

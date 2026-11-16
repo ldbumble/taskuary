@@ -78,3 +78,35 @@ class QueryTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class AWriteThatReturnsNoRows(unittest.TestCase):
+    """2026-11-16: an approved INSERT ... SELECT said "No results. Previous SQL was not a query." - the fetch raised before the commit, so
+    the change the owner approved was rolled back. A batch with no result set is done: it says how many rows it changed, and commits."""
+    class Cur:
+        def __init__(self): self.description, self.rowcount, self.sets = None, 3, 0
+        def execute(self, q): return self
+        def nextset(self): self.sets += 1; return False
+        def fetchmany(self, n): raise RuntimeError('No results.  Previous SQL was not a query.')
+
+    class Cx:
+        def __init__(self, cur): self.cur, self.committed, self.rolled = cur, False, False
+        def cursor(self): return self.cur
+        def commit(self): self.committed = True
+        def rollback(self): self.rolled = True
+        def close(self): pass
+
+    def test_an_approved_insert_commits_and_says_its_count(self):
+        cx = self.Cx(self.Cur())
+        with mock.patch.object(mssql, '_connect', return_value=cx):
+            rows = mssql.run_query({'driver': 'D', 'query': 'INSERT INTO t (a) SELECT a FROM s', '_write': True})
+        self.assertEqual(rows, [{'rows_affected': 3}])
+        self.assertTrue(cx.committed); self.assertFalse(cx.rolled)
+
+    def test_the_odbc_road_of_any_database_does_the_same(self):
+        from taskuary import db
+        cx = self.Cx(self.Cur())
+        import pyodbc
+        with mock.patch.object(pyodbc, 'connect', return_value=cx):
+            rows = db._rows_odbc('DRIVER=x', 'UPDATE t SET a=1', 5, write=True)
+        self.assertEqual(rows, [{'rows_affected': 3}]); self.assertTrue(cx.committed)

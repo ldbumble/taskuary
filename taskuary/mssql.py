@@ -38,13 +38,11 @@ def run_query(cfg: dict, limit: int = None) -> list:
     'INSERT ...; SELECT 1' through a read-level card used to land (2026-10-05)."""
     from .reports import row_limit
     limit = limit or row_limit(cfg)[0]
-    from .db import read_only
+    from .db import read_only, odbc_rows
     q = cfg['query'] if cfg.get('_write') else read_only(cfg['query'])      # rollback cannot take back a sent mail or a shell (db.read_only)
     cx = _connect(conn_str(cfg))
     try:
-        cur = cx.cursor().execute(q)
-        cols = [c[0] for c in cur.description or []]
-        rows = [dict(zip(cols, r)) for r in cur.fetchmany(limit)]
+        rows = odbc_rows(cx.cursor().execute(q), limit)       # a write's batch returns no rows - said as its count, then committed
         cx.commit() if cfg.get('_write') else cx.rollback()
         return rows
     finally: cx.close()

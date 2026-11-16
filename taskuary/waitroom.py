@@ -427,10 +427,11 @@ def watch(store):
 
 def later(store, delay: float = 3.0):
     """Look shortly - called from a dying session's own pump thread, which must not host the
-    next session's startup."""
+    next session's startup. -> the Timer."""
     tm = threading.Timer(delay, lambda: _safe(store))
     tm.daemon = True
     tm.start()
+    return tm
 
 def _safe(store):
     try: tick(store)

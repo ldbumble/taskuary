@@ -551,6 +551,20 @@ def no_goal_reads_in_the_background():
 
 
 @pytest.fixture(autouse=True)
+def no_waiting_room_clock_left_behind(monkeypatch):
+    """A session's end looks at the waiting room a beat later, on a Timer (waitroom.later). Left running it fired in the NEXT test with the
+    old store: it found no session for that store's task 1 yet and opened one of its own - registered first, it took the next test's line,
+    and that test's own session never heard it (test_acp_coding on Windows CI, 2026-11-13..15). Each test's clock stops with the test."""
+    from taskuary import waitroom
+    real, timers = waitroom.later, []
+    def later(store, delay=3.0): tm = real(store, delay); timers.append(tm); return tm
+    monkeypatch.setattr(waitroom, 'later', later)
+    yield
+    for tm in timers: tm.cancel()
+    for tm in timers: tm.join(10)                # ...one already looking finishes before the next test begins
+
+
+@pytest.fixture(autouse=True)
 def no_sessions_left_behind():
     """A test that puts a stand-in session in terminal.SESSIONS and never takes it out handed it to every test after it: on CI's order a
     Mock left there broke the agent-load count (blackboard.subagent_count) of a test three files on. Each test gets the table it found."""

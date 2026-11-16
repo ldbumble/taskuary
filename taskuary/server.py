@@ -37,6 +37,8 @@ from . import processing_all
 # to be importable BEFORE any card reaches for it (deps.py)
 deps.use_packages()
 cfg = config.load()
+from . import backups, __version__
+if not demo.enabled(): backups.before_open(config.db_path(), __version__)       # the schema changes on an upgrade: a copy to go back to first
 store = SQLiteStore(config.db_path())
 # The profiles Taskuary ships, added to the CONFIG before the loop below copies it into the database - so they appear on
 # the Agents page, and a restart never rewrites one the owner has changed (seed_profiles skips any name already there).
@@ -167,6 +169,7 @@ async def _lifespan(_app):
         try:                                          # Recently deleted keeps a report, a rule or a profile KEEP_DAYS, then it goes for good
             from . import recentlydeleted; recentlydeleted.purge(store)
         except Exception as e: logger.warning(f'Recently deleted not purged: {e}')
+        backups.start(config.db_path())               # a copy of the database and its files once a day, kept a week
     else:
         # THE DEMO WORLD IS A FINISHED INSTALL: the settle above never runs for it, so its flag stayed unset and read as "not finished" -
         # every demo, and every browser test in CI, opened on setup instead of the day (2026-10-15)

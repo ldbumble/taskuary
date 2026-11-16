@@ -102,7 +102,7 @@
 <div class="entry on">
       <a class="page" href="./troubleshooting" aria-current="page">When something is wrong</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide When something is wrong's sections"></button>
-      <div class="secs"><a class="sec" href="#it-will-not-start" data-sec="it-will-not-start">It will not start</a><a class="sec" href="#a-connection-stopped" data-sec="a-connection-stopped">A connection stopped</a><a class="sec" href="#triage-got-it-wrong" data-sec="triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="#a-reply-has-no-confirmed-delivery" data-sec="a-reply-has-no-confirmed-delivery">A reply has no confirmed delivery</a><a class="sec" href="#an-agent-is-stuck" data-sec="an-agent-is-stuck">An agent is stuck</a><a class="sec" href="#an-agent-is-slow-to-start" data-sec="an-agent-is-slow-to-start">An agent is slow to start</a><a class="sec" href="#a-report-returned-nothing" data-sec="a-report-returned-nothing">A report returned nothing</a><a class="sec" href="#reading-the-audit-log" data-sec="reading-the-audit-log">Reading the audit log</a><a class="sec" href="#where-the-logs-are" data-sec="where-the-logs-are">Where the logs are</a><a class="sec" href="#report-a-bug" data-sec="report-a-bug">Report a bug</a><a class="sec" href="#still-wrong" data-sec="still-wrong">Still wrong</a></div>
+      <div class="secs"><a class="sec" href="#it-will-not-start" data-sec="it-will-not-start">It will not start</a><a class="sec" href="#a-connection-stopped" data-sec="a-connection-stopped">A connection stopped</a><a class="sec" href="#triage-got-it-wrong" data-sec="triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="#a-reply-has-no-confirmed-delivery" data-sec="a-reply-has-no-confirmed-delivery">A reply has no confirmed delivery</a><a class="sec" href="#an-agent-is-stuck" data-sec="an-agent-is-stuck">An agent is stuck</a><a class="sec" href="#an-agent-is-slow-to-start" data-sec="an-agent-is-slow-to-start">An agent is slow to start</a><a class="sec" href="#a-report-returned-nothing" data-sec="a-report-returned-nothing">A report returned nothing</a><a class="sec" href="#reading-the-audit-log" data-sec="reading-the-audit-log">Reading the audit log</a><a class="sec" href="#where-the-logs-are" data-sec="where-the-logs-are">Where the logs are</a><a class="sec" href="#going-back-to-a-backup" data-sec="going-back-to-a-backup">Going back to a backup</a><a class="sec" href="#report-a-bug" data-sec="report-a-bug">Report a bug</a><a class="sec" href="#still-wrong" data-sec="still-wrong">Still wrong</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./whats-new">What's new</a>
@@ -287,8 +287,20 @@ altered&quot; is not, and it names the rows.</p>
 <td>Playbooks</td>
 <td><code>~/.taskuary/playbooks/*.md</code></td>
 </tr>
+<tr>
+<td>Backups (a week of daily copies)</td>
+<td><code>~/.taskuary/backups/</code></td>
+</tr>
 </tbody></table>
 <p>Under Docker, all of it is <code>/data</code> inside the container. <code>TASKUARY_HOME</code> moves it anywhere.</p>
+<h2 id="going-back-to-a-backup">Going back to a backup<a class="anchor" href="#going-back-to-a-backup" aria-label="Link to this section">#</a></h2>
+<p>Taskuary copies its database once a day, and again before a new version first opens it, into
+<code>~/.taskuary/backups/</code> - seven days are kept. The files your mail and agents brought in are mirrored
+beside them (<code>attachments/</code>, <code>artifacts/</code>). To go back to one, quit Taskuary, then:</p>
+<pre><code class="language-bash">cp ~/.taskuary/backups/taskuary-2026-11-16.db ~/.taskuary/taskuary.db &amp;&amp; rm -f ~/.taskuary/taskuary.db-wal ~/.taskuary/taskuary.db-shm
+</code></pre>
+<p>(the date is the copy you want; a copy named <code>-before-&lt;version&gt;</code> is the one taken just before that version opened it). Copy
+<code>backups/attachments</code> and <code>backups/artifacts</code> back over the home&#39;s own folders if files are missing too.</p>
 <h2 id="report-a-bug">Report a bug<a class="anchor" href="#report-a-bug" aria-label="Link to this section">#</a></h2>
 <p>Every error the Assistant shows, and every failing item under the bell, has a small <strong>Report this
 bug</strong> link. The Help icon in the top bar opens the same popup when nothing failed but something is

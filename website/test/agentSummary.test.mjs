@@ -144,6 +144,8 @@ test("a turn's On you steps are said under its words, never twice", () => {
   assert.equal(turnOnYou(sum, sum.did), "For you to do: Decide whether to offer same-day pay; Say if I should ask Payworth for terms.");
   assert.equal(turnOnYou(sum, "Compared three. **Decide whether to offer same-day pay** - your call."), "For you to do: Say if I should ask Payworth for terms.");
   assert.equal(turnOnYou({ did: "x" }, "x"), "");
+  // ...a step ending on its own question or ellipsis keeps it, never "?." (the live chat, 2026-11-16)
+  assert.equal(turnOnYou({ on_you: ["Pick a date", "Should I ask Payworth for terms?"] }, ""), "For you to do: Pick a date; Should I ask Payworth for terms?");
   assert.equal(turnOnYou(null, "x"), "");
   assert.match(read("GeneralWorkspace.jsx"), /const onYou = !live && sum && !ask \? turnOnYou\(sum, words\) : ""/);
   assert.match(read("GeneralWorkspace.jsx"), /\{!!onYou && <div className="tq-aui-summary" data-tq-on-you="" style={{ marginTop: 10 }}>/);

@@ -290,6 +290,7 @@ def by_sentence(s, n: int = 1200) -> str:
     head = s[:n]
     end = max(head.rfind(c + ' ') for c in '.!?')
     return head[:end + 1] if end > n // 3 else head.rsplit(' ', 1)[0] + '…'
+ON_YOU_MAX = 300   # one box or On you step: cut on a sentence (by_sentence) - everywhere one is taken in, so none is cut twice
 def is_goal(t) -> bool: return bool((t or {}).get('DoneWhen'))      # a goal is a task with a done-when sentence (spec 2026-10-12)
 def agent_tickable(i) -> bool: return not (i.get('out') or i.get('tid'))   # an email box ticks when it goes, a goal's step when its task closes
 def agent_tick(store, tid, item, done: bool = True, actor: str = 'agent') -> tuple:
@@ -2451,7 +2452,7 @@ class SQLiteStore:
         out, seen = [], set()
         for x in items:
             if not isinstance(x, str): continue
-            text = x.strip()[:300]
+            text = x.strip() if len(x.strip()) <= ON_YOU_MAX else by_sentence(x, ON_YOU_MAX)
             if not text: continue
             # Case can be substantive in paths, identifiers, and commands. Only the exact
             # stored text is safe to treat as a duplicate.

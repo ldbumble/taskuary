@@ -8,6 +8,7 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
 import { hasReply, nextSteps, oneLine } from "./agentSummary.js";
+import { stepsLine } from "./checklist.js";
 import { isCardReview } from "./actionCard.js";
 import { Md } from "./md.jsx";
 import { MicButton } from "./ui.jsx";
@@ -30,9 +31,9 @@ const PARA = { ...LINE, mt: 1 };
 const ONYOU_SHOWN = 3;
 const OnYou = ({ items }) => {
   if (!items.length) return null;
-  const shown = items.slice(0, ONYOU_SHOWN).map((i) => i.text.replace(/[.\s]+$/, "")), more = items.length - shown.length;
+  const more = items.length - ONYOU_SHOWN;
   return <Typography data-tq-on-you={items.map((i) => i.id || "").join(" ")} sx={LINE}>
-    {`For you to do: ${shown.join("; ")}${more > 0 ? `, and ${more} more in the On you line under To do` : ""}.`}</Typography>;
+    {stepsLine("For you to do", items.slice(0, ONYOU_SHOWN).map((i) => i.text), more > 0 ? `, and ${more} more in the On you line under To do` : "")}</Typography>;
 };
 // NEXT STEPS HOLD THE REPLY (the owner, 2026-11-05: "next steps should be above or combined with suggested reply as that's the next steps.
 // meaning review the file then send it"): one head, what is on the owner first, then the draft with its Send

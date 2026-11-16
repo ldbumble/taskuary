@@ -48,5 +48,9 @@ export const settleTick = (ticks, id, done) => {
 
 // THE STEPS LEFT ON THE OWNER, ONE QUIET LINE UNDER THE TO DO (the owner, 2026-11-09): an agent's "press Send on the draft" and a setup step
 // like "connect a calendar" (the checklist's `on_you` items, store.set_on_you) are not work to tick - "On you: a; b." or '' when none is left
-export const onYouLine = (items) => { const left = (items || []).filter((i) => i?.on_you && !i.done && i.text).map((i) => String(i.text).replace(/[.\s]+$/, ""));
-  return left.length ? `On you: ${left.join("; ")}.` : ""; };
+// ...one sentence however it is headed - here, under a turn (agentSummary.turnOnYou) and in its summary (AgentSummary): a step ending on its own
+// "?" or "…" keeps it, never "?."
+export const stepOf = (x) => String(x || "").replace(/[.\s]+$/, "");
+export const stepsLine = (head, steps, tail = "") => { const l = (steps || []).map(stepOf).filter(Boolean); if (!l.length) return "";
+  const s = `${head}: ${l.join("; ")}${tail}`; return /[?!…]$/.test(s) ? s : `${s}.`; };
+export const onYouLine = (items) => stepsLine("On you", (items || []).filter((i) => i?.on_you && !i.done && i.text).map((i) => i.text));

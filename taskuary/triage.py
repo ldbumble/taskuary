@@ -284,6 +284,7 @@ def thread_of(j: dict, earlier: set):
     """The model's reading of the whole thread, cut to size; a mid it was not shown (0 is the mail being judged) is dropped. None when there is none."""
     t = j.get('thread')
     if not isinstance(t, dict): return None
+    from .store import ON_YOU_MAX, by_sentence
     s = lambda v, n: ' '.join(str(v or '').split())[:n]
     def mids(k, f):
         r = []
@@ -293,7 +294,7 @@ def thread_of(j: dict, earlier: set):
             if m in earlier | {0}: r.append({'mid': m, f: s(o.get(f), 200)})
         return r[:6]
     oth = [{'who': s(o.get('who'), 200), 'did': s(o.get('did'), 200)} for o in (t.get('others') if isinstance(t.get('others'), list) else []) if isinstance(o, dict)][:6]
-    on = [s(x, 200) for x in (t.get('on_you') if isinstance(t.get('on_you'), list) else []) if x][:6]
+    on = [by_sentence(x, ON_YOU_MAX) for x in (t.get('on_you') if isinstance(t.get('on_you'), list) else []) if x][:6]
     th = {'asking': s(t.get('asking'), 300), 'your_part': s(t.get('your_part'), 300), 'others': oth, 'asks': mids('asks', 'about'), 'aside': mids('aside', 'why'), 'on_you': on}
     return th if any(th.values()) else None
 

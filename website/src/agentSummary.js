@@ -1,6 +1,7 @@
 // WHERE THE OWNER STANDS AFTER A TURN (general.SUMMARY_TYPE, Task 3.5): each answer may carry `summary` = {about, did, on_you, nothing_left},
 // drawn as "What this is about" / "What I did" / "Next steps" (AgentSummary.jsx). No React, so it runs under bare node.
 import { asUtc } from "./dates.js";
+import { stepOf, stepsLine } from "./checklist.js";
 
 // a reply drafted and not yet sent - an action (a playbook, a held browser act) or a slot email is not one
 const isDraft = (r) => !!r && r.Kind !== "action" && r.Kind !== "slot" && r.Status === "pending";
@@ -55,8 +56,8 @@ const answerWords = (w) => { const t = String(w || "").trim(); return !!t && (t.
 // the words, each step the words do not already hold, so nothing is said twice
 const flat = (s) => String(s || "").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
 export const turnOnYou = (summary, words) => {
-  const said = flat(words), left = (summary?.on_you || []).map((x) => String(x || "").replace(/[.\s]+$/, "")).filter((x) => x && !said.includes(flat(x)));
-  return left.length ? `For you to do: ${left.join("; ")}.` : "";
+  const said = flat(words);
+  return stepsLine("For you to do", (summary?.on_you || []).filter((x) => stepOf(x) && !said.includes(flat(stepOf(x)))));
 };
 export const answerShown = (summary, words) => !String(words || "").trim() ? false
   : typeof summary?.answer_is_result === "boolean" ? summary.answer_is_result : answerWords(words);

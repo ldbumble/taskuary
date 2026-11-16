@@ -406,13 +406,15 @@ def summary_marker(text: str, letters=()) -> tuple:
     try: j = json_of(m.group(1))
     except ValueError: return bare()
     if not isinstance(j, dict): return bare()
-    flat = lambda x, n: without_letters(' '.join(str(x or '').split()), letters)[:n]
+    # ...cut on a sentence, never mid-word: a step cut at 200 characters read "then ask me again and." under the answer (2026-11-16)
+    from .store import ON_YOU_MAX, by_sentence
+    flat = lambda x, n: by_sentence(without_letters(' '.join(str(x or '').split()), letters), n)
     out = {'about': flat(j.get('about'), 600), 'did': flat(j.get('did'), 600), 'nothing_left': j.get('nothing_left') is True}
     # ...and the agent's own say on whether its prose is the deliverable (GeneralWorkspace: agentSummary.answerShown) - kept only when it said
     if isinstance(j.get('answer_is_result'), bool): out['answer_is_result'] = j['answer_is_result']
     # ...and the one press it waits on to carry on (general.follow_up): that press starts its next turn
     if j.get('after_press') in AFTER_PRESS: out['after_press'] = j['after_press']
-    if isinstance(j.get('on_you'), list): out['on_you'] = list(dict.fromkeys(x for x in (flat(o, 200) for o in j['on_you'] if isinstance(o, str)) if x))[:6]
+    if isinstance(j.get('on_you'), list): out['on_you'] = list(dict.fromkeys(x for x in (flat(o, ON_YOU_MAX) for o in j['on_you'] if isinstance(o, str)) if x))[:6]
     if cs := [{'kind': c['kind'], 'review': c['review'] if isinstance(c.get('review'), int) else None, 'said': ' '.join(c['said'].split())[:1000]}
               for c in j.get('corrections') or [] if isinstance(c, dict) and c.get('kind') in ('redraft', 'ask') and isinstance(c.get('said'), str) and c['said'].strip()]:
         out['corrections'] = cs[:6]

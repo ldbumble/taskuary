@@ -43,6 +43,18 @@ def test_the_block_is_read_and_always_taken_out():
     assert selfclose.SUMMARY_OPEN not in selfclose.for_screen(f'Working on it.\n{block()}')
 
 
+# A STEP IS NEVER CUT MID-SENTENCE (the live chat, 2026-11-16: "For you to do: ... then ask me again and." - a 200-character cut of the agent's
+# step, its last word an "and"): a long step reaches the screen and the To do whole up to its last full sentence, the same in both places
+def test_a_long_step_is_kept_to_its_last_whole_sentence():
+    long = 'Open the vendor portal and download the October statement as a PDF. ' * 4 + 'Then forward it to Erin Blake, check the totals, and then ask me again and I will pay it.'
+    _, summ = selfclose.summary_marker(block(on_you=[long, 'Approve the draft']))
+    (cut, short) = summ['on_you']
+    assert cut.endswith('as a PDF.') and long.startswith(cut) and short == 'Approve the draft'
+    s = MemoryStore(); tid = task(s)
+    turn(s, tid, f'Done.\n{block(on_you=[long])}')
+    assert [i['text'] for i in on_you(s, tid)] == [cut]
+
+
 def test_a_turn_ends_with_three_parts():
     s = MemoryStore(); tid = task(s)
     shown, _ = turn(s, tid, f'The pay run is Friday.\n\n{block()}')

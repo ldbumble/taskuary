@@ -721,6 +721,7 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
         if (found := taskcontext.found_tasks(store, msg, shown | {int((thread.get('thread_task') or {}).get('tid') or 0)})):
             thread = {**thread, 'found_by_search': found}
         # ...and how this sender's last asks were worked, further back than three days (TQ-0955, 2026-10-05)
+        if (notices := taskcontext.filed_notices(store, msg)): thread = {**thread, 'filed_notices': notices}
         theirs = taskcontext.sender_history(store, msg)
         if theirs: thread = {**thread, 'sender_history': theirs}
     except Exception as e: logger.debug(f'recent closures skipped: {e}')
@@ -1113,6 +1114,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             return _split_note(store, split_from, msg, land_on(store, msg, same, intent, actor, 'same', cfg=cfg, pol=pol, mine=mine,
                                                                notes_note=_notes_note()))
         if intent['intent'] == 'fyi':
+            # ...A NOTICE COME AGAIN JOINS THE ONE IT REPEATS (the owner, 2026-11-16: "one failure is one row"): triage named the filed notice it
+            # repeats (same_notice), so it lands on that notice's thread - the rail folds a thread's notices into one row (fold_fyi_threads)
+            if (was := store.get_message(intent['same_notice']) if intent.get('same_notice') else None) and was.get('ConversationId'):
+                msg['conversation_id'] = was['ConversationId']
+                if msg.get('_mid'): store.set_conversation(msg['_mid'], was['ConversationId'])
             mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
                             f"triage: {route_head('fyi')} - {intent.get('why') or 'informational'}" + _notes_note(), [], 'triage',

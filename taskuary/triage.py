@@ -50,6 +50,8 @@ FIELDS = {
     'sender_history': "sender_history is how this sender's last few asks were worked, newest first: each one's kind.",
     'recently_closed': "recently_closed is work on this thread, sender or subject that was closed in the last few days, each with its "
                        "tid and how it ended - the finding the agent wrote, or the ask if no agent ran.",
+    'filed_notices': ("filed_notices is this sender's earlier messages filed as notices with no task, newest first: each with its mid, "
+                      "subject, how triage read it and when."),
     'open_work': ("open_work is the OPEN tasks this message touches, each with its tid; in_another_chat is true on one whose lines sit in "
                   "a different chat or group than this chat line."),
     'open_items': ("open_items is the owner's other open tasks and Watching items, newest first, one line each: its ref and (tid), title, "
@@ -192,6 +194,7 @@ LEVELS = ('regular', 'important', 'urgent')
 DIFFICULTY, SURE, DATA = _bullet('difficulty'), _bullet('sure'), _bullet('data_class')
 REFINES = _bullet('refines')
 REPEAT = _bullet('repeat')           # ...and whether a notice an open task holds, come again, changed: only a change wakes its agent (2026-11-15)
+SAME_NOTICE = _bullet('same_notice')   # ...and the filed notice a repeat of it is, so one failure stays one row (2026-11-16)
 COVERED = _bullet('covered')         # the open tasks that already hold part of what a message reports (2026-11-15)
 TASK_TITLE = _bullet('task_title')   # ...and the wider title a line that joins at the combine level gives the task (2026-10-29)
 OFFER = _bullet('offer')         # what an agent could do for the owner about the main ask (2026-10-28)
@@ -296,7 +299,7 @@ def thread_of(j: dict, earlier: set):
 
 
 def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, coding=True, workflows=None,
-                   earlier=False, thread_task=False, notes=False, workstreams=False, watched=False, lean=True) -> dict:
+                   earlier=False, thread_task=False, notes=False, workstreams=False, watched=False, lean=True, notices=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
     Prose asks; a schema binds. Handed this, gpt-5.4 answered `title` and `summary` even when the
@@ -359,6 +362,7 @@ def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, cod
                  related_message_ids={'type': ['array', 'null'], 'items': {'type': 'integer'}},
                  existing_task_id={'type': ['integer', 'null']}, same_problem={'type': ['boolean', 'null']})
     if same: p['same_as'] = {'type': ['integer', 'null']}
+    if notices: p['same_notice'] = {'type': ['integer', 'null']}
     # ...and the open tasks that already hold PART of it, for a message that reports several things (ingest: a report run, 2026-11-15)
     if same: p['covered'] = {'type': ['array', 'null'], 'items': {'type': 'integer'}}
     # THE THREAD IS A HINT (the owner, 2026-10-26): a message on a task's thread joins it unless this says why it is another job
@@ -979,6 +983,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # ...and of what the owner's search found, closed ones too (context.found_tasks)
             same_ids |= {int(x) for k in ('open_items', 'found_by_search') for l in (thread or {}).get(k) or []
                          for x in re.findall(r'\(tid (\d+)\)', str(l))[:1]}
+            notice_ids = {int(n['mid']) for n in (thread or {}).get('filed_notices') or [] if n.get('mid')}
             goal_steps = {int(g['tid']): {x['id'] for x in g.get('steps') or []} for g in (thread or {}).get('open_goals') or []}
             earlier_ids = {int(x) for l in (thread or {}).get('exchange') or [] for x in re.findall(r'^\[#(\d+)\]', str(l))}
             home = ((thread or {}).get('thread_task') or {}).get('tid')
@@ -1030,6 +1035,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and 'refines' not in base and (home or same_ids or candidates is not None): system += '\n\n' + REFINES
             if not shape and '**repeat**' not in base and (home or same_ids or candidates is not None): system += '\n\n' + REPEAT
             if not shape and 'task_title' not in base and (home or same_ids or candidates is not None): system += '\n\n' + TASK_TITLE
+            if not shape and '**same_notice**' not in base and notice_ids: system += '\n\n' + SAME_NOTICE
             if not shape and '**covered**' not in base and same_ids: system += '\n\n' + COVERED      # ...and what open work already holds (2026-11-15)
             if not shape and '**offer**' not in base: system += '\n\n' + OFFER        # ...and what an agent could do for them (2026-10-28)
             if not shape and '**needs_browser**' not in base: system += '\n\n' + NEEDS_BROWSER   # ...and whether it is done on a web page (2026-10-29)
@@ -1051,7 +1057,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             system = stable(fixed, menus, memory, rest=system, ttl='1h')
             answer = ask_json(llm, system, user, want=verdict_schema(candidates, playbooks, same=bool(same_ids), goals=bool(goal_steps),
                                                                      coding=coding, workflows=workflows, earlier=bool(earlier_ids), thread_task=bool(home),
-                                                                     notes=bool(note_ids), workstreams=bool(workstreams), watched=watched, lean=lean),
+                                                                     notes=bool(note_ids), workstreams=bool(workstreams), watched=watched, lean=lean,
+                                                                     notices=bool(notice_ids)),
                               need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
                               **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
@@ -1088,6 +1095,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 try: same = int(j.get('same_as')) if j.get('same_as') is not None else None
                 except (TypeError, ValueError): same = None
                 if same in same_ids: out['same_as'] = same
+                # same_notice: only a filed notice it was shown
+                if str(j.get('same_notice') or '').isdigit() and int(j['same_notice']) in notice_ids: out['same_notice'] = int(j['same_notice'])
                 # covered: the same rule - only tids it was shown, and never the one it IS
                 cov = [int(x) for x in (j.get('covered') if isinstance(j.get('covered'), list) else []) if str(x).lstrip('-').isdigit()]
                 if (cov := [x for x in dict.fromkeys(cov) if x in same_ids and x != out.get('same_as')]): out['covered'] = cov

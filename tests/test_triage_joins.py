@@ -376,3 +376,36 @@ class ReopenedQuestionOnTheRailTests(unittest.TestCase):
         self.assertEqual(rail(), [a, c])
         m('d', asked('reply_only', True, 'Erin asks what separates the accounts'), 'c2', 0, 'Can you explain the difference?')
         self.assertEqual(rail(), [a, c, b])
+
+
+class OneFailureOneRowFiledTests(unittest.TestCase):
+    """THE OWNER, 2026-11-16 ("one failure is one row"): a system's failure mail, each run on its own thread, stood on the rail three times -
+    triage filed each as fyi and read each as "failed again". It is shown the sender's notices filed with no task, names the one this repeats
+    (same_notice), and the repeat lands on that notice's thread, which the rail folds into one row."""
+    def test_three_failure_mails_are_one_row(self):
+        from datetime import datetime
+        from taskuary import processing_unread as pu
+        s, seen = MemoryStore(), []
+        def llm(system, user, **k):
+            u = json.loads(user); seen.append((system, u))
+            shown = u.get('filed_notices') or []
+            return json.dumps({'intent': 'fyi', 'why': 'an automated failure notice', 'title': 'Nightly ledger export failed', 'summary': 's',
+                               'same_notice': shown[-1]['mid'] if shown and 'ledger export' in u['body'] else None})
+        def alert(ext, conv, body):
+            with mock.patch.object(ingest, '_spawn'):
+                return ingest.ingest_message(s, {'external_id': ext, 'channel': 'email', 'from_email': 'alerts@vendor.example', 'from_name': 'Ledger Alerts',
+                    'conversation_id': conv, 'subject': '[Ledger export] Nightly job FAILED', 'body': body,
+                    'sent_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}, llm=llm)
+        got = [alert(f'f{i}', f'fail-{i}', f'The nightly ledger export failed at 0{i}:00 UTC. Run id: {1000 + i}.') for i in (1, 2, 3)]
+        self.assertTrue(all(g['status'] == 'filed' for g in got), got)
+        self.assertNotIn('filed_notices', seen[0][1])
+        self.assertEqual([n['mid'] for n in seen[1][1]['filed_notices']], [got[0]['message_id']])
+        self.assertIn('**same_notice**', seen[1][0])
+        convs = {s.get_message(g['message_id'])['ConversationId'] for g in got}
+        self.assertEqual(convs, {'fail-1'}, 'the repeats land on the first notice\'s thread')
+        # ...a different notice from the same sender stays its own row
+        other = alert('f9', 'quota-1', 'Your storage quota is 90% full.')
+        self.assertEqual(s.get_message(other['message_id'])['ConversationId'], 'quota-1')
+        cards = [{'lane': 'fyi', 'kind': 'fyi', 'tid': None, 'cid': s.get_message(g['message_id'])['ConversationId'], 'channel': 'email',
+                  'key': f"m{g['message_id']}", 'mid': g['message_id'], 'last_at': ''} for g in got + [other]]
+        self.assertEqual(len(pu.fold_fyi_threads(cards)), 2)

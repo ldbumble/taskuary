@@ -234,6 +234,21 @@ def written_between(sender: str, to: set, senders: set, recips: set, own: set) -
 BETWEEN = 'written between the same people - this comes from someone its mail went to, and goes to who wrote it'
 
 
+NOTICE_DAYS, NOTICES = 7, 5
+def filed_notices(store, msg: dict, days: int = NOTICE_DAYS, limit: int = NOTICES) -> list:
+    """ONE FAILURE IS ONE ROW, FILED OR NOT (the owner, 2026-11-15/16): a system's failure mail that comes again each run - each on its own
+    thread - stood on the rail once per mail, though triage read each one as "failed again". What this sender's mail was FILED as, with no
+    task, in the last days - by sender, a fact, never by words - so triage can name the notice this one repeats (same_notice)."""
+    sender = str(msg.get('from_email') or '').lower()
+    if not sender: return []
+    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    rows = store._rows("SELECT MessageId, Subject, TriageTitle, SentAt FROM message WHERE lower(FromEmail)=? AND TaskId IS NULL AND Status='filed' "
+                       "AND replace(SentAt,'T',' ')>=? AND IFNULL(ExternalId,'')<>? ORDER BY MessageId DESC LIMIT ?",
+                       (sender, since, str(msg.get('external_id') or ''), limit))
+    return [{'mid': r['MessageId'], 'subject': r.get('Subject') or '', 'read_as': r.get('TriageTitle') or '', 'when': str(r.get('SentAt') or '')[:16]}
+            for r in rows if r['MessageId'] != msg.get('_mid')]
+
+
 def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
     """The OPEN work this arrival touches - the same thread, the same run or record, the same sender, or a title and summary alike
     in meaning (textsim) - so triage can say "this is TQ-x again" (same_as) instead of opening a second task for one job (the owner,

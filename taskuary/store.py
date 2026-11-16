@@ -2914,6 +2914,7 @@ class SQLiteStore:
         return self._rows("SELECT MessageId, ConversationId, Channel, Direction, Subject, FromName, FromEmail, SentAt, Status, TaskId, SenderClass, substr(BodyText, 1, 400) BodyText "
                           "FROM message WHERE Status NOT IN ('context','history','skipped') AND SentAt>=? ORDER BY SentAt DESC LIMIT ?", (since, limit))
     def set_brief(self, mid, brief): self._exec('UPDATE message SET Brief=? WHERE MessageId=?', (brief, mid))
+    def set_conversation(self, mid, cid): self._exec('UPDATE message SET ConversationId=? WHERE MessageId=?', (cid, mid))
     # ── what the assistant's post reads (assistant.py) ────────────────────────────────────────
     def owner_last_words(self, since, before, limit=40):
         """Threads whose LAST message is the owner's own ('context' rides inside a chain, 'out' was

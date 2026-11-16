@@ -740,7 +740,10 @@ class DemoDashboardTests(unittest.TestCase):
     def test_a_report_of_the_last_fourteen_days_ends_yesterday(self):
         from datetime import date, timedelta
         days = [r['day'] for r in next(rows for title, _, rows in demo.REPORTS if 'last 14' in title)]
-        self.assertEqual((len(days), days[-1], days[0]), (14, str(date.today() - timedelta(days=1)), str(date.today() - timedelta(days=14))))
+        # ...as of when the demo was read: a run that crosses midnight between the import and this line (CI, 23:55 UTC) is a day on
+        d = [date.fromisoformat(x) for x in days]
+        self.assertEqual((len(d), [b - a for a, b in zip(d, d[1:])]), (14, [timedelta(days=1)] * 13))
+        self.assertIn(date.today() - d[-1], (timedelta(days=1), timedelta(days=2)))
 
     def test_the_dashboards_count_the_whole_morning_not_the_half_seeded_before_them(self):
         # they ran before the agents' day and the tour were seeded: the rail read "Open now 12" beside nineteen open tasks (the walk, 2026-11-15)

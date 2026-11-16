@@ -2,6 +2,12 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.14 - 2026-11-16
+
+- A working agent's growing log is read only where it grew, and a task's chat is built once for every request at once
+- A step left on the owner is cut on its last whole sentence, never mid-word, and one ending on "?" keeps it
+- A press says what it does at once and until it lands: "You pressed Accept and close - acceptingâ€¦", then "âœ“ Accepted", then the close
+
 ## 0.4.0.13 - 2026-11-16
 
 - A coding task's chat reads each CLI log once per version: a poll no longer parses every session's whole log again

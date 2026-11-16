@@ -406,3 +406,27 @@ def test_a_view_the_agent_showed_is_still_drawn_once_its_turn_is_filed(home):
         {'type': 'tool_result', 'name': 'r1', 'detail': {'tool_call_id': 'r1', 'result': 'a,b'}}])
     show, read = [x for x in sessionrecord.general_steps(s, tid) if x['k'] == 'tool']
     assert show['output'] == answer and 'output' not in read
+
+
+def test_a_coding_chat_polled_again_reads_each_cli_log_once_per_version(home, monkeypatch):
+    """The owner's live app, 2026-11-16: a coding task's chat took 15-43 s a poll - every poll parsed each session's whole CLI log again
+    (~1 s per 100 MB) while the page polled every few seconds. The conversation is built from a log read once per (file, mtime, size): polled
+    again it reads nothing, and only a log that grew is read again."""
+    import os
+    from taskuary import conversation
+    monkeypatch.setattr(sessionrecord, '_STEPS', {}, raising=False)
+    s = MemoryStore(); tid = s.create_task({'Title': 'Fix the March import', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
+    for i in range(3):
+        claude_log(home, f'big{i}')
+        s._exec("INSERT INTO transcript (TaskId, Sid, Brain, ExtId, CreatedAt) VALUES (?,?,?,?,datetime('now'))", (tid, f's{i}', 'claude', f'big{i}'))
+    reads, real = [], sessionrecord.READERS['claude']
+    monkeypatch.setitem(sessionrecord.READERS, 'claude', (real[0], lambda f: reads.append(f.name) or real[1](f), real[2]))
+    first = conversation.items(s, tid)
+    assert sorted(reads) == ['big0.jsonl', 'big1.jsonl', 'big2.jsonl']
+    for _ in range(5): assert conversation.items(s, tid)['rev'] == first['rev']
+    assert len(reads) == 3, f'a poll read a log again: {reads}'
+    f = home / '.claude' / 'projects' / 'C--work-ledger' / 'big1.jsonl'
+    f.write_text(f.read_text(encoding='utf-8') + '\n' + json.dumps({'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'One more check.'}]}}), encoding='utf-8')
+    os.utime(f, ns=(f.stat().st_atime_ns, f.stat().st_mtime_ns + 10**9))
+    conversation.items(s, tid)
+    assert reads[3:] == ['big1.jsonl'], 'only the log that grew is read again'

@@ -12,7 +12,7 @@ pruning its logs next month does not take the record with it.
 A step is {k, text, name?, file?, at?}: k is `you` (what the agent was told), `brief` (what Taskuary told it - keep_seed),
 `thought`, `said`, `tool` (name + what it was pointed at), `plan` (its todo list), `compact` (the CLI compacted its context) or `error`. Tool OUTPUT is left out on purpose - it is the noise the record
 is read past, and the agent's next thought or answer says what it made of it."""
-import json
+import json, threading
 import re
 from datetime import datetime
 from pathlib import Path
@@ -281,13 +281,26 @@ READERS = {'claude': (_claude_file, _claude, 'Claude Code log'), 'codex': (_code
            'copilot': (_copilot_file, _copilot, 'Copilot session log'), 'gemini': (_gemini_file, _gemini, 'Gemini chat file')}
 
 
+# ...READ ONCE PER VERSION OF THE LOG (the owner's live app, 2026-11-16: a coding task's chat took 15-43 s a poll - every poll parsed each of its
+# sessions' whole CLI log again, ~1 s per 100 MB, and the page polls every few seconds): kept by (file, its mtime, its size), read again only
+# when the log changed
+_STEPS, _STEPS_LOCK = {}, threading.Lock()
+
 def cli_steps(cli: str, ext: str) -> tuple[list, str]:
     """(steps, source) from the CLI's own log, or ([], '') when it keeps none we can read."""
     r = READERS.get(str(cli or '').split('/')[-1].removesuffix('.exe'))
     if not (r and ext): return [], ''
     try:
         f = r[0](str(ext))
-        return (r[1](f), r[2]) if f else ([], '')
+        if not f: return [], ''
+        st = f.stat(); key, ver = (r[2], str(f)), (st.st_mtime_ns, st.st_size)
+        with _STEPS_LOCK: hit = _STEPS.get(key)
+        if not hit or hit[0] != ver:
+            hit = (ver, r[1](f))
+            with _STEPS_LOCK:
+                if len(_STEPS) > 64: _STEPS.clear()
+                _STEPS[key] = hit
+        return [dict(x) for x in hit[1]], r[2]
     except Exception as e:
         logger.debug(f'session record: {cli} log for {ext} unreadable - {e}'); return [], ''
 

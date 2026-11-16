@@ -16,7 +16,7 @@ import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, DraftField, SubjectRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
-import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, replyContext } from "./replyDelivery.js";
+import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, needsAddress, pressWords, replyContext } from "./replyDelivery.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
 import { useFoldBar } from "./foldBar.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
@@ -179,8 +179,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // ...AND THE PRESSED BUTTON SAYS WHAT IS HAPPENING (the owner, 2026-11-12: "the card button should say sending then close"): a spinner
   // beside "Sending…" while it goes, then "Sent" - in place, never a line above the card
   // (the row's verbs read the words; the card's own buttons draw them with the spinner - `sentOr` is the word, its look is `spinning`)
-  const sentOr = (w) => (sent ? "Sent" : w);
-  const spinning = (w) => (sent ? "Sent" : <><CircularProgress size={11} data-tq-sending="" sx={{ color: "inherit", mr: 0.75 }} />{w}</>);
+  // ...in the card's own words: an invite's Accept says Accepting… then Accepted (pressWords)
+  const pw = pressWords(r);
+  const sentOr = (w) => (sent ? pw.done : w);
+  const spinning = (w) => (sent ? pw.done : <><CircularProgress size={11} data-tq-sending="" sx={{ color: "inherit", mr: 0.75 }} />{w}</>);
   // ...said by the send that was pressed: Close out has two, and "Sending…" stood on both
   const [pressed, setPressed] = useState("approve");
   const [err, setErr] = useState("");
@@ -290,6 +292,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // and Approve, which does the same and leaves the task open. Only where the reply rides with it: with none, Approve never closed the task
   const twoApproves = !!co && !r.Stale && closesIt && sendable && !simulated && !delivery.frozen;
   const coDoes = co ? `${co.then}, then sends your reply to ${replyContext(r)}` : "";
+  const pressedWord = pressed === "send_close" ? (co ? closeCo : closeWord) : co ? co.approveLabel : proposal ? proposal.approveLabel : sendWord;
+  const going = busyNow && !sent && ["approve", "send_close"].includes(pressed), goingWord = String((proposal || co)?.busyLabel || pw.busy);
   const closeCoTitle = `${closeCo} ${coDoes} - ${closeThen}`, coTitle = `${co?.approveLabel} ${coDoes} - ${stays}`;
   // ...either pair keeps its line, and folds its open one when tight
   const paired = twoSends || twoApproves;
@@ -408,7 +412,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) {
         // ...with what went and where (`said`): the chat keeps the sent card in place, marked, while the task closes (TaskPage SentHere)
         setSent(verb === "approve"); setBusy(false); await onSent({ closes: closesIt && shut && verb === "approve" && (data.reply ? !!data.reply.ok : true),
-          said: verb === "approve" ? { text: value, channel: r.Channel || "", to: replyContext(r), subject: deliverySubject(r), id: r.ReviewId } : null }); return;
+          said: verb === "approve" ? { text: value, channel: r.Channel || "", to: replyContext(r), subject: deliverySubject(r), id: r.ReviewId, done: pw.sentAs } : null }); return;
       }
       onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }      // what the page did after the answer (onSent), not the press
@@ -504,7 +508,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       // ...and a card that is connected but cannot send keeps the Copy it drew before (`waits`): the draft can still go out by hand
       ...(connect.waits ? [{ id: no("copy"), label: copied ? `✓ ${btn("copy", "done")}` : btn("copy"), tone: "s", disabled: off || !words.trim(), run: copyIt, title: copyTitle }] : []),
     ] : delivery.frozen ? [
-      { id: no("approve"), label: busy ? "Checking delivery…" : delivery.label, tone: "p", disabled: off || !delivery.canCheck,
+      { id: no("approve"), label: delivery.active ? pw.busy : busy ? "Checking delivery…" : delivery.label, tone: "p", disabled: off || !delivery.canCheck,
         run: () => decide("approve"), title: delivery.line, why: delivery.active ? "waiting for the provider" : "" },
       ...(unconfirmed ? [{ id: no("anyway"), label: btn("approve", "unknown"), tone: "s", disabled: off, run: sendAnyway, title: btnHint("approve", "unknown") },
         ...(r.TaskId ? [{ id: no("done"), label: btn("close"), tone: "s", disabled: off, run: doneAnyway, title: btnHint("close") }] : [])] : []),
@@ -531,16 +535,16 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     ] : chatFile ? [
       { id: no("email-file"), label: "Reply by email with the file", tone: "p", disabled: off, run: onEmailInstead,
         title: `A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes` },
-      { id: no("approve"), label: busy ? sentOr("Sending…") : `${sendWord} without the file`, tone: "s", disabled: off || !words.trim(), why: words.trim() ? "" : "write the reply first",
+      { id: no("approve"), label: busy ? sentOr(pw.busy) : `${sendWord} without the file`, tone: "s", disabled: off || !words.trim(), why: words.trim() ? "" : "write the reply first",
         run: () => decide("approve"), title: `Sends only the words to ${replyContext(r)} - no file goes with them` },
     ] : twoSends ? [
       // Close out's two: Send and close the primary, Send beside it - the one that gives up its place when the line is tight (useFoldBar)
-      { id: no("send_close"), label: busy && pressed === "send_close" ? sentOr("Sending…") : `${closeWord}${copying}`, tone: "p", disabled: off || (!words.trim() && !isCal),
+      { id: no("send_close"), label: busy && pressed === "send_close" ? sentOr(pw.busy) : `${closeWord}${copying}`, tone: "p", disabled: off || (!words.trim() && !isCal),
         why: words.trim() || isCal ? "" : "write the reply first", run: () => decide("approve", false, true), title: closeTitle },
-      { id: no("approve"), label: busy && pressed !== "send_close" ? sentOr("Sending…") : `${sendWord}${copying}`, tone: "s", disabled: off || (!words.trim() && !isCal),
+      { id: no("approve"), label: busy && pressed !== "send_close" ? sentOr(pw.busy) : `${sendWord}${copying}`, tone: "s", disabled: off || (!words.trim() && !isCal),
         why: words.trim() || isCal ? "" : "write the reply first", run: () => decide("approve", false, false), title: sendTitle },
     ] : [
-      { id: no("approve"), label: busy ? sentOr(simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length && !isCal ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: off || (!words.trim() && !isCal), why: words.trim() || isCal ? "" : "write the reply first",
+      { id: no("approve"), label: busy ? sentOr(simulated ? "Simulating…" : pw.busy) : simulated ? "Simulate approval" : `${sendWord}${ccNow.length && !isCal ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: off || (!words.trim() && !isCal), why: words.trim() || isCal ? "" : "write the reply first",
         run: () => decide("approve"), title: simulated ? "Complete this temporary demo; no email is sent" : isCal ? thenLine : `Sends this response to ${replyContext(r)}` },
     ]),
     ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: off, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
@@ -632,7 +636,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   return (
     <Box sx={{ mt: 0.5 }}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1 }}>{err}</Alert>}
-      {delivery.line && <Alert severity={delivery.state === "unknown" ? "warning" : "info"} sx={{ mb: 1 }}>{delivery.line}</Alert>}
+      {/* THE PRESS IS SAID AT ONCE, IN HIS WORDS (the owner, 2026-11-16: Accept and close showed nothing for 15 seconds, then the task was gone):
+          what he pressed and what it is doing, from the press until its answer - then the card, pressed, says how it went */}
+      {going ? <Alert severity="info" data-tq-pressed-line="" sx={{ mb: 1 }}>{`You pressed ${pressedWord} - ${goingWord.toLowerCase()}`}</Alert>
+        : delivery.line && <Alert severity={delivery.state === "unknown" ? "warning" : "info"} sx={{ mb: 1 }}>{delivery.line}</Alert>}
       <ApprovalInterrupt it={interrupt} onResolve={(choice) => {
         // the click did not send; the owner's edit stays theirs, the refreshed draft is shown beside it
         const res = resolveInterrupt(interrupt, choice, { [r.ReviewId]: value });
@@ -746,7 +753,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         ) : delivery.frozen ? (<>
           <Button size="small" variant={solid} disableElevation disabled={off || !delivery.canCheck}
             onClick={() => decide("approve")} title={delivery.line}>
-            {busy ? "Checking delivery…" : delivery.label}
+            {delivery.active ? spinning(pw.busy) : busy ? "Checking delivery…" : delivery.label}
           </Button>
           {unconfirmed && <Button size="small" variant="outlined" disabled={off} onClick={sendAnyway} title={btnHint("approve", "unknown")}>{btn("approve", "unknown")}</Button>}
           {unconfirmed && r.TaskId && <Button size="small" variant="outlined" disabled={off} onClick={doneAnyway} title={btnHint("close")}>{btn("close")}</Button>}
@@ -806,7 +813,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
               Reply by email with the file</Button>
             <Button size="small" variant="outlined" disabled={off || !words.trim()} onClick={() => decide("approve")}
               title={`Sends only the words to ${replyContext(r)} - no file goes with them`}>
-              {busy ? spinning("Sending…") : `${sendWord} without the file`}</Button>
+              {busy ? spinning(pw.busy) : `${sendWord} without the file`}</Button>
           </>
         ) : twoSends ? (
           /* CLOSE OUT'S TWO SENDS (the owner, 2026-11-03): Send and close first and filled, Send beside it - and on a line too tight for both,
@@ -814,11 +821,11 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           <>
             <Button size="small" variant={closeVariant} disableElevation disabled={off || (!words.trim() && !isCal)} onClick={() => decide("approve", false, true)}
               title={closeTitle} data-tq-send="close">
-              {busy && pressed === "send_close" ? spinning("Sending…") : `${closeWord}${copying}`}</Button>
+              {busy && pressed === "send_close" ? spinning(pw.busy) : `${closeWord}${copying}`}</Button>
             {foldMore([{ id: no("approve"), label: `${sendWord}${copying}`, title: sendTitle, disabled: off || (!words.trim() && !isCal), run: () => { setSendAt(null); decide("approve", false, false); } }])}
             <Button size="small" variant={lit === no("approve") ? "contained" : "outlined"} disableElevation disabled={off || (!words.trim() && !isCal)}
               onClick={() => decide("approve", false, false)} title={sendTitle} data-tq-send="open" data-tq-bar-item="send" style={folded ? HIDE : undefined}>
-              {busy && pressed !== "send_close" ? spinning("Sending…") : `${sendWord}${copying}`}</Button>
+              {busy && pressed !== "send_close" ? spinning(pw.busy) : `${sendWord}${copying}`}</Button>
           </>
         ) : (
           // ...a calendar answer's note may be empty (verdicts: `cal`), so an invite with none still has its Send - New → Meeting's pick
@@ -828,7 +835,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
             onClick={() => decide("approve")}
             title={simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}`}>
             {/* the one word for the send, as everywhere (buttons.json) */}
-            {busy ? spinning(simulated ? "Simulating…" : "Sending…")
+            {busy ? spinning(simulated ? "Simulating…" : pw.busy)
               : simulated ? "Simulate approval" : `${sendWord}${ccNow.length ? `, copying ${ccNow.length}` : ""}`}
           </Button>
         )}

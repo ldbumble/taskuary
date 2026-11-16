@@ -5,6 +5,7 @@ import { FAINT, INK } from "./theme.jsx";
 import api from "./api";
 import { press } from "./press.js";
 import { bulkSendable, slotReviews } from "./taskLifecycle.js";
+import { label as btn } from "./buttons.js";
 
 // The task's emails still waiting for Send (slots.py), each its own card with its own Send. One that went is its SentCard in its turn
 // (TaskPage turnCards), as a reply is; a dropped one is its line in the chat. A name with no address yet wears a "?" - never guessed into one.
@@ -29,7 +30,7 @@ export default function SlotList({ taskId, checklist = [], reviews = [], onChang
   };
   return (
     <Box sx={{ mt: 1.5, maxWidth: 900 }}>
-      {waiting.length > 1 && <Box sx={{ mb: 0.6 }}><Button size="small" disabled={busy} onClick={approveAll}>{busy ? "Sending…" : `Approve all (${waiting.length})`}</Button></Box>}
+      {waiting.length > 1 && <Box sx={{ mb: 0.6 }}><Button size="small" disabled={busy} onClick={approveAll}>{busy ? btn("approve", "busy") : `Approve all (${waiting.length})`}</Button></Box>}
       {items.map((i) => {
         const rv = byRid[i.rid];
         return (

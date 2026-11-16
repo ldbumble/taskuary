@@ -274,6 +274,8 @@ if (process.argv[1]?.endsWith("real-conv.mjs")) {
     // ...a stranger writes on the thread: his words wait by the box, behind the Trust action
     else if (k === "strangermail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: "email", subject, from_name: "Omar Keller", from_email: "omar@other.example", conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
     else if (k === "mail") console.log("mail", JSON.stringify(await api("/api/ingest/push", { channel: CH, subject: CHAT ? "" : subject, ...who, ...FROM, conversation_id: `conv-${name}`, body: arg })).slice(0, 160));
+    // ...the mailbox refuses from here on (`refuse:<its words>`), or sends again (`refuse:`): a press whose act fails
+    else if (k === "refuse") console.log("refuse", JSON.stringify(await api("/api/fixture/outbox", arg ? { fail: arg } : {})));
     else if (k === "press") console.log(await press(page, new RegExp(arg), "[data-tq-task-page]"));
     // ...pressed twice in one breath (one send, one line), his own answer on the channel outside the app, a card's words changed before its press
     else if (k === "press2") console.log(await press(page, new RegExp(arg), "[data-tq-task-page]"), "|", await press(page, new RegExp(arg), "[data-tq-task-page]"));

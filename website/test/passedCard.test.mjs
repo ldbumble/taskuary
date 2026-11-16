@@ -34,7 +34,7 @@ test("the press a card took is a mark, never a button - one mark for a proposal,
   const card = src("PassedCard.jsx");
   assert.match(card, /export const PressedButton = \(\{ pressed, label = "" \}\)[\s\S]*<Box component="span" role="status" data-tq-pressed=\{pressed\}/);
   assert.doesNotMatch(card, /<Button|\bdisabled\b/);
-  assert.match(src("SentCard.jsx"), /<PressedButton pressed="sent" label="✓ Sent" \/>/);
+  assert.match(src("SentCard.jsx"), /<PressedButton pressed="sent" label=\{sentMark\(p\)\} \/>/);
   assert.match(src("LandingCard.jsx"), /<PressedButton pressed=\{s\.landed\.how\} label=\{w\.done\} \/>/);
   for (const f of ["SentCard.jsx", "PassedCard.jsx", "ReplacedDraft.jsx"]) assert.doesNotMatch(src(f), /<Button[^>]*\bdisabled\b/, f);
   // ...and a settled card is titled by what it was (its lead), with its result beside it once

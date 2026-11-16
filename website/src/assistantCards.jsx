@@ -750,7 +750,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
   const goSx = conflict || (co && blocked) ? alertSx : moveSx;
   const verb = conflict
     ? <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => sendBack(`The merge was refused: ${gh.reason.split(" - ")[0]}. Resolve that on the pull request and push; the owner approves it once it is clean.`)} sx={goSx}>
-        {busy === "back" ? "Sending…" : btn("continue")}</Button>
+        {busy === "back" ? btn("approve", "busy") : btn("continue")}</Button>
     : action
     ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || (co && blocked)} title={co && blocked ? gh.reason : btnHint("approve", "action")} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={goSx}>{busy === "approve" ? (co ? co.busy : "Running…") : btn("approve", "action")}</Button>
     : rv && !draftCanSend(caps, rv) && !card.closeout ? null : rv && !value.trim() && !stale ? (
@@ -768,7 +768,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
         {busy === "redraft" ? "Drafting…" : btn("redraft")}</Button>
     ) : (
       <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim() || blocked} title={blocked ? gh.reason : undefined} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={goSx}>
-        {busy === "approve" ? "Sending…" : btn("approve")}</Button>
+        {busy === "approve" ? btn("approve", "busy") : btn("approve")}</Button>
     );
   const then = conflict ? <>tells it to resolve the conflicts and push; this card comes back when it stops, and nothing is merged or sent until then.</>
     : co ? <>{co.then}{mate ? <>, then the reply above {sendsBy(mate.Channel, mate.FromName || "them")}</> : null}.</>
@@ -815,7 +815,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
           <TextField fullWidth multiline minRows={1} maxRows={4} autoFocus value={back} onChange={(e) => setBack(e.target.value)}
             placeholder={`What should ${card.agent || "the agent"} change?`} sx={{ "& textarea": { fontSize: 12.5 } }} />
           <Button size="small" variant="outlined" disabled={!!busy || !back.trim()} onClick={() => sendBack(back.trim())} sx={quiet}>
-            {busy === "back" ? "Sending…" : btn("continue")}</Button>
+            {busy === "back" ? btn("approve", "busy") : btn("continue")}</Button>
         </div>
       )}
       {/* "Mark done" arrives as a conversation word; off the walk (no words), the same road is still offered

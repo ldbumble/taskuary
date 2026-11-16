@@ -129,6 +129,52 @@ def _install_fresh_routes(app, store):
                                 "DraftText": body.get("draft") or "Hi Erin, here is a long review of every flaw we found in the tool, one by one. Alex"})
         return {"taskId": tid, "reviewId": rid, "messageId": mid}
 
+    @app.post("/api/fixture/invite")
+    def fixture_invite(body: dict = Body(...)):
+        """An Outlook invite from Erin, its Accept drafted on its task, and the calendar a stand-in that answers after `delay` seconds (or
+        refuses with `fail`): every calendar press's remote call, slow as Graph and Google can be. Nothing leaves."""
+        import json as _json
+        from datetime import datetime, timedelta
+        from unittest import mock
+        from taskuary import calwrite, channels
+        me = "alex@northwind.example"
+        store.set_setting("owner_email", me, "owner"); store.set_setting("owner_name", "Alex Doyle", "owner")
+        ol = store.get_connector_by_type("outlook")
+        store.save_connector({"ConnectorId": ol["ConnectorId"], "Active": 1, "Secret": "rt", "ConfigJson": _json.dumps({"auth": "user", "account": me,
+                              "granted_scope": "offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite"})}, "owner")
+        if not any(s.get("Address") == me for s in store.list_sources(False)): store.save_source({"Channel": "email", "Address": me, "Owner": "me", "Active": 1, "ConnectorId": ol["ConnectorId"]}, "owner")
+        day = datetime.now() + timedelta(days=1)
+        while day.weekday() >= 5: day += timedelta(days=1)
+        d, n = day.strftime("%Y-%m-%d"), int(time.time())
+        cal = {"kind": "request", "provider": "outlook", "mailbox": me, "event_id": f"ev-{n}", "ical_uid": f"uid-{n}", "update": False, "answered": False, "asks": True,
+               "subject": body.get("subject") or "Budget sync", "start": f"{d} 14:30", "end": f"{d} 15:00", "all_day": False,
+               "organizer": "Erin Blake", "organizer_email": "erin@northwind.example", "attendees": ["erin@northwind.example", me]}
+        def slow(st, env, note):
+            time.sleep(float(body.get("delay") or 0))
+            if body.get("fail"): raise RuntimeError(body["fail"])
+            return {"channel": "calendar", "to": list(env.get("to") or []), "act": env.get("act")}
+        calwrite.deliver = slow
+        with mock.patch.object(calwrite, "busy", return_value=[]):
+            out = ingest.ingest_message(store, {"external_id": f"graph:ev-{n}-request", "channel": "email", "subject": f"Invitation: {cal['subject']}", "body": "Join us",
+                                                "from_name": "Erin Blake", "from_email": "erin@northwind.example", "to": [me], "source_name": me,
+                                                "sent_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "invite": True, "cal": cal, "mail_meta": {"invite": True, "cal": cal}}, llm=None)
+        if not [r for r in store.list_reviews("pending") if r.get("TaskId") == out["task_id"]]: calwrite.draft(store, out["message_id"], "accept", actor="agent")
+        return {**out, "taskId": out["task_id"]}
+
+    @app.post("/api/fixture/attach-mail")
+    def fixture_attach_mail(body: dict = Body(...)):
+        """A mail with files on it (`files`: paths on disk), taken in as the Graph road takes one: its files read for triage, then saved on it."""
+        import base64, mimetypes
+        from taskuary import channels, server
+        atts = [{"id": str(i), "name": Path(p).name, "contentType": mimetypes.guess_type(p)[0] or "application/octet-stream", "size": Path(p).stat().st_size,
+                 "contentBytes": base64.b64encode(Path(p).read_bytes()).decode()} for i, p in enumerate(body.get("files") or [])]
+        ext = f"fx-att:{time.time()}"
+        out = ingest.ingest_message(store, {"external_id": ext, "channel": "email", "subject": body.get("subject") or "Training seats", "body": body.get("body") or "See attached.",
+                                            "from_name": "Erin Blake", "from_email": "erin@northwind.example", "conversation_id": body.get("conversation") or ext,
+                                            "images": channels.images_for_triage(store, atts), **channels.files_for_triage(atts), "mail_meta": channels.att_marks(atts)}, llm=server._llm())
+        if out.get("message_id"): channels.save_attachments(store, out["message_id"], atts, ext)
+        return out
+
     @app.post("/api/fixture/own-reply")
     def fixture_own_reply(body: dict = Body(...)):
         "The owner's own line on the task's channel, read back from it as a poll reads it (channels.ingest_own_message) - a recorded flood's third voice."
@@ -194,6 +240,7 @@ def _install_fresh_routes(app, store):
         store_mod.set_owner(store, "Alex Doyle", "alex@northwind.example", "owner")     # ...the one door: the agents' documents name him too
         box = Path(os.environ["TASKUARY_HOME"]) / "outbox.jsonl"
         def out(*a, **k):
+            if body.get("fail"): raise RuntimeError(body["fail"])         # ...a mailbox that refuses: a press whose act fails (`fail` its words)
             keep = lambda v: v if isinstance(v, (str, list, int, type(None))) else type(v).__name__
             with box.open("a", encoding="utf-8") as f: f.write(json.dumps({"args": [keep(x) for x in a[1:]], "kw": {n: keep(v) for n, v in k.items()}}, default=str) + "\n")
             return {"channel": "email", "to": k.get("to") or ["gail@northwind.example"], "cc": k.get("cc") or []}

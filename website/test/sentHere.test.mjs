@@ -13,7 +13,7 @@ test("a reply that went says where, and that the task is closing or why it stays
   assert.equal(sentLine({ channel: "", to: "Ray Colton", closing: false }), "Sent to Ray Colton");
   const page = read("TaskPage.jsx");
   assert.match(page, /const chatCards = sentBox \? <SentCard \{\.\.\.sentBox\} \/> :/);
-  assert.match(read("ReviewDecision.jsx"), /said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: replyContext\(r\), subject: deliverySubject\(r\), id: r\.ReviewId \} : null/);
+  assert.match(read("ReviewDecision.jsx"), /said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: replyContext\(r\), subject: deliverySubject\(r\), id: r\.ReviewId, done: pw\.sentAs \} : null/);
 });
 
 // the owner, 2026-11-09: "leave the card in the turn with the pressed button" - the sent block said it with no card around it
@@ -31,7 +31,7 @@ test("a sent reply stays its card: the subject, the words, and ✓ Sent on the b
   markDemo(true); assert.equal(sentLine({ channel: "teams" }), "Sent - in the demo, nothing left this computer"); markDemo(false);
   assert.equal(sentLine({ channel: "teams" }), "Sent on Teams");
   const card = read("SentCard.jsx");
-  assert.match(card, /<PressedButton pressed="sent" label="✓ Sent" \/>/);      // ...a mark, never a button nobody can press (passedCard.test.mjs)
+  assert.match(card, /<PressedButton pressed="sent" label=\{sentMark\(p\)\} \/>/);      // ...a mark, never a button nobody can press (passedCard.test.mjs)
 });
 
 // THE LIVE SHAPE (the audit, 2026-11-13, on the real CLI): Send pressed, he stays on the task, the sender writes again, the agent drafts the
@@ -63,3 +63,22 @@ test("the line under what was sent says the agent is still working only while a 
   assert.match(readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8"), /stillWorking\(liveSession, answered\) \? "The task stays open while its agent is still working\."/);
 });
 
+
+// A PRESS SAYS WHAT IT DOES, FROM THE PRESS TO THE CLOSE (the owner, 2026-11-16: "Accept and close" on an invite showed nothing for 15 seconds - the
+// calendar was slow - and then the task was gone; its card had said "Sending…", "Checking delivery…" and "Sent by email" over an invite)
+test("an invite's Accept and close says Accepting… at once, then Accepted - closing, never a send's words", async () => {
+  const { pressWords } = await import("../src/replyDelivery.js");
+  const cal = (act) => ({ Deliver: JSON.stringify({ kind: "calendar", act, to: ["erin@northwind.example"] }) });
+  assert.deepEqual(pressWords(cal("accept")), { busy: "Accepting…", done: "Accepted", sentAs: "Accepted" });
+  assert.equal(pressWords(cal("decline")).busy, "Declining…");
+  assert.deepEqual(pressWords({ Deliver: JSON.stringify({ to: ["erin@northwind.example"] }) }), { busy: "Sending…", done: "Sent", sentAs: "" });
+  const p = { channel: "email", closing: true, done: "Accepted", demo: false };
+  assert.equal(sentLine(p), "Accepted - closing the task");
+  assert.equal(sentSaid(p), "closing the task");
+  const rd = read("ReviewDecision.jsx");
+  // ...his press is a line at once, until its answer: what he pressed and what it is doing
+  assert.match(rd, /const going = busyNow && !sent && \["approve", "send_close"\]\.includes\(pressed\)/);
+  assert.match(rd, /\{going \? <Alert severity="info" data-tq-pressed-line="" sx=\{\{ mb: 1 \}\}>\{`You pressed \$\{pressedWord\} - \$\{goingWord\.toLowerCase\(\)\}`\}<\/Alert>/);
+  // ...and while the review itself says it is going, the card keeps the act's own word - "Checking delivery…" only for a check
+  assert.match(rd, /\{delivery\.active \? spinning\(pw\.busy\) : busy \? "Checking delivery…" : delivery\.label\}/);
+});

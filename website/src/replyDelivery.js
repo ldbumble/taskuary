@@ -1,3 +1,4 @@
+import { label } from "./buttons.js";
 // THE ENVELOPE ON A DRAFT: who it goes to, who is copied, what rides with it.
 //
 // Review has always read these out of the review's `Deliver` blob. The task page's Reply card now
@@ -6,6 +7,11 @@
 export const deliveryMeta = (review) => {
   try { return JSON.parse(review?.Deliver || "null") || {}; } catch { return {}; }
 };
+// WHAT A PRESS OF THE CARD DOES, IN ITS OWN WORDS (the owner, 2026-11-16: "Accept and close" said "Sending…", then "Checking delivery…", then
+// "Sent by email" over an invite he accepted): a calendar card's act - Accepting… / Accepted - and every other card's send (buttons.json states)
+const CAL_VERB = { accept: "accept_invite", decline: "decline_invite", propose: "propose_time" };
+export const pressVerb = (review) => { const m = deliveryMeta(review); return (m.kind === "calendar" && CAL_VERB[m.act]) || "approve"; };
+export const pressWords = (review) => { const v = pressVerb(review); return { busy: label(v, "busy"), done: label(v, "done"), sentAs: v === "approve" ? "" : label(v, "done") }; };
 // THE NAME RIDES WITH ITS ADDRESS: the envelope keeps bare addresses (what the send needs), so a redraft - which pins one - turned
 // "Erin Blake <erin@…>" on the To line into the address alone. The sender's name is on the review: looked up by address.
 const named = (a, review) => {

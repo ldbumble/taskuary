@@ -48,7 +48,7 @@ import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
 import { noteKey, noteOf, onYouLine, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
 import { fmtDate, fmtTime } from "./dates.js";
-import { deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, replyContext } from "./replyDelivery.js";
+import { deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, pressWords, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision from "./ReviewDecision.jsx";
@@ -2772,7 +2772,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // ...a task's email the same as a reply (the owner, 2026-11-13: "never close action boxes. once sent just say sent")
     // ...and the one just pressed here says what the press did to the task beside it (`closing`, `kept`), as it did where its draft stood
     ...allReviews.filter((r) => r.Kind !== "action" && WENT.includes(r.Status) && r.ReviewId !== sentBox?.id)
-      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard id={r.ReviewId} text={r.FinalText || r.DraftText} channel={r.Channel || ""}
+      .map((r) => ({ key: `sent:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, node: <SentCard id={r.ReviewId} text={r.FinalText || r.DraftText} channel={r.Channel || ""} done={pressWords(r).sentAs}
         to={replyContext(r)} subject={deliverySubject(r)} at={r.DecidedAt} {...(sentHere?.id === r.ReviewId ? { closing: sentHere.closing, kept: sentHere.kept } : {})} /> }))];
   // ...the reply that went is that card in its turn, so the chat's cards say it no second time - no "What was sent", no To over it
   const sentCarded = !!sentReview && turnCards.some((c) => c.key === `sent:${sentReview.ReviewId}`);
@@ -3788,7 +3788,7 @@ const Fold = ({ title, children }) => (
 // `sec`: the section it heads in the desk's three (2026-10-27) - then its line is the sections' one style (SectionHead): "2 · AGENT", one dim
 // descriptor (its own title where that is not the section's name, its description), "up to here" where the task is
 // THE REPLY THAT JUST WENT, where its draft stood (TaskPage sentHere): its card, pressed - SentCard
-const SENT_BEAT = 900;
+const SENT_BEAT = 1600;
 
 const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false, sec = null, here = false, sub = undefined }) => (
   <Box {...pressable(onToggle)} aria-expanded={onToggle ? !folded : undefined} data-tq-quiet={quiet ? "" : undefined}

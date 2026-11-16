@@ -2981,6 +2981,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           <Button variant="contained" disableElevation onClick={addSource}>Add</Button>
         </Box>
         {MAIL_CARDS.includes(conn.Type) && <MailSignature conn={conn} addresses={mine.map((s) => s.Address)} reload={reload} />}
+        {MAIL_CARDS.includes(conn.Type) && <MarkReadHere conn={conn} reload={reload} />}
       </Box>
     )}] : []),
     ...(isAI ? [] : [
@@ -4043,6 +4044,25 @@ function MailSignature({ conn, addresses = [], reload }) {
   if (boxes.length < 2) return field("", "Signature for mail from this mailbox", cfg.signature || "", (e) => save({ signature: e.target.value }));
   return <>{boxes.map((a) => field(a, `Signature for mail from ${a}`, a.toLowerCase() in per ? per[a.toLowerCase()] : cfg.signature || "",
     (e) => save({ signatures: { ...per, [a.toLowerCase()]: e.target.value } })))}</>;
+}
+
+// READ HERE, READ THERE (the owner, 2026-11-16): mail you read here - opened, shown in the chat, All read, Done on its task - is
+// marked read in this mailbox too (filing.mark_read_back). Off by default; what stopped it is the one line under the switch.
+const READ_THERE = { outlook: "Outlook", gmail: "Gmail", imap: "your mailbox" };
+function MarkReadHere({ conn, reload }) {
+  const saveConn = useSaveConnector(reload);
+  const cfg = parse(conn.ConfigJson), on = !!cfg.mark_read_here;
+  // the old line goes with the press: it was about the switch as it stood
+  const flip = () => saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, mark_read_here: !on, mark_read_problem: undefined }) });
+  return (
+    <Box data-tq-mark-read-here="" sx={{ mt: 2, maxWidth: 620 }}>
+      <RoleRow on={on} onToggle={flip} label={`Mark mail read in ${READ_THERE[conn.Type]} when you read it here`}
+        desc={`On: a mail you open, read in the chat, mark read or finish here turns read in ${READ_THERE[conn.Type]} too. Off: your mailbox is left as it is.`} />
+      {on && cfg.mark_read_problem && (
+        <Typography variant="body2" data-tq-mark-read-problem="" sx={{ mt: 0.75, color: "var(--tq-danger, #6b2733)" }}>✗ {cfg.mark_read_problem}</Typography>
+      )}
+    </Box>
+  );
 }
 
 const useRoles = (conn, reload) => {

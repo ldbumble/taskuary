@@ -61,9 +61,10 @@ class MailTests(unittest.TestCase):
         self.assertEqual(len(s._rows("SELECT * FROM message WHERE Channel='email'")), 2)
         self.assertIsNone(s.get_connector_by_type('outlook')['LastError'])   # not the card's problem
 
-    def test_the_real_marker_swallows_a_graph_refusal(self):
-        with mock.patch.object(channels.requests, 'patch', side_effect=RuntimeError('403')):
-            channels.mark_mail_read('tok', 'me@myco.example', 'AAMk1')          # no raise
+    def test_the_real_marker_says_a_refusal_and_its_caller_decides(self):
+        """Ingest swallows it (above); the read-here write-back keeps it on the card (ReadHereTests)."""
+        with mock.patch.object(channels.requests, 'patch', side_effect=RuntimeError('403')), self.assertRaises(RuntimeError):
+            channels.mark_mail_read('tok', 'me@myco.example', 'AAMk1')
 
 
 class SlackTests(unittest.TestCase):
@@ -116,6 +117,117 @@ class SlackTests(unittest.TestCase):
         self.assertIsNotNone(s.get_source(good)['LastPolledAt'])
         self.assertIsNone(s.get_source(bad)['LastPolledAt'], 'the failed channel keeps its watermark')
         self.assertIn('C000', s.get_connector(cid)['LastError'] or '')
+
+
+class ReadHereTests(unittest.TestCase):
+    """A switch on each mail card (the owner, 2026-11-16): mail he reads HERE - the receipt Done, Next, All read and "shown in
+    the chat" all write - is marked read in that card's own mailbox. Off by default; one read, one write-back."""
+    def setUp(self):
+        import tempfile
+        from taskuary.store import SQLiteStore
+        self.dir = tempfile.mkdtemp()
+        self.s = SQLiteStore(f'{self.dir}/readhere.db')
+        self.addCleanup(self.s.close)
+
+    def _card(self, kind, cfg, on=True):
+        s = self.s
+        cid = s.get_connector_by_type(kind)['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'sec', 'Active': 1, 'ConfigJson': json.dumps({**cfg, **({'mark_read_here': True} if on else {})})}, 'o')
+        s.save_source({'Channel': 'email', 'Address': 'alex@northwind.example', 'ConnectorId': cid, 'Active': 1}, 'o')
+        return cid
+
+    def _mail(self, ext, subject='the export is broken'):
+        s = self.s
+        tid = s.create_task({'Title': subject, 'Kind': 'task', 'Status': 'open'}, 'triage')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': ext, 'Channel': 'email', 'Subject': subject, 'FromName': 'Erin Blake',
+                             'FromEmail': 'erin@vendor.example', 'SourceName': 'alex@northwind.example', 'BodyText': 'it writes empty files',
+                             'SentAt': '2026-11-16 09:00:00', 'Status': 'open'})
+        return mid, tid
+
+    def _armed(self, *mails):
+        """The receipts live once processing reads are on; the switch's clock starts on the first sweep, before any read."""
+        from taskuary import filing
+        stamp = '2026-11-16 09:00:00'
+        self.s.reconcile_processing_membership(fixed_now=stamp)
+        self.s.activate_processing_reads(fixed_now=stamp, live_state=[])
+        filing.mark_read_back(self.s)
+        self.s._exec("UPDATE setting SET Value='2000-01-01 00:00:00' WHERE Name LIKE 'mark_read_since:%'")
+
+    def _done(self, tid):
+        self.s.reconcile_processing_membership()
+        self.s.set_funnel_state(f'task:{tid}', 'done')
+
+    def _graph(self, patch=None):
+        from taskuary import filing
+        with mock.patch.object(channels, 'graph_token', return_value='tok'), \
+             mock.patch.object(channels.requests, 'patch', **({'side_effect': patch} if patch else {})) as pt:
+            n = filing.mark_read_back(self.s)
+        return pt, n
+
+    def test_off_by_default_nothing_is_written_back(self):
+        from taskuary import filing
+        cid = self._card('outlook', {'tenant_id': 't', 'client_id': 'c'}, on=False)
+        _mid, tid = self._mail('graph:AAMk1'); self._armed(); self._done(tid)
+        pt, _n = self._graph()
+        pt.assert_not_called()
+        self.assertFalse(filing.marks_read_here(self.s.get_connector(cid)))
+
+    def test_outlook_patches_is_read_once_for_one_read(self):
+        self._card('outlook', {'tenant_id': 't', 'client_id': 'c'})
+        _mid, tid = self._mail('graph:AAMk1'); _other, _t2 = self._mail('graph:AAMk2', 'not opened yet')
+        self._armed(); self._done(tid)
+        pt, n = self._graph()
+        self.assertEqual(n, 1)
+        pt.assert_called_once()                                               # the unopened one is left bold
+        self.assertTrue(pt.call_args[0][0].endswith('/users/alex@northwind.example/messages/AAMk1'))
+        self.assertEqual(pt.call_args[1]['json'], {'isRead': True})
+        self.s.set_funnel_state(f'task:{tid}', 'done')                        # read again: still one write-back
+        pt, _n = self._graph()
+        pt.assert_not_called()
+
+    def test_imap_sets_seen_on_its_uid_in_the_inbox(self):
+        from tests.test_filing import FakeImap
+        from taskuary import filing
+        self._card('gmail', {'address': 'alex@northwind.example'})
+        _mid, tid = self._mail('imap:abc:v7:41'); self._armed(); self._done(tid)
+        fake = FakeImap([('\\HasNoChildren', 'INBOX')]); fake.flags = []
+        fake.uid = lambda cmd, *a: (fake.flags.append(a), ('OK', []))[1] if cmd == 'store' else ('NO', [])
+        with mock.patch('taskuary.imapmail.imaplib.IMAP4_SSL', return_value=fake): self.assertEqual(filing.mark_read_back(self.s), 1)
+        self.assertEqual(fake.flags, [('41', '+FLAGS', r'(\Seen)')])
+        self.assertFalse(fake.readonly)
+
+    def test_a_sign_in_without_mail_readwrite_says_so_on_the_card_and_calls_nothing(self):
+        from taskuary import filing
+        cid = self._card('outlook', {'auth': 'user', 'client_id': 'c', 'granted_scope': 'offline_access User.Read Mail.Read Mail.Send'})
+        _mid, tid = self._mail('graph:AAMk1'); self._armed(); self._done(tid)
+        pt, _n = self._graph()
+        pt.assert_not_called()
+        line = json.loads(self.s.get_connector(cid)['ConfigJson'])[filing.READ_PROBLEM]
+        self.assertIn('sign in with Microsoft again', line)
+
+    def test_a_403_keeps_the_line_and_the_mail_is_tried_again_once_allowed(self):
+        import requests
+        from taskuary import filing
+        cid = self._card('outlook', {'tenant_id': 't', 'client_id': 'c'})
+        _mid, tid = self._mail('graph:AAMk1'); self._armed(); self._done(tid)
+        refused = requests.HTTPError('403 Client Error: Forbidden', response=mock.Mock(status_code=403))
+        self._graph(refused)
+        self.assertIn('Mail.ReadWrite', json.loads(self.s.get_connector(cid)['ConfigJson'])[filing.READ_PROBLEM])
+        pt, n = self._graph()                                                 # the admin granted it: the same mail goes through
+        self.assertEqual(n, 1); pt.assert_called_once()
+        self.assertNotIn(filing.READ_PROBLEM, json.loads(self.s.get_connector(cid)['ConfigJson']))
+
+    def test_reads_before_the_switch_went_on_are_left_alone(self):
+        from taskuary import filing
+        self._card('outlook', {'tenant_id': 't', 'client_id': 'c'})
+        _mid, tid = self._mail('graph:AAMk1')
+        stamp = '2026-11-16 09:00:00'
+        self.s.reconcile_processing_membership(fixed_now=stamp); self.s.activate_processing_reads(fixed_now=stamp, live_state=[])
+        self._done(tid)                                                        # read before the first sweep started the clock
+        self.s._exec("UPDATE processing_read_receipt SET ReadAt='2000-01-02 00:00:00'")
+        filing.mark_read_back(self.s)                                          # the clock starts now
+        pt, _n = self._graph()
+        pt.assert_not_called()
 
 
 if __name__ == '__main__':

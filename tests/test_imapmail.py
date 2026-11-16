@@ -22,7 +22,7 @@ def _mime(frm='Rita Vole <rita@partner.example>', subj='the export is broken', b
 
 class FakeImap:
     def __init__(self, msgs):
-        self.msgs, self.readonly, self.flagged = msgs, None, []
+        self.msgs, self.readonly, self.flagged, self.fetched = msgs, None, [], []
         # imaplib.IMAP4_SSL keeps the TLS socket here, and _login reads the certificate off it
         self.sock = mock.Mock(getpeercert=mock.Mock(return_value=b'the mail host certificate'))
     def login(self, u, p): return 'OK', []
@@ -32,8 +32,8 @@ class FakeImap:
     def uid(self, cmd, *a):
         if cmd == 'search': return 'OK', [' '.join(str(u) for u in sorted(self.msgs)).encode()]
         if cmd == 'fetch':
-            u = int(a[0])
-            return 'OK', [(f'{u} (RFC822)'.encode(), self.msgs[u])]
+            u = int(a[0]); self.fetched.append(a[1])
+            return 'OK', [(f'{u} (UID {u} BODY[] {{{len(self.msgs[u])}}}'.encode(), self.msgs[u])]
         if cmd == 'store':
             self.flagged.append((int(a[0]), a[1], a[2]))
             return 'OK', []
@@ -82,6 +82,16 @@ class ImapTests(unittest.TestCase):
             imapmail.poll_imap(s, c, [], llm=None)
         self.assertTrue(fake.readonly)          # readonly is what stops RFC822 setting \Seen
         self.assertEqual(fake.flagged, [])
+
+    def test_every_fetch_peeks_so_polling_never_marks_mail_read_by_itself(self):
+        """A plain RFC822 FETCH sets the Seen flag on a writable box - and the box is writable whenever a switch may flag or file."""
+        s, c = self._store()
+        s.set_setting('mark_read_enabled', '1', 'o')
+        fake = FakeImap({101: _mime()})
+        with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=fake):
+            imapmail.poll_imap(s, c, [], llm=None)
+        self.assertTrue(fake.fetched)
+        self.assertTrue(all('BODY.PEEK[]' in f and 'RFC822' not in f for f in fake.fetched), fake.fetched)
 
     def test_mark_read_flags_seen_on_what_it_took(self):
         s, c = self._store()

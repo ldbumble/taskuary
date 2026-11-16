@@ -2034,10 +2034,9 @@ def wants_read(store) -> bool:
 
 
 def mark_mail_read(tok: str, upn: str, graph_id: str):
-    try:
-        requests.patch(f'{GRAPH}/users/{upn}/messages/{graph_id}', timeout=20,
-                       headers={'Authorization': f'Bearer {tok}'}, json={'isRead': True}).raise_for_status()
-    except Exception as e: logger.warning(f'marking mail {graph_id} read failed: {e}')
+    """The one Graph call that marks a mail read (Mail.ReadWrite); raises, so each caller decides what a refusal costs."""
+    requests.patch(f'{GRAPH}/users/{upn}/messages/{graph_id}', timeout=20,
+                   headers={'Authorization': f'Bearer {tok}'}, json={'isRead': True}).raise_for_status()
 
 
 def mark_chat_read(tok: str, upn: str, chat_id: str, user_id: str = ''):
@@ -2319,7 +2318,9 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                             except Exception as e: logger.warning(f"saving attachments for {m['id']} failed: {e}")
                         # a duplicate is still mail the hub has read - the flag may just be
                         # older than the switch, and skipping it would strand those bold rows
-                        if read_it and not m.get('isRead'): mark_mail_read(tok, s['Address'], m['id'])
+                        if read_it and not m.get('isRead'):
+                            try: mark_mail_read(tok, s['Address'], m['id'])
+                            except Exception as e: logger.warning(f"marking mail {m['id']} read failed: {e}")
                         # ...but only for mail that STAYED. A skip policy's mail is never shown, so the
                         # chain behind it is never read either - and a shared log mailbox is one dead
                         # conversation per message: a 3-day catch-up bought 634 history calls that each

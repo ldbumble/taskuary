@@ -149,7 +149,7 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
     The poll supplies its exact folder identity and protects every Inbox UID it still owns. That
     keeps history retrieval from duplicating a scoped row or swallowing pending work as history.
     """
-    from .imapmail import sent_folder, _dec, _hdr_addrs, _body_and_attachments, _external_id, _validity, mail_ids
+    from .imapmail import sent_folder, _dec, _hdr_addrs, _body_and_attachments, _external_id, _validity, mail_ids, FETCH_BODY
     protected = {str(box): {int(uid) for uid in uids}
                  for box, uids in dict(protected or {}).items()}
     protected_after = {str(box): int(uid) for box, uid in dict(protected_after or {}).items()}
@@ -177,7 +177,7 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
                                     validity=identity.get('validity'), mode=identity['mode'])
                        if identity else f'{"imap-sent" if is_sent else "imap"}:{user}:{uid}')
                 if store.message_exists(ext): continue
-                typ, parts = M.uid('fetch', str(uid), '(RFC822)')
+                typ, parts = M.uid('fetch', str(uid), f'({FETCH_BODY})')
                 if typ != 'OK' or not parts or parts[0] is None: failed += 1; continue   # counted: a skipped body is a gap, not coverage (PW-010)
                 msg = email.message_from_bytes(parts[0][1])
                 name, addr = email.utils.parseaddr(_dec(msg.get('From')))

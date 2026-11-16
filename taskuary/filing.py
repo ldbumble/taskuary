@@ -5,8 +5,10 @@ its task closed (never an FYI or report put down without a task). Unhandled mail
 
 Best-effort like every marker in channels.py: a refused consent or a server with no Archive is written down once per
 message and never costs the poll. Only mail handled AFTER the choice was made is filed - choosing it must not empty a
-mailbox of a year of closed work in one poll."""
-import logging
+mailbox of a year of closed work in one poll.
+
+Its sibling, per mail card: mail the owner READ here marked read there (mark_read_back, below)."""
+import contextlib, json, logging, threading, time
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -70,12 +72,23 @@ def _uid_of(ext_id: str, validity):
     except ValueError: return None
 
 
-def _file_imap(store, c, rows) -> int:
+@contextlib.contextmanager
+def _inbox(c):
+    """The card's INBOX, signed in and opened for writing - the one folder Taskuary reads mail from."""
     from . import imapmail
     M, _user = imapmail._login(c)
     try:
         typ, _d = M.select('INBOX', readonly=False)
         if typ != 'OK': raise RuntimeError(f'SELECT INBOX returned {typ}')
+        yield M
+    finally:
+        try: M.logout()
+        except Exception: pass
+
+
+def _file_imap(store, c, rows) -> int:
+    from . import imapmail
+    with _inbox(c) as M:
         box = archive_folder(M, gmail=c['Type'] == 'gmail' or 'gmail' in (imapmail._hosts(c)[0] or ''))
         if not box:
             for r in rows: _filed(store, r['MessageId'], 'skipped: this mailbox has no Archive folder')
@@ -91,9 +104,6 @@ def _file_imap(store, c, rows) -> int:
             except Exception as e:
                 logger.warning(f'filing {r["ExternalId"]} failed: {e}'); _filed(store, r['MessageId'], f'failed: {e}')
         return n
-    finally:
-        try: M.logout()
-        except Exception: pass
 
 
 def file_handled(store) -> int:
@@ -129,3 +139,116 @@ def file_handled(store) -> int:
             # the sign-in itself failed: nothing was moved and nothing is written down, so the next poll tries again
             logger.warning(f"filing handled mail on {c.get('Name') or c['Type']} failed: {e}")
     return n
+
+
+# ── read here, read there ───────────────────────────────────────────────────────────────────────────────────────────────────
+# A setting on each mail card (the owner, 2026-11-16: "mark email read as you read them, it should be a setting on the
+# connector"). "Read here" is the owner's read receipt - processing_read_receipt, the one record every way of reading writes
+# (opening it, shown in the chat, Next, All read on an FYI batch, Done on its task: store.set_funnel_state) - so the write-back
+# hangs off that table once, never off a view. Only what was read after the switch went on counts; each mail is written back
+# once (mail_read_back); a refusal is kept on the card's switch as one line with its fix, and everything else is tried again.
+READ_KEY, READ_PROBLEM, MAIL_CARDS = 'mark_read_here', 'mark_read_problem', ('outlook', 'gmail', 'imap')
+OWNER_READS = ('explicit_done', 'surfaced', 'own_words')          # never legacy_preserved: a migration is not the owner reading
+SCOPE_LINE = {True: 'Your Microsoft sign-in can read mail but not mark it read - sign in with Microsoft again on this card to allow it.',
+              False: 'Microsoft refused to mark mail read - the company app needs Mail.ReadWrite, which its admin grants.'}
+READ_EVERY = 15                                                    # seconds between sweeps on the quick clock
+
+
+def read_since_key(cid) -> str: return f'mark_read_since:{cid}'
+def marks_read_here(c) -> bool:
+    try: return c.get('Type') in MAIL_CARDS and bool(json.loads(c.get('ConfigJson') or '{}').get(READ_KEY))
+    except ValueError: return False
+
+
+def read_here(store, since: str, addresses, limit: int = 200) -> list:
+    """Inbound mail of these mailboxes the owner read here since `since`, not yet marked read there."""
+    if not addresses: return []
+    return store._rows(f"""SELECT m.MessageId, m.ExternalId, m.SourceName FROM message m
+        WHERE m.Channel='email' AND COALESCE(m.Direction,'in')='in' AND (m.ExternalId LIKE 'graph:%' OR m.ExternalId LIKE 'imap:%')
+          AND LOWER(m.SourceName) IN ({','.join('?' * len(addresses))})
+          AND NOT EXISTS (SELECT 1 FROM mail_read_back b WHERE b.MessageId=m.MessageId)
+          AND EXISTS (SELECT 1 FROM processing_read_receipt r WHERE r.EntityKind='message' AND r.LocalId=CAST(m.MessageId AS TEXT)
+                      AND r.Origin IN ({','.join('?' * len(OWNER_READS))}) AND julianday(r.ReadAt)>=julianday(?))
+        ORDER BY m.MessageId LIMIT ?""", (*[a.lower() for a in addresses], *OWNER_READS, since, limit))
+
+
+def _read_back(store, mid, result): store._exec('INSERT OR REPLACE INTO mail_read_back (MessageId, At, Result) VALUES (?,?,?)', (mid, _now(), result[:200]))
+
+
+def _problem(store, c, line: str) -> int:
+    """The card's one line under its switch: set to what stopped the write-back, cleared once one goes through."""
+    try: had = json.loads(c.get('ConfigJson') or '{}').get(READ_PROBLEM) or ''
+    except ValueError: had = ''
+    if had != line: store.merge_connector_config(c['ConnectorId'], {READ_PROBLEM: line or None})
+    return 0
+
+
+def _read_graph(store, c, rows) -> int:
+    from . import msauth
+    from .channels import graph_creds, graph_token, mark_mail_read, _status
+    cfg, sec, _ = graph_creds(store, c)
+    user = cfg.get('auth') == 'user'
+    if user and msauth.granted(cfg, 'Mail.ReadWrite') is False: return _problem(store, c, SCOPE_LINE[True])
+    tok, n = graph_token(cfg, sec), 0
+    for r in rows:
+        try: mark_mail_read(tok, r['SourceName'], r['ExternalId'][6:])
+        except Exception as e:
+            code = _status(e)
+            if code == 403: return _problem(store, c, SCOPE_LINE[user]) + n
+            if code in (404, 410): _read_back(store, r['MessageId'], 'gone: no longer in the mailbox'); continue
+            raise                                                  # anything else: the rest waits for the next sweep
+        _read_back(store, r['MessageId'], 'read'); n += 1
+    return n
+
+
+def _read_imap(store, c, rows) -> int:
+    from . import imapmail
+    with _inbox(c) as M:
+        validity, n = imapmail._validity(M), 0
+        for r in rows:
+            uid = _uid_of(r['ExternalId'], validity)
+            if uid is None: _read_back(store, r['MessageId'], 'skipped: the mailbox was renumbered'); continue
+            imapmail.mark_seen(M, uid)
+            _read_back(store, r['MessageId'], 'read'); n += 1
+        return n
+
+
+def mark_read_back(store) -> int:
+    """One sweep: every mail the owner read here, on a card whose switch is on, marked read in that card's own mailbox."""
+    n, srcs = 0, None
+    for c in store.list_connectors():
+        if c['Type'] not in MAIL_CARDS: continue
+        key = read_since_key(c['ConnectorId']); since = store.get_setting(key)
+        if not (c.get('Active') and marks_read_here(c)):
+            if since: store.set_setting(key, '', 'filing')         # off again: a later On starts from then
+            continue
+        if not since: store.set_setting(key, _now(), 'filing'); continue
+        if srcs is None: srcs = [s for s in store.list_sources() if s['Channel'] == 'email' and s.get('Active') and s.get('Address')]
+        rows = read_here(store, since, [s['Address'] for s in srcs if s.get('ConnectorId') == c['ConnectorId']])
+        if not rows: continue
+        full = store.get_connector(c['ConnectorId'], with_secret=True)
+        try: got = (_read_graph if c['Type'] == 'outlook' else _read_imap)(store, full, rows)
+        except Exception as e:
+            from .channels import plain_failure
+            logger.warning(f"marking read mail read on {c.get('Name') or c['Type']} failed: {e}")
+            _problem(store, c, f"Could not mark mail read there just now - tried again shortly. {plain_failure(e, c['Type'] == 'outlook')[:200]}")
+            continue
+        if got: _problem(store, c, '')
+        n += got
+    return n
+
+
+_SWEEP, _LAST = threading.Lock(), [0.0]
+
+
+def read_back_soon(store):
+    """The quick clock's tick: one sweep at a time, on its own thread, never more often than READ_EVERY - a slow mailbox
+    holds neither the clock nor the press that read the mail."""
+    from . import demo
+    if demo.enabled() or time.monotonic() - _LAST[0] < READ_EVERY or not _SWEEP.acquire(blocking=False): return
+    _LAST[0] = time.monotonic()
+    def run():
+        try: mark_read_back(store)
+        except Exception as e: logger.warning(f'marking read mail read failed: {e}')
+        finally: _SWEEP.release()
+    threading.Thread(target=run, name='mark-read-back', daemon=True).start()

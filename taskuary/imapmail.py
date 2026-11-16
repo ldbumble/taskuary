@@ -401,7 +401,7 @@ def sent_window(c, days: int, cap: int = 300, progress=None) -> list:
             if progress and len(out) % 20 == 0:
                 progress('running', f'reading {user} - {len(out)} of {len(uids)} sent mails')
             try:
-                typ, parts = M.uid('fetch', str(uid), '(RFC822)')
+                typ, parts = M.uid('fetch', str(uid), f'({FETCH_BODY})')
                 if typ != 'OK' or not parts or parts[0] is None: continue
                 msg = email.message_from_bytes(parts[0][1])
                 body, _atts = _body_and_attachments(msg)
@@ -497,11 +497,23 @@ def _gmail(M) -> bool:
     return isinstance(caps, (tuple, list, set, frozenset)) and 'X-GM-EXT-1' in caps
 
 
+# Taskuary's own reads never mark mail read: a plain RFC822 FETCH sets \Seen on a writable mailbox, and the box is writable
+# whenever something here may flag or file it. BODY.PEEK[] is the same bytes with the flags left alone; marking read is only
+# ever mark_seen, on purpose.
+FETCH_BODY = 'BODY.PEEK[]'
+
+
+def mark_seen(M, uid: int):
+    """Set the Seen flag on one message of the selected (writable) mailbox; raises when the server refuses."""
+    typ, _d = M.uid('store', str(uid), '+FLAGS', r'(\Seen)')
+    if typ != 'OK': raise IMAPCommandError(f'STORE +FLAGS returned {typ}')
+
+
 def _fetch_message(M, uid: int):
     """Fetch and decode one message, distinguishing a retryable UID hole from local persistence.
     Returns (msg, body, attachments, Gmail's thread id or None) - the id rides the same FETCH, never a second trip."""
     gm = _gmail(M)
-    typ, parts = M.uid('fetch', str(uid), '(X-GM-THRID RFC822)' if gm else '(RFC822)')
+    typ, parts = M.uid('fetch', str(uid), f'(X-GM-THRID {FETCH_BODY})' if gm else f'({FETCH_BODY})')
     if typ != 'OK' or not parts or parts[0] is None:
         raise _UIDFetchFailure(f'uid {uid} FETCH returned {typ}')
     try:
@@ -796,9 +808,8 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                                scope=_scope(imap_h, imap_port, user, box),
                                seen_validity=validity, legacy_evidence=legacy)
     try:
-        # readonly is what has always kept the funnel invisible in the mailbox: an ordinary
-        # RFC822 fetch sets \Seen by itself. Only the mark-read switch opens the box for
-        # writing, and then the flag is set explicitly, per message, after it is safely in.
+        # readonly keeps the funnel invisible in the mailbox, and every fetch PEEKs as well (FETCH_BODY). Only the
+        # mark-read switch opens the box for writing, and then the flag is set explicitly, per message, after it is safely in.
         read_it = wants_read(store)
         typ, _data = M.select('INBOX', readonly=not read_it)
         if typ != 'OK': raise IMAPCommandError(f'SELECT INBOX returned {typ}')
@@ -861,7 +872,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
             if atts and message_id:
                 save_attachments(store, message_id, atts, ext_id)
             if read_it:
-                try: M.uid('store', str(uid), '+FLAGS', r'(\Seen)')
+                try: mark_seen(M, uid)
                 except Exception as e: logger.warning(f'marking {user} uid {uid} seen failed: {e}')
             if fresh_thread and out['status'] != 'duplicate':
                 # the thread's history, completed once from INBOX and Sent (chains.py, PW-011); the poll's

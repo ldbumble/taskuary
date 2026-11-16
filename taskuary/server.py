@@ -10820,6 +10820,8 @@ def quick_forever():
             if poll_minutes() > 0:
                 quick = _quick_due()
                 if quick: _poll_on_quick_clock(quick)
+                from . import filing
+                filing.read_back_soon(store)              # mail read here, marked read in its mailbox where its card says so
         except Exception as e:
             logger.exception(f'chat poll failed: {e}')
         time.sleep(QUICK_TICK)

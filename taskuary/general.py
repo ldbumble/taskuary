@@ -3071,6 +3071,7 @@ class GeneralSession:
         # ...and the warm agent's word that this needs the full agent (quickwork.HAND_ON) is Taskuary's to act on, never the owner's to read
         from . import quickwork
         reply, self.handed_on = quickwork.handed_on(reply) if self.quick else (reply, '')
+        if self.handed_on and not reply: return ''            # ...a hand-on that found nothing to say yet files nothing: the full agent's turn is next
         # ...A TURN THAT SAID NO WORD AT ALL is the turn that said nothing (SILENT), woken once and then asking - never "the model returned an
         # empty response" over a Continue (the audit, 2026-11-10 - the owner: "if you have nothing to reply just ask what should i reply?")
         if not reply and is_dock(self.store.get_task(self.task_id)): raise RuntimeError('the model returned an empty response')

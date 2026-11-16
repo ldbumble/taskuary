@@ -54,15 +54,17 @@ def takes(store, tid) -> bool: return not why_deep(store, tid)
 HAND_ON = '[[TASKUARY-FULL-AGENT]]'
 WARM_LINE = (f"YOU ARE THE QUICK AGENT on this task: do it here with your tools when it is a lookup, an answer or a reply - a decision that "
              f"is the owner's is a question for them, not a reason to hand on. Where it needs the full agent (a browser, a long build, many steps "
-             f"across systems), write {HAND_ON} and one line saying why, after what you found so far, and stop.")
+             f"across systems), write {HAND_ON} and one line saying why, after what you found so far, and stop - the hand-on is Taskuary's "
+             f"alone: never tell the owner you pass it on.")
 _HAND = re.compile(r'\[\[\s*TASKUARY-FULL-AGENT\s*\]\][ \t]*([^\n]*)', re.I)
 
+# ...AND THE HAND-ON IS SILENT (the owner, 2026-11-16: he never hears the inner workings - "passing this to the full agent" stood in his
+# chat over the full agent's answer): the marker and its why are Taskuary's; a turn that said nothing else files nothing
 def handed_on(reply) -> tuple:
-    "(the reply without the marker, why the warm agent hands the work on - '' when it does not). A turn that said nothing else says that."
+    "(the reply without the marker, why the warm agent hands the work on - '' when it does not)."
     m = _HAND.search(str(reply or ''))
     if not m: return reply, ''
-    why, rest = ' '.join(m.group(1).split()).rstrip('.') or 'it needs more than a quick turn', _HAND.sub('', reply).strip()
-    return rest or f'{ESCALATED}{why}.', why
+    return _HAND.sub('', reply).strip(), ' '.join(m.group(1).split()).rstrip('.') or 'it needs more than a quick turn'
 
 
 def _clean(s) -> str:
@@ -125,12 +127,10 @@ def _give(store) -> None:
         from . import blackboard as bb
         if store.queued_dispatches(): bb.drain_later(store, 0)      # a queued agent may fit now; never on this thread, which the drain could hold
     except Exception as e: logger.debug(f'no drain after a quick turn: {e}')
-ESCALATED = 'This needs the full agent: '
 ESCALATE_BRIEF = 'THE QUICK AGENT CAME FIRST and found this needs the full agent - {why}. What it did and found is in the conversation above. Take it from here.'
 
-def escalate(store, tid, ask: str, why: str, said: bool = False) -> None:
+def escalate(store, tid, ask: str, why: str) -> None:
     "The deep path, on the same session, the warm turn's notes in its conversation. The cap, the queue and the retry budget apply as to any deep start."
-    if not said: store.add_comment(tid, 'router', 'agent', f'{ESCALATED}{why}')       # `said`: the warm turn's own words already say it
     store.audit('task', tid, 'quick_escalated', 'router', 'agent', {'why': why})
     ask = ask.removeprefix(ingest.reply_job(store, tid)).strip()       # first_ask puts the reply job back in front of the brief
     ingest._auto_general(store, tid, f"{ask}\n\n{ESCALATE_BRIEF.format(why=why.rstrip('.'))}", deep=True)
@@ -146,13 +146,13 @@ def again(store, tid, session, turn: str, **kw) -> str:
     general.OPENING.add(tid)
     try:
         _take(store, tid)
-        try: said = session.send_prompt(turn, **{'brief': True, **kw}, quick=True, delivery_instructions=WARM_LINE)
+        try: session.send_prompt(turn, **{'brief': True, **kw}, quick=True, delivery_instructions=WARM_LINE)
         finally: _give(store)
     finally: general.OPENING.discard(tid)
     why = getattr(session, 'handed_on', '')
     if not (isinstance(why, str) and why): return 'filed'
     session.handed_on = ''
-    escalate(store, tid, turn, why, said=str(said or '').startswith(ESCALATED))
+    escalate(store, tid, turn, why)
     return 'escalated'
 
 def start(store, tid, brief: str = None, **pick) -> str:

@@ -264,13 +264,18 @@ def test_the_warm_agent_hands_on_to_the_full_agent_with_its_notes():
     turns = general.history(s, tid)
     assert turns[-1]['content'][0]['text'] == 'Two dates fit.'                 # its notes are the conversation the full agent carries on
     assert not any(quickwork.HAND_ON in (c['Body'] or '') for c in s.list_comments(tid))
-    assert any(c['Body'] == quickwork.ESCALATED + 'it means booking travel across three sites' for c in s.list_comments(tid))
+    # ...and the hand-on is silent (the owner, 2026-11-16): no line of the inner workings reaches his chat
+    assert not any('full agent' in (c['Body'] or '').lower() or 'vendor portal' in (c['Body'] or '') for c in s.list_comments(tid))
 
-def test_a_hand_on_with_nothing_else_says_so_once():
+def test_a_hand_on_with_nothing_else_files_nothing_and_says_nothing():
+    """The real-CLI walk, 2026-11-16: "passing this to the full agent" stood in his chat over the full agent's answer. The marker and its why
+    are Taskuary's alone; a warm turn that found nothing yet files nothing, and the full agent starts on the why."""
     s = home(); tid, _ = arrived(s)
-    out, _, _ = run(s, tid, Brain(f'{quickwork.HAND_ON} it needs the vendor portal'))
-    assert out == 'escalated'
-    assert [c['Body'] for c in s.list_comments(tid) if quickwork.ESCALATED in (c['Body'] or '')] == [quickwork.ESCALATED + 'it needs the vendor portal.']
+    n = len(s.list_comments(tid))
+    out, auto, _ = run(s, tid, Brain(f'{quickwork.HAND_ON} it needs the vendor portal'))
+    assert out == 'escalated' and 'it needs the vendor portal' in auto.call_args[0][2]
+    assert len(s.list_comments(tid)) == n, [c['Body'] for c in s.list_comments(tid)[n:]]
+    assert "never tell the owner you pass it on" in quickwork.WARM_LINE
 
 def test_a_failed_warm_turn_is_a_failure_kept_with_its_retry():
     "A tooled turn may have done part of its work before it failed: it is never started again as the full agent behind the owner's back."

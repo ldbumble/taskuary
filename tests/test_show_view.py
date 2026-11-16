@@ -268,12 +268,31 @@ def test_the_tools_one_example_is_a_good_spec_with_a_grid_tiles_a_chart_a_table_
     assert len(v['elements']['kpi']['props']['items']) == 3
 
 
+def test_the_answer_is_the_answer_never_a_line_of_what_did_not_happen():
+    """The owner, 2026-11-16: "tell me what to do and i will do it" was answered "No changes were made to Azure permissions, resources, or the
+    implementation this turn" - and on the real CLI a plain question closed "I didn't change anything. I couldn't open the context file...".
+    The verify rule told every turn to say what it checked, "or that you could not": it says how an effect was checked, and what did not
+    happen only where it changes the answer - in the template, the line a pre-template copy hears, and an edited copy that read as shipped."""
+    import tempfile
+    from pathlib import Path
+    from taskuary import store as store_mod
+    from taskuary.store import SQLiteStore
+    agent = (Path(agenttools.__file__).parent / 'templates' / 'agent.md').read_text(encoding='utf-8')
+    assert store_mod._VERIFY_NOW in agent and 'or that you could not' not in agent
+    assert 'Answer what was asked' in agenttools.VERIFY_RULE and 'could not check it' not in agenttools.VERIFY_RULE
+    path = Path(tempfile.mkdtemp()) / 'taskuary.db'
+    s = SQLiteStore(str(path)); s.save_doc('agent', 'MINE.\r\n' + store_mod._VERIFY_WAS.replace('\n', '\r\n') + 'last.', 'owner')
+    s.cx.execute("DELETE FROM setting WHERE Name='agent_answers_the_ask'"); s.cx.commit()
+    a = SQLiteStore(str(path)).get_doc('agent')
+    assert store_mod._VERIFY_NOW.replace('\n', '\r\n') in a and 'or that you could not' not in a and a.startswith('MINE.') and a.endswith('last.')
+
+
 def test_every_worker_is_told_to_show_files_through_the_tool_and_never_claim_an_unchecked_effect():
     # 2026-11-09: a coding agent "opened" screenshots in an image viewer nobody could see and said they were on the owner's screen
     from taskuary import brief, selfclose, terminal
     rules = terminal.with_fence_rule(brief.rules(MemoryStore(), 'agent', terminal.AGENT_CHARS))      # the coding road's cut, the template's copy
     for said in ('call the `show` tool with its path in `files`', 'Never open a viewer, a browser or an app on the computer',
-                 'unless the show tool returned it', 'Never claim an effect you did not verify'):
+                 'unless the show tool returned it', 'Claim an effect'):
         assert said in rules, said
     old = terminal.with_fence_rule('Honest reporting: say what you did.')        # an owner's AGENT.md from before it hears both too
     assert agenttools.SHOW_RULE in old and agenttools.VERIFY_RULE in old

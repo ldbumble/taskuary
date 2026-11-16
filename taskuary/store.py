@@ -423,6 +423,11 @@ _FANOUT_NOW = ('\n## Several to-dos at once\n'
 _PROMISE_AT = '- "Nothing to do here" is also an ending'
 _PROMISE_HELD = ('- A reply goes when what it says is true. Never promise a later step ("I\'ll let you know when it\'s live"): do\n'
                  '  it, or ask for the go-ahead and wait. If something is genuinely left, say plainly what, and who does it.\n')
+# THE ANSWER IS THE ANSWER (agenttools.VERIFY_RULE, 2026-11-16): an edited AGENT.md that still reads the verify line as shipped takes today's
+_VERIFY_WAS = ('- Never claim an effect you did not verify (searched, opened, sent, changed, pushed, deployed, on screen); say what you checked\n'
+               '  it by, or that you could not.\n')
+_VERIFY_NOW = ('- Answer what was asked. Claim an effect (searched, opened, sent, changed, pushed, deployed, on screen) only once you verified\n'
+               '  it, and say how; what you did not do or could not open is said only where it changes the answer.\n')
 _PROMISE_NOW = ('- A reply goes when what it says is true. Never promise a later step ("I\'ll let you know when it\'s live"): do\n'
                 '  it, or set up the press it waits on and write the reply once it is true. If something is genuinely left, say plainly what, and who does it.\n')
 # THE LOGIN RULE LIVES IN CODE (the owner, 2026-11-04, and the Task 3.4 review): a login the thread asks for and the owner's own files hold
@@ -1805,6 +1810,14 @@ class SQLiteStore:
                     if '\r\n' in body: was, now = was.replace('\n', '\r\n'), now.replace('\n', '\r\n')
                     if body.count(was) == 1: self.cx.execute('UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=?', (body.replace(was, now), _now(), name))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('guide_says_what_follows_the_press', '1', 'migration')")
+            # ...and THE ANSWER IS THE ANSWER (_VERIFY_WAS -> _VERIFY_NOW): into an edited AGENT.md where the earlier line still reads as shipped, once
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='agent_answers_the_ask'").fetchone():
+                row = self.cx.execute("SELECT Content FROM doc WHERE Name='agent'").fetchone()
+                body = (row['Content'] or '') if row else ''
+                nl = '\r\n' if '\r\n' in body else '\n'
+                was, now = _VERIFY_WAS.replace('\n', nl), _VERIFY_NOW.replace('\n', nl)
+                if body.count(was) == 1: self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='agent'", (body.replace(was, now), _now()))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('agent_answers_the_ask', '1', 'migration')")
             # ...and WORK IN ANOTHER REPOSITORY IS A QUESTION (_ELSEWHERE_NOW), into an edited CODING.md the same way, once
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_asks_to_move'").fetchone():
                 row = self.cx.execute("SELECT Content FROM doc WHERE Name='coding'").fetchone()

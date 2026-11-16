@@ -658,8 +658,11 @@ TOOLS_LINE = ("Your Taskuary tools (the `taskuary` MCP server, where your sessio
 SHOW_RULE = ("To show the owner an image, a file or a page, call the `show` tool with its path in `files` - it appears in this chat. Never "
              "open a viewer, a browser or an app on the computer to show them something, and never say something is on their screen "
              "unless the show tool returned it.")
-VERIFY_RULE = ("Never claim an effect you did not verify - opened, sent, pushed, deployed, on screen. Say what you checked it by, or that "
-               "you could not check it.")
+# ...and THE ANSWER IS THE ANSWER (the owner, 2026-11-16: "tell me what to do and i will do it" was answered "No changes were made to Azure
+# permissions, resources, or the implementation this turn"): "say what you checked it by, or that you could not" closed every turn with what it
+# had NOT done - a line of what did not happen is said only where it changes the answer
+VERIFY_RULE = ("Answer what was asked. Claim an effect (searched, opened, sent, changed, pushed, deployed, on screen) only once you verified it, "
+               "and say how; what you did not do or could not open is said only where it changes the answer.")
 
 
 def url(task_id) -> str:

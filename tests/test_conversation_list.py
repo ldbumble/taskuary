@@ -965,3 +965,12 @@ class TheCodingRoadsSignInTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_a_turn_has_one_clock_live_and_finished():
+    """The owner, 2026-11-16: a reply turn read "working 1m 39s" while it ran and "ran 1m 27s" once done. One function says when a turn
+    began - its first hand-over after the answer before it - for the turn at work and the finished one alike."""
+    from taskuary.conversation import turn_start
+    marks = [{'Seq': 3, 'At': 100.0}, {'Seq': 5, 'At': 160.0}, {'Seq': 9, 'At': 200.0}, {'Seq': 9, 'At': 230.0}]
+    assert turn_start(marks, 0, 6) == 100.0, 'a second hand-over mid-turn does not move its start'
+    assert turn_start(marks, 9) == 200.0 and turn_start(marks, 12) == 0.

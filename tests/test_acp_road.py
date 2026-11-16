@@ -305,7 +305,8 @@ def test_a_stop_ends_its_own_turn_and_never_the_one_that_begins_after_it(monkeyp
         with mock.patch.object(agents, '_resolve_cmd', return_value=[FAKE[0]]):
             try: said[n] = agents.run_cli(profile(keep_alive=key), f'turn {n}', trace, extra_env={'FAKE_ACP_HANG': '1'}, cancel=stop, resume=resume)
             except Exception as e: said[n] = e
-    backstops = lambda: [t for t in threading.enumerate() if t.name == 'acp-stop-backstop']
+    others = {t for t in threading.enumerate() if t.name == 'acp-stop-backstop'}       # ...an earlier test's, still waiting on a stop never pressed
+    backstops = lambda: [t for t in threading.enumerate() if t.name == 'acp-stop-backstop' and t not in others]
     try:
         s1, s2 = threading.Event(), threading.Event()
         a = threading.Thread(target=turn, args=(1, s1)); a.start()

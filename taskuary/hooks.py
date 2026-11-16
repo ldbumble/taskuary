@@ -804,9 +804,11 @@ def general_settings(task_id, sid: str = '') -> str:
     # ...THE SHELL HOLD NAMES ITS TASK (the real-CLI walks, 2026-11-12): a chat's session is found by its CLI's conversation id, which its
     # first turn has not given it yet - so a delete held in that turn passed the hook unread, was held at the ACP permission instead, and
     # the agent heard only "User refused permission": never the hold's own words, and it told the owner the step "waits for your approval"
+    # ...and its browser hold on that SAME hook (sid): a second hook to the same door ran the whole shell gate twice on every shell call
+    from urllib.parse import quote
+    q = f'?task={int(task_id)}' + (f'&sid={quote(str(sid))}' if sid else '')
     for h in d['hooks']['PreToolUse']:
-        if h.get('matcher') == BROWSER_MATCH: h['hooks'] = [{**x, 'command': x['command'].replace(BROWSER_MARK, f'{BROWSER_MARK}?task={int(task_id)}', 1)} for x in h['hooks']]
-    if sid: d['hooks']['PreToolUse'].append(_browser_hold(sid))
+        if h.get('matcher') == BROWSER_MATCH: h['hooks'] = [{**x, 'command': x['command'].replace(BROWSER_MARK, f'{BROWSER_MARK}{q}', 1)} for x in h['hooks']]
     return _session_file(f'general-{task_id}' + (f'-{sid}' if sid else ''), d)
 
 

@@ -36,3 +36,14 @@ class GeneralRunsOnTaskuarysSetupAlone(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+def test_one_browser_hook_carries_the_task_and_its_hold():
+    """Timed on the real CLI, 2026-11-16: a reply turn's every shell call ran two browser hooks to the same door - one naming the task, one the
+    chat's hold - each the whole shell gate. One hook names both."""
+    import json as _json
+    from pathlib import Path
+    from taskuary import hooks
+    d = _json.loads(Path(hooks.general_settings(7, 'abc123')).read_text(encoding='utf-8'))
+    bw = [x for h in d['hooks']['PreToolUse'] if h.get('matcher') == hooks.BROWSER_MATCH for x in h['hooks']]
+    assert len(bw) == 1 and '?task=7&sid=abc123' in bw[0]['command'] and bw[0]['timeout'] == hooks.BROWSER_WAIT + 10

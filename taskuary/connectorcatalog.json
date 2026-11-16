@@ -195,6 +195,44 @@
               "agent": true
             }
           ]
+        },
+        {
+          "kind": "tracker",
+          "road": "run_tool",
+          "tool": "github_close",
+          "press": "Close issue",
+          "busy": "Closing…",
+          "done": "Closed",
+          "undone": "Not closed",
+          "note": "Nothing is closed on GitHub until you press Close issue.",
+          "fields": [
+            {
+              "key": "repo",
+              "label": "In",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "number",
+              "label": "Issue",
+              "type": "line",
+              "agent": true,
+              "heading": true
+            },
+            {
+              "key": "reason",
+              "label": "Why",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "comment",
+              "label": "Comment",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            }
+          ]
         }
       ]
     },

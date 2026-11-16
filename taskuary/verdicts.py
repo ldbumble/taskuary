@@ -4,7 +4,7 @@ FAILS returns the review to the queue wearing the error, so nothing looks finish
 never left the machine. The corrections feed LEARNED.md (an edit shows how the owner
 writes, a reject what should never have been drafted).
 """
-import hashlib, json, re, threading
+import contextvars, hashlib, json, re, threading
 from pathlib import Path
 
 from loguru import logger
@@ -565,10 +565,15 @@ def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: st
                            envelope=envelope, send_fn=post)
 
 
+# ...ONE OF A BULK CARD'S ROWS (bulkcard.run): its agent hears the whole run once, at its end - never once a row
+QUIET = contextvars.ContextVar('verdicts_quiet', default=False)
+
+
 def decide(store, rv: dict, verb_in: str, *a, closes: bool = False, **kw) -> dict:
     """_decide, and a yes that went wakes the task's agent where its last turn said it waits on that Send (general.follow_up).
     `closes`: Send and close - the task's close, through its one gate, as the send went (out['shut'])."""
     out = _decide(store, rv, verb_in, *a, **kw)
+    if QUIET.get(): return out
     if verb_in in ('approve', 'edit', 'merge_anyway') and out.get('ok') and not out.get('send_error') and rv.get('TaskId'):
         from . import general, proposals
         actor = a[2] if len(a) > 2 else kw.get('actor', 'owner')

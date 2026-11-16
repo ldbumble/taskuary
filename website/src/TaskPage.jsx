@@ -52,6 +52,7 @@ import { deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, pressWords, r
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision from "./ReviewDecision.jsx";
+import BulkCard from "./BulkCard.jsx";
 import HeldSteps from "./HeldSteps.jsx";
 import SlotList from "./SlotList.jsx";
 import BatchItems from "./BatchItems.jsx";
@@ -1469,7 +1470,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // playbook proposal combined into the reply ready section as it's part of the approval/action").
   // ...and only the task on the table's own: the last task's record, read until the new one lands, put its Send and Redraft on the row
   // for a beat, then the row emptied and refilled (the owner, 2026-10-26: "when you load task the buttons load then go gray then reload")
-  const allReviews = t ? detail?.reviews || [] : [];
+  // ...the rows of a BULK CARD are its own (BulkCard, taskuary/bulkcard.py): one card for many of one act, never a card each
+  const allReviews = (t ? detail?.reviews || [] : []).filter((r) => !r.Batch);
+  const batches = Object.values((t ? detail?.reviews || [] : []).filter((r) => r.Batch).reduce((m, r) => ({ ...m, [r.Batch]: [...(m[r.Batch] || []), r] }), {}))
+    .map((rs) => [...rs].sort((a, b) => a.ReviewId - b.ReviewId));
   // A TASK'S REPLIES IN ROUNDS (replyRounds.js; the owner, 2026-11-01): what was sent, closed without sending and closed with is the CURRENT
   // round's - the reply that answered an earlier message, and its "Sent ... stays open", stood over the message that reopened the task
   const sentOutsideAll = sentElsewhere(detail?.messages || [], detail?.reviews || []);
@@ -2761,7 +2765,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const sentBox = sentStands(sentHere, allReviews, inTurns);
   const replacedCards = allReviews.filter(isReplaced).map((r) => ({ key: `replaced:${r.ReviewId}`, at: r.CreatedAt || "", rid: r.ReviewId, byRow: true, record: true,
     node: <ReplacedDraft review={r} /> }));
-  const turnCards = [...passedCards, ...replacedCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
+  const turnCards = [...passedCards, ...batches.map((rs) => ({ key: `batch:${rs[0].Batch}`, at: rs[0].CreatedAt || "", rid: rs[0].ReviewId, waits: true,
+      node: <BulkCard rows={rs} tid={t?.TaskId} onChanged={decided} /> })), ...replacedCards, ...pressedCards.map((g) => ({ key: g.key, at: g.at, rid: g.reviews[0].ReviewId,
       node: g.held ? <HeldSteps reviews={g.reviews} onChanged={decided} /> : <PassedCard reviews={g.reviews} /> })),
     ...(inTurns ? askCards : []).map((g) => ({ key: g.key, at: g.reviews[0].CreatedAt || "", rid: g.reviews[0].ReviewId, waits: true, also: asksBelow, note: g.held ? "" : askNote(g.reviews[0]),
       node: g.held ? <HeldSteps reviews={g.reviews} toRow={inRow && !pendingReview && liveAsks === 1} onChanged={decided} />
@@ -2799,7 +2804,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {calAsk?.invite && <Typography data-tq-invite="" variant="body2" sx={{ mb: 1, color: INK }}>{calAsk.line}
             {!!calAsk.clash && <Box component="span" sx={{ color: "var(--tq-danger, #7a2f3c)", fontWeight: 600 }}> - it {calAsk.clash}</Box>}</Typography>}
           {/* the emails that close it (slots.py), where a task's close is decided - each with its own draft */}
-          <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={detail?.reviews || []}
+          <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={allReviews}
             onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
           {/* the bar comes FIRST, above the letter it acts on. What it no longer holds is
               that jump to another tab: the draft is right here, and a button whose whole job

@@ -5183,6 +5183,26 @@ def decide_steps(body: StepsBody):
     except ValueError as e: raise HTTPException(422, str(e))
     return out
 
+# A BULK CARD (bulkcard.py): one press does every act on it, by each act's own road, in the background - its progress read here, drawn as a bar.
+# The owner's alone: no agent door (guard.AGENT_WRITES) lists it
+class BatchRunBody(BaseModel): skip: list[int] = []
+
+@app.post('/api/reviews/batch/{key}/run')
+def batch_run(key: str, body: BatchRunBody):
+    from . import bulkcard
+    try: return bulkcard.run(store, key, body.skip, ACTOR)
+    except ValueError as e: raise HTTPException(409, str(e))
+
+@app.get('/api/reviews/batch/{key}')
+def batch_state(key: str):
+    from . import bulkcard
+    return bulkcard.state(store, key)
+
+@app.post('/api/reviews/batch/{key}/cancel')
+def batch_cancel(key: str):
+    from . import bulkcard
+    return bulkcard.cancel(store, key)
+
 @app.get('/api/reviews/{rid}/closeout')
 def closeout_state(rid: int):
     """What the close-out card should offer RIGHT NOW, read from GitHub (ghcloseout.assess): the pull request's state

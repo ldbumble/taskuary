@@ -1284,6 +1284,8 @@ class SQLiteStore:
             if 'ActError' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ActError TEXT')
             # ...and the agent's word that the reply is NO LONGER NEEDED (someone else answered, the owner already did) - kept as the why
             if 'NotNeeded' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN NotNeeded TEXT')
+            # ...and the BULK CARD it is one row of (bulkcard.py): many of the same act raised together, one card, one press for them all
+            if 'Batch' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN Batch TEXT')
             # ...and WHAT FILED IT ('triage': a reply triage owes; 'chase': the owner's chase), where its kind does not say. It was read off
             # the first words of Reason - the line the card shows the owner, which a redraft rewrites (the spine audit, 2026-11-09). The rows
             # filed under those words are marked once, here

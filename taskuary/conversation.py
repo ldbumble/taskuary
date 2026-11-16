@@ -751,7 +751,17 @@ def _items(store, tid: int) -> dict:
     # ...AND ONE THAT WENT IS A CARD OF THE TURN IT STOOD UNDER, as a reply that went is (the audit, 2026-11-13, recorded on the real CLI: two
     # emails sent, and the list placed neither - the page drew them under everything, so they went from the chat while each later turn
     # worked and came back at its foot, under words written long after them)
+    # ...A BULK CARD IS ONE CARD (bulkcard.py): its rows stand as the one card of its first, which the page draws in its bulk form
+    batches = {}
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Batch IS NOT NULL ORDER BY ReviewId", (tid,)): batches.setdefault(r['Batch'], []).append(r)
     for r in store._rows("SELECT * FROM review WHERE TaskId=? ORDER BY ReviewId", (tid,)):
+        if (b := r.get('Batch')):
+            rs = batches.get(b) or [r]
+            if r['ReviewId'] != rs[0]['ReviewId'] or r['ReviewId'] in held: continue
+            open_ = any(x['Status'] == 'pending' for x in rs)
+            place({'id': f"r:{r['ReviewId']}", 'kind': 'card', 'review': r['ReviewId'], 'what': 'batch', 'batch': b, 'n': len(rs),
+                   'status': 'pending' if open_ else 'done', 'at': r['CreatedAt'], 'decided': None}, ep(r['CreatedAt']) + 0.999)
+            continue
         if r['Kind'] == 'slot' and not (str(r.get('DraftText') or '').strip() and (proposals_passed(r) or r['Status'] in WENT or r['ReviewId'] in past)): continue
         if unwritten(r) or r['ReviewId'] in held: continue
         if f"r:{r['ReviewId']}" in waited and hosts.get(f"r:{r['ReviewId']}") is None and r['Status'] != 'pending' and r.get('DecidedBy') not in OWNER_ACTORS: continue
@@ -869,12 +879,12 @@ def _items(store, tid: int) -> dict:
         k = f"r:{r['ReviewId']}"
         if k not in waited: return run_end(wrote(ep(r['CreatedAt']) + 0.999))
         return turn_by.get(hosts.get(k) or (ahead or {}).get('id'))
-    spots += [t for r in store._rows("SELECT ReviewId, CreatedAt, DraftText FROM review WHERE TaskId=? AND Kind='slot' AND Status='pending'", (tid,))
+    spots += [t for r in store._rows("SELECT ReviewId, CreatedAt, DraftText FROM review WHERE TaskId=? AND Kind='slot' AND Status='pending' AND Batch IS NULL", (tid,))
               if str(r.get('DraftText') or '').strip() and r['ReviewId'] not in held | past and (t := spot(r))]
     letters = max(spots, key=lambda t: order.get(t['id'], -1))['id'] if spots else None
     # ...and where its block stands is where each waiting email STOOD, kept as a card's place is (`shown` Host): sent, it stays there
     if letters and turn_by.get(letters, {}).get('state') not in LIVE:
-        for r in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Kind='slot' AND Status='pending'", (tid,)):
+        for r in store._rows("SELECT ReviewId FROM review WHERE TaskId=? AND Kind='slot' AND Status='pending' AND Batch IS NULL", (tid,)):
             if r['ReviewId'] not in held | past and hosts.get(f"r:{r['ReviewId']}") != letters:
                 store._exec('INSERT INTO shown (TaskId, Key, Seq, Host) VALUES (?,?,0,?) ON CONFLICT(TaskId, Key) DO UPDATE SET Host=excluded.Host', (tid, f"c:r:{r['ReviewId']}", letters))
     # THE WAITING ROOM (the owner, 2026-11-12): what waits for the agent is drawn in ONE place until it is heard - his lines as rows over the

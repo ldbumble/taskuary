@@ -86,6 +86,7 @@ ACTIONS = {
     # is a write - a proposal you approve only on a card narrowed to read (cards start at FULL below).
     'linkedin_me': 'read', 'linkedin_post': 'write',
     'github_issue': 'write',     # a new issue: the everyday write a GitHub card is for - and it reaches people (REACHES)
+    'github_issues': 'read', 'github_close': 'write',     # ...a repository's open issues read; one closed, on his press
     'bluesky_me': 'read', 'bluesky_timeline': 'read', 'bluesky_post': 'write',
     'mastodon_me': 'read', 'mastodon_timeline': 'read', 'mastodon_post': 'write',
     'robinhood_tools': 'read', 'robinhood_read': 'read', 'robinhood_order': 'write',
@@ -159,6 +160,7 @@ REACHES = {
     'mastodon_post': 'posts on Mastodon under your name', 'zoho_invoice_send': 'sends an invoice to a customer',
     # ...an issue too (2026-11-06): GitHub tells everyone watching the repository - a trusted repository's agent still waits for Create issue
     'github_issue': 'opens an issue on GitHub - everyone watching the repository is told',
+    'github_close': 'closes an issue on GitHub - everyone watching it is told',
     'robinhood_order': 'places an order with your money', 'treg_call': 'calls a paid endpoint that can publish or order',
     # these two reach whatever the far side does with them, so the call itself decides (reaches below)
     'mcp': "runs a tool its server does not mark read-only - it may send, post or comment",

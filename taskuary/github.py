@@ -1,10 +1,10 @@
 """Minimal GitHub helpers (optional): a fine-grained PAT is all the config."""
-import re
+import os, re
 
 import requests
 from loguru import logger
 
-GH = 'https://api.github.com'
+GH = os.environ.get('TASKUARY_GITHUB_API') or 'https://api.github.com'     # ...another only for a recorded walk's stand-in GitHub
 def _h(tok): return {'Authorization': f'Bearer {tok}', 'Accept': 'application/vnd.github+json',
                      'X-GitHub-Api-Version': '2022-11-28'}
 
@@ -176,6 +176,39 @@ def run_github_issue(cfg):
     repo, title = str(cfg['repo']).strip(), ' '.join(str(cfg['title']).split())[:256]
     out = create_issue(cfg['token'], repo, title, str(cfg.get('body') or ''), issue_labels(cfg.get('labels')))
     return {'headline': f"opened {repo}#{out['number']}", 'rows': [{'repo': repo, 'number': out['number'], 'title': title, 'url': out['url']}]}
+
+
+# A REPOSITORY'S ISSUES, READ - AND ONE CLOSED ON THE OWNER'S PRESS (the owner, 2026-11-16: "go through all issues on a GitHub repo and close all
+# that don't matter"): the agent reads the open issues, judges them, and sets up the ones to close - many at once, one bulk card (bulkcard.py)
+def run_github_issues(cfg):
+    """GitHub: a repository's open issues, newest activity first - {repo: owner/name, limit (default 100, at most 500)}. Read-only."""
+    repo = str(cfg.get('repo') or '').strip()
+    if not REPO.match(repo): raise RuntimeError('github_issues needs `repo` - owner/name')
+    if not cfg.get('token'): raise RuntimeError('the GitHub connection has no token saved - paste one under Connections')
+    want, out, page = min(int(cfg.get('limit') or 100), 500), [], 1
+    while len(out) < want:
+        r = _ok(requests.get(f'{GH}/repos/{repo}/issues', headers=_h(cfg['token']), params={'state': 'open', 'per_page': 100, 'page': page, 'sort': 'updated'},
+                             timeout=20), 'list the issues')
+        got = [x for x in r.json() if 'pull_request' not in x]
+        out += [{'number': x['number'], 'title': x.get('title'), 'labels': ', '.join(l.get('name', '') for l in x.get('labels') or []),
+                 'comments': x.get('comments'), 'updated': x.get('updated_at'), 'author': (x.get('user') or {}).get('login'),
+                 'body': ' '.join(str(x.get('body') or '').split())[:300]} for x in got]
+        if len(r.json()) < 100: break
+        page += 1
+    from .reports import rows_out
+    return rows_out(out[:want + 1], want, 'issues')        # (headline, body), saying so when the list was cut
+
+def run_github_close(cfg):
+    """GitHub: close one issue - {repo: owner/name, number, comment (optional, said on it after the close), reason: completed|not_planned}.
+    Everyone watching the issue is told, so an agent's call waits for the owner's Close issue."""
+    repo, n = str(cfg.get('repo') or '').strip(), cfg.get('number')
+    if not REPO.match(repo): raise RuntimeError('github_close needs `repo` - owner/name')
+    if not str(n or '').isdigit(): raise RuntimeError('github_close needs the issue `number`')
+    if not cfg.get('token'): raise RuntimeError('the GitHub connection has no token saved - paste one under Connections')
+    reason = 'not_planned' if str(cfg.get('reason') or '').strip() in ('not_planned', 'not planned') else 'completed'
+    _ok(requests.patch(f'{GH}/repos/{repo}/issues/{n}', headers=_h(cfg['token']), json={'state': 'closed', 'state_reason': reason}, timeout=20), f'close #{n}')
+    if str(cfg.get('comment') or '').strip(): comment_issue(cfg['token'], repo, n, str(cfg['comment']))
+    return {'headline': f'closed {repo}#{n}', 'rows': [{'repo': repo, 'number': int(n), 'reason': reason}]}
 
 
 def comment_issue(tok, repo, number, body):

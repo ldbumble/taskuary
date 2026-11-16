@@ -551,11 +551,14 @@ def _older(store, tid: int, before: float, actions: float = 0) -> list:
     at = max(before or 0., actions or 0.)
     if not at: return []
     rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND DeliveryClaim IS NULL", (int(tid),))
+    from . import bulkcard
     words = lambda r: bool(str(r.get('DraftText') or '').strip())
     # ...A REPLY'S WORDS BY WHEN THEY WERE WRITTEN (DraftAt), not when its card was raised: one owed is raised empty as its mail lands and the
     # agent writes it later - a line between the two is one it saw (CI, 2026-11-15). Older only: a stamp is no finer than its second, and an
     # input in the card's own second leaves it standing until its agent hears it
     def card(r):
+        # ...but a bulk card at work runs on to its end, and shows it (bulkcard: the owner, 2026-11-16)
+        if r.get('Batch') and bulkcard.running(store, r['Batch']): return False
         if r['Kind'] == 'slot': return words(r) and not str(r.get('Reason') or '').startswith('your email')
         return r['Kind'] == 'action' or words(r) or r['Kind'] not in ('draft_reply', 'draft')
     return [r['ReviewId'] for r in rows if card(r) and ep(r.get('DraftAt') or r['CreatedAt']) < at]

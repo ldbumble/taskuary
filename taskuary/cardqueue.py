@@ -49,7 +49,9 @@ def in_line(r: dict) -> bool:
 
 
 def _turn(r) -> str:
-    "A turn's held steps are one card (heldGroups on the page): the key they share - a review's own id for any other card."
+    """A turn's held steps are one card (heldGroups on the page), and so are the rows of a bulk card (bulkcard.py, its Batch): the key they
+    share - a review's own id for any other card."""
+    if r.get('Batch'): return f"b:{r['Batch']}"
     p = _p(r) if r['Kind'] == 'action' else {}
     return f"{p.get('sid') or ''}|{p['turn']}|{p.get('where') or p.get('cwd') or ''}" if p.get('action') == 'shell_act' and p.get('turn') is not None else f"rv{r['ReviewId']}"
 
@@ -130,7 +132,11 @@ def what(store, u: dict) -> str:
     from . import landing
     if u['rids'] == [LAND]: return f"the {landing.HOW.get(u.get('how'), 'push').lower()}"
     r = u['rows'][0]
+    if r.get('Batch') and len(u['rows']) > 1:
+        from .timewords import plural
+        return plural(len(u['rows']), 'email') if r['Kind'] == 'slot' else f"{len(u['rows'])} like {what(store, {'rids': [r['ReviewId']], 'rows': [{**r, 'Batch': None}]})}"
     if r['Kind'] == 'action':
+        if (p := _p(r)).get('repo') and p.get('number') is not None: return f"{p['repo']}#{p['number']}"       # ...an issue by its own name
         why = ' '.join(str(r.get('Reason') or '').split())
         for lead in ('the agent proposes to ', 'the workflow asks to '): why = why[len(lead):] if why.lower().startswith(lead) else why
         why = why.split(': ', 1)[1] if why.startswith('held before it ran') and ': ' in why else why

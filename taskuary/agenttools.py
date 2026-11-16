@@ -288,12 +288,12 @@ SHORT = {
     'propose_reply': "Set up this task's reply for the owner's Send.",
     'reply_not_needed': 'The reply waiting here is no longer needed; say why.',
     'withdraw_draft': 'Take back a reply, email or proposal you set up that has not gone out.',
-    'propose_email': "Draft an email for the owner's Send.",
+    'propose_email': "Draft an email for the owner's Send - many at once in `items`, one card.",
     'sign_form': "Fill and sign a PDF form with the owner's saved signature.",
     'answer_invite': "Answer this task's meeting invite: accept, decline or propose.",
     'set_up_meeting': "Set up a meeting for the owner's press.",
     'share': 'Share a dashboard or report you made with a person.',
-    'propose': 'Ask the owner to approve one act Taskuary runs on their press (action, why).',
+    'propose': 'Ask the owner to approve an act Taskuary runs on their press (action, why) - many at once in `items`, one card.',
     'find_tools': "A tool's full instructions by name, or more tools by need.",
 }
 def lean(s):
@@ -335,13 +335,43 @@ NOT_LISTED = ("A SITE OR SYSTEM NOT LISTED HERE has no connection: say so in one
 
 def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     """_call - and a card's tool says where its card stands in the task's line (cardqueue: one card at a time, in the order raised)."""
-    out = _call(store, tid, name, args, doors)
+    if TOOLS[name][0] == 'propose' and isinstance((args or {}).get('items'), list): out = _many(store, tid, name, args, doors)
+    else: out = _call(store, tid, name, args, doors)
     if TOOLS[name][0] != 'propose' or not isinstance(out, str): return out
     from . import cardqueue
     if not (line := cardqueue.says(store, tid)): return out
     try: got = json.loads(out)
     except ValueError: got = None
     return _j({**got, 'your_cards': line}) if isinstance(got, dict) else f'{out} {line}'
+
+
+# MANY OF ONE ACT, ONE CARD (bulkcard.py; the owner, 2026-11-16: "for a job that is a bulk process you should be able to review a few of them and
+# then send them all out"): any card's tool takes `items` - each item that tool's own fields, over the ones given beside them - and files each
+# by its own door, as one call would; the rows share one Batch, which the line of cards and the chat hold as ONE card with one press
+ITEMS = {'type': 'array', 'items': {'type': 'object', 'additionalProperties': True},
+         'description': "many of this same act at once (25 emails, 40 issues to close): a list of objects, each with this tool's own fields - "
+                        "fields beside `items` are shared by all. ONE card holds them: the owner reviews a few, does them all with one press, "
+                        "and you hear how the whole run went, once."}
+for _n, (_c, _d, _s, _door) in TOOLS.items():      # ...every card's tool but the landing question, which is one per checkout
+    if _c == 'propose' and _n != 'propose_land':
+        need = _s.get('required') or []
+        # ...what one card needs, each item needs - or the call carries it whole: one or the other, never neither
+        _s['properties']['items'] = {**ITEMS, 'items': {**ITEMS['items'], **({'required': need} if need else {})}}
+        if need: _s.pop('required'); _s['anyOf'] = [{'required': need}, {'required': ['items']}]
+def _many(store, tid: int, name: str, args: dict, doors: dict) -> str:
+    from . import bulkcard
+    base, items = {k: v for k, v in args.items() if k != 'items'}, [x for x in args['items'] if isinstance(x, dict)]
+    if not items: raise ValueError('`items` holds no objects - give each item its own fields')
+    if len(items) > 500: raise ValueError(f'{len(items)} items is past what one card holds (500) - split them, or narrow the list')
+    key, top = bulkcard.new_key(), (store._one('SELECT MAX(ReviewId) AS m FROM review') or {}).get('m') or 0
+    refused = []
+    for i, it in enumerate(items):
+        try: _call(store, tid, name, {**base, **it}, doors)
+        except Exception as e: refused.append(f'item {i + 1}: {failed(name, e)}')
+    store._exec('UPDATE review SET Batch=? WHERE TaskId=? AND ReviewId>? AND Status=?', (key, int(tid), top, 'pending'))
+    n = (store._one('SELECT COUNT(*) AS n FROM review WHERE Batch=?', (key,)) or {}).get('n') or 0
+    return _j({'ok': n > 0, 'batch': key, 'on_the_card': n, **({'refused': refused} if refused else {}),
+               'shown': 'They stand as ONE card: the owner reviews a few and does them all with one press; you hear the whole run once.'})
 
 
 def _call(store, tid: int, name: str, args: dict, doors: dict) -> str:

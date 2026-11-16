@@ -971,6 +971,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'linkedin_me': _lazy('linkedin', 'run_linkedin_me'),
             'linkedin_post': _lazy('linkedin', 'run_linkedin_post'),
             'github_issue': _lazy('github', 'run_github_issue'),     # a new issue, on the owner's press (github.run_github_issue)
+            'github_issues': _lazy('github', 'run_github_issues'), 'github_close': _lazy('github', 'run_github_close'),
             # Robinhood over its hosted MCP: the manifest, the reads, and the one write.
             # The write is registered like QuickBooks' bill - PROPOSED on a card narrowed to read, run at FULL.
             'robinhood_tools': _lazy('robinhood', 'run_robinhood_tools'),
@@ -1100,7 +1101,7 @@ CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhou
            'cockroachdb': 'cockroachdb', 'oracle': 'oracle', 'duckdb': 'duckdb', 'dynamodb': 'dynamodb', 'mongodb': 'mongodb', 'redis': 'redis', 'neo4j': 'neo4j', 'obsidian_read': 'obsidian',
            **{f'{t}_read': t for t in apireads.types()}, 
            'treg_tools': 'treg', 'treg_search': 'treg', 'treg_call': 'treg',
-           'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin', 'github_issue': 'github',
+           'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin', 'github_issue': 'github', 'github_issues': 'github', 'github_close': 'github',
            'bluesky_me': 'bluesky', 'bluesky_timeline': 'bluesky', 'bluesky_post': 'bluesky',
            'mastodon_me': 'mastodon', 'mastodon_timeline': 'mastodon', 'mastodon_post': 'mastodon',
            's3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
@@ -1353,7 +1354,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'robinhood_tools': robinhood_connection, 'robinhood_read': robinhood_connection,
                  'robinhood_order': robinhood_connection,
                  'linkedin_me': linkedin_connection, 'linkedin_post': linkedin_connection,
-                 'github_issue': github_connection,
+                 'github_issue': github_connection, 'github_issues': github_connection, 'github_close': github_connection,
                  'bluesky_me': bluesky_connection, 'bluesky_timeline': bluesky_connection,
                  'bluesky_post': bluesky_connection,
                  'mastodon_me': mastodon_connection, 'mastodon_timeline': mastodon_connection,

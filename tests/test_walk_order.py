@@ -38,7 +38,7 @@ def today_ago(hours, span=3.0, now=None):
     now = now or datetime.now()
     elapsed = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds() / 3600
     if elapsed > span + 0.5: return hours
-    return hours * (max(elapsed - 0.1, 0.05) / span)
+    return hours * 0.9 * elapsed / span            # ...never a floor: one (3 minutes) put the runs before midnight at 00:02 UTC
 
 
 def store():
@@ -147,7 +147,7 @@ class TodaysBriefLeadsTests(unittest.TestCase):
     def test_a_brief_stamp_lands_on_today_at_every_hour_of_the_clock(self):
         """The guard on the guard: whatever hour CI starts, a run these tests call "today's" has
         to BE today's, and two of them have to keep their order."""
-        for hour, minute in ((0, 3), (0, 52), (1, 30), (2, 45), (4, 0), (12, 0), (23, 59)):
+        for hour, minute in ((0, 1), (0, 2), (0, 3), (0, 52), (1, 30), (2, 45), (4, 0), (12, 0), (23, 59)):
             now = datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0)
             early, late = today_ago(3, now=now), today_ago(1, now=now)
             with self.subTest(at=f'{hour:02d}:{minute:02d}'):

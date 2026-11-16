@@ -197,4 +197,6 @@ def test_a_script_from_a_strangers_task_is_never_offered_and_one_with_no_clock_r
 def test_the_agent_is_told_the_road_and_never_to_ask_it_in_prose():
     from taskuary import agenttools, general
     assert 'save_routine {title, script' in str(agenttools.TOOLS['propose'])
-    assert '"action": "save_routine"' in general._ACTION and 'never for a one-off' in general._ACTION
+    from taskuary.store import MemoryStore
+    said = general.action_line(MemoryStore())     # ...its fields on the marked-block road; the tool road names it (the propose tool carries them)
+    assert '"action": "save_routine"' in said and 'never for a one-off' in said and 'propose save_routine' in general.action_line(MemoryStore(), tools=True)

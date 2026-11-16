@@ -92,7 +92,7 @@ def test_the_desktop_window_opens_on_a_keyed_url(monkeypatch):
     win = Win()
     fake = types.SimpleNamespace(create_window=lambda *a, **k: made.update(k) or win, start=lambda f=None: f and f())
     monkeypatch.setitem(sys.modules, 'webview', fake)
-    monkeypatch.setattr(desktop, 'already_serving', lambda: '')
+    monkeypatch.setattr(desktop, 'already_serving', lambda port=None: '')
     monkeypatch.setattr(desktop, 'start_server', lambda port=None: (types.SimpleNamespace(), 'http://127.0.0.1:7801'))
     monkeypatch.setattr(desktop, 'serving', lambda u, secs=0: True); monkeypatch.setattr(desktop, 'stop_server', lambda s: 'clean')
     monkeypatch.setattr(sys, 'argv', ['taskuary-desktop'])
@@ -105,7 +105,7 @@ def _second_start(monkeypatch, status):
     made, asked, opened = [], [], []
     fake = types.SimpleNamespace(create_window=lambda *a, **k: made.append(k), start=lambda *a, **k: made.append('start'))
     monkeypatch.setitem(sys.modules, 'webview', fake)
-    monkeypatch.setattr(desktop, 'already_serving', lambda: 'http://127.0.0.1:7787')
+    monkeypatch.setattr(desktop, 'already_serving', lambda port=None: 'http://127.0.0.1:7787')
     class Conn:
         def __init__(self, host, port, timeout=0): asked.append((host, port))
         def request(self, m, path, headers=None): asked.append((m, path))
@@ -127,3 +127,18 @@ def test_taskuary_started_again_brings_the_running_window_forward_and_opens_none
 def test_a_running_one_with_no_window_is_opened_in_the_browser_never_a_second_window(monkeypatch):
     made, asked, opened = _second_start(monkeypatch, 409)
     assert made == [] and opened == ['http://127.0.0.1:7787/?k=fromserver']
+
+
+def test_a_start_given_its_own_port_never_asks_the_app_on_the_configured_one(monkeypatch):
+    # 2026-11-16: a scratch copy started with --port asked 7787, found the owner's running app, and brought his window up
+    asked = []
+    monkeypatch.setattr(desktop, 'already_serving', lambda port=None: asked.append(port) or '')
+    monkeypatch.setattr(desktop, 'held_elsewhere', lambda: '')
+    fake = types.SimpleNamespace(create_window=lambda *a, **k: types.SimpleNamespace(events=types.SimpleNamespace(closing=None), load_url=lambda u: None,
+                                 load_html=lambda h: None), start=lambda f=None: None)
+    monkeypatch.setitem(sys.modules, 'webview', fake)
+    monkeypatch.setattr(desktop, 'start_server', lambda port=None: (types.SimpleNamespace(), f'http://127.0.0.1:{port}'))
+    monkeypatch.setattr(desktop, 'stop_server', lambda s: 'clean')
+    monkeypatch.setattr(sys, 'argv', ['taskuary-desktop', '--port', '7899'])
+    desktop.main()
+    assert asked == [7899]

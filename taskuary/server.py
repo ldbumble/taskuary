@@ -7879,6 +7879,15 @@ def deps_install(body: dict):
     return out
 
 
+@app.post('/api/deps/local-whisper')
+def deps_local_whisper():
+    """The mic's "Set up Local Whisper": faster-whisper, its model and the card, in the background (voice.set_up_local). Under /api/deps/,
+    so guard.DENIED keeps it the owner's press."""
+    from . import voice
+    store.audit('connector', 0, 'local_whisper_setup', ACTOR)
+    return voice.set_up_local(store)
+
+
 def _failed_test(cid: int, name: str, out: dict):
     """A test that failed, left on the connector (failures.record_on): the card said it once, and nothing could read it after."""
     try: failures.record_on(store, 'connector', cid, kind='connection.test', error=out.get('detail') or 'the test failed', what=f'{name} failed its test', name=name)

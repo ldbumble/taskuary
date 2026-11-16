@@ -590,22 +590,26 @@ to the S3 bucket named on the card, a job transcribes it, and the clip and its t
 deleted once read. With no voice card a voice note still lands, filed with a line
 saying it was not transcribed and why, its audio attached so one click transcribes it later.
 
+**With nothing set up, the mic still works.** The Taskuary window records the microphone like any
+other app and the clip is transcribed by, in order: a voice card; the OpenAI or Gemini connection you
+already have (its own speech endpoint, same key); or **Local Whisper**. With none of those, the
+first press of the mic offers **Set up Local Whisper**: one press downloads it and its model in the
+background (a few hundred MB, once), the mic says so while it does, and from then on what you say
+is turned into text on this computer and never leaves it. Nothing is installed until you press.
+
 Open **Windows / browser voice** under **AI · voice** to choose and test built-in dictation.
-**Windows speech recognition** uses the microphone on the computer running Taskuary;
 **Browser speech recognition** uses the current tab's speech service where supported, such as
 Chrome. Edge carries the same speech API, but its service often hears the speech and sends back
 no words (or answers "network" while online); when that happens the mic says so in one line, with a
-button that switches it to your voice card or to Windows speech. The Windows app's embedded browser
-has no browser speech service, so choose Windows there. Neither choice needs an API key or another voice provider. An explicit choice applies to
+button that switches it to your voice card, or sets up Local Whisper. The Windows app's embedded
+browser has no browser speech service. **Windows speech recognition** (Windows voice typing) is used
+only when you choose it here: it needs **Online speech recognition** under Settings > Privacy &
+security > Speech, and on some managed PCs it cannot run at all. An explicit choice applies to
 microphone buttons in this browser or app window and overrides a connected voice AI card for
-dictation. **Automatic** uses a connected card first, then browser speech, then Windows speech.
+dictation. **Automatic** uses a connected card first, then browser speech, then offers Local Whisper.
 
-Windows needs **Online speech recognition** under Settings > Privacy & security > Speech and
-desktop microphone access under Microphone. If speech recognition is off, pressing the mic asks
-before enabling it. Failed availability checks can be retried on the card without restarting the
-app. Windows and browser speech may use their own online services. The microphone test keeps its
-words on the card. These built-in services handle live dictation; voice-note files still use a
-transcription card. On a Mac, click in the box and press the Dictation key (or Fn twice).
+The microphone test keeps its words on the card. On a Mac, click in the box and press the Dictation
+key (or Fn twice).
 
 ## A vendor's own MCP server
 

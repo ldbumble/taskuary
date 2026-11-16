@@ -90,18 +90,67 @@ def save_vocabulary(store, terms, actor: str = 'owner') -> list:
     return clean
 
 
+# THE AI THE OWNER ALREADY CONNECTED HEARS TOO (the owner, 2026-11-16: "all other apps work ... Need this to work"): an OpenAI or Gemini card
+# with its key transcribes through that vendor's own speech endpoint, as the voice card it stands in for - no second key to find
+_HEARS = {'openai': ('openai_stt', 'https://api.openai.com/v1'), 'gemini': ('gemini_stt', None)}
+
+def _hearing(c):
+    "An AI card that can transcribe, as the voice card it stands in for - None when its address is not the vendor's own (a proxy may not hear)."
+    t, base = _HEARS[c['Type']]
+    if base and (_cfg(c).get('base_url') or base).rstrip('/') != base: return None
+    return {**c, 'Type': t, 'ConfigJson': '{}', 'Via': c['Type']}
+
 def pick(store):
-    """The first active voice connector that can actually run - a key where one is needed - else a HIPAA AI card with its access code."""
+    """The first active voice connector that can actually run - a key where one is needed - else a HIPAA AI card with its access code,
+    else an OpenAI or Gemini AI card with its key (_HEARS)."""
     cs = [c for c in store.list_connectors() if c['Active']]
     c = next((c for c in cs if c['Type'] in VOICE_TYPES and (c['HasSecret'] or c['Type'] not in NEEDS_KEY)), None) \
         or next((c for c in cs if c['Type'] in GATEWAY_TYPES and c['HasSecret']), None)
-    return store.get_connector(c['ConnectorId'], with_secret=True) if c else None
+    if c: return store.get_connector(c['ConnectorId'], with_secret=True)
+    return next((h for c in cs if c['Type'] in _HEARS and c['HasSecret'] and (h := _hearing(store.get_connector(c['ConnectorId'], with_secret=True)))), None)
 
 
 def ready(store) -> dict:
     c = pick(store)
-    return {'ready': bool(c), 'provider': c['Type'] if c else None, 'label': LABELS.get(c['Type']) if c else None,
-            'vocabulary': vocabulary(store), 'builtin': None if c else builtin()}
+    label = (f"your {'OpenAI' if c['Via'] == 'openai' else 'Gemini'} connection" if c.get('Via') else LABELS.get(c['Type'])) if c else None
+    return {'ready': bool(c), 'provider': c['Type'] if c else None, 'label': label, 'vocabulary': vocabulary(store),
+            'builtin': None if c else builtin(), 'local': None if c else local_state()}
+
+
+# LOCAL WHISPER IN ONE PRESS (the owner, 2026-11-16: "when you install the app ask for that permission. Need this to work"; and 2026-11-12:
+# "don't install things automatically"). With nothing that hears, the mic's press offers it: one press installs faster-whisper where this
+# Taskuary imports from (deps.install - the exe's own pip into ~/.taskuary/packages), fetches its model and turns the Local Whisper card on.
+# Nothing starts it but that press. The clip stays on this computer, and no Windows setting has to allow it.
+LOCAL_MODEL = 'base'      # ~1.5 s a sentence on a laptop CPU; the card can pick small or medium
+GETTING = 'Setting up Local Whisper on this computer - a one-time download of a few minutes. The mic hears you once it is done.'
+_PREP = {}
+
+def local_state():
+    "{'state': 'getting'|'failed', 'line': ...} while a setup runs or after one failed; None before any and once it is done."
+    st = _PREP.get('state')
+    if st not in ('getting', 'failed'): return None
+    return {'state': st, 'line': GETTING if st == 'getting' else f"Local Whisper could not be set up - {_PREP.get('why')}"}
+
+def _set_up(store):
+    from . import deps
+    try:
+        if not deps.installed('faster_whisper'): deps.install('faster_whisper')
+        from faster_whisper.utils import download_model
+        download_model(LOCAL_MODEL)
+        c = next((c for c in store.list_connectors() if c['Type'] == 'local_whisper'), None)
+        cfg = {**(_cfg(store.get_connector(c['ConnectorId'])) if c else {}), 'model': LOCAL_MODEL}
+        store.save_connector({'ConnectorId': c['ConnectorId'] if c else None, 'Type': 'local_whisper', 'Name': 'Local Whisper',
+                              'ConfigJson': json.dumps(cfg), 'Active': 1}, 'owner')
+        _PREP.clear(); logger.info('voice: Local Whisper is set up - the mic hears on this computer')
+    except Exception as e:      # pip, the model download, a DLL - whichever failed says so, and the press can be made again
+        _PREP.update(state='failed', why=str(e)[-300:]); logger.warning(f'voice: Local Whisper could not be set up - {e}')
+
+def set_up_local(store):
+    "The owner's press: Local Whisper set up in the background, one setup at a time."
+    if _PREP.get('state') != 'getting':
+        _PREP.clear(); _PREP['state'] = 'getting'
+        threading.Thread(target=_set_up, args=(store,), daemon=True, name='voice-local').start()
+    return local_state()
 
 
 def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.ogg', c: dict = None, mic: bool = False,
@@ -339,7 +388,9 @@ _LOCAL = {}
 def _local(cfg, data, name, terms=()):
     """faster-whisper in-process, model cached after the first call (the first call downloads it)."""
     try: from faster_whisper import WhisperModel
-    except ImportError: raise RuntimeError('Local Whisper needs faster-whisper on the server: pip install taskuary[voice]')
+    except ImportError:     # ...as the card's Install button, not a pip command an exe has nowhere to run (deps.Missing)
+        from .deps import Missing
+        raise Missing('faster_whisper', 'Local Whisper needs faster-whisper - install it from the card') from None
     size = cfg.get('model') or 'small'
     m = _LOCAL.get(size)
     if m is None: m = _LOCAL[size] = WhisperModel(size, device=cfg.get('device') or 'cpu', compute_type=cfg.get('compute') or 'int8')

@@ -100,7 +100,7 @@ class ProviderTests(unittest.TestCase):
     def test_no_connector_is_said_the_way_the_owner_can_fix_it(self):
         s = MemoryStore()
         with mock.patch.object(voice, 'builtin', return_value=None):
-            self.assertEqual(voice.ready(s), {'ready': False, 'provider': None, 'label': None, 'vocabulary': [], 'builtin': None})
+            self.assertEqual(voice.ready(s), {'ready': False, 'provider': None, 'label': None, 'vocabulary': [], 'builtin': None, 'local': None})
             with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'x', 'audio/ogg', mic=True)
         self.assertIn(VOICE, str(e.exception)); self.assertIn('Groq', str(e.exception))
 
@@ -643,3 +643,61 @@ class FixIsAButton(unittest.TestCase):
         with mock.patch.object(server.sys, 'platform', 'win32'), mock.patch('taskuary.spawn.bare') as sf, \
              mock.patch.object(server, '_is_loopback', return_value=False):
             self.assertEqual(c_api.post('/api/voice/open-settings', params={'which': 'microphone'}).status_code, 409); sf.assert_not_called()
+
+
+class MicWorksWithNothingSetUp2026_11_16(unittest.TestCase):
+    """The owner, 2026-11-16: "all other apps work ... Need this to work" - the desktop window's mic leaned on Windows voice typing, a
+    PowerShell child driving WinRT that failed on a PC whose microphone every other app could use. Now the window records like a tab and
+    the clip is heard by a voice card, the AI the owner already connected, or Local Whisper set up in one press."""
+    def test_an_openai_card_with_its_key_hears_through_openais_own_speech_endpoint(self):
+        s = _voice_store('openai', 'sk-1')
+        c = voice.pick(s)
+        self.assertEqual((c['Type'], c['Secret'], c['Via']), ('openai_stt', 'sk-1', 'openai'))
+        self.assertEqual(voice.ready(s)['label'], 'your OpenAI connection')
+        with mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'send it Friday'})) as p:
+            out = voice.transcribe(s, b'x' * 4000, 'audio/webm', 'clip.webm', level=0.2, seconds=2)
+        self.assertEqual(out['text'], 'send it Friday')
+        self.assertEqual(p.call_args[0][0], 'https://api.openai.com/v1/audio/transcriptions')
+        self.assertEqual(p.call_args[1]['headers'], {'Authorization': 'Bearer sk-1'})
+
+    def test_an_openai_card_pointed_at_another_server_is_not_taken_to_hear(self):
+        s = _voice_store('openai', 'sk-1')
+        s.save_connector({'ConnectorId': s.get_connector_by_type('openai')['ConnectorId'], 'ConfigJson': json.dumps({'base_url': 'https://proxy.example/v1'})}, 'o')
+        self.assertIsNone(voice.pick(s))
+
+    def test_a_voice_card_still_comes_first(self):
+        s = _voice_store('groq_stt', 'gk')
+        s.save_connector({'ConnectorId': s.get_connector_by_type('openai')['ConnectorId'], 'Active': 1, 'Secret': 'sk-1'}, 'o')
+        self.assertEqual(voice.pick(s)['Type'], 'groq_stt')
+
+    def test_local_whisper_without_faster_whisper_offers_the_cards_install_button(self):
+        from taskuary.deps import Missing
+        with mock.patch.dict(sys.modules, {'faster_whisper': None}), self.assertRaises(Missing) as e:
+            voice._local({}, b'x', 'a.webm')
+        self.assertEqual(e.exception.package, 'faster_whisper')
+
+    def test_one_press_installs_fetches_the_model_and_turns_the_card_on(self):
+        s = MemoryStore(); voice._PREP.clear()
+        fw = types.ModuleType('faster_whisper.utils'); fw.download_model = mock.Mock()
+        with mock.patch('taskuary.deps.installed', return_value=False), mock.patch('taskuary.deps.install') as inst, \
+             mock.patch.dict(sys.modules, {'faster_whisper': types.ModuleType('faster_whisper'), 'faster_whisper.utils': fw}):
+            voice._PREP['state'] = 'getting'
+            self.assertEqual(voice.ready(s)['local']['state'], 'getting')
+            voice._set_up(s)
+        inst.assert_called_once_with('faster_whisper'); fw.download_model.assert_called_once_with(voice.LOCAL_MODEL)
+        c = voice.pick(s)
+        self.assertEqual((c['Type'], json.loads(c['ConfigJson'])['model']), ('local_whisper', voice.LOCAL_MODEL))
+        self.assertIsNone(voice.ready(s)['local'], 'done: nothing left to say')
+
+    def test_a_setup_that_fails_says_why_and_can_be_pressed_again(self):
+        s = MemoryStore(); voice._PREP.clear()
+        with mock.patch('taskuary.deps.installed', return_value=False), mock.patch('taskuary.deps.install', side_effect=RuntimeError('no internet')):
+            voice._set_up(s)
+        self.assertEqual(voice.local_state()['state'], 'failed'); self.assertIn('no internet', voice.local_state()['line'])
+        with mock.patch.object(voice.threading, 'Thread') as t:
+            self.assertEqual(voice.set_up_local(s)['state'], 'getting'); t.return_value.start.assert_called_once()
+        voice._PREP.clear()
+
+    def test_the_press_is_the_owners_alone(self):
+        from taskuary import guard
+        self.assertTrue(any(m == 'POST' and __import__('re').match(p, '/api/deps/local-whisper') for m, p, _ in guard.DENIED))

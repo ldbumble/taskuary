@@ -40,7 +40,7 @@ export default function BuiltinVoice({ onBack }) {
       <MenuItem value="windows" disabled={!voice?.builtin}>Windows speech recognition</MenuItem>
       <MenuItem value="browser" disabled={!browser}>Browser speech recognition</MenuItem>
     </TextField>
-    <Typography sx={{ my: 2 }}>Selecting Windows or Browser uses only that service, even if a voice AI card is connected. Automatic uses a connected voice card first, then browser or Windows speech.</Typography>
+    <Typography sx={{ my: 2 }}>Selecting Windows or Browser uses only that service, even if a voice AI card is connected. Automatic uses a connected voice card (or an OpenAI or Gemini connection) first, then this browser's speech; with neither, the mic offers Local Whisper, set up on this computer in one press. Windows speech is used only when chosen here.</Typography>
     {error && <Alert severity="error">{error}</Alert>}
     <Button onClick={check} disabled={active || checking || !voice}>{checking ? "Checking availability…" : "Check availability again"}</Button>
     {choice === "auto" ? <Alert severity="info">Choose Windows or Browser above to test built-in dictation.</Alert> : <>

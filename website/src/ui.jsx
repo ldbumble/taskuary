@@ -559,7 +559,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   const flash = (s) => setErr(s || "");
   React.useEffect(() => () => { recRef.current?.cancel?.(); }, []);
   // the voice this computer has besides the browser's: the voice card, else Windows voice typing - a dead browser service offers it as the fix
-  const other = voice?.ready ? { label: voice.label || "the voice AI", choice: "auto" } : voice?.builtin ? { label: voice.builtin.label, choice: "windows" } : null;
+  const other = voice?.ready ? { label: voice.label || "the voice AI", choice: "auto" } : { label: "Local Whisper", choice: "auto", local: true };
   const fix = micFix(err, other);
   const openSettings = async (which) => {
     try { await api.post("/api/voice/open-settings", null, { params: { which } }); }
@@ -585,7 +585,22 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   const viaBuiltin = !!(builtin && route === "windows");
   const viaLive = !!(viaBuiltin && builtin.live && !speechAsk);     // Windows voice typing hears the microphone itself: a session, not a clip
   const off = !!(voice && route !== "connector" && !viaBrowser && !viaBuiltin);
-  const press = (e) => { setErr(""); if (!off && !(viaBuiltin && speechAsk)) return start(); setAsk(e.currentTarget); voice.recheck(); };
+  // LOCAL WHISPER IN ONE PRESS (voice.set_up_local): while it sets itself up the mic says so and looks again every few seconds
+  const getting = voice?.local?.state === "getting";
+  React.useEffect(() => { if (!getting) return; const t = setInterval(() => voice.recheck(), 3000); return () => clearInterval(t); }, [getting]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and the setting-up line goes when it hears, or turns into why it could not (with Try again)
+  const settingUp = React.useRef(false);
+  React.useEffect(() => {
+    if (!settingUp.current || getting) return;
+    settingUp.current = false; flash(voice?.local?.state === "failed" ? voice.local.line : "");
+  }, [getting, voice?.local?.state]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const setUpLocal = async () => {
+    setAsk(null); chooseVoice("auto");
+    try { const { data } = await api.post("/api/deps/local-whisper"); settingUp.current = data?.state === "getting"; flash(data?.line || ""); }
+    catch (e) { flash(e?.response?.data?.detail || "Local Whisper could not be set up"); }
+    voice?.recheck();
+  };
+  const press = (e) => { setErr(""); if (getting) return flash(voice.local.line); if (!off && !(viaBuiltin && speechAsk)) return start(); setAsk(e.currentTarget); voice.recheck(); };
   const [turning, setTurning] = React.useState(false);
   const turnOn = async () => {
     setTurning(true);
@@ -668,7 +683,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
     setRec(session); setBusy(false); if (ctl) ctl.current = { cancel: session.cancel };
   };
   const stop = () => { rec?.stop(); if (!viaBrowser && !viaLive) setRec(null); };   // the browser's dictation and voice typing report back themselves
-  const title = err || (!voice ? ""
+  const title = err || (!voice ? "" : getting ? voice.local.line
     : rec ? "Stop and transcribe"
     : route === "connector" ? `Dictate (${voice.label || voice.provider})`
     : viaBrowser ? `Dictate — your browser's own recogniser. A voice AI (${placeName("voice")}) is more accurate and reads voice notes.`
@@ -690,8 +705,8 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
         border: "1px solid var(--tq-edge-red, #e3c9ce)", borderRadius: 1.5, boxShadow: "0 4px 14px rgba(0,0,0,.08)" }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ fontSize: 12.5, color: INK, lineHeight: 1.45 }}>{err}</Typography>
-          {fix && <Button size="small" variant="contained" disableElevation data-tq-mic-fix={fix.settings || fix.choose || "voice"} sx={{ textTransform: "none", mt: 0.75 }}
-            onClick={() => fix.settings ? openSettings(fix.settings) : fix.choose ? (setErr(""), chooseVoice(fix.choose)) : (setErr(""), openAppLink(place("voice").href))}>{fix.label}</Button>}
+          {fix && <Button size="small" variant="contained" disableElevation data-tq-mic-fix={fix.settings || (fix.local ? "local" : fix.choose) || "voice"} sx={{ textTransform: "none", mt: 0.75 }}
+            onClick={() => fix.settings ? openSettings(fix.settings) : fix.local ? setUpLocal() : fix.choose ? (setErr(""), chooseVoice(fix.choose)) : (setErr(""), openAppLink(place("voice").href))}>{fix.label}</Button>}
         </Box>
         <MuiIconButton size="small" aria-label="dismiss" onClick={() => setErr("")} sx={{ p: 0.25, mt: -0.25 }}><CloseIcon sx={{ fontSize: 15 }} /></MuiIconButton>
       </Box>
@@ -712,8 +727,9 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
         </Typography>
       </> : <>
         <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: INK }}>Set up voice to talk instead of type</Typography>
-        <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>
-          Pick a voice AI under {placeName("voice")}. Groq has a free tier; Local Whisper runs on this computer with no key.
+        <Typography data-tq-voice-local-ask="" sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>
+          {voice?.local?.state === "failed" ? `${voice.local.line}. ` : ""}Local Whisper hears you on this computer - free, no key, and what you
+          say never leaves it (a one-time download of a few hundred MB). Or pick a voice AI under {placeName("voice")}.
         </Typography>
       </>}
       {/* a Mac's own voice typing takes any box with the cursor in it - this window cannot call it, the owner can (voice.py LIVE) */}
@@ -725,7 +741,9 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
           data-tq-speech-on="" onClick={turnOn}>{turning ? "Turning it on…" : "Turn it on"}</Button>}
         {viaBuiltin && speechAsk && <Button size="small" variant="text" sx={{ textTransform: "none" }} data-tq-speech-settings=""
           onClick={() => { setAsk(null); openSettings("speech"); }}>Open speech settings</Button>}
-        <Button size="small" variant={viaBuiltin && speechAsk ? "text" : "contained"} disableElevation sx={{ textTransform: "none" }}
+        {!viaBuiltin && voice?.choice === "auto" && <Button size="small" variant="contained" disableElevation sx={{ textTransform: "none" }}
+          data-tq-voice-local="" onClick={setUpLocal}>{voice?.local?.state === "failed" ? "Try Local Whisper again" : "Set up Local Whisper"}</Button>}
+        <Button size="small" variant={(viaBuiltin && speechAsk) || voice?.choice === "auto" ? "text" : "contained"} disableElevation sx={{ textTransform: "none" }}
           onClick={() => { setAsk(null); openAppLink(place("voice").href); }}>{voice?.choice !== "auto" ? "Voice settings" : "Set up voice AI"}</Button>
       </Box>
     </Popover>

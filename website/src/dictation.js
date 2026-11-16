@@ -19,10 +19,11 @@ export const browserRecogniser = (w = typeof window === "undefined" ? null : win
 // A MIC FAILURE NAMES ITS FIX AS A BUTTON (the owner, 2026-11-09: "it's broken you need to show the issue?? ... just request the permission
 // like a normal app and they can hit approve"): the Windows setting a line points at opens with one press, the voice shelf for the rest.
 // ...and a browser whose speech service is down offers the voice this computer has instead (`other`: {label, choice} - the voice card,
-// or Windows voice typing), else the voice shelf (the owner, 2026-11-16: "the browser's own speech recognition was not working")
+// or {local: true}: Local Whisper set up in one press), else the voice shelf (the owner, 2026-11-16: "the browser's own speech recognition was not working")
 export const micFix = (line, other = null) => {
   const s = String(line || "");
-  if (/browser's speech service/i.test(s)) return other ? { label: `Use ${other.label}`, choose: other.choice } : { label: "Set up voice AI", voice: true };
+  if (/browser's speech service/i.test(s)) return other ? { label: other.local ? "Set up Local Whisper" : `Use ${other.label}`, choose: other.choice, ...(other.local ? { local: true } : {}) } : { label: "Set up voice AI", voice: true };
+  if (/^Local Whisper could not be set up/.test(s)) return { label: "Try Local Whisper again", choose: "auto", local: true };
   if (/microphone privacy|desktop apps access your microphone|MicrophoneUnavailable|No microphone Windows/i.test(s)) return { label: "Open microphone settings", settings: "microphone" };
   if (/Online speech recognition|speech privacy|speech service did not answer|speech recognition is off/i.test(s)) return { label: "Open speech settings", settings: "speech" };
   if (/voice AI/i.test(s)) return { label: "Set up voice AI", voice: true };

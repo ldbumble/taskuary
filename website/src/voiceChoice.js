@@ -10,5 +10,7 @@ export function chooseVoice(value) {
 export function micRoute(voice, browser, choice) {
   if (choice === "windows") return voice?.builtin ? "windows" : "off";
   if (choice === "browser") return browser ? "browser" : "off";
-  return voice?.ready ? "connector" : browser ? "browser" : voice?.builtin ? "windows" : "off";
+  // Automatic: a voice card (or an AI card that hears), else the tab's own recogniser, else none - the press offers Local Whisper in one press.
+  // Windows voice typing only when chosen (2026-11-16: its PowerShell/WinRT child failed on PCs where every other app hears the mic)
+  return voice?.ready ? "connector" : browser ? "browser" : "off";
 }

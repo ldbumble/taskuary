@@ -194,4 +194,7 @@ test("a browser speech service failure offers the computer's other voice, else t
     assert.equal(micFix(dictationError(c)).voice, true, c);
   }
   assert.equal(micFix(dictationError("network"), { label: "Groq", choice: "auto" }).settings, undefined, "never Windows' speech settings for a browser's service");
+  assert.deepEqual(micFix(dictationError("blank"), { label: "Local Whisper", choice: "auto", local: true }), { label: "Set up Local Whisper", choose: "auto", local: true },
+    "with no voice card, Local Whisper in one press");
+  assert.deepEqual(micFix("Local Whisper could not be set up - pip could not reach the internet"), { label: "Try Local Whisper again", choose: "auto", local: true });
 });

@@ -11,9 +11,13 @@ test("an explicit built-in choice never routes audio to an AI card", () => {
   assert.equal(micRoute(voice, false, "browser"), "off");
 });
 
-test("automatic chooses a browser then Windows without a voice card", () => {
+// Windows voice typing only when chosen (2026-11-16: its PowerShell/WinRT child failed on PCs where every other app hears the mic) - with no
+// card and no browser recogniser the mic is "off", and its press offers Local Whisper in one press
+test("automatic chooses a voice card, then the browser's own, and never Windows voice typing by itself", () => {
+  assert.equal(micRoute({ ready: true, builtin: {} }, true, "auto"), "connector");
   assert.equal(micRoute({ builtin: {} }, true, "auto"), "browser");
-  assert.equal(micRoute({ builtin: {} }, false, "auto"), "windows");
+  assert.equal(micRoute({ builtin: {} }, false, "auto"), "off");
+  assert.equal(micRoute({ builtin: {} }, false, "windows"), "windows", "still there when chosen");
   assert.equal(micRoute({}, false, "auto"), "off");
 });
 

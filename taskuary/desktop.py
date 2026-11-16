@@ -669,7 +669,9 @@ def main():
     # the app is ~8s cold before uvicorn exists at all, so the alternative is what the owner
     # actually saw: their own window telling them it could not connect, for 18 seconds.
     # ...and if one is already up, that one comes to the front and this start ends: never two (show_running).
-    running = already_serving() or held_elsewhere()
+    # ...on ITS port: a start given --port asked the configured one (7787) instead, so a scratch copy started beside the owner's brought
+    # the owner's window to the front, or opened it in his browser (2026-11-16)
+    running = already_serving(port=port) or held_elsewhere()
     if running: splash(); return show_running(running, config.load()['server'].get('token') or '')
     allow_downloads(webview)
     held, booted = {}, threading.Event()

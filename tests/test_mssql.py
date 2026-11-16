@@ -106,7 +106,7 @@ class AWriteThatReturnsNoRows(unittest.TestCase):
     def test_the_odbc_road_of_any_database_does_the_same(self):
         from taskuary import db
         cx = self.Cx(self.Cur())
-        import pyodbc
-        with mock.patch.object(pyodbc, 'connect', return_value=cx):
+        fake = mock.MagicMock(); fake.connect.return_value = cx          # no pyodbc on CI's macOS: the driver is stood in
+        with mock.patch.dict('sys.modules', {'pyodbc': fake}):
             rows = db._rows_odbc('DRIVER=x', 'UPDATE t SET a=1', 5, write=True)
         self.assertEqual(rows, [{'rows_affected': 3}]); self.assertTrue(cx.committed)

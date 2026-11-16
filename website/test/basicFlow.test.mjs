@@ -110,6 +110,8 @@ test("a turn at work says what is happening, or what we wait for, beside its dot
   // ...and what we wait for, where no step runs: the model writing, a session opening, his press (waitingOn)
   assert.equal(workingLine([{ type: "work", steps: [{ summary: "Read a.csv", status: "done" }] }], label), "Thinking…");
   assert.equal(workingLine([], label, { starting: true }), "Waiting for the agent to start");
+  // ...on the chat's first turn only: a later one starting again is the work going on - its dots, no words of the app's (the owner, 2026-11-16)
+  assert.equal(workingLine([], label, { starting: true, later: true }), "");
   assert.equal(workingLine(parts, label, { ask: "Waiting for your Allow once" }), "Waiting for your Allow once");
   const { waitingOn } = await import("../src/chatStream.js");
   assert.equal(waitingOn({ permissions: [{}] }), "Waiting for your Allow once");

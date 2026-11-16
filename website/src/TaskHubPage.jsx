@@ -585,7 +585,7 @@ export default function TaskHubPage() {
   const openTask = (taskId, opts) => {
     readAhead({ kind: "task", tid: taskId });
     selectTask(taskId);
-    ask({ kind: "task", tid: taskId, start: opts?.start ? { agent: opts.agent, model: opts.model } : null, act: opts?.act || null });
+    ask({ kind: "task", tid: taskId, start: opts?.start ? { agent: opts.agent, model: opts.model } : null, act: opts?.act || null, row: opts?.row || null });
     if (tab !== "Assistant") { setTab("Assistant"); tabRef.current = "Assistant"; }
   };
 

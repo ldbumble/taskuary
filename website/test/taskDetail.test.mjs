@@ -93,7 +93,7 @@ test("a chat read still on its way when the view mounts is handed over as it lan
   assert.match(page, /const \[detail, setDetail\] = useState\(\(\) => \(aheadChat\(selected\) \? null : heldTask\(selected\)\)\);/);
   assert.match(page, /const chat = aheadChat\(id\), both = \(p\) => \(chat \? Promise\.all\(\[p, Promise\.race\(\[chat, new Promise\(\(r\) => setTimeout\(r, CHAT_WAIT\)\)\]\)\]\)/);
   assert.match(page, /if \(coming\) \{ const data = await both\(coming\);/);
-  assert.match(view, /if \(!data && !error\) return opening/);
+  assert.match(view, /if \(!data && !error && !\(opening && conv\.list\?\.items\?\.length\)\) return <Box data-tq-chat-reading=""/);
 });
 
 // ...AND THE LIST IS PART OF IT (the bug hunt, 2026-11-12: a job New had just made opened its head over an empty chat for a beat, the agent's

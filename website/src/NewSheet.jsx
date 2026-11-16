@@ -43,6 +43,7 @@ import { capabilities, useCapabilities } from "./capabilities.js";
 import { PromptBox } from "./AgentSummary.jsx";
 import { MdLine } from "./md.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
+import { madeRow } from "./funnelPile.js";
 
 // what the card IS, as its title: New's own box asks, and a card the Assistant wrote from it says what it made of the words
 const TITLE = { chat: "What do you need?", agent: "An agent's job", workflow: "A routine", report: "A report", dashboard: "A dashboard",
@@ -276,7 +277,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
     // new agent button should spin"): the card in the conversation is put down by the task landing on the table (AssistantView pull, holdsNew),
     // so its press stays busy until then - free again, it could be pressed twice and file the task twice. A dialog's host closes it itself
     let opened = false;
-    const openIt = (tid) => { opened = !!tid && !!onOpenTask; onOpenTask?.(tid); };
+    // ...drawn at the press as its row (funnelPile.madeRow): the task, his words and its agent starting, never New's card over a "…"
+    const openIt = (tid) => { opened = !!tid && !!onOpenTask; onOpenTask?.(tid, { row: madeRow(tid, about) }); };
     try {
       if (kind === "send") {
         const { data } = await api.post("/api/outbox", {

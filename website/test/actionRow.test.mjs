@@ -214,13 +214,13 @@ test("a row, a task or an fyi puts the open browse view down AT THE CLICK, as on
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.match(view, /const browsing = useMemo\(\(\) => liveBrowseId\(shown\), \[shown\]\);/); assert.match(process.getBuiltinModule("node:fs").readFileSync(new URL("../src/funnelPile.js", import.meta.url), "utf8"), /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.down \? null : shown\[i\]\.id;/, "a put-down view is no longer the live one");
   // a task opened by name goes the rail's road (pull, below) - a busy walk waits for it; a walk on the phone no longer lands a bare card (2026-10-23)
-  assert.match(view, /const openTaskCard = \(req\) => \{[\s\S]{0,400}?pull\(`task:\$\{req\.tid\}`\); return;\n\s+\}\n\s+openLater\.current = req;\n\s+\};/);
+  assert.match(view, /const openTaskCard = \(req\) => \{[\s\S]{0,400}?pull\(`task:\$\{req\.tid\}`, null, req\.row\); return;\n\s+\}\n\s+openLater\.current = req;\n\s+\};/);
   // ...and a task asked for while a turn is in flight (the Assistant's own link to it, a Board press during Next) waits for that turn and
   // then goes the same road - the bare card it landed as rang no rail row (the dead-end walk's RING, 2026-10-20)
-  assert.match(view, /if \(busy \|\| resetting \|\| !openLater\.current\) return;\n\s+const req = openLater\.current; openLater\.current = null;\n\s+if \(req\.kind === "msg"\) openMsgRef\.current\?\.\(req\.mid\); else if \(req\.kind === "pull"\) pullRef\.current\?\.\(req\.key, req\.asUser\); else openTaskRef\.current\?\.\(req\);\n\s+\}, \[busy, resetting\]\);/);
+  assert.match(view, /if \(busy \|\| resetting \|\| !openLater\.current\) return;\n\s+const req = openLater\.current; openLater\.current = null;\n\s+if \(req\.kind === "msg"\) openMsgRef\.current\?\.\(req\.mid\); else if \(req\.kind === "pull"\) pullRef\.current\?\.\(req\.key, req\.asUser, req\.row\); else openTaskRef\.current\?\.\(req\);\n\s+\}, \[busy, resetting\]\);/);
   // ...and a rail row clicked mid-turn is drawn at once from its rail row (2026-11-03), its move in the same one slot - the latest ask wins
-  assert.match(view, /if \(!resetting && \(busy \|\| turnFlight\.current\)\) \{\n\s+const row = \(pileRef\.current\?\.items \|\| \[\]\)\.find\(\(i\) => i\.key === key && !i\.settling\);/);
-  assert.match(view, /putOnTable\(row\); setFoldedKey\(\(k\) => \(k === row\.key \? null : k\)\);\n\s+\}\n\s+openLater\.current = \{ kind: "pull", key, asUser \}; return;/);
+  assert.match(view, /const row = \(pileRef\.current\?\.items \|\| \[\]\)\.find\(\(i\) => i\.key === key && !i\.settling\) \|\| \(made\?\.key === key \? made : null\);/);
+  assert.match(view, /putOnTable\(row\); setFoldedKey\(\(k\) => \(k === row\.key \? null : k\)\);\n\s+\};\n\s+if \(!resetting && \(busy \|\| turnFlight\.current\)\) \{\n\s+if \(row && row\.key !== currentRef\.current\?\.key\) ahead\(\);\n\s+openLater\.current = \{ kind: "pull", key, asUser, row: made \}; return;/);
   // ...every view but New's own card, held up until the task it made lands (holdsNew, newOpensWhatItMade.test.mjs - 2026-11-09)
   assert.match(view, /if \(old\) setOld\(null\); if \(!held\) browseDown\(\);\s+const going = surface\(key, asUser \|\| null\);/, "pull");
   // ...and a message asked for by id (a card's link, #msg=) goes the same road, as its own card - waiting out a turn as a task does

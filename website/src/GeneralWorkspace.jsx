@@ -31,7 +31,7 @@ import ViewSpec, { PlanRow } from "./ViewSpec.jsx";
 import { wantsAsk, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
-import { agentName, workOf, doingNow,  elapsedText, turnStamp } from "./agentWork.js";
+import { agentName, elapsedText, turnStamp } from "./agentWork.js";
 import { AGENT_TURN, MESSAGE, instructionsHint } from "./kinds.js";
 import { assignedAgent } from "./agentIdentity.js";
 import { LinkPopups, LocalFiles, Md } from "./md.jsx";
@@ -51,7 +51,6 @@ import "./agentStepRows.css";
 import { ModelSelect, TaskuaryMark } from "./ui.jsx";
 import { label as btn } from "./buttons.js";
 import { placeName } from "./words.js";
-import { starting as startingLine } from "./laneSays.js";
 import { plural } from "./timeWords.js";
 import { PASSED_LINE } from "./PassedCard.jsx";
 import ConnectAi from "./ConnectAi.jsx";
@@ -106,23 +105,6 @@ export const messagesWithTrace = (messages, session, keepStart = true) => {
 };
 
 
-// AN AGENT AT WORK, in one band. The machinery was all there - a CLI brain really does emit its
-// tool calls, and the window really did draw them - but it drew eight identical grey rows each
-// ending in the word COMPLETE, a box labelled "Agent progress" holding the start line and a model
-// id, and put the only live signal in the smallest type on the page, underneath everything. It
-// reported mechanism; it never said who was working, how far in, how long, or what it had got
-// (the owner, 2026-09-08: "It doesn't look like an agent that got you").
-//
-// Four facts, said once, above the trail. Nothing here is new information - the trace and the task
-// already carried all of it (agentWork.js).
-// ...NO WORDS, ONLY THE SPIN (the owner, 2026-11-10: "don't want the working... thing. we should never see that ever. it should show agent and
-// time and how long it's running rightg away. under it it can spin like normal"): the turn's head says who, when and how long (RunClock); under
-// it, while it has said nothing more, the dots the stream always had - starting or at work alike, never a line of words of their own
-const AgentBand = ({ name, provider, work, starting = "" }) => {
-  const doing = doingNow(work);
-  return <div className="tq-aui-thinking" role="status" aria-label={`${provider || name || "The agent"} is at work`} title={doing || undefined}
-    data-tq-working="" {...(starting && !work.steps.length ? { "data-tq-starting-line": "" } : {})}><i /><i /><i /></div>;
-};
 // THE TURN'S HEAD, FROM THE PRESS: its time and how long it has run, counting - the same element before the agent's first word and after it
 // ...and the ONE way to stop an agent mid-run, on the turn it stops (the owner, 2026-11-10: "we should have x button for agent to stop in middle
 // of the work"): the chat's own stop road (onStop), nothing else
@@ -421,7 +403,8 @@ const TurnTime = ({ t }) => {
   const ran = t.started && t.ended ? turnStamp({ start: t.started * 1000, end }) : "";
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>· {when(end)}{ran ? ` · ${ran}` : ""}</span>;
 };
-const ConvTurn = ({ t, more, cards, name, ask = null }) => {
+// `later`: a turn after the chat's first - its agent starting again is the work going on, never a line of its own (workingLine)
+const ConvTurn = ({ t, more, cards, name, ask = null, later = false }) => {
   const live = t.state === "working" || t.state === "starting";
   const parts = useMemo(() => turnParts(eventsOf(t.steps || [], live), { answer: t.text || "" }), [t.steps, t.text, live]);
   const key = t.answer || t.id, at = useTurnOutputs(key), shown = React.useContext(ShownCtx)[key];
@@ -436,7 +419,7 @@ const ConvTurn = ({ t, more, cards, name, ask = null }) => {
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
   const compacting = live && ((x) => x?.k === "compact" && !!x.status && !["completed", "failed", "cancelled"].includes(x.status))((t.steps || []).at(-1));
-  const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting", ask: React.useContext(WaitOnCtx) }) : "";
+  const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting", later, ask: React.useContext(WaitOnCtx) }) : "";
   if (quiet) return null;
   return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}
@@ -506,7 +489,7 @@ function Conversation({ items, nodes = [], posts = [], next = null, nextRid = nu
   const rows = items.map((x, i) => {
     const prev = items[i - 1];
     if (x.kind === "turn") return <ConvTurn key={x.id} t={x} more={prev?.kind === "turn"} name={name} ask={x.id === askAt ? ask : null}
-      cards={cardsOf(x)} />;
+      cards={cardsOf(x)} later={items.slice(0, i).some((y) => y.kind === "turn")} />;
     if (x.kind === "line") return <ConvLine key={x.id} x={x} more={prev?.kind === "line"} />;
     if (x.kind === "arrival") return <div key={x.id} className="tq-aui-message tq-aui-brief" data-tq-item={x.id}><Arrived mail={[x]} prev={prev?.kind === "arrival" ? prev : null} /></div>;
     if (x.kind === "card") { const got = draw([x]); return got.length ? <div key={x.id} className="tq-aui-message tq-aui-agent" data-tq-item={x.id} data-tq-row-cards=""><div className="tq-aui-agent-body">{got}</div></div> : null; }
@@ -921,10 +904,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...a start the page already knows of says so before the conversation's first read lands, never a 520px spinner over nothing
   // ...never drawn from the list alone before this read: the files and cards it carries landed a beat later and grew the turn by 900 px under
   // the owner's eyes (recorded 2026-11-12) - the task view waits for the read asked ahead with it instead (TaskPage loadDetail, aheadChat)
-  if (!data && !error) return opening
-    ? <Box data-tq-starting="" sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.75, overflow: "hidden", bgcolor: PANEL2, px: 1.5, pt: 1.5, ...(compact ? { height: "auto" } : { flex: "0 0 auto" }) }}>
-        <AgentBand name={agentName(task)} work={workOf([])} starting={startingLine(agentName(task))} /></Box>
-    : <Box data-tq-chat-reading="" sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
+  // ...AND A START ALREADY HEARD IS ITS CHAT FROM THERE: his words and the turn starting under them, from the list (the owner, 2026-11-16: the
+  // dots stood in a box of their own, then the chat came in around them) - the one place a starting turn is drawn is the chat's (ConvTurn)
+  if (!data && !error && !(opening && conv.list?.items?.length)) return <Box data-tq-chat-reading="" sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
   // ...the agent's turns, as the list holds them: what each said, by the name the page keys a turn by
   const turnsNow = (conv.list?.items || []).filter((x) => x.kind === "turn");

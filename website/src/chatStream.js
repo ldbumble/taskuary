@@ -215,10 +215,12 @@ export const waitingChips = (pending, came = "") => {
 // working instead of just ... which means nothing"; and on every level, "what it's doing and what are we waiting for"): one line beside a turn's
 // dots, from what the list already holds - what the turn waits on him for (`ask`), else the newest step at work in its own words
 // (agentSteps.stepLabel), else the model writing; a turn not begun yet waits for its agent to start. Plain code, never a model call
-export const workingLine = (parts, label, { starting = false, ask = "" } = {}) => {
+// ...but only the CHAT'S FIRST turn says it waits for its agent (the owner, 2026-11-16, mid-conversation on a session gone idle: "Waiting for the
+// agent to start" is the app's mechanics) - a `later` turn starting is the work going on: its dots and no words, until it has a step to name
+export const workingLine = (parts, label, { starting = false, later = false, ask = "" } = {}) => {
   if (ask) return ask;
   const steps = (parts || []).filter((p) => p.type === "work").flatMap((p) => p.steps || []), last = steps.at(-1);
-  if (!last) return starting ? "Waiting for the agent to start" : "Thinking…";
+  if (!last) return !starting ? "Thinking…" : later ? "" : "Waiting for the agent to start";
   return last.status === "running" ? String(label(last) || "").split(/\r?\n/)[0].trim() || "Working…" : "Thinking…";
 };
 // WHERE THE AGENT'S QUESTION IS DRAWN (the owner, 2026-11-13: "never ever pin items on the bottom of the chat"): in the turn that asked it,

@@ -360,6 +360,11 @@ export const pressOnto = (walk, rail, { putDown = null, how = "next", fromKey = 
 export const holdsNew = (msgs, browsing, rail, key) => !!key && !!browsing
   && (msgs || []).some((m) => m.id === browsing && m.role === "browse" && m.area === "new")
   && !(rail || []).some((i) => i.key === key && !i.settling);
+// ...AND WHAT NEW MADE IS ITS ROW AT THE PRESS (the owner, 2026-11-16: "on new task it says sent to agent and then the bottom of the screen shows
+// ... it should show ... on the agent starting, not randomly on the bottom of the canvas"): the task New just made, as the row the table draws -
+// put up at the press like a rail row (AssistantView pull), its chat's starting turn under his words from there, and the "…" of the move that
+// fetches its real row waiting under the fold, never at the canvas foot under New's card
+export const madeRow = (tid, title) => ({ key: `task:${tid}`, kind: "task", tid: Number(tid), title: String(title || "").slice(0, 300) });
 // NEXT TURNS BLUE AS SOON AS THE MOVE SAVES (the owner, 2026-11-06): a light walk answer (no rail rides) carries the walk's whole word -
 // below included - and the rail on screen takes it until its own read lands, so a second press draws its row and Back stands at once
 export const withWalk = (pile, walk) => (pile && walk && "below" in walk ? { ...pile, walk } : pile);

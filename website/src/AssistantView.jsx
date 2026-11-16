@@ -3079,7 +3079,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (setupOn.current) setOverSetup(true);
     if (!(busy || resetting || turnFlight.current)) {
       openExtra.current = req.start || req.act ? { tid: req.tid, autostart: req.start || null, act: req.act || null } : null;
-      pull(`task:${req.tid}`); return;
+      pull(`task:${req.tid}`, null, req.row); return;
     }
     openLater.current = req;
   };
@@ -3087,7 +3087,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => {
     if (busy || resetting || !openLater.current) return;
     const req = openLater.current; openLater.current = null;
-    if (req.kind === "msg") openMsgRef.current?.(req.mid); else if (req.kind === "pull") pullRef.current?.(req.key, req.asUser); else openTaskRef.current?.(req);
+    if (req.kind === "msg") openMsgRef.current?.(req.mid); else if (req.kind === "pull") pullRef.current?.(req.key, req.asUser, req.row); else openTaskRef.current?.(req);
   }, [busy, resetting]);
   // ...and a line typed while it came up (askLater, at send) goes once it is up - after an open queued above, which takes the turn first,
   // and one at a time: each is its own turn, answered before the next goes
@@ -3109,16 +3109,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setRailOpen(false); if (old) setOld(null); browseDown();
     return surface(null, null, null, false, "back");
   };
-  const pull = (key, asUser) => {
+  // `made`: the row of a task New just made (funnelPile.madeRow), which no rail row holds yet - drawn at the press as a rail row is
+  const pull = (key, asUser, made = null) => {
+    const row = (pileRef.current?.items || []).find((i) => i.key === key && !i.settling) || (made?.key === key ? made : null);
+    const ahead = () => {
+      rowsDrawn.current += 1; setRailOpen(false); browseDown(); setExpanded(false);
+      const id = `a${Date.now()}`, was = openLater.current?.key;
+      setMsgs((m) => [...m.filter((x) => !(x.ahead && x.card?.key === was)), { id, role: "assistant", text: "", options: [], chips: [], card: row, ahead: true }]);
+      putOnTable(row); setFoldedKey((k) => (k === row.key ? null : k));
+    };
     if (!resetting && (busy || turnFlight.current)) {
-      const row = (pileRef.current?.items || []).find((i) => i.key === key && !i.settling);
-      if (row && row.key !== currentRef.current?.key) {
-        rowsDrawn.current += 1; setRailOpen(false); browseDown(); setExpanded(false);
-        const id = `a${Date.now()}`, was = openLater.current?.key;
-        setMsgs((m) => [...m.filter((x) => !(x.ahead && x.card?.key === was)), { id, role: "assistant", text: "", options: [], chips: [], card: row, ahead: true }]);
-        putOnTable(row); setFoldedKey((k) => (k === row.key ? null : k));
-      }
-      openLater.current = { kind: "pull", key, asUser }; return;
+      if (row && row.key !== currentRef.current?.key) ahead();
+      openLater.current = { kind: "pull", key, asUser, row: made }; return;
     }
     navHow.current = "push";
     if (setupOn.current) setOverSetup(true);                // during setup it opens over setup, which waits where it was (W2)
@@ -3127,7 +3129,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setOpening(key && key !== currentRef.current?.key ? key : null);
     // ...but New's own press, opening the task it just made, keeps the card up - its button spinning - until that task is on the table
     // (holdsNew): put down at the press, the task it was opened over came back under the "…" (the owner, 2026-11-09)
-    const held = holdsNew(msgsRef.current, browsingRef.current, pileRef.current?.items, key);
+    const held = !made && holdsNew(msgsRef.current, browsingRef.current, pileRef.current?.items, key);
+    if (made && row !== currentRef.current && key !== currentRef.current?.key) ahead();
     setRailOpen(false); if (old) setOld(null); if (!held) browseDown();
     const going = surface(key, asUser || null);
     if (held) Promise.resolve(going).finally(() => browseDownRef.current?.());

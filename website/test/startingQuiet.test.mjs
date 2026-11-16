@@ -9,8 +9,10 @@ const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"
 // ...and since 2026-11-10 no line of words at all ("don't want the working... thing ... it should show agent and time and how long it's running
 // rightg away. under it it can spin like normal"): a start is the spin under the turn's head, its clock the head's, from the press
 test("a start is the spin under the turn's head, never a line of words", () => {
-  const ws = read("GeneralWorkspace.jsx"), band = ws.slice(ws.indexOf("const AgentBand"), ws.indexOf("// The speaker of the agent's turns"));
-  assert.match(band, /"data-tq-starting-line": ""/);
-  assert.doesNotMatch(band, /className="tq-aui-band"|<span>\{starting\}<\/span>/);
-  assert.match(band, /const RunClock = \(\{ start \}\)/);
+  // ...ONE PLACE DRAWS A STARTING TURN, the chat's own (ConvTurn - the owner, 2026-11-16): no band of its own before the chat is read
+  const ws = read("GeneralWorkspace.jsx"), turn = ws.slice(ws.indexOf("const ConvTurn"), ws.indexOf("const RetryCtx"));
+  assert.match(turn, /\{\.\.\.\(t\.state === "starting" \? \{ "data-tq-starting-line": "" \} : \{\}\)\}/);
+  assert.match(turn, /<RunClock start=/);
+  assert.doesNotMatch(ws, /const AgentBand|<AgentBand/);
+  assert.match(ws, /const RunClock = \(\{ start \}\)/);
 });

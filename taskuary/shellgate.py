@@ -34,11 +34,12 @@ is held is a delete tool by name (rm, del, Remove-Item, rmdir... and the .NET / 
 folder: its working folder and the temp folder are its to tidy, everything else is the owner's. A target it cannot read - a variable set
 somewhere else, a pipe into Remove-Item - is held, never let through for being hard to read.
 """
-import contextvars, json, ntpath, os, re, shlex, shutil, subprocess, tempfile
+import contextvars, json, ntpath, os, re, shlex, shutil, subprocess, tempfile, threading
 from loguru import logger
 from .browsergate import _segments, _deny, _tell, not_approved, NEXT, OWNER_NO
 
 HELD = 'Taskuary held this for the owner'
+_FILING = threading.Lock()
 # ...said to the agent the hold covers, as the browser's hold is (browserview.HOLD_LINE): told nothing, a general agent asked "Should I delete
 # it?" in words, the owner said yes, and the delete was held for a second yes on the task (the overnight run, 2026-11-03)
 HOLD_LINE = ("A DELETE ON THE OWNER'S COMPUTER outside your working folder, a read of files outside this task's own folders, and a step that leaves the machine (a push, a merge, a publish, "
@@ -357,14 +358,17 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
     from . import landing
     if cmd and (lands := landing.push_asked(store, tid, cmd, cwd, about)): return _deny(lands[1])      # the landing card's own button, never a second card
     folders = [a['folder'] for a in reads or [] if a.get('folder')]
-    if not _pending(store, tid, sid, cmd, folders):
-        from . import proposals
-        proposals.queue(store, tid, {'action': 'shell_act', 'sid': str(sid), 'turn': turn_of(store, tid), 'command': str(cmd)[:4000], 'shell': shell, 'cwd': cwd or '',
-                                     # the card's In: the folder a delete aims at, never the agent's own scratch folder it ran from
-                                     'what': what, 'why': why, 'where': next((a['where'] for a in todo if a.get('where')), ''),
-                                     **({'reads': folders} if folders else {}),
-                                     **({'about': ' '.join(str(about).split())[:300]} if str(about or '').strip() else {})}, 'agent')
-        store.audit('task', tid, 'shell_act_held', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
+    # ...ONE CARD FOR ONE CALL, EVEN WHEN TWO GATES HEAR IT AT ONCE (recorded on the real CLI, 2026-11-16: the hook and the ACP gate held the
+    # same command in the same millisecond, and the card read "2 steps" and ran it twice): the look and the filing are one step
+    with _FILING:
+        if not _pending(store, tid, sid, cmd, folders):
+            from . import proposals
+            proposals.queue(store, tid, {'action': 'shell_act', 'sid': str(sid), 'turn': turn_of(store, tid), 'command': str(cmd)[:4000], 'shell': shell, 'cwd': cwd or '',
+                                         # the card's In: the folder a delete aims at, never the agent's own scratch folder it ran from
+                                         'what': what, 'why': why, 'where': next((a['where'] for a in todo if a.get('where')), ''),
+                                         **({'reads': folders} if folders else {}),
+                                         **({'about': ' '.join(str(about).split())[:300]} if str(about or '').strip() else {})}, 'agent')
+            store.audit('task', tid, 'shell_act_held', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
     from .selfclose import CARD_TAIL
     then = ('Taskuary runs this exact command in the same folder and tells you what happened' if cmd else
             'the folder is yours to read for the rest of this task and you are told to go on')

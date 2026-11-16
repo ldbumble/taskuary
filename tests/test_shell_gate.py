@@ -381,3 +381,16 @@ class ReadingOutside(unittest.TestCase):
             self.assertEqual(call(os.path.join(self.docs, 'conftest.py'))['hookSpecificOutput']['permissionDecision'], 'deny')
         self.assertEqual(len(self.pending()), 1)
         self.assertIn('Read', hooks.BROWSER_MATCH.split('|'))
+
+
+class TwoGatesAtOnce(unittest.TestCase):
+    def test_one_call_held_by_two_gates_at_the_same_moment_is_one_card(self):
+        """Recorded on the real CLI, 2026-11-16: the hook and the ACP gate held one command in the same millisecond - two cards of it, "2 of 2
+        ran", the command run twice. The look for a waiting card and the filing of one are one step."""
+        import threading
+        s = MemoryStore(); tid = Factory(s).task('Fill the invoice templates'); go = threading.Barrier(4)
+        def hold(): go.wait(); sg.check(s, tid, 'run1', 'rm -rf C:/work/elsewhere/old', 'Bash', r'C:\work\ledger')
+        ts = [threading.Thread(target=hold) for _ in range(4)]
+        for t in ts: t.start()
+        for t in ts: t.join(10)
+        self.assertEqual(len(s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))), 1)

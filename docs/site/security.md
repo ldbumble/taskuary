@@ -94,6 +94,12 @@ looks passes. Any other goes to your AI with the control it names, and one that 
 delete or submit is held for your **Approve** the same way. Approving runs that exact command, and
 does nothing if that control is gone.
 
+**An agent asks before it reads outside its task.** Its working folder (a coding agent's checkout), the
+task's outputs, the files that came on the task's mail and the temp folder are its own. A read or a
+listing anywhere else - by a file tool or a path in a command - is held for your **Approve** the same
+way, and once approved that folder is the task's to read until it ends. Taskuary's own folder and the
+places sign-ins are kept are never read by an agent, not even on a yes.
+
 **The agent never holds a sign-in.** The agent asks; Taskuary types the user name, password and
 authenticator code into the browser itself, over Chrome's own DevTools connection, only into the
 page's top document, only on the site the sign-in was saved for, checked again with the box focused.

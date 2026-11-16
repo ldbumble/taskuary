@@ -194,6 +194,11 @@ you turn it on, runs only on a task marked &quot;needs desktop&quot;, and never 
 looks passes. Any other goes to your AI with the control it names, and one that would send, pay,
 delete or submit is held for your <strong>Approve</strong> the same way. Approving runs that exact command, and
 does nothing if that control is gone.</p>
+<p><strong>An agent asks before it reads outside its task.</strong> Its working folder (a coding agent&#39;s checkout), the
+task&#39;s outputs, the files that came on the task&#39;s mail and the temp folder are its own. A read or a
+listing anywhere else - by a file tool or a path in a command - is held for your <strong>Approve</strong> the same
+way, and once approved that folder is the task&#39;s to read until it ends. Taskuary&#39;s own folder and the
+places sign-ins are kept are never read by an agent, not even on a yes.</p>
 <p><strong>The agent never holds a sign-in.</strong> The agent asks; Taskuary types the user name, password and
 authenticator code into the browser itself, over Chrome&#39;s own DevTools connection, only into the
 page&#39;s top document, only on the site the sign-in was saved for, checked again with the box focused.

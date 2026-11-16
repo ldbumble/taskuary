@@ -40,3 +40,7 @@
 .tq-published-more:hover { color: var(--tq-secondary, #4d514b); }
 .tq-published-folded { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .tq-published-fold[data-tq-fold="earlier"] .tq-published-folded { padding-left: 12px; }
+/* a file read in place under its chip (FileView): its name and its Download and Hide on one row where they fit, the name above them where not */
+.tq-file-view .tq-published-row { gap: 4px; }
+.tq-file-view .tq-published-name { min-width: 0; flex: 1 1 120px; }
+.tq-file-view .tq-published-name b, .tq-file-view .tq-published-name span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

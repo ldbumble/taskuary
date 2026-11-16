@@ -146,6 +146,32 @@ class FileRoutesTests(unittest.TestCase):
         self.assertIn('was moved or deleted', self.client.get(f'/api/attachments/{kept}').json()['detail'])
         self.assertIn('never saved', self.client.get(f'/api/attachments/{never}').json()['detail'])
 
+    def test_a_mail_attachment_previews_on_the_road_an_agents_file_does(self):
+        "The owner, 2026-11-16: a Word, Excel, CSV or text attachment only downloaded, while the same file an agent made opened in place."
+        from openpyxl import Workbook
+        d = config.home() / 'attachments' / '78'; d.mkdir(parents=True, exist_ok=True); self.addCleanup(shutil.rmtree, d, True)
+        _docx(d / 'review.docx'); shutil.copy(d / 'review.docx', self.dir / 'review copy.docx')
+        wb = Workbook(); wb.active.append(['Vendor', 'Cost']); wb.active.append(['Trainly', 480]); wb.save(d / 'rates.xlsx')
+        (d / 'rates.csv').write_text('Vendor,Cost\nPayworth,300\n'); (d / 'notes.txt').write_text('call Erin back')
+        # a mail's own type is often a shrug: the name says what it is
+        ct = {'review.docx': 'application/octet-stream', 'rates.xlsx': outputs.content_type('rates.xlsx'), 'rates.csv': '', 'notes.txt': 'text/plain'}
+        for n, c in ct.items(): self.store.add_attachment({'MessageId': 78, 'Name': n, 'ContentType': c, 'Size': 9, 'Inline': 0, 'Path': str(d / n)})
+        self.store.get_message = lambda mid: {'MessageId': mid, 'Channel': 'email'}
+        rows = {r['name']: r for r in self.client.get('/api/messages/78/attachments').json()['data']}
+        self.assertEqual({n: r['preview'] for n, r in rows.items()}, {'review.docx': 'document', 'rates.xlsx': 'sheet', 'rates.csv': 'table', 'notes.txt': 'text'})
+        self.assertEqual(rows['rates.csv']['content_type'], 'text/csv')
+        self.assertEqual(rows['review.docx']['content_type'], outputs.content_type('review.docx'))
+        # the same words as the agent's copy of the same document, from the same reader
+        doc = self.client.get(rows['review.docx']['url'], params={'preview': 'true'}).json()
+        self.assertEqual(doc, self.client.get(self.rows()['review copy.docx']['url'], params={'preview': 'true'}).json())
+        self.assertEqual(self.client.get(rows['rates.xlsx']['url'], params={'preview': 'true'}).json()['rows'], [['Vendor', 'Cost'], ['Trainly', '480']])
+        txt = self.client.get(rows['notes.txt']['url'])
+        self.assertEqual((txt.text, txt.headers['content-type'].split(';')[0]), ('call Erin back', 'text/plain'))
+        self.assertTrue(self.client.get(rows['rates.csv']['url']).headers['content-disposition'].startswith('inline'))
+        # read once per content: a second look is the cache's, whoever asks
+        with mock.patch.object(outputs, 'document', side_effect=AssertionError('read again')):
+            self.assertEqual(self.client.get(rows['review.docx']['url'], params={'preview': 'true'}).json(), doc)
+
     # -- the roads around the routes ---------------------------------------------------------------------------------------------
     def test_email_someone_attaches_a_file_the_agent_made(self):
         seen = {}

@@ -74,3 +74,19 @@ test("an open message draws a chat's small photo; a mail's small inline logo sta
   // the open letter draws them; a closed row stays the row alone
   assert.match(rowsFn, /open === r\.m\.MessageId && \([\s\S]*<Attachments messageId=\{r\.m\.MessageId\} canFetch=\{r\.m\.Channel === "email"/);
 });
+
+// ONE VIEWER FOR EVERY FILE (the owner, 2026-11-16: "it should be the same code both in the agent and on the email"): a Word, Excel, CSV or
+// text attachment only downloaded, while the same file an agent made opened in place. Each chip the server says previews opens in place, in
+// the viewer an agent's file opens in (PublishedPages.FileView -> Preview), Download beside it; a picture opens in the one file dialog
+test("an attachment opens in place in the viewer an agent's file opens in", () => {
+  const pub = fs.readFileSync(new URL("../src/PublishedPages.jsx", import.meta.url), "utf8");
+  assert.match(att, /import \{ FileDialog, FileView \} from "\.\/PublishedPages\.jsx";/);
+  assert.match(att, /a\.preview \? setOpen\(open\?\.id === a\.id \? null : a\) : save\(a\)/, "a file with a preview opens, the rest saves");
+  assert.match(att, /<FileView key=\{open\.id\} file=\{open\} onClose=\{\(\) => setOpen\(null\)\} \/>/);
+  assert.match(att, /<FileDialog file=\{big\} onClose=\{\(\) => setBig\(null\)\} \/>/);
+  assert.doesNotMatch(att, /PdfView|<Dialog /, "no second viewer");
+  assert.match(pub, /export function FileView\(\{ file: f, onClose \}\)[\s\S]*?<Preview page=\{f\} \/>/);
+  // drawn by what the row says it is, whoever made it - not only a file in the task's folder
+  assert.match(pub, /const sheet = page\.preview === "sheet", pdf = isPdf\(page\), doc = page\.preview === "document";/);
+  assert.match(pub, /if \(page\.preview === "table" \|\| \/csv\/\.test\(type\(page\)\)\) \{/);
+});

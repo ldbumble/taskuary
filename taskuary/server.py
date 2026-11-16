@@ -3759,13 +3759,24 @@ def _att_row(a: dict, mail: bool = True) -> dict:
     """One attachment as the panel needs it: enough to decide whether to draw it or list it. `mail`: it rode in on an email, where
     a small inline picture is a signature's logo (Attachments.jsx chrome) - a chat's photo is marked inline too, and IS the message
     (the owner, 2026-10-29: a WhatsApp photo in an open message stood as a "JPG ...jpg 14 KB" chip to click)."""
-    return {'id': a['AttachmentId'], 'name': a['Name'], 'content_type': a['ContentType'] or '',
+    from . import outputs
+    path = _attachment_path(a['Path'])
+    return {'id': a['AttachmentId'], 'name': a['Name'], 'content_type': _att_type(a),
             'size': a['Size'], 'inline': bool(a['Inline']), 'saved': bool(a['Path']), 'mail': mail,
+            # opened in place by the viewer an agent's file opens in (PublishedPages.Preview), told how here as that file is (outputs.preview_of)
+            'preview': outputs.preview_of(path, a['Name']) if path else None,
             'is_image': str(a['ContentType'] or '').startswith('image/'),
             # a voice note is meant to be PLAYED where you are reading it, not downloaded and
             # opened in something else - the panel draws a player for these (Attachments.jsx)
             'is_audio': str(a['ContentType'] or '').startswith('audio/'),
             'url': f"/api/attachments/{a['AttachmentId']}" if a['Path'] else None}
+
+
+def _att_type(a: dict) -> str:
+    "An attachment's type - the mail's word for it, or where that is a shrug (none, octet-stream) what its name says (outputs.content_type)."
+    from . import outputs
+    ct = str(a.get('ContentType') or '').split(';')[0].strip()
+    return ct if ct and ct.lower() != 'application/octet-stream' else outputs.content_type(a.get('Name') or '')
 
 
 
@@ -3869,10 +3880,9 @@ def task_document(tid: int, did: str, offset: int = 0, limit: int = 0, fresh: bo
 # GET and HEAD: the page asks HEAD before it saves (Attachments.saveFile), so a file that is gone is a line on the page, never the
 # window navigated to a JSON 404 - the desktop window has no Back to come home with
 @app.api_route('/api/attachments/{aid}', methods=['GET', 'HEAD'])
-def attachment(aid: int, download: bool = False):
-    """The bytes. Images are served inline so the panel can just draw them; everything else
-    downloads under its own name. Path is confined to the attachments dir; SVG/HTML never
-    render as a document on this origin."""
+def attachment(aid: int, download: bool = False, preview: bool = False, sheet: str = ''):
+    """The bytes, or a preview - on the road a file an agent made is served (_serve_file). Path is confined to the attachments dir;
+    SVG/HTML never render as a document on this origin."""
     a = store.get_attachment(aid)
     if not a: raise HTTPException(404, 'attachment not found')
     path = _attachment_path(a.get('Path'))
@@ -3880,14 +3890,7 @@ def attachment(aid: int, download: bool = False):
         raise HTTPException(404, f'{_att_filename(a.get("Name"))} {GONE} from Taskuary\'s attachments folder - open the original message for it')
     if not path:
         raise HTTPException(404, 'this one was never saved - open the original message for it')
-    ct = (a.get('ContentType') or 'application/octet-stream').split(';')[0].strip() or 'application/octet-stream'
-    # audio joins images as "shown in place": <audio> is a subresource like <img>, and an
-    # attachment disposition on it is a download prompt waiting to happen
-    inline = (not download) and ct.lower().startswith(('image/', 'audio/')) and ct.lower() not in _NOSCRIPT
-    resp = FileResponse(path, media_type=ct, filename=_att_filename(a.get('Name')),
-                        content_disposition_type='inline' if inline else 'attachment')
-    resp.headers['X-Content-Type-Options'], resp.headers['Cache-Control'] = 'nosniff', 'no-cache'
-    return resp
+    return _serve_file(path, a.get('Name'), _att_type(a), download, preview, sheet, f'attachment {aid}')
 
 
 @app.api_route('/api/task-artifacts/{aid}', methods=['GET', 'HEAD'])
@@ -3963,30 +3966,35 @@ def task_output(tid: int, rel: str, download: bool = False, preview: bool = Fals
     path = outputs.resolve(tid, rel, outputs.turn_folder(tid, turn) if turn > 0 else None)
     if not path: raise HTTPException(404, f'{Path(str(rel).replace(chr(92), "/")).name or "That file"} {GONE} - it is no longer in '
                                           f'{task_ref(tid)}\'s folder ({outputs.folder(tid)})')
+    return _serve_file(path, path.name, outputs.content_type(path.name), download, preview, sheet, f'task {tid} output')
+
+
+def _serve_file(path: Path, name: str, ct: str, download: bool, preview: bool, sheet: str, what: str):
+    """A confined file as every file route serves it - a mail's attachment and an agent's file alike (the owner, 2026-11-16: "the same
+    code both in the agent and on the email"). `preview`: a workbook's sheet as rows or a document's paragraphs and tables, read once per
+    content (outputs.previewed); otherwise the bytes: a picture drawn as itself, text and anything that could run as plain text, the rest as
+    a download under its own name (_NOSCRIPT)."""
+    from . import outputs
     if preview:
-        how = outputs.PREVIEW.get(path.suffix.lower())
-        if how == 'document':
-            try: return outputs.document(path)
-            except Exception as e:
-                logger.info(f'task {tid} output {path.name} not previewed - {e}')
-                raise HTTPException(422, 'This document could not be read for a preview - Download it to open it.')
-        if how != 'sheet': raise HTTPException(422, 'only a workbook or a document has a preview here - open the file itself')
-        if not outputs.can_sheet():
+        how = outputs.PREVIEW.get(Path(name or path.name).suffix.lower())
+        if how not in ('sheet', 'document'): raise HTTPException(422, 'only a workbook or a document has a preview here - open the file itself')
+        if how == 'sheet' and not outputs.can_sheet():
             raise HTTPException(501, 'No preview on this install (it needs openpyxl) - Download opens it in your spreadsheet app.')
-        try: return outputs.sheet(path, sheet)
+        try: return outputs.previewed(path, name, sheet)
         except Exception as e:
-            logger.info(f'task {tid} output {path.name} not previewed - {e}')
-            raise HTTPException(422, 'This workbook could not be read for a preview - Download it to open it.')
-    ct = outputs.content_type(path.name)
+            logger.info(f'{what} {_att_filename(name)} not previewed - {e}')
+            raise HTTPException(422, f'This {"document" if how == "document" else "workbook"} could not be read for a preview - Download it to open it.')
     low = ct.lower()
-    if download or not (low.startswith(('image/', 'text/', 'video/', 'audio/')) or low in ('application/json', 'application/pdf')):
-        resp = FileResponse(path, media_type=ct, filename=_att_filename(path.name), content_disposition_type='attachment')
+    # ...an SVG keeps its type so an <img> draws it (a report's chart), as a download - never a page on this origin
+    svg = low in _NOSCRIPT and low.startswith('image/')
+    if download or svg or not (low.startswith(('image/', 'text/', 'video/', 'audio/')) or low in ('application/json', 'application/pdf')):
+        resp = FileResponse(path, media_type=ct, filename=_att_filename(name), content_disposition_type='attachment')
     else:
         # in place: a picture as itself, a PDF for the viewer, a video or sound for the player (FileResponse answers its Range asks, so it
         # seeks), text (and SVG/HTML, which could run as Taskuary) as plain text
         media = ct if low.startswith(('image/', 'video/', 'audio/')) or low == 'application/pdf' else 'text/plain; charset=utf-8'
         if low in _NOSCRIPT: media = 'text/plain; charset=utf-8'
-        resp = FileResponse(path, media_type=media, filename=_att_filename(path.name), content_disposition_type='inline')
+        resp = FileResponse(path, media_type=media, filename=_att_filename(name), content_disposition_type='inline')
     resp.headers['X-Content-Type-Options'], resp.headers['Cache-Control'] = 'nosniff', 'no-cache'
     return resp
 

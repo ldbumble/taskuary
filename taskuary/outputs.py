@@ -9,6 +9,7 @@ file the agent wrote was on disk and unreachable from the page.
 Now the folder is named: <home>/scratch/outputs/TQ-nnnn/ for task nnnn - the very one the agent picked - it is said in the brief
 (brief), and GET /api/task-outputs/<tid>/<file> serves a file in THAT task's folder and nothing else (resolve)."""
 import json, mimetypes, re, shutil
+from functools import lru_cache
 from datetime import datetime
 from pathlib import Path
 
@@ -109,6 +110,13 @@ def rel(tid: int, p: Path) -> str:
 # "it is ready for you to review"): a file of a kind with no viewer of its own - a query, a script, a config - that is plain text reads as text.
 # By its bytes, never its name: no list of extensions decides what can be read
 def reads_as_text(p: Path) -> bool:
+    try: st = p.stat()
+    except OSError: return False
+    return _reads_as_text(str(p), st.st_size, st.st_mtime_ns)
+
+@lru_cache(maxsize=2048)
+def _reads_as_text(p: str, size: int, mtime: int) -> bool:
+    "...once per file as it stands (its size and stamp in the key): a list a page polls never reads the same head twice."
     try:
         with open(p, 'rb') as f: head = f.read(4096)
     except OSError: return False
@@ -118,11 +126,18 @@ def reads_as_text(p: Path) -> bool:
     return True
 
 
+# ONE ROAD TO A PREVIEW (the owner, 2026-11-16: "it should be the same code both in the agent and on the email"): a file an agent made and a
+# file that came on a mail are told how they preview here, and read for it below - `name` where the file on disk carries a stamp, not its name
+def preview_of(p: Path, name: str = ''):
+    "How the page previews `p` - by its kind, else plain text by its bytes; None is Download only (a workbook too, on an install with no openpyxl)."
+    how = PREVIEW.get(Path(name or p.name).suffix.lower()) or ('text' if reads_as_text(p) else None)
+    return None if how == 'sheet' and not can_sheet() else how
+
+
 def row(tid: int, p: Path, rel: str) -> dict:
     "One file as the page draws it - the same shape as a shown page (page_row), so one list draws both."
     from urllib.parse import quote
-    ext, sheet = p.suffix.lower(), PREVIEW.get(p.suffix.lower()) or ('text' if reads_as_text(p) else None)
-    if sheet == 'sheet' and not can_sheet(): sheet = None
+    ext, sheet = p.suffix.lower(), preview_of(p)
     st = p.stat()
     return {'id': f'output:{rel}', 'name': p.name, 'path': rel, 'kind': 'output', 'content_type': content_type(p.name),
             'size': st.st_size, 'at': datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M:%S'), 'preview': sheet, 'url': f'/api/task-outputs/{int(tid)}/{quote(rel)}',
@@ -369,6 +384,18 @@ def document(p: Path) -> dict:
             if rows: blocks.append({'rows': rows})
     while blocks and not blocks[-1].get('text', True): blocks.pop()
     return {'blocks': blocks, 'more': more, 'max_blocks': DOC_BLOCKS}
+
+
+PREVIEW_VERSION = 1
+def previewed(p: Path, name: str = '', sheet_name: str = '') -> dict:
+    """A workbook's sheet (sheet) or a document's words (document) as the page draws them - read once per CONTENT, in the attachment-text
+    cache (attachtext.cached), whichever file, route or press asks. Raises ValueError for a file of a kind with no such preview."""
+    import hashlib
+    from . import attachtext
+    how = PREVIEW.get(Path(name or p.name).suffix.lower())
+    if how not in ('sheet', 'document'): raise ValueError(how)
+    key = f'preview-{hashlib.sha256(p.read_bytes()).hexdigest()}-{how}-{sheet_name}-v{PREVIEW_VERSION}'
+    return attachtext.cached(key, lambda: document(p) if how == 'document' else sheet(p, sheet_name))
 
 
 def brief(tid: int) -> str:

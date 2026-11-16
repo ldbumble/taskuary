@@ -12,7 +12,8 @@ import { linkRefs, looksMd, refParts } from "./mdText.js";
 import { appLink, linkRoad, openAppLink, ownPath } from "./appLinks.js";
 import { codeLocalPaths, localFile, plainCitations } from "./taskOutputs.js";
 import CopyCorner from "./CopyCorner.jsx";
-import { attUrl, isPdf, PdfView, saveFile } from "./Attachments.jsx";
+import { attUrl, saveFile } from "./fileSave.js";
+import { FileView, isPdf } from "./PublishedPages.jsx";
 import ViewSpec from "./ViewSpec.jsx";
 import { fencedView } from "./viewSpec.js";
 export { looksMd };
@@ -59,10 +60,10 @@ const A = ({ href, children, onTask }) => {
   const page = road === "page" ? appLink(hash) || String(hash).trim() : null;
   // ...and a file an agent made, as the Assistant links it (lookups.outputs_find): the Result's own Download - one tap saves it
   const file = road === "file";
-  // ...SAVED where it is (Attachments.saveFile), never a new tab: the desktop window handed that tab to the system browser, and a file
+  // ...SAVED where it is (fileSave.saveFile), never a new tab: the desktop window handed that tab to the system browser, and a file
   // moved or deleted since the link was written opened a raw 404 there - now it is a line beside the link
   const [err, setErr] = React.useState(""), [saved, setSaved] = React.useState(""), raw = file ? own : href;
-  // ...but a PDF is READ under the link, Download beside it (Attachments.PdfView; the owner, 2026-11-04)
+  // ...but a PDF is READ under the link, Download beside it (PublishedPages.FileView, the viewer every file opens in; the owner, 2026-11-04)
   const [view, setView] = React.useState(false), pdf = file && isPdf({ name: fileName(raw) });
   const pop = React.useContext(LinkPop), web = !!pop && road === "outside" && isWebLink(href);
   if (file) href = attUrl({ url: own }, true);
@@ -81,7 +82,7 @@ const A = ({ href, children, onTask }) => {
     {err && <span data-tq-file-error="" style={{ color: DIM, fontWeight: 400 }}> — {err}</span>}
     {saved && <span data-tq-file-saved="" style={{ color: DIM, fontWeight: 400 }}> — {saved}</span>}
     {view && <span data-tq-file-link-view="" style={{ display: "block" }}>
-      <PdfView file={{ url: raw, name: fileName(raw) }} onClose={() => setView(false)} /></span>}
+      <FileView file={{ url: raw, name: fileName(raw), preview: "pdf" }} onClose={() => setView(false)} /></span>}
   </>);
 };
 

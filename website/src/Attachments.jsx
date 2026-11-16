@@ -2,101 +2,16 @@
 // so images are drawn right here in the panel rather than listed as filenames - and the
 // spreadsheet, the PDF, the invoice are one click from where you are reading about them.
 import React, { useEffect, useState } from "react";
-import { Box, Button, CircularProgress, Dialog, Typography } from "@mui/material";
+import { Box, CircularProgress, Typography } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import DownloadIcon from "@mui/icons-material/Download";
 import GraphicEqIcon from "@mui/icons-material/GraphicEq";
 import api from "./api";
+import { attUrl, useSave } from "./fileSave.js";
 import { bareLine } from "./mailLinks.js";
+import { FileDialog, FileView } from "./PublishedPages.jsx";
 import { AttachChip, AttachRow } from "./promptImages.jsx";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
-
-// An <img src> carries no headers, so the token rides in the query string (see token_gate).
-export const attUrl = (a, download) => {
-  if (String(a.url || "").startsWith("data:")) return a.url;   // the static demo carries its own bytes
-  const t = localStorage.getItem("taskuary_token");
-  const q = [download ? "download=true" : "", t ? `token=${encodeURIComponent(t)}` : ""].filter(Boolean).join("&");
-  return `${a.url}${q ? `${String(a.url).includes("?") ? "&" : "?"}${q}` : ""}`;   // a link that came with its own query keeps it
-};
-
-// what a refused file read said, from a JSON body or a Blob one (a preview asks for bytes, so its error comes back as a Blob too)
-export const fileError = async (e, fallback) => {
-  let d = e?.response?.data;
-  if (typeof Blob !== "undefined" && d instanceof Blob) { try { d = JSON.parse(await d.text()); } catch { d = null; } }
-  return (d && typeof d === "object" && d.detail) || fallback;
-};
-
-// SAVE A FILE, never navigate to it. A Download that was a plain link took the window to the file's address: a file moved or deleted
-// left the owner on a raw JSON 404 - and the desktop window has no Back. The server is asked first (HEAD); a file that is there is
-// saved by a link with `download`, so the page stays where it is; one that is not throws the server's own reason for the page to say.
-// ...and in the desktop window it lands in the computer's Downloads folder, said in words (desktop.save_download): WebView2's own
-// download opened a Save As box wherever it liked (the owner, 2026-11-02: "the download should go to the local computer download").
-// Resolves to the line to show once saved there, or "" when the browser's own download took it.
-export const savedLine = (r) => r?.name ? `Saved to ${r.folder || "Downloads"} as ${r.name}` : "";
-export const saveFile = async (a, w = typeof window === "undefined" ? null : window) => {
-  const href = attUrl(a, true), bridge = w?.pywebview?.api;
-  if (typeof bridge?.save_download === "function" && !href.startsWith("data:")) {
-    const r = await bridge.save_download(new URL(href, w.location.href).href);
-    if (!r?.name) throw new Error(r?.error || "This file could not be saved - try again.");
-    return savedLine(r);
-  }
-  if (!href.startsWith("data:") && typeof api.head === "function") {
-    // no-cache: the browser answered a HEAD from the copy a preview had fetched, so a file deleted since was still "there"
-    try { await api.head(a.url, { headers: { "Cache-Control": "no-cache" } }); }
-    catch (e) {
-      // a HEAD has no body to carry the reason: ask once more for it - a file that is gone answers in a few bytes
-      let why = "";
-      try { await api.get(a.url, { params: { download: true }, responseType: "blob", headers: { "Cache-Control": "no-cache" } }); }
-      catch (e2) { why = await fileError(e2, ""); }
-      throw new Error(why || (e?.response?.status === 404 ? "This file was moved or deleted." : "This file could not be saved - try again."));
-    }
-  }
-  const el = document.createElement("a");
-  // `download` empty: the server's Content-Disposition names it (a published page gets its .html there)
-  el.href = href; el.download = ""; el.rel = "noopener"; el.style.display = "none";
-  document.body.appendChild(el); el.click(); el.remove();
-  return "";
-};
-
-// [error, save, saved]: a Download's press, the line it leaves when the file is not there, and where the desktop put it (both cleared
-// by the next press)
-export const useSave = () => {
-  const [err, setErr] = useState(""), [saved, setSaved] = useState("");
-  return [err, (a) => { setErr(""); setSaved(""); saveFile(a).then(setSaved, (e) => setErr(e.message)); }, saved];
-};
-
-// A PDF IS READ IN PLACE (the owner, 2026-11-04: "it should display the pdf inline ... instead of downloading"): its bytes fetched with the
-// token as a blob, drawn by the browser's own PDF viewer in a frame - a blob of OUR fetch, so the file is the one the route confined, and
-// the viewer runs none of the PDF's script as the page. Download beside it saves the file itself.
-export const isPdf = (a) => /^application\/pdf\b/i.test(a?.content_type || "") || /\.pdf$/i.test(a?.name || "");
-export function PdfView({ file, onClose, sx }) {
-  const [src, setSrc] = useState(""), [err, setErr] = useState(""), [saveErr, save, saved] = useSave();
-  useEffect(() => {
-    let live = true, url = "";
-    setSrc(""); setErr("");
-    api.get(file.url, { responseType: "blob", headers: { "Cache-Control": "no-cache" } })
-      .then((r) => { if (live) { url = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" })); setSrc(url); } })
-      .catch(async (e) => { const why = await fileError(e, "This PDF could not be read - Download it to open it."); if (live) setErr(why); });
-    return () => { live = false; if (url) URL.revokeObjectURL(url); };
-  }, [file.url]);
-  return (
-    // spans throughout: it also opens under a link inside a paragraph of an answer (md.jsx)
-    <Box component="span" data-tq-pdf-view={file.name || ""} sx={{ display: "block", mt: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "var(--tq-panel, #fff)", overflow: "hidden", ...sx }}>
-      <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 1, px: 1, py: 0.4, bgcolor: PANEL2, borderBottom: `1px solid ${BORDER}` }}>
-        <Typography variant="caption" sx={{ color: INK, fontWeight: 600, flex: 1, minWidth: 0 }} noWrap title={file.name}>{file.name}</Typography>
-        {!!file.size && <Typography variant="caption" sx={{ color: FAINT }}>{kb(file.size)}</Typography>}
-        <Button size="small" startIcon={<DownloadIcon sx={{ fontSize: 15 }} />} href={attUrl(file, true)} data-tq-download="" title="Save a copy"
-          onClick={(e) => { e.preventDefault(); save(file); }}>Download</Button>
-        {onClose && <Button size="small" onClick={onClose} title="Put it away">Hide</Button>}
-      </Box>
-      {saveErr && <Typography variant="caption" data-tq-file-error="" sx={{ display: "block", px: 1, py: 0.5, color: DIM }}>{saveErr}</Typography>}
-      {saved && <Typography variant="caption" data-tq-file-saved="" sx={{ display: "block", px: 1, py: 0.5, color: DIM }}>{saved}</Typography>}
-      {err ? <Typography variant="caption" data-tq-file-error="" sx={{ display: "block", px: 1, py: 1, color: DIM }}>{err}</Typography>
-        : src ? <Box component="iframe" src={src} title={file.name || "PDF"} sx={{ display: "block", width: "100%", height: "min(70vh, 640px)", border: 0 }} />
-        : <Box component="span" sx={{ display: "block", p: 1 }}><CircularProgress size={12} /></Box>}
-    </Box>
-  );
-}
+import { PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const LOGO = 48 * 1024;   // a company logo in a signature runs 20-40 KB (24 KB let a 24.4 KB one draw as a picture)
 // A cid-referenced image smaller than a logo IS a signature, not the ask, so it gets a chip like
@@ -123,7 +38,8 @@ const KIND = { pdf: "PDF", sheet: "XLSX", excel: "XLSX", csv: "CSV", zip: "ZIP",
 const LINK_KIND = [["sheet", "SHEET"], ["spreadsheet", "SHEET"], ["slides", "SLIDES"], ["presentation", "SLIDES"], ["pdf", "PDF"],
   ["issue", "ISSUE"], ["pull request", "PR"], ["folder", "FOLDER"], ["page", "PAGE"], ["doc", "DOC"]];
 const kindOf = (a) => a.link ? (LINK_KIND.find(([k]) => String(a.kind || "").toLowerCase().includes(k))?.[1] || "LINK")
-  : Object.entries(KIND).find(([k]) => (a.content_type + " " + a.name).toLowerCase().includes(k))?.[1]
+  // ...its name first: a .csv sent as application/vnd.ms-excel is a CSV, not an XLSX
+  : [a.name, a.content_type].map((s) => Object.entries(KIND).find(([k]) => String(s || "").toLowerCase().includes(k))?.[1]).find(Boolean)
   || (a.name.split(".").pop() || "file").slice(0, 5).toUpperCase();
 // where a chip opens: a file's own bytes here (with the token), a linked document at its own address (never with it) - and a file
 // kept without its bytes (a cloud link Outlook attaches, one over the size limit) at the original message, where it still opens
@@ -132,7 +48,7 @@ const SAVE_MAX = 12 * 1024 * 1024;   // channels.ATT_BYTES
 const hrefOf = (a, original) => a.link ? a.external_url : a.url ? attUrl(a, true) : original || undefined;
 const unsaved = (a) => (a.size > SAVE_MAX ? `over ${kb(SAVE_MAX)}, so not saved here` : "no copy came with the mail - a cloud file's link, or a forwarded mail");
 const titleOf = (a, original) => a.link ? `${a.kind} — ${a.note ? `not read: ${a.note}` : a.read ? (a.rows != null ? `read, ${a.rows} rows` : "read") : "opens where it lives"}`
-  : a.url ? (isPdf(a) ? "read it here" : "open it") : `${unsaved(a)} — ${original ? "opens in the original message" : "open it from the mail in your mailbox"}`;
+  : a.url ? (a.preview ? "read it here" : "save a copy") : `${unsaved(a)} — ${original ? "opens in the original message" : "open it from the mail in your mailbox"}`;
 
 // a mail whose body points at a picture it does not carry ([image: ...], cid:) - worth a "look for attachments" offer
 export const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
@@ -142,13 +58,13 @@ export const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test
 // a small inline one is drawn, not chipped as a signature's logo; and the panel says what it is, never a blank
 export const Attachments = ({ messageId, canFetch, dense, original, asFiles = null, bare = null }) => {
   const [items, setItems] = useState(null);
-  const [big, setBig] = useState(null), [pdf, setPdf] = useState(null);
+  const [big, setBig] = useState(null), [open, setOpen] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [saveErr, save, saved] = useSave();
   const load = () => api.get(`/api/messages/${messageId}/attachments`)
     .then(({ data }) => setItems(data.data || [])).catch(() => setItems([]));
-  useEffect(() => { setItems(null); setBig(null); setPdf(null); setErr(""); load(); }, [messageId]);
+  useEffect(() => { setItems(null); setBig(null); setOpen(null); setErr(""); load(); }, [messageId]);
   // mail that arrived before Taskuary kept attachments - and the retry after a Graph hiccup
   const fetchNow = async () => {
     setBusy(true); setErr("");
@@ -231,8 +147,9 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
             <AttachChip key={a.id} component={hrefOf(a, original) ? "a" : "div"} href={hrefOf(a, original)} data-tq-linked-doc={a.link ? "" : undefined} data-tq-att={a.name}
               data-tq-unsaved={!a.link && !a.url ? "" : undefined} name={a.name}
               target="_blank" rel={a.link || !a.url ? "noopener noreferrer" : "noopener"} title={titleOf(a, original)}
-              aria-expanded={!a.link && a.url && isPdf(a) ? pdf?.id === a.id : undefined}
-              onClick={!a.link && a.url ? (e) => { e.preventDefault(); isPdf(a) ? setPdf(pdf?.id === a.id ? null : a) : save(a); } : undefined}
+              aria-expanded={!a.link && a.url && a.preview ? open?.id === a.id : undefined}
+              /* ...READ IN PLACE, every kind the server can preview (outputs.preview_of): the viewer an agent's file opens in, Download beside it */
+              onClick={!a.link && a.url ? (e) => { e.preventDefault(); a.preview ? setOpen(open?.id === a.id ? null : a) : save(a); } : undefined}
               icon={<Typography component="span" variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 600, color: "var(--tq-link, #55697a)", flexShrink: 0 }}>{kindOf(a)}</Typography>}
               /* ...and a file it could not keep says so on the chip, not only on hover */
               note={a.link ? (a.note ? "not read" : "") : a.url ? kb(a.size) : original ? "in the original" : "not saved"}
@@ -241,25 +158,11 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
         </AttachRow>
         {saveErr && <Typography variant="caption" data-tq-file-error="" sx={{ display: "block", mt: 0.5, color: DIM }}>{saveErr}</Typography>}
         {saved && <Typography variant="caption" data-tq-file-saved="" sx={{ display: "block", mt: 0.5, color: DIM }}>{saved}</Typography>}
-        {pdf && files.some((a) => a.id === pdf.id) && <PdfView key={pdf.id} file={pdf} onClose={() => setPdf(null)} />}
+        {open && files.some((a) => a.id === open.id) && <FileView key={open.id} file={open} onClose={() => setOpen(null)} />}
         </Box>
       )}
-      {/* full size, on top of everything - a screenshot of a spreadsheet is unreadable inline */}
-      <Dialog open={!!big} onClose={() => setBig(null)} maxWidth="xl"
-        PaperProps={{ sx: { bgcolor: PANEL, p: 1 } }}>
-        {big && (
-          <>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-              <Typography variant="caption" sx={{ color: INK, fontWeight: 600, flex: 1 }}>{big.name}</Typography>
-              <Typography variant="caption" sx={{ color: FAINT }}>{kb(big.size)}</Typography>
-              <Button size="small" startIcon={<DownloadIcon sx={{ fontSize: 15 }} />} href={attUrl(big, true)}
-                onClick={(e) => { e.preventDefault(); save(big); }}>Save</Button>
-            </Box>
-            <Box component="img" src={attUrl(big)} alt={big.name}
-              sx={{ display: "block", maxWidth: "88vw", maxHeight: "82vh", objectFit: "contain" }} />
-          </>
-        )}
-      </Dialog>
+      {/* full size, on top of everything - a screenshot of a spreadsheet is unreadable inline - in the one file dialog (FileDialog) */}
+      <FileDialog file={big} onClose={() => setBig(null)} />
     </Box>
   );
 };

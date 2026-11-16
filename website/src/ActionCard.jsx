@@ -10,7 +10,7 @@ import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api.js";
 import { openAppLink } from "./appLinks.js";
-import { attUrl } from "./Attachments.jsx";
+import { attUrl } from "./fileSave.js";
 import { FileDialog } from "./PublishedPages.jsx";
 import { actionFor, changed, choiceOf, fieldsOf, stateOf, textKey, valuesOf, wordsOf } from "./actionCard.js";
 import { outputRow } from "./taskOutputs.js";

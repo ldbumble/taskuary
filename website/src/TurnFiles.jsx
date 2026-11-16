@@ -3,7 +3,7 @@
 // picture opening it over the chat (FileDialog), Download beside it
 import React, { useState } from "react";
 import { Button } from "@mui/material";
-import { attUrl, useSave } from "./Attachments.jsx";
+import { attUrl, useSave } from "./fileSave.js";
 import { CopyFile, FileDialog, isText, Preview } from "./PublishedPages.jsx";
 
 const isPic = (f) => /^image\//.test(f?.content_type || "") && !/svg/.test(f?.content_type || "");

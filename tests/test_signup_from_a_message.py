@@ -226,9 +226,39 @@ class TheTurn(unittest.TestCase):
         self.assertIn(browserview.WANTS, str(s.get_task(tid).get('Tags') or '')); self.assertTrue(sess.browser_wanted)
 
     def test_no_agent_browser_and_a_strangers_task_each_say_why(self):
-        _, _, _, system, kw = self.turn(installed=False)
-        self.assertIn('install agent-browser under', system); self.assertIsNone(kw.get('hold_sid'))
+        _, _, sess, system, kw = self.turn(installed=False)
+        self.assertIn('install agent-browser under', system)
+        # ...and its hold hook rides anyway: a launch that gained it once a browser came changed its --settings and reopened the warm
+        # conversation on a follow-up (2026-11-16) - the hook only asks whether this chat's browser is held
+        self.assertEqual(kw.get('hold_sid'), sess.sid)
         # ...an untrusted sender's task has no turn to tell anything: no agent works it until Trust (origin.hold, tests/test_conversation_list.py)
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class AWarmConversationStaysWarm(unittest.TestCase):
+    """Recorded on the real CLI, 2026-11-16: a follow-up 20 s after an answer reopened the agent's conversation ("its launch settings changed")
+    - its first turn had the browser offered with the hold hook in its --settings, the next had none, and the browser's line sat in the system
+    prompt. The owner saw a start-up on every follow-up. The launch is the same turn to turn; what changed of the browser rides in the turn."""
+    def test_a_browser_that_changes_between_turns_never_changes_the_launch(self):
+        from taskuary import llm
+        from test_general import connect_cli
+        connect_cli(self, claude={'cmd': 'claude', 'args': ['-p']})
+        s, tid, _, _ = world(False)
+        sess = general.GeneralSession(s, tid, pick='cli:claude')
+        seen = []
+        def answer(system, user, **kw): seen.append((system, user)); return 'Done.'
+        for installed in (False, True):
+            with mock.patch.object(browserview, 'start'), mock.patch.object(browserview, 'installed', return_value=installed), \
+                    mock.patch.object(browserview, 'state', return_value={'open': False, 'url': '', 'port': 1}), \
+                    mock.patch.object(browserview, 'keep_page'), \
+                    mock.patch.object(llm, 'build_llm', return_value=answer) as build:
+                sess.send_prompt('Sign me up for the webinar in its mail' if not installed else 'Go on with it', pick='cli:claude')
+            kw = build.call_args.kwargs
+            if not installed: first_kw = kw; sess.cli_sid = 'conv-1'          # ...the CLI's conversation, kept from the first turn on
+        (sys1, _), (sys2, user2) = seen
+        self.assertEqual(sys1, sys2, 'the system the conversation was opened with is the one it goes on with')
+        self.assertEqual(first_kw.get('hold_sid'), kw.get('hold_sid'), 'its --settings (the hold hook) the same')
+        self.assertIn('install agent-browser under', sys1)
+        self.assertIn('NO BROWSER IS OPEN for this task yet', user2, 'the browser now there is told in the turn')

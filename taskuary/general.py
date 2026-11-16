@@ -2746,40 +2746,42 @@ class GeneralSession:
                     if coming: self._remember_trace('progress', 'browser', browserview.GETTING)
                 was = browserview.last_page(self.task_id) if self.browser_wanted else ''
                 last = was if was and page_needs_owner(self.store, self.task_id) else ''
+                # ...WHAT IT IS TOLD OF ITS BROWSER RIDES WITH THE TURN'S LATE FACTS (freeze), never the frozen head: it changes from one turn to
+                # the next (a page opened, a set-up done), and in the system prompt each change reopened the warm conversation (2026-11-16)
                 if self.browser_wanted and (browserview.state(self.sid, fresh=True).get('open') or (last and browserview.start(self.sid, last))):
                     browser_tools = True
-                    system = f'{system}\n\n{browserview.brief(held=self.holds_browser())}'
+                    late.append(browserview.brief(held=self.holds_browser()))
                 elif self.browser_wanted and not last and browserview.installed():
                     browser_tools, browser_offer = True, True
-                    system = f'{system}\n\n{browserview.offer(held=self.holds_browser())}' + \
-                             (f' It was last on {was} - open it again only if the work still needs it.' if was else '')
+                    late.append(browserview.offer(held=self.holds_browser())
+                                + (f' It was last on {was} - open it again only if the work still needs it.' if was else ''))
                 elif self.browser_wanted:
                     # a browser that did not open is SAID - in the turn and to the agent - not left for it to guess at (2026-10-25)
                     why = browserview.FAILED_WHY if browserview.installed() else setup_why or 'agent-browser is not installed on this computer'
                     self.browser_failed = why
                     self._emit(f'\x1b[33mThe browser did not open: {why}.\x1b[0m\r\n')
                     self._remember_trace('progress', 'browser', f'The browser did not open: {why}. Send another message to try again.')
-                    system = f'{system}\n\n{browserview.FAILED_LINE.format(why=why)}'
+                    late.append(browserview.FAILED_LINE.format(why=why))
                 elif browser_offered(self.store, self.task_id, self.pick):
                     # ...and a task nobody marked still gets the browser OFFERED, so a link in a message is followed in Taskuary's own
                     # browser and not in a tool of the CLI's own that nobody can watch or hold (browserview.OWN_ONLY, 2026-10-28)
                     if browserview.installed() or coming:
                         browser_tools, browser_offer = True, True
-                        system = f'{system}\n\n{browserview.offer(held=self.holds_browser())}' + (f' {browserview.SETTING_UP}' if coming else '')
-                    elif setup_why: system = f'{system}\n\n{browserview.NO_SET_UP.format(why=setup_why)}'
+                        late.append(browserview.offer(held=self.holds_browser()) + (f' {browserview.SETTING_UP}' if coming else ''))
+                    elif setup_why: late.append(browserview.NO_SET_UP.format(why=setup_why))
                     else:
                         from . import words as places
-                        system = f"{system}\n\n{browserview.NOT_SET_UP.format(where=places.name('ai_apps'))}"
+                        late.append(browserview.NOT_SET_UP.format(where=places.name('ai_apps')))
                 elif not is_dock(self.store.get_task(self.task_id)):
                     # a stranger's task gets no browser, and its agent can say why instead of reaching for one of its own
                     from . import origin
                     o, why = origin.of_task(self.store, self.task_id)
-                    if o == 'stranger': system = f'{system}\n\n{browserview.STRANGER_LINE.format(why=why)}'
+                    if o == 'stranger': late.append(browserview.STRANGER_LINE.format(why=why))
             # ...and the owner's desktop apps, once the owner turned Agent Desktop on - on the browser's own terms (agentdesktop.offered):
             # a CLI with hands, the owner's own task, the same hook holding what can't be undone
             from . import agentdesktop
             desk = agentdesktop.offered(self.store, self.task_id, self.pick)
-            if desk: system = f'{system}\n\n{agentdesktop.brief(held=self.holds_browser())}'
+            if desk: late.append(agentdesktop.brief(held=self.holds_browser()))
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
             if self.pick.startswith('cli:'):
@@ -2882,7 +2884,9 @@ class GeneralSession:
             # the CLI's own hands, in Taskuary's scratch folder (llm._build_llm), with the session's token in its environment
             if browser_tools or hands or desk: build_args.update(cli_tools=True)
             # ...and the browser hold as this chat's own hook: the user-wide one never knew a headless chat, so Pay went through (2026-10-25)
-            if (browser_tools or desk) and self.holds_browser(): build_args.update(hold_sid=self.sid)
+            # ...ALWAYS, where its CLI can hold: the hook only asks whether this chat's browser is held, and a session given it on one turn and not
+            # the next changed its launch (--settings), so its warm conversation was closed and reopened on a follow-up (2026-11-16)
+            if self.holds_browser(): build_args.update(hold_sid=self.sid)
             # WHICH GEAR: session work takes the MAIN model - a general worker is doing a job, not
             # classifying one message. The dock is the Assistant's own chat and keeps the quick
             # gear it shares with triage (aidefaults). See the 2026-09-16 spec.

@@ -145,15 +145,18 @@ def _take(key: str, cmd: list, cwd, env, resume, sig: tuple, swap: bool = False)
         if swap and (lv is None or lv.lock.locked()): return None
         # a fresh conversation where one was going (New chat), another conversation named, different launch
         # settings (a model or brain changed), or a process that died: close it and start again
-        stale = lv is not None and (not lv.alive() or lv.sig != sig
-                                     or (not resume and lv.turns > 0)
-                                     or (resume and lv.sid and resume != lv.sid))
-        if stale:
+        why = '' if lv is None else ('its process ended' if not lv.alive() else 'its launch settings changed' if lv.sig != sig
+                                     else 'a fresh conversation' if not resume and lv.turns > 0
+                                     else 'another conversation' if resume and lv.sid and resume != lv.sid else '')
+        if why:
             _POOL.pop(key).close(); lv = None
         if lv is None:
             if len(_POOL) >= MAX_LIVE:
                 old = min((k for k, v in _POOL.items() if not v.lock.locked()), key=lambda k: _POOL[k].used, default=None)
-                if old: _POOL.pop(old).close()
+                if old: _POOL.pop(old).close(); logger.info(f'clipool: closed {old} to make room - {MAX_LIVE} processes were open')
+            # ...WHY A PROCESS STARTS, said once (a follow-up a few minutes after an answer read as a cold start, 2026-11-16): new, or what made the
+            # warm one unusable - the one line that tells a slow follow-up from a warm one
+            logger.info(f'clipool: starting {key}{" on " + resume if resume else ""} - {why or "none was open"}')
             lv = Live(key, cmd + INPUT + (['--resume', resume] if resume else []), cwd, env, sig)
             if resume: lv.sid = resume
             _POOL[key] = lv
@@ -209,8 +212,28 @@ def run(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, resum
 # ── an ACP conversation: a connection, not a process we write lines to (agents.run_acp) ─────────────────────────────────────────
 # The same pool, so the idle clock, MAX_LIVE, New chat (close) and shutdown treat it as they treat a claude process. Opening one
 # takes seconds (an adapter's start, initialize, session/new), so it happens OUTSIDE the lock.
-def _stale(lv, sig, resume) -> bool:
-    return not lv.alive() or lv.sig != sig or (not resume and lv.turns > 0) or bool(resume and lv.sid and resume != lv.sid)
+def _differs(a, b) -> str:
+    "Where two launch signatures differ - down to the changed leaf of a JSON part - for the line that says why a conversation was reopened."
+    def leaf(x, y, at=''):
+        if isinstance(x, dict) and isinstance(y, dict):
+            return [p for k in sorted(set(x) | set(y)) for p in leaf(x.get(k), y.get(k), f'{at}.{k}')]
+        if x == y: return []
+        if isinstance(x, str) and isinstance(y, str):
+            i = next((i for i, (c, d) in enumerate(zip(x, y)) if c != d), min(len(x), len(y)))
+            return [f'{at} at {i}: {x[max(0, i - 40):i + 40]!r} -> {y[max(0, i - 40):i + 40]!r}']
+        return [at or '.']
+    out = []
+    for i, (x, y) in enumerate(zip(a or (), b or ())):
+        if x == y: continue
+        try: out += [f'part {i}{p}' for p in leaf(json.loads(x), json.loads(y))]
+        except (TypeError, ValueError): out.append(f'part {i}')
+    return '; '.join(out)[:600] or 'its length'
+
+
+def _stale(lv, sig, resume) -> str:
+    "Why the open conversation no longer fits ('' when it does): the same four reasons _take reads for a process."
+    return ('its process ended' if not lv.alive() else f'its launch settings changed ({_differs(lv.sig, sig)})' if lv.sig != sig
+            else 'a fresh conversation' if not resume and lv.turns > 0 else f'another conversation ({lv.sid} open)' if resume and lv.sid and resume != lv.sid else '')
 
 
 def _put(key: str, lv):
@@ -219,16 +242,17 @@ def _put(key: str, lv):
         if old is not None and old is not lv: _POOL.pop(key).close()
         if len(_POOL) >= MAX_LIVE:
             out = min((k for k, v in _POOL.items() if not v.lock.locked()), key=lambda k: _POOL[k].used, default=None)
-            if out: _POOL.pop(out).close()
+            if out: _POOL.pop(out).close(); logger.info(f'clipool: closed {out} to make room - {MAX_LIVE} processes were open')
         _POOL[key] = lv
 
 
 def take(key: str, sig: tuple, open_conn, resume=None):
     "The live ACP conversation for `key`: the open one when it still fits (same launch, same conversation), else `open_conn()`."
     with _LOCK:
-        lv = _POOL.get(key)
-        if lv is not None and _stale(lv, sig, resume) and not lv.lock.locked(): _POOL.pop(key).close(); lv = None
+        lv, why = _POOL.get(key), 'none was open'
+        if lv is not None and (why := _stale(lv, sig, resume) or 'none was open') != 'none was open' and not lv.lock.locked(): _POOL.pop(key).close(); lv = None
     if lv is not None: return lv
+    logger.info(f'clipool: opening {key}{" on " + resume if resume else ""} - {why}')
     lv = open_conn(); _put(key, lv)
     return lv
 

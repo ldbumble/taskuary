@@ -316,6 +316,10 @@ class ReadingOutside(unittest.TestCase):
         self.assertEqual(rg.command_paths(f'cat "{here}"', self.work), [here])
         self.assertEqual(rg.command_paths(f'cd "{self.docs}" && ls', self.work), [self.docs])
         self.assertEqual(rg.command_paths('cat $NOPE_NOT_SET/x.txt', self.work), [None], 'a path built from a variable it cannot read is held')
+        # ...the real CLI's own shape (2026-11-16): the path kept in a variable, then read through it - it passed the gate unread
+        live = f"$p='{here}'; $l=Get-Content $p; \"rows: $((Import-Csv $p).Count)\""
+        self.assertTrue(rg.command_paths(live, self.work) and set(rg.command_paths(live, self.work)) == {here}, rg.command_paths(live, self.work))
+        self.assertTrue(rg.of_command(self.s, self.tid, live, self.work)[0])
         for cmd in ('git status', 'for f in *.csv; do wc -l "$f"; done', 'grep -rn /api/tasks src', 'curl -s https://docs.northwind.example/a',
                     'dir /s', 'python script.py 2>/dev/null', 'cat "$TASKUARY_OUTPUTS/total.txt"'):
             self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], ''), cmd)
@@ -328,7 +332,7 @@ class ReadingOutside(unittest.TestCase):
         self.assertEqual(got[0], acpgate.HELD); self.assertIn('held this for the owner', got[1])
         [rv] = self.pending(); p = json.loads(rv['DraftText'])
         self.assertEqual((p['action'], p['command'], p['why']), ('shell_act', '', "it is outside this task's own folders"))
-        self.assertIn('conftest.py', p['what']); self.assertEqual(p['reads'], [os.path.normcase(os.path.realpath(self.docs))])
+        self.assertIn('conftest.py', p['what']); self.assertEqual(p['reads'], [os.path.realpath(self.docs)], 'the folder as he spells it, not case-folded')
         # ...the same read on the shell road, by the one gate a CLI's and the API's commands pass
         d = hooks.command_gate(self.s, self.tid, 'run1', f'Get-Content "{os.path.join(self.docs, "conftest.py")}"', 'PowerShell', self.work)
         self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')

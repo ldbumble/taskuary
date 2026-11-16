@@ -70,6 +70,7 @@ def judge(store, tid, paths, cwd: str = '') -> tuple:
         if any(_in(p, r) for r in mine): continue
         if any(_in(p, r) for r in nev): return [], NEVER
         if any(_in(p, r) for r in ok): continue
+        p = os.path.realpath(os.path.expanduser(str(raw)))           # ...said as the owner's own spelling of it, never case-folded
         folder = p if os.path.isdir(p) else os.path.dirname(p)
         held.setdefault(folder, []).append('' if folder == p else os.path.basename(p))
     out = [{'tool': 'read', 'what': _said(f, ns), 'why': WHY, 'where': f, 'folder': f} for f, ns in held.items()]
@@ -107,7 +108,12 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
     it cannot read. The program itself, options, URLs and switches (`/s`) are not paths."""
     out, here, env = [], cwd, dict(env or {})
     for seg in _SPLIT.split(str(cmd or '')):
-        try: w = [x.strip('"\'') for x in shlex.split(seg, posix=False)]
+        # ...a path kept in a variable is read where the variable is (`$p='C:/x.csv'; Get-Content $p` - the real-CLI walk, 2026-11-16)
+        if (m := re.match(r'^\s*\$?([A-Za-z_]\w*)\s*=\s*([^=].*)$', seg)):
+            v = m[2].strip().strip('"\'')
+            env[m[1].lower()] = v
+            seg = f'= {v}'
+        try: w =[x.strip('"\'') for x in shlex.split(seg, posix=False)]
         except ValueError: w = [x.strip('"\'') for x in seg.split()]
         while w and (re.match(r'^[A-Za-z_]\w*=', w[0]) or w[0].lower() in ('&', 'sudo', 'time', 'nohup', 'command', 'exec', 'call', 'then', 'do', 'if', 'else')): w = w[1:]
         if not w: continue
@@ -120,6 +126,7 @@ def command_paths(cmd: str, cwd: str = '', env: dict = None) -> list:
         for x in w[1:]:
             x = re.sub(r'^\d?[<>]+&?', '', x)
             if x.startswith('-'): x = x.split('=', 1)[1] if '=' in x else ''
+            if (v := _VAR.fullmatch(x)) and (v[1] or v[2]).lower() in env: x = env[(v[1] or v[2]).lower()]
             if not x or '://' in x or re.match(r'^/\w$', x) or re.match(r'^(/dev/|\d$)', x) or not _pathish(x): continue
             e = _expand(x, here, env)
             if e is None: out.append(None); continue

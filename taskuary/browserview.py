@@ -167,7 +167,10 @@ def state(sid: str, fresh: bool = False) -> dict:
     # written since and naming another page, is the page; the same page with its query cut off (.target keeps none) is not another.
     if last.get('url') and url and not last.get('relays') and not _same_place(last['url'], url) and _written(name, 'target') > last.get('url_at', 0):
         last.pop('url', None)
-    st = {'open': bool(port) and _listening(port), 'url': last.get('url') or url, 'port': port}
+    # ...AND ITS CHROME ANSWERS (0.4.0.15: any agent-browser command of the session before Taskuary started its Chrome - the agent's own, a
+    # `get url` - left a helper pointed at a port nobody listened on; its stream answered, so the browser read "open", start() launched
+    # nothing, and every command after timed out with no Chrome running at all)
+    st = {'open': bool(port) and _listening(port) and chrome_up(sid), 'url': last.get('url') or url, 'port': port}
     _CACHE[sid] = (now, st)
     return _with_fill(sid, st)
 
@@ -770,10 +773,10 @@ def _forget_profile(sid: str) -> None:
     shutil.rmtree(_profile(sid), ignore_errors=True)
     with _PORTS_LOCK: _PORTS.pop(str(sid), None)
 
-def _spawn_chrome(argv: list) -> int:
-    "Start Chrome where the owner never sees it; its pid. Windows: on Taskuary's own desktop; elsewhere: its window off the screen."
+def _spawn_chrome(argv: list, hidden: bool = True) -> int:
+    "Start Chrome where the owner never sees it; its pid. `hidden` (Windows): on Taskuary's own desktop; else its window off the screen."
     env, cwd = spawn.env_for(dict(os.environ)), spawn.cwd_for(None)
-    if os.name != 'nt':
+    if os.name != 'nt' or not hidden:
         return spawn.bare([*argv, '--window-position=-32000,-32000'], env=env, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL, start_new_session=True).pid
     import ctypes, ctypes.wintypes as W
@@ -793,6 +796,9 @@ def _spawn_chrome(argv: list) -> int:
     k.CloseHandle(pi.hp); k.CloseHandle(pi.ht)
     return int(pi.pid)
 
+def chrome_up(sid: str) -> bool: return _listening(cdp_port(sid))      # session `sid`'s own Chrome answers on its port
+
+
 def real_chrome(sid: str) -> int | None:
     "Session `sid`'s own Chrome, started if it is not up; its pid (0 when one already answered). None when it could not start."
     port = cdp_port(sid)
@@ -800,12 +806,17 @@ def real_chrome(sid: str) -> int | None:
     exe = chrome_exe()
     if not exe: logger.warning(f'no Chrome for the browser of {sid}'); return None
     prof = _profile(sid); prof.mkdir(parents=True, exist_ok=True)
-    try: pid = _spawn_chrome([exe, f'--remote-debugging-port={port}', f'--user-data-dir={prof}', *CHROME_ARGS, 'about:blank'])
-    except OSError as e: logger.warning(f'could not start Chrome for {sid}: {e}'); return None
-    for _ in range(int(LAUNCH_WAIT / LAUNCH_POLL)):
-        if _listening(port): return pid
-        time.sleep(LAUNCH_POLL)
-    logger.warning(f'Chrome for {sid} did not answer on its port within {LAUNCH_WAIT:.0f}s'); _end_daemon(sid, [pid])
+    argv = [exe, f'--remote-debugging-port={port}', f'--user-data-dir={prof}', *CHROME_ARGS, 'about:blank']
+    # ...and where its own desktop cannot be had or Chrome does not come up on it, the same Chrome with its window off the screen: a browser
+    # that works beats one that is out of sight, and the log says which it was
+    for hidden in ((True, False) if os.name == 'nt' else (False,)):
+        try: pid = _spawn_chrome(argv, hidden)
+        except OSError as e: logger.warning(f'could not start Chrome for {sid}{" on its own desktop" if hidden else ""}: {e}'); continue
+        for _ in range(int(LAUNCH_WAIT / LAUNCH_POLL)):
+            if _listening(port): return pid
+            time.sleep(LAUNCH_POLL)
+        logger.warning(f'Chrome for {sid} did not answer on its port within {LAUNCH_WAIT:.0f}s{" on its own desktop" if hidden else ""}')
+        _end_daemon(sid, [pid])
     return None
 
 
@@ -839,6 +850,11 @@ def start(sid: str, url: str = 'about:blank') -> bool:
         # exactly what makes agent-browser replace this daemon with a blank default one (see IDLE_MS).
         try: seed(sid)
         except Exception as e: logger.debug(f'the browser of {sid} starts without the sign-ins live elsewhere: {e}')
+        # ...a helper an earlier command left pointed at a Chrome that was never there is closed first: it answers, and drives nothing
+        if _listening(int(_read(session_name(sid), 'stream') or 0) if _read(session_name(sid), 'stream').isdigit() else 0):
+            try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True)
+            except (OSError, subprocess.SubprocessError) as e: logger.debug(f'the helper of {sid} without a Chrome was not closed: {e}')
+            _end_daemon(sid, [_daemon_pid(sid)]); _CACHE.pop(sid, None)
         if (chrome := real_chrome(sid)) is None: return False
         listed(sid, True, [chrome] if chrome else None)
         cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY, 'open', url or 'about:blank']

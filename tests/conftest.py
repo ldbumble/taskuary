@@ -807,3 +807,4 @@ def no_real_chrome(request, monkeypatch):
     if request.node.get_closest_marker('real_chrome'): return
     from taskuary import browserview
     monkeypatch.setattr(browserview, 'real_chrome', lambda sid: 0)
+    monkeypatch.setattr(browserview, 'chrome_up', lambda sid: True)

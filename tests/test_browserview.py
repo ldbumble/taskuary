@@ -100,13 +100,43 @@ class StateTests(unittest.TestCase):
             self.assertEqual(e['AGENT_BROWSER_CDP'], str(port)); self.assertNotIn('AGENT_BROWSER_USER_AGENT', e)
             self.assertEqual(bv.env('rc1')['AGENT_BROWSER_CDP'], str(port), 'one port per session, whoever asks')
             started, up = [], iter([False, False, True])
-            with mock.patch.object(bv, '_spawn_chrome', side_effect=lambda argv: started.append(argv) or 4242),                  mock.patch.object(bv, '_listening', side_effect=lambda p, timeout=.25: next(up, True)), mock.patch.object(bv.time, 'sleep'):
+            with mock.patch.object(bv, '_spawn_chrome', side_effect=lambda argv, hidden=True: started.append(argv) or 4242),                  mock.patch.object(bv, '_listening', side_effect=lambda p, timeout=.25: next(up, True)), mock.patch.object(bv.time, 'sleep'):
                 self.assertEqual(bv.real_chrome('rc1'), 4242)
             argv = started[0]
             self.assertEqual(argv[0], str(exe)); self.assertIn(f'--remote-debugging-port={port}', argv)
             self.assertIn('--disable-blink-features=AutomationControlled', argv)
             self.assertFalse([a for a in argv if 'headless' in a or 'enable-automation' in a])
             self.assertTrue(any(a.startswith('--user-data-dir=') and a.endswith('tq-rc1') for a in argv))
+
+    @pytest.mark.real_chrome
+    def test_a_helper_left_by_a_command_before_the_launch_is_no_open_browser_and_start_launches_the_chrome(self):
+        """0.4.0.15: any agent-browser command of a session before Taskuary started its Chrome left a helper pointed at a port nobody
+        listened on. Its stream answered, so the browser read "open", start() launched nothing, and every command timed out with no Chrome
+        running. Open means the Chrome answers too; start closes that helper and launches the Chrome, and the page is opened after."""
+        stream = socket.socket(); stream.bind(('127.0.0.1', 0)); stream.listen(64)
+        try:
+            (self.tmp / 'tq-early.stream').write_text(str(stream.getsockname()[1])); (self.tmp / 'tq-early.pid').write_text('5150')
+            self.assertFalse(bv.state('early', fresh=True)['open'], 'a helper with no Chrome under it is no open browser')
+            done, chrome = [], {'up': False}
+            def run(argv, **kw): done.append(('run', argv[-1])); return mock.Mock(returncode=0)
+            def launched(sid): chrome['up'] = True; done.append(('chrome', sid)); return 4242
+            with mock.patch.object(bv, 'program', return_value='ab'), mock.patch.object(bv.spawn, 'run', side_effect=run),                  mock.patch.object(bv, '_end_daemon', side_effect=lambda sid, pids=None: done.append(('end', pids))),                  mock.patch.object(bv, 'real_chrome', side_effect=launched), mock.patch.object(bv, 'chrome_up', side_effect=lambda sid: chrome['up']),                  mock.patch.object(bv.spawn, 'popen', side_effect=lambda cmd, **kw: done.append(('open', cmd[-1]))), mock.patch.object(bv, 'clock'):
+                self.assertTrue(bv.start('early', 'https://portal.example'))
+            self.assertEqual([d[0] for d in done], ['run', 'end', 'chrome', 'open'])      # the helper closed, then the Chrome, then the page
+            self.assertEqual(done[1][1], [5150])
+        finally: stream.close()
+
+    @pytest.mark.real_chrome
+    def test_a_chrome_that_cannot_start_on_its_own_desktop_starts_off_the_screen(self):
+        if os.name != 'nt': self.skipTest('its own desktop is a Windows road')
+        tried = []
+        def spawn_chrome(argv, hidden=True):
+            tried.append(hidden)
+            if hidden: raise OSError('no desktop')
+            return 77
+        with mock.patch.object(bv, 'chrome_exe', return_value='chrome.exe'), mock.patch.object(bv, '_spawn_chrome', side_effect=spawn_chrome),              mock.patch.object(bv, '_listening', side_effect=lambda p, timeout=.25: bool(tried) and tried[-1] is False), mock.patch.object(bv.time, 'sleep'):
+            self.assertEqual(bv.real_chrome('fallback'), 77)
+        self.assertEqual(tried, [True, False])
 
     def test_the_session_name_rides_in_the_pty_environment(self):
         """Every pty gets AGENT_BROWSER_SESSION=tq-<sid>: whatever agent-browser command the agent

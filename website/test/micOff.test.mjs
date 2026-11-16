@@ -19,15 +19,19 @@ test("with no voice AI and no voice found the mic is crossed out, and its press 
 test("a browser recogniser or the computer's own is used at once, with no opt-in to press", () => {
   // the order lives in micRoute (voiceChoice.js, its own tests): Automatic = a voice card, else the browser's, else the computer's own
   assert.match(mic, /route = micRoute\(voice, SR, voice\?\.choice\)/);
-  assert.match(mic, /viaBrowser = !!\(voice && route === "browser" && !\(srDown && builtin && voice\.choice === "auto"\)\)/, "the browser's recogniser whenever there is one");
-  assert.match(mic, /viaBuiltin = !!\(builtin && !viaBrowser && \(route === "windows" \|\| \(route === "browser" && voice\?\.choice === "auto"\)\)\)/, "else the computer's own, as the server reports it");
+  assert.match(mic, /viaBrowser = !!\(voice && route === "browser"\)/, "the browser's recogniser whenever there is one");
+  assert.match(mic, /viaBuiltin = !!\(builtin && route === "windows"\)/, "else the computer's own, as the server reports it");
   assert.doesNotMatch(ui, /tq-voice-browser|useBrowser|this browser's own \(free\)/, "the opt-in step is gone");
   assert.doesNotMatch(mic, /toWav/, "no WAV clip for the 2006 offline dictation: it is gone (TQ-1283)");
 });
 
-test("a tab whose speech service will not answer hands over to the computer's own", () => {
-  assert.match(mic, /builtin && voice\.choice === "auto" && \[dictationError\("network"\), dictationError\("service-not-allowed"\)\]\.includes\(line\)/);
-  assert.match(mic, /setSrDown\(true\)/);
+// A DEAD BROWSER SERVICE OFFERS THE OTHER VOICE (the owner, 2026-11-16: "the browser's own speech recognition was not working"): one road -
+// the line says the service is down and its button switches the mic to the voice card, else Windows voice typing; no silent hand-over
+test("a tab whose speech service will not answer offers this computer's other voice as its button", () => {
+  assert.match(mic, /const other = voice\?\.ready \? \{ label: voice\.label \|\| "the voice AI", choice: "auto" \} : voice\?\.builtin \? \{ label: voice\.builtin\.label, choice: "windows" \} : null/);
+  assert.match(mic, /const fix = micFix\(err, other\)/);
+  assert.match(mic, /fix\.choose \? \(setErr\(""\), chooseVoice\(fix\.choose\)\)/);
+  assert.doesNotMatch(mic, /srDown/, "the session-only hand-over is gone");
 });
 
 test("the popup opens the voice section of Connections, and that link lands there", () => {

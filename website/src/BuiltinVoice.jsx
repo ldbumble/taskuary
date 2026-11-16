@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Box, Button, MenuItem, TextField, Typography } from "@mui/material";
 import { Crumb, MicButton, useVoiceReady } from "./ui.jsx";
 import { browserRecogniser } from "./dictation.js";
@@ -8,6 +8,8 @@ import api from "./api";
 export default function BuiltinVoice({ onBack }) {
   const voice = useVoiceReady();
   const [choice, setChoice] = useState(voiceChoice);
+  // ...and follows a choice made elsewhere: the mic's own "Use Groq" when this browser's speech service is down (micFix)
+  useEffect(() => { const f = () => setChoice(voiceChoice()); window.addEventListener("taskuary-voice-choice", f); return () => window.removeEventListener("taskuary-voice-choice", f); }, []);
   const [text, setText] = useState("");
   const [interim, setInterim] = useState("");
   const [active, setActive] = useState(false);

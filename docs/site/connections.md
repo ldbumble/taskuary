@@ -593,8 +593,10 @@ saying it was not transcribed and why, its audio attached so one click transcrib
 Open **Windows / browser voice** under **AI · voice** to choose and test built-in dictation.
 **Windows speech recognition** uses the microphone on the computer running Taskuary;
 **Browser speech recognition** uses the current tab's speech service where supported, such as
-Edge or Chrome. The Windows app's embedded browser has no browser speech service, so choose Windows
-there. Neither choice needs an API key or another voice provider. An explicit choice applies to
+Chrome. Edge carries the same speech API, but its service often hears the speech and sends back
+no words (or answers "network" while online); when that happens the mic says so in one line, with a
+button that switches it to your voice card or to Windows speech. The Windows app's embedded browser
+has no browser speech service, so choose Windows there. Neither choice needs an API key or another voice provider. An explicit choice applies to
 microphone buttons in this browser or app window and overrides a connected voice AI card for
 dictation. **Automatic** uses a connected card first, then browser speech, then Windows speech.
 

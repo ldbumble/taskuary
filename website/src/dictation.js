@@ -18,8 +18,11 @@ export const browserRecogniser = (w = typeof window === "undefined" ? null : win
 
 // A MIC FAILURE NAMES ITS FIX AS A BUTTON (the owner, 2026-11-09: "it's broken you need to show the issue?? ... just request the permission
 // like a normal app and they can hit approve"): the Windows setting a line points at opens with one press, the voice shelf for the rest.
-export const micFix = (line) => {
+// ...and a browser whose speech service is down offers the voice this computer has instead (`other`: {label, choice} - the voice card,
+// or Windows voice typing), else the voice shelf (the owner, 2026-11-16: "the browser's own speech recognition was not working")
+export const micFix = (line, other = null) => {
   const s = String(line || "");
+  if (/browser's speech service/i.test(s)) return other ? { label: `Use ${other.label}`, choose: other.choice } : { label: "Set up voice AI", voice: true };
   if (/microphone privacy|desktop apps access your microphone|MicrophoneUnavailable|No microphone Windows/i.test(s)) return { label: "Open microphone settings", settings: "microphone" };
   if (/Online speech recognition|speech privacy|speech service did not answer|speech recognition is off/i.test(s)) return { label: "Open speech settings", settings: "speech" };
   if (/voice AI/i.test(s)) return { label: "Set up voice AI", voice: true };
@@ -29,10 +32,13 @@ export const micFix = (line) => {
 // what the owner reads when the browser will not listen - null: not the owner's to fix, the mic just goes on
 export const dictationError = (code) => ({
   "not-allowed": "The browser blocked the microphone - allow it in the address bar, then press the mic again",
-  "service-not-allowed": "This browser will not lend its voice to this page - try Chrome or Edge, or set up a voice AI",
-  "network": "Browser voice needs an internet connection - it could not reach the browser's speech service",
+  "service-not-allowed": "This browser's speech service will not serve this page - try Chrome, or dictate with another voice",
+  // ...not "needs an internet connection" (2026-11-16): Edge 147+ answers "network" online too - its service, not the owner's line, is down
+  "network": "This browser's speech service is not answering - check the internet connection, or dictate with another voice",
+  // Edge 157 hears the speech (speechstart) and settles each phrase as an empty final: the microphone was fine, the service sent no words
+  "blank": "This browser's speech service heard you but sent back no words - it cannot dictate in this browser",
   "audio-capture": "No microphone found - plug one in or pick it in your sound settings",
-  "language-not-supported": "The browser's voice does not hear this language - set up a voice AI instead",
+  "language-not-supported": "This browser's speech service does not hear this language - dictate with another voice",
   "no-speech": "No words heard - check the microphone is on and not muted, then press the mic and talk",
   "aborted": "Something else took the microphone - press the mic to go on",
 }[code] ?? (code ? `Browser voice stopped (${code})` : null));
@@ -40,11 +46,13 @@ export const dictationError = (code) => ({
 // errors that end dictation; the rest (a pause, a refused vocabulary) start the next session
 const FATAL = new Set(["not-allowed", "service-not-allowed", "network", "audio-capture", "language-not-supported", "bad-grammar"]);
 const QUICK_MS = 1500, QUICK_MAX = 3;            // a session that dies at once, three times running, is a browser that will not listen
+const BLANK_MAX = 2;                             // two phrases settled with no words and none with any: the service is not transcribing
 
 /* One dictation. `SR` the browser's recogniser class; `phrases()` makes the vocabulary's phrase list (dropped if refused). onFinal(text) for each settled
    phrase, onInterim(text) for what is still being heard ("" when none), onEnd(errLine|null) once, when it is over. */
 export function dictate({ SR, lang = "en-US", phrases = null, onFinal, onInterim, onEnd, now = () => Date.now() }) {
-  let on = true, r = null, fatal = null, quick = 0, began = 0, heard = false, usePhrases = !!phrases;
+  let on = true, r = null, fatal = null, quick = 0, began = 0, heard = false, blank = 0, usePhrases = !!phrases;
+  const silent = () => dictationError(blank ? "blank" : "no-speech");   // what a mic that landed nothing says
   const finish = (line) => { if (r) { r.onresult = r.onerror = r.onend = null; } on = false; onInterim?.(""); onEnd?.(line); };
   const begin = () => {
     const s = r = new SR(); let done = 0;     // finals of this session already handed over
@@ -54,8 +62,9 @@ export function dictate({ SR, lang = "en-US", phrases = null, onFinal, onInterim
       if (s !== r) return;
       const res = Array.from(e.results);
       let i = done;
-      for (; i < res.length && res[i].isFinal; i++) { const t = res[i][0]?.transcript?.trim(); if (t) { heard = true; onFinal?.(t); } }
+      for (; i < res.length && res[i].isFinal; i++) { const t = res[i][0]?.transcript?.trim(); if (t) { heard = true; onFinal?.(t); } else blank++; }
       done = i;
+      if (!heard && blank >= BLANK_MAX) { const line = silent(); finish(line); try { s.abort(); } catch { /* already ended */ } return; }
       onInterim?.(res.slice(i).filter((x) => !x.isFinal).map((x) => x[0]?.transcript?.trim()).filter(Boolean).join(" "));
       quick = 0;
     };
@@ -70,7 +79,7 @@ export function dictate({ SR, lang = "en-US", phrases = null, onFinal, onInterim
       onInterim?.("");
       if (fatal) return finish(dictationError(fatal));
       quick = now() - began < QUICK_MS ? quick + 1 : 0;
-      if (quick >= QUICK_MAX) return finish(heard ? null : dictationError("no-speech"));
+      if (quick >= QUICK_MAX) return finish(heard ? null : silent());
       try { began = now(); s.onresult = s.onerror = s.onend = null; begin(); } catch { finish("The browser stopped listening - press the mic to go on"); }
     };
     began = now(); s.start();
@@ -83,7 +92,7 @@ export function dictate({ SR, lang = "en-US", phrases = null, onFinal, onInterim
       on = false; const s = r;
       s.onerror = null;
       // ...and a stop with no word heard says so (2026-11-09: "you start it and end it and no words show up") - never a silent mic
-      s.onend = () => { s.onresult = s.onend = null; onInterim?.(""); onEnd?.(heard ? null : dictationError("no-speech")); };
+      s.onend = () => { s.onresult = s.onend = null; onInterim?.(""); onEnd?.(heard ? null : silent()); };
       try { s.stop(); } catch { s.onend(); }
     },
     // a send: the words in flight would land in a box just emptied, so they are dropped

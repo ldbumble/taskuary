@@ -18,7 +18,7 @@ import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { browserRecogniser, dictate, dictationError, inAppWindow, micFix } from "./dictation.js";
-import { voiceChoice, micRoute } from "./voiceChoice.js";
+import { chooseVoice, voiceChoice, micRoute } from "./voiceChoice.js";
 import { onLive, touches } from "./live.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { RepoPicker } from "./RepoPicker.jsx";
@@ -550,7 +550,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   // mic with it, mid-sentence. The box holds itself open while this is true
   React.useEffect(() => { onActive?.(!!rec || busy); }, [!!rec, busy]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [err, setErr] = React.useState("");
-  const [ask, setAsk] = React.useState(null), [srDown, setSrDown] = React.useState(false);
+  const [ask, setAsk] = React.useState(null);
   // ...and a mic that stops SAYS WHY, beside it, not in a tooltip nobody hovers (the owner, 2026-10-28: "it just turns right off")
   // ...and IT STAYS SAID until the next press or its x (the owner, 2026-11-09: "this is not a error??" - an 8 s tooltip had faded before
   // it was read): a line beside the mic, with the fix as a button. A Windows setting opened from it is checked again when the window
@@ -558,7 +558,9 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   const recRef = React.useRef(null), anchor = React.useRef(null); recRef.current = rec;
   const flash = (s) => setErr(s || "");
   React.useEffect(() => () => { recRef.current?.cancel?.(); }, []);
-  const fix = micFix(err);
+  // the voice this computer has besides the browser's: the voice card, else Windows voice typing - a dead browser service offers it as the fix
+  const other = voice?.ready ? { label: voice.label || "the voice AI", choice: "auto" } : voice?.builtin ? { label: voice.builtin.label, choice: "windows" } : null;
+  const fix = micFix(err, other);
   const openSettings = async (which) => {
     try { await api.post("/api/voice/open-settings", null, { params: { which } }); }
     catch (e) { flash(e?.response?.data?.detail || "Windows would not open its settings - open Settings > Privacy & security yourself"); return; }
@@ -572,15 +574,15 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   // crossed out until "use this browser's own" was pressed, and in the desktop window there was nothing to press. Now, with no card: a
   // tab's own recogniser (Edge and Chrome ship the Web Speech API) is used at once; else the computer's own (voice.py builtin - Windows'
   // dictation, behind the desktop window too); only with neither is the mic crossed out and its press asks. A card still wins, and is
-  // still what transcribes a voice-note FILE. A tab whose speech service will not answer hands over to the computer's own.
+  // still what transcribes a voice-note FILE. A tab whose speech service will not answer says so, with the other voice as its button (micFix).
   const SR = browserRecogniser(), route = micRoute(voice, SR, voice?.choice);
   const builtin = route !== "connector" ? voice?.builtin : null;
   // ...AND NOTHING THAT DOES NOT WORK (TQ-1283, the owner, 2026-11-03: "you can't use something that doesn't work ... trigger the
   // question if you want to turn that on"): Windows voice typing with its speech setting off is not a fallback to worse dictation -
   // the press asks to turn it on, and a yes turns it on and starts listening
   const speechAsk = !!builtin?.ask;
-  const viaBrowser = !!(voice && route === "browser" && !(srDown && builtin && voice.choice === "auto"));
-  const viaBuiltin = !!(builtin && !viaBrowser && (route === "windows" || (route === "browser" && voice?.choice === "auto")));
+  const viaBrowser = !!(voice && route === "browser");
+  const viaBuiltin = !!(builtin && route === "windows");
   const viaLive = !!(viaBuiltin && builtin.live && !speechAsk);     // Windows voice typing hears the microphone itself: a session, not a clip
   const off = !!(voice && route !== "connector" && !viaBrowser && !viaBuiltin);
   const press = (e) => { setErr(""); if (!off && !(viaBuiltin && speechAsk)) return start(); setAsk(e.currentTarget); voice.recheck(); };
@@ -607,9 +609,6 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
           onInterim: (t) => live.current.onInterim?.(t),
           onEnd: (line) => {
             setRec(null); if (ctl) ctl.current = null; if (all) live.current.onText?.(all);
-            if (builtin && voice.choice === "auto" && [dictationError("network"), dictationError("service-not-allowed")].includes(line)) {
-              setSrDown(true); line = `The browser's speech service did not answer - press the mic again to use ${builtin.label}`;
-            }
             if (line) flash(line);
           } });
         setRec(d); if (ctl) ctl.current = { cancel: () => d.cancel() };
@@ -691,8 +690,8 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
         border: "1px solid var(--tq-edge-red, #e3c9ce)", borderRadius: 1.5, boxShadow: "0 4px 14px rgba(0,0,0,.08)" }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ fontSize: 12.5, color: INK, lineHeight: 1.45 }}>{err}</Typography>
-          {fix && <Button size="small" variant="contained" disableElevation data-tq-mic-fix={fix.settings || "voice"} sx={{ textTransform: "none", mt: 0.75 }}
-            onClick={() => fix.settings ? openSettings(fix.settings) : (setErr(""), openAppLink(place("voice").href))}>{fix.label}</Button>}
+          {fix && <Button size="small" variant="contained" disableElevation data-tq-mic-fix={fix.settings || fix.choose || "voice"} sx={{ textTransform: "none", mt: 0.75 }}
+            onClick={() => fix.settings ? openSettings(fix.settings) : fix.choose ? (setErr(""), chooseVoice(fix.choose)) : (setErr(""), openAppLink(place("voice").href))}>{fix.label}</Button>}
         </Box>
         <MuiIconButton size="small" aria-label="dismiss" onClick={() => setErr("")} sx={{ p: 0.25, mt: -0.25 }}><CloseIcon sx={{ fontSize: 15 }} /></MuiIconButton>
       </Box>

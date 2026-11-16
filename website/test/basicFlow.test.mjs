@@ -127,6 +127,15 @@ test("a turn at work says what is happening, or what we wait for, beside its dot
   assert.equal(workingLine([], label, { starting: true }), "Waiting for the agent to start");
   // ...on the chat's first turn only: a later one starting again is the work going on - its dots, no words of the app's (the owner, 2026-11-16)
   assert.equal(workingLine([], label, { starting: true, later: true }), "");
+  // ...and where the newest step is a thought, its latest words - never a bare "Thinking…" for minutes (the owner, 2026-11-16)
+  const thought = { kind: "thought", status: "done", summary: "The owner wants two bakeries.", detail: "The owner wants two bakeries. Tatte opens at 7 on Sundays, so I should check Bakey next." };
+  assert.equal(workingLine([{ type: "work", steps: [thought] }], label), "Tatte opens at 7 on Sundays, so I should check Bakey next");
+  const { thinkingLine } = await import("../src/chatStream.js");
+  assert.ok(thinkingLine("word ".repeat(80)).length <= 110);
+  // ...and the answer it is writing, while that is the newest thing it did - a long answer read "Thinking…" for 85 s on the real CLI
+  assert.equal(workingLine([{ type: "work", steps: [thought] }], label, { doing: "Option one is Salem. Option two is Providence, by train." }),
+    "Writing: Option two is Providence, by train");
+  assert.match(workingLine([{ type: "work", steps: [{ summary: "Search", doing: "Searching the web", status: "running" }] }], label, { doing: "x." }), /^Searching/, "a step at work leads");
   assert.equal(workingLine(parts, label, { ask: "Waiting for your Allow once" }), "Waiting for your Allow once");
   const { waitingOn } = await import("../src/chatStream.js");
   assert.equal(waitingOn({ permissions: [{}] }), "Waiting for your Allow once");

@@ -218,11 +218,22 @@ export const waitingChips = (pending, came = "") => {
 // (agentSteps.stepLabel), else the model writing; a turn not begun yet waits for its agent to start. Plain code, never a model call
 // ...but only the CHAT'S FIRST turn says it waits for its agent (the owner, 2026-11-16, mid-conversation on a session gone idle: "Waiting for the
 // agent to start" is the app's mechanics) - a `later` turn starting is the work going on: its dots and no words, until it has a step to name
-export const workingLine = (parts, label, { starting = false, later = false, ask = "" } = {}) => {
+// `doing`: the answer it is writing, while that is the newest thing it did (conversation `doing`)
+export const workingLine = (parts, label, { starting = false, later = false, ask = "", doing = "" } = {}) => {
   if (ask) return ask;
   const steps = (parts || []).filter((p) => p.type === "work").flatMap((p) => p.steps || []), last = steps.at(-1);
+  if (last?.status === "running") return String(label(last) || "").split(/\r?\n/)[0].trim() || "Working…";
+  if (doing && thinkingLine(doing)) return `Writing: ${thinkingLine(doing)}`;
   if (!last) return !starting ? "Thinking…" : later ? "" : "Waiting for the agent to start";
-  return last.status === "running" ? String(label(last) || "").split(/\r?\n/)[0].trim() || "Working…" : "Thinking…";
+  // ...and WHAT IT IS THINKING, where its newest step is a thought (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else):
+  // that thought's latest words, as it writes them (agents.ACPSteps._thinking) - never a bare word for minutes
+  return last.kind === "thought" ? thinkingLine(last.detail || last.summary) || "Thinking…" : "Thinking…";
+};
+// a thought as one short line: its last sentence, cut at a word
+export const thinkingLine = (text) => {
+  const t = String(text || "").replace(/\s+/g, " ").trim().replace(/[.…]+$/, "");
+  const s = t.split(/(?<=[.!?])\s+/).filter(Boolean).at(-1) || "";
+  return s.length > 110 ? `…${s.slice(-108).replace(/^\S*\s/, "")}` : s;
 };
 // WHERE THE AGENT'S QUESTION IS DRAWN (the owner, 2026-11-13: "never ever pin items on the bottom of the chat"): in the turn that asked it,
 // which the list names (conversation.items `asking.turn`) - "" only while that turn is not in what is drawn (a read behind, a chat with no

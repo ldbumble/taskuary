@@ -489,8 +489,16 @@ def _items(store, tid: int) -> dict:
         answered = max(turn_of, default=0)
         began = max((m['At'] for m in marks if m['Seq'] >= answered), default=0.) or max(last + 1e-7, getattr(ses, 'last', 0) or 0)
         trace = list(getattr(ses, 'trace', None) or [])
+        # ...and the answer it is writing, while that is the newest thing it did (agents.ACPSteps._live): the turn's line of what it is doing
+        doing = (lambda e: clean(e.get('detail')) if e and e.get('type') == 'live' and e.get('name') == 'writing' else '')(trace[-1] if trace else None)
+        # ...STARTING UNTIL ITS AGENT HAS THE PROMPT (recorded on the real CLI, 2026-11-16: a cold adapter took most of a minute to open, and the
+        # turn read "Thinking..." over it): no word from the agent's road yet but its own start - every CLI road traces `prompt` as it hands it over
+        # ...OPENING while its agent really is starting: the road that opens a conversation says so (clipool.take), and the prompt it then hands
+        # over ends it - a kept conversation is never opening, whatever its trace holds a beat into the turn
+        kinds = [e.get('type') for e in trace]
+        opening = 'opening' in kinds and kinds[::-1].index('opening') < (kinds[::-1].index('prompt') if 'prompt' in kinds else len(kinds))
         put(max(last + 1e-7, began), 1, {'kind': 'turn', 'at': stamp(began), 'state': 'working', 'steps': _said(sessionrecord.trace_steps(trace)), 'text': '', 'cards': [],
-                                        'started': general.PRESSED.get(tid) or began, 'ended': None, 'sid': getattr(ses, 'sid', '')})
+                                        'started': general.PRESSED.get(tid) or began, 'ended': None, 'sid': getattr(ses, 'sid', ''), **({'doing': doing} if doing else {}), **({'opening': True} if opening else {})})
 
     # a coding session's record: its steps, cut into turns where it was given something. What it was given is never drawn from the record -
     # his lines are the ledger's, Taskuary's briefs nobody's - but a line typed into the pane itself, or one from before the ledger, is his

@@ -2852,7 +2852,7 @@ class GeneralSession:
                 if kind == 'tool_call':
                     target = next(iter((detail.get('args') or {}).values()), '') if isinstance(detail, dict) else ''
                     self._emit(f'\x1b[33mtool>\x1b[0m {name} {str(target)[:180]}\r\n')
-                elif kind == 'live' and isinstance(detail, str):
+                elif kind == 'live' and isinstance(detail, str) and name not in ('thinking', 'writing'):      # ...snapshots are the chat's, not the pane's
                     # the ACP road's progress (a tool call, its completion, a plan) - the argv road's
                     # stream-json arrives as `tool_call` above; over ACP it is a `live` line, and the pane
                     # and the Board card showed nothing but "you>" for the whole turn (2026-09-20)

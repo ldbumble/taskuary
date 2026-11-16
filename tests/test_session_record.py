@@ -475,3 +475,46 @@ def test_five_reads_of_one_task_at_once_are_one_build(home, monkeypatch):
     for t in ts: t.join(10)
     assert len(builds) == 1 and len(got) == 5 and all(g is got[0] for g in got)
     conversation.items(s, tid); assert len(builds) == 2, 'a read after the build is its own'
+
+
+def test_a_thought_being_written_is_one_open_step_its_snapshots_update(monkeypatch):
+    """The owner, 2026-11-16: "Thinking..." for three minutes with nothing else - the ACP road traced a thought only once it was whole. As it
+    streams its newest words go out about once a second (agents.ACPSteps), read here as ONE open thought the whole paragraph then replaces."""
+    from taskuary import agents
+    said, clock = [], [0.0]
+    monkeypatch.setattr(agents.time, 'monotonic', lambda: clock[0])
+    feed = agents.ACPSteps(lambda *e: said.append(e), 'claude')
+    for i, w in enumerate(['The owner wants ', 'two bakeries. ', 'Tatte opens at 7, ', 'so check Bakey next.']):
+        clock[0] = i * 0.6
+        feed({'sessionUpdate': 'agent_thought_chunk', 'content': {'type': 'text', 'text': w}})
+    live = [d for k, n, d in said if k == 'live' and n == 'thinking']
+    assert live == ['The owner wants', 'The owner wants two bakeries. Tatte opens at 7,'], live      # ...about once a second, not per chunk
+    feed({'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'Tatte opens first.'}})    # ...the thought is whole
+    steps = sessionrecord.trace_steps([{'type': k, 'name': n, 'detail': d} for k, n, d in said])
+    assert [s['k'] for s in steps] == ['thought'] and not steps[0].get('live') and steps[0]['text'].endswith('so check Bakey next.')
+    mid = sessionrecord.trace_steps([{'type': 'live', 'name': 'thinking', 'detail': x} for x in live])
+    assert [(s['k'], s['text'], s.get('live')) for s in mid] == [('thought', live[-1], True)], 'mid-thought: one open step, its newest words'
+    # ...and the answer as it streams: snapshots too, the turn's line of what it is doing (a long answer read "Thinking..." for 85 s)
+    said.clear(); clock[0] = 10.0
+    for w in ['Salem is close. ', 'Providence is cheaper.']: feed({'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': w}})
+    assert [d for k, n, d in said if (k, n) == ('live', 'writing')] == ['Tatte opens first.Salem is close.']    # ...the words as they streamed
+
+
+def test_the_turn_at_work_says_when_its_agent_is_still_opening_and_what_it_is_writing(monkeypatch):
+    """Recorded on the real CLI, 2026-11-16: a cold adapter took most of a minute to open under "Thinking...", then a long answer streamed in
+    under the same word. The turn at work says it is `opening` until its road hands the agent the prompt, and carries the answer being
+    written as `doing` while that is the newest thing it did."""
+    from types import SimpleNamespace
+    from taskuary import conversation
+    s = MemoryStore(); tid = s.create_task({'Title': 'Plan the offsite', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+    ses = SimpleNamespace(busy=True, trace=[{'type': 'start', 'name': None, 'detail': {}}], sid='s1', last=0, task_id=tid)
+    monkeypatch.setattr(general, 'session_for', lambda t: ses if t == tid else None)
+    monkeypatch.setattr(general, 'at_work', lambda t: True); monkeypatch.setattr(general, 'working', lambda st, t: True)      # ...its turn is at work
+    turn = lambda: [x for x in conversation.items(s, tid)['items'] if x['kind'] == 'turn'][-1]
+    assert 'opening' not in turn(), 'a turn a beat in, its trace holding only its start, is no start-up (a kept conversation)'
+    ses.trace.append({'type': 'opening', 'name': 'claude', 'detail': ''})            # ...the road really opens one (clipool.take)
+    assert turn().get('opening') is True and 'doing' not in turn()
+    ses.trace += [{'type': 'prompt', 'name': 'prompt_sent_to_agent', 'detail': 'x'}, {'type': 'live', 'name': 'writing', 'detail': 'Option one is Salem.'}]
+    assert 'opening' not in turn() and turn()['doing'] == 'Option one is Salem.'
+    ses.trace.append({'type': 'tool_call', 'name': 'WebSearch', 'detail': {'tool_call_id': 'c1', 'args': {'query': 'Salem hotels'}}})
+    assert 'doing' not in turn(), 'a step after the words leads'

@@ -1249,7 +1249,16 @@ class ACPSteps:
 
     def __init__(self, trace, name: str, held: dict = None):
         self.trace, self.name, self.held = trace, name, held if held is not None else {}
-        self.calls, self.said, self.thought, self.plans = {}, [], [], 0
+        self.calls, self.said, self.thought, self.plans, self.live_at = {}, [], [], 0, -1e9
+
+    # ...AND WHAT IT IS THINKING OR WRITING IS SAID AS IT GROWS (the owner, 2026-11-16: "Thinking..." for three minutes with nothing else - "it
+    # is a chat: the owner must see what the agent is doing at all times"): about once a second the newest words of the thought or the answer
+    # it is writing go out as a `live` snapshot - a thought kept as the one open thought they update (sessionrecord.trace_steps), the words
+    # as the turn's line of what it is doing (conversation: `doing`) - and the whole paragraph still goes once it is done (_words)
+    LIVE_EVERY, LIVE_N = 1.0, 600
+    def _live(self, name: str, parts: list):
+        if (now := time.monotonic()) - self.live_at < self.LIVE_EVERY: return
+        if (t := ''.join(parts).strip()): self.live_at = now; self.trace('live', name, t[-self.LIVE_N:])
 
     # ── words ───────────────────────────────────────────────────────────────────────────────
     def _words(self):
@@ -1329,10 +1338,10 @@ class ACPSteps:
         kind = u.get('sessionUpdate')
         if kind == 'agent_message_chunk':
             if self.thought: self._words()
-            self._settle_others(); self.said.append(acp_mod._text_of(u.get('content'))); return
+            self._settle_others(); self.said.append(acp_mod._text_of(u.get('content'))); self._live('writing', self.said); return
         if kind == 'agent_thought_chunk':
             if self.said: self._words()
-            self._settle_others(); self.thought.append(acp_mod._text_of(u.get('content'))); return
+            self._settle_others(); self.thought.append(acp_mod._text_of(u.get('content'))); self._live('thinking', self.thought); return
         if kind in ('tool_call', 'tool_call_update'):
             self._words()
             c = self._merge(u)
@@ -1592,7 +1601,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     from . import acpgate, clipool
     sig = _acp_sig(launch, cwd, env)
     opener = lambda: acp_mod.Conversation(_acp_open(name, launch, cwd, env, resume, profile.get('timeout'), trace), sig)
-    conv = clipool.take(keep, sig, opener, resume) if keep else opener()
+    conv = clipool.take(keep, sig, opener, resume, opening=lambda: trace('opening', name, '')) if keep else opener()
     client = conv.client
     trace('prompt', 'prompt_sent_to_agent', prompt)
     trace('tool', 'cli', f"{name} over acp{' via ' + launch['adapter'] if launch['adapter'] else ''} cwd={cwd or os.getcwd()}"

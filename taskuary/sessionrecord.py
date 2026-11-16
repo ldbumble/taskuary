@@ -504,7 +504,13 @@ def trace_steps(trace: list) -> list:
         # once the turn was filed the table or chart was gone from the chat - only the live turn had ever drawn one
         elif k == 'tool_result' and isinstance(d, dict) and MARK in str(d.get('result') or '') and (s := calls.get(d.get('tool_call_id') or name)):
             s['output'] = str(d['result'])
-        elif k == 'progress' and name in ('thinking', 'reasoning') and str(d or '').strip(): steps.append({'k': 'thought', 'text': _cut(d, THOUGHT_N)})
+        # ...a thought still being written is ONE open step its snapshots update (agents.ACPSteps._thinking), the whole paragraph taking its place
+        elif k == 'live' and name == 'thinking' and str(d or '').strip():
+            if steps and steps[-1].get('live'): steps[-1]['text'] = _cut(d, THOUGHT_N)
+            else: steps.append({'k': 'thought', 'text': _cut(d, THOUGHT_N), 'live': True})
+        elif k == 'progress' and name in ('thinking', 'reasoning') and str(d or '').strip():
+            if steps and steps[-1].get('live'): steps.pop()
+            steps.append({'k': 'thought', 'text': _cut(d, THOUGHT_N)})
         elif k == 'progress' and name in ('text', 'agent_message') and str(d or '').strip(): steps.append({'k': 'said', 'text': _cut(d, SAID_N)})
         elif k == 'tool_result' and isinstance(d, dict) and d.get('is_error'): steps.append({'k': 'error', 'text': _cut(d.get('result'), 400)})
         elif k == 'error': steps.append({'k': 'error', 'text': _cut((d or {}).get('result') if isinstance(d, dict) else d, 400)})

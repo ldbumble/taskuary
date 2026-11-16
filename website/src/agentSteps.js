@@ -392,9 +392,17 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       const name = String(e.name || "");
       if (name === "thinking" || name === "reasoning") {
         const t = flat(forScreen(e.detail));
+        if (t && steps.at(-1)?.kind === "thought" && steps.at(-1).live) steps.pop();     // ...the whole paragraph in its snapshots' place
         if (t) steps.push({ id: `thought-${steps.length}`, kind: "thought", summary: clip(t, 140), detail: t.length > 140 ? t : "", status: "done" });
       } else if (name === "text" || name === "agent_message") say("said", e.detail);
       else say("note", e.detail);
+    } else if (e.type === "live" && e.name === "writing") {
+      // ...the answer as it streams is the turn's line of what it is doing (conversation `doing`), never words drawn twice
+    } else if (e.type === "live" && e.name === "thinking") {
+      // ...a thought still being written (agents.ACPSteps): ONE open thought its snapshots update, never words said
+      const t = flat(forScreen(e.detail || "")), last = steps.at(-1);
+      if (t && last?.kind === "thought" && last.live) Object.assign(last, { summary: clip(t, 140), detail: t.length > 140 ? t : "" });
+      else if (t) steps.push({ id: `thought-${steps.length}`, kind: "thought", summary: clip(t, 140), detail: t.length > 140 ? t : "", status: "done", live: true });
     } else if (e.type === "live" && !structured && e.detail && !ECHO.test(String(e.detail))) {
       say("said", e.detail);
     } else if (e.type === "start" && keepStart) {

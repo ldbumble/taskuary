@@ -419,7 +419,8 @@ const ConvTurn = ({ t, more, cards, name, ask = null, later = false }) => {
   // ...WHILE THE CLI COMPACTS ITS CONTEXT the turn at work says so (the owner, 2026-11-10: "show compacting like claude code does"): its newest
   // step is the compaction, not yet over
   const compacting = live && ((x) => x?.k === "compact" && !!x.status && !["completed", "failed", "cancelled"].includes(x.status))((t.steps || []).at(-1));
-  const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting", later, ask: React.useContext(WaitOnCtx) }) : "";
+  // ...`opening`: its agent's process really is starting (conversation.items) - said on any turn then, and only then; `doing`: the answer as it is written
+  const doing = live ? workingLine(parts, stepLabel, { starting: t.state === "starting" || !!t.opening, later: later && !t.opening, ask: React.useContext(WaitOnCtx), doing: t.doing || "" }) : "";
   if (quiet) return null;
   return <div className={`tq-aui-message tq-aui-agent${words && !live ? " tq-copy-host" : ""}${more ? " tq-aui-agent-more" : ""}`} data-tq-item={t.id} data-tq-chat-line={key} data-tq-turn={t.state}>
     {!!words && !live && <CopyCorner text={words} label="Copy this answer" />}

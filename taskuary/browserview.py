@@ -1,6 +1,6 @@
 """The agent's browser, watched live beside its terminal.
 
-A coding session drives a headless Chrome through agent-browser (clis.TOOLS) from its own
+A coding session drives a Chrome Taskuary runs for it, out of sight, through agent-browser (clis.TOOLS) from its own
 terminal, and until now that was all you saw of it - text scrolling past. This is the other
 half: the owner watches the page the agent is on, in the task page and on the Wall, and can
 take the keyboard when a page asks for something an agent must never type (a password, a
@@ -39,14 +39,6 @@ _TTL = 2.0                      # state() is on the terminal-listing poll path: 
 LAUNCH_WAIT = 25.0
 LAUNCH_POLL = 0.25
 NAV_WAIT = 45.0                 # one page load on a browser that is already up, not a launch: a slow sign-in page, not a cold Chrome
-# Chrome's own launch flags. agent-browser leaves `navigator.webdriver` TRUE by default (measured
-# here 2026-09-14: true without this flag, false with it) - the cheapest tell a login page has, and
-# one it reads before any of the interesting signals. The other half of the 2026 detection advice is
-# to run HEADED, and that half is deliberately not taken: Windows has no virtual display, so a headed
-# browser is a Chrome window sitting across the owner's own work - which is exactly what happened
-# when it was tried (the owner, 2026-09-14: "I closed it by mistake. It should not show up in random.
-# but in the browser."). The pane IS where this browser shows.
-LAUNCH_ARGS = '--disable-blink-features=AutomationControlled'
 LAST = {}                       # sid -> the newest frame seen by any relay: what Snapshot files
 _CACHE = {}                     # sid -> (when, state)
 _START_LOCKS = {}               # sid -> one launch at a time; session mount + first prompt race otherwise opens two Chromes
@@ -126,23 +118,11 @@ IDLE_MS = '0'
 # 0.38.2, as is the env-borne idle timeout above (re-measured 2026-10-02). On 0.41.2 its own `state save` fails the same way once a
 # second site is open ("Invalid response: EOF", 2026-11-15) - so Taskuary keeps the cookies itself, over DevTools (keep, clock).
 AUTOSAVE_MS = '0'
-# ...AND A USER-AGENT THAT DOES NOT SAY "HeadlessChrome". Headless Chrome sends `HeadlessChrome/<v>` in its
-# User-Agent header, and Akamai-fronted sites reset the HTTP/2 stream on it: fidelity.com and its sign-in page
-# both failed with net::ERR_HTTP2_PROTOCOL_ERROR (TQ-1359, 2026-11-08; curl with that UA alone gets the same
-# reset, the identical request as `Chrome/<v>` gets 200). The client hints already say plain Chromium, so the
-# fix is the same engine version under its ordinary name - read from agent-browser's own Chrome build, so it
-# never drifts from what the browser really is. It rides in env() for the reason IDLE_MS does: the UA is in
-# agent-browser's launch fingerprint, and a launch that set it alone would be replaced by the next plain command.
-def user_agent() -> str:
-    "Chrome's ordinary UA for the newest Chrome build agent-browser installed; '' (agent-browser's own) when there is none."
-    vs = [tuple(map(int, m[1].split('.'))) for p in (home()/'browsers').glob('chrome-*') if (m := re.fullmatch(r'chrome-(\d+(?:\.\d+)*)', p.name))]
-    if not vs: return ''
-    plat = 'Windows NT 10.0; Win64; x64' if os.name=='nt' else 'Macintosh; Intel Mac OS X 10_15_7' if sys.platform=='darwin' else 'X11; Linux x86_64'
-    return f'Mozilla/5.0 ({plat}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{max(vs)[0]}.0.0.0 Safari/537.36'
 def env(sid: str) -> dict:
-    e = {'AGENT_BROWSER_SESSION': session_name(sid), 'AGENT_BROWSER_IDLE_TIMEOUT_MS': IDLE_MS, 'AGENT_BROWSER_AUTOSAVE_INTERVAL_MS': AUTOSAVE_MS}
-    if not os.environ.get('AGENT_BROWSER_USER_AGENT') and (ua := user_agent()): e['AGENT_BROWSER_USER_AGENT'] = ua    # the owner's own setting wins
-    return e
+    """What every agent-browser command of session `sid` runs with - the agent's, the pane's and the server's alike: its name, the
+    browser it attaches to (AGENT_BROWSER_CDP, the session's own Chrome: real_chrome), and the launch options its fingerprint holds."""
+    return {'AGENT_BROWSER_SESSION': session_name(sid), 'AGENT_BROWSER_CDP': str(cdp_port(sid)),
+            'AGENT_BROWSER_IDLE_TIMEOUT_MS': IDLE_MS, 'AGENT_BROWSER_AUTOSAVE_INTERVAL_MS': AUTOSAVE_MS}
 def _cli_env(sid: str) -> dict: return {**os.environ, **env(sid)}    # the server's own calls match the pty's
 def home() -> Path: return Path(os.environ.get('AGENT_BROWSER_HOME') or Path.home() / '.agent-browser')
 
@@ -437,7 +417,7 @@ def navigate(sid: str, url: str) -> str:
 
 def close(sid: str, tid: int = None):
     """The pty ended: close its browser too. Best effort, and only when there is one - otherwise a
-    headless Chrome per finished task sits idle for an hour each. `tid`: the task whose browser view keeps its last frame (keep_frame)."""
+    Chrome per finished task sits idle for an hour each. `tid`: the task whose browser view keeps its last frame (keep_frame)."""
     exe = program()
     with _START_LOCKS_GUARD:
         lock = _START_LOCKS.setdefault(sid, threading.Lock())
@@ -453,7 +433,7 @@ def close(sid: str, tid: int = None):
             try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True)
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')
         _end_daemon(sid)
-        _CACHE.pop(sid, None); LAST.pop(sid, None); listed(sid, False)
+        _CACHE.pop(sid, None); LAST.pop(sid, None); listed(sid, False); _forget_profile(sid)
     with _START_LOCKS_GUARD:
         if _START_LOCKS.get(sid) is lock: _START_LOCKS.pop(sid, None)
 
@@ -751,6 +731,84 @@ def ask_open(sid: str, url: str) -> dict:
         raise ValueError(FAILED_WHY)
 
 
+# A REAL CHROME, ON A DESKTOP OF ITS OWN (the owner, 2026-11-16: a site's "Verify you are human" looped however often he clicked it in the
+# view). agent-browser's own launch was two tells Cloudflare reads: a headless Chrome, and navigator.webdriver TRUE - set by that launch
+# whatever flags it was handed (measured on 0.41.2) - so it re-challenged for ever. Taskuary starts each session's Chrome itself, an
+# ordinary headed one with no automation flag and a profile of its own, and agent-browser attaches to it over DevTools (env's
+# AGENT_BROWSER_CDP, so every command of the session drives this one). On Windows its window lives on a desktop of Taskuary's own: drawn
+# and screencast as any window is, never on the owner's screen, in his taskbar or taking his focus - and his clicks in the view reach it
+# as they always did, and count (recorded: the same Cloudflare check looping headless, through on one click here). Elsewhere the window
+# sits off the screen. Sign-ins still ride agent-browser's restore state (--restore attaches too) and keep()'s clock.
+DESKTOP = 'taskuary-browsers'
+CHROME_ARGS = ['--no-first-run', '--no-default-browser-check', '--disable-blink-features=AutomationControlled', '--window-size=1280,720',
+               '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling',
+               '--disable-features=CalculateNativeWinOcclusion,Translate', '--disable-sync', '--disable-default-apps', '--password-store=basic']
+_PORTS, _PORTS_LOCK = {}, threading.Lock()
+
+def cdp_port(sid: str) -> int:
+    "The DevTools port of session `sid`'s Chrome: one per session, chosen the first time it is asked for, so every command agrees on it."
+    with _PORTS_LOCK:
+        if str(sid) not in _PORTS:
+            with socket.socket() as so: so.bind(('127.0.0.1', 0)); _PORTS[str(sid)] = so.getsockname()[1]
+        return _PORTS[str(sid)]
+
+def chrome_exe() -> str:
+    "The Chrome a session runs: the owner's AGENT_BROWSER_EXECUTABLE_PATH, else the newest one agent-browser installed; '' when none."
+    own = os.environ.get('AGENT_BROWSER_EXECUTABLE_PATH') or ''
+    if own and os.path.isfile(own): return own
+    names = {'chrome.exe', 'chrome', 'Google Chrome for Testing'}
+    for d in sorted((home() / 'browsers').glob('chrome-*'), key=lambda p: [int(x) for x in re.findall(r'\d+', p.name)] or [0], reverse=True):
+        if (f := next((p for p in d.rglob('*') if p.name in names and p.is_file()), None)): return str(f)
+    return ''
+
+def _profile(sid: str) -> Path:
+    from . import config
+    return config.home() / 'browser-profiles' / session_name(sid)
+def _forget_profile(sid: str) -> None:
+    "A closed session's profile goes: its sign-ins were kept already (keep, at close), and a profile per session would only pile up."
+    import shutil
+    shutil.rmtree(_profile(sid), ignore_errors=True)
+    with _PORTS_LOCK: _PORTS.pop(str(sid), None)
+
+def _spawn_chrome(argv: list) -> int:
+    "Start Chrome where the owner never sees it; its pid. Windows: on Taskuary's own desktop; elsewhere: its window off the screen."
+    env, cwd = spawn.env_for(dict(os.environ)), spawn.cwd_for(None)
+    if os.name != 'nt':
+        return spawn.bare([*argv, '--window-position=-32000,-32000'], env=env, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL, start_new_session=True).pid
+    import ctypes, ctypes.wintypes as W
+    k, u = ctypes.WinDLL('kernel32', use_last_error=True), ctypes.WinDLL('user32', use_last_error=True)
+    u.CreateDesktopW.restype = W.HANDLE
+    if not u.CreateDesktopW(DESKTOP, None, None, 0, 0x10000000, None): raise OSError(f'no desktop for the browser ({ctypes.get_last_error()})')
+    class SI(ctypes.Structure):
+        _fields_ = [('cb', W.DWORD), ('r', W.LPWSTR), ('desk', W.LPWSTR), ('title', W.LPWSTR)] + [(n, W.DWORD) for n in 'x y w h cx cy fill flags'.split()] + \
+                   [('show', W.WORD), ('cb2', W.WORD), ('r2', ctypes.c_void_p), ('i', W.HANDLE), ('o', W.HANDLE), ('e', W.HANDLE)]
+    class PI(ctypes.Structure): _fields_ = [('hp', W.HANDLE), ('ht', W.HANDLE), ('pid', W.DWORD), ('tid', W.DWORD)]
+    si, pi = SI(), PI(); si.cb, si.desk = ctypes.sizeof(SI), DESKTOP
+    block = ctypes.create_unicode_buffer(''.join(f'{a}={b}\0' for a, b in (env or os.environ).items()) + '\0')
+    with spawn.clean_dll_dir():
+        ok = k.CreateProcessW(None, ctypes.create_unicode_buffer(subprocess.list2cmdline(argv)), None, None, False,
+                              0x00000400 | 0x00000200, block, cwd, ctypes.byref(si), ctypes.byref(pi))     # unicode env, its own process group
+    if not ok: raise OSError(f'Chrome did not start ({ctypes.get_last_error()})')
+    k.CloseHandle(pi.hp); k.CloseHandle(pi.ht)
+    return int(pi.pid)
+
+def real_chrome(sid: str) -> int | None:
+    "Session `sid`'s own Chrome, started if it is not up; its pid (0 when one already answered). None when it could not start."
+    port = cdp_port(sid)
+    if _listening(port): return 0
+    exe = chrome_exe()
+    if not exe: logger.warning(f'no Chrome for the browser of {sid}'); return None
+    prof = _profile(sid); prof.mkdir(parents=True, exist_ok=True)
+    try: pid = _spawn_chrome([exe, f'--remote-debugging-port={port}', f'--user-data-dir={prof}', *CHROME_ARGS, 'about:blank'])
+    except OSError as e: logger.warning(f'could not start Chrome for {sid}: {e}'); return None
+    for _ in range(int(LAUNCH_WAIT / LAUNCH_POLL)):
+        if _listening(port): return pid
+        time.sleep(LAUNCH_POLL)
+    logger.warning(f'Chrome for {sid} did not answer on its port within {LAUNCH_WAIT:.0f}s'); _end_daemon(sid, [pid])
+    return None
+
+
 def start(sid: str, url: str = 'about:blank') -> bool:
     """Open the browser FOR this session, before the agent asks for one.
 
@@ -781,12 +839,10 @@ def start(sid: str, url: str = 'about:blank') -> bool:
         # exactly what makes agent-browser replace this daemon with a blank default one (see IDLE_MS).
         try: seed(sid)
         except Exception as e: logger.debug(f'the browser of {sid} starts without the sign-ins live elsewhere: {e}')
-        cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY,
-               '--args', LAUNCH_ARGS, 'open', url or 'about:blank']
-        listed(sid, True)
+        if (chrome := real_chrome(sid)) is None: return False
+        listed(sid, True, [chrome] if chrome else None)
+        cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY, 'open', url or 'about:blank']
         try:
-            # detached and HEADLESS: the live pane is the visible browser. --headed opens a second
-            # desktop window outside Taskuary and defeats the side-by-side surface.
             spawn.popen(cmd, env=_cli_env(sid), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              stdin=subprocess.DEVNULL, close_fds=True)
         except (OSError, subprocess.SubprocessError) as e:
@@ -794,7 +850,7 @@ def start(sid: str, url: str = 'about:blank') -> bool:
             return False
         for _ in range(int(LAUNCH_WAIT / LAUNCH_POLL)):            # it has a Chrome to launch
             time.sleep(LAUNCH_POLL)
-            if state(sid, fresh=True)['open']: listed(sid, True, _daemon_pid(sid)); clock(sid); return True
+            if state(sid, fresh=True)['open']: listed(sid, True, [_daemon_pid(sid)]); clock(sid); return True
         logger.warning(f'the browser for {sid} did not come up within {LAUNCH_WAIT:.0f}s')
         return False
 
@@ -809,15 +865,17 @@ def _listed_file() -> Path:
     return home() / 'browser_sessions.json'
 
 def _listed() -> dict:
-    "session id -> the pid of the agent-browser helper its launch started (None where not known yet, or listed before pids were kept)."
+    "session id -> the pids its launch started: its Chrome and the agent-browser helper ([] where not known yet; one pid from an older run)."
     try: d = json.loads(_listed_file().read_text(encoding='utf-8')) or {}
     except (OSError, ValueError, TypeError): return {}
-    return {str(k): v for k, v in d.items()} if isinstance(d, dict) else {str(x): None for x in d}
+    pids = lambda v: [int(x) for x in (v if isinstance(v, list) else [v]) if x]
+    return {str(k): pids(v) for k, v in d.items()} if isinstance(d, dict) else {str(x): [] for x in d}
 
-def listed(sid: str, on: bool, pid: int = None) -> None:
+def listed(sid: str, on: bool, pids: list = None) -> None:
+    "Note session `sid` open (`pids` added to what its launch started) or closed."
     with _LISTED_LOCK:
         had = _listed(); now = dict(had)
-        if on: now[str(sid)] = pid or had.get(str(sid))
+        if on: now[str(sid)] = list(dict.fromkeys([*had.get(str(sid), []), *(int(x) for x in pids or () if x)]))
         else: now.pop(str(sid), None)
         if now == had: return
         try: _listed_file().write_text(json.dumps(now), encoding='utf-8')
@@ -833,7 +891,7 @@ def _daemon_pid(sid: str) -> int | None:
     except (TypeError, ValueError): return None
 
 def _is_helper(pid: int) -> bool:
-    "Is process `pid` an agent-browser program (a pid reused by anything else is left alone)?"
+    "Is process `pid` an agent-browser program or the Chrome Taskuary runs for its sessions (a pid reused by anything else is left alone)?"
     try:
         if os.name == 'nt':
             from .unpack import _image
@@ -841,16 +899,24 @@ def _is_helper(pid: int) -> bool:
         else: img = os.readlink(f'/proc/{int(pid)}/exe') if os.path.exists(f'/proc/{int(pid)}') else spawn.run(
             ['ps', '-p', str(int(pid)), '-o', 'comm='], capture_output=True, text=True, timeout=5).stdout
     except Exception: return False
-    return 'agent-browser' in os.path.basename(str(img or '').strip()).lower()
+    img = str(img or '').strip()
+    if 'agent-browser' in os.path.basename(img).lower(): return True
+    exe = chrome_exe()          # ...never the owner's own Chrome: only the very program real_chrome starts, by its whole path
+    return bool(exe) and os.path.isabs(img) and os.path.normcase(os.path.realpath(img)) == os.path.normcase(os.path.realpath(exe))
 
-def _end_daemon(sid: str, pid: int = None) -> bool:
-    "End the agent-browser helper Taskuary's launch of `sid` started, if it is still running. True when one was ended."
-    pid = pid or _listed().get(str(sid))
-    if not pid or not _is_helper(pid): return False
-    try:
-        import signal
-        os.kill(int(pid), signal.SIGTERM); return True
-    except OSError as e: logger.debug(f'the browser helper {pid} of {sid} was not ended: {e}'); return False
+def _end_daemon(sid: str, pids: list = None) -> bool:
+    "End what Taskuary's launch of `sid` started - its Chrome, the agent-browser helper - where still running. True when one was ended."
+    done = False
+    for pid in pids if pids is not None else _listed().get(str(sid), []):
+        if not pid or not _is_helper(pid): continue
+        try:
+            if os.name == 'nt': spawn.run(['taskkill', '/PID', str(int(pid)), '/T', '/F'], capture_output=True, timeout=20)
+            else:
+                import signal
+                os.kill(int(pid), signal.SIGTERM)
+            done = True
+        except (OSError, subprocess.SubprocessError) as e: logger.debug(f'the browser process {pid} of {sid} was not ended: {e}')
+    return done
 
 def close_orphans() -> int:
     """At start, before any session of this run exists: close every browser the last run listed and never closed. Returns how many."""
@@ -861,7 +927,7 @@ def close_orphans() -> int:
             try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True); done = True
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the left-over browser {sid}: {e}')
         n += _end_daemon(sid, pid) or done
-        listed(sid, False)
+        listed(sid, False); _forget_profile(sid)
     if n: logger.info(f'closed {n} browser(s) the last run left open')
     return n
 

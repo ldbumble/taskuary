@@ -258,7 +258,7 @@ class ALeftOverBrowserIsClosedTests(unittest.TestCase):
         with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'popen'), \
              mock.patch.object(browserview, 'state', return_value={'open': False}), mock.patch.object(browserview, 'LAUNCH_WAIT', 0):
             browserview.start('run-a', 'https://portal.example/')
-        self.assertEqual(browserview._listed(), {'run-a': None})
+        self.assertEqual(browserview._listed(), {'run-a': []})
         with mock.patch.object(browserview, 'program', return_value=''): browserview.close('run-a')
         self.assertEqual(browserview._listed(), {})
 
@@ -278,15 +278,18 @@ class ALeftOverBrowserIsClosedTests(unittest.TestCase):
         with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'popen'),              mock.patch.object(browserview, 'state', return_value={'open': True}), mock.patch.object(browserview, 'LAUNCH_POLL', .001),              mock.patch.object(browserview, 'LAUNCH_WAIT', 1):
             # ...the first look says it is not up yet, the next that it is
             with mock.patch.object(browserview, 'state', side_effect=[{'open': False}, {'open': True}]): self.assertTrue(browserview.start('run-a', 'https://portal.example/'))
-        self.assertEqual(browserview._listed(), {'run-a': 4242})
-        helpers = {4242}
-        with mock.patch.object(browserview, '_is_helper', side_effect=lambda pid: pid in helpers), mock.patch.object(browserview.os, 'kill') as kill,              mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'run'):
+        self.assertEqual(browserview._listed(), {'run-a': [4242]})
+        # ...and the Chrome Taskuary started for it (real_chrome), listed beside its helper and ended with it
+        browserview.listed('run-a', True, [7373]); self.assertEqual(browserview._listed(), {'run-a': [4242, 7373]})
+        ours = {4242, 7373}
+        ended = lambda run: [int(c.args[0][2]) for c in run.call_args_list if c.args[0][:1] == ['taskkill']] if os.name == 'nt' else None
+        with mock.patch.object(browserview, '_is_helper', side_effect=lambda pid: pid in ours), mock.patch.object(browserview.os, 'kill') as kill,              mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'run') as run:
             browserview.close('run-a')                                     # its Chrome is gone (no stream file): the helper is ended all the same
-            self.assertEqual([c.args[0] for c in kill.call_args_list], [4242])
-            kill.reset_mock(); browserview.listed('run-b', True, 5151); browserview.listed('run-c', True, 6161)
-            helpers = {5151}                                               # run-c's pid now runs something else
+            self.assertEqual(ended(run) if os.name == 'nt' else [c.args[0] for c in kill.call_args_list], [4242, 7373])
+            kill.reset_mock(); run.reset_mock(); browserview.listed('run-b', True, [5151]); browserview.listed('run-c', True, [6161])
+            ours = {5151}                                                  # run-c's pid now runs something else
             self.assertEqual(browserview.close_orphans(), 1)
-            self.assertEqual([c.args[0] for c in kill.call_args_list], [5151])
+            self.assertEqual(ended(run) if os.name == 'nt' else [c.args[0] for c in kill.call_args_list], [5151])
         self.assertEqual(browserview._listed(), {})
 
 
@@ -298,7 +301,7 @@ class ALeftOverBrowserIsClosedTests(unittest.TestCase):
         sessions = self.dir / 'sessions'; sessions.mkdir()
         old = {'name': 'sess', 'value': 'old', 'domain': 'portal.example', 'path': '/'}
         (sessions / 'taskuary-tq-run-0.json').write_text(json.dumps({'cookies': [old, {'name': 'pref', 'value': 'dark', 'domain': 'news.example', 'path': '/'}]}))
-        browserview.listed('run-a', True, 11)
+        browserview.listed('run-a', True, [11])
         live = {'name': 'sess', 'value': 'live', 'domain': 'portal.example', 'path': '/'}
         with mock.patch.object(browserview, 'state', side_effect=lambda sid, fresh=False: {'open': sid == 'run-a'}),              mock.patch.object(browserview, '_live_cookies', side_effect=lambda sid: [live] if sid == 'run-a' else []):
             self.assertEqual(browserview.seed('run-b'), 2)

@@ -220,14 +220,9 @@ class StartingItTests(unittest.TestCase):
             self.assertTrue(bv.start('abc123', 'https://portal.example'))
         self.assertEqual(seen['cmd'][:5], ['ab', '--session', 'tq-abc123', '--restore', bv.RESTORE_KEY])
         self.assertEqual(seen['cmd'][-2:], ['open', 'https://portal.example'])
-        # ...and it does not announce itself. agent-browser leaves navigator.webdriver true by
-        # default (measured 2026-09-14); a login page reads that before anything subtler.
-        self.assertIn('--args', seen['cmd'])
-        self.assertIn('AutomationControlled', seen['cmd'][seen['cmd'].index('--args') + 1])
-        # HEADED is not how this browser is hidden - the pane is. A headed Chrome on Windows is a
-        # window across the owner's own work (the owner, 2026-09-14: "it should not show up in
-        # random. but in the browser").
-        self.assertNotIn('--headed', seen['cmd'])
+        # ...and attaches to the session's own Chrome (real_chrome, its flags its own): agent-browser's launch flags are none of ours,
+        # and the attach rides env(), so the agent's own commands agree (the owner, 2026-11-16: Cloudflare looped on its headless launch)
+        self.assertNotIn('--args', seen['cmd']); self.assertNotIn('--headed', seen['cmd'])
 
     def test_a_browser_the_agent_already_opened_is_not_opened_twice(self):
         with mock.patch.object(bv.shutil, 'which', return_value='ab'), \

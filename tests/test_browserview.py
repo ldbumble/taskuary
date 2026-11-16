@@ -1,6 +1,7 @@
 """The agent's browser beside its terminal: agent-browser's state files say a browser is open,
 the relay pipes its screencast to the page (and the owner's input back), Snapshot files the
 frame on the task. A fake screencast server stands in for agent-browser - no Chrome in CI."""
+import pytest
 import asyncio, base64, json, os, socket, sys, threading, time, unittest
 from pathlib import Path
 from unittest import mock
@@ -85,19 +86,27 @@ class StateTests(unittest.TestCase):
                 self.assertTrue(bv.start('slow'))
         self.assertGreater(sum(slept), 10, 'it waited past the warm budget rather than giving up on it')
 
-    def test_the_browser_does_not_announce_itself_as_headless(self):
-        """Akamai sites (fidelity.com) reset the HTTP/2 stream on a `HeadlessChrome` UA - ERR_HTTP2_PROTOCOL_ERROR (TQ-1359).
-        Every command's env carries the ordinary Chrome UA at the installed build's major version; none installed, or the
-        owner's own AGENT_BROWSER_USER_AGENT, leaves it alone."""
+    @pytest.mark.real_chrome
+    def test_the_session_s_chrome_is_a_real_one_taskuary_starts_and_agent_browser_attaches_to(self):
+        """Cloudflare looped on agent-browser's own headless launch, whose navigator.webdriver is TRUE (the owner, 2026-11-16): the
+        session's Chrome is an ordinary headed one Taskuary starts on the session's own port and profile, with no automation flag and
+        never headless, and every agent-browser command of the session attaches to it (AGENT_BROWSER_CDP) - no `--args`, no UA of ours."""
         import tempfile
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'AGENT_BROWSER_HOME': d}):
-            os.environ.pop('AGENT_BROWSER_USER_AGENT', None)
-            self.assertNotIn('AGENT_BROWSER_USER_AGENT', bv.env('x'), 'no Chrome build: agent-browser keeps its own')
-            for v in ('chrome-99.0.1.2', 'chrome-152.0.7977.64', 'chrome-not-a-version'): (Path(d)/'browsers'/v).mkdir(parents=True)
-            ua = bv.env('x')['AGENT_BROWSER_USER_AGENT']
-            self.assertIn('Chrome/152.0.0.0', ua); self.assertNotIn('Headless', ua)
-            with mock.patch.dict(os.environ, {'AGENT_BROWSER_USER_AGENT': 'mine'}):
-                self.assertNotIn('AGENT_BROWSER_USER_AGENT', bv.env('x'), "the owner's setting is inherited, not overridden")
+            (Path(d) / 'browsers' / 'chrome-152.0.7977.64').mkdir(parents=True); exe = Path(d) / 'browsers' / 'chrome-152.0.7977.64' / 'chrome.exe'
+            exe.write_text('')
+            self.assertEqual(bv.chrome_exe(), str(exe))
+            e = bv.env('rc1'); port = bv.cdp_port('rc1')
+            self.assertEqual(e['AGENT_BROWSER_CDP'], str(port)); self.assertNotIn('AGENT_BROWSER_USER_AGENT', e)
+            self.assertEqual(bv.env('rc1')['AGENT_BROWSER_CDP'], str(port), 'one port per session, whoever asks')
+            started, up = [], iter([False, False, True])
+            with mock.patch.object(bv, '_spawn_chrome', side_effect=lambda argv: started.append(argv) or 4242),                  mock.patch.object(bv, '_listening', side_effect=lambda p, timeout=.25: next(up, True)), mock.patch.object(bv.time, 'sleep'):
+                self.assertEqual(bv.real_chrome('rc1'), 4242)
+            argv = started[0]
+            self.assertEqual(argv[0], str(exe)); self.assertIn(f'--remote-debugging-port={port}', argv)
+            self.assertIn('--disable-blink-features=AutomationControlled', argv)
+            self.assertFalse([a for a in argv if 'headless' in a or 'enable-automation' in a])
+            self.assertTrue(any(a.startswith('--user-data-dir=') and a.endswith('tq-rc1') for a in argv))
 
     def test_the_session_name_rides_in_the_pty_environment(self):
         """Every pty gets AGENT_BROWSER_SESSION=tq-<sid>: whatever agent-browser command the agent

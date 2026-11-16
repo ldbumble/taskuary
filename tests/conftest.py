@@ -502,6 +502,7 @@ def pytest_configure(config):
     # later run then waits on a director that is not there (an hour of false reproductions, 2026-11-11) - a session starts without it
     Path(__file__).with_name('.fake-director').unlink(missing_ok=True)
     config.addinivalue_line('markers', 'acp: the test drives the ACP road itself, so it keeps clis.ADAPTERS (no_real_acp_adapters)')
+    config.addinivalue_line('markers', 'real_chrome: the test drives browserview.real_chrome itself, its spawn stood in for (no_real_chrome)')
 
 
 @pytest.fixture(autouse=True)
@@ -797,3 +798,12 @@ def the_basic_flow(request):
 
 # WHAT THE BASIC FLOW FOUND AND IS NOT FIXED YET (2026-11-12): (test name prefix, the break's words) - each an open finding, named in the report
 FLOW_OPEN = []
+
+
+@pytest.fixture(autouse=True)
+def no_real_chrome(request, monkeypatch):
+    """A session's Chrome is started by Taskuary itself (browserview.real_chrome) - a test never starts one: it reads as already up, and
+    whatever stands in for agent-browser answers as before. The tests of the launch itself mark `real_chrome` and stand in for the spawn."""
+    if request.node.get_closest_marker('real_chrome'): return
+    from taskuary import browserview
+    monkeypatch.setattr(browserview, 'real_chrome', lambda sid: 0)

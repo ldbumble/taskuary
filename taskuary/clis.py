@@ -113,7 +113,7 @@ def acp_adapter(cmd: str) -> dict:
 TOOLS = [
     {'name': 'agent-browser', 'cmd': 'agent-browser', 'label': 'agent-browser (Vercel)', 'license': 'Apache-2.0',
      'install': 'npm install -g agent-browser', 'url': 'https://github.com/vercel-labs/agent-browser',
-     'why': 'a local headless Chromium the coding agent drives from the terminal, shown live beside the session (browserview.py)',
+     'why': 'a Chrome Taskuary runs out of sight for the agent to drive from its terminal, shown live beside the session (browserview.py)',
      'status': 'available'},
     # its sibling for the desktop (the owner, 2026-10-31): native apps through the OS accessibility tree, off until its card is on
     {'name': 'agent-desktop', 'cmd': 'agent-desktop', 'label': 'agent-desktop (Vercel)', 'license': 'Apache-2.0',

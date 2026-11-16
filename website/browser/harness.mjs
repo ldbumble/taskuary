@@ -231,6 +231,8 @@ export async function startHarness({ fresh = false, bin = "", tour = false } = {
       if (process.env.REAL_BROWSER === "own") backendEnv.AGENT_BROWSER_HOME = path.join(os.homedir(), ".agent-browser");
       // ...and Taskuary reads that browser's own ports on this computer (fixture_server.py LOOPBACK): blocked, no sign-in was ever raised
       if (process.env.REAL_BROWSER) backendEnv.TASKUARY_FIXTURE_LOOPBACK = "1";
+      // ...and the Chrome it runs, where the scratch home has none of its own (AGENT_BROWSER_EXECUTABLE_PATH, as the owner may set it)
+      if (process.env.REAL_BROWSER && process.env.AGENT_BROWSER_EXECUTABLE_PATH) backendEnv.AGENT_BROWSER_EXECUTABLE_PATH = process.env.AGENT_BROWSER_EXECUTABLE_PATH;
     }
     delete backendEnv.TASKUARY_DEMO;
     if (process.platform === "win32") delete backendEnv.Path;

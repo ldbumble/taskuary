@@ -24,7 +24,7 @@ class EveryRoadFilesItOnceTests(unittest.TestCase):
 
     def _stream(self, pick, brain, attachments=()):
         with mock.patch.object(server, 'store', self.s), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
-             mock.patch.object(server, '_refresh_for_turn', return_value=({}, '')), mock.patch.object(handbook, 'enabled', return_value=False), \
+             mock.patch.object(handbook, 'enabled', return_value=False), \
              mock.patch.object(llm, 'build_llm', side_effect=lambda *a, trace=None, **k: (lambda system, user, **kw: brain(trace, user))):
             r = TestClient(server.app).post(f'/api/tasks/{self.tid}/assistant/stream', json={'text': LINE, 'pick': pick, 'attachments': list(attachments)})
         return [json.loads(x) for x in r.text.splitlines()]

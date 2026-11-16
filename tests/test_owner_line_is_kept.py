@@ -14,7 +14,6 @@ from fastapi.testclient import TestClient
 from taskuary import general, server
 from taskuary.store import MemoryStore
 
-REAL_REFRESH = server._refresh_for_turn            # the door's own sync before a turn (each test stubs it, but the one about it)
 
 
 class Brain:
@@ -35,8 +34,7 @@ class OwnerLineIsKept(unittest.TestCase):
                   mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli', 'label': 'Claude Code', 'model': ''}]),
                   mock.patch('taskuary.agents.ready_brains', return_value=['claude']),
                   mock.patch('taskuary.hooks.judge_ended', lambda *a, **k: None),
-                  mock.patch.object(server, 'store', self.s),
-                  mock.patch.object(server, '_refresh_for_turn', return_value=({}, ''))]:
+                  mock.patch.object(server, 'store', self.s)]:
             p.start(); self.addCleanup(p.stop)
         self.addCleanup(self.end)
 
@@ -135,19 +133,19 @@ class OwnerLineIsKept(unittest.TestCase):
 
     def test_a_line_typed_while_a_chat_poll_holds_its_lock_is_kept_and_answered_never_refused(self):
         """The owner's live task, 2026-11-12: his agent at rest with no process left, a chat poll holding its lock - the start waited 45 s on
-        it, was refused ("messages are still syncing; I did not use stale chat context - try again in a moment"), and his line came back red
-        with that glued to it. His line is kept and heard at once; the start waits a few seconds for the poll, then goes on from what is
-        stored and says so once; the door never answers him with a refusal."""
+        it, was refused, and his line came back red with that glued to it. And 2026-11-16: the turn then went on under "The newest mail could
+        not be read first" - about mail, on a line he typed. His line is kept and heard at once, nothing is fetched or said first."""
         from taskuary import conversation
         self.brain.delay = 0
         refused = mock.patch.object(server, '_refresh_chat_context', side_effect=RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment'))
-        with refused, mock.patch.object(server, '_refresh_for_turn', new=REAL_REFRESH):
+        with refused as read:
             self.assertIsNone(general.session_for(self.tid))
             r = TestClient(server.app).post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Compare three tools.', 'line_id': 'l-sync'})
         self.assertEqual(r.status_code, 200, r.text)
         got = conversation.items(self.s, self.tid)['items']
         self.assertEqual([x['id'] for x in got if x['kind'] == 'line'], ['l-sync'])
-        self.assertEqual([x['text'] for x in got if x['kind'] == 'note'], [general.SYNC_STALE])
+        self.assertFalse(read.called)
+        self.assertEqual([x['text'] for x in got if x['kind'] == 'note'], [])
         self.assertEqual([x['text'] for x in got if x['kind'] == 'turn'], ['Answer 1.'])
         self.assertNotIn('syncing', json.dumps(got))
 

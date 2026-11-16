@@ -2548,22 +2548,6 @@ def _chat_kind(task_id: int):
     store.update_task(task_id, {'Kind': 'general'}, ACTOR)
     store.audit('task', task_id, 'kind_by_typing', ACTOR, detail={'from': t.get('Kind')})
 
-FOLLOW_UP_STALE = 'The newest messages could not be read first, so the agent goes on from what it already has'
-
-def _refresh_for_turn(task_id: int) -> tuple[dict, str]:
-    """The chat's sync before a turn, as (refresh, why it was skipped). A FOLLOW-UP to an agent already live on the task is the owner
-    talking to work under way, as Continue is - and Continue never waits on a sync: a mail poll still running, or a mailbox's
-    old error, refused every typed word to an agent waiting on you, and the box showed nothing (the owner, 2026-11-02: "the text
-    goes no where"). It goes on and says so. Starting an agent still reads the chat first (_refresh_chat_context)."""
-    # ...AND A START NEITHER (the owner's live task, 2026-11-12: an agent at rest with no process left - its start waited 45 s on a chat poll's
-    # lock, was refused, and his line came back red with the refusal glued to it): a poll that holds the lock is waited on a few seconds
-    # (SYNC_PATIENCE), then the turn goes on from what is stored and says so once (general.SYNC_STALE); a mailbox's own error the same
-    try: return _refresh_chat_context(task_id=task_id, patience=SYNC_PATIENCE), ''
-    except RuntimeError as e:
-        logger.info(f'task {task_id}: a line goes in without a fresh sync - {e}')
-        return {}, FOLLOW_UP_STALE
-SYNC_PATIENCE = 5               # seconds a typed line's start waits on a chat poll another reader holds
-
 def _demo_turn(task_id: int, text: str, line_id=None):
     """THE DEMO HAS NO AI (the owner, 2026-11-05: "of course no prompts work since there is no AI"): what is typed into a task's chat is
     kept, and the answer under it says so in plain words - never "No AI is connected" over a chat whose turns were all written in
@@ -2610,9 +2594,9 @@ def waiting_now(task_id: int):
     return {'ok': True, **waitroom.deliver(store, task_id)}
 
 def _say(task_id: int, body, **kw):
-    "A typed line on the one road (general.take_line), as the chat's doors send it - the chat synced first, behind the kept line."
+    "A typed line on the one road (general.take_line), as the chat's doors send it - his words straight to the agent, nothing fetched first."
     from . import general
-    return general.take_line(store, task_id, body.text, body.attachments, ACTOR, _line_id(body), prepare=kw.pop('prepare', lambda: _refresh_for_turn(task_id)),
+    return general.take_line(store, task_id, body.text, body.attachments, ACTOR, _line_id(body),
                              **({k: v for k, v in (('connector_id', body.connector_id), ('model', body.model), ('pick', body.pick)) if v} if general.handles(store.get_task(task_id)) else {}), **kw)
 def _line_id(body): return (getattr(body, 'line_id', None) or '')[:80] or None
 
@@ -2705,13 +2689,6 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
 
     def work():
         session = None
-        def synced():
-            fresh, stale = _refresh_for_turn(task_id)
-            if stale: put({'type': 'progress', 'name': 'sync_messages', 'detail': stale})
-            # ...shown only when it found something: an empty check before every turn was machinery in the chat (the owner, 2026-11-05)
-            if fresh.get('polled') and fresh.get('added'):
-                put({'type': 'tool_call', 'name': 'sync_messages',
-                     'detail': {'new': fresh.get('added', 0)}})
         try:
             # ...said started only with an AI to start on: with none the step read "Started the selected agent" over a turn that
             # never could run (2026-10-22 walk) - send_prompt keeps the owner's words and fails saying why
@@ -2721,7 +2698,7 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
                 nonlocal session
                 session = s
                 if s.pick: put({'type': 'start', 'session': s.info()})
-            session, reply = _say(task_id, body, trace=trace, cancel=cancel, started=started, prepare=synced)
+            session, reply = _say(task_id, body, trace=trace, cancel=cancel, started=started)
             put({'type': 'done', 'reply': reply, 'payload': _assistant_payload(task_id, session)})
         # Once headers are streaming, FastAPI cannot replace this with its normal JSON error
         # response. Always terminate the NDJSON stream explicitly instead of leaving the UI's
@@ -3075,7 +3052,7 @@ def continue_work(task_id: int, body: ContinueBody = None):
         # (its own conversation, else a fresh one with the handover), one that idled out, one at rest. What came in since rides as Taskuary's
         extra = general.relayed(note, (body.context if body else '') or '')
         told = '\n\n'.join(x for x in [continuity.news_block(store, task_id), f'{general.RELAY} {extra}' if extra else ''] if x) if general.handles(task) else ''
-        try: out = general.take_line(store, task_id, note, imgs or None, ACTOR, wait=False,      # ...and Continue never waits on a sync (_refresh_for_turn)
+        try: out = general.take_line(store, task_id, note, imgs or None, ACTOR, wait=False,
                                      **({'delivery_instructions': told} if told else {}))
         except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
         kind = 'general' if general.handles(task) else 'coding'
@@ -10603,7 +10580,7 @@ def _refresh_for_finish(_store, task_id: int, message_id: int) -> dict:
     return _refresh_chat_context(task_id=task_id, message_id=message_id)
 
 
-def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bool = False, on_fetched=None, patience: float = None) -> dict:
+def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bool = False, on_fetched=None) -> dict:
     """Synchronize a live chat before its stored text is used to answer or act.
 
     The background clock keeps the screen lively; this is the correctness gate.  If an Assistant
@@ -10631,8 +10608,7 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bo
     if grace and _recently_fetched(types, store):
         return {'polled': False, 'newer': False, 'before': before, 'after': before,
                 'added': 0, 'channel': channel, 'fresh': True}
-    # `patience`: how long a poll another reader holds is waited on (a number of seconds; else the gate's own DRAIN_WAIT)
-    added = _poll_reports(0, what=f'refreshing {channel} context', only=types, wait=patience or True, on_fetched=on_fetched)
+    added = _poll_reports(0, what=f'refreshing {channel} context', only=types, wait=True, on_fetched=on_fetched)
     if added is False:
         raise RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment')
     failed = [store.get_connector(c['ConnectorId']) for c in connectors]

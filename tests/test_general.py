@@ -391,19 +391,20 @@ class GeneralApiTests(unittest.TestCase):
             first = client.post(f'/api/tasks/{tid}/assistant/stream', json={'text': 'Make the chart', 'pick': 'cli:claude'})
             self.assertEqual(json.loads(first.text.splitlines()[-1])['type'], 'done')
             self.assertTrue(general.session_for(tid).waiting(), 'parked: the agent is waiting on you, with no question open')
-            with mock.patch.object(server, '_refresh_chat_context', side_effect=busy):
+            with mock.patch.object(server, '_refresh_chat_context', side_effect=busy) as read:
                 r = client.post(f'/api/tasks/{tid}/assistant/stream', json={'text': 'Now make it blue', 'pick': 'cli:claude'})
         events = [json.loads(line) for line in r.text.splitlines()]
         self.assertEqual(events[-1]['type'], 'done', events[-1])
         self.assertEqual(events[-1]['reply'], 'Turn 2 done.')
-        self.assertIn({'type': 'progress', 'name': 'sync_messages', 'detail': server.FOLLOW_UP_STALE}, events)
+        self.assertFalse(read.called, 'his words go straight in: nothing is fetched first')
+        self.assertFalse([e for e in events if e.get('name') == 'sync_messages'], events)
         self.assertIn('Now make it blue', said[-1])
         self.assertEqual([m['role'] for m in events[-1]['payload']['messages']], ['user', 'assistant', 'user', 'assistant'])
 
-    def test_starting_an_agent_still_reads_the_chat_first(self):
-        """No agent live: a typed message STARTS one, and that still reads the chat first - but a sync it cannot do never refuses his line
-        (the owner's live task, 2026-11-12: refused after 45 s, his line came back red with the refusal glued to it): the turn goes on from
-        what is stored and says so once."""
+    def test_a_typed_line_starts_the_agent_without_reading_the_mail_first(self):
+        """No agent live: a typed message STARTS one, and nothing is fetched first (the owner, 2026-11-16: "tell me what to do and i will do
+        it" - his own line - came back under "The newest mail could not be read first, so the agent goes on from what it already has"): his
+        words are his, and mail that comes meanwhile reaches the agent as it arrives. Nothing is said about mail on his turn."""
         store = MemoryStore(); tid = general_task(store)
         connect_cli(self, claude={'cmd': 'claude'})
         busy = RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment')
@@ -412,9 +413,8 @@ class GeneralApiTests(unittest.TestCase):
              mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'The chart is made.'):
             r = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/stream', json={'text': 'Make the chart', 'pick': 'cli:claude'})
         events = [json.loads(line) for line in r.text.splitlines()]
-        self.assertTrue(read.called)                                                                  # ...read first
-        self.assertFalse([e for e in events if e['type'] == 'error'], events)                         # ...never a refusal
-        self.assertIn({'type': 'progress', 'name': 'sync_messages', 'detail': server.FOLLOW_UP_STALE}, events)
+        self.assertFalse(read.called)                                                                 # ...nothing fetched first
+        self.assertFalse([e for e in events if e['type'] == 'error' or e.get('name') == 'sync_messages'], events)
         self.assertEqual(next(e for e in events if e['type'] == 'done')['reply'], 'The chart is made.')
 
     def test_a_turn_that_dies_mid_way_is_said_once_its_session_is_down(self):

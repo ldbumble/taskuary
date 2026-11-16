@@ -136,7 +136,7 @@ def run_kept(store, tid: int) -> bool:
     w = kept[0]
     PRESSED[tid] = time.time(); _IN_FLIGHT[tid] = 1; OPENING.add(tid)
     def go():
-        try: _start_line(store, tid, t, w['text'], w['files'], 'owner', w.get('line'), w['id'], None, {})
+        try: _start_line(store, tid, t, w['text'], w['files'], 'owner', w.get('line'), w['id'], {})
         except Exception as e: logger.warning(f'task {tid}: the lines that waited did not start their turn - {e}')
     threading.Thread(target=go, daemon=True, name=f'line-{tid}').start()
     return True
@@ -3548,14 +3548,15 @@ def line_state(store, tid: int, rows: list = None, was: bool = False) -> dict:
     return {'working': was or starting(tid) or _at_work(s), 'turnStarted': at, 'waiting': waiting_lines(store, tid) if rows is None else rows}
 
 
-def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=None, prepare=None, wait=True, **kw):
+def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=None, wait=True, **kw):
     """THE ONE ROAD FOR A LINE THE OWNER TYPES TO A TASK'S AGENT, whatever agent takes it and whatever its session is doing - at work, at rest,
     idled out, ended, never started, closed, after a restart (the owner, 2026-11-10: "coding and general use the same code when it comes to
     interactions so there should be no difference ... it should happen right away"). In this order, before any process is started or woken:
     a closed task opens again (reopen), the line is kept as the owner's (wait_line - a read a millisecond later draws it), the turn is at work
     (OPENING, from the press - PRESSED), and only then does the kind's own starter take it: a chat's turn (say_line) or a coding session's
     next prompt, the session woken or reopened as needed (waitroom.deliver). How a process starts, its callbacks and its cards are the kind's;
-    nothing before them is. `prepare()`: what the door does before the agent hears it (a sync of the chat), after the line is kept and at work.
+    nothing before them is. NOTHING IS FETCHED FIRST (the owner, 2026-11-16: "tell me what to do and i will do it" drew "The newest mail could not
+    be read first" over his own typed line): what he types is his, and mail that comes meanwhile reaches the agent as it arrives (waitroom).
     `wait=False`: the starter runs behind the answer (a door that answers at once) - everything before it has happened by then.
     -> the starter's answer: (session, reply) for a chat, the waiting room's for a coding session; {'kept': row} when not waited for."""
     text = str(text or '').strip()
@@ -3576,8 +3577,6 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
         selfclose.claim(store, tid, actor)
     from . import outputs
     files = outputs.take_in(tid, files) if files and handles(t) else files
-    # ...A START READS THE CHAT FIRST, as it always did (server._refresh_for_turn), at work from the press all the while: a sync that fails
-    # refuses the start before anything is kept, its reason under the line on the page
     line_id = line_id or new_line_id()
     # ...AND A TURN HE STOPPED IS AT REST FOR HIS NEXT LINE, though its CLI has not let go (the bug hunt's stop, 2026-11-12): the page drew the
     # line under the stop, kept unheard it went down by the box, and came back up seconds later when the stopped turn ended. It begins the
@@ -3600,22 +3599,14 @@ def take_line(store, tid: int, text: str, files=None, actor='owner', line_id=Non
     try: wid = wait_line(store, tid, text, files, line_id)
     except Exception: answered(tid, every=True); conversation.unhear(store, tid, [line_id]); raise
     if not wait:
-        threading.Thread(target=lambda: _start_line(store, tid, t, text, files, actor, line_id, wid, prepare, kw), daemon=True, name=f'line-{tid}').start()
+        threading.Thread(target=lambda: _start_line(store, tid, t, text, files, actor, line_id, wid, kw), daemon=True, name=f'line-{tid}').start()
         return {'kept': wid}
-    return _start_line(store, tid, t, text, files, actor, line_id, wid, prepare, kw)
+    return _start_line(store, tid, t, text, files, actor, line_id, wid, kw)
 
 
-SYNC_STALE = 'The newest mail could not be read first, so the agent goes on from what it already has.'
-def _start_line(store, tid, t, text, files, actor, line_id, wid, prepare, kw):
+def _start_line(store, tid, t, text, files, actor, line_id, wid, kw):
     "take_line's last step: the kind's own starter, the line already kept and at work."
     try:
-        if prepare:
-            # ...a sync that could not be done never refuses his line: the agent goes on from what is stored, and the chat says so once
-            try: got = prepare()
-            except Exception as e: logger.info(f'task {tid}: the chat was not read first - {e}'); got = ({}, str(e))
-            if isinstance(got, tuple) and len(got) > 1 and got[1]:
-                from . import sessionrecord
-                store.add_comment(tid, sessionrecord.NOTE_ACTOR, ASSISTANT_TYPE, SYNC_STALE)
         if handles(t): return say_line(store, tid, text, files, actor=actor, waiting=wid, line_id=line_id, **kw)
         from . import waitroom
         out = waitroom.deliver(store, tid)

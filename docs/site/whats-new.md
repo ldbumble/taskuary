@@ -2,6 +2,23 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.4.0.13 - 2026-11-16
+
+- A coding task's chat reads each CLI log once per version: a poll no longer parses every session's whole log again
+- The quick agent's hand-on to the full agent is silent: the owner never hears the inner workings
+- An agent never says the task is ready for Mark done while a card it set up still waits
+- One failure is one row for filed notices too: a failure mail come again lands on the notice it repeats
+- A browser whose speech service sends no words says so, with this computer's other voice as its button
+- An approved SQL write that returns no rows commits and says its count, instead of failing and rolling back
+- A mail's attachment opens in place in the viewer an agent's file opens in, Download beside it
+- An approved act that fails hands back to its agent at once, and its card is over with the error
+- A line the owner types goes straight to the agent: nothing is fetched first, and no mail line is said on his turn
+- A new task opens with its agent's turn starting under the ask, never a "..." at the canvas foot
+- A paste into a task's chat attaches to its box: its upload and why one failed show there, and no upload hangs
+- An agent that answered and idled out waits on you; its chat no longer says it left without finishing
+- An agent may read the context file Taskuary wrote for its task: the read gate refused it as Taskuary's own data
+- The agent answers what was asked; a line of what it did not do is said only where it changes the answer
+
 ## 0.4.0.12 - 2026-11-16
 
 - The agents' instructions say each rule once and shorter, and a card's content is never retold in other words

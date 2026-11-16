@@ -131,9 +131,14 @@ def pending(tid: int = None, store=None) -> list:
              'options': [{'kind': o, 'label': LABEL[o]} for o in p['req']['options']]} for p in sorted(rows, key=lambda p: p['at'])]
 
 
-def ask(store, tid: int, request: dict, wait: float = None, timed_out=None) -> str:
+ASIDE: set = set()      # the requests set aside as the chat moved on (set_aside): refused, and by nobody - never the owner's no
+
+
+def ask(store, tid: int, request: dict, wait: float = None, timed_out=None, moved_on=None) -> str:
     """THE SEAM. Blocks until answered (call it off an event loop). Returns one of the request's options. `timed_out()` is called when
-    nobody answered - the refusal returned then is no owner's word, and a caller may file it for later (acpgate)."""
+    nobody answered - the refusal returned then is no owner's word, and a caller may file it for later (acpgate); `moved_on()` when it was
+    still waiting as the chat moved past it (set_aside) - no one's no either, and its agent is told so (the owner, 2026-11-16: the agent wrote
+    "You declined my search of the FanApp code" of a step he never answered)."""
     from . import agents, agentchannels, workerstate as ws
     tid, r = int(tid), normal(request)
     if not agents.developer_mode(store): return _pick(r, False)
@@ -161,6 +166,10 @@ def ask(store, tid: int, request: dict, wait: float = None, timed_out=None) -> s
     finally:
         with _LOCK: PENDING.pop(pid, None)
     ans = kind_of((out or {}).get(rid), r['options'])
+    if pid in ASIDE:
+        ASIDE.discard(pid)
+        if moved_on: moved_on()
+        return ans or _pick(r, False)
     if not ans:
         ans = _pick(r, False)
         said = (f"No answer in {round(wait / 60) or 1} min{'s' if round(wait / 60) != 1 else ''} - the agent's request was refused: it {line(r)}."
@@ -208,6 +217,7 @@ def set_aside(store, tid: int) -> list:
     out = []
     for p in ps:
         if not (h := ws.HELD.get(p['g'])): continue
+        ASIDE.add(p['id'])
         ws._answer_held(store, int(tid), h, {p['rid']: _pick(p['req'], False)}, 'taskuary')
         said = SET_ASIDE_SAID.format(line(p['req']))
         store.add_comment(int(tid), 'taskuary', 'agent', said); out.append(p['id'])

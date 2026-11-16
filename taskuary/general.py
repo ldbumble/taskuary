@@ -3198,6 +3198,9 @@ class GeneralSession:
             # box asking for the answer to a question nobody needed. Closed before the turn's end is written: an answer is a turn going on. The turn's own stored word (its summary's nothing_left), no reading of it;
             # a sign-in or a page handed over is not a question of words, and ends by its own road
             if not asks and summ and summ.get('nothing_left'):
+                from . import proposals as _props
+                try: _props.finished_without(self.store, self.task_id)
+                except Exception as e: logger.debug(f'task {self.task_id}: the steps it finished without stayed lit - {e}')
                 from .signin import PREFIX as _SIGNIN
                 from .browserview import TURN_PREFIX as _TURN
                 for r in ws.open_requests(ws.events(self.store, self.task_id, self.sid)):

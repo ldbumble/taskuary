@@ -113,6 +113,25 @@ def test_no_answer_is_a_refusal_said_plainly(s):
     assert any(b.startswith('No answer in') and 'refused' in b and 'npm test -- money' in b for b in said)
 
 
+def test_a_request_the_chat_moved_past_is_nobodys_no_and_its_agent_is_told_it_was_still_waiting(s):
+    """The owner's live task, 2026-11-16: a general agent's read was waiting on his Allow, he wrote again, and the agent told him "You declined
+    my search of the FanApp code". He never answered: set aside as the chat moved on is no one's no (acpgate.STILL_WAITING)."""
+    from taskuary import acpgate
+    tid, past = coding(s), []
+    box = []
+    t = threading.Thread(target=lambda: box.append(perm.ask(s, tid, perm.from_acp(ACP), wait=5, moved_on=lambda: past.append(1))), daemon=True); t.start()
+    for _ in range(200):
+        if perm.pending(tid, s): break
+        time.sleep(0.02)
+    perm.set_aside(s, tid); t.join(5)
+    assert box == ['reject_once'] and past == [1]
+    told = []
+    with mock.patch.object(perm, 'ask', lambda st, t_, r, **kw: kw['moved_on']() or 'reject_once'), mock.patch('taskuary.shellgate.declined', lambda *a, **k: told.append(a)):
+        got = acpgate.put_to_owner({'store': s, 'task_id': tid, 'sid': 'sess-1', 'cwd': REPO}, ACP, 'it reads outside')
+    assert got == (acpgate.REFUSED, acpgate.STILL_WAITING) and told == [], 'never "the owner did not approve it"'
+    assert 'nobody said no' in acpgate.STILL_WAITING
+
+
 def test_the_generic_answer_road_takes_the_label_too(s):
     "The rail's own answer (POST /worker/answer) carries the choice's label - it resolves the held request as the button does."
     tid = coding(s)

@@ -506,9 +506,28 @@ LAND_LINE = '- the push/landing question you raised'
 PASSED_SAID = 'This was set aside when you moved on - ask the agent to bring it back.'
 
 
+NOT_NEEDED = 'not needed - the agent finished without it'
+
+
 def passed(rv: dict | None) -> bool:
     "Whether review `rv` is a card the conversation moved past (move_on) - not pressable, and its press route says so (PASSED_SAID)."
-    return bool(rv) and rv.get('Status') == 'superseded' and rv.get('DecideNote') == SET_ASIDE
+    return bool(rv) and rv.get('Status') == 'superseded' and rv.get('DecideNote') in (SET_ASIDE, NOT_NEEDED)
+
+
+def finished_without(store, tid: int) -> list:
+    """A STEP HELD IN A TURN THAT THEN FINISHED THE JOB IS NOT LEFT LIT UNDER ITS ANSWER (the owner, 2026-11-16: a research turn's PDF read-back
+    was held, it finished the report another way, and the Approve stood live under the complete answer). The turn's own word that its goal is
+    met and checked (its summary's nothing_left - no reading of it) greys the steps held in that same turn in place, with the true line. ->
+    the review ids."""
+    from .shellgate import turn_of
+    turn, out = turn_of(store, int(tid)), []
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' AND DeliveryClaim IS NULL", (int(tid),)):
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): p = {}
+        if isinstance(p, dict) and p.get('action') in HELD_ACTS and p.get('turn') == turn and store.decide_review(r['ReviewId'], 'superseded', None, 'taskuary', note=NOT_NEEDED):
+            out.append(r['ReviewId'])
+    if out: store.audit('task', tid, 'cards_passed', 'taskuary', 'system', {'rids': out, 'why': NOT_NEEDED})
+    return out
 
 
 def move_on(store, tid, before: str = None) -> list:
@@ -618,6 +637,7 @@ def passed_why(store, r: dict) -> str:
     his lines and the messages that came in, up to when it was set aside - written after it, or before the agent read it."""
     from . import general
     from .conversation import _mail, ep
+    if r.get('DecideNote') == NOT_NEEDED: return 'Not needed - the agent finished without it'
     card, end = ep(r.get('DraftAt') or r.get('CreatedAt')), ep(r.get('DecidedAt')) or time.time()
     tid = int(r['TaskId'])
     his = [x for x in store.list_comments(tid, internal=True) if x.get('ActorType') in (general.USER_TYPE, general.WAITING_TYPE)

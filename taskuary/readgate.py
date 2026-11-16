@@ -43,7 +43,47 @@ def own(store, tid, cwd: str = '') -> list:
         # is its own work - timed on a long task, 2026-11-16: a grep over its mail's files was refused as Taskuary's data, and it worked around
         ms = store.list_messages(int(tid))
         rs += [a['Path'] for m in ms for a in store.list_attachments(m['MessageId']) if a.get('Path')] + [config.home() / 'attachments' / str(int(m['MessageId'])) for m in ms]
-    return [_n(r) for r in dict.fromkeys(map(str, rs)) if r]
+    return [_n(r) for r in dict.fromkeys(map(str, rs + checkouts(store))) if r]
+
+
+def checkouts(store) -> list:
+    """EVERY CHECKOUT OF A REPOSITORY TASKUARY HAS IS WORK, FOR EVERY AGENT (the owner, 2026-11-16, "we went through this 50 times": a general
+    agent asked to "read the folder FanApp" - his own GitHub-connected repository, whose checkout coding tasks run in): the checkouts the agents'
+    profiles map their repositories to (repochoice), and every checkout a coding task's session ran in (its transcripts) - as folders, never
+    the folders above them."""
+    if store is None: return []
+    from . import repochoice
+    out = [p for p in repochoice._paths(store).values() if p]
+    try: out += [r['Cwd'] for r in store._rows("SELECT DISTINCT Cwd FROM transcript WHERE IFNULL(Cwd,'')<>''") if repochoice.is_checkout(r['Cwd'])]
+    except Exception: pass
+    return list(dict.fromkeys(map(str, out)))
+
+
+# WHAT ITS OWN CLI FETCHED FOR IT IS ITS WORK TOO (the owner, 2026-11-16, of a research turn whose PDF read-back was held as a card under its
+# finished answer: "files the agent's own CLI downloaded during the task count as its work area"). The exact folders, never their parents:
+# Claude Code keeps what a WebFetch saved in <its home>/projects/<the session's folder, spelled>/<session>/tool-results - the project part
+# names THIS task's folder, so another task's or the owner's own sessions are not in it; Codex keeps the pictures it made in
+# <CODEX_HOME>/generated_images/<thread>, read here only for the threads this task's sessions ran. Everything else in those homes - their
+# sign-ins, settings, other sessions - still asks, or is never read (floor.kept_secret).
+def _slug(cwd: str) -> str: return re.sub(r'[^A-Za-z0-9]', '-', str(cwd or ''))
+def fetched(p: str, cwd: str = '', sids=()) -> bool:
+    """Is normalised path `p` inside a folder the task's own CLI downloaded into: Claude Code's tool-results for a session started in `cwd`,
+    or Codex's pictures for one of `sids`?"""
+    from .climodels import claude_home
+    if cwd:
+        base = _n(Path(claude_home()) / 'projects' / _slug(cwd))
+        if _in(p, base):
+            rest = p[len(base):].lstrip('\/').split(os.sep)
+            if len(rest) >= 3 and rest[1] == 'tool-results' and rest[0]: return True
+    codex = _n(Path(os.environ.get('CODEX_HOME') or Path.home() / '.codex') / 'generated_images')
+    return any(_in(p, _n(Path(codex) / str(sid))) for sid in sids if sid)
+
+
+def _sids(store, tid) -> list:
+    "The ids of the CLI sessions this task's agents ran (their transcripts): the threads whose own downloads are its work."
+    if store is None or not str(tid or '').isdigit(): return []
+    try: return [r['Sid'] for r in store._rows('SELECT DISTINCT Sid FROM transcript WHERE TaskId=?', (int(tid),)) if r.get('Sid')]
+    except Exception: return []
 
 
 def _open() -> list:
@@ -68,12 +108,12 @@ def judge(store, tid, paths, cwd: str = '') -> tuple:
     'folder'} - shellgate's own shape), `never` the reason when one is Taskuary's own or a sign-in place ('' else). None in `paths` is a
     path that could not be read, held as a step of its own."""
     from . import floor
-    mine, nev, ok = own(store, tid, cwd), [_n(p) for p in floor.kept_secret()], granted(store, tid) + _open()
+    mine, nev, ok, sids = own(store, tid, cwd), [_n(p) for p in floor.kept_secret()], granted(store, tid) + _open(), _sids(store, tid)
     held, blind = {}, False
     for raw in paths or []:
         if raw is None: blind = True; continue
         p = _n(raw)
-        if any(_in(p, r) for r in mine): continue
+        if any(_in(p, r) for r in mine) or fetched(p, cwd, sids): continue
         if any(_in(p, r) for r in nev): return [], NEVER
         if any(_in(p, r) for r in ok): continue
         p = os.path.realpath(os.path.expanduser(str(raw)))           # ...said as the owner's own spelling of it, never case-folded

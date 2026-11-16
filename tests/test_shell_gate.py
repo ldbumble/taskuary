@@ -338,6 +338,48 @@ class ReadingOutside(unittest.TestCase):
         self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')
         self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', 'Get-Content notes.md', 'PowerShell', self.work), {})
 
+    def test_what_its_own_cli_downloaded_is_its_work_and_the_rest_of_that_home_still_asks(self):
+        """The owner, 2026-11-16: a research turn's read-back of the PDF its own WebFetch had saved was held as a card under its finished
+        answer - "files the agent's own CLI downloaded during the task count as its work area". The exact folders: Claude Code's tool-results
+        for a session started in this task's folder, Codex's pictures for this task's own threads - never another session's, nor the rest of
+        those homes."""
+        from taskuary import acpgate, climodels, readgate
+        claude = os.path.join(self.docs, 'claude-home'); codex = os.path.join(self.docs, 'codex-home')         # ...outside its work, as his own are
+        with mock.patch.dict(os.environ, {'CLAUDE_CONFIG_DIR': claude, 'CODEX_HOME': codex}):
+            mine = os.path.join(claude, 'projects', readgate._slug(self.work), '4efe24ce', 'tool-results', 'webfetch-17948.pdf')
+            other = os.path.join(claude, 'projects', readgate._slug(self.docs), '4efe24ce', 'tool-results', 'webfetch-1.pdf')
+            log = os.path.join(claude, 'projects', readgate._slug(self.work), '4efe24ce.jsonl')
+            self.assertEqual(acpgate.decide(self.read(mine), self.ctx)[0], acpgate.ALLOWED, 'its own download, read back')
+            self.assertEqual(acpgate.decide(self.read(other), self.ctx)[0], acpgate.HELD, "another folder's session is not its own")
+            self.assertNotEqual(acpgate.decide(self.read(log), self.ctx)[0], acpgate.ALLOWED, 'its session log is no download')
+            self.s.add_transcript(self.tid, 'thread-7', 'Drew the chart.', 'codex', self.work)
+            self.assertTrue(readgate.fetched(readgate._n(os.path.join(codex, 'generated_images', 'thread-7', 'chart.png')), self.work, readgate._sids(self.s, self.tid)))
+            self.assertFalse(readgate.fetched(readgate._n(os.path.join(codex, 'generated_images', 'thread-8', 'x.png')), self.work, readgate._sids(self.s, self.tid)))
+
+    def test_a_checkout_of_a_repository_taskuary_has_is_every_agents_work(self):
+        """The owner's live task, 2026-11-16 ("we went through this 50 times"): a general agent on a question about one app asked to "read the
+        folder FanApp" - his GitHub-connected repository, whose checkout the coding agents' map names. Every checkout Taskuary has - a
+        profile's map, a folder a coding session ran in - is any agent's work; the folder above it still asks."""
+        from taskuary import acpgate, repochoice
+        fan, ledger = os.path.join(self.docs, 'FanApp'), os.path.join(self.docs, 'ledger')
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/fanapp': fan}}))
+        self.assertEqual(acpgate.decide(self.read(os.path.join(fan, 'src', 'App.tsx')), self.ctx)[0], acpgate.ALLOWED)
+        other = Factory(self.s).task('Fix the ledger rounding', kind='coding'); self.s.add_transcript(other, 'run9', 'Fixed.', 'claude', ledger)
+        with mock.patch.object(repochoice, 'is_checkout', lambda p: os.path.normcase(str(p)) == os.path.normcase(ledger)):
+            self.assertEqual(acpgate.decide(self.read(os.path.join(ledger, 'totals.py')), self.ctx)[0], acpgate.ALLOWED, 'a checkout a coding task ran in')
+        self.assertEqual(acpgate.decide(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx)[0], acpgate.HELD, 'the folder above them still asks')
+
+    def test_a_step_held_in_a_turn_that_finished_the_job_greys_with_the_true_line(self):
+        """The same walk: the PDF read was held, the turn finished the report another way and said its goal was met (nothing_left) - and the
+        Approve stood live under the complete answer. Steps held in a turn that finished are over: greyed in place, with what happened."""
+        from taskuary import acpgate, proposals
+        acpgate.decide(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx); [rv] = self.pending()
+        self.assertEqual(proposals.finished_without(self.s, self.tid), [rv['ReviewId']])
+        r = self.s.get_review(rv['ReviewId'])
+        self.assertTrue(proposals.passed(r), 'nothing presses it')
+        self.assertEqual(proposals.passed_why(self.s, r), 'Not needed - the agent finished without it')
+        self.assertEqual(proposals.passed_since(self.s, self.tid, ''), [], 'never told back as a card he moved past')
+
     def test_approve_lets_the_task_read_that_folder_from_then_on_and_tells_the_agent(self):
         from taskuary import acpgate
         call = self.read(os.path.join(self.docs, 'conftest.py'))

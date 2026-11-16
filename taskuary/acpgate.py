@@ -108,14 +108,18 @@ def owner_asks(ctx: dict) -> bool:
 # THE OWNER'S OWN NO ON THE STEP, in their voice (the owner, 2026-11-10): it read "Taskuary refused it: the owner said no" - the app
 # taking the credit for their press
 YOU_REJECTED = 'You rejected this'
+# ...and a step nobody answered is no one's no: it was still waiting when the chat moved past it (permissions.set_aside)
+STILL_WAITING = ('It was still waiting for the owner when the conversation moved on - nobody said no to it, so never say they did. Raise '
+                 'it again if it is still needed')
 
 
 def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
     "(answer, why) once the owner has answered a held call (permissions.ask) - or not: then the Approve card, and a refusal."
     from . import permissions, shellgate, workerstate as ws
-    store, tid, late = ctx['store'], int(ctx['task_id']), []
+    store, tid, late, past = ctx['store'], int(ctx['task_id']), [], []
     req = {**permissions.from_acp(params), 'sid': str(ctx.get('sid') or (params or {}).get('sessionId') or '')}
-    got = permissions.ask(store, tid, req, timed_out=lambda: late.append(1))
+    got = permissions.ask(store, tid, req, timed_out=lambda: late.append(1), moved_on=lambda: past.append(1))
+    if past: return REFUSED, STILL_WAITING
     tc = (params or {}).get('toolCall') or {}
     reads = reads_of(tc, ctx)[0]
     if got.startswith('allow'):
@@ -148,14 +152,14 @@ def answerer(ctx: dict, trace=None, held: dict = None):
         if answer == HELD and asks: answer, why = put_to_owner(ctx, params, why)
         out = acp.pick(params.get('options'), answer == ALLOWED)
         iid = str(tc.get('toolCallId') or '')
-        if answer != ALLOWED and held is not None: held[iid] = why if answer in (HELD, CARD) or why == YOU_REJECTED else f'Taskuary refused it: {why}'
+        if answer != ALLOWED and held is not None: held[iid] = why if answer in (HELD, CARD) or why in (YOU_REJECTED, STILL_WAITING) else f'Taskuary refused it: {why}'
         # ...AND THE AGENT HEARS TASKUARY'S OWN REASON (recorded on the real CLI, 2026-11-15): the adapter's answer is "User refused permission
         # to run tool" whoever said no, so a push refused with the way on ("call propose_land") reached only the page's trace - the agent
         # told the owner "once you approve, I'll push" over nothing to approve. Said as the owner's own no is (put_to_owner), by the one road
         if answer in (REFUSED, CARD) and why and why != YOU_REJECTED and ctx.get('store') is not None and str(ctx.get('task_id') or '').isdigit():
             from .browsergate import _tell
             cmd = tool_of(tc)['command']
-            _tell(ctx['store'], int(ctx['task_id']), f"{f'`{cmd[:200]}`' if cmd else 'That step'} was not run - Taskuary's own answer, not the owner's: {why}")
+            _tell(ctx['store'], int(ctx['task_id']), f"{f'`{cmd[:200]}`' if cmd else 'That step'} was not run - " + (why if why == STILL_WAITING else f"Taskuary's own answer, not the owner's: {why}"))
         name = tool_of(tc)['name'] or str(tc.get('title') or 'tool')
         (logger.info if answer == ALLOWED else logger.warning)(f'acp permission: {name} {answer}' + (f' - {why}' if why else ''))
         if trace: trace('permission', name, {'tool_call_id': iid, 'answer': answer, 'why': why, 'title': str(tc.get('title') or '')[:200]})

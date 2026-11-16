@@ -16,10 +16,13 @@ export const IMAGE_ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 export const isImagePath = (p) => /\.(png|jpe?g|gif|webp)$/i.test(String(p || ""));
 
 // one file to the server: a picture through the image road (its type check), anything else through the file road; { path, name, image }
+// ...IN A MINUTE OR TWO, or it says so (the owner, 2026-11-16: a paste's "Attaching..." never resolved and nothing was attached): an upload
+// with no limit that stalled held the box's busy line for good
+export const UPLOAD_MS = 120000;
 export async function savePromptFile(f) {
-  const image = IMAGE_TYPES.test(f.type);
-  const { data } = image ? await api.post("/api/prompt-image", f, { headers: { "Content-Type": f.type } })
-    : await api.post("/api/prompt-file", f, { headers: { "Content-Type": "application/octet-stream", "X-File-Name": encodeURIComponent(f.name || "file") } });
+  const image = IMAGE_TYPES.test(f.type), timeout = UPLOAD_MS;
+  const { data } = image ? await api.post("/api/prompt-image", f, { headers: { "Content-Type": f.type }, timeout })
+    : await api.post("/api/prompt-file", f, { headers: { "Content-Type": "application/octet-stream", "X-File-Name": encodeURIComponent(f.name || "file") }, timeout });
   return { path: data.path, name: f.name || (image ? "pasted image" : "file"), image };
 }
 
@@ -37,12 +40,17 @@ export function usePromptImages({ files: anyFile = false } = {}) {
         const got = await savePromptFile(f);
         setImgs((cur) => (cur.length >= MAX_IMAGES ? cur : [...cur, { ...got, url: got.image ? URL.createObjectURL(f) : "" }]));
       }
-    } catch (e) { setErr(e?.response?.data?.detail || (anyFile ? "the file did not upload" : "the image did not upload")); }
+    } catch (e) {
+      setErr(e?.response?.data?.detail || (e?.code === "ECONNABORTED" ? "the upload took too long - try it again"
+        : anyFile ? "the file did not upload - try it again" : "the image did not upload - try it again"));
+    }
     finally { setBusy(false); }
     return true;
   }, [takes, anyFile]);
   const remove = useCallback((path) => setImgs((cur) => cur.filter((i) => i.path !== path)), []);
-  const clear = useCallback(() => setImgs([]), []);
+  const clear = useCallback(() => { setImgs([]); setErr(""); }, []);
+  // ...and files a send could not take, put back in front of what was added since (a task chat's failed line)
+  const put = useCallback((files) => setImgs((cur) => [...files.filter((f) => !cur.some((c) => c.path === f.path)), ...cur]), []);
   // a paste that carries an image (or, with `files`, any file) is that, not text; anything else pastes as it always did
   const onPaste = useCallback((e) => {
     const files = [...(e.clipboardData?.files || [])].filter(takes);
@@ -53,7 +61,7 @@ export function usePromptImages({ files: anyFile = false } = {}) {
     if (files.length) { e.preventDefault(); add(files); }
   }, [add, takes]);
   const onDragOver = useCallback((e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault(); }, []);
-  return { imgs, paths: imgs.map((i) => i.path), busy, err, add, remove, clear, files: anyFile, drop: { onPaste, onDrop, onDragOver } };
+  return { imgs, paths: imgs.map((i) => i.path), busy, err, add, remove, clear, put, files: anyFile, drop: { onPaste, onDrop, onDragOver } };
 }
 
 // the paperclip: opens the file picker - images only, or any file where the box takes them

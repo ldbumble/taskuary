@@ -202,7 +202,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [hasAbout, setHasAbout] = useState(false);
   const aboutRef = useRef(null);
   const [mode, setMode] = useState("draft");
-  const pics = usePromptImages();
+  const pics = usePromptImages({ files: true });          // ...a pasted, dropped or picked file of any kind, as every box takes (2026-11-16)
   // agent
   // NOTHING TO PICK (the owner, TQ-1397: "you ask the agent what you need and it should do it ... never, ever be stuck on a repo thing"): no
   // agent, AI, model or repository picker - Settings names the AI, and a live session opens in its task's own folder and picks its repository

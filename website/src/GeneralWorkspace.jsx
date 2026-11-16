@@ -13,7 +13,7 @@ import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
 import { aheadChat, heldChat, heldConversation } from "./taskDetail.js";
-import { AttachChip, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
+import { AttachChip, fileChips, fileState, usePromptImages } from "./promptImages.jsx";
 import { keepUnsent, unsent } from "./unsent.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { baseName } from "./agentSteps.js";
@@ -530,7 +530,7 @@ const PendingStrip = ({ items, now = false, onRetry = null, onDrop = null, onNow
     className="tq-aui-arrived-more-btn" data-tq-try-again="" onClick={() => onRetry(x)}>{btn("try_again")}</button></>}</div>)}
 </div>; };
 
-function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack,
+function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, onSent, onClearAttachments, onAttach, onAttachBack, pics = null,
   prompt, onPromptUsed, name = "Taskuary", asking, onAnswer, drafts = [], acts = [], onDraftDecided, noComposer = false,
   chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, turnCards = null, queued = null, hold = null, idle = "", onTrusted, hint = "", placeholder = "",
   empty = "", seed = null, list = null, reloadList = null }) {
@@ -688,11 +688,13 @@ function AssistantThread({ task, onAsked, onStop, selectionRef, attachmentsRef, 
                 composer its root and input. Its files inside it, the one attachment look in one line (the owner, 2026-11-05), and WHERE IT CAME
                 FROM a chip at its left (2026-11-06) - a press opens it. A turn at work stops on the x of its own head, never in the box */}
             <OneBox root={ComposerPrimitive.Root} rootProps={{ onSubmit: (e) => { e.preventDefault(); sendLine(); } }} onFiles={onAttach}
-              chips={attachmentsRef.current.length || came || chipsWaiting.length ? <>
+              chips={attachmentsRef.current.length || pics?.busy || pics?.err || came || chipsWaiting.length ? <>
                 {came && ((w) => <AttachChip data-tq-came-chip="" {...(w ? { "data-tq-pending-ids": w.ids.join(" ") } : {})} name={w ? w.label : came.label}
                   title={came.title || came.label} icon={came.icon || false} onClick={came.onOpen} sx={{ cursor: came.onOpen ? "pointer" : "default" }} />)(chipsWaiting.find((c) => c.came))}
                 {chipsWaiting.filter((c) => !c.came).map((c) => <AttachChip key={c.key} data-tq-waiting-chip="" data-tq-pending-ids={c.ids.join(" ")} name={c.label} title={c.label} icon={false} />)}
-                {attachmentsRef.current.map((a) => <AttachChip key={a.path} data-tq-file-chip={a.name} name={a.name} onRemove={() => onClearAttachments(a.path)} />)}</> : null}
+                {/* ...his files, and their upload's state or why one failed, ON THE BOX (the owner, 2026-11-16: a paste's "Attaching..." stood at the
+                    top of the chat and never resolved): the one attach road every box takes (promptImages.usePromptImages) */}
+                {pics && <>{fileChips(pics)}{fileState(pics)}</>}</> : null}
               input={<ComposerPrimitive.Input className="tq-aui-input" onKeyDown={onKey} placeholder={askWords || placeholder || MESSAGE} />}
               onMic={(t) => { const c = runtime.thread.composer, was = c.getState().text; c.setText(was.trim() ? `${was.trimEnd()} ${t}` : t); }}
               send={<button type="button" className="tq-aui-send" aria-label="Send" data-tq-send="" onClick={() => sendLine()}><SendIcon fontSize="small" /></button>} />
@@ -711,8 +713,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const [data, setData] = useState(first);
   const [connectorId, setConnectorId] = useState(() => String(pickFor(first())?.id || ""));
   const [model, setModel] = useState(() => { const d = first(), p = pickFor(d); return p ? d?.session?.model || p.model || "" : ""; });
-  const [attachments, setAttachments] = useState([]);
-  const [uploading, setUploading] = useState(false);
+  // ...ITS FILES TAKE THE ONE ATTACH ROAD (promptImages.usePromptImages): paperclip, paste and drop alike, any file, on the box
+  const pics = usePromptImages({ files: true });
   const [error, setError] = useState("");
   const [ownPrompt, setOwnPrompt] = useState(null);
   const [answered, setAnswered] = useState("");          // the question this card answered (AgentAsks)
@@ -736,7 +738,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const level = chat ? detailFor({ source, settings: defaults, own }) : "steps";
   // ...and the CLI that runs, what it asks and what it waits on his press for: the list's own (conversation.items `live`, `asking`, `permissions`)
   const cli = coding ? conv.list?.live || null : null;
-  attachmentsRef.current = attachments;
+  attachmentsRef.current = pics.imgs;
 
   // asked once, and only once: the marker is cleared on the server as the question goes
   const dropAsk = useCallback(() => {
@@ -760,7 +762,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
 
   useEffect(() => {
     let live = true;
-    setData(first()); setError(""); setAttachments([]);
+    setData(first()); setError(""); pics.clear();
     // Looking at a general task is not sending it to an agent. Load saved state only; the first
     // actual message (or an explicit Send to agent action) starts the regular agent.
     if (coding) return () => { live = false; };
@@ -778,26 +780,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       accept(r.data);
     } catch (e) { setError(errText(e)); }
   };
-  // ...ANY FILE, not pictures only (the owner, 2026-11-05: "does drop in the prompt box attach it in all prompt boxes?"): a picture keeps the
-  // task's own image road, anything else the prompt's file road (promptImages.savePromptFile) - the agent reads either from its path
-  const upload = async (files) => {
-    const list = [...(files || [])];
-    if (!list.length) return;
-    setUploading(true); setError("");
-    try {
-      const added = [];
-      for (const file of list.slice(0, MAX_IMAGES)) {
-        if (!IMAGE_TYPES.test(file.type)) { const got = await savePromptFile(file); added.push({ name: got.name, path: got.path }); continue; }
-        const r = await api.post(`/api/tasks/${task.TaskId}/waitroom/image`, file, { headers: { "Content-Type": file.type } });
-        added.push({ name: file.name || "pasted image", path: r.data.path });
-      }
-      setAttachments((old) => [...old, ...added]);
-    } catch (e) { setError(errText(e)); }
-    finally { setUploading(false); }
-  };
   // one path (a chip's x), or the paths a send took - never the whole box, so a file added since stays
-  const clearAttachments = useCallback((paths) => setAttachments((old) => (paths == null ? [] : old.filter((a) => ![paths].flat().includes(a.path)))), []);
-  const attachBack = useCallback((files) => setAttachments((old) => [...files.filter((f) => !old.some((a) => a.path === f.path)), ...old]), []);
+  const clearAttachments = useCallback((paths) => (paths == null ? pics.clear() : [paths].flat().forEach(pics.remove)), [pics.clear, pics.remove]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const attachBack = pics.put;
   const sent = accept;
   const stopRun = useCallback(() => {
     if (coding) api.post(`/api/tasks/${task.TaskId}/agent/cancel`).then(() => setTimeout(conv.load, 600)).catch((x) => setError(errText(x)));
@@ -880,12 +865,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // a turn this pane streams itself, whose own copy is the one on screen
   const quietRef = useRef(false); quietRef.current = loaded && !busy;
   useEffect(() => onLive("task-changed", (ev) => { if (quietRef.current && touches(ev, task.TaskId)) refresh(); }), [task.TaskId, refresh]);
-  const pasted = (e) => {
-    const files = [...(e.clipboardData?.files || [])];
-    if (files.length) { e.preventDefault(); upload(files); }
-  };
-  const dropped = (e) => { const files = [...(e.dataTransfer?.files || [])]; if (files.length) { e.preventDefault(); upload(files); } };
-  const dragging = (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault(); };
+  const { onPaste: pasted, onDrop: dropped, onDragOver: dragging } = pics.drop;
 
   // ...AND ONCE IT IS UP FOR THE OWNER IT STAYS UP until the agent answers again (the owner, 2026-11-05, signing in to a site in two steps: "I put
   // in username then hit next the box disappeared then reopened to put in password. You can leave it open until auth is done"): between a
@@ -985,7 +965,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       <AssistantThread key={task.TaskId} task={task} list={conv.list} reloadList={conv.load}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
         attachmentsRef={attachmentsRef} onSent={sent} onClearAttachments={clearAttachments} onAttachBack={attachBack}
-        onAttach={upload}
+        onAttach={pics.add} pics={pics}
         prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
         name={name}
@@ -1082,7 +1062,6 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
               <Md text={textOf(m)} /></>}</Box>)}
         </Box>
       </Box>}
-      {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching…</Box>}
       {!chat && <ThreadReading reading={data?.thread} mails={mails} variant="chat" />}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {/* ALWAYS inside the pane, session or not: a session that arrives mid-turn (`started`) must not

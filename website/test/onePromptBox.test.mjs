@@ -60,3 +60,18 @@ test("on a phone the box's chips wrap above its words", () => {
   assert.match(css, /@media \(max-width: 599\.95px\) \{\s+\.tq-aui-composer:has\(> \.tq-aui-attachments\) \{ flex-wrap: wrap;/);
   assert.match(css, /\.tq-aui-composer > \.tq-aui-attachments \{ order: -1; flex: 1 0 100%; max-width: 100%;/);
 });
+
+// A PASTE ATTACHES TO THE BOX IT WAS PASTED IN (the owner, 2026-11-16: Ctrl+V in a task's chat drew a grey "Attaching..." at the top of the
+// chat, it never resolved and nothing was attached): the task chat takes the one attach road every box takes - paperclip, paste and drop,
+// any file - its progress and why it failed on the box, and an upload that stalls says so
+test("a task chat's paste takes the one attach road, on the box, and no upload hangs", () => {
+  const ws = read("GeneralWorkspace.jsx"), pi = read("promptImages.jsx");
+  assert.match(ws, /const pics = usePromptImages\(\{ files: true \}\);/);
+  assert.match(ws, /const \{ onPaste: pasted, onDrop: dropped, onDragOver: dragging \} = pics\.drop;/);
+  assert.match(ws, /\{pics && <>\{fileChips\(pics\)\}\{fileState\(pics\)\}<\/>\}/, "its chips and their state in the box");
+  assert.doesNotMatch(ws, /Attaching…|waitroom\/image|setUploading/, "no second road, no line of its own over the chat");
+  assert.match(pi, /export const UPLOAD_MS = 120000;/);
+  assert.match(pi, /headers: \{ "Content-Type": f\.type \}, timeout \}/);
+  assert.match(pi, /e\?\.code === "ECONNABORTED" \? "the upload took too long - try it again"/);
+  assert.match(read("NewSheet.jsx"), /const pics = usePromptImages\(\{ files: true \}\);/, "New's box takes any file");
+});

@@ -371,6 +371,18 @@ class ReadingOutside(unittest.TestCase):
         other = context.files(self.tid + 1)[0]
         self.assertEqual(acpgate.decide(self.read(str(other)), self.ctx), (acpgate.REFUSED, readgate.NEVER))
 
+    def test_a_search_over_the_tasks_own_mail_folders_is_its_own_work_and_no_other_messages(self):
+        """Timed on a long task, 2026-11-16: a grep over the files that came on the task's mail was refused as Taskuary's own data, and the
+        agent spent its turn working around it. Each of the task's messages' folders is its own; another message's is not."""
+        from taskuary import acpgate, config, readgate
+        mine = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'g1', 'Channel': 'email', 'Subject': 'plan', 'Status': 'routed'})
+        other = self.s.add_message({'ExternalId': 'g2', 'Channel': 'email', 'Subject': 'not ours', 'Status': 'routed'})
+        there = (config.home() / 'attachments' / str(mine)).exists()      # ...the test home is shared: another test may have made it
+        grep = lambda d: {'toolCallId': 'g', 'kind': 'search', '_meta': {'claudeCode': {'toolName': 'Grep'}}, 'rawInput': {'pattern': 'sign-off', 'path': d}}
+        self.assertEqual(acpgate.decide(grep(str(config.home() / 'attachments' / str(mine))), self.ctx)[0], acpgate.ALLOWED)
+        self.assertEqual(acpgate.decide(grep(str(config.home() / 'attachments' / str(other))), self.ctx), (acpgate.REFUSED, readgate.NEVER))
+        self.assertEqual((config.home() / 'attachments' / str(mine)).exists(), there, 'the gate names the folder, never makes it')
+
     def test_taskuarys_own_home_is_never_read_not_even_on_a_yes(self):
         from taskuary import acpgate, apiagent, readgate
         self.assertEqual(acpgate.decide(self.read(self.secret), self.ctx), (acpgate.REFUSED, readgate.NEVER))

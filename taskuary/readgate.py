@@ -39,7 +39,10 @@ def own(store, tid, cwd: str = '') -> list:
     from . import config, context, outputs
     rs = [cwd, config.home() / 'scratch'] + ([outputs.folder(int(tid)), *context.files(int(tid))] if str(tid or '').isdigit() else [])
     if store is not None and str(tid or '').isdigit():
-        rs += [a['Path'] for m in store.list_messages(int(tid)) for a in store.list_attachments(m['MessageId']) if a.get('Path')]
+        # ...and each of its messages' own folders whole (artifacts.attachment_dir's: one per message - named, never made), so a search across what came on the task
+        # is its own work - timed on a long task, 2026-11-16: a grep over its mail's files was refused as Taskuary's data, and it worked around
+        ms = store.list_messages(int(tid))
+        rs += [a['Path'] for m in ms for a in store.list_attachments(m['MessageId']) if a.get('Path')] + [config.home() / 'attachments' / str(int(m['MessageId'])) for m in ms]
     return [_n(r) for r in dict.fromkeys(map(str, rs)) if r]
 
 

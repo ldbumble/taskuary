@@ -41,7 +41,7 @@ from .browsergate import _segments, _deny, _tell, not_approved, NEXT, OWNER_NO
 HELD = 'Taskuary held this for the owner'
 # ...said to the agent the hold covers, as the browser's hold is (browserview.HOLD_LINE): told nothing, a general agent asked "Should I delete
 # it?" in words, the owner said yes, and the delete was held for a second yes on the task (the overnight run, 2026-11-03)
-HOLD_LINE = ("A DELETE ON THE OWNER'S COMPUTER outside your working folder, and a step that leaves the machine (a push, a merge, a publish, "
+HOLD_LINE = ("A DELETE ON THE OWNER'S COMPUTER outside your working folder, a read of files outside this task's own folders, and a step that leaves the machine (a push, a merge, a publish, "
              "a mail from a script, data sent to a web address), is HELD for the owner's press: the call comes back refused - as \"held for the owner\" or as a permission that was declined, "
              "which is Taskuary's hold and never the owner's no - and Taskuary puts it on the task as a card, runs it once they approve and tells you what happened. So never ask the owner in words whether to delete - "
              "run the command and end your turn when it is held. The held step IS the owner's "
@@ -277,11 +277,11 @@ def _outward(cmd: str) -> list:
     return out
 
 
-def _pending(store, tid: int, sid: str, cmd: str):
+def _pending(store, tid: int, sid: str, cmd: str, reads: list = ()):
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,)):
         try: p = json.loads(r.get('DraftText') or '{}')
         except ValueError: continue
-        if p.get('action') == 'shell_act' and p.get('sid') == str(sid) and p.get('command') == cmd: return r
+        if p.get('action') == 'shell_act' and p.get('sid') == str(sid) and p.get('command') == cmd and p.get('reads', []) == list(reads): return r
     return None
 
 
@@ -335,11 +335,12 @@ def trusted(store, cwd: str, todo: list) -> str:
     return repo if all(a.get('what') in ok and a.get('why') == OUT for a in todo) else ''
 
 
-def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool | str = False, about: str = '') -> dict:
+def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool | str = False, about: str = '', reads: list = ()) -> dict:
     """The hook's answer for one shell command: {} lets it run; `ask` (asks) hands it to the CLI's own prompt (never an allow); else a
     refusal holds it and puts the step on the task. ONE step holds the whole command - the line is the agent's, and half of it is not what it asked.
-    `about`: the agent's own words for the call (a CLI's shell tool takes a `description`) - the card leads with them (the owner, 2026-11-09)"""
-    todo = acts(cmd, cwd)
+    `about`: the agent's own words for the call (a CLI's shell tool takes a `description`) - the card leads with them (the owner, 2026-11-09)
+    `reads`: what it reads outside its work (readgate.judge) - held on the same card; Approve also lets the task read those folders."""
+    todo = (acts(cmd, cwd) if cmd else []) + list(reads or [])
     if not todo: return {}
     what, why = ('; '.join(dict.fromkeys(a[k] for a in todo)) for k in ('what', 'why'))
     if (repo := trusted(store, cwd, todo)):
@@ -350,20 +351,24 @@ def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '
         store.audit('task', tid, 'shell_act_asked', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
         # ...said only where a terminal does ask (agent walk 2, 2026-11-10: the line stood on a task whose agent has no terminal, over a
         # push its own gate had already answered with the landing card)
-        if ask != 'chat': store.add_comment_once(tid, 'taskuary', 'agent', f"The agent asked to {what}: `{str(cmd)[:300]}` - its terminal asks you to allow it.")
+        if ask != 'chat': store.add_comment_once(tid, 'taskuary', 'agent', f"The agent asked to {what}" + (f": `{str(cmd)[:300]}`" if cmd else '') + " - its terminal asks you to allow it.")
         return {'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'ask',
                                        'permissionDecisionReason': f'Taskuary asks you first: {what} ({why}).'}}
     from . import landing
-    if (lands := landing.push_asked(store, tid, cmd, cwd, about)): return _deny(lands[1])      # the landing card's own button, never a second card
-    if not _pending(store, tid, sid, cmd):
+    if cmd and (lands := landing.push_asked(store, tid, cmd, cwd, about)): return _deny(lands[1])      # the landing card's own button, never a second card
+    folders = [a['folder'] for a in reads or [] if a.get('folder')]
+    if not _pending(store, tid, sid, cmd, folders):
         from . import proposals
         proposals.queue(store, tid, {'action': 'shell_act', 'sid': str(sid), 'turn': turn_of(store, tid), 'command': str(cmd)[:4000], 'shell': shell, 'cwd': cwd or '',
                                      # the card's In: the folder a delete aims at, never the agent's own scratch folder it ran from
                                      'what': what, 'why': why, 'where': next((a['where'] for a in todo if a.get('where')), ''),
+                                     **({'reads': folders} if folders else {}),
                                      **({'about': ' '.join(str(about).split())[:300]} if str(about or '').strip() else {})}, 'agent')
         store.audit('task', tid, 'shell_act_held', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
     from .selfclose import CARD_TAIL
-    return _deny(f"{HELD}: {what} ({why}). Once they press it, Taskuary runs this exact command in the same folder and tells you what happened. "
+    then = ('Taskuary runs this exact command in the same folder and tells you what happened' if cmd else
+            'the folder is yours to read for the rest of this task and you are told to go on')
+    return _deny(f"{HELD}: {what} ({why}). Once they press it, {then}. "
                  f"Do not try it another way, never ask them to run it or print it for them to copy. {CARD_TAIL} End your turn now, or go on "
                  "with work that does not need it.")
 
@@ -444,6 +449,14 @@ def mid_turn(store, tid: int, sid: str) -> str:
 def perform(store, tid: int, p: dict, run=None) -> dict:
     """The owner's yes: run the held command, as it was, in the folder it was held in. `run`: the runner (tests stand one in)."""
     cmd, cwd = str(p.get('command') or ''), str(p.get('cwd') or '')
+    from . import readgate
+    readgate.grant(store, tid, p.get('reads'))
+    if not cmd and p.get('reads'):
+        said = f"The owner let you read {', '.join(p['reads'])} for the rest of this task. Read what you needed there now. " + NEXT
+        if (told := _batch.get()) is not None: told.append(p.get('what') or 'a read')
+        else: _tell(store, tid, said, wake=True)
+        store.audit('task', tid, 'shell_act_done', 'owner', 'human', {'what': p.get('what'), 'reads': p['reads']})
+        return {'performed': p.get('what') or 'a read', 'said': ''}
     if not cmd: raise RuntimeError('this held step names no command')
     if (busy := mid_turn(store, tid, p.get('sid'))): raise RuntimeError(busy)
     if cwd and not os.path.isdir(cwd): raise RuntimeError(f'the folder it was held in is gone ({cwd}) - nothing was done')

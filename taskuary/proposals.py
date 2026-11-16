@@ -90,7 +90,8 @@ ACTIONS = {
     'browser_act': ("do this in the agent's browser", ('sid', 'args'), None),
     # ...and a shell step that leaves the machine - a push, a merge, a public post, a publish, a mail - HELD the same way (shellgate.py,
     # the owner's ruling 2026-10-28): raised only by the shell hook; approving it runs that exact command in the folder it was held in
-    'shell_act': ("run this step of the agent's", ('sid', 'command'), None),
+    # ...or, a read outside the task's folders with no command (readgate.py), lets the task read those folders
+    'shell_act': ("run this step of the agent's", ('sid',), None),
     # ...and a desktop act that can't be undone, HELD the same way (agentdesktop.py, 2026-10-31): approving it runs that exact command
     'desktop_act': ("do this in an app on the owner's desktop", ('sid', 'args'), None),
     # A PART OF THE TASK THAT IS ANOTHER JOB (the owner, 2026-11-10: "random things that triage puts in one task that doesn't belong really,

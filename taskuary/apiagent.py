@@ -266,6 +266,13 @@ def _search(store, tid: int, sid: str, q: str) -> str:
 def _hands(store, tid: int, sid: str, name: str, a: dict) -> str:
     "A CLI's own hands, run by the server: files, the web, and commands under the ONE gate a CLI's commands pass (hooks.command_gate)."
     import os
+    if name in ('files_list', 'file_read'):
+        # ...a read outside the task's own folders waits for the owner, as a CLI's does (readgate.py)
+        from . import readgate, shellgate
+        cwd = workdir(store, tid)
+        held, never = readgate.judge(store, tid, [_path(store, tid, a.get('path') or '.')], cwd)
+        if never: raise ValueError(never)
+        if held: return (shellgate.check(store, tid, sid, '', cwd=cwd, reads=held).get('hookSpecificOutput') or {}).get('permissionDecisionReason') or shellgate.HELD
     if name == 'files_list':
         d = _path(store, tid, a.get('path') or '.')
         if not d.is_dir(): raise ValueError(f'{d} is not a folder')

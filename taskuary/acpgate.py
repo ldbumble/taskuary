@@ -13,7 +13,9 @@ the agent ASKS (clis.ADAPTERS sets the mode that makes it ask) and the answer is
     owner's Approve), and so is an HTTP client that writes to a host off this machine (curl -X POST, -d, Invoke-RestMethod -Method
     Post...) - by each tool's own grammar, never by words in a mail. The hook road reads the same command by the same function
     (shellgate.acts), so one command is held alike on both.
-  - Everything else - reads, edits in its folder, searches, a page fetched - is allowed, as the bypass allowed it.
+  - A read or a search outside the task's own folders is held the same way (readgate.py); Taskuary's own home and the sign-in places
+    are refused outright.
+  - Everything else - reads in its folders, edits there, a page fetched - is allowed, as the bypass allowed it.
 
 THE OWNER'S BUTTONS (step 3, permissions.py). With Developer mode on, what these rules HOLD is put to the owner as it happens: Allow once
 / Reject in the task chat and on a chat bound to the task (agentchannels.py), the agent waiting on the answer. The rules above still
@@ -62,25 +64,34 @@ def decide(tc: dict, ctx: dict) -> tuple:
     """(answer, why) for one toolCall. ctx: store, task_id, cli, cwd, sid."""
     t, store = tool_of(tc), ctx.get('store')
     if t['server']: return _mcp(store, ctx.get('cli') or '', t['server'], t['tool'])
-    if not t['command']: return ALLOWED, ''
-    from . import shellgate
-    cwd = str((tc.get('rawInput') or {}).get('cwd') or ctx.get('cwd') or '') if isinstance(tc.get('rawInput'), dict) else str(ctx.get('cwd') or '')
-    if not shellgate.acts(t['command'], cwd): return ALLOWED, ''
-    tid = ctx.get('task_id')
-    if store is None or not str(tid or '').isdigit():
-        return REFUSED, '; '.join(dict.fromkeys(a['what'] for a in shellgate.acts(t['command'], cwd))) + ' - it waits for the owner'
-    shell = 'PowerShell' if re.search(r'powershell|pwsh', t['name'] + t['command'], re.I) else 'Bash'
+    from . import readgate, shellgate
     raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
-    todo = shellgate.acts(t['command'], cwd)
+    cwd, tid = str(raw.get('cwd') or ctx.get('cwd') or ''), ctx.get('task_id')
+    reads, never = reads_of(tc, ctx)
+    if never: return REFUSED, never
+    todo = (shellgate.acts(t['command'], cwd) if t['command'] else []) + reads
+    if not todo: return ALLOWED, ''
+    if store is None or not str(tid or '').isdigit(): return REFUSED, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for the owner'
+    shell = 'PowerShell' if re.search(r'powershell|pwsh', t['name'] + t['command'], re.I) else 'Bash'
     if not shellgate.trusted(store, cwd, todo):
         from . import landing
         # a push of the task's own work is the landing card's Push (landing.push_asked) - before any other button is drawn for it
-        if (lands := landing.push_asked(store, int(tid), t['command'], cwd, str(raw.get('description') or ''))): return (CARD if lands[0] else REFUSED), lands[1]
+        if t['command'] and (lands := landing.push_asked(store, int(tid), t['command'], cwd, str(raw.get('description') or ''))): return (CARD if lands[0] else REFUSED), lands[1]
         # ...put to the owner as buttons (answerer): the Approve card is filed only if they do not answer, so nothing waits twice
         if ctx.get('owner_asks'): return HELD, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for your answer'
-    said = shellgate.check(store, int(tid), str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False, about=str(raw.get('description') or ''))
+    said = shellgate.check(store, int(tid), str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False, about=str(raw.get('description') or ''), reads=reads)
     if not said: return ALLOWED, 'a repo the owner trusts to act on its own'
     return HELD, said['hookSpecificOutput']['permissionDecisionReason']
+
+
+def reads_of(tc: dict, ctx: dict) -> tuple:
+    "(held, never) for what one toolCall reads outside its task's folders (readgate): a shell line's paths, else a file tool's own."
+    from . import readgate
+    t, raw = tool_of(tc), tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
+    cwd = str(raw.get('cwd') or ctx.get('cwd') or '')
+    if t['command']: return readgate.of_command(ctx.get('store'), ctx.get('task_id'), t['command'], cwd)
+    if t['kind'] not in ('read', 'search') and t['name'] not in readgate.READ_TOOLS: return [], ''
+    return readgate.judge(ctx.get('store'), ctx.get('task_id'), readgate.tool_paths(raw, tc.get('locations'), cwd), cwd)
 
 
 def owner_asks(ctx: dict) -> bool:
@@ -105,7 +116,12 @@ def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
     store, tid, late = ctx['store'], int(ctx['task_id']), []
     req = {**permissions.from_acp(params), 'sid': str(ctx.get('sid') or (params or {}).get('sessionId') or '')}
     got = permissions.ask(store, tid, req, timed_out=lambda: late.append(1))
-    if got.startswith('allow'): return ALLOWED, 'the owner allowed it'
+    tc = (params or {}).get('toolCall') or {}
+    reads = reads_of(tc, ctx)[0]
+    if got.startswith('allow'):
+        from . import readgate
+        readgate.grant(store, tid, [a['folder'] for a in reads if a.get('folder')])      # ...a folder he let it read stays the task's
+        return ALLOWED, 'the owner allowed it'
     if not late:
         # ...and the agent hears WHOSE no it was: the adapter's refusal reads the same for Taskuary's own block (browsergate.OWNER_NO). Into
         # the turn it is in where the adapter steers, else as its next words; a run with no session of ours hears it with the owner's next line
@@ -113,11 +129,11 @@ def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
             r = permissions.normal(req)
             shellgate.declined(store, tid, {'what': permissions.asked(r | permissions.held_for(r, str(ctx.get('cwd') or ''))), 'command': r['command']})
         return REFUSED, YOU_REJECTED
-    tc = (params or {}).get('toolCall') or {}
     raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
     t, cwd = tool_of(tc), str(raw.get('cwd') or ctx.get('cwd') or '')
     shell = 'PowerShell' if re.search(r'powershell|pwsh', t['name'] + t['command'], re.I) else 'Bash'
-    said = shellgate.check(store, tid, str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False, about=str(raw.get('description') or '')) if t['command'] else {}
+    said = shellgate.check(store, tid, str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False, about=str(raw.get('description') or ''),
+                           reads=reads) if t['command'] or reads else {}
     return HELD, (said.get('hookSpecificOutput') or {}).get('permissionDecisionReason') or why
 
 

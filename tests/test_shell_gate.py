@@ -2,7 +2,7 @@
 hold risky steps on the existing proposal card). A push, a merge, a public post, a publish or a mail an agent runs from its shell is read by
 each tool's own grammar, refused to the agent and put on the task with Approve and Dismiss; Approve runs that exact command in the folder it
 was held in and tells the agent; Dismiss tells it no. Everything else passes at once. Invented Northwind repositories only (CLAUDE.md)."""
-import json, time, unittest
+import json, os, time, unittest
 from types import SimpleNamespace
 from unittest import mock
 
@@ -284,3 +284,92 @@ class Deleting(unittest.TestCase):
         # ...and where the owner can answer the CLI's own prompt, it asks there, with the same words
         a = sg.check(self.s, self.tid, 'p1', f'rm -rf "{self.dl}"', 'Bash', self.cwd, ask=True)['hookSpecificOutput']
         self.assertEqual(a['permissionDecision'], 'ask'); self.assertIn("(it can't be undone)", a['permissionDecisionReason'])
+
+
+class ReadingOutside(unittest.TestCase):
+    """AN AGENT ASKS BEFORE IT READS OUTSIDE ITS WORK (the owner, 2026-11-15: "for all agents they should ask before acting like all other
+    actions that ask for permissions"). Its own folders run freely; a read anywhere else is the same held card a push is, and Approve lets the
+    task read that folder from then on; Taskuary's home and the sign-in places are never read. The 'owner's folder' here is this test folder -
+    outside the scratch home, the temp folder and the agent's working folder."""
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from taskuary import config
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Sum the quarter from his spreadsheet')
+        self.work, self.docs = tempfile.mkdtemp(), str(Path(__file__).parent)
+        config.home().mkdir(parents=True, exist_ok=True); self.secret = str(config.home() / 'config.toml')
+        self.told = []
+        self.sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: self.told.append(text))
+        self.ctx = {'store': self.s, 'task_id': self.tid, 'cwd': self.work, 'sid': 'run1'}
+
+    def pending(self): return self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
+    def read(self, p): return {'toolCallId': 'c', 'kind': 'read', '_meta': {'claudeCode': {'toolName': 'Read'}}, 'rawInput': {'file_path': p}}
+
+    def heard(self):
+        end = time.time() + 5
+        while not self.told and time.time() < end: time.sleep(.01)
+        return self.told
+
+    def test_a_shell_line_is_read_for_the_paths_it_names(self):
+        from taskuary import readgate as rg
+        here = os.path.join(self.docs, 'conftest.py')
+        self.assertEqual(rg.command_paths(f'cat "{here}"', self.work), [here])
+        self.assertEqual(rg.command_paths(f'cd "{self.docs}" && ls', self.work), [self.docs])
+        self.assertEqual(rg.command_paths('cat $NOPE_NOT_SET/x.txt', self.work), [None], 'a path built from a variable it cannot read is held')
+        for cmd in ('git status', 'for f in *.csv; do wc -l "$f"; done', 'grep -rn /api/tasks src', 'curl -s https://docs.northwind.example/a',
+                    'dir /s', 'python script.py 2>/dev/null', 'cat "$TASKUARY_OUTPUTS/total.txt"'):
+            self.assertEqual(rg.of_command(self.s, self.tid, cmd, self.work), ([], ''), cmd)
+
+    def test_work_in_its_own_folders_runs_and_a_read_outside_is_the_held_card(self):
+        from taskuary import acpgate, outputs
+        self.assertEqual(acpgate.decide(self.read(os.path.join(self.work, 'notes.md')), self.ctx)[0], acpgate.ALLOWED)
+        self.assertEqual(acpgate.decide(self.read(str(outputs.folder(self.tid) / 'total.xlsx')), self.ctx)[0], acpgate.ALLOWED)
+        got = acpgate.decide(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx)
+        self.assertEqual(got[0], acpgate.HELD); self.assertIn('held this for the owner', got[1])
+        [rv] = self.pending(); p = json.loads(rv['DraftText'])
+        self.assertEqual((p['action'], p['command'], p['why']), ('shell_act', '', "it is outside this task's own folders"))
+        self.assertIn('conftest.py', p['what']); self.assertEqual(p['reads'], [os.path.normcase(os.path.realpath(self.docs))])
+        # ...the same read on the shell road, by the one gate a CLI's and the API's commands pass
+        d = hooks.command_gate(self.s, self.tid, 'run1', f'Get-Content "{os.path.join(self.docs, "conftest.py")}"', 'PowerShell', self.work)
+        self.assertEqual(d['hookSpecificOutput']['permissionDecision'], 'deny')
+        self.assertEqual(hooks.command_gate(self.s, self.tid, 'run1', 'Get-Content notes.md', 'PowerShell', self.work), {})
+
+    def test_approve_lets_the_task_read_that_folder_from_then_on_and_tells_the_agent(self):
+        from taskuary import acpgate
+        call = self.read(os.path.join(self.docs, 'conftest.py'))
+        acpgate.decide(call, self.ctx); [rv] = self.pending()
+        with mock.patch('taskuary.workerstate._live', return_value=self.sess):
+            self.assertTrue(verdicts.decide(self.s, rv, 'approve')['ok'])
+        self.assertIn('The owner let you read', self.heard()[0])
+        self.assertEqual(acpgate.decide(call, self.ctx)[0], acpgate.ALLOWED)
+        self.assertEqual(acpgate.decide(self.read(os.path.join(self.docs, 'browser', 'x.mjs')), self.ctx)[0], acpgate.ALLOWED)
+        self.assertEqual(self.pending(), [])
+
+    def test_dismiss_tells_the_agent_whose_no_it_was(self):
+        from taskuary import acpgate, browsergate
+        acpgate.decide(self.read(os.path.join(self.docs, 'conftest.py')), self.ctx); [rv] = self.pending()
+        with mock.patch('taskuary.workerstate._live', return_value=self.sess):
+            self.assertTrue(verdicts.decide(self.s, rv, 'reject')['ok'])
+        self.assertIn('did not approve it', self.heard()[0]); self.assertIn(browsergate.OWNER_NO, self.told[0])
+
+    def test_taskuarys_own_home_is_never_read_not_even_on_a_yes(self):
+        from taskuary import acpgate, apiagent, readgate
+        self.assertEqual(acpgate.decide(self.read(self.secret), self.ctx), (acpgate.REFUSED, readgate.NEVER))
+        d = hooks.command_gate(self.s, self.tid, 'run1', f'cat "{self.secret}"', 'Bash', self.work)
+        self.assertEqual(d['hookSpecificOutput']['permissionDecisionReason'], readgate.NEVER)
+        readgate.grant(self.s, self.tid, [os.path.dirname(self.secret)])
+        self.assertEqual(acpgate.decide(self.read(self.secret), self.ctx)[0], acpgate.REFUSED)
+        self.assertEqual(self.pending(), [])
+        # ...and the API road's own file tools, by the same rule
+        with mock.patch.object(apiagent, 'workdir', return_value=self.work):
+            self.assertRaisesRegex(ValueError, 'never read by an agent', apiagent._hands, self.s, self.tid, 'run1', 'file_read', {'path': self.secret})
+            self.assertIn('held this for the owner', apiagent._hands(self.s, self.tid, 'run1', 'files_list', {'path': self.docs}))
+
+    def test_a_cli_file_tool_on_the_hook_road_is_judged_the_same(self):
+        t = SimpleNamespace(store=self.s, task_id=self.tid, sid='run1', cwd=self.work)
+        call = lambda p: hooks.browser({'tool_name': 'Read', 'tool_input': {'file_path': p}, 'cwd': self.work})
+        with mock.patch.object(hooks, '_pane', return_value=t), mock.patch.object(sg, 'asks', return_value=''):
+            self.assertEqual(call(os.path.join(self.work, 'a.md')), {})
+            self.assertEqual(call(os.path.join(self.docs, 'conftest.py'))['hookSpecificOutput']['permissionDecision'], 'deny')
+        self.assertEqual(len(self.pending()), 1)
+        self.assertIn('Read', hooks.BROWSER_MATCH.split('|'))

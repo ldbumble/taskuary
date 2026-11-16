@@ -299,10 +299,11 @@ async def _relay(ws, sid: str, url: str):
 # is also the tab the agent's next command works - so the view lets him only while the page is his. Its id is agent-browser's `t<N>`.
 _TAB_ANY = re.compile(r'"type"\s*:\s*"tab"')
 _TAB = re.compile(r'\{\s*"type"\s*:\s*"tab"\s*,\s*"tab"\s*:\s*"(t\d{1,4})"\s*\}')
+TAB_REF = re.compile(r't\d{1,4}|[0-9A-Fa-f]{16,64}')          # agent-browser's t<N>, or a tab's DevTools target id (stable across tabs opening)
 def switch_tab(sid: str, tab: str) -> bool:
-    "Make tab `tab` (t<N>) the active one of this session's browser. Output to a FILE, never a pipe (navigate)."
+    "Make tab `tab` (t<N> or its target id) the active one of this session's browser. Output to a FILE, never a pipe (navigate)."
     exe = program()
-    if not exe or not re.fullmatch(r't\d{1,4}', str(tab)) or not state(sid, fresh=True)['open']: return False
+    if not exe or not TAB_REF.fullmatch(str(tab or '')) or not state(sid, fresh=True)['open']: return False
     log = Path(tempfile.gettempdir()) / f'{session_name(sid)}-tab.log'
     try:
         with open(log, 'wb') as f:
@@ -312,6 +313,12 @@ def switch_tab(sid: str, tab: str) -> bool:
     except OSError as e: logger.debug(f'the browser of {sid} did not switch to {tab}: {e}'); return False
     _CACHE.pop(sid, None)
     return ok
+
+
+def active_tab(sid: str) -> str:
+    "The DevTools target id of the tab this session's browser works now, from agent-browser's own word ('' when it has none)."
+    try: return str((json.loads(_read(session_name(sid), 'target') or '{}') or {}).get('targetId') or '')
+    except ValueError: return ''
 
 
 def snapshot(store, sid: str, actor: str, tid: int = None) -> dict:

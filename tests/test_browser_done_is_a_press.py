@@ -56,6 +56,22 @@ class DoneIsAPress(unittest.TestCase):
         again = ws.answer(self.s, self.tid, rid, '', press=True)                  # a second press, or the watch got there first
         self.assertEqual((again['delivered'], again['state']), (False, 'resolved')); self.assertEqual(len(self.told), 1)
 
+    def test_his_done_puts_the_browser_back_on_the_steps_own_tab_before_the_agent_looks(self):
+        """The owner, 2026-11-15: sites are tabs of one browser, and while a step was his he could show another tab - the agent, told to
+        look at the page, worked whichever tab he left showing. The tab the step was handed over on is kept with it, and his I'm done
+        switches the browser back to it before the agent is told."""
+        order = []
+        with mock.patch.object(browserview, 'active_tab', return_value='5E59148433CDB7E3310EE4A0CD72F41B'): rid = self.turn()
+        self.sess.send_prompt = lambda text, as_owner=True, **k: order.append(('told', text[:20]))
+        with mock.patch.object(browserview, 'switch_tab', side_effect=lambda sid, tab: order.append(('tab', sid, tab)) or True):
+            ws.answer(self.s, self.tid, rid, '', press=True)
+            end = time.time() + 5
+            while len(order) < 2 and time.time() < end: time.sleep(.01)
+        self.assertEqual(order[0], ('tab', 'run1', '5E59148433CDB7E3310EE4A0CD72F41B'))
+        self.assertEqual(order[1][0], 'told')
+        self.assertTrue(browserview.TAB_REF.fullmatch('5E59148433CDB7E3310EE4A0CD72F41B'))
+        self.assertIsNone(browserview.TAB_REF.fullmatch('t1 & del x'))
+
     def test_from_his_done_until_the_agent_is_told_the_task_is_at_work(self):
         """Recorded on the real CLI (the browser audit, 2026-11-15): he passed the check and pressed I'm done; the step closed, and until the
         told agent's turn had begun the task read as nothing at work, the page still drawn beside a chat that said nothing was happening.

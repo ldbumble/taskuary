@@ -503,7 +503,7 @@ def hand_over(store, tid: int, sid: str, act: dict, pg: dict, v: dict, site: str
             try: _run(sid, ['scrollintoview', f"@{c['ref']}"], 15, 'scroll')
             except Exception as e: logger.debug(f'browsergate: {sid} was not scrolled to {btn} - {e}')
         chat = hasattr(term.SESSIONS.get(str(sid)), 'send_prompt')
-        with _HANDS_LOCK: HANDS[rid] = {'tid': tid, 'sid': str(sid), 'btn': btn, 'name': c.get('name') or '', 'site': site}
+        with _HANDS_LOCK: HANDS[rid] = {'tid': tid, 'sid': str(sid), 'btn': btn, 'name': c.get('name') or '', 'site': site, 'tab': browserview.active_tab(sid)}
         ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, choices=[browserview.TURN_DONE] if chat else None, source='api')
         store.audit('task', tid, 'browser_act_handed', 'taskuary', 'system', {'verb': act.get('verb'), 'site': site, 'why': v.get('why')})
         if watch: threading.Thread(target=watch, args=(store, tid, sid, rid), daemon=True, name=f'press-watch-{tid}').start()
@@ -540,7 +540,8 @@ def watch_turn(store, tid: int, sid: str, rid: str, what: str, site: str, watch=
     """A step only the owner can do on the page - a captcha, a card number (browserview.your_turn) - watched as a press is (the owner,
     2026-11-05: "if we need the user we should wait for them to do it"): when the page moves on, the agent hears it and goes on. Done stays."""
     if watch is ...: watch = globals()['watch']
-    with _HANDS_LOCK: HANDS[rid] = {'tid': tid, 'sid': str(sid), 'kind': 'turn', 'what': what, 'site': site, 'btn': '', 'name': ''}
+    from . import browserview
+    with _HANDS_LOCK: HANDS[rid] = {'tid': tid, 'sid': str(sid), 'kind': 'turn', 'what': what, 'site': site, 'btn': '', 'name': '', 'tab': browserview.active_tab(sid)}
     if watch: threading.Thread(target=watch, args=(store, tid, sid, rid), daemon=True, name=f'turn-watch-{tid}').start()
 
 
@@ -641,6 +642,9 @@ def done(store, tid: int, rid: str) -> bool:
                           f"there, so Taskuary cannot tell whether it was. They pressed {buttons.label('try_again')}: open it again (`agent-browser open {url}`), "
                           "look, and if the step still needs them, bring the page back to it and hand it over again the way you did before.", wake=True)
         return True
+    # ...ON THE TAB IT WAS HANDED OVER ON (the owner, 2026-11-15): he may have shown another tab meanwhile, and the agent's next command works
+    # the tab shown - so the browser goes back to the step's own tab before the agent is told to look
+    if h.get('tab'): browserview.switch_tab(h['sid'], h['tab'])
     step = f"the step you handed them ({h.get('what') or 'on the page'})" if turn else f"pressing {h['btn']}"
     store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site'], 'btn': '' if turn else h['btn'], 'by': 'done'})
     _tell(store, tid, f"The owner pressed {browserview.TURN_DONE}: they say they finished {step} on the page. Taskuary did not see the page move - "

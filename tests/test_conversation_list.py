@@ -227,7 +227,11 @@ class TheList(unittest.TestCase):
         self.brain.delay = 0
         self.assertTrue(general.stop_turn(self.s, self.tid))
         sec = int(conversation.ep(general.press_lines(self.s, self.tid)[-1]['createdAt']))
-        self.s._exec("UPDATE heard SET At=? WHERE TaskId=? AND (Ref='l-two' OR Kind='turn' AND At>=(SELECT At FROM heard WHERE Ref='l-two'))", (sec + 0.9, self.tid))
+        # ...late in that second, yet after all that stood above l-two: sec + 0.9 fixed put it above the first turn whenever that turn began
+        # in the second's last tenth (CI on Windows) - the turn's id moved and the list read it as gone
+        was = self.s._one("SELECT MAX(At) AS m FROM heard WHERE TaskId=? AND At<(SELECT At FROM heard WHERE Ref='l-two')", (self.tid,))['m']
+        self.s._exec("UPDATE heard SET At=? WHERE TaskId=? AND (Ref='l-two' OR Kind='turn' AND At>=(SELECT At FROM heard WHERE Ref='l-two'))",
+                     ((max(was, sec) + sec + 1) / 2, self.tid))
         got = self.list(); ids = [x['id'] for x in got['items'] if x['kind'] in ('line', 'press')]
         self.assertEqual((ids[:2], len(ids)), (['l-one', 'l-two'], 3), self.kinds(got))
         self.assertEqual([x['state'] for x in got['items'] if x['kind'] == 'turn'][0], 'done')

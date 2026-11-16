@@ -174,6 +174,8 @@ AGENT_READS = (
 # listed so that test_guard walks app.routes and FAILS on a write route nobody classified: a new
 # door is a decision, not something that inherits whatever the table happened to say.
 OWNER_ONLY = (
+    # a bulk card's press does every act on it, and its Stop ends the rest (bulkcard.py): his alone, as each act's own press is
+    (r'POST', r'^/api/reviews/batch/[0-9a-f]+/(run|cancel)$', "a bulk card's press does every act on it - that is the owner's"),
     # the first thing a cornered model would do is mark the send tool it was denied as one that does not send (sendfilter)
     (r'POST', r'^/api/sendfilter/(correct|scan)$', "which of the owner's own MCP tools count as sends is the owner's word"),
     # the router's rules, a judgement's correction and a step up to the strong model are the owner's (the router, 2026-10-25)

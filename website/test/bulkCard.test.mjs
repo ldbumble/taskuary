@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pressOf, progress, rowOf, rowState, running } from "../src/bulkCard.js";
+import { countOf, pressOf, progress, rowOf, rowState, running } from "../src/bulkCard.js";
 
 // ONE CARD FOR A BULK JOB (taskuary/bulkcard.py; the owner, 2026-11-16). Invented people and a stand-in repository.
 const mail = (id, to, extra = {}) => ({ ReviewId: id, Kind: "slot", Status: "pending", Batch: "b1", DraftText: "Hello - about Market St.",
@@ -17,6 +17,7 @@ test("a row says whom or what it goes to, its one line, and what to check", () =
 test("the press says what it does, by the act's own words", () => {
   assert.equal(pressOf([mail(1, "a@cedar.example")], 24), "Send 24 emails");
   assert.equal(pressOf([close(1)], 37), "Close 37 issues");
+  assert.equal(countOf([close(1), close(2)]), "2 issues"); assert.equal(countOf([mail(1, "a@cedar.example")]), "1 email");
 });
 
 test("each row stands where its run left it, and the bar counts what is over", () => {

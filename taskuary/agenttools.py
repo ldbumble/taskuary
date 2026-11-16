@@ -348,12 +348,14 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
 # MANY OF ONE ACT, ONE CARD (bulkcard.py; the owner, 2026-11-16: "for a job that is a bulk process you should be able to review a few of them and
 # then send them all out"): any card's tool takes `items` - each item that tool's own fields, over the ones given beside them - and files each
 # by its own door, as one call would; the rows share one Batch, which the line of cards and the chat hold as ONE card with one press
-ITEMS = {'type': 'array', 'items': {'type': 'object', 'additionalProperties': True},
+ITEMS = {'type': 'array', 'items': {'type': 'object'},
          'description': "many of this same act at once (25 emails, 40 issues to close): a list of objects, each with this tool's own fields - "
                         "fields beside `items` are shared by all. ONE card holds them: the owner reviews a few, does them all with one press, "
                         "and you hear how the whole run went, once."}
-for _n, (_c, _d, _s, _door) in TOOLS.items():      # ...every card's tool but the landing question, which is one per checkout
-    if _c == 'propose' and _n != 'propose_land':
+# ...the two every act goes by: an email, and any other act (`propose`: a close, a post, a SQL write, an API call) - a reply answers one
+# message, an invite one meeting, and the landing question is one per checkout
+for _n, (_c, _d, _s, _door) in TOOLS.items():
+    if _n in ('propose_email', 'propose'):
         need = _s.get('required') or []
         # ...what one card needs, each item needs - or the call carries it whole: one or the other, never neither
         _s['properties']['items'] = {**ITEMS, 'items': {**ITEMS['items'], **({'required': need} if need else {})}}

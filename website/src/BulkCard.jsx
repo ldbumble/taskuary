@@ -6,7 +6,7 @@ import { Box, Button, Checkbox, LinearProgress, Typography } from "@mui/material
 import ReviewDecision from "./ReviewDecision.jsx";
 import ActionCard from "./ActionCard.jsx";
 import { cardOf, isCardReview } from "./actionCard.js";
-import { pressOf, progress, rowOf, rowState, running } from "./bulkCard.js";
+import { countOf, pressOf, progress, rowOf, rowState, running } from "./bulkCard.js";
 import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
 import api from "./api";
 
@@ -33,7 +33,7 @@ export default function BulkCard({ rows = [], tid, onChanged }) {
   return (
     <Box data-tq-bulk-card={key} sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.5, mt: 1, bgcolor: "var(--tq-panel, #fff)", opacity: aside ? 0.6 : 1 }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.75 }}>
-        <Typography sx={{ fontWeight: 600, color: INK, fontSize: 14 }}>{rows.length} {rows[0]?.Kind === "action" ? "steps" : "emails"} - review a few, then do them all</Typography>
+        <Typography sx={{ fontWeight: 600, color: INK, fontSize: 14 }}>{countOf(rows)} - review a few, then do them all</Typography>
         {aside && <Typography variant="caption" sx={{ color: FAINT }}>Not done - the chat moved on before you pressed it</Typography>}
       </Box>
       {(running(run) || run?.state === "finished" || run?.state === "stopped") && <Box data-tq-bulk-progress="" sx={{ mb: 1 }}>
@@ -52,7 +52,7 @@ export default function BulkCard({ rows = [], tid, onChanged }) {
               <Typography sx={{ fontSize: 13, color: DIM, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.line}</Typography>
               {w.flags.map((f) => <Typography key={f} variant="caption" sx={{ color: "var(--tq-warn, #8a4b1c)" }}>{f}</Typography>)}
               {s.failed && <Typography variant="caption" sx={{ color: "var(--tq-danger, #7a2f3c)", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.failed}>{s.failed}</Typography>}
-              {s.waiting && !aside && <Button size="small" onClick={() => flip(setOpen, shown(r, i) ? -r.ReviewId : r.ReviewId)} sx={{ minWidth: 0 }}>{shown(r, i) ? "Close" : "Open"}</Button>}
+              {s.waiting && !aside && <Button size="small" onClick={() => flip(setOpen, shown(r, i) ? -r.ReviewId : r.ReviewId)} sx={{ minWidth: 0 }}>{shown(r, i) ? "Hide" : "Open"}</Button>}
             </Box>
             {s.waiting && !aside && shown(r, i) && <Box sx={{ pl: 4, pb: 1 }}>
               {isCardReview(r) ? <ActionCard row={cardOf(r)} tid={tid} onChanged={onChanged} /> : <ReviewDecision review={r} onChanged={onChanged} />}</Box>}

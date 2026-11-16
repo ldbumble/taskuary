@@ -24,6 +24,13 @@ export const pressOf = (rows, n) => {
   const press = actionFor(proposalFrom(r)?.type)?.press || "", [verb, ...rest] = press.split(" ");
   return rest.length === 1 ? `${verb} ${plural(n, rest[0])}` : press ? `${press} - all ${n}` : `Approve all ${n}`;
 };
+// ...and what the card holds, by the same words: "24 emails", "30 issues", else "5 steps"
+export const countOf = (rows) => {
+  const r = rows[0] || {}, n = rows.length;
+  if (r.Kind !== "action") return plural(n, "email");
+  const rest = (actionFor(proposalFrom(r)?.type)?.press || "").split(" ").slice(1);
+  return plural(n, rest.length === 1 ? rest[0] : "step");
+};
 const SET_ASIDE = "set aside when you moved on";
 // where each row stands: done, failed (its error), left out, set aside as the chat moved on, or waiting
 export const rowState = (r, run) => {
